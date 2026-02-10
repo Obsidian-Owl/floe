@@ -25,6 +25,7 @@ Requirements Covered:
 
 from __future__ import annotations
 
+import re
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -66,6 +67,47 @@ ATTR_SINK_DESTINATION = "egress.destination"
 ATTR_SINK_ROWS_WRITTEN = "egress.rows_written"
 ATTR_SINK_DURATION_MS = "egress.duration_ms"
 ATTR_SINK_STATUS = "egress.status"
+
+
+# Sensitive key patterns for redaction (FR-049)
+_SENSITIVE_KEY_PATTERN = re.compile(
+    r"(password|secret_key|access_key|token|api_key|authorization|credential)"
+    r"\s*[=:]\s*\S+",
+    re.IGNORECASE,
+)
+_URL_CREDENTIAL_PATTERN = re.compile(
+    r"://[^@/\s]+:[^@/\s]+@",
+)
+
+
+def sanitize_error_message(msg: str, max_length: int = 500) -> str:
+    """Sanitize an error message by redacting credentials and truncating.
+
+    Strips URL credential patterns (e.g., ``://user:pass@host``) and
+    key-value patterns for known sensitive keys (password=, secret_key=,
+    etc.) before truncating to max_length.
+
+    Args:
+        msg: Raw error message to sanitize.
+        max_length: Maximum length of returned message.
+
+    Returns:
+        Sanitized and truncated error message.
+
+    Example:
+        >>> sanitize_error_message("Failed: password=secret123 at host")
+        'Failed: password=<REDACTED> at host'
+    """
+    # Redact URL credentials like ://user:pass@host
+    sanitized = _URL_CREDENTIAL_PATTERN.sub("://<REDACTED>@", msg)
+    # Redact key=value patterns for sensitive keys
+    sanitized = _SENSITIVE_KEY_PATTERN.sub(
+        lambda m: m.group(0).split("=", 1)[0].split(":", 1)[0] + "=<REDACTED>"
+        if "=" in m.group(0)
+        else m.group(0).split(":", 1)[0] + ": <REDACTED>",
+        sanitized,
+    )
+    return sanitized[:max_length]
 
 
 def get_tracer() -> trace.Tracer:
@@ -150,7 +192,10 @@ def ingestion_span(
             span.set_status(Status(StatusCode.OK))
         except Exception as e:
             span.set_status(Status(StatusCode.ERROR, type(e).__name__))
-            span.record_exception(e)
+            span.set_attribute("exception.type", type(e).__name__)
+            span.set_attribute(
+                "exception.message", sanitize_error_message(str(e))
+            )
             raise
 
 
@@ -200,8 +245,8 @@ def record_ingestion_error(
         ...         raise
     """
     span.set_attribute(ATTR_ERROR_TYPE, type(error).__name__)
-    # Truncate message to prevent sensitive data leakage in long error strings
-    message = str(error)[:500]
+    # Sanitize message to redact credentials and truncate
+    message = sanitize_error_message(str(error))
     span.set_attribute(ATTR_ERROR_MESSAGE, message)
     if category is not None:
         span.set_attribute(ATTR_ERROR_CATEGORY, category)
@@ -253,7 +298,10 @@ def egress_span(
             span.set_status(Status(StatusCode.OK))
         except Exception as e:
             span.set_status(Status(StatusCode.ERROR, type(e).__name__))
-            span.record_exception(e)
+            span.set_attribute("exception.type", type(e).__name__)
+            span.set_attribute(
+                "exception.message", sanitize_error_message(str(e))
+            )
             raise
 
 
@@ -302,7 +350,7 @@ def record_egress_error(
         ...         raise
     """
     span.set_attribute(ATTR_ERROR_TYPE, type(error).__name__)
-    message = str(error)[:500]
+    message = sanitize_error_message(str(error))
     span.set_attribute(ATTR_ERROR_MESSAGE, message)
     if category is not None:
         span.set_attribute(ATTR_ERROR_CATEGORY, category)

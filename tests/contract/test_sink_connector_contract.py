@@ -297,3 +297,43 @@ class TestSinkConnectorMixinContract:
         plugin = MockBidirectionalPlugin()
         assert isinstance(plugin, IngestionPlugin)
         assert isinstance(plugin, SinkConnector)
+
+
+class TestSinkConfigValidationContract:
+    """Contract tests for SinkConfig __post_init__ validation."""
+
+    @pytest.mark.requirement("4G-SC-006")
+    def test_sink_config_validates_on_construction(self) -> None:
+        """Verify SinkConfig validates fields at construction time.
+
+        4G-SC-006: SinkConfig validation is part of the contract.
+        """
+        # Valid construction should work
+        config = SinkConfig(sink_type="rest_api")
+        assert config.sink_type == "rest_api"
+
+        # Invalid construction should fail
+        with pytest.raises(ValueError):
+            SinkConfig(sink_type="")
+
+    @pytest.mark.requirement("4G-SC-006")
+    def test_sink_config_batch_size_bounds_are_contract(self) -> None:
+        """Verify SinkConfig batch_size bounds are part of the contract.
+
+        4G-SC-006: Bounds 1-100_000 are enforced.
+        """
+        # Lower bound
+        config = SinkConfig(sink_type="rest_api", batch_size=1)
+        assert config.batch_size == 1
+
+        # Upper bound
+        config = SinkConfig(sink_type="rest_api", batch_size=100_000)
+        assert config.batch_size == 100_000
+
+        # Below lower
+        with pytest.raises(ValueError):
+            SinkConfig(sink_type="rest_api", batch_size=0)
+
+        # Above upper
+        with pytest.raises(ValueError):
+            SinkConfig(sink_type="rest_api", batch_size=100_001)

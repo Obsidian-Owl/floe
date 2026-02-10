@@ -180,6 +180,35 @@ class TestDestinationConfig:
         ):
             DestinationConfig(**invalid_data)
 
+    @pytest.mark.requirement("4G-SEC-010")
+    def test_destination_config_rejects_config_with_too_many_keys(
+        self, valid_destination_data: dict[str, Any]
+    ) -> None:
+        """Test DestinationConfig rejects config dict with more than 50 keys.
+
+        Validates resource exhaustion prevention on config dict.
+        """
+        big_config = {f"key_{i}": f"value_{i}" for i in range(51)}
+        invalid_data = {**valid_destination_data, "config": big_config}
+
+        with pytest.raises(ValidationError, match="config has 51 keys"):
+            DestinationConfig(**invalid_data)
+
+    @pytest.mark.requirement("4G-SEC-010")
+    def test_destination_config_accepts_config_with_50_keys(
+        self, valid_destination_data: dict[str, Any]
+    ) -> None:
+        """Test DestinationConfig accepts config dict with exactly 50 keys.
+
+        Validates boundary condition — 50 keys is the maximum allowed.
+        """
+        config_50 = {f"key_{i}": f"value_{i}" for i in range(50)}
+        data = {**valid_destination_data, "config": config_50}
+
+        dest = DestinationConfig(**data)
+        assert dest.config is not None
+        assert len(dest.config) == 50
+
 
 class TestFloeSpecDestinations:
     """Unit tests for FloeSpec.destinations field (T024)."""
@@ -269,3 +298,19 @@ class TestFloeSpecDestinations:
 
         with pytest.raises(ValidationError, match="[Dd]uplicate.*destination.*name"):
             FloeSpec(**spec_data)
+
+    @pytest.mark.requirement("4G-SEC-003")
+    def test_destination_config_batch_size_exceeds_max(
+        self, valid_destination_data: dict[str, Any]
+    ) -> None:
+        """Test DestinationConfig rejects batch_size greater than 100_000.
+
+        Validates that batch_size has both lower (ge=1) and upper (le=100_000)
+        bounds for DoS prevention.
+        """
+        invalid_data = {**valid_destination_data, "batch_size": 100_001}
+
+        with pytest.raises(
+            ValidationError, match="Input should be less than or equal to 100000"
+        ):
+            DestinationConfig(**invalid_data)

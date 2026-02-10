@@ -55,6 +55,7 @@ from floe_ingestion_dlt.tracing import (
     record_egress_result,
     record_ingestion_error,
     record_ingestion_result,
+    sanitize_error_message,
 )
 
 if TYPE_CHECKING:
@@ -523,7 +524,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
 
             except Exception as e:
                 elapsed = time.perf_counter() - start_time
-                error_msg = str(e)[:500]  # Truncate for safety
+                error_msg = sanitize_error_message(str(e))
 
                 # Check if this is a schema contract violation
                 # dlt raises exceptions containing "schema" and "contract" when
@@ -616,6 +617,11 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             if "s3_endpoint" in catalog_config:
                 dest_config["s3_endpoint"] = catalog_config["s3_endpoint"]
             if "s3_access_key" in catalog_config:
+                logger.warning(
+                    "s3_credentials_in_config",
+                    message="S3 credentials should use environment variables "
+                    "(AWS_ACCESS_KEY_ID), not config passthrough. See FR-018.",
+                )
                 dest_config["s3_access_key"] = catalog_config["s3_access_key"]
             if "s3_secret_key" in catalog_config:
                 dest_config["s3_secret_key"] = catalog_config["s3_secret_key"]
@@ -764,16 +770,32 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     )
                     return result
 
-                # Compute checksum of data for load assurance
-                data_bytes = str(data).encode("utf-8")
-                checksum = f"sha256:{hashlib.sha256(data_bytes).hexdigest()}"
+                # Compute checksum via Arrow IPC wire format (safe, reproducible)
+                import pyarrow as pa
+
+                if isinstance(data, pa.Table):
+                    hasher = hashlib.sha256()
+                    sink_buf = pa.BufferOutputStream()
+                    writer = pa.ipc.new_stream(sink_buf, data.schema)
+                    for batch in data.to_batches():
+                        writer.write_batch(batch)
+                    writer.close()
+                    ipc_bytes = sink_buf.getvalue()
+                    hasher.update(ipc_bytes)
+                    checksum = f"sha256:{hasher.hexdigest()}"
+                    data_bytes_len = len(ipc_bytes)
+                else:
+                    # Fallback for non-Arrow data
+                    data_bytes = str(data).encode("utf-8")
+                    checksum = f"sha256:{hashlib.sha256(data_bytes).hexdigest()}"
+                    data_bytes_len = len(data_bytes)
 
                 elapsed = time.perf_counter() - start_time
 
                 result = EgressResult(
                     success=True,
                     rows_delivered=num_rows,
-                    bytes_transmitted=len(data_bytes),
+                    bytes_transmitted=data_bytes_len,
                     duration_seconds=elapsed,
                     checksum=checksum,
                     delivery_timestamp=datetime.now(timezone.utc).isoformat(),
@@ -795,7 +817,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
 
             except Exception as e:
                 elapsed = time.perf_counter() - start_time
-                error_msg = str(e)[:500]
+                error_msg = sanitize_error_message(str(e))
 
                 record_egress_error(span, e, category="transient")
 
@@ -848,6 +870,11 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             if "s3_endpoint" in catalog_config:
                 source_config["s3_endpoint"] = catalog_config["s3_endpoint"]
             if "s3_access_key" in catalog_config:
+                logger.warning(
+                    "s3_credentials_in_config",
+                    message="S3 credentials should use environment variables "
+                    "(AWS_ACCESS_KEY_ID), not config passthrough. See FR-018.",
+                )
                 source_config["s3_access_key"] = catalog_config["s3_access_key"]
             if "s3_secret_key" in catalog_config:
                 source_config["s3_secret_key"] = catalog_config["s3_secret_key"]

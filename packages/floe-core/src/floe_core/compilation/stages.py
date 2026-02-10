@@ -261,6 +261,24 @@ def compile_pipeline(
                 stage=CompilationStage.ENFORCE.value,
                 dry_run=dry_run,
             )
+            # Validate sink destinations against enterprise whitelist
+            if (
+                manifest.approved_sinks is not None
+                and spec.destinations is not None
+            ):
+                from floe_core.schemas.plugins import validate_sink_whitelist
+
+                for destination in spec.destinations:
+                    validate_sink_whitelist(
+                        sink_type=destination.sink_type,
+                        approved_sinks=manifest.approved_sinks,
+                    )
+                log.info(
+                    "sink_whitelist_validated",
+                    destination_count=len(spec.destinations),
+                    approved_sinks=manifest.approved_sinks,
+                )
+
             # Placeholder: Full enforcement requires dbt manifest.json which is
             # generated later by dbt compile. The run_enforce_stage() function
             # is used directly after dbt compilation for policy enforcement.

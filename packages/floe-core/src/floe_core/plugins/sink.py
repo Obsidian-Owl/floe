@@ -18,6 +18,7 @@ Example:
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -48,6 +49,46 @@ class SinkConfig:
     field_mapping: dict[str, str] | None = None
     retry_config: dict[str, Any] | None = None
     batch_size: int | None = None
+
+    def __post_init__(self) -> None:
+        """Validate SinkConfig fields at construction time.
+
+        Raises:
+            ValueError: If any field fails validation.
+        """
+        # sink_type must be non-empty
+        if not self.sink_type or not self.sink_type.strip():
+            msg = "sink_type must be a non-empty string"
+            raise ValueError(msg)
+
+        # batch_size bounds: 1 <= batch_size <= 100_000
+        if self.batch_size is not None:
+            if self.batch_size < 1:
+                msg = f"batch_size must be >= 1, got {self.batch_size}"
+                raise ValueError(msg)
+            if self.batch_size > 100_000:
+                msg = f"batch_size must be <= 100_000, got {self.batch_size}"
+                raise ValueError(msg)
+
+        # connection_config depth/size limits
+        if len(self.connection_config) > 50:
+            msg = (
+                f"connection_config has {len(self.connection_config)} keys, "
+                "max 50"
+            )
+            raise ValueError(msg)
+
+        # field_mapping values must be valid identifiers (prevent injection)
+        if self.field_mapping is not None:
+            identifier_pattern = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+            for source, dest in self.field_mapping.items():
+                if not identifier_pattern.match(dest):
+                    msg = (
+                        f"field_mapping destination '{dest}' for source "
+                        f"'{source}' must be a valid identifier "
+                        "(alphanumeric + underscore)"
+                    )
+                    raise ValueError(msg)
 
 
 @dataclass
@@ -159,6 +200,11 @@ class SinkConnector(ABC):
         Validates the configuration and returns a destination object
         ready for writing. Should fail fast with a clear error if
         credentials are invalid.
+
+        .. note::
+            TODO(SEC-001): When implementing real destination writes,
+            validate connection URLs against SSRF (block RFC1918,
+            link-local, metadata endpoints). See security review #5.
 
         Args:
             config: Sink destination configuration.

@@ -426,3 +426,126 @@ class TestEgressResultDataclass:
         assert result2.destination_record_ids == []
         assert result1.errors == ["error-1"]
         assert result2.errors == []
+
+
+class TestSinkConfigValidation:
+    """Test SinkConfig __post_init__ validation (security remediation)."""
+
+    @pytest.mark.requirement("4G-SEC-002")
+    def test_empty_sink_type_raises_value_error(self) -> None:
+        """Test that empty sink_type raises ValueError.
+
+        Validates input validation prevents empty sink identifiers.
+        """
+        with pytest.raises(ValueError, match="sink_type must be a non-empty string"):
+            SinkConfig(sink_type="")
+
+    @pytest.mark.requirement("4G-SEC-002")
+    def test_whitespace_only_sink_type_raises_value_error(self) -> None:
+        """Test that whitespace-only sink_type raises ValueError.
+
+        Validates whitespace strings are rejected.
+        """
+        with pytest.raises(ValueError, match="sink_type must be a non-empty string"):
+            SinkConfig(sink_type="   ")
+
+    @pytest.mark.requirement("4G-SEC-003")
+    def test_batch_size_zero_raises_value_error(self) -> None:
+        """Test batch_size=0 raises ValueError.
+
+        Validates lower bound enforcement.
+        """
+        with pytest.raises(ValueError, match="batch_size must be >= 1"):
+            SinkConfig(sink_type="rest_api", batch_size=0)
+
+    @pytest.mark.requirement("4G-SEC-003")
+    def test_batch_size_negative_raises_value_error(self) -> None:
+        """Test batch_size=-1 raises ValueError.
+
+        Validates negative values are rejected.
+        """
+        with pytest.raises(ValueError, match="batch_size must be >= 1"):
+            SinkConfig(sink_type="rest_api", batch_size=-1)
+
+    @pytest.mark.requirement("4G-SEC-003")
+    def test_batch_size_exceeds_max_raises_value_error(self) -> None:
+        """Test batch_size=100_001 raises ValueError.
+
+        Validates upper bound enforcement.
+        """
+        with pytest.raises(ValueError, match="batch_size must be <= 100_000"):
+            SinkConfig(sink_type="rest_api", batch_size=100_001)
+
+    @pytest.mark.requirement("4G-SEC-003")
+    def test_batch_size_at_max_boundary_succeeds(self) -> None:
+        """Test batch_size=100_000 is accepted.
+
+        Validates upper boundary is inclusive.
+        """
+        config = SinkConfig(sink_type="rest_api", batch_size=100_000)
+        assert config.batch_size == 100_000
+
+    @pytest.mark.requirement("4G-SEC-003")
+    def test_batch_size_at_min_boundary_succeeds(self) -> None:
+        """Test batch_size=1 is accepted.
+
+        Validates lower boundary is inclusive.
+        """
+        config = SinkConfig(sink_type="rest_api", batch_size=1)
+        assert config.batch_size == 1
+
+    @pytest.mark.requirement("4G-SEC-002")
+    def test_connection_config_exceeds_max_keys_raises_value_error(self) -> None:
+        """Test connection_config with 51 keys raises ValueError.
+
+        Validates dictionary size limits for DoS prevention.
+        """
+        big_config = {f"key_{i}": f"value_{i}" for i in range(51)}
+        with pytest.raises(ValueError, match="connection_config has 51 keys"):
+            SinkConfig(sink_type="rest_api", connection_config=big_config)
+
+    @pytest.mark.requirement("4G-SEC-002")
+    def test_connection_config_at_max_keys_succeeds(self) -> None:
+        """Test connection_config with 50 keys succeeds.
+
+        Validates boundary is inclusive.
+        """
+        config_50 = {f"key_{i}": f"value_{i}" for i in range(50)}
+        config = SinkConfig(sink_type="rest_api", connection_config=config_50)
+        assert len(config.connection_config) == 50
+
+    @pytest.mark.requirement("4G-SEC-011")
+    def test_field_mapping_valid_identifiers_succeeds(self) -> None:
+        """Test field_mapping with valid identifier values succeeds.
+
+        Validates clean identifier mapping passes validation.
+        """
+        config = SinkConfig(
+            sink_type="rest_api",
+            field_mapping={"customer_id": "Id", "email": "Email_Address"},
+        )
+        assert config.field_mapping == {"customer_id": "Id", "email": "Email_Address"}
+
+    @pytest.mark.requirement("4G-SEC-011")
+    def test_field_mapping_sql_injection_raises_value_error(self) -> None:
+        """Test field_mapping with SQL injection payload raises ValueError.
+
+        Validates injection prevention via identifier validation.
+        """
+        with pytest.raises(ValueError, match="must be a valid identifier"):
+            SinkConfig(
+                sink_type="rest_api",
+                field_mapping={"email": "Email; DROP TABLE users;--"},
+            )
+
+    @pytest.mark.requirement("4G-SEC-011")
+    def test_field_mapping_special_chars_raises_value_error(self) -> None:
+        """Test field_mapping with special characters raises ValueError.
+
+        Validates non-alphanumeric characters in destinations are rejected.
+        """
+        with pytest.raises(ValueError, match="must be a valid identifier"):
+            SinkConfig(
+                sink_type="rest_api",
+                field_mapping={"name": "user.name"},
+            )

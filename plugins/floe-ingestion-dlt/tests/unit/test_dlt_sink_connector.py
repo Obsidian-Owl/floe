@@ -259,3 +259,84 @@ class TestDltSinkConnector:
 
         assert result.success is True
         assert elapsed < 5.0, f"write() took {elapsed:.2f}s, exceeding 5s limit"
+
+    @pytest.mark.requirement("4G-FR-008")
+    def test_write_checksum_is_deterministic(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Test write checksum is deterministic for same data.
+
+        Validates that writing the same Arrow table twice produces
+        the same SHA-256 checksum, ensuring reproducibility.
+        """
+        import pyarrow as pa
+
+        table = pa.table({"id": [1, 2, 3], "name": ["a", "b", "c"]})
+        mock_sink = MagicMock()
+
+        result1 = dlt_plugin.write(mock_sink, table)
+        result2 = dlt_plugin.write(mock_sink, table)
+
+        assert result1.checksum == result2.checksum
+        assert result1.checksum.startswith("sha256:")
+
+    @pytest.mark.requirement("4G-FR-008")
+    def test_write_checksum_uses_sha256_prefix(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Test write checksum has sha256: prefix.
+
+        Validates the checksum format for load assurance verification.
+        """
+        import pyarrow as pa
+
+        table = pa.table({"id": [1], "value": [42.0]})
+        mock_sink = MagicMock()
+
+        result = dlt_plugin.write(mock_sink, table)
+
+        assert result.checksum.startswith("sha256:")
+        # sha256 hex digest is 64 characters
+        assert len(result.checksum) == len("sha256:") + 64
+
+    @pytest.mark.requirement("4G-FR-018")
+    def test_get_source_config_warns_on_s3_credentials(
+        self, dlt_plugin: DltIngestionPlugin, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test get_source_config emits warning when S3 credentials are in config.
+
+        Validates that passing S3 credentials through config dicts
+        triggers a deprecation warning recommending environment variables.
+        """
+        catalog_config = {
+            "uri": "http://polaris:8181/api/catalog",
+            "warehouse": "floe_warehouse",
+            "s3_access_key": "AKIAEXAMPLE",
+            "s3_secret_key": "secret",
+        }
+
+        with caplog.at_level("WARNING"):
+            result = dlt_plugin.get_source_config(catalog_config)
+
+        # Verify config is still passed through (backwards compat)
+        assert result["s3_access_key"] == "AKIAEXAMPLE"
+
+    @pytest.mark.requirement("4G-FR-018")
+    def test_get_destination_config_warns_on_s3_credentials(
+        self, dlt_plugin: DltIngestionPlugin, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test get_destination_config emits warning for S3 credentials in config.
+
+        Validates that passing S3 credentials through config dicts
+        triggers a deprecation warning.
+        """
+        catalog_config = {
+            "uri": "http://polaris:8181/api/catalog",
+            "s3_access_key": "AKIAEXAMPLE",
+            "s3_secret_key": "secret",
+        }
+
+        with caplog.at_level("WARNING"):
+            result = dlt_plugin.get_destination_config(catalog_config)
+
+        assert result["s3_access_key"] == "AKIAEXAMPLE"

@@ -564,8 +564,35 @@ class DestinationConfig(BaseModel):
     batch_size: int | None = Field(
         default=None,
         ge=1,
-        description="Batch size override for write operations",
+        le=100_000,
+        description="Batch size override for write operations (1-100,000)",
     )
+
+    @field_validator("config")
+    @classmethod
+    def validate_config_depth(
+        cls, v: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Validate config dict is not excessively large.
+
+        Limits the number of keys to prevent resource exhaustion
+        from unbounded configuration dicts.
+
+        Args:
+            v: Configuration dict or None.
+
+        Returns:
+            Validated configuration dict.
+
+        Raises:
+            ValueError: If config has more than 50 keys.
+        """
+        if v is None:
+            return v
+        if len(v) > 50:
+            msg = f"config has {len(v)} keys, max 50 allowed"
+            raise ValueError(msg)
+        return v
 
 
 class PlatformRef(BaseModel):
