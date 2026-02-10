@@ -138,7 +138,7 @@ def test_sanitized_error_recording_overhead() -> None:
     """
     error_msg = (
         "Connection failed to https://user:password@example.com/api "
-        "with api_key=sk-1234567890 and token=Bearer abc123"
+        "with api_key=REDACTED_TEST_KEY and token=Bearer REDACTED"
     )
 
     # Sanitized path (what we use in production)
@@ -155,7 +155,7 @@ def test_raw_error_recording_baseline() -> None:
     """
     error_msg = (
         "Connection failed to https://user:password@example.com/api "
-        "with api_key=sk-1234567890 and token=Bearer abc123"
+        "with api_key=REDACTED_TEST_KEY and token=Bearer REDACTED"
     )
 
     # Raw path (no sanitization)
