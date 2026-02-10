@@ -54,6 +54,7 @@ from floe_core.plugins.dbt import (
 
 from .detection import detect_fusion, detect_fusion_binary
 from .errors import DBTFusionNotFoundError
+from .tracing import TRACER_NAME, dbt_fusion_span, get_tracer
 
 logger = structlog.get_logger(__name__)
 
@@ -120,6 +121,15 @@ class DBTFusionPlugin(DBTPlugin):
             The floe API version this plugin is compatible with.
         """
         return FLOE_API_VERSION
+
+    @property
+    def tracer_name(self) -> str:
+        """OpenTelemetry tracer name for this plugin.
+
+        Returns:
+            Tracer name following floe naming convention.
+        """
+        return TRACER_NAME
 
     def _get_binary_path(self) -> Path:
         """Get path to Fusion CLI binary.
@@ -240,22 +250,24 @@ class DBTFusionPlugin(DBTPlugin):
         Requirements:
             FR-017: subprocess invocation
         """
-        result = self._run_fusion_command(
-            "compile",
-            project_dir,
-            profiles_dir,
-            target,
-        )
-
-        if result.returncode != 0:
-            error_msg = result.stderr or result.stdout or "Unknown error"
-            raise DBTCompilationError(
-                message=f"Fusion compile failed: {error_msg}",
-                original_message=result.stderr,
+        tracer = get_tracer()
+        with dbt_fusion_span(tracer, "compile", mode="fusion") as span:
+            result = self._run_fusion_command(
+                "compile",
+                project_dir,
+                profiles_dir,
+                target,
             )
 
-        manifest_path = project_dir / "target" / "manifest.json"
-        return manifest_path
+            if result.returncode != 0:
+                error_msg = result.stderr or result.stdout or "Unknown error"
+                raise DBTCompilationError(
+                    message=f"Fusion compile failed: {error_msg}",
+                    original_message=result.stderr,
+                )
+
+            manifest_path = project_dir / "target" / "manifest.json"
+            return manifest_path
 
     def run_models(
         self,
@@ -288,46 +300,51 @@ class DBTFusionPlugin(DBTPlugin):
         Requirements:
             FR-017: subprocess invocation
         """
-        result = self._run_fusion_command(
-            "run",
-            project_dir,
-            profiles_dir,
-            target,
-            select=select,
-            exclude=exclude,
-            full_refresh=full_refresh,
-        )
-
-        if result.returncode != 0:
-            error_msg = result.stderr or result.stdout or "Unknown error"
-            raise DBTExecutionError(
-                message=f"Fusion run failed: {error_msg}",
-                original_message=result.stderr,
+        tracer = get_tracer()
+        with dbt_fusion_span(tracer, "run", mode="fusion") as span:
+            result = self._run_fusion_command(
+                "run",
+                project_dir,
+                profiles_dir,
+                target,
+                select=select,
+                exclude=exclude,
+                full_refresh=full_refresh,
             )
 
-        # Parse run_results.json for result details
-        run_results_path = project_dir / "target" / "run_results.json"
-        manifest_path = project_dir / "target" / "manifest.json"
+            if result.returncode != 0:
+                error_msg = result.stderr or result.stdout or "Unknown error"
+                raise DBTExecutionError(
+                    message=f"Fusion run failed: {error_msg}",
+                    original_message=result.stderr,
+                )
 
-        models_run = 0
-        failures = 0
-        execution_time = 0.0
+            # Parse run_results.json for result details
+            run_results_path = project_dir / "target" / "run_results.json"
+            manifest_path = project_dir / "target" / "manifest.json"
 
-        if run_results_path.exists():
-            run_results = json.loads(run_results_path.read_text())
-            results = run_results.get("results", [])
-            models_run = len(results)
-            failures = sum(1 for r in results if r.get("status") not in ("success", "pass"))
-            execution_time = run_results.get("elapsed_time", 0.0)
+            models_run = 0
+            failures = 0
+            execution_time = 0.0
 
-        return DBTRunResult(
-            success=True,
-            manifest_path=manifest_path,
-            run_results_path=run_results_path,
-            models_run=models_run,
-            failures=failures,
-            execution_time_seconds=execution_time,
-        )
+            if run_results_path.exists():
+                run_results = json.loads(run_results_path.read_text())
+                results = run_results.get("results", [])
+                models_run = len(results)
+                failures = sum(1 for r in results if r.get("status") not in ("success", "pass"))
+                execution_time = run_results.get("elapsed_time", 0.0)
+
+            # Record model count in span
+            span.set_attribute("dbt_fusion.model_count", models_run)
+
+            return DBTRunResult(
+                success=True,
+                manifest_path=manifest_path,
+                run_results_path=run_results_path,
+                models_run=models_run,
+                failures=failures,
+                execution_time_seconds=execution_time,
+            )
 
     def test_models(
         self,

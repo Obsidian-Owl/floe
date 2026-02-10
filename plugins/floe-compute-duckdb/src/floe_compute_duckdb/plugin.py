@@ -35,6 +35,8 @@ from floe_core.observability import (
 )
 from floe_core.plugins import ComputePlugin
 
+from floe_compute_duckdb.tracing import TRACER_NAME, compute_span, get_tracer
+
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
@@ -171,6 +173,15 @@ class DuckDBComputePlugin(ComputePlugin):
         """
         return True
 
+    @property
+    def tracer_name(self) -> str:
+        """OpenTelemetry tracer name for compute operations.
+
+        Returns:
+            Canonical tracer name for DuckDB compute plugin.
+        """
+        return TRACER_NAME
+
     def generate_dbt_profile(self, config: ComputeConfig) -> dict[str, Any]:
         """Generate dbt profile.yml configuration for DuckDB.
 
@@ -221,53 +232,61 @@ class DuckDBComputePlugin(ComputePlugin):
             >>> len(profile["attach"])
             1
         """
+        tracer = get_tracer()
         connection = config.connection
+        db_path = connection.get("path", ":memory:")
 
-        profile: dict[str, Any] = {
-            "type": "duckdb",
-            "path": connection.get("path", ":memory:"),
-            "threads": config.threads,
-        }
+        with compute_span(
+            tracer,
+            "generate_profile",
+            engine="duckdb",
+            db_path=db_path,
+        ):
+            profile: dict[str, Any] = {
+                "type": "duckdb",
+                "path": db_path,
+                "threads": config.threads,
+            }
 
-        # Add timeout if specified (FR-021: query timeout enforcement)
-        # dbt-duckdb adapter handles actual timeout enforcement
-        if config.timeout_seconds:
-            profile["timeout_seconds"] = config.timeout_seconds
+            # Add timeout if specified (FR-021: query timeout enforcement)
+            # dbt-duckdb adapter handles actual timeout enforcement
+            if config.timeout_seconds:
+                profile["timeout_seconds"] = config.timeout_seconds
 
-        # Add optional extensions if specified
-        extensions = connection.get("extensions")
-        if extensions:
-            profile["extensions"] = extensions
+            # Add optional extensions if specified
+            extensions = connection.get("extensions")
+            if extensions:
+                profile["extensions"] = extensions
 
-        # Add optional settings if specified
-        settings = connection.get("settings")
-        if settings:
-            profile["settings"] = settings
+            # Add optional settings if specified
+            settings = connection.get("settings")
+            if settings:
+                profile["settings"] = settings
 
-        # Add optional attach blocks if specified (for attaching external databases)
-        attach_configs = connection.get("attach")
-        if attach_configs:
-            attach_list: list[dict[str, Any]] = []
-            for attach in attach_configs:
-                attach_entry: dict[str, Any] = {"path": attach["path"]}
+            # Add optional attach blocks if specified (for attaching external databases)
+            attach_configs = connection.get("attach")
+            if attach_configs:
+                attach_list: list[dict[str, Any]] = []
+                for attach in attach_configs:
+                    attach_entry: dict[str, Any] = {"path": attach["path"]}
 
-                # Alias is optional but recommended
-                if "alias" in attach:
-                    attach_entry["alias"] = attach["alias"]
+                    # Alias is optional but recommended
+                    if "alias" in attach:
+                        attach_entry["alias"] = attach["alias"]
 
-                # Type is optional (defaults to DuckDB native)
-                if "type" in attach:
-                    attach_entry["type"] = attach["type"]
+                    # Type is optional (defaults to DuckDB native)
+                    if "type" in attach:
+                        attach_entry["type"] = attach["type"]
 
-                # Additional options can be included
-                if "options" in attach and attach["options"]:
-                    attach_entry.update(attach["options"])
+                    # Additional options can be included
+                    if "options" in attach and attach["options"]:
+                        attach_entry.update(attach["options"])
 
-                attach_list.append(attach_entry)
+                    attach_list.append(attach_entry)
 
-            profile["attach"] = attach_list
+                profile["attach"] = attach_list
 
-        return profile
+            return profile
 
     def get_required_dbt_packages(self) -> list[str]:
         """Return required dbt packages for DuckDB.
@@ -308,51 +327,54 @@ class DuckDBComputePlugin(ComputePlugin):
         import duckdb
 
         path = config.connection.get("path", ":memory:")
-        start_time = time.perf_counter()
+        tracer = get_tracer()
 
-        with start_validation_span(self.name) as span:
-            span.set_attribute("db.path", path)
+        with compute_span(tracer, "validate_connection", engine="duckdb", db_path=path):
+            start_time = time.perf_counter()
 
-            try:
-                conn = duckdb.connect(path, read_only=False)
+            with start_validation_span(self.name) as span:
+                span.set_attribute("db.path", path)
+
                 try:
-                    # Simple validation query
-                    query_result = conn.execute("SELECT 1").fetchone()
-                    latency_ms = (time.perf_counter() - start_time) * 1000
+                    conn = duckdb.connect(path, read_only=False)
+                    try:
+                        # Simple validation query
+                        query_result = conn.execute("SELECT 1").fetchone()
+                        latency_ms = (time.perf_counter() - start_time) * 1000
 
-                    if query_result and query_result[0] == 1:
+                        if query_result and query_result[0] == 1:
+                            result = ConnectionResult(
+                                status=ConnectionStatus.HEALTHY,
+                                latency_ms=latency_ms,
+                                message=f"Connected to DuckDB successfully (path: {path})",
+                            )
+                            span.set_attribute("validation.status", "healthy")
+                            record_validation_duration(self.name, latency_ms, "healthy")
+                            return result
+
                         result = ConnectionResult(
-                            status=ConnectionStatus.HEALTHY,
+                            status=ConnectionStatus.UNHEALTHY,
                             latency_ms=latency_ms,
-                            message=f"Connected to DuckDB successfully (path: {path})",
+                            message="DuckDB validation query returned unexpected result",
                         )
-                        span.set_attribute("validation.status", "healthy")
-                        record_validation_duration(self.name, latency_ms, "healthy")
+                        span.set_attribute("validation.status", "unhealthy")
+                        record_validation_duration(self.name, latency_ms, "unhealthy")
+                        record_validation_error(self.name, "unexpected_result")
                         return result
-
-                    result = ConnectionResult(
+                    finally:
+                        conn.close()
+                except Exception as e:
+                    latency_ms = (time.perf_counter() - start_time) * 1000
+                    span.set_attribute("validation.status", "unhealthy")
+                    span.set_attribute("error.message", str(e))
+                    record_validation_duration(self.name, latency_ms, "unhealthy")
+                    record_validation_error(self.name, type(e).__name__)
+                    return ConnectionResult(
                         status=ConnectionStatus.UNHEALTHY,
                         latency_ms=latency_ms,
-                        message="DuckDB validation query returned unexpected result",
+                        message=f"Failed to connect to DuckDB: {e}",
+                        warnings=[f"Error details: {e!s}"],
                     )
-                    span.set_attribute("validation.status", "unhealthy")
-                    record_validation_duration(self.name, latency_ms, "unhealthy")
-                    record_validation_error(self.name, "unexpected_result")
-                    return result
-                finally:
-                    conn.close()
-            except Exception as e:
-                latency_ms = (time.perf_counter() - start_time) * 1000
-                span.set_attribute("validation.status", "unhealthy")
-                span.set_attribute("error.message", str(e))
-                record_validation_duration(self.name, latency_ms, "unhealthy")
-                record_validation_error(self.name, type(e).__name__)
-                return ConnectionResult(
-                    status=ConnectionStatus.UNHEALTHY,
-                    latency_ms=latency_ms,
-                    message=f"Failed to connect to DuckDB: {e}",
-                    warnings=[f"Error details: {e!s}"],
-                )
 
     def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
         """Return K8s resource requirements for DuckDB dbt job pods.
@@ -413,50 +435,58 @@ class DuckDBComputePlugin(ComputePlugin):
         Raises:
             ValueError: If catalog_name contains invalid characters.
         """
-        # Validate catalog_name as it's used as an SQL identifier (AS clause)
-        # This prevents SQL injection via malicious catalog names
-        _validate_sql_identifier(catalog_config.catalog_name, "catalog_name")
+        tracer = get_tracer()
 
-        statements: list[str] = [
-            "INSTALL iceberg;",
-            "LOAD iceberg;",
-        ]
+        with compute_span(
+            tracer,
+            "get_catalog_attachment_sql",
+            engine="duckdb",
+            extra_attributes={"catalog.name": catalog_config.catalog_name},
+        ):
+            # Validate catalog_name as it's used as an SQL identifier (AS clause)
+            # This prevents SQL injection via malicious catalog names
+            _validate_sql_identifier(catalog_config.catalog_name, "catalog_name")
 
-        # Escape string values to prevent SQL injection
-        catalog_name_escaped = _escape_sql_string(catalog_config.catalog_name)
+            statements: list[str] = [
+                "INSTALL iceberg;",
+                "LOAD iceberg;",
+            ]
 
-        # Build ATTACH statement with options
-        attach_parts = [
-            f"ATTACH '{catalog_name_escaped}' AS {catalog_config.catalog_name}",
-            "(TYPE ICEBERG",
-        ]
+            # Escape string values to prevent SQL injection
+            catalog_name_escaped = _escape_sql_string(catalog_config.catalog_name)
 
-        if catalog_config.catalog_uri:
-            uri_escaped = _escape_sql_string(catalog_config.catalog_uri)
-            attach_parts.append(f", ENDPOINT '{uri_escaped}'")
+            # Build ATTACH statement with options
+            attach_parts = [
+                f"ATTACH '{catalog_name_escaped}' AS {catalog_config.catalog_name}",
+                "(TYPE ICEBERG",
+            ]
 
-        if catalog_config.warehouse:
-            warehouse_escaped = _escape_sql_string(catalog_config.warehouse)
-            attach_parts.append(f", WAREHOUSE '{warehouse_escaped}'")
+            if catalog_config.catalog_uri:
+                uri_escaped = _escape_sql_string(catalog_config.catalog_uri)
+                attach_parts.append(f", ENDPOINT '{uri_escaped}'")
 
-        # Add credentials if provided (extract secret values and escape)
-        creds = catalog_config.credentials
-        client_id = creds.get("client_id")
-        client_secret = creds.get("client_secret")
+            if catalog_config.warehouse:
+                warehouse_escaped = _escape_sql_string(catalog_config.warehouse)
+                attach_parts.append(f", WAREHOUSE '{warehouse_escaped}'")
 
-        if client_id:
-            # SecretStr: use get_secret_value() to extract, then escape
-            value = _escape_sql_string(client_id.get_secret_value())
-            attach_parts.append(f", CLIENT_ID '{value}'")
-        if client_secret:
-            value = _escape_sql_string(client_secret.get_secret_value())
-            attach_parts.append(f", CLIENT_SECRET '{value}'")
+            # Add credentials if provided (extract secret values and escape)
+            creds = catalog_config.credentials
+            client_id = creds.get("client_id")
+            client_secret = creds.get("client_secret")
 
-        attach_parts.append(")")
+            if client_id:
+                # SecretStr: use get_secret_value() to extract, then escape
+                value = _escape_sql_string(client_id.get_secret_value())
+                attach_parts.append(f", CLIENT_ID '{value}'")
+            if client_secret:
+                value = _escape_sql_string(client_secret.get_secret_value())
+                attach_parts.append(f", CLIENT_SECRET '{value}'")
 
-        statements.append("".join(attach_parts) + ";")
+            attach_parts.append(")")
 
-        return statements
+            statements.append("".join(attach_parts) + ";")
+
+            return statements
 
     def get_cube_datasource_config(
         self,
