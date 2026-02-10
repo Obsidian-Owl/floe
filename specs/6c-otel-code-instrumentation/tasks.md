@@ -65,6 +65,8 @@ Tests are mandatory per spec (US5 is P0, FR-020 through FR-024 require tests).
 
 **Independent Test**: Run each plugin's `test_tracing.py` with `InMemorySpanExporter` to verify spans created with correct names, attributes, and error recording.
 
+**IMPORTANT (FR-019)**: Every new `tracing.py` context manager MUST set `FloeSpanAttributes` (floe.namespace, floe.product.name) in addition to domain-specific attributes. Follow the pattern from floe-catalog-polaris.
+
 ### Tests for Phase 3
 
 - [ ] T011 [P] [US5] Write tracing test for floe-secrets-infisical in `plugins/floe-secrets-infisical/tests/unit/test_tracing.py` — span name, secrets.provider attr, secrets.key_name attr, NO secret values in attrs, error sanitized (FR-020, FR-021)
@@ -93,6 +95,8 @@ Tests are mandatory per spec (US5 is P0, FR-020 through FR-024 require tests).
 **Goal**: Instrument 7 plugins — 4 alert, 2 quality, 1 lineage.
 
 **Independent Test**: Same InMemorySpanExporter pattern per plugin.
+
+**IMPORTANT (FR-019)**: Every new `tracing.py` context manager MUST set `FloeSpanAttributes` (floe.namespace, floe.product.name) in addition to domain-specific attributes.
 
 ### Tests for Phase 4
 
@@ -128,6 +132,8 @@ Tests are mandatory per spec (US5 is P0, FR-020 through FR-024 require tests).
 **Goal**: Instrument remaining 4 plugins (compute-duckdb, orchestrator-dagster, network-security-k8s, dbt-fusion).
 
 **Independent Test**: Same InMemorySpanExporter pattern per plugin.
+
+**IMPORTANT (FR-019)**: Every new `tracing.py` context manager MUST set `FloeSpanAttributes` (floe.namespace, floe.product.name) in addition to domain-specific attributes.
 
 ### Tests for Phase 5
 
@@ -217,6 +223,7 @@ Tests are mandatory per spec (US5 is P0, FR-020 through FR-024 require tests).
 - [ ] T079 Verify all plugins have tracer_name — `pytest tests/contract/test_plugin_instrumentation_contract.py -v` (SC-001)
 - [ ] T080 Run performance benchmark — `pytest benchmarks/test_tracing_perf.py -v --benchmark-only` (SC-006)
 - [ ] T081 Full regression — `make test-unit` (SC-002, SC-007)
+- [ ] T082 [US1] Verify all 19 tracing.py modules set `FloeSpanAttributes` (floe.namespace, floe.product.name) in their context managers — `rg "FloeSpanAttributes" plugins/*/src/*/tracing.py` confirms all present (FR-019, SC-001)
 
 **Checkpoint**: All success criteria verified. Epic 6C complete.
 
@@ -322,6 +329,26 @@ Each phase produces independently verifiable output:
 
 ---
 
+## Plan-to-Tasks Phase Mapping
+
+Tasks reorganize plan sub-phases by priority tier (security-first) rather than plugin category:
+
+| Plan Phase | Tasks Phase | Rationale |
+|------------|-------------|-----------|
+| Phase 1 (Sanitization) | Phase 1 | Identical |
+| Phase 2 (Unified @traced) | Phase 2 (US2 track) | Identical |
+| Phase 4 (PluginMetadata) | Phase 2 (US3 track, parallel) | Grouped with foundational work |
+| Phase 5A (Alert plugins) | Phase 4 | Grouped by breadth |
+| Phase 5B (Security/RBAC) | Phase 3 | Promoted: highest audit value |
+| Phase 5C (Secrets) | Phase 3 | Promoted: security-sensitive |
+| Phase 5D (Quality) | Phase 4 | Grouped by breadth |
+| Phase 5E (Compute/Orchestrator/Lineage/DBT) | Phase 4 (lineage) + Phase 5 (rest) | Split by priority |
+| Phase 3 (Iceberg migration) | Phase 2 T007-T008 | Merged into unified @traced phase |
+| Phase 6 (Sanitize existing) | Phase 6 + Phase 7 | Split: existing plugins vs core packages |
+| Phase 7 (Audit) | Phase 8 | Renumbered |
+| Phase 8 (Contract + Benchmark) | Phase 9 | Renumbered |
+| Phase 9 (Test sweep) | Phase 9 | Merged with contract/benchmark |
+
 ## Notes
 
 - [P] tasks = different files, no dependencies
@@ -330,4 +357,4 @@ Each phase produces independently verifiable output:
 - Telemetry backends (console, jaeger) are excluded from instrumentation — infinite loop risk
 - Tests use InMemorySpanExporter pattern (R8 in plan)
 - All error recording uses sanitize_error_message() (FR-013, FR-014)
-- 81 total tasks across 9 phases
+- 82 total tasks across 9 phases
