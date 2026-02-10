@@ -718,21 +718,21 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
     def write(self, sink: Any, data: Any, **kwargs: Any) -> EgressResult:
         """Push data to the configured sink destination (FR-008).
 
-        Writes data to the destination. The ``data`` parameter is a
-        ``pyarrow.Table`` at runtime (typed as Any to avoid a hard
-        dependency on pyarrow in floe-core).
+        Writes data to the destination via a dlt egress pipeline.
+        The ``data`` parameter is a ``pyarrow.Table`` at runtime
+        (typed as Any to avoid a hard dependency on pyarrow in floe-core).
 
         Args:
             sink: Configured destination dict from create_sink().
             data: Data to write (pyarrow.Table at runtime).
-            **kwargs: Additional write options.
+            **kwargs: Additional write options (table_name, write_disposition).
 
         Returns:
             EgressResult with delivery metrics and receipt.
 
         Raises:
             RuntimeError: If plugin not started.
-            SinkWriteError: If write operation fails.
+            SinkWriteError: If write operation fails or dlt reports failed jobs.
             SinkConnectionError: If destination is unreachable.
         """
         if not self._started:
@@ -740,6 +740,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
 
         tracer = get_tracer()
         sink_type = sink.get("sink_type", "unknown") if isinstance(sink, dict) else "unknown"
+        connection_config = sink.get("connection_config", {}) if isinstance(sink, dict) else {}
         start_time = time.perf_counter()
 
         with egress_span(tracer, "write", sink_type=sink_type) as span:
@@ -785,6 +786,31 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     data_bytes = str(data).encode("utf-8")
                     checksum = f"sha256:{hashlib.sha256(data_bytes).hexdigest()}"
                     data_bytes_len = len(data_bytes)
+
+                # Execute dlt egress pipeline to deliver data to destination
+                import dlt
+
+                table_name = kwargs.get("table_name", "egress_output")
+                write_disposition = kwargs.get("write_disposition", "append")
+
+                pipeline = dlt.pipeline(
+                    pipeline_name=f"floe_egress_{sink_type}",
+                    destination=sink_type,
+                    credentials=connection_config or None,
+                )
+
+                load_info = pipeline.run(
+                    data,
+                    table_name=table_name,
+                    write_disposition=write_disposition,
+                )
+
+                # Verify delivery — dlt marks failed jobs on load_info
+                if getattr(load_info, "has_failed_jobs", False):
+                    raise SinkWriteError(
+                        f"dlt egress pipeline reported failed jobs for sink '{sink_type}'",
+                        source_type=sink_type,
+                    )
 
                 elapsed = time.perf_counter() - start_time
 

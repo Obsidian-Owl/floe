@@ -30,6 +30,7 @@ def dlt_plugin() -> Generator[DltIngestionPlugin, None, None]:
 
     Mocks the dlt import during startup since dlt is a runtime
     dependency not available in the unit test environment.
+    Configures mock pipeline to simulate successful egress delivery.
 
     Yields:
         Started DltIngestionPlugin instance
@@ -39,6 +40,11 @@ def dlt_plugin() -> Generator[DltIngestionPlugin, None, None]:
     """
     mock_dlt = MagicMock()
     mock_dlt.__version__ = "1.20.0"
+    # Configure egress pipeline mock: pipeline.run() returns load_info
+    # with has_failed_jobs=False (simulates successful delivery)
+    mock_load_info = MagicMock()
+    mock_load_info.has_failed_jobs = False
+    mock_dlt.pipeline.return_value.run.return_value = mock_load_info
     with patch.dict("sys.modules", {"dlt": mock_dlt}):
         plugin = DltIngestionPlugin()
         plugin.startup()
@@ -279,6 +285,55 @@ class TestDltSinkConnector:
         assert result.checksum.startswith("sha256:")
         # sha256 hex digest is 64 characters
         assert len(result.checksum) == len("sha256:") + 64
+
+    @pytest.mark.requirement("4G-FR-008")
+    def test_write_invokes_dlt_pipeline(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test write() creates and runs a dlt egress pipeline.
+
+        Validates that write() actually delegates data delivery to dlt
+        rather than silently succeeding without writing data.
+        """
+        import sys
+
+        mock_dlt = sys.modules["dlt"]
+
+        sink = dlt_plugin.create_sink(
+            SinkConfig(
+                sink_type="rest_api",
+                connection_config={"base_url": "https://api.example.com"},
+            )
+        )
+        mock_data = MagicMock()
+        mock_data.num_rows = 10
+
+        dlt_plugin.write(sink, mock_data)
+
+        mock_dlt.pipeline.assert_called_once()  # type: ignore[union-attr]
+        mock_dlt.pipeline.return_value.run.assert_called_once()  # type: ignore[union-attr]
+
+    @pytest.mark.requirement("4G-FR-008")
+    def test_write_raises_on_dlt_failed_jobs(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Test write() raises SinkWriteError when dlt reports failed jobs.
+
+        Validates that delivery failures from the dlt pipeline are
+        propagated as SinkWriteError, not swallowed.
+        """
+        import sys
+
+        mock_dlt = sys.modules["dlt"]
+        # Simulate dlt reporting failed jobs
+        mock_load_info = MagicMock()
+        mock_load_info.has_failed_jobs = True
+        mock_dlt.pipeline.return_value.run.return_value = mock_load_info  # type: ignore[union-attr]
+
+        mock_sink = MagicMock()
+        mock_data = MagicMock()
+        mock_data.num_rows = 10
+
+        from floe_ingestion_dlt.errors import SinkWriteError
+
+        with pytest.raises(SinkWriteError, match="failed jobs"):
+            dlt_plugin.write(mock_sink, mock_data)
 
     @pytest.mark.requirement("4G-FR-018")
     def test_get_source_config_warns_on_s3_credentials(
