@@ -10,16 +10,15 @@ are implemented on DltIngestionPlugin.
 
 from __future__ import annotations
 
-import sys
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from floe_core.plugins.ingestion import IngestionPlugin
-from floe_core.plugins.sink import SinkConnector, SinkConfig, EgressResult
-from floe_ingestion_dlt.plugin import DltIngestionPlugin
+from floe_core.plugins.sink import EgressResult, SinkConfig, SinkConnector
+
 from floe_ingestion_dlt.errors import SinkConfigurationError
+from floe_ingestion_dlt.plugin import DltIngestionPlugin
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -301,7 +300,7 @@ class TestDltSinkConnector:
 
     @pytest.mark.requirement("4G-FR-018")
     def test_get_source_config_warns_on_s3_credentials(
-        self, dlt_plugin: DltIngestionPlugin, caplog: pytest.LogCaptureFixture
+        self, dlt_plugin: DltIngestionPlugin, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """Test get_source_config emits warning when S3 credentials are in config.
 
@@ -315,15 +314,19 @@ class TestDltSinkConnector:
             "s3_secret_key": "secret",
         }
 
-        with caplog.at_level("WARNING"):
-            result = dlt_plugin.get_source_config(catalog_config)
+        result = dlt_plugin.get_source_config(catalog_config)
 
         # Verify config is still passed through (backwards compat)
         assert result["s3_access_key"] == "AKIAEXAMPLE"
 
+        # Verify warning was actually emitted (structlog writes to stdout)
+        assert "s3_credentials_in_config" in capsys.readouterr().out, (
+            "Expected S3 credential deprecation warning in output"
+        )
+
     @pytest.mark.requirement("4G-FR-018")
     def test_get_destination_config_warns_on_s3_credentials(
-        self, dlt_plugin: DltIngestionPlugin, caplog: pytest.LogCaptureFixture
+        self, dlt_plugin: DltIngestionPlugin, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """Test get_destination_config emits warning for S3 credentials in config.
 
@@ -336,7 +339,11 @@ class TestDltSinkConnector:
             "s3_secret_key": "secret",
         }
 
-        with caplog.at_level("WARNING"):
-            result = dlt_plugin.get_destination_config(catalog_config)
+        result = dlt_plugin.get_destination_config(catalog_config)
 
         assert result["s3_access_key"] == "AKIAEXAMPLE"
+
+        # Verify warning was actually emitted (structlog writes to stdout)
+        assert "s3_credentials_in_config" in capsys.readouterr().out, (
+            "Expected S3 credential deprecation warning in output"
+        )

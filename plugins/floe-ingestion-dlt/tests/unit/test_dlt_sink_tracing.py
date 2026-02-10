@@ -12,13 +12,13 @@ Pattern matches existing ingestion_span() in the same module.
 from __future__ import annotations
 
 import pytest
+from floe_core.plugins.sink import EgressResult
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
 
-from floe_core.plugins.sink import EgressResult
 from floe_ingestion_dlt.tracing import (
     ATTR_ERROR_CATEGORY,
     ATTR_ERROR_MESSAGE,
@@ -260,6 +260,7 @@ class TestSanitizeErrorMessage:
         msg = f"Error: secret_key={test_value}"
         result = sanitize_error_message(msg)
         assert test_value not in result
+        assert "<REDACTED>" in result
 
 
 class TestSpanExceptionRecording:

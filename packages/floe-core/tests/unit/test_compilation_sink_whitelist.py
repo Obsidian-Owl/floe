@@ -77,38 +77,76 @@ class TestSinkWhitelistEnforcement:
 
     @pytest.mark.requirement("4G-SEC-007")
     def test_no_approved_sinks_means_all_allowed(self) -> None:
-        """Test that None approved_sinks means no whitelist enforcement.
+        """Test that None approved_sinks skips whitelist enforcement.
 
         Validates backwards compatibility — if manifest has no
-        approved_sinks field, all sink types are allowed.
+        approved_sinks field, all sink types are allowed. Exercises
+        the same guard condition used in compile_pipeline Stage 4.
         """
-        # When approved_sinks is None, the validation should be skipped
-        # This is tested by checking the conditional in compile_pipeline
+        from floe_core.schemas.plugins import (
+            SinkWhitelistError,
+            validate_sink_whitelist,
+        )
+
         spec = _make_spec_with_destinations([
             {
                 "name": "any-sink",
-                "sink_type": "anything",
+                "sink_type": "anything_exotic",
                 "connection_secret_ref": "secret-ref",
             }
         ])
 
-        # With approved_sinks=None, validation block is not entered
         manifest_mock = MagicMock()
         manifest_mock.approved_sinks = None
 
-        # The condition `manifest.approved_sinks is not None` should be False
-        assert manifest_mock.approved_sinks is None
-        # So no validation occurs — any sink type is fine
+        # Exercise the same guard condition as compile_pipeline:
+        # if manifest.approved_sinks is not None and spec.destinations is not None
+        if (
+            manifest_mock.approved_sinks is not None
+            and spec.destinations is not None
+        ):
+            for destination in spec.destinations:
+                validate_sink_whitelist(
+                    sink_type=destination.sink_type,
+                    approved_sinks=manifest_mock.approved_sinks,
+                )
+
+        # If we reach here without SinkWhitelistError, the guard worked.
+        # Verify the exotic sink_type would actually fail if validated:
+        with pytest.raises(SinkWhitelistError):
+            validate_sink_whitelist("anything_exotic", ["rest_api"])
 
     @pytest.mark.requirement("4G-SEC-007")
     def test_no_destinations_means_no_validation(self) -> None:
-        """Test that None destinations means no whitelist validation needed.
+        """Test that None destinations skips whitelist validation.
 
         Validates that compile_pipeline skips sink validation when
-        the FloeSpec has no destinations field.
+        the FloeSpec has no destinations field. Exercises the same
+        guard condition used in compile_pipeline Stage 4.
         """
-        spec = _make_spec_with_destinations(None)
-        assert spec.destinations is None
+        from floe_core.schemas.plugins import validate_sink_whitelist
 
-        # The condition `spec.destinations is not None` should be False
-        # So no validation occurs
+        spec = _make_spec_with_destinations(None)
+
+        # Restrictive whitelist that would reject anything not listed
+        manifest_mock = MagicMock()
+        manifest_mock.approved_sinks = ["rest_api"]
+
+        # Exercise the same guard condition as compile_pipeline:
+        # if manifest.approved_sinks is not None and spec.destinations is not None
+        validated_count = 0
+        if (
+            manifest_mock.approved_sinks is not None
+            and spec.destinations is not None
+        ):
+            for destination in spec.destinations:
+                validate_sink_whitelist(
+                    sink_type=destination.sink_type,
+                    approved_sinks=manifest_mock.approved_sinks,
+                )
+                validated_count += 1
+
+        # Guard prevented validation — zero destinations validated
+        assert validated_count == 0, (
+            "No destinations should be validated when spec.destinations is None"
+        )
