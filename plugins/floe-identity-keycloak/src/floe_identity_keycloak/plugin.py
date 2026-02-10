@@ -14,7 +14,7 @@ Implements:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import httpx
 from floe_core.plugin_metadata import HealthState, HealthStatus
@@ -24,35 +24,13 @@ from floe_core.plugins.identity import (
     TokenValidationResult,
     UserInfo,
 )
-from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
-from opentelemetry.trace import SpanKind, Status, StatusCode
 
 from .config import KeycloakIdentityConfig
 from .token_validator import TokenValidator
-
-if TYPE_CHECKING:
-    from opentelemetry.trace import Tracer
-
-# Tracer name for Keycloak plugin
-_TRACER_NAME = "floe.identity.keycloak"
+from .tracing import TRACER_NAME, get_tracer, identity_span
 
 # Error messages (avoid S1192 duplicate string literals)
 _NOT_STARTED_ERROR = "Plugin not started. Call startup() first."
-
-# OpenTelemetry span attribute names
-_SPAN_REALM = "keycloak.realm"
-_SPAN_CLIENT_ID = "keycloak.client_id"
-_SPAN_AUTH_SUCCESS = "keycloak.auth.success"
-_SPAN_TOKEN_VALID = "keycloak.token.valid"
-
-
-def _get_tracer() -> Tracer:
-    """Get OpenTelemetry tracer for this plugin.
-
-    Returns:
-        Tracer instance from the shared factory.
-    """
-    return _factory_get_tracer(_TRACER_NAME)
 
 
 class KeycloakIdentityPlugin(IdentityPlugin):
@@ -99,6 +77,15 @@ class KeycloakIdentityPlugin(IdentityPlugin):
     def description(self) -> str:
         """Plugin description."""
         return "Keycloak OIDC identity provider for floe platform"
+
+    @property
+    def tracer_name(self) -> str | None:
+        """OpenTelemetry tracer name for this plugin.
+
+        Returns:
+            Tracer name string following OTel naming conventions.
+        """
+        return TRACER_NAME
 
     def __init__(self, config: KeycloakIdentityConfig) -> None:
         """Initialize KeycloakIdentityPlugin.
@@ -226,29 +213,16 @@ class KeycloakIdentityPlugin(IdentityPlugin):
                 "scope": " ".join(self._config.scopes),
             }
 
-        tracer = _get_tracer()
-        with tracer.start_as_current_span(
-            "keycloak.authenticate",
-            kind=SpanKind.CLIENT,
+        tracer = get_tracer()
+        with identity_span(
+            tracer,
+            "authenticate",
+            realm=self._config.realm,
+            extra_attributes={"identity.grant_type": grant_type},
         ) as span:
-            span.set_attribute(_SPAN_REALM, self._config.realm)
-            span.set_attribute(_SPAN_CLIENT_ID, self._config.client_id)
-            span.set_attribute("keycloak.grant_type", grant_type)
-
-            try:
-                result = self._do_authenticate(data)
-                if result is not None:
-                    span.set_attribute(_SPAN_AUTH_SUCCESS, True)
-                    span.set_status(Status(StatusCode.OK))
-                else:
-                    span.set_attribute(_SPAN_AUTH_SUCCESS, False)
-                    span.set_status(Status(StatusCode.ERROR, "Authentication failed"))
-                return result
-            except Exception as e:
-                span.set_attribute(_SPAN_AUTH_SUCCESS, False)
-                span.set_status(Status(StatusCode.ERROR, str(e)))
-                span.record_exception(e)
-                raise
+            result = self._do_authenticate(data)
+            span.set_attribute("identity.auth.success", result is not None)
+            return result
 
     def _do_authenticate(self, data: dict[str, Any]) -> str | None:
         """Execute authentication request.
@@ -334,29 +308,17 @@ class KeycloakIdentityPlugin(IdentityPlugin):
         if not self._started or not self._token_validator:
             raise RuntimeError(_NOT_STARTED_ERROR)
 
-        tracer = _get_tracer()
-        with tracer.start_as_current_span(
-            "keycloak.validate_token",
-            kind=SpanKind.CLIENT,
+        tracer = get_tracer()
+        with identity_span(
+            tracer,
+            "validate_token",
+            realm=self._config.realm,
         ) as span:
-            span.set_attribute(_SPAN_REALM, self._config.realm)
-            span.set_attribute(_SPAN_CLIENT_ID, self._config.client_id)
-
-            try:
-                result = self._validate_and_convert(token, self._token_validator)
-                span.set_attribute(_SPAN_TOKEN_VALID, result.valid)
-                if result.valid:
-                    span.set_status(Status(StatusCode.OK))
-                    if result.user_info:
-                        span.set_attribute("keycloak.user.subject", result.user_info.subject)
-                else:
-                    span.set_status(Status(StatusCode.ERROR, result.error or "Invalid token"))
-                return result
-            except Exception as e:
-                span.set_attribute(_SPAN_TOKEN_VALID, False)
-                span.set_status(Status(StatusCode.ERROR, str(e)))
-                span.record_exception(e)
-                raise
+            result = self._validate_and_convert(token, self._token_validator)
+            span.set_attribute("identity.token.valid", result.valid)
+            if result.valid and result.user_info:
+                span.set_attribute("identity.user.subject", result.user_info.subject)
+            return result
 
     def _validate_and_convert(self, token: str, validator: TokenValidator) -> TokenValidationResult:
         """Validate token and convert to floe_core result.
@@ -448,30 +410,18 @@ class KeycloakIdentityPlugin(IdentityPlugin):
         # Use cached validator or create new one
         validator = self._get_or_create_realm_validator(realm)
 
-        tracer = _get_tracer()
-        with tracer.start_as_current_span(
-            "keycloak.validate_token_for_realm",
-            kind=SpanKind.CLIENT,
+        tracer = get_tracer()
+        with identity_span(
+            tracer,
+            "validate_token_for_realm",
+            realm=realm,
+            multi_tenant=True,
         ) as span:
-            span.set_attribute(_SPAN_REALM, realm)
-            span.set_attribute(_SPAN_CLIENT_ID, self._config.client_id)
-            span.set_attribute("keycloak.multi_tenant", True)
-
-            try:
-                result = self._validate_and_convert(token, validator)
-                span.set_attribute(_SPAN_TOKEN_VALID, result.valid)
-                if result.valid:
-                    span.set_status(Status(StatusCode.OK))
-                    if result.user_info:
-                        span.set_attribute("keycloak.user.subject", result.user_info.subject)
-                else:
-                    span.set_status(Status(StatusCode.ERROR, result.error or "Invalid token"))
-                return result
-            except Exception as e:
-                span.set_attribute(_SPAN_TOKEN_VALID, False)
-                span.set_status(Status(StatusCode.ERROR, str(e)))
-                span.record_exception(e)
-                raise
+            result = self._validate_and_convert(token, validator)
+            span.set_attribute("identity.token.valid", result.valid)
+            if result.valid and result.user_info:
+                span.set_attribute("identity.user.subject", result.user_info.subject)
+            return result
 
     def authenticate_for_realm(
         self,

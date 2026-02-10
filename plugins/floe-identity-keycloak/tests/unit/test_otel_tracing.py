@@ -1,7 +1,11 @@
-"""Unit tests for OpenTelemetry tracing in Keycloak plugin.
+"""Unit tests for OpenTelemetry tracing integration in Keycloak plugin methods.
 
 Task: T072
 Requirements: OB-005 (OpenTelemetry tracing for authentication operations)
+
+These tests verify that plugin methods (authenticate, validate_token,
+validate_token_for_realm) correctly use the identity_span context manager
+from the tracing module and work with NoOp tracers.
 """
 
 from __future__ import annotations
@@ -50,7 +54,6 @@ class TestAuthenticateTracing:
             KeycloakIdentityConfig,
             KeycloakIdentityPlugin,
         )
-        from floe_identity_keycloak import plugin as plugin_module
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -78,7 +81,7 @@ class TestAuthenticateTracing:
                 mock_response.json.return_value = {"access_token": "test-token"}
                 mock_post.return_value = mock_response
 
-                with patch.object(plugin_module, "_get_tracer", return_value=mock_tracer):
+                with patch("floe_identity_keycloak.plugin.get_tracer", return_value=mock_tracer):
                     token = plugin.authenticate({})
 
                     assert token == "test-token"
@@ -93,7 +96,6 @@ class TestAuthenticateTracing:
             KeycloakIdentityConfig,
             KeycloakIdentityPlugin,
         )
-        from floe_identity_keycloak import plugin as plugin_module
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -119,17 +121,22 @@ class TestAuthenticateTracing:
                 mock_response.json.return_value = {"access_token": "test-token"}
                 mock_post.return_value = mock_response
 
-                with patch.object(plugin_module, "_get_tracer", return_value=mock_tracer):
+                with patch("floe_identity_keycloak.plugin.get_tracer", return_value=mock_tracer):
                     plugin.authenticate({})
 
-                    # Verify span attributes were set
-                    set_attribute_calls = mock_span.set_attribute.call_args_list
-                    attributes = {call[0][0]: call[0][1] for call in set_attribute_calls}
+                    # Verify span was created with identity.authenticate name
+                    call_args = mock_tracer.start_as_current_span.call_args
+                    assert call_args[0][0] == "identity.authenticate"
 
-                    assert attributes.get("keycloak.realm") == "test-realm"
-                    assert attributes.get("keycloak.client_id") == "my-client"
-                    assert attributes.get("keycloak.grant_type") == "client_credentials"
-                    assert attributes.get("keycloak.auth.success") is True
+                    # Verify initial attributes contain realm and grant_type
+                    attributes = call_args[1]["attributes"]
+                    assert attributes.get("identity.realm") == "test-realm"
+                    assert attributes.get("identity.grant_type") == "client_credentials"
+
+                    # Verify auth success attribute set on span
+                    set_attribute_calls = mock_span.set_attribute.call_args_list
+                    set_attrs = {call[0][0]: call[0][1] for call in set_attribute_calls}
+                    assert set_attrs.get("identity.auth.success") is True
         finally:
             plugin.shutdown()
 
@@ -144,7 +151,6 @@ class TestValidateTokenTracing:
             KeycloakIdentityConfig,
             KeycloakIdentityPlugin,
         )
-        from floe_identity_keycloak import plugin as plugin_module
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -173,15 +179,15 @@ class TestValidateTokenTracing:
             with patch.object(
                 plugin._token_validator, "validate", return_value=mock_validator_result
             ):
-                with patch.object(plugin_module, "_get_tracer", return_value=mock_tracer):
+                with patch("floe_identity_keycloak.plugin.get_tracer", return_value=mock_tracer):
                     result = plugin.validate_token("invalid-token")
 
                     assert result.valid is False
                     mock_tracer.start_as_current_span.assert_called_once()
 
-                    # Check span name
+                    # Check span name uses new identity prefix
                     call_args = mock_tracer.start_as_current_span.call_args
-                    assert call_args[0][0] == "keycloak.validate_token"
+                    assert call_args[0][0] == "identity.validate_token"
         finally:
             plugin.shutdown()
 
@@ -196,7 +202,6 @@ class TestValidateTokenForRealmTracing:
             KeycloakIdentityConfig,
             KeycloakIdentityPlugin,
         )
-        from floe_identity_keycloak import plugin as plugin_module
 
         config = KeycloakIdentityConfig(
             server_url="https://keycloak.example.com",
@@ -227,15 +232,15 @@ class TestValidateTokenForRealmTracing:
             with patch.object(
                 plugin, "_get_or_create_realm_validator", return_value=mock_validator
             ):
-                with patch.object(plugin_module, "_get_tracer", return_value=mock_tracer):
+                with patch("floe_identity_keycloak.plugin.get_tracer", return_value=mock_tracer):
                     plugin.validate_token_for_realm("token", "other-realm")
 
-                    # Verify multi_tenant attribute
-                    set_attribute_calls = mock_span.set_attribute.call_args_list
-                    attributes = {call[0][0]: call[0][1] for call in set_attribute_calls}
+                    # Verify span attributes include realm and multi_tenant
+                    call_args = mock_tracer.start_as_current_span.call_args
+                    attributes = call_args[1]["attributes"]
 
-                    assert attributes.get("keycloak.realm") == "other-realm"
-                    assert attributes.get("keycloak.multi_tenant") is True
+                    assert attributes.get("identity.realm") == "other-realm"
+                    assert attributes.get("identity.multi_tenant") is True
         finally:
             plugin.shutdown()
 
@@ -272,7 +277,7 @@ class TestTracingWithNoOpTracer:
                 mock_response.json.return_value = {"access_token": "test-token"}
                 mock_post.return_value = mock_response
 
-                # No need to patch _get_tracer - the real factory handles this gracefully
+                # No need to patch get_tracer - the real factory handles this gracefully
                 token = plugin.authenticate({})
 
                 assert token == "test-token"
@@ -306,7 +311,7 @@ class TestTracingWithNoOpTracer:
             with patch.object(
                 plugin._token_validator, "validate", return_value=mock_validator_result
             ):
-                # No need to patch _get_tracer - the real factory handles this gracefully
+                # No need to patch get_tracer - the real factory handles this gracefully
                 result = plugin.validate_token("test-token")
 
                 assert result.valid is False
