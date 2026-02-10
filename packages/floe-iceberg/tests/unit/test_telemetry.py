@@ -1,6 +1,7 @@
 """Unit tests for floe_iceberg.telemetry module.
 
-Tests the @traced decorator for OpenTelemetry instrumentation.
+Tests the @traced decorator (re-exported from floe-core) for OpenTelemetry
+instrumentation of floe-iceberg operations.
 
 Note:
     No __init__.py files in test directories - pytest uses importlib mode
@@ -27,6 +28,9 @@ if TYPE_CHECKING:
 def mock_tracer() -> Generator[MagicMock, None, None]:
     """Create a mock tracer for testing.
 
+    Patches get_tracer in floe_core.telemetry.tracing where the unified
+    traced decorator retrieves it.
+
     Yields:
         MagicMock tracer with span context manager.
     """
@@ -40,7 +44,10 @@ def mock_tracer() -> Generator[MagicMock, None, None]:
     mock_tracer = MagicMock()
     mock_tracer.start_as_current_span = MagicMock(return_value=mock_span)
 
-    with patch("floe_iceberg.telemetry.get_tracer", return_value=mock_tracer) as mock_get_tracer:
+    with patch(
+        "floe_core.telemetry.tracing.get_tracer",
+        return_value=mock_tracer,
+    ) as mock_get_tracer:
         mock_get_tracer.return_value = mock_tracer
         yield mock_tracer
 
@@ -51,7 +58,7 @@ def mock_tracer() -> Generator[MagicMock, None, None]:
 
 
 class TestTracedDecorator:
-    """Tests for the @traced decorator."""
+    """Tests for the @traced decorator (re-exported from floe-core)."""
 
     @pytest.mark.requirement("FR-041")
     def test_traced_creates_span(self, mock_tracer: MagicMock) -> None:
@@ -75,34 +82,14 @@ class TestTracedDecorator:
         assert call_args[0][0] == "my_function"
 
     @pytest.mark.requirement("FR-041")
-    def test_traced_includes_operation_name_attribute(self, mock_tracer: MagicMock) -> None:
-        """Test span includes operation name attribute.
-
-        Acceptance criteria from T069:
-        - Span includes operation name and attributes
-        """
-        from floe_iceberg.telemetry import traced
-
-        @traced
-        def create_table() -> None:
-            pass
-
-        create_table()
-
-        mock_span = mock_tracer.start_as_current_span.return_value
-        mock_span.__enter__.return_value.set_attribute.assert_any_call(
-            "floe.iceberg.operation", "create_table"
-        )
-
-    @pytest.mark.requirement("FR-041")
-    def test_traced_with_custom_operation_name(self, mock_tracer: MagicMock) -> None:
-        """Test @traced accepts custom operation name.
+    def test_traced_with_custom_name(self, mock_tracer: MagicMock) -> None:
+        """Test @traced accepts custom span name via name parameter.
 
         Verifies decorator parameter for custom span name.
         """
         from floe_iceberg.telemetry import traced
 
-        @traced(operation_name="custom_operation")
+        @traced(name="custom_operation")
         def my_function() -> None:
             pass
 
@@ -194,7 +181,7 @@ class TestTracedDecorator:
 
     @pytest.mark.requirement("FR-041")
     def test_traced_records_exception_on_error(self, mock_tracer: MagicMock) -> None:
-        """Test @traced records exception when function raises."""
+        """Test @traced records sanitized exception details when function raises."""
         from floe_iceberg.telemetry import traced
 
         @traced
@@ -206,7 +193,9 @@ class TestTracedDecorator:
             failing_function()
 
         mock_span = mock_tracer.start_as_current_span.return_value.__enter__.return_value
-        mock_span.record_exception.assert_called_once()
+        # Unified traced uses set_attribute for exception details (sanitized)
+        mock_span.set_attribute.assert_any_call("exception.type", "ValueError")
+        mock_span.set_attribute.assert_any_call("exception.message", "Something went wrong")
 
     @pytest.mark.requirement("FR-041")
     def test_traced_sets_error_status_on_exception(self, mock_tracer: MagicMock) -> None:

@@ -68,7 +68,7 @@ class _IcebergSnapshotManager:
     # Snapshot Management Operations
     # =========================================================================
 
-    @traced(operation_name="iceberg.snapshot.list_snapshots")
+    @traced(name="iceberg.snapshot.list_snapshots")
     def list_snapshots(self, table: Table) -> list[SnapshotInfo]:
         """List all snapshots for a table, ordered by timestamp (newest first).
 
@@ -107,7 +107,7 @@ class _IcebergSnapshotManager:
         )
         return snapshots
 
-    @traced(operation_name="iceberg.snapshot.rollback")
+    @traced(name="iceberg.snapshot.rollback")
     def rollback_to_snapshot(self, table: Table, snapshot_id: int) -> Table:
         """Rollback table to a previous snapshot.
 
@@ -192,7 +192,7 @@ class _IcebergSnapshotManager:
         )
         return table
 
-    @traced(operation_name="iceberg.snapshot.expire_snapshots")
+    @traced(name="iceberg.snapshot.expire_snapshots")
     def expire_snapshots(
         self,
         table: Table,

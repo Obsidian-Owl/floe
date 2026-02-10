@@ -63,7 +63,7 @@ class _IcebergCompactionManager:
     # Compaction Operations
     # =========================================================================
 
-    @traced(operation_name="iceberg.compaction.compact_table")
+    @traced(name="iceberg.compaction.compact_table")
     def compact_table(
         self,
         table: Table,

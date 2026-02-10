@@ -164,7 +164,7 @@ class TestTracedDecorator:
         self,
         tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
     ) -> None:
-        """Test @traced records exception details when function raises."""
+        """Test @traced records sanitized exception details when function raises."""
         from floe_core.telemetry.tracing import traced
 
         _, exporter = tracer_provider_with_exporter
@@ -180,15 +180,14 @@ class TestTracedDecorator:
         assert len(spans) == 1
         span = spans[0]
 
-        # Span should have error status
+        # Span should have error status with sanitized description
         assert span.status.status_code == StatusCode.ERROR
         assert "Something went wrong" in (span.status.description or "")
 
-        # Exception should be recorded as event
-        events = span.events
-        assert len(events) >= 1
-        exception_event = next((e for e in events if e.name == "exception"), None)
-        assert exception_event is not None
+        # Exception details recorded as attributes (sanitized, no record_exception)
+        attrs = dict(span.attributes or {})
+        assert attrs.get("exception.type") == "ValueError"
+        assert attrs.get("exception.message") == "Something went wrong"
 
     @pytest.mark.requirement("FR-022")
     def test_traced_reraises_exception(
@@ -499,7 +498,7 @@ class TestCreateSpanContextManager:
         self,
         tracer_provider_with_exporter: tuple[TracerProvider, InMemorySpanExporter],
     ) -> None:
-        """Test create_span records exception when raised inside context."""
+        """Test create_span records sanitized exception when raised inside context."""
         from floe_core.telemetry.tracing import create_span
 
         _, exporter = tracer_provider_with_exporter
@@ -512,15 +511,14 @@ class TestCreateSpanContextManager:
         assert len(spans) == 1
         span = spans[0]
 
-        # Span should have error status
+        # Span should have error status with sanitized description
         assert span.status.status_code == StatusCode.ERROR
         assert "Test error" in (span.status.description or "")
 
-        # Exception should be recorded as event
-        events = span.events
-        assert len(events) >= 1
-        exception_event = next((e for e in events if e.name == "exception"), None)
-        assert exception_event is not None
+        # Exception details recorded as attributes (sanitized, no record_exception)
+        attrs = dict(span.attributes or {})
+        assert attrs.get("exception.type") == "ValueError"
+        assert attrs.get("exception.message") == "Test error"
 
     @pytest.mark.requirement("FR-022")
     def test_create_span_reraises_exception(

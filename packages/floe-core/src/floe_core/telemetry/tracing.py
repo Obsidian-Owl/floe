@@ -3,7 +3,15 @@
 This module provides tracing utilities including the @traced decorator
 and create_span() context manager for instrumenting floe operations.
 
-Contract Version: 1.0.0
+The @traced decorator supports:
+- ``name``: Custom span name (default: function name).
+- ``attributes``: Static attributes dict applied to every invocation.
+- ``floe_attributes``: Typed FloeSpanAttributes for semantic conventions.
+- ``attributes_fn``: Callable receiving the decorated function's ``*args, **kwargs``
+  and returning a ``dict[str, Any]`` of dynamic span attributes. Exceptions
+  inside ``attributes_fn`` are logged at WARNING level and never propagate.
+
+Contract Version: 1.1.0
 
 Requirements Covered:
 - FR-004: Spans for compilation operations
@@ -15,6 +23,7 @@ Requirements Covered:
 - FR-007d: floe.mode attribute
 - FR-019: OpenTelemetry semantic conventions
 - FR-022: Error recording with exception details
+- 6C-FR-008: Unified @traced with attributes_fn and sanitized errors
 
 See Also:
     - specs/001-opentelemetry/: Feature specification
@@ -32,6 +41,7 @@ from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, cast, overload
 
 from opentelemetry.trace import Status, StatusCode, Tracer
 
+from floe_core.telemetry.sanitization import sanitize_error_message
 from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 from floe_core.telemetry.tracer_factory import (
     reset_tracer,  # Re-exported for test isolation
@@ -91,6 +101,7 @@ def traced(
     name: str | None = None,
     attributes: dict[str, str] | None = None,
     floe_attributes: FloeSpanAttributes | None = None,
+    attributes_fn: Callable[..., dict[str, Any]] | None = None,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
@@ -100,11 +111,14 @@ def traced(
     name: str | None = None,
     attributes: dict[str, str] | None = None,
     floe_attributes: FloeSpanAttributes | None = None,
+    attributes_fn: Callable[..., dict[str, Any]] | None = None,
 ) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator to trace function execution with OpenTelemetry span.
 
     Creates a span for the decorated function, automatically recording
-    the function name, duration, and any exceptions that occur.
+    the function name, duration, and any exceptions that occur. Error
+    messages are sanitized via ``sanitize_error_message()`` to strip
+    credentials before recording on the span.
 
     Can be used with or without arguments:
         @traced
@@ -116,9 +130,12 @@ def traced(
     Args:
         func: The function to decorate (when used without parentheses).
         name: Optional custom span name. Defaults to function name.
-        attributes: Optional span attributes to set.
+        attributes: Optional static span attributes to set on every invocation.
         floe_attributes: Optional FloeSpanAttributes to inject Floe semantic
             conventions (floe.namespace, floe.product.name, etc.) onto the span.
+        attributes_fn: Optional callable that receives the decorated function's
+            ``*args, **kwargs`` and returns a ``dict[str, Any]`` of dynamic
+            attributes. Failures are logged at WARNING and never propagate.
 
     Returns:
         Decorated function that creates a span on each invocation.
@@ -142,6 +159,12 @@ def traced(
         >>> @traced(floe_attributes=attrs)
         ... def pipeline_run():
         ...     pass
+
+        >>> def get_attrs(table_id: str, **kw: str) -> dict[str, str]:
+        ...     return {"table_id": table_id}
+        >>> @traced(attributes_fn=get_attrs)
+        ... def load_table(table_id: str) -> None:
+        ...     pass
     """
 
     def decorator(fn: Callable[P, R]) -> Callable[P, R]:
@@ -158,19 +181,40 @@ def traced(
                 for key, value in attributes.items():
                     span.set_attribute(key, value)
 
+        def _set_dynamic_attributes(span: Span, *args: Any, **kwargs: Any) -> None:
+            """Set dynamic attributes from attributes_fn, swallowing errors."""
+            if attributes_fn is not None:
+                try:
+                    dynamic_attrs = attributes_fn(*args, **kwargs)
+                    for key, value in dynamic_attrs.items():
+                        span.set_attribute(key, value)
+                except Exception:
+                    logger.warning(
+                        "attributes_fn failed for span %s",
+                        span_name,
+                        exc_info=True,
+                    )
+
         if asyncio.iscoroutinefunction(fn):
 
             @functools.wraps(fn)
             async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 tracer = get_tracer()
-                with tracer.start_as_current_span(span_name) as span:
+                with tracer.start_as_current_span(
+                    span_name,
+                    record_exception=False,
+                    set_status_on_exception=False,
+                ) as span:
                     _set_span_attributes(span)
+                    _set_dynamic_attributes(span, *args, **kwargs)
                     try:
                         result = await fn(*args, **kwargs)
                         return cast(R, result)
                     except Exception as e:
-                        span.set_status(Status(StatusCode.ERROR, str(e)))
-                        span.record_exception(e)
+                        sanitized = sanitize_error_message(str(e))
+                        span.set_status(Status(StatusCode.ERROR, sanitized))
+                        span.set_attribute("exception.type", type(e).__name__)
+                        span.set_attribute("exception.message", sanitized)
                         raise
 
             return async_wrapper  # type: ignore[return-value]
@@ -179,14 +223,21 @@ def traced(
             @functools.wraps(fn)
             def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 tracer = get_tracer()
-                with tracer.start_as_current_span(span_name) as span:
+                with tracer.start_as_current_span(
+                    span_name,
+                    record_exception=False,
+                    set_status_on_exception=False,
+                ) as span:
                     _set_span_attributes(span)
+                    _set_dynamic_attributes(span, *args, **kwargs)
                     try:
                         result = fn(*args, **kwargs)
                         return result
                     except Exception as e:
-                        span.set_status(Status(StatusCode.ERROR, str(e)))
-                        span.record_exception(e)
+                        sanitized = sanitize_error_message(str(e))
+                        span.set_status(Status(StatusCode.ERROR, sanitized))
+                        span.set_attribute("exception.type", type(e).__name__)
+                        span.set_attribute("exception.message", sanitized)
                         raise
 
             return sync_wrapper
@@ -238,7 +289,11 @@ def create_span(
         ...     pass
     """
     tracer = get_tracer()
-    with tracer.start_as_current_span(name) as span:
+    with tracer.start_as_current_span(
+        name,
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
         # Set Floe semantic attributes first (if provided)
         if floe_attributes is not None:
             for key, value in floe_attributes.to_otel_dict().items():
@@ -250,6 +305,8 @@ def create_span(
         try:
             yield span
         except Exception as e:
-            span.set_status(Status(StatusCode.ERROR, str(e)))
-            span.record_exception(e)
+            sanitized = sanitize_error_message(str(e))
+            span.set_status(Status(StatusCode.ERROR, sanitized))
+            span.set_attribute("exception.type", type(e).__name__)
+            span.set_attribute("exception.message", sanitized)
             raise

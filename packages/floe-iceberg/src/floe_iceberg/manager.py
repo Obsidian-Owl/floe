@@ -560,7 +560,7 @@ class IcebergTableManager:
     # =========================================================================
 
     @traced(
-        operation_name="iceberg.write_data",
+        name="iceberg.write_data",
     )
     def write_data(
         self,

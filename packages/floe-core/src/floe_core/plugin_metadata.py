@@ -186,6 +186,19 @@ class PluginMetadata(ABC):
         """
         return []
 
+    @property
+    def tracer_name(self) -> str | None:
+        """OpenTelemetry tracer name for this plugin.
+
+        Override to report instrumentation status to the audit system.
+        Instrumented plugins should return their TRACER_NAME constant
+        (e.g., "floe.catalog.polaris").
+
+        Returns:
+            Tracer name string, or None if uninstrumented.
+        """
+        return None
+
     def get_config_schema(self) -> type[BaseModel] | None:
         """Return the Pydantic model for configuration validation.
 
