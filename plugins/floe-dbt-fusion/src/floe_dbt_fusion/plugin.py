@@ -251,7 +251,7 @@ class DBTFusionPlugin(DBTPlugin):
             FR-017: subprocess invocation
         """
         tracer = get_tracer()
-        with dbt_fusion_span(tracer, "compile", mode="fusion") as span:
+        with dbt_fusion_span(tracer, "compile", mode="fusion"):
             result = self._run_fusion_command(
                 "compile",
                 project_dir,

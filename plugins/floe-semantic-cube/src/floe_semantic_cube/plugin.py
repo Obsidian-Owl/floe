@@ -25,8 +25,8 @@ import httpx
 import structlog
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.semantic import SemanticLayerPlugin
-
 from floe_core.telemetry.sanitization import sanitize_error_message
+
 from floe_semantic_cube.config import CubeSemanticConfig
 from floe_semantic_cube.schema_generator import CubeSchemaGenerator
 from floe_semantic_cube.tracing import (

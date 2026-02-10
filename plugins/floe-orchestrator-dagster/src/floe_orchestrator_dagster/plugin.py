@@ -33,13 +33,14 @@ from floe_core.plugins.orchestrator import (
     ValidationResult,
 )
 from floe_core.schemas import CompiledArtifacts
+from pydantic import ValidationError as PydanticValidationError
+
 from floe_orchestrator_dagster.tracing import (
     ATTR_ASSET_COUNT,
     TRACER_NAME,
     get_tracer,
     orchestrator_span,
 )
-from pydantic import ValidationError as PydanticValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -613,7 +614,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         import httpx
 
         tracer = get_tracer()
-        with orchestrator_span(tracer, "validate_connection") as span:
+        with orchestrator_span(tracer, "validate_connection"):
             # Determine Dagster URL
             url = dagster_url or os.environ.get("DAGSTER_URL", "http://localhost:3000")
             graphql_endpoint = f"{url.rstrip('/')}/graphql"
@@ -673,7 +674,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 return ValidationResult(
                     success=False,
                     message="Failed to connect to Dagster service",
-                    errors=[f"Connection error: {e}. Ensure Dagster webserver is running at {url}."],
+                    errors=[
+                        f"Connection error: {e}. Ensure Dagster webserver is running at {url}.",
+                    ],
                 )
             except Exception as e:
                 logger.error(

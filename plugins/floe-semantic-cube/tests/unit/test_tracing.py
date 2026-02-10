@@ -192,11 +192,11 @@ class TestSemanticSpan:
     def test_semantic_span_handles_exception_and_reraises(self) -> None:
         """Test that semantic_span handles exceptions and sets error status.
 
-        Validates that exceptions are recorded on the span, status is set to
-        ERROR, and the exception is re-raised.
+        Validates that exceptions are recorded on the span with sanitized
+        error messages, status is set to ERROR, and the exception is re-raised.
         """
         mock_tracer = MagicMock(spec=["start_as_current_span"])
-        mock_span = MagicMock(spec=["set_status", "record_exception"])
+        mock_span = MagicMock(spec=["set_status", "set_attribute"])
         mock_tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
 
         test_error = ValueError("test error")
@@ -205,12 +205,18 @@ class TestSemanticSpan:
             with semantic_span(mock_tracer, "failing_operation"):
                 raise test_error
 
-        # Verify error handling
-        mock_span.record_exception.assert_called_once_with(test_error)
+        # Verify error handling uses sanitized attributes
         mock_span.set_status.assert_called_once()
         status_call = mock_span.set_status.call_args[0][0]
         assert status_call.status_code == StatusCode.ERROR
         assert status_call.description == "ValueError"
+        # Verify sanitized error attributes are set
+        attr_calls = {
+            call[0][0]: call[0][1]
+            for call in mock_span.set_attribute.call_args_list
+        }
+        assert attr_calls["exception.type"] == "ValueError"
+        assert "test error" in attr_calls["exception.message"]
 
     @pytest.mark.requirement("FR-048")
     def test_semantic_span_yields_span_for_custom_attributes(self) -> None:
