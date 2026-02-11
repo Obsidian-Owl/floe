@@ -12,7 +12,6 @@ import os
 import subprocess
 import uuid
 from collections.abc import Callable, Generator
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -165,16 +164,6 @@ def run_helm(
 
 
 @pytest.fixture(scope="session")
-def project_root() -> Path:
-    """Get the project root directory.
-
-    Returns:
-        Path to the floe project root (contains pyproject.toml, charts/, demo/).
-    """
-    return Path(__file__).parent.parent.parent
-
-
-@pytest.fixture(scope="session")
 def e2e_namespace() -> str:
     """Generate unique namespace for E2E test session.
 
@@ -319,42 +308,6 @@ def wait_for_service() -> Callable[..., None]:
         )
 
     return _wait_for_service
-
-
-@pytest.fixture(scope="session")
-def compiled_artifacts() -> Callable[[Path], Any]:
-    """Factory fixture that compiles floe.yaml through the real 6-stage pipeline.
-
-    Uses the real compile_pipeline() function from floe-core, ensuring E2E tests
-    validate actual compilation behavior rather than hand-crafted test doubles.
-
-    Returns:
-        Factory function that compiles specs via the real compiler.
-
-    Example:
-        artifacts = compiled_artifacts(Path("demo/customer-360/floe.yaml"))
-        assert artifacts.version == "0.5.0"
-    """
-    from floe_core.compilation.stages import compile_pipeline
-
-    project_root = Path(__file__).parent.parent.parent
-    manifest_path = project_root / "demo" / "manifest.yaml"
-
-    def _compile_artifacts(spec_path: Path) -> Any:
-        """Compile floe.yaml to CompiledArtifacts via real 6-stage pipeline.
-
-        Args:
-            spec_path: Path to floe.yaml file.
-
-        Returns:
-            CompiledArtifacts object from real compilation.
-
-        Raises:
-            CompilationException: If any compilation stage fails.
-        """
-        return compile_pipeline(spec_path, manifest_path)
-
-    return _compile_artifacts
 
 
 @pytest.fixture(scope="session")
