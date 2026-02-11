@@ -163,7 +163,10 @@ class TestGetTracer:
         Validates that the function delegates to the factory with the
         correct RBAC tracer name constant.
         """
-        with patch("floe_rbac_k8s.tracing._factory_get_tracer") as mock_factory:
+        # Patch via sys.modules to avoid __getattr__ in __init__.py on Python 3.10
+        import floe_rbac_k8s.tracing as _tracing_mod
+
+        with patch.object(_tracing_mod, "_factory_get_tracer") as mock_factory:
             mock_tracer = MagicMock()
             mock_factory.return_value = mock_tracer
 

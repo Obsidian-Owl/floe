@@ -416,3 +416,77 @@ class TestDeployCommand:
         assert result.exit_code == 0
         assert "Ignoring invalid --set value" in result.output
         assert "no-equals-sign" in result.output
+
+    @pytest.mark.requirement("FR-018")
+    def test_invalid_release_name_rejected(self, runner: CliRunner, chart_dir: Path) -> None:
+        """Test that invalid release names are rejected."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--release-name",
+                "INVALID_CAPS",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "Invalid release name" in result.output
+
+    @pytest.mark.requirement("FR-018")
+    def test_invalid_namespace_rejected(self, runner: CliRunner, chart_dir: Path) -> None:
+        """Test that invalid namespace is rejected."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--namespace",
+                "bad namespace!",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "Invalid namespace" in result.output
+
+    @pytest.mark.requirement("FR-018")
+    def test_invalid_timeout_rejected(self, runner: CliRunner, chart_dir: Path) -> None:
+        """Test that invalid timeout format is rejected."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--timeout",
+                "not-a-timeout",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "Invalid timeout" in result.output
+
+    @pytest.mark.requirement("FR-018")
+    def test_empty_set_key_rejected(self, runner: CliRunner, chart_dir: Path) -> None:
+        """Test that empty --set keys are warned and skipped."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--set",
+                "=value",
+                "--set",
+                "a..b=value",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Ignoring invalid --set key" in result.output

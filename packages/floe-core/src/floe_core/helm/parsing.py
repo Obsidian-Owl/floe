@@ -47,6 +47,11 @@ def parse_set_values(
                 warn_fn(f"Ignoring invalid --set value (missing '='): {item}")
             continue
         key, _, value = item.partition("=")
+        # Reject empty keys and keys with empty path segments (e.g. "a..b")
+        if not key or not all(key.split(".")):
+            if warn_fn is not None:
+                warn_fn(f"Ignoring invalid --set key (empty or has empty segment): {item}")
+            continue
         flat[key] = parse_value(value)
 
     return unflatten_dict(flat)

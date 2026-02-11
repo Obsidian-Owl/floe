@@ -13,6 +13,7 @@ Example:
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -23,6 +24,11 @@ import yaml
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warn
 from floe_core.helm import HelmValuesConfig, HelmValuesGenerator
 from floe_core.helm.parsing import parse_set_values
+from floe_core.telemetry.sanitization import sanitize_error_message
+
+# Validation patterns for user-supplied Helm/K8s arguments
+_K8S_NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?$")
+_TIMEOUT_RE = re.compile(r"^\d+[smh]?$")
 
 
 @click.command(
@@ -126,6 +132,23 @@ def deploy_command(
 
     # Compute namespace
     namespace = namespace or f"floe-{env}"
+
+    # Validate user-supplied Helm/K8s names to prevent argument injection
+    if not _K8S_NAME_RE.match(release_name):
+        error_exit(
+            f"Invalid release name: {release_name!r} (must match K8s naming conventions)",
+            exit_code=ExitCode.GENERAL_ERROR,
+        )
+    if not _K8S_NAME_RE.match(namespace):
+        error_exit(
+            f"Invalid namespace: {namespace!r} (must match K8s naming conventions)",
+            exit_code=ExitCode.GENERAL_ERROR,
+        )
+    if not _TIMEOUT_RE.match(timeout):
+        error_exit(
+            f"Invalid timeout format: {timeout!r} (expected e.g. 10m, 300s, 1h)",
+            exit_code=ExitCode.GENERAL_ERROR,
+        )
 
     # Create HelmValuesConfig with defaults
     info(f"Generating values for environment: {env}")
@@ -236,7 +259,7 @@ def deploy_command(
         except subprocess.CalledProcessError as e:
             error_msg = "Helm deployment failed"
             if e.stderr:
-                error_msg = f"{error_msg}\n{e.stderr}"
+                error_msg = f"{error_msg}\n{sanitize_error_message(e.stderr)}"
             error_exit(error_msg, exit_code=ExitCode.GENERAL_ERROR)
 
     finally:
