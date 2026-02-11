@@ -57,9 +57,9 @@ class TestParseValue:
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_float(self) -> None:
         """Test parsing float values."""
-        assert parse_value("3.14") == 3.14
-        assert parse_value("0.5") == 0.5
-        assert parse_value("-1.5") == -1.5
+        assert parse_value("3.14") == pytest.approx(3.14)
+        assert parse_value("0.5") == pytest.approx(0.5)
+        assert parse_value("-1.5") == pytest.approx(-1.5)
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_string(self) -> None:
@@ -126,7 +126,7 @@ class TestParseSetValues:
             )
         )
         assert result["int_val"] == 42
-        assert result["float_val"] == 3.14
+        assert result["float_val"] == pytest.approx(3.14)
         assert result["bool_val"] is True
         assert result["null_val"] is None
         assert result["str_val"] == "hello"
@@ -145,10 +145,31 @@ class TestParseSetValues:
         assert result == {"key": ""}
 
     @pytest.mark.requirement("9b-FR-063")
-    def testparse_value_with_equals(self) -> None:
+    def test_parse_value_with_equals(self) -> None:
         """Test parsing value containing equals sign."""
         result = parse_set_values(("url=http://example.com?foo=bar",))
         assert result == {"url": "http://example.com?foo=bar"}
+
+    @pytest.mark.requirement("9b-FR-063")
+    def test_warn_fn_called_for_invalid_entries(self) -> None:
+        """Test that warn_fn callback is invoked for entries missing '='."""
+        warnings: list[str] = []
+        result = parse_set_values(
+            ("key=value", "no-equals", "other=test"),
+            warn_fn=warnings.append,
+        )
+        assert result == {"key": "value", "other": "test"}
+        assert len(warnings) == 1
+        assert "no-equals" in warnings[0]
+
+    @pytest.mark.requirement("9b-FR-063")
+    def test_warn_fn_none_silently_skips(self) -> None:
+        """Test that warn_fn=None silently skips invalid entries."""
+        result = parse_set_values(
+            ("key=value", "no-equals"),
+            warn_fn=None,
+        )
+        assert result == {"key": "value"}
 
 
 class TestGenerateCommand:

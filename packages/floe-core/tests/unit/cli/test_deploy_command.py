@@ -115,7 +115,7 @@ class TestDeployCommand:
 
     @pytest.mark.requirement("FR-018")
     def test_dry_run_with_set_values(self, runner: CliRunner, chart_dir: Path) -> None:
-        """Test --set values are included."""
+        """Test --set values appear in generated output."""
         result = runner.invoke(
             deploy_command,
             [
@@ -129,6 +129,7 @@ class TestDeployCommand:
             ],
         )
         assert result.exit_code == 0
+        assert "replicas: 3" in result.output
 
     @pytest.mark.requirement("FR-018")
     def test_invalid_chart_path(self, runner: CliRunner, tmp_path: Path) -> None:
@@ -143,6 +144,7 @@ class TestDeployCommand:
             ],
         )
         assert result.exit_code != 0
+        assert "not exist" in result.output.lower() or "invalid" in result.output.lower()
 
     @pytest.mark.requirement("FR-018")
     def test_skip_schema_validation_default(
@@ -212,14 +214,14 @@ class TestDeployCommand:
                 str(chart_dir),
             ],
         )
-        # Should exit with non-zero code on failure
         assert result.exit_code != 0
+        assert "Helm deployment failed" in result.output
 
     @pytest.mark.requirement("FR-018")
     def test_additional_values_file(
         self, runner: CliRunner, chart_dir: Path, tmp_path: Path
     ) -> None:
-        """Test merging additional values files."""
+        """Test merging additional values files into generated output."""
         extra_values = tmp_path / "extra.yaml"
         extra_values.write_text(yaml.dump({"custom": {"key": "value"}}))
 
@@ -236,6 +238,8 @@ class TestDeployCommand:
             ],
         )
         assert result.exit_code == 0
+        assert "custom:" in result.output
+        assert "key: value" in result.output
 
     @pytest.mark.requirement("FR-018")
     def test_env_specific_values_loaded(
@@ -253,6 +257,7 @@ class TestDeployCommand:
             ],
         )
         assert result.exit_code == 0
+        assert "Loading environment values: values-test.yaml" in result.output
 
     @pytest.mark.requirement("FR-018")
     def test_set_multiple_values(self, runner: CliRunner, chart_dir: Path) -> None:
@@ -314,7 +319,7 @@ class TestDeployCommand:
     def test_multiple_values_files(
         self, runner: CliRunner, chart_dir: Path, tmp_path: Path
     ) -> None:
-        """Test merging multiple additional values files."""
+        """Test merging multiple additional values files into output."""
         extra1 = tmp_path / "extra1.yaml"
         extra1.write_text(yaml.dump({"key1": "value1"}))
 
@@ -336,10 +341,12 @@ class TestDeployCommand:
             ],
         )
         assert result.exit_code == 0
+        assert "key1: value1" in result.output
+        assert "key2: value2" in result.output
 
     @pytest.mark.requirement("FR-018")
     def test_set_value_type_parsing(self, runner: CliRunner, chart_dir: Path) -> None:
-        """Test that --set values are parsed to correct types."""
+        """Test that --set values are parsed to correct types in output."""
         result = runner.invoke(
             deploy_command,
             [
@@ -357,10 +364,9 @@ class TestDeployCommand:
             ],
         )
         assert result.exit_code == 0
-        # Check the output contains parsed values
-        output = result.output
-        assert "int_val: 42" in output or "42" in output
-        assert "bool_val: true" in output or "true" in output
+        assert "int_val: 42" in result.output
+        assert "bool_val: true" in result.output
+        assert "string_val: hello" in result.output
 
     @pytest.mark.requirement("FR-018")
     def test_invalid_values_file(
@@ -382,6 +388,7 @@ class TestDeployCommand:
             ],
         )
         assert result.exit_code != 0
+        assert "Failed to load values file" in result.output
 
     @pytest.mark.requirement("FR-018")
     def test_dry_run_shows_values_content(
@@ -400,4 +407,28 @@ class TestDeployCommand:
         )
         assert result.exit_code == 0
         assert "Generated values content:" in result.output
-        assert "fullnameOverride:" in result.output or "global:" in result.output
+        assert "fullnameOverride:" in result.output
+        assert "global:" in result.output
+
+    @pytest.mark.requirement("FR-018")
+    def test_invalid_set_value_shows_warning(
+        self, runner: CliRunner, chart_dir: Path
+    ) -> None:
+        """Test that invalid --set entries (missing '=') produce warnings."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--set",
+                "valid=ok",
+                "--set",
+                "no-equals-sign",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Ignoring invalid --set value" in result.output
+        assert "no-equals-sign" in result.output
