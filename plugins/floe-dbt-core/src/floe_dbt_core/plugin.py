@@ -35,6 +35,7 @@ from .errors import (
     parse_dbt_error_location,
 )
 from .tracing import (
+    TRACER_NAME,
     dbt_span,
     get_tracer,
     set_result_attributes,
@@ -100,6 +101,15 @@ class DBTCorePlugin(DBTPlugin):
     def floe_api_version(self) -> str:
         """Return compatible floe API version."""
         return "1.0"
+
+    @property
+    def tracer_name(self) -> str:
+        """Return the OpenTelemetry tracer name.
+
+        Returns:
+            The tracer name for this plugin's operations.
+        """
+        return TRACER_NAME
 
     def compile_project(
         self,

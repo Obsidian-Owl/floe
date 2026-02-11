@@ -31,6 +31,9 @@ namespace:
   create: true
   name: floe-test
 
+# Override fullname to decouple service names from Helm release name
+fullnameOverride: floe-platform
+
 # =============================================================================
 # Dagster Configuration (Minimal)
 # =============================================================================
@@ -300,3 +303,7 @@ test:
 # =============================================================================
 cube:
   enabled: true
+  secret:
+    apiSecret: "test-cube-api-secret-32chars000"  # pragma: allowlist secret
+  cubestore:
+    enabled: false  # No ARM64 image available for Cube Store

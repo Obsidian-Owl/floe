@@ -35,6 +35,13 @@ from floe_core.plugins.orchestrator import (
 from floe_core.schemas import CompiledArtifacts
 from pydantic import ValidationError as PydanticValidationError
 
+from floe_orchestrator_dagster.tracing import (
+    ATTR_ASSET_COUNT,
+    TRACER_NAME,
+    get_tracer,
+    orchestrator_span,
+)
+
 logger = logging.getLogger(__name__)
 
 # Resource presets for Dagster workloads (following helm-values-schema.md)
@@ -125,6 +132,15 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         """
         return "Dagster orchestrator for floe data pipelines"
 
+    @property
+    def tracer_name(self) -> str:
+        """OpenTelemetry tracer name for this plugin.
+
+        Returns:
+            The OTel tracer name for orchestrator operations.
+        """
+        return TRACER_NAME
+
     def _validate_artifacts(self, artifacts: dict[str, Any]) -> CompiledArtifacts:
         """Validate CompiledArtifacts schema before definition generation.
 
@@ -194,67 +210,73 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         """
         from dagster import Definitions
 
-        # Validate artifacts against CompiledArtifacts schema (FR-009)
-        validated = self._validate_artifacts(artifacts)
+        tracer = get_tracer()
+        with orchestrator_span(tracer, "create_definitions") as span:
+            # Validate artifacts against CompiledArtifacts schema (FR-009)
+            validated = self._validate_artifacts(artifacts)
 
-        # Extract transforms from validated artifacts
-        if validated.transforms is None:
-            logger.warning("No transforms found in artifacts, returning empty Definitions")
-            return Definitions(assets=[])
+            # Extract transforms from validated artifacts
+            if validated.transforms is None:
+                logger.warning("No transforms found in artifacts, returning empty Definitions")
+                span.set_attribute(ATTR_ASSET_COUNT, 0)
+                return Definitions(assets=[])
 
-        # Get models list from transforms
-        models = validated.transforms.models
-        if not models:
-            logger.warning("No models found in transforms, returning empty Definitions")
-            return Definitions(assets=[])
+            # Get models list from transforms
+            models = validated.transforms.models
+            if not models:
+                logger.warning("No models found in transforms, returning empty Definitions")
+                span.set_attribute(ATTR_ASSET_COUNT, 0)
+                return Definitions(assets=[])
 
-        # Convert ResolvedModel to TransformConfig objects
-        transform_configs = self._models_to_transform_configs(
-            [model.model_dump() for model in models]
-        )
-
-        # Create assets from transforms
-        assets = self.create_assets_from_transforms(transform_configs)
-
-        # T108-T111: Wire Iceberg resources if catalog and storage are configured
-        resources = self._create_iceberg_resources(validated.plugins)
-
-        # T047-T049: Wire semantic layer resources and asset if semantic plugin is configured
-        semantic_resources = self._create_semantic_resources(validated.plugins)
-        resources.update(semantic_resources)
-
-        if "semantic_layer" in semantic_resources:
-            from floe_orchestrator_dagster.assets.semantic_sync import (
-                sync_semantic_schemas,
+            # Convert ResolvedModel to TransformConfig objects
+            transform_configs = self._models_to_transform_configs(
+                [model.model_dump() for model in models]
             )
 
-            assets.append(sync_semantic_schemas)
+            # Create assets from transforms
+            assets = self.create_assets_from_transforms(transform_configs)
 
-        # T035: Wire ingestion resources if ingestion plugin is configured
-        ingestion_resources = self._create_ingestion_resources(validated.plugins)
-        resources.update(ingestion_resources)
+            # T108-T111: Wire Iceberg resources if catalog and storage are configured
+            resources = self._create_iceberg_resources(validated.plugins)
 
-        # T034: Wire ingestion assets if ingestion resource is available
-        if "ingestion" in resources and validated.plugins and validated.plugins.ingestion:
-            from floe_orchestrator_dagster.assets.ingestion import (
-                create_ingestion_assets,
+            # T047-T049: Wire semantic layer resources and asset if semantic plugin is configured
+            semantic_resources = self._create_semantic_resources(validated.plugins)
+            resources.update(semantic_resources)
+
+            if "semantic_layer" in semantic_resources:
+                from floe_orchestrator_dagster.assets.semantic_sync import (
+                    sync_semantic_schemas,
+                )
+
+                assets.append(sync_semantic_schemas)
+
+            # T035: Wire ingestion resources if ingestion plugin is configured
+            ingestion_resources = self._create_ingestion_resources(validated.plugins)
+            resources.update(ingestion_resources)
+
+            # T034: Wire ingestion assets if ingestion resource is available
+            if "ingestion" in resources and validated.plugins and validated.plugins.ingestion:
+                from floe_orchestrator_dagster.assets.ingestion import (
+                    create_ingestion_assets,
+                )
+
+                ingestion_assets = create_ingestion_assets(validated.plugins.ingestion)
+                assets.extend(ingestion_assets)
+
+            span.set_attribute(ATTR_ASSET_COUNT, len(assets))
+
+            logger.info(
+                "Created Dagster Definitions",
+                extra={
+                    "asset_count": len(assets),
+                    "model_count": len(models),
+                    "has_iceberg": "iceberg" in resources,
+                    "has_semantic_layer": "semantic_layer" in resources,
+                    "has_ingestion": "ingestion" in resources,
+                },
             )
 
-            ingestion_assets = create_ingestion_assets(validated.plugins.ingestion)
-            assets.extend(ingestion_assets)
-
-        logger.info(
-            "Created Dagster Definitions",
-            extra={
-                "asset_count": len(assets),
-                "model_count": len(models),
-                "has_iceberg": "iceberg" in resources,
-                "has_semantic_layer": "semantic_layer" in resources,
-                "has_ingestion": "ingestion" in resources,
-            },
-        )
-
-        return Definitions(assets=assets, resources=resources if resources else {})
+            return Definitions(assets=assets, resources=resources if resources else {})
 
     def _create_iceberg_resources(
         self,
@@ -591,77 +613,81 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         import httpx
 
-        # Determine Dagster URL
-        url = dagster_url or os.environ.get("DAGSTER_URL", "http://localhost:3000")
-        graphql_endpoint = f"{url.rstrip('/')}/graphql"
+        tracer = get_tracer()
+        with orchestrator_span(tracer, "validate_connection"):
+            # Determine Dagster URL
+            url = dagster_url or os.environ.get("DAGSTER_URL", "http://localhost:3000")
+            graphql_endpoint = f"{url.rstrip('/')}/graphql"
 
-        try:
-            # Send a simple GraphQL query to check connectivity
-            query = {"query": "{ __typename }"}
+            try:
+                # Send a simple GraphQL query to check connectivity
+                query = {"query": "{ __typename }"}
 
-            with httpx.Client(timeout=timeout) as client:
-                response = client.post(graphql_endpoint, json=query)
+                with httpx.Client(timeout=timeout) as client:
+                    response = client.post(graphql_endpoint, json=query)
 
-            if response.status_code == 200:
-                logger.info(
-                    "Dagster connection validated",
-                    extra={"url": graphql_endpoint},
+                if response.status_code == 200:
+                    logger.info(
+                        "Dagster connection validated",
+                        extra={"url": graphql_endpoint},
+                    )
+                    return ValidationResult(
+                        success=True,
+                        message="Successfully connected to Dagster service",
+                    )
+
+                # Non-200 response
+                logger.warning(
+                    "Dagster connection failed",
+                    extra={
+                        "url": graphql_endpoint,
+                        "status_code": response.status_code,
+                    },
                 )
                 return ValidationResult(
-                    success=True,
-                    message="Successfully connected to Dagster service",
+                    success=False,
+                    message=f"Dagster service returned status {response.status_code}",
+                    errors=[
+                        f"HTTP {response.status_code} from {graphql_endpoint}. "
+                        "Ensure Dagster webserver is running and accessible."
+                    ],
                 )
 
-            # Non-200 response
-            logger.warning(
-                "Dagster connection failed",
-                extra={
-                    "url": graphql_endpoint,
-                    "status_code": response.status_code,
-                },
-            )
-            return ValidationResult(
-                success=False,
-                message=f"Dagster service returned status {response.status_code}",
-                errors=[
-                    f"HTTP {response.status_code} from {graphql_endpoint}. "
-                    "Ensure Dagster webserver is running and accessible."
-                ],
-            )
-
-        except httpx.TimeoutException:
-            logger.warning(
-                "Dagster connection timed out",
-                extra={"url": graphql_endpoint, "timeout": timeout},
-            )
-            return ValidationResult(
-                success=False,
-                message=f"Connection to Dagster timed out after {timeout}s",
-                errors=[
-                    f"Timeout connecting to {graphql_endpoint}. "
-                    "Check network connectivity and ensure Dagster is running."
-                ],
-            )
-        except httpx.ConnectError as e:
-            logger.warning(
-                "Dagster connection failed",
-                extra={"url": graphql_endpoint, "error": str(e)},
-            )
-            return ValidationResult(
-                success=False,
-                message="Failed to connect to Dagster service",
-                errors=[f"Connection error: {e}. Ensure Dagster webserver is running at {url}."],
-            )
-        except Exception as e:
-            logger.error(
-                "Unexpected error validating Dagster connection",
-                extra={"url": graphql_endpoint, "error": str(e)},
-            )
-            return ValidationResult(
-                success=False,
-                message="Unexpected error connecting to Dagster",
-                errors=[str(e)],
-            )
+            except httpx.TimeoutException:
+                logger.warning(
+                    "Dagster connection timed out",
+                    extra={"url": graphql_endpoint, "timeout": timeout},
+                )
+                return ValidationResult(
+                    success=False,
+                    message=f"Connection to Dagster timed out after {timeout}s",
+                    errors=[
+                        f"Timeout connecting to {graphql_endpoint}. "
+                        "Check network connectivity and ensure Dagster is running."
+                    ],
+                )
+            except httpx.ConnectError as e:
+                logger.warning(
+                    "Dagster connection failed",
+                    extra={"url": graphql_endpoint, "error": str(e)},
+                )
+                return ValidationResult(
+                    success=False,
+                    message="Failed to connect to Dagster service",
+                    errors=[
+                        f"Connection error: {e}. Ensure Dagster webserver is running at {url}.",
+                    ],
+                )
+            except Exception as e:
+                logger.error(
+                    "Unexpected error validating Dagster connection",
+                    extra={"url": graphql_endpoint, "error": str(e)},
+                )
+                return ValidationResult(
+                    success=False,
+                    message="Unexpected error connecting to Dagster",
+                    errors=[str(e)],
+                )
 
     def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
         """Return K8s resource requirements for Dagster workloads.

@@ -59,6 +59,8 @@ import structlog
 from opentelemetry import metrics, trace
 from opentelemetry.trace import Status, StatusCode
 
+from floe_core.telemetry.sanitization import sanitize_error_message
+
 if TYPE_CHECKING:
     from collections.abc import Generator
 
@@ -445,8 +447,10 @@ class OCIMetrics:
             try:
                 yield span
             except Exception as e:
-                span.set_status(Status(StatusCode.ERROR, str(e)))
-                span.record_exception(e)
+                sanitized_msg = sanitize_error_message(str(e))
+                span.set_status(Status(StatusCode.ERROR, sanitized_msg))
+                span.set_attribute("exception.type", type(e).__name__)
+                span.set_attribute("exception.message", sanitized_msg)
                 raise
 
     def _normalize_registry(self, registry: str) -> str:

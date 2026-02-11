@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
 from typing import TYPE_CHECKING, Any
 
 from floe_core.plugin_metadata import HealthState, HealthStatus
@@ -15,20 +14,7 @@ from floe_core.plugins.quality import (
 )
 from floe_core.schemas.quality_config import Dimension, QualityConfig
 
-try:
-    from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
-
-    _HAS_OTEL = True
-except ImportError:
-    _HAS_OTEL = False
-    _factory_get_tracer = None  # type: ignore[assignment]
-
-
-def _quality_span(name: str, attributes: dict[str, Any] | None = None) -> Any:
-    if not _HAS_OTEL or _factory_get_tracer is None:
-        return nullcontext()
-    return _factory_get_tracer(__name__).start_as_current_span(name, attributes=attributes)
-
+from floe_quality_dbt.tracing import TRACER_NAME, get_tracer, quality_span
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -55,6 +41,11 @@ class DBTExpectationsPlugin(QualityPlugin):
     def description(self) -> str:
         return "dbt-expectations data quality plugin for the floe data platform"
 
+    @property
+    def tracer_name(self) -> str:
+        """Return the OpenTelemetry tracer name for this plugin."""
+        return TRACER_NAME
+
     def run_checks(
         self,
         suite_name: str,
@@ -75,14 +66,13 @@ class DBTExpectationsPlugin(QualityPlugin):
         Returns:
             QualitySuiteResult with check outcomes.
         """
-        with _quality_span(
-            "floe.quality.run_checks",
-            {
-                "quality.provider": "dbt_expectations",
-                "quality.suite_name": suite_name,
-                "quality.data_source": data_source,
-            },
-        ):
+        tracer = get_tracer()
+        with quality_span(
+            tracer,
+            "run_checks",
+            suite_name=suite_name,
+            data_source=data_source,
+        ) as _span:
             opts = options or {}
             suite = QualitySuite(
                 model_name=data_source,
@@ -125,14 +115,13 @@ class DBTExpectationsPlugin(QualityPlugin):
         Raises:
             QualityTimeoutError: If execution exceeds suite.timeout_seconds.
         """
-        with _quality_span(
-            "floe.quality.run_suite",
-            {
-                "quality.provider": "dbt_expectations",
-                "quality.suite_name": suite.model_name,
-                "quality.checks_count": len(suite.checks),
-            },
-        ):
+        tracer = get_tracer()
+        with quality_span(
+            tracer,
+            "run_suite",
+            suite_name=suite.model_name,
+            checks_count=len(suite.checks),
+        ) as _span:
             try:
                 from floe_quality_dbt.executor import run_dbt_tests_with_timeout
 
@@ -166,14 +155,13 @@ class DBTExpectationsPlugin(QualityPlugin):
         Returns:
             List of QualityCheckResult for each expectation.
         """
-        with _quality_span(
-            "floe.quality.validate_expectations",
-            {
-                "quality.provider": "dbt_expectations",
-                "quality.check_count": len(expectations),
-                "quality.data_source": data_source,
-            },
-        ):
+        tracer = get_tracer()
+        with quality_span(
+            tracer,
+            "validate_expectations",
+            data_source=data_source,
+            checks_count=len(expectations),
+        ) as _span:
             if not expectations:
                 return []
 

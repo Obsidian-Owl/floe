@@ -116,11 +116,46 @@ Focus on:
 3. Isolation - deterministic and independent?
 4. Maintainability - brittle to implementation changes?
 5. Type appropriateness - right level of test?
+6. Side-effect verification - for methods that write/send/publish/deploy/delete, do tests assert mock invocations (assert_called*), not just return value shape? Flag any test that only checks isinstance(result, X) or result.success without verifying the underlying action occurred. This is the 'Accomplishment Simulator' anti-pattern — see .claude/rules/testing-standards.md.
 
 Return structured analysis with severity ratings.")
 ```
 
 **Wait for code-reviewer to return.**
+
+### Phase 1.5: Side-Effect Verification Audit
+
+**You handle this phase directly.** This catches the "Accomplishment Simulator" anti-pattern where tests pass but code does nothing.
+
+For each test file being reviewed:
+
+1. **Identify side-effect methods**: Find tests for methods whose spec uses verbs like "write", "send", "publish", "deploy", "delete", "push", "emit"
+2. **Check for mock invocation assertions**: For each such test, verify it contains `assert_called`, `assert_called_once`, `assert_called_with`, or similar mock verification
+3. **Flag Return-Value-as-Proxy**: Tests that ONLY check `result.success`, `isinstance(result, X)`, or `result.rows_delivered` without any mock invocation assertions are P0 issues
+
+```bash
+# Automated check: find side-effect tests missing mock assertions
+for f in [test files]; do
+  # Find test functions for side-effect methods
+  grep -n "def test.*write\|def test.*send\|def test.*publish\|def test.*deploy\|def test.*delete\|def test.*push" "$f" | while read line; do
+    # Check if file has ANY assert_called pattern
+    if ! grep -q "assert_called" "$f"; then
+      echo "P0: $f has side-effect tests but NO mock invocation assertions"
+    fi
+  done
+done
+```
+
+**Report format**:
+```markdown
+#### Side-Effect Verification Audit
+
+| Test File | Side-Effect Tests | Has assert_called* | Status |
+|-----------|-------------------|-------------------|--------|
+| test_write.py | test_write_data, test_write_empty | YES | PASS |
+| test_sink.py | test_push_to_api | NO — only checks result.success | **P0 FAIL** |
+```
+```
 
 ### Phase 2: floe-Specific Analysis (Parallel)
 
@@ -231,6 +266,11 @@ Synthesize all reports into a unified strategic assessment.
 - **Maintainability**: Brittle to implementation changes?
 - **Type Appropriateness**: Right level of test?
 
+### Side-Effect Verification (Accomplishment Simulator Detection)
+- **Mock invocation**: Tests for write/send/deploy assert mock.assert_called*()?
+- **Return-value-as-proxy**: Tests only check result shape, not behavior?
+- **Import-satisfying mocks**: MagicMock() in fixtures never verified with assert_called*()?
+
 ### From floe-specific agents
 - **Plugin Quality**: All 11 types tested? Lifecycle coverage?
 - **Contract Stability**: Schema stable? Backwards compatible?
@@ -269,3 +309,4 @@ After completing this skill:
 - **`TESTING.md`** - Testing standards
 - **`.claude/rules/testing-standards.md`** - Testing rules
 - **`.claude/rules/test-organization.md`** - Test organization
+- **`.claude/rules/quality-escalation.md`** - Escalation protocol (includes Accomplishment Simulator anti-pattern)

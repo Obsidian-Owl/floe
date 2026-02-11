@@ -40,6 +40,12 @@ Consolidated agent for all test debt analysis (replaces 5 specialized agents).
 - Incomplete branch coverage
 - Skipped/disabled tests
 
+### 6. Behavioral Verification (Accomplishment Simulator Detection)
+- Side-effect methods (write/send/publish/deploy) tested with mock invocation assertions
+- Import-satisfying mocks (MagicMock without assert_called*)
+- Return-value-as-proxy pattern (only checking result.success, not verifying action)
+- TDD shape-only tests (tests verify interface contract but not behavioral contract)
+
 ## Output Format
 
 ```markdown
@@ -53,6 +59,7 @@ Consolidated agent for all test debt analysis (replaces 5 specialized agents).
 | Edge Cases | N | High/Med/Low |
 | Duplication | N | High/Med/Low |
 | Coverage | N | High/Med/Low |
+| Behavioral | N | High/Med/Low |
 
 ### Critical Issues (P0)
 [List with file:line references]

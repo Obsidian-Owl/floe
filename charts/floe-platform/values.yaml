@@ -46,6 +46,9 @@ namespace:
   # Namespace name (defaults to release namespace)
   name: ""
 
+# Override fullname to decouple service names from Helm release name
+fullnameOverride: floe-platform
+
 # =============================================================================
 # Cluster Mapping (Multi-Environment Support)
 # =============================================================================

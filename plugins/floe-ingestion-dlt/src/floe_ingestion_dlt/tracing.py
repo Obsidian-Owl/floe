@@ -25,10 +25,10 @@ Requirements Covered:
 
 from __future__ import annotations
 
-import re
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
+from floe_core.telemetry.sanitization import sanitize_error_message
 from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
@@ -67,47 +67,6 @@ ATTR_SINK_DESTINATION = "egress.destination"
 ATTR_SINK_ROWS_WRITTEN = "egress.rows_written"
 ATTR_SINK_DURATION_MS = "egress.duration_ms"
 ATTR_SINK_STATUS = "egress.status"
-
-
-# Sensitive key patterns for redaction (FR-049)
-_SENSITIVE_KEY_PATTERN = re.compile(
-    r"(password|secret_key|access_key|token|api_key|authorization|credential)"
-    r"\s*[=:]\s*\S+",
-    re.IGNORECASE,
-)
-_URL_CREDENTIAL_PATTERN = re.compile(
-    r"://[^@/\s]+:[^@/\s]+@",
-)
-
-
-def sanitize_error_message(msg: str, max_length: int = 500) -> str:
-    """Sanitize an error message by redacting credentials and truncating.
-
-    Strips URL credential patterns (e.g., ``://user:pass@host``) and  # pragma: allowlist secret
-    key-value patterns for known sensitive keys (password=, secret_key=,
-    etc.) before truncating to max_length.
-
-    Args:
-        msg: Raw error message to sanitize.
-        max_length: Maximum length of returned message.
-
-    Returns:
-        Sanitized and truncated error message.
-
-    Example:
-        >>> sanitize_error_message("Failed: password=secret123 at host")
-        'Failed: password=<REDACTED> at host'
-    """
-    # Redact URL credentials like ://user:pass@host
-    sanitized = _URL_CREDENTIAL_PATTERN.sub("://<REDACTED>@", msg)
-    # Redact key=value patterns for sensitive keys
-    sanitized = _SENSITIVE_KEY_PATTERN.sub(
-        lambda m: m.group(0).split("=", 1)[0].split(":", 1)[0] + "=<REDACTED>"
-        if "=" in m.group(0)
-        else m.group(0).split(":", 1)[0] + ": <REDACTED>",
-        sanitized,
-    )
-    return sanitized[:max_length]
 
 
 def get_tracer() -> trace.Tracer:

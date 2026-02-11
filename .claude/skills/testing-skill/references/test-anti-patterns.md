@@ -520,6 +520,85 @@ def test_timestamp(mock_datetime):
 
 ---
 
+## 7. Accomplishment Simulator (CRITICAL)
+
+### Problem
+
+A function computes metrics, logs success, emits OTel spans, and returns a well-formed result — but never performs the core action. Tests only check the return value shape, not that the side effect occurred. Named after Epic 4G where `write()` returned `EgressResult(success=True, rows_delivered=100)` but never called `dlt.pipeline.run()`.
+
+### Detection
+
+```bash
+# Find tests for side-effect methods that lack mock invocation assertions
+rg "def test.*write|def test.*send|def test.*publish|def test.*deploy" --type py tests/ -l | \
+  xargs -I{} sh -c 'rg "assert_called" {} > /dev/null || echo "ACCOMPLISHMENT SIMULATOR: {}"'
+```
+
+### ❌ FORBIDDEN
+
+```python
+# Tests only verify return value SHAPE — proves nothing about BEHAVIOR
+def test_write_returns_egress_result(plugin):
+    """Looks comprehensive but tests nothing meaningful."""
+    result = plugin.write(mock_sink, mock_data)
+    assert isinstance(result, EgressResult)  # Shape check
+    assert result.success is True            # Shape check
+    assert result.rows_delivered >= 0        # Shape check
+    assert type(result) is EgressResult      # Shape check
+    # write() could be a complete no-op and ALL assertions pass!
+
+# Mock exists only to prevent ImportError, never verified
+@pytest.fixture
+def plugin():
+    mock_dlt = MagicMock()
+    mock_dlt.__version__ = "1.20.0"
+    # mock_dlt.pipeline is never assert_called*() in ANY test
+    with patch.dict("sys.modules", {"dlt": mock_dlt}):
+        yield create_plugin()
+```
+
+**Problems**:
+- Tests pass with 100% "coverage" while core functionality is missing
+- Passes ALL structural quality gates (lint, types, security, contract tests)
+- False confidence: "122 tests pass" means nothing if they test shape, not behavior
+- TDD trap: Tests written before implementation verify interface, not behavioral contract
+
+### ✅ CORRECT
+
+```python
+# Tests verify BEHAVIOR — the side effect actually occurred
+def test_write_invokes_dlt_pipeline(plugin):
+    """Proves write() actually delegates to dlt pipeline."""
+    import sys
+    mock_dlt = sys.modules["dlt"]
+
+    plugin.write(sink, mock_data)
+
+    # Verify the CORE ACTION happened
+    mock_dlt.pipeline.assert_called_once()                    # Pipeline created
+    mock_dlt.pipeline.return_value.run.assert_called_once()   # Data sent
+
+def test_write_raises_on_failed_delivery(plugin):
+    """Proves write() propagates delivery failures."""
+    import sys
+    mock_dlt = sys.modules["dlt"]
+    mock_dlt.pipeline.return_value.run.return_value.has_failed_jobs = True
+
+    with pytest.raises(SinkWriteError, match="failed jobs"):
+        plugin.write(sink, mock_data)
+```
+
+**Key Principle**: For any method whose spec says "MUST write/send/publish/deploy", at least one test MUST use `mock.assert_called*()` to verify the action occurred.
+
+### The Two Types of Mocks
+
+| Type | Purpose | Example | Acceptable? |
+|------|---------|---------|-------------|
+| **Import-satisfying** | Prevents ImportError | `mock_dlt = MagicMock()` with no assertions | Only if other tests verify invocation |
+| **Invocation-verifying** | Proves behavior | `mock_dlt.pipeline.assert_called_once()` | **Required** for side-effect methods |
+
+---
+
 ## Summary: Anti-Pattern Detection Checklist
 
 Before committing tests, run these checks:
@@ -544,6 +623,15 @@ rg "@pytest\.mark\.requirement" --type py tests/ | wc -l
 # 5. Negative path tests exist
 rg "def test_.*_invalid|def test_.*_failure|def test_.*_error" --type py tests/
 # Expected: At least 1 negative test per positive test
+
+# 6. Side-effect tests have mock invocation assertions
+rg "def test.*write|def test.*send|def test.*publish|def test.*deploy" --type py tests/ -l | \
+  xargs -I{} sh -c 'rg "assert_called" {} > /dev/null || echo "ACCOMPLISHMENT SIMULATOR: {}"'
+# Expected: No warnings
+
+# 7. No import-satisfying-only mocks
+rg "MagicMock\(\)" --type py tests/ -l | head -5
+# Manual review: Each MagicMock must have assert_called* somewhere in the test file
 ```
 
 ---

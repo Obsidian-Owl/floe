@@ -27,8 +27,8 @@ from floe_core.cli.utils import ExitCode, error_exit, info, success
 from floe_core.helm import (
     HelmValuesConfig,
     HelmValuesGenerator,
-    unflatten_dict,
 )
+from floe_core.helm.parsing import parse_set_values
 
 # Type alias for Helm values
 HelmValues = dict[str, Any]
@@ -133,7 +133,7 @@ def generate_command(
         dry_run: If True, show what would be generated without writing.
     """
     # Parse --set values into dict
-    user_overrides: dict[str, Any] = _parse_set_values(set_values)
+    user_overrides: dict[str, Any] = parse_set_values(set_values)
 
     # Load additional values files
     additional_values: list[dict[str, Any]] = []
@@ -231,69 +231,6 @@ def generate_command(
             f"Helm values generation failed: {e}",
             exit_code=ExitCode.GENERAL_ERROR,
         )
-
-
-def _parse_set_values(set_values: tuple[str, ...]) -> dict[str, Any]:
-    """Parse --set key=value arguments into nested dict.
-
-    Args:
-        set_values: Tuple of "key=value" strings.
-
-    Returns:
-        Nested dictionary with parsed values.
-
-    Example:
-        >>> _parse_set_values(("dagster.replicas=3", "global.env=prod"))
-        {'dagster': {'replicas': 3}, 'global': {'env': 'prod'}}
-    """
-    if not set_values:
-        return {}
-
-    flat: dict[str, Any] = {}
-    for item in set_values:
-        if "=" not in item:
-            continue
-        key, _, value = item.partition("=")
-        # Try to parse as int/float/bool
-        parsed = _parse_value(value)
-        flat[key] = parsed
-
-    return unflatten_dict(flat)
-
-
-def _parse_value(value: str) -> str | int | float | bool | None:
-    """Parse a string value into appropriate Python type.
-
-    Args:
-        value: String value from --set argument.
-
-    Returns:
-        Parsed value as int, float, bool, None, or original string.
-    """
-    # Handle null
-    if value.lower() == "null":
-        return None
-
-    # Handle booleans
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
-
-    # Try int
-    try:
-        return int(value)
-    except ValueError:
-        pass
-
-    # Try float
-    try:
-        return float(value)
-    except ValueError:
-        pass
-
-    # Return as string
-    return value
 
 
 __all__: list[str] = ["generate_command"]

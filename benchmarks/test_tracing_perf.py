@@ -2,17 +2,21 @@
 
 Measures overhead of OpenTelemetry tracing primitives:
 - @traced decorator
+- @traced with attributes_fn dynamic attributes
 - create_span context manager
+- Sanitized vs raw error recording
 - Realistic pipeline workloads
 
-Target: <5% overhead for realistic operations (SC-004).
+Target: <5% overhead for realistic operations (SC-004, SC-006).
 """
 
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
+from floe_core.telemetry.sanitization import sanitize_error_message
 from floe_core.telemetry.tracing import create_span, traced
 
 
@@ -98,6 +102,65 @@ def test_realistic_pipeline_with_tracing() -> None:
         return sum(item["value"] for item in parsed["items"])
 
     pipeline()
+
+
+@pytest.mark.benchmark
+def test_traced_with_attributes_fn_overhead() -> None:
+    """Benchmark @traced decorator with dynamic attributes_fn.
+
+    Measures the additional overhead of computing attributes dynamically
+    from function arguments via the attributes_fn parameter.
+
+    Requirements: FR-024, SC-006
+    """
+
+    def get_attrs(table_id: str, **kwargs: Any) -> dict[str, Any]:
+        return {"table.id": table_id, "table.size": len(table_id)}
+
+    @traced(
+        name="dynamic_attributed_operation",
+        attributes_fn=get_attrs,
+    )
+    def work(table_id: str) -> int:
+        return sum(range(100))
+
+    work(table_id="benchmark_table")
+
+
+@pytest.mark.benchmark
+def test_sanitized_error_recording_overhead() -> None:
+    """Benchmark sanitized error recording vs raw.
+
+    Measures the overhead of sanitize_error_message() when recording
+    errors in spans. Should verify <5% overhead compared to raw.
+
+    Requirements: FR-024, SC-006
+    """
+    error_msg = (
+        "Connection failed to https://user:password@example.com/api "
+        "with api_key=REDACTED_TEST_KEY and token=Bearer REDACTED"
+    )
+
+    # Sanitized path (what we use in production)
+    with create_span("sanitized_error_test") as span:
+        sanitized = sanitize_error_message(error_msg)
+        span.set_attribute("exception.message", sanitized)
+
+
+@pytest.mark.benchmark
+def test_raw_error_recording_baseline() -> None:
+    """Baseline for error recording without sanitization.
+
+    Provides reference point for calculating sanitization overhead.
+    """
+    error_msg = (
+        "Connection failed to https://user:password@example.com/api "
+        "with api_key=REDACTED_TEST_KEY and token=Bearer REDACTED"
+    )
+
+    # Raw path (no sanitization)
+    with create_span("raw_error_test") as span:
+        span.set_attribute("exception.message", error_msg)
 
 
 @pytest.mark.benchmark

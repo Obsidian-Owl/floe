@@ -15,6 +15,13 @@ import structlog
 from floe_core.contracts.monitoring.violations import ContractViolationEvent
 from floe_core.plugins.alert_channel import AlertChannelPlugin
 
+from floe_alert_alertmanager.tracing import (
+    ATTR_DELIVERY_STATUS,
+    TRACER_NAME,
+    alert_span,
+    get_tracer,
+)
+
 logger = structlog.get_logger(__name__)
 
 
@@ -43,36 +50,59 @@ class AlertmanagerPlugin(AlertChannelPlugin):
     def floe_api_version(self) -> str:
         return "1.0"
 
+    @property
+    def tracer_name(self) -> str:
+        return TRACER_NAME
+
     def validate_config(self) -> list[str]:
-        errors: list[str] = []
-        if not self._api_url:
-            errors.append("api_url is required")
-        return errors
+        tracer = get_tracer()
+        with alert_span(
+            tracer,
+            "validate_config",
+            channel="alertmanager",
+            destination=self._api_url,
+        ):
+            errors: list[str] = []
+            if not self._api_url:
+                errors.append("api_url is required")
+            return errors
 
     async def send_alert(self, event: ContractViolationEvent) -> bool:
-        alerts = self._build_alerts(event)
-        url = f"{self._api_url}/api/v2/alerts"
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    url,
-                    json=alerts,
-                    timeout=self._timeout_seconds,
-                )
-                if response.status_code >= 400:
-                    self._log.warning(
-                        "alertmanager_http_error",
-                        status_code=response.status_code,
-                        contract_name=event.contract_name,
+        tracer = get_tracer()
+        with alert_span(
+            tracer,
+            "send_alert",
+            channel="alertmanager",
+            destination=self._api_url,
+            severity=event.severity.value,
+        ) as span:
+            alerts = self._build_alerts(event)
+            url = f"{self._api_url}/api/v2/alerts"
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        url,
+                        json=alerts,
+                        timeout=self._timeout_seconds,
                     )
-                    return False
-                return True
-        except (httpx.ConnectError, httpx.TimeoutException) as e:
-            self._log.warning("alertmanager_connection_error", error=str(e))
-            return False
-        except Exception as e:
-            self._log.error("alertmanager_unexpected_error", error=str(e))
-            return False
+                    if response.status_code >= 400:
+                        self._log.warning(
+                            "alertmanager_http_error",
+                            status_code=response.status_code,
+                            contract_name=event.contract_name,
+                        )
+                        span.set_attribute(ATTR_DELIVERY_STATUS, "failed")
+                        return False
+                    span.set_attribute(ATTR_DELIVERY_STATUS, "delivered")
+                    return True
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                self._log.warning("alertmanager_connection_error", error=str(e))
+                span.set_attribute(ATTR_DELIVERY_STATUS, "failed")
+                return False
+            except Exception as e:
+                self._log.error("alertmanager_unexpected_error", error=str(e))
+                span.set_attribute(ATTR_DELIVERY_STATUS, "failed")
+                return False
 
     def _build_alerts(self, event: ContractViolationEvent) -> list[dict[str, Any]]:
         return [

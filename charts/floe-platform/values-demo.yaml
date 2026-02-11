@@ -13,6 +13,9 @@
 global:
   environment: demo
 
+# Override fullname to decouple service names from Helm release name
+fullnameOverride: floe-platform
+
 # =============================================================================
 # Dagster Configuration (Orchestration)
 # =============================================================================

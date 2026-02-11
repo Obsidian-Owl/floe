@@ -155,12 +155,12 @@ helm-template: ## Render Helm templates (ENV=dev|staging|prod)
 	@echo "Rendering Helm templates..."
 	@mkdir -p .helm-output
 	@if [ -n "$(ENV)" ] && [ -f "charts/floe-platform/values-$(ENV).yaml" ]; then \
-		helm template floe charts/floe-platform \
+		helm template floe-platform charts/floe-platform \
 			--values charts/floe-platform/values.yaml \
 			--values charts/floe-platform/values-$(ENV).yaml \
 			--output-dir .helm-output/$(ENV); \
 	else \
-		helm template floe charts/floe-platform \
+		helm template floe-platform charts/floe-platform \
 			--values charts/floe-platform/values.yaml \
 			--output-dir .helm-output/default; \
 	fi
@@ -182,10 +182,7 @@ helm-test: ## Run Helm tests (requires deployed release, RELEASE=name, NAMESPACE
 .PHONY: helm-install-dev
 helm-install-dev: helm-deps ## Install floe-platform for development
 	@echo "Installing floe-platform for development..."
-	@helm upgrade --install floe charts/floe-platform \
-		--namespace floe-dev --create-namespace \
-		--values charts/floe-platform/values.yaml \
-		--values charts/floe-platform/values-dev.yaml
+	@uv run floe platform deploy --env dev --chart charts/floe-platform
 
 .PHONY: helm-uninstall
 helm-uninstall: ## Uninstall floe-platform (NAMESPACE=ns required)
@@ -194,7 +191,7 @@ helm-uninstall: ## Uninstall floe-platform (NAMESPACE=ns required)
 		exit 1; \
 	fi
 	@echo "Uninstalling floe from $(NAMESPACE)..."
-	@helm uninstall floe --namespace $(NAMESPACE)
+	@helm uninstall floe-platform --namespace $(NAMESPACE)
 
 .PHONY: helm-integration-test
 helm-integration-test: helm-deps ## Run Helm integration tests in Kind cluster
@@ -204,25 +201,19 @@ helm-integration-test: helm-deps ## Run Helm integration tests in Kind cluster
 		echo "Creating Kind cluster..."; \
 		kind create cluster --name floe-test --wait 120s; \
 	fi
-	@# Install charts
+	@# Install charts via floe platform deploy
 	@echo "Installing floe-platform chart..."
-	@helm upgrade --install floe-test charts/floe-platform \
-		--namespace floe-test --create-namespace \
-		--values charts/floe-platform/values.yaml \
-		--values charts/floe-platform/values-dev.yaml \
-		--wait --timeout 5m
+	@uv run floe platform deploy --env dev --chart charts/floe-platform \
+		--namespace floe-test --timeout 5m
 	@# Run Helm tests
 	@echo "Running Helm tests..."
-	@helm test floe-test --namespace floe-test --timeout 5m
+	@helm test floe-platform --namespace floe-test --timeout 5m
 	@echo "Helm integration tests passed!"
 
 .PHONY: helm-install-test
 helm-install-test: helm-deps ## Install floe-platform with test values (requires Kind cluster)
 	@echo "Installing floe-platform with test configuration..."
-	@helm upgrade --install floe-test charts/floe-platform \
-		--namespace floe-test --create-namespace \
-		--values charts/floe-platform/values-test.yaml \
-		--wait --timeout 10m
+	@uv run floe platform deploy --env test --chart charts/floe-platform
 	@echo "Installing floe-jobs with test configuration..."
 	@helm upgrade --install floe-jobs-test charts/floe-jobs \
 		--namespace floe-test \
@@ -233,10 +224,7 @@ helm-install-test: helm-deps ## Install floe-platform with test values (requires
 .PHONY: helm-upgrade-test
 helm-upgrade-test: helm-deps ## Upgrade floe-platform test installation
 	@echo "Upgrading floe-platform test installation..."
-	@helm upgrade floe-test charts/floe-platform \
-		--namespace floe-test \
-		--values charts/floe-platform/values-test.yaml \
-		--wait --timeout 10m
+	@uv run floe platform deploy --env test --chart charts/floe-platform
 	@helm upgrade floe-jobs-test charts/floe-jobs \
 		--namespace floe-test \
 		--values charts/floe-jobs/values-test.yaml \
@@ -247,7 +235,7 @@ helm-upgrade-test: helm-deps ## Upgrade floe-platform test installation
 helm-uninstall-test: ## Uninstall floe test installation
 	@echo "Uninstalling floe test installation..."
 	@helm uninstall floe-jobs-test --namespace floe-test 2>/dev/null || true
-	@helm uninstall floe-test --namespace floe-test 2>/dev/null || true
+	@helm uninstall floe-platform --namespace floe-test 2>/dev/null || true
 	@kubectl delete namespace floe-test --ignore-not-found --wait=false
 	@echo "Test infrastructure uninstalled!"
 
@@ -274,9 +262,8 @@ demo: ## Deploy platform and run all 3 demo data products with dashboards
 	@echo "Ensuring Kind cluster is running..."
 	$(MAKE) kind-up
 	@echo "Installing floe-platform Helm chart with demo overrides..."
-	@helm upgrade --install floe-platform ./charts/floe-platform \
-		-f ./charts/floe-platform/values-demo.yaml \
-		-n floe-dev --create-namespace --wait --timeout 300s
+	@uv run floe platform deploy --env dev --chart ./charts/floe-platform \
+		--values ./charts/floe-platform/values-demo.yaml
 	@echo "Compiling demo data products..."
 	@if [ -n "$(PRODUCTS)" ]; then \
 		for product in $(shell echo $(PRODUCTS) | tr ',' ' '); do \

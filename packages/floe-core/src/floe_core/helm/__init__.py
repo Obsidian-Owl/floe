@@ -34,6 +34,10 @@ from floe_core.helm.merger import (
     merge_all,
     unflatten_dict,
 )
+from floe_core.helm.parsing import (
+    parse_set_values,
+    parse_value,
+)
 from floe_core.helm.schemas import (
     ClusterConfig,
     ClusterMapping,
@@ -59,4 +63,7 @@ __all__: list[str] = [
     "flatten_dict",
     "merge_all",
     "unflatten_dict",
+    # Parsing utilities
+    "parse_set_values",
+    "parse_value",
 ]

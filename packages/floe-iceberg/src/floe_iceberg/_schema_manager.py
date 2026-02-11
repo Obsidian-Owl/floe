@@ -124,7 +124,7 @@ class _IcebergSchemaManager:
     # =========================================================================
 
     @traced(
-        operation_name="iceberg.schema.evolve_schema",
+        name="iceberg.schema.evolve_schema",
         attributes={"operation": "evolve_schema"},
     )
     def evolve_schema(

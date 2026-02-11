@@ -26,6 +26,7 @@ from typing import Any
 from opentelemetry import trace
 
 from floe_core.schemas.signing import AttestationManifest, Subject
+from floe_core.telemetry.sanitization import sanitize_error_message
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -140,16 +141,22 @@ def generate_sbom(
             return sbom
 
         except subprocess.CalledProcessError as e:
-            span.record_exception(e)
+            sanitized_msg = sanitize_error_message(str(e))
+            span.set_attribute("exception.type", type(e).__name__)
+            span.set_attribute("exception.message", sanitized_msg)
             raise SBOMGenerationError(
                 f"syft exited with code {e.returncode}",
                 stderr=e.stderr,
             ) from e
         except subprocess.TimeoutExpired as e:
-            span.record_exception(e)
+            sanitized_msg = sanitize_error_message(str(e))
+            span.set_attribute("exception.type", type(e).__name__)
+            span.set_attribute("exception.message", sanitized_msg)
             raise SBOMGenerationError("syft timed out after 300 seconds") from e
         except json.JSONDecodeError as e:
-            span.record_exception(e)
+            sanitized_msg = sanitize_error_message(str(e))
+            span.set_attribute("exception.type", type(e).__name__)
+            span.set_attribute("exception.message", sanitized_msg)
             raise SBOMGenerationError(f"Invalid JSON output from syft: {e}") from e
 
 
@@ -226,13 +233,17 @@ def attach_attestation(
             )
 
         except subprocess.CalledProcessError as e:
-            span.record_exception(e)
+            sanitized_msg = sanitize_error_message(str(e))
+            span.set_attribute("exception.type", type(e).__name__)
+            span.set_attribute("exception.message", sanitized_msg)
             raise AttestationAttachError(
                 f"cosign exited with code {e.returncode}",
                 stderr=e.stderr,
             ) from e
         except subprocess.TimeoutExpired as e:
-            span.record_exception(e)
+            sanitized_msg = sanitize_error_message(str(e))
+            span.set_attribute("exception.type", type(e).__name__)
+            span.set_attribute("exception.message", sanitized_msg)
             raise AttestationAttachError("cosign timed out after 120 seconds") from e
 
 
@@ -300,7 +311,9 @@ def retrieve_attestations(
             return attestations
 
         except subprocess.TimeoutExpired as e:
-            span.record_exception(e)
+            sanitized_msg = sanitize_error_message(str(e))
+            span.set_attribute("exception.type", type(e).__name__)
+            span.set_attribute("exception.message", sanitized_msg)
             raise AttestationError("cosign timed out after 60 seconds") from e
 
 

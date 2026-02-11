@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any, Literal
 from floe_core.network.schemas import _validate_namespace
 from floe_core.plugins import NetworkSecurityPlugin
 
+from floe_network_security_k8s.tracing import TRACER_NAME, get_tracer, security_span
+
 if TYPE_CHECKING:
     from floe_core.network.schemas import NetworkPolicyConfig
 
@@ -50,6 +52,11 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         """Minimum floe API version required."""
         return "1.0"
 
+    @property
+    def tracer_name(self) -> str:
+        """OpenTelemetry tracer name for this plugin."""
+        return TRACER_NAME
+
     def generate_network_policy(self, config: NetworkPolicyConfig) -> dict[str, Any]:
         """Generate a single K8s NetworkPolicy manifest.
 
@@ -59,37 +66,44 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             Dictionary representing K8s NetworkPolicy YAML.
         """
-        manifest: dict[str, Any] = {
-            "apiVersion": "networking.k8s.io/v1",
-            "kind": "NetworkPolicy",
-            "metadata": {
-                "name": config.name,
-                "namespace": config.namespace,
-                "labels": {
-                    "app.kubernetes.io/managed-by": "floe",
+        tracer = get_tracer()
+        with security_span(
+            tracer,
+            "generate_network_policy",
+            policy_type="NetworkPolicy",
+            namespace=config.namespace,
+        ):
+            manifest: dict[str, Any] = {
+                "apiVersion": "networking.k8s.io/v1",
+                "kind": "NetworkPolicy",
+                "metadata": {
+                    "name": config.name,
+                    "namespace": config.namespace,
+                    "labels": {
+                        "app.kubernetes.io/managed-by": "floe",
+                    },
                 },
-            },
-            "spec": {
-                "podSelector": config.pod_selector or {},
-                "policyTypes": [],
-            },
-        }
+                "spec": {
+                    "podSelector": config.pod_selector or {},
+                    "policyTypes": [],
+                },
+            }
 
-        # Add ingress rules if present
-        if config.ingress_rules:
-            manifest["spec"]["policyTypes"].append("Ingress")
-            manifest["spec"]["ingress"] = [
-                self._convert_ingress_rule(rule) for rule in config.ingress_rules
-            ]
+            # Add ingress rules if present
+            if config.ingress_rules:
+                manifest["spec"]["policyTypes"].append("Ingress")
+                manifest["spec"]["ingress"] = [
+                    self._convert_ingress_rule(rule) for rule in config.ingress_rules
+                ]
 
-        # Add egress rules if present
-        if config.egress_rules:
-            manifest["spec"]["policyTypes"].append("Egress")
-            manifest["spec"]["egress"] = [
-                self._convert_egress_rule(rule) for rule in config.egress_rules
-            ]
+            # Add egress rules if present
+            if config.egress_rules:
+                manifest["spec"]["policyTypes"].append("Egress")
+                manifest["spec"]["egress"] = [
+                    self._convert_egress_rule(rule) for rule in config.egress_rules
+                ]
 
-        return manifest
+            return manifest
 
     def _convert_ingress_rule(self, rule: Any) -> dict[str, Any]:
         """Convert an IngressRule to K8s manifest format."""
@@ -147,25 +161,33 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             List of NetworkPolicy manifests (ingress-deny, egress-deny).
         """
         _validate_namespace(namespace)
-        return [
-            {
-                "apiVersion": "networking.k8s.io/v1",
-                "kind": "NetworkPolicy",
-                "metadata": {
-                    "name": "default-deny-all",
-                    "namespace": namespace,
-                    "labels": {
-                        "app.kubernetes.io/managed-by": "floe",
+        tracer = get_tracer()
+        with security_span(
+            tracer,
+            "generate_default_deny_policies",
+            policy_type="NetworkPolicy",
+            namespace=namespace,
+            resource_count=1,
+        ):
+            return [
+                {
+                    "apiVersion": "networking.k8s.io/v1",
+                    "kind": "NetworkPolicy",
+                    "metadata": {
+                        "name": "default-deny-all",
+                        "namespace": namespace,
+                        "labels": {
+                            "app.kubernetes.io/managed-by": "floe",
+                        },
                     },
-                },
-                "spec": {
-                    "podSelector": {},
-                    "policyTypes": ["Ingress", "Egress"],
-                    "ingress": [],
-                    "egress": [],
-                },
-            }
-        ]
+                    "spec": {
+                        "podSelector": {},
+                        "policyTypes": ["Ingress", "Egress"],
+                        "ingress": [],
+                        "egress": [],
+                    },
+                }
+            ]
 
     def generate_dns_egress_rule(self) -> dict[str, Any]:
         """Generate DNS egress rule (always required).

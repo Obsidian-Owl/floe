@@ -17,6 +17,8 @@ import structlog
 from floe_core.contracts.monitoring.violations import ContractViolationEvent
 from floe_core.plugins.alert_channel import AlertChannelPlugin
 
+from .tracing import TRACER_NAME, alert_span, get_tracer
+
 logger = structlog.get_logger(__name__)
 
 CLOUDEVENTS_CONTENT_TYPE = "application/cloudevents+json"
@@ -47,6 +49,7 @@ class WebhookAlertPlugin(AlertChannelPlugin):
         self._webhook_url = webhook_url
         self._timeout_seconds = timeout_seconds
         self._log = logger.bind(component="webhook_alert")
+        self._tracer = get_tracer()
 
     @property
     def name(self) -> str:
@@ -63,16 +66,26 @@ class WebhookAlertPlugin(AlertChannelPlugin):
         """Return floe API version this plugin implements."""
         return "1.0"
 
+    @property
+    def tracer_name(self) -> str:
+        """Return OpenTelemetry tracer name."""
+        return TRACER_NAME
+
     def validate_config(self) -> list[str]:
         """Validate webhook configuration.
 
         Returns:
             List of validation error messages. Empty list means valid.
         """
-        errors: list[str] = []
-        if not self._webhook_url:
-            errors.append("webhook_url is required")
-        return errors
+        with alert_span(
+            self._tracer,
+            "validate_config",
+            channel="webhook",
+        ):
+            errors: list[str] = []
+            if not self._webhook_url:
+                errors.append("webhook_url is required")
+            return errors
 
     async def send_alert(self, event: ContractViolationEvent) -> bool:
         """Send violation as CloudEvents v1.0 structured-mode POST.
@@ -83,41 +96,48 @@ class WebhookAlertPlugin(AlertChannelPlugin):
         Returns:
             True if delivery succeeded, False otherwise.
         """
-        cloudevent = self._build_cloudevent(event)
+        with alert_span(
+            self._tracer,
+            "send",
+            channel="webhook",
+            destination=self._webhook_url,
+            extra_attributes={"contract.name": event.contract_name},
+        ):
+            cloudevent = self._build_cloudevent(event)
 
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    self._webhook_url,
-                    json=cloudevent,
-                    headers={"Content-Type": CLOUDEVENTS_CONTENT_TYPE},
-                    timeout=self._timeout_seconds,
-                )
-
-                if response.status_code >= 400:
-                    self._log.warning(
-                        "webhook_http_error",
-                        status_code=response.status_code,
-                        contract_name=event.contract_name,
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        self._webhook_url,
+                        json=cloudevent,
+                        headers={"Content-Type": CLOUDEVENTS_CONTENT_TYPE},
+                        timeout=self._timeout_seconds,
                     )
-                    return False
 
-                return True
+                    if response.status_code >= 400:
+                        self._log.warning(
+                            "webhook_http_error",
+                            status_code=response.status_code,
+                            contract_name=event.contract_name,
+                        )
+                        return False
 
-        except (httpx.ConnectError, httpx.TimeoutException) as e:
-            self._log.warning(
-                "webhook_connection_error",
-                error=str(e),
-                contract_name=event.contract_name,
-            )
-            return False
-        except Exception as e:
-            self._log.error(
-                "webhook_unexpected_error",
-                error=str(e),
-                contract_name=event.contract_name,
-            )
-            return False
+                    return True
+
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                self._log.warning(
+                    "webhook_connection_error",
+                    error=str(e),
+                    contract_name=event.contract_name,
+                )
+                return False
+            except Exception as e:
+                self._log.error(
+                    "webhook_unexpected_error",
+                    error=str(e),
+                    contract_name=event.contract_name,
+                )
+                return False
 
     def _build_cloudevent(self, event: ContractViolationEvent) -> dict[str, Any]:
         """Build CloudEvents v1.0 structured-mode envelope.

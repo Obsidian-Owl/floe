@@ -21,6 +21,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
+from floe_core.telemetry.sanitization import sanitize_error_message
 from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
@@ -114,7 +115,9 @@ def semantic_span(
             span.set_status(Status(StatusCode.OK))
         except Exception as e:
             span.set_status(Status(StatusCode.ERROR, type(e).__name__))
-            span.record_exception(e)
+            sanitized = sanitize_error_message(str(e))
+            span.set_attribute("exception.type", type(e).__name__)
+            span.set_attribute("exception.message", sanitized)
             raise
 
 

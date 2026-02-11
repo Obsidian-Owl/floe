@@ -28,6 +28,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
 
+from floe_core.plugin_metadata import PluginMetadata
+from floe_core.plugin_types import PluginType
 from floe_core.telemetry.tracing import create_span
 
 if TYPE_CHECKING:
@@ -120,6 +122,44 @@ class CompilationStage(str, Enum):
             CompilationStage.GENERATE: "Output CompiledArtifacts JSON",
         }
         return descriptions[self]
+
+
+def _discover_plugins_for_audit() -> list[tuple[PluginType, PluginMetadata]]:
+    """Discover all registered plugins via entry points for audit.
+
+    Loads each entry point, instantiates the plugin class (no-args), and
+    returns a list of (PluginType, PluginMetadata) tuples suitable for
+    ``verify_plugin_instrumentation()``.
+
+    Plugins that fail to load or instantiate are logged and skipped.
+
+    Returns:
+        List of (PluginType, PluginMetadata) tuples for all discoverable plugins.
+    """
+    from importlib.metadata import entry_points
+
+    results: list[tuple[PluginType, PluginMetadata]] = []
+
+    for plugin_type in PluginType:
+        try:
+            eps = entry_points(group=plugin_type.value)
+        except Exception:
+            continue
+
+        for ep in eps:
+            try:
+                plugin_class = ep.load()
+                instance = plugin_class()
+                results.append((plugin_type, instance))
+            except Exception as exc:
+                logger.debug(
+                    "audit_plugin_load_failed",
+                    plugin_name=ep.name,
+                    plugin_type=plugin_type.name,
+                    error=str(exc),
+                )
+
+    return results
 
 
 def compile_pipeline(
@@ -275,6 +315,14 @@ def compile_pipeline(
                     destination_count=len(spec.destinations),
                     approved_sinks=manifest.approved_sinks,
                 )
+
+            # Plugin instrumentation audit (FR-016, FR-017)
+            from floe_core.telemetry.audit import verify_plugin_instrumentation
+
+            _audit_plugins = _discover_plugins_for_audit()
+            _audit_warnings = verify_plugin_instrumentation(_audit_plugins)
+            for _warn_msg in _audit_warnings:
+                log.warning("uninstrumented_plugin", message=_warn_msg)
 
             # Placeholder: Full enforcement requires dbt manifest.json which is
             # generated later by dbt compile. The run_enforce_stage() function

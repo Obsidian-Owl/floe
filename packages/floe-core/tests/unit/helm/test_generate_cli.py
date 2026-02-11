@@ -19,97 +19,94 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from floe_core.cli.helm.generate import (
-    _parse_set_values,
-    _parse_value,
-    generate_command,
-)
+from floe_core.cli.helm.generate import generate_command
+from floe_core.helm.parsing import parse_set_values, parse_value
 
 
 class TestParseValue:
-    """Tests for _parse_value helper function."""
+    """Tests for parse_value helper function."""
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_null(self) -> None:
         """Test parsing 'null' string."""
-        assert _parse_value("null") is None
-        assert _parse_value("NULL") is None
-        assert _parse_value("Null") is None
+        assert parse_value("null") is None
+        assert parse_value("NULL") is None
+        assert parse_value("Null") is None
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_bool_true(self) -> None:
         """Test parsing 'true' string."""
-        assert _parse_value("true") is True
-        assert _parse_value("TRUE") is True
-        assert _parse_value("True") is True
+        assert parse_value("true") is True
+        assert parse_value("TRUE") is True
+        assert parse_value("True") is True
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_bool_false(self) -> None:
         """Test parsing 'false' string."""
-        assert _parse_value("false") is False
-        assert _parse_value("FALSE") is False
-        assert _parse_value("False") is False
+        assert parse_value("false") is False
+        assert parse_value("FALSE") is False
+        assert parse_value("False") is False
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_integer(self) -> None:
         """Test parsing integer values."""
-        assert _parse_value("42") == 42
-        assert _parse_value("0") == 0
-        assert _parse_value("-10") == -10
+        assert parse_value("42") == 42
+        assert parse_value("0") == 0
+        assert parse_value("-10") == -10
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_float(self) -> None:
         """Test parsing float values."""
-        assert _parse_value("3.14") == 3.14
-        assert _parse_value("0.5") == 0.5
-        assert _parse_value("-1.5") == -1.5
+        assert parse_value("3.14") == pytest.approx(3.14)
+        assert parse_value("0.5") == pytest.approx(0.5)
+        assert parse_value("-1.5") == pytest.approx(-1.5)
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_string(self) -> None:
         """Test parsing string values."""
-        assert _parse_value("hello") == "hello"
-        assert _parse_value("test-value") == "test-value"
-        assert _parse_value("with spaces") == "with spaces"
+        assert parse_value("hello") == "hello"
+        assert parse_value("test-value") == "test-value"
+        assert parse_value("with spaces") == "with spaces"
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_string_with_number_prefix(self) -> None:
         """Test parsing strings that start with numbers."""
         # These should be strings, not numbers
-        assert _parse_value("123abc") == "123abc"
-        assert _parse_value("1.2.3") == "1.2.3"
+        assert parse_value("123abc") == "123abc"
+        assert parse_value("1.2.3") == "1.2.3"
 
 
 class TestParseSetValues:
-    """Tests for _parse_set_values helper function."""
+    """Tests for parse_set_values helper function."""
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_empty_tuple(self) -> None:
         """Test parsing empty set values."""
-        result = _parse_set_values(())
+        result = parse_set_values(())
         assert result == {}
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_single_value(self) -> None:
         """Test parsing single key=value pair."""
-        result = _parse_set_values(("key=value",))
+        result = parse_set_values(("key=value",))
         assert result == {"key": "value"}
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_nested_values(self) -> None:
         """Test parsing nested key paths."""
-        result = _parse_set_values(("dagster.replicas=3",))
+        result = parse_set_values(("dagster.replicas=3",))
         assert result == {"dagster": {"replicas": 3}}
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_deeply_nested(self) -> None:
         """Test parsing deeply nested paths."""
-        result = _parse_set_values(("a.b.c.d=value",))
+        result = parse_set_values(("a.b.c.d=value",))
         assert result == {"a": {"b": {"c": {"d": "value"}}}}
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_multiple_values(self) -> None:
         """Test parsing multiple key=value pairs."""
-        result = _parse_set_values(("dagster.replicas=3", "global.env=prod", "enabled=true"))
+        result = parse_set_values(("dagster.replicas=3", "global.env=prod", "enabled=true"))
         assert result == {
             "dagster": {"replicas": 3},
             "global": {"env": "prod"},
@@ -119,7 +116,7 @@ class TestParseSetValues:
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_type_conversion(self) -> None:
         """Test automatic type conversion."""
-        result = _parse_set_values(
+        result = parse_set_values(
             (
                 "int_val=42",
                 "float_val=3.14",
@@ -129,7 +126,7 @@ class TestParseSetValues:
             )
         )
         assert result["int_val"] == 42
-        assert result["float_val"] == 3.14
+        assert result["float_val"] == pytest.approx(3.14)
         assert result["bool_val"] is True
         assert result["null_val"] is None
         assert result["str_val"] == "hello"
@@ -137,21 +134,42 @@ class TestParseSetValues:
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_invalid_format_skipped(self) -> None:
         """Test that values without '=' are skipped."""
-        result = _parse_set_values(("key=value", "invalid", "other=test"))
+        result = parse_set_values(("key=value", "invalid", "other=test"))
         assert result == {"key": "value", "other": "test"}
         assert "invalid" not in result
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_empty_value(self) -> None:
         """Test parsing empty value after equals."""
-        result = _parse_set_values(("key=",))
+        result = parse_set_values(("key=",))
         assert result == {"key": ""}
 
     @pytest.mark.requirement("9b-FR-063")
     def test_parse_value_with_equals(self) -> None:
         """Test parsing value containing equals sign."""
-        result = _parse_set_values(("url=http://example.com?foo=bar",))
+        result = parse_set_values(("url=http://example.com?foo=bar",))
         assert result == {"url": "http://example.com?foo=bar"}
+
+    @pytest.mark.requirement("9b-FR-063")
+    def test_warn_fn_called_for_invalid_entries(self) -> None:
+        """Test that warn_fn callback is invoked for entries missing '='."""
+        warnings: list[str] = []
+        result = parse_set_values(
+            ("key=value", "no-equals", "other=test"),
+            warn_fn=warnings.append,
+        )
+        assert result == {"key": "value", "other": "test"}
+        assert len(warnings) == 1
+        assert "no-equals" in warnings[0]
+
+    @pytest.mark.requirement("9b-FR-063")
+    def test_warn_fn_none_silently_skips(self) -> None:
+        """Test that warn_fn=None silently skips invalid entries."""
+        result = parse_set_values(
+            ("key=value", "no-equals"),
+            warn_fn=None,
+        )
+        assert result == {"key": "value"}
 
 
 class TestGenerateCommand:

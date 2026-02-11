@@ -102,7 +102,7 @@ class _IcebergTableLifecycle:
     # =========================================================================
 
     @traced(
-        operation_name="iceberg.lifecycle.create_table",
+        name="iceberg.lifecycle.create_table",
         attributes={"operation": "create"},
     )
     def create_table(
@@ -255,7 +255,7 @@ class _IcebergTableLifecycle:
         return True  # Assume exists in production (real catalog will verify)
 
     @traced(
-        operation_name="iceberg.lifecycle.drop_table",
+        name="iceberg.lifecycle.drop_table",
         attributes={"operation": "drop"},
     )
     def drop_table(

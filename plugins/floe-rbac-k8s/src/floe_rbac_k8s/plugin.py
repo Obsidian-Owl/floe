@@ -26,6 +26,8 @@ from floe_core.schemas.rbac import (
     ServiceAccountConfig,
 )
 
+from floe_rbac_k8s.tracing import get_tracer, security_span
+
 
 class K8sRBACPlugin(RBACPlugin):
     """Kubernetes RBAC plugin for generating RBAC manifests.
@@ -62,6 +64,15 @@ class K8sRBACPlugin(RBACPlugin):
         """Minimum floe API version required."""
         return "1.0"
 
+    @property
+    def tracer_name(self) -> str | None:
+        """OpenTelemetry tracer name for this plugin.
+
+        Returns:
+            The RBAC security tracer name for instrumentation auditing.
+        """
+        return "floe.security.rbac"
+
     def generate_service_account(
         self,
         config: ServiceAccountConfig,
@@ -91,7 +102,9 @@ class K8sRBACPlugin(RBACPlugin):
             >>> manifest["automountServiceAccountToken"]
             False
         """
-        return config.to_k8s_manifest()
+        tracer = get_tracer()
+        with security_span(tracer, "generate_service_account", policy_type="ServiceAccount"):
+            return config.to_k8s_manifest()
 
     def generate_role(
         self,
@@ -122,7 +135,9 @@ class K8sRBACPlugin(RBACPlugin):
             >>> manifest["kind"]
             'Role'
         """
-        return config.to_k8s_manifest()
+        tracer = get_tracer()
+        with security_span(tracer, "generate_role", policy_type="Role"):
+            return config.to_k8s_manifest()
 
     def generate_role_binding(
         self,
@@ -159,7 +174,9 @@ class K8sRBACPlugin(RBACPlugin):
             >>> manifest["kind"]
             'RoleBinding'
         """
-        return config.to_k8s_manifest()
+        tracer = get_tracer()
+        with security_span(tracer, "generate_role_binding", policy_type="RoleBinding"):
+            return config.to_k8s_manifest()
 
     def generate_namespace(
         self,
@@ -188,7 +205,9 @@ class K8sRBACPlugin(RBACPlugin):
             >>> manifest["kind"]
             'Namespace'
         """
-        return config.to_k8s_manifest()
+        tracer = get_tracer()
+        with security_span(tracer, "generate_namespace", policy_type="Namespace"):
+            return config.to_k8s_manifest()
 
     def generate_pod_security_context(
         self,
@@ -221,9 +240,15 @@ class K8sRBACPlugin(RBACPlugin):
             >>> len(contexts["volumes"]) > 0  # Default includes /tmp
             True
         """
-        return {
-            "pod": config.to_pod_security_context(),
-            "container": config.to_container_security_context(),
-            "volumes": config.to_volumes(),
-            "volumeMounts": config.to_volume_mounts(),
-        }
+        tracer = get_tracer()
+        with security_span(
+            tracer,
+            "generate_pod_security_context",
+            policy_type="PodSecurityContext",
+        ):
+            return {
+                "pod": config.to_pod_security_context(),
+                "container": config.to_container_security_context(),
+                "volumes": config.to_volumes(),
+                "volumeMounts": config.to_volume_mounts(),
+            }
