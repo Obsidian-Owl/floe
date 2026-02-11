@@ -201,14 +201,10 @@ helm-integration-test: helm-deps ## Run Helm integration tests in Kind cluster
 		echo "Creating Kind cluster..."; \
 		kind create cluster --name floe-test --wait 120s; \
 	fi
-	@# Install charts
+	@# Install charts via floe platform deploy
 	@echo "Installing floe-platform chart..."
-	@helm upgrade --install floe-platform charts/floe-platform \
-		--namespace floe-test --create-namespace \
-		--values charts/floe-platform/values.yaml \
-		--skip-schema-validation \
-		--values charts/floe-platform/values-dev.yaml \
-		--wait --timeout 5m
+	@uv run floe platform deploy --env dev --chart charts/floe-platform \
+		--namespace floe-test --timeout 5m
 	@# Run Helm tests
 	@echo "Running Helm tests..."
 	@helm test floe-platform --namespace floe-test --timeout 5m

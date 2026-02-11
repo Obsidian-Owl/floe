@@ -16,13 +16,13 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any
 
 import click
 import yaml
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warn
-from floe_core.helm import HelmValuesConfig, HelmValuesGenerator, unflatten_dict
+from floe_core.helm import HelmValuesConfig, HelmValuesGenerator
+from floe_core.helm.parsing import parse_set_values
 
 
 @click.command(
@@ -164,7 +164,7 @@ def deploy_command(
             )
 
     # Parse --set values
-    user_overrides = _parse_set_values(set_values)
+    user_overrides = parse_set_values(set_values, warn_fn=warn)
     if user_overrides:
         info(f"Applying {len(user_overrides)} user overrides")
         generator.set_user_overrides(user_overrides)
@@ -246,69 +246,6 @@ def deploy_command(
                 os.unlink(temp_file.name)
             except OSError:
                 pass
-
-
-def _parse_set_values(set_values: tuple[str, ...]) -> dict[str, Any]:
-    """Parse --set key=value arguments into nested dict.
-
-    Args:
-        set_values: Tuple of "key=value" strings.
-
-    Returns:
-        Nested dictionary with parsed values.
-
-    Example:
-        >>> _parse_set_values(("dagster.replicas=3", "global.env=prod"))
-        {'dagster': {'replicas': 3}, 'global': {'env': 'prod'}}
-    """
-    if not set_values:
-        return {}
-
-    flat: dict[str, Any] = {}
-    for item in set_values:
-        if "=" not in item:
-            warn(f"Ignoring invalid --set value (missing '='): {item}")
-            continue
-        key, _, value = item.partition("=")
-        parsed = _parse_value(value)
-        flat[key] = parsed
-
-    return unflatten_dict(flat)
-
-
-def _parse_value(value: str) -> str | int | float | bool | None:
-    """Parse a string value into appropriate Python type.
-
-    Args:
-        value: String value from --set argument.
-
-    Returns:
-        Parsed value as int, float, bool, None, or original string.
-    """
-    # Handle null
-    if value.lower() == "null":
-        return None
-
-    # Handle booleans
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
-
-    # Try int
-    try:
-        return int(value)
-    except ValueError:
-        pass
-
-    # Try float
-    try:
-        return float(value)
-    except ValueError:
-        pass
-
-    # Return as string
-    return value
 
 
 __all__: list[str] = ["deploy_command"]
