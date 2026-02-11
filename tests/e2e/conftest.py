@@ -110,6 +110,70 @@ def pytest_collection_modifyitems(
         print("=" * 70)
 
 
+def run_kubectl(
+    args: list[str],
+    namespace: str | None = None,
+    timeout: int = 60,
+) -> subprocess.CompletedProcess[str]:
+    """Run kubectl command with optional namespace.
+
+    Shared helper for E2E tests. Uses the real kubectl binary — no mocks.
+
+    Args:
+        args: kubectl arguments (e.g., ["get", "pods"]).
+        namespace: K8s namespace to target. If provided, adds -n flag.
+        timeout: Command timeout in seconds. Defaults to 60.
+
+    Returns:
+        Completed process result with stdout, stderr, and returncode.
+    """
+    cmd = ["kubectl"]
+    if namespace:
+        cmd.extend(["-n", namespace])
+    cmd.extend(args)
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def run_helm(
+    args: list[str],
+    timeout: int = 900,
+) -> subprocess.CompletedProcess[str]:
+    """Run helm command with timeout.
+
+    Shared helper for E2E tests. Uses the real helm binary — no mocks.
+
+    Args:
+        args: helm arguments (e.g., ["status", "floe-platform"]).
+        timeout: Command timeout in seconds. Defaults to 900.
+
+    Returns:
+        Completed process result with stdout, stderr, and returncode.
+    """
+    return subprocess.run(
+        ["helm"] + args,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
+@pytest.fixture(scope="session")
+def project_root() -> Path:
+    """Get the project root directory.
+
+    Returns:
+        Path to the floe project root (contains pyproject.toml, charts/, demo/).
+    """
+    return Path(__file__).parent.parent.parent
+
+
 @pytest.fixture(scope="session")
 def e2e_namespace() -> str:
     """Generate unique namespace for E2E test session.
