@@ -26,9 +26,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def tracer_with_exporter() -> Generator[
-    tuple[TracerProvider, InMemorySpanExporter], None, None
-]:
+def tracer_with_exporter() -> Generator[tuple[TracerProvider, InMemorySpanExporter], None, None]:
     """Create a TracerProvider with InMemorySpanExporter for testing.
 
     Injects the tracer into the tracing module for test purposes.

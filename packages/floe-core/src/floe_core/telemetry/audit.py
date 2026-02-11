@@ -36,9 +36,11 @@ logger = structlog.get_logger(__name__)
 
 # Plugin types excluded from instrumentation audit.
 # Telemetry backends must NOT trace themselves (infinite loop).
-_EXCLUDED_PLUGIN_TYPES: frozenset[PluginType] = frozenset({
-    PluginType.TELEMETRY_BACKEND,
-})
+_EXCLUDED_PLUGIN_TYPES: frozenset[PluginType] = frozenset(
+    {
+        PluginType.TELEMETRY_BACKEND,
+    }
+)
 
 
 def verify_plugin_instrumentation(

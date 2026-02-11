@@ -74,8 +74,7 @@ class TestSanitizeErrorMessage:
         # The regex only captures "Bearer" (first \S+ after colon),
         # not the full token
         assert (
-            result
-            == "HTTP error: authorization: <REDACTED> eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+            result == "HTTP error: authorization: <REDACTED> eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
         )
         assert "Bearer" not in result
 
@@ -189,7 +188,7 @@ class TestSanitizeErrorMessage:
         credential=<REDACTED>.
         """
         # pragma: allowlist secret
-        msg = "S3 error: credential=ASIATESTACCESSKEY123 region=us-east-1"  # pragma: allowlist secret
+        msg = "S3 error: credential=ASIATESTACCESSKEY123 region=us-east-1"  # noqa: E501
         result = sanitize_error_message(msg)
 
         assert result == "S3 error: credential=<REDACTED> region=us-east-1"

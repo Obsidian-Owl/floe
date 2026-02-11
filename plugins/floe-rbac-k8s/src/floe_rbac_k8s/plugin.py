@@ -103,9 +103,7 @@ class K8sRBACPlugin(RBACPlugin):
             False
         """
         tracer = get_tracer()
-        with security_span(
-            tracer, "generate_service_account", policy_type="ServiceAccount"
-        ):
+        with security_span(tracer, "generate_service_account", policy_type="ServiceAccount"):
             return config.to_k8s_manifest()
 
     def generate_role(
@@ -177,9 +175,7 @@ class K8sRBACPlugin(RBACPlugin):
             'RoleBinding'
         """
         tracer = get_tracer()
-        with security_span(
-            tracer, "generate_role_binding", policy_type="RoleBinding"
-        ):
+        with security_span(tracer, "generate_role_binding", policy_type="RoleBinding"):
             return config.to_k8s_manifest()
 
     def generate_namespace(

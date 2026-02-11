@@ -37,9 +37,7 @@ class TestDeployCommand:
         # Create values.yaml
         (chart / "values.yaml").write_text(yaml.dump({"global": {"environment": "dev"}}))
         # Create values-test.yaml
-        (chart / "values-test.yaml").write_text(
-            yaml.dump({"global": {"environment": "test"}})
-        )
+        (chart / "values-test.yaml").write_text(yaml.dump({"global": {"environment": "test"}}))
         return chart
 
     @pytest.mark.requirement("FR-018")
@@ -60,9 +58,7 @@ class TestDeployCommand:
         assert "floe-platform" in result.output
 
     @pytest.mark.requirement("FR-018")
-    def test_dry_run_with_custom_release_name(
-        self, runner: CliRunner, chart_dir: Path
-    ) -> None:
+    def test_dry_run_with_custom_release_name(self, runner: CliRunner, chart_dir: Path) -> None:
         """Test --dry-run with custom release name."""
         result = runner.invoke(
             deploy_command,
@@ -147,9 +143,7 @@ class TestDeployCommand:
         assert "not exist" in result.output.lower() or "invalid" in result.output.lower()
 
     @pytest.mark.requirement("FR-018")
-    def test_skip_schema_validation_default(
-        self, runner: CliRunner, chart_dir: Path
-    ) -> None:
+    def test_skip_schema_validation_default(self, runner: CliRunner, chart_dir: Path) -> None:
         """Test --skip-schema-validation is on by default."""
         result = runner.invoke(
             deploy_command,
@@ -170,9 +164,7 @@ class TestDeployCommand:
         self, mock_subprocess: MagicMock, runner: CliRunner, chart_dir: Path
     ) -> None:
         """Test that deploy executes helm command."""
-        mock_subprocess.run.return_value = MagicMock(
-            returncode=0, stdout="deployed", stderr=""
-        )
+        mock_subprocess.run.return_value = MagicMock(returncode=0, stdout="deployed", stderr="")
         mock_subprocess.CalledProcessError = subprocess.CalledProcessError
 
         result = runner.invoke(
@@ -242,9 +234,7 @@ class TestDeployCommand:
         assert "key: value" in result.output
 
     @pytest.mark.requirement("FR-018")
-    def test_env_specific_values_loaded(
-        self, runner: CliRunner, chart_dir: Path
-    ) -> None:
+    def test_env_specific_values_loaded(self, runner: CliRunner, chart_dir: Path) -> None:
         """Test that environment-specific values file is auto-loaded."""
         result = runner.invoke(
             deploy_command,
@@ -369,9 +359,7 @@ class TestDeployCommand:
         assert "string_val: hello" in result.output
 
     @pytest.mark.requirement("FR-018")
-    def test_invalid_values_file(
-        self, runner: CliRunner, chart_dir: Path, tmp_path: Path
-    ) -> None:
+    def test_invalid_values_file(self, runner: CliRunner, chart_dir: Path, tmp_path: Path) -> None:
         """Test error on invalid YAML in values file."""
         bad_values = tmp_path / "bad.yaml"
         bad_values.write_text("invalid: yaml: content: [")
@@ -391,9 +379,7 @@ class TestDeployCommand:
         assert "Failed to load values file" in result.output
 
     @pytest.mark.requirement("FR-018")
-    def test_dry_run_shows_values_content(
-        self, runner: CliRunner, chart_dir: Path
-    ) -> None:
+    def test_dry_run_shows_values_content(self, runner: CliRunner, chart_dir: Path) -> None:
         """Test dry-run displays generated values."""
         result = runner.invoke(
             deploy_command,
@@ -411,9 +397,7 @@ class TestDeployCommand:
         assert "global:" in result.output
 
     @pytest.mark.requirement("FR-018")
-    def test_invalid_set_value_shows_warning(
-        self, runner: CliRunner, chart_dir: Path
-    ) -> None:
+    def test_invalid_set_value_shows_warning(self, runner: CliRunner, chart_dir: Path) -> None:
         """Test that invalid --set entries (missing '=') produce warnings."""
         result = runner.invoke(
             deploy_command,

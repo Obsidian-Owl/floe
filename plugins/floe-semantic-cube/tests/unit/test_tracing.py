@@ -211,10 +211,7 @@ class TestSemanticSpan:
         assert status_call.status_code == StatusCode.ERROR
         assert status_call.description == "ValueError"
         # Verify sanitized error attributes are set
-        attr_calls = {
-            call[0][0]: call[0][1]
-            for call in mock_span.set_attribute.call_args_list
-        }
+        attr_calls = {call[0][0]: call[0][1] for call in mock_span.set_attribute.call_args_list}
         assert attr_calls["exception.type"] == "ValueError"
         assert "test error" in attr_calls["exception.message"]
 

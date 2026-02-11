@@ -15,19 +15,18 @@ import re
 from importlib.metadata import entry_points
 
 import pytest
-
 from floe_core.plugin_types import PluginType
 
 # Entry point groups to audit (PluginType groups + network_security)
-_PLUGIN_GROUPS: dict[str, str] = {
-    pt.value: pt.name for pt in PluginType
-}
+_PLUGIN_GROUPS: dict[str, str] = {pt.value: pt.name for pt in PluginType}
 _PLUGIN_GROUPS["floe.network_security"] = "NETWORK_SECURITY"
 
 # Groups excluded from instrumentation requirement
-_EXCLUDED_GROUPS: frozenset[str] = frozenset({
-    PluginType.TELEMETRY_BACKEND.value,
-})
+_EXCLUDED_GROUPS: frozenset[str] = frozenset(
+    {
+        PluginType.TELEMETRY_BACKEND.value,
+    }
+)
 
 # Naming convention: floe.{category}.{implementation}
 _TRACER_NAME_PATTERN = re.compile(r"^floe\.[a-z]+\.[a-z][a-z0-9_]*$")
@@ -50,8 +49,7 @@ class TestPluginInstrumentationContract:
             total += len(list(eps))
 
         assert total == _EXPECTED_TOTAL_PLUGINS, (
-            f"Expected {_EXPECTED_TOTAL_PLUGINS} total registered plugins, "
-            f"found {total}"
+            f"Expected {_EXPECTED_TOTAL_PLUGINS} total registered plugins, found {total}"
         )
 
     def test_instrumented_plugin_count(self) -> None:
@@ -79,9 +77,7 @@ class TestPluginInstrumentationContract:
             f"Expected {_EXPECTED_INSTRUMENTED_PLUGINS} instrumented plugins, "
             f"found {instrumented}. Uninstrumented: {uninstrumented}"
         )
-        assert uninstrumented == [], (
-            f"Uninstrumented plugins found: {uninstrumented}"
-        )
+        assert uninstrumented == [], f"Uninstrumented plugins found: {uninstrumented}"
 
     def test_telemetry_backends_excluded(self) -> None:
         """Telemetry backends (console, jaeger) do NOT have tracer_name overridden."""
@@ -89,8 +85,7 @@ class TestPluginInstrumentationContract:
         for ep in eps:
             cls = ep.load()
             has_tracer = any(
-                "tracer_name" in c.__dict__ and c.__name__ != "PluginMetadata"
-                for c in cls.__mro__
+                "tracer_name" in c.__dict__ and c.__name__ != "PluginMetadata" for c in cls.__mro__
             )
             assert not has_tracer, (
                 f"Telemetry backend '{ep.name}' should NOT override tracer_name "
@@ -115,9 +110,7 @@ class TestPluginInstrumentationContract:
                         "does not match 'floe.{category}.{implementation}'"
                     )
 
-        assert violations == [], (
-            f"Tracer name convention violations:\n" + "\n".join(violations)
-        )
+        assert violations == [], "Tracer name convention violations:\n" + "\n".join(violations)
 
 
 def _get_tracer_name_from_class(cls: type) -> str | None:

@@ -17,7 +17,6 @@ from floe_core.plugin_metadata import PluginMetadata
 from floe_core.plugin_types import PluginType
 from floe_core.telemetry.audit import verify_plugin_instrumentation
 
-
 # ---------------------------------------------------------------------------
 # Test plugin stubs
 # ---------------------------------------------------------------------------
@@ -136,9 +135,7 @@ class TestVerifyPluginInstrumentation:
     def test_callable_programmatically(self) -> None:
         """Audit function should be callable with any Sequence of tuples."""
         # Verify it works with a tuple (not just list)
-        plugins = (
-            (PluginType.COMPUTE, _InstrumentedPlugin("duckdb", "floe.compute.duckdb")),
-        )
+        plugins = ((PluginType.COMPUTE, _InstrumentedPlugin("duckdb", "floe.compute.duckdb")),)
 
         warnings = verify_plugin_instrumentation(plugins)
 

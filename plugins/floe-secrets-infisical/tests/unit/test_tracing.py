@@ -93,9 +93,7 @@ class TestSecretsSpan:
         Verifies the provider attribute is recorded on the span
         when specified.
         """
-        with secrets_span(
-            tracer_with_exporter, "get_secret", provider="infisical"
-        ):
+        with secrets_span(tracer_with_exporter, "get_secret", provider="infisical"):
             pass
 
         spans = span_exporter.get_finished_spans()

@@ -130,9 +130,7 @@ class TestComputeSpan:
         attributes = dict(spans[0].attributes or {})
 
         for attr_value in attributes.values():
-            assert str(attr_value) != fake_cred, (
-                f"Credential found in span attribute: {attr_value}"
-            )
+            assert str(attr_value) != fake_cred, f"Credential found in span attribute: {attr_value}"
 
     @pytest.mark.requirement("6C-FR-020")
     def test_compute_span_error_sanitized(

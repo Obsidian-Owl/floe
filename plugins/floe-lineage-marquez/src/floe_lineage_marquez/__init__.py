@@ -305,9 +305,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
             >>> strategy["strategy"]
             'centralized'
         """
-        with lineage_span(
-            self._tracer, "get_namespace_strategy", namespace=self._environment
-        ):
+        with lineage_span(self._tracer, "get_namespace_strategy", namespace=self._environment):
             return {
                 "strategy": "centralized",
                 "environment": self._environment,

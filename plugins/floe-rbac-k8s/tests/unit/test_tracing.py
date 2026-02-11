@@ -117,9 +117,7 @@ class TestSecuritySpan:
         """
         tracer, exporter = tracer_with_exporter
 
-        with pytest.raises(
-            RuntimeError, match="connection failed"
-        ):
+        with pytest.raises(RuntimeError, match="connection failed"):
             with security_span(tracer, "generate_role", policy_type="Role"):
                 raise RuntimeError(
                     "connection failed password=supersecret123"  # pragma: allowlist secret
