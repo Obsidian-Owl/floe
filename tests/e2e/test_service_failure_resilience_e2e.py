@@ -19,6 +19,7 @@ See Also:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import httpx
 import pytest
@@ -167,6 +168,72 @@ class TestServiceFailureResilience:
 
         assert pod_ready, (
             f"Polaris pod did not restart within 120s.\n"
+            f"Check: kubectl get pods -n {NAMESPACE} -l app.kubernetes.io/component=polaris"
+        )
+
+    @pytest.mark.requirement("AC-2.7")
+    def test_compilation_during_service_outage(
+        self,
+        project_root: Path,
+    ) -> None:
+        """Verify compilation handles service outage gracefully.
+
+        Restarts a service pod, then immediately attempts compilation.
+        Compilation should either succeed (if it doesn't need the downed
+        service) or fail with a descriptive error containing the service name.
+
+        This validates pipeline-aware failure handling without requiring
+        Dagster pipeline infrastructure — compilation is a Python process.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        manifest_path = project_root / "demo" / "manifest.yaml"
+
+        # Restart Polaris pod to create transient outage
+        result = run_kubectl(
+            [
+                "delete",
+                "pod",
+                "-l",
+                "app.kubernetes.io/component=polaris",
+                "--grace-period=0",
+                "--force",
+            ],
+            namespace=NAMESPACE,
+            timeout=30,
+        )
+        assert result.returncode == 0, f"Failed to delete Polaris pod: {result.stderr}"
+
+        # Immediately attempt compilation during the outage window
+        try:
+            artifacts = compile_pipeline(spec_path, manifest_path)
+            # Compilation succeeded — it doesn't depend on Polaris at compile time
+            assert artifacts.version, "Compilation returned empty artifacts during service outage"
+        except Exception as e:
+            # Compilation failed — verify the error is descriptive
+            error_msg = str(e).lower()
+            assert (
+                "polaris" in error_msg
+                or "catalog" in error_msg
+                or "connection" in error_msg
+                or "timeout" in error_msg
+                or "service" in error_msg
+            ), (
+                f"Compilation failed with non-descriptive error during outage: {e}\n"
+                "Errors during service outage should mention the affected service."
+            )
+
+        # Wait for Polaris to recover (cleanup for other tests)
+        pod_ready = wait_for_condition(
+            lambda: _check_pod_ready("app.kubernetes.io/component=polaris"),
+            timeout=120.0,
+            interval=5.0,
+            description="Polaris pod to restart after compilation test",
+            raise_on_timeout=False,
+        )
+        assert pod_ready, (
+            f"Polaris pod did not recover within 120s.\n"
             f"Check: kubectl get pods -n {NAMESPACE} -l app.kubernetes.io/component=polaris"
         )
 

@@ -2,8 +2,35 @@
   "version": "0.2.0",
   "currentWork": {
     "id": "test-hardening-audit",
-    "phase": "building",
+    "phase": "verifying",
     "startedAt": "2026-02-12T06:45:00Z"
   },
-  "completedWork": []
+  "completedWork": [],
+  "gates": {
+    "gate-build": {
+      "status": "PASS",
+      "timestamp": "2026-02-12T10:30:00Z",
+      "findings": { "blocker": 0, "warning": 0, "info": 1 }
+    },
+    "gate-tests": {
+      "status": "PASS",
+      "timestamp": "2026-02-12T14:30:00Z",
+      "findings": { "blocker": 0, "warning": 0, "info": 1 }
+    },
+    "gate-security": {
+      "status": "PASS",
+      "timestamp": "2026-02-12T10:45:00Z",
+      "findings": { "blocker": 0, "warning": 0, "info": 2 }
+    },
+    "gate-wiring": {
+      "status": "PASS",
+      "timestamp": "2026-02-12T14:30:00Z",
+      "findings": { "blocker": 0, "warning": 1, "info": 0 }
+    },
+    "gate-spec": {
+      "status": "PASS",
+      "timestamp": "2026-02-12T14:30:00Z",
+      "findings": { "blocker": 0, "warning": 1, "info": 1 }
+    }
+  }
 }

@@ -96,7 +96,7 @@ class TestObservabilityRoundTrip:
         # If no traces found with "floe" service, check what services exist
         if not traces_found:
             services_response = jaeger_client.get("/api/services")
-            services = []
+            services: list[str] = []
             if services_response.status_code == 200:
                 services = services_response.json().get("data", [])
 
@@ -107,6 +107,56 @@ class TestObservabilityRoundTrip:
                 f"OTel Collector may not be forwarding to Jaeger.\n"
                 f"Check: kubectl logs -n floe-test -l app.kubernetes.io/name=otel --tail=20"
             )
+
+        # Validate span hierarchy — spans should have parent-child relationships
+        traces_response = jaeger_client.get(
+            "/api/traces",
+            params={
+                "service": "floe",
+                "start": start_time,
+                "end": end_time + 60_000_000,
+                "limit": 5,
+            },
+        )
+        assert traces_response.status_code == 200, (
+            f"Jaeger trace query failed: {traces_response.status_code}"
+        )
+
+        traces_data = traces_response.json().get("data", [])
+        assert len(traces_data) > 0, "No traces returned for span hierarchy validation"
+
+        # Inspect the first trace for span structure
+        first_trace = traces_data[0]
+        spans = first_trace.get("spans", [])
+        assert len(spans) > 0, "Trace has no spans"
+
+        # Collect span IDs and parent span IDs
+        span_ids = {s["spanID"] for s in spans}
+        spans_with_parent = [
+            s
+            for s in spans
+            if s.get("references")
+            and any(
+                ref.get("refType") == "CHILD_OF" and ref.get("spanID") in span_ids
+                for ref in s["references"]
+            )
+        ]
+
+        # Verify parent-child relationships exist (compilation has nested stages)
+        assert len(spans_with_parent) > 0, (
+            f"No parent-child span relationships found in trace. "
+            f"Compilation should produce nested spans for stages. "
+            f"Span count: {len(spans)}, "
+            f"Operations: {[s.get('operationName', '?') for s in spans[:10]]}"
+        )
+
+        # Verify spans have meaningful operation names
+        operation_names = [s.get("operationName", "") for s in spans]
+        non_empty_ops = [op for op in operation_names if op]
+        assert len(non_empty_ops) == len(spans), (
+            f"Some spans have empty operationName: "
+            f"{[s['spanID'] for s in spans if not s.get('operationName')]}"
+        )
 
     @pytest.mark.requirement("AC-2.3")
     def test_otel_collector_accepts_spans(

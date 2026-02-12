@@ -16,13 +16,10 @@ See Also:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any
 
 import httpx
 import pytest
-
-if TYPE_CHECKING:
-    pass
 
 
 @pytest.mark.e2e
@@ -144,6 +141,44 @@ class TestLineageRoundTrip:
             f"Marquez rejected OpenLineage event: {response.status_code} {response.text}"
         )
 
+        # Post a COMPLETE event with input/output datasets (full lifecycle)
+        ol_complete_event: dict[str, Any] = {
+            "eventType": "COMPLETE",
+            "eventTime": time.strftime("%Y-%m-%dT%H:%M:%S.000000Z", time.gmtime()),
+            "run": {
+                "runId": "e2e-test-00000000-0000-0000-0000-000000000001",
+            },
+            "job": {
+                "namespace": test_namespace,
+                "name": job_name,
+            },
+            "inputs": [
+                {
+                    "namespace": test_namespace,
+                    "name": "source_customers",
+                    "facets": {},
+                },
+            ],
+            "outputs": [
+                {
+                    "namespace": test_namespace,
+                    "name": "stg_customers",
+                    "facets": {},
+                },
+            ],
+            "producer": "https://github.com/floe-dev/floe",
+            "schemaURL": ("https://openlineage.io/spec/2-0-2/OpenLineage.json#/$defs/RunEvent"),
+        }
+
+        complete_response = marquez_client.post(
+            "/api/v1/lineage",
+            json=ol_complete_event,
+        )
+        assert complete_response.status_code in (200, 201), (
+            f"Marquez rejected COMPLETE event: "
+            f"{complete_response.status_code} {complete_response.text}"
+        )
+
         # Query back the job
         jobs_response = marquez_client.get(
             f"/api/v1/namespaces/{test_namespace}/jobs",
@@ -158,4 +193,23 @@ class TestLineageRoundTrip:
             f"Posted job '{job_name}' not found in Marquez.\n"
             f"Available jobs: {job_names}\n"
             "OpenLineage event may not have been processed."
+        )
+
+        # Validate dataset graph: input and output datasets should be recorded
+        datasets_response = marquez_client.get(
+            f"/api/v1/namespaces/{test_namespace}/datasets",
+        )
+        assert datasets_response.status_code == 200, (
+            f"Failed to query datasets: {datasets_response.status_code}"
+        )
+
+        datasets_data = datasets_response.json()
+        dataset_names = [d.get("name") for d in datasets_data.get("datasets", [])]
+        assert "source_customers" in dataset_names, (
+            f"Input dataset 'source_customers' not found in Marquez. "
+            f"Available datasets: {dataset_names}"
+        )
+        assert "stg_customers" in dataset_names, (
+            f"Output dataset 'stg_customers' not found in Marquez. "
+            f"Available datasets: {dataset_names}"
         )

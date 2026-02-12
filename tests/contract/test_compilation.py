@@ -12,7 +12,7 @@ Reclassified from tests/e2e/ to tests/contract/ per test hardening audit
 contract.
 
 See Also:
-    - tests/e2e/conftest.py: compiled_artifacts fixture
+    - tests/conftest.py: compiled_artifacts fixture
     - packages/floe-core/src/floe_core/schemas/compiled_artifacts.py: CompiledArtifacts schema
     - packages/floe-core/src/floe_core/compilation/stages.py: Compilation stages
 """
@@ -43,7 +43,7 @@ from pydantic import ValidationError
 
 
 class TestCompilation:
-    """E2E tests for the compilation pipeline.
+    """Contract tests for the compilation pipeline.
 
     Tests validate the complete compilation workflow from FloeSpec to CompiledArtifacts.
     These tests run without K8s and verify schema compliance, determinism, and contract stability.
@@ -91,7 +91,7 @@ class TestCompilation:
         # Validate observability config
         assert artifacts.observability is not None
         assert artifacts.observability.telemetry is not None
-        assert isinstance(artifacts.observability.telemetry.resource_attributes, object)
+        assert isinstance(artifacts.observability.telemetry.resource_attributes, ResourceAttributes)
         assert artifacts.observability.lineage_namespace == "customer-360"
 
         # Plugin type assertions (exact values)
@@ -294,8 +294,9 @@ class TestCompilation:
         assert artifacts.version == COMPILED_ARTIFACTS_VERSION
         assert artifacts.metadata.product_name == "customer-360"
 
-        # Enforcement stage runs but produces None when no governance config exists.
-        # Demo products don't have governance config by default.
+        # GAP: ENFORCE stage does not produce enforcement_result for default
+        # demo manifest despite governance config being present. This is a
+        # compilation pipeline gap — tracked for follow-up.
         # When enforcement_result IS present, validate its structure.
         if artifacts.enforcement_result is not None:
             assert isinstance(artifacts.enforcement_result.passed, bool), (

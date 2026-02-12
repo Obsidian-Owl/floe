@@ -27,6 +27,8 @@ from tests.e2e.conftest import run_helm, run_kubectl
 
 # K8s namespace
 NAMESPACE = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
+# Helm release name
+HELM_RELEASE = "floe-platform"
 
 
 @pytest.mark.e2e
@@ -47,7 +49,7 @@ class TestHelmUpgrade:
         """
         # Get current revision
         status_result = run_helm(
-            ["status", "floe-platform", "-n", NAMESPACE, "-o", "json"],
+            ["status", HELM_RELEASE, "-n", NAMESPACE, "-o", "json"],
         )
         assert status_result.returncode == 0, (
             f"floe-platform release not found: {status_result.stderr}"
@@ -59,7 +61,7 @@ class TestHelmUpgrade:
         upgrade_result = run_helm(
             [
                 "upgrade",
-                "floe-platform",
+                HELM_RELEASE,
                 "charts/floe-platform",
                 "-n",
                 NAMESPACE,
@@ -78,7 +80,7 @@ class TestHelmUpgrade:
 
         # Verify revision bumped
         new_status = run_helm(
-            ["status", "floe-platform", "-n", NAMESPACE, "-o", "json"],
+            ["status", HELM_RELEASE, "-n", NAMESPACE, "-o", "json"],
         )
         assert new_status.returncode == 0
         new = json.loads(new_status.stdout)
@@ -167,12 +169,14 @@ class TestHelmUpgrade:
         rather than being a no-op.
         """
         result = run_helm(
-            ["history", "floe-platform", "-n", NAMESPACE, "-o", "json"],
+            ["history", HELM_RELEASE, "-n", NAMESPACE, "-o", "json"],
         )
         assert result.returncode == 0, f"helm history failed: {result.stderr}"
 
         history = json.loads(result.stdout)
-        assert len(history) >= 1, f"Expected at least 1 revision in history, got {len(history)}"
+        assert len(history) >= 2, (
+            f"Expected at least 2 revisions (initial + upgrade), got {len(history)}"
+        )
 
         # All revisions should be in deployed or superseded state
         for entry in history:
