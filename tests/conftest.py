@@ -11,7 +11,9 @@ Note:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 
 # Early PYTHONPATH check for better error messages
@@ -57,6 +59,52 @@ def compiled_artifacts_version() -> str:
         ...     assert compiled_artifacts_version == "0.3.0"
     """
     return COMPILED_ARTIFACTS_VERSION
+
+
+@pytest.fixture(scope="session")
+def project_root() -> Path:
+    """Path to the repository root.
+
+    Returns:
+        Path to the root of the floe repository.
+    """
+    return Path(__file__).parent.parent
+
+
+@pytest.fixture(scope="session")
+def compiled_artifacts() -> Callable[[Path], Any]:
+    """Factory fixture that compiles floe.yaml through the real 6-stage pipeline.
+
+    Uses the real compile_pipeline() function from floe-core, ensuring tests
+    validate actual compilation behavior rather than hand-crafted test doubles.
+
+    Returns:
+        Factory function that compiles specs via the real compiler.
+
+    Example:
+        artifacts = compiled_artifacts(Path("demo/customer-360/floe.yaml"))
+        assert artifacts.version == "0.5.0"
+    """
+    from floe_core.compilation.stages import compile_pipeline
+
+    root = Path(__file__).parent.parent
+    manifest_path = root / "demo" / "manifest.yaml"
+
+    def _compile_artifacts(spec_path: Path) -> Any:
+        """Compile floe.yaml to CompiledArtifacts via real 6-stage pipeline.
+
+        Args:
+            spec_path: Path to floe.yaml file.
+
+        Returns:
+            CompiledArtifacts object from real compilation.
+
+        Raises:
+            CompilationException: If any compilation stage fails.
+        """
+        return compile_pipeline(spec_path, manifest_path)
+
+    return _compile_artifacts
 
 
 def pytest_configure(config: pytest.Config) -> None:

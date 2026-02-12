@@ -12,7 +12,6 @@ import os
 import subprocess
 import uuid
 from collections.abc import Callable, Generator
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -108,6 +107,60 @@ def pytest_collection_modifyitems(
         print("=" * 70)
         print("These are ADVISORY warnings. Review and fix as needed.")
         print("=" * 70)
+
+
+def run_kubectl(
+    args: list[str],
+    namespace: str | None = None,
+    timeout: int = 60,
+) -> subprocess.CompletedProcess[str]:
+    """Run kubectl command with optional namespace.
+
+    Shared helper for E2E tests. Uses the real kubectl binary — no mocks.
+
+    Args:
+        args: kubectl arguments (e.g., ["get", "pods"]).
+        namespace: K8s namespace to target. If provided, adds -n flag.
+        timeout: Command timeout in seconds. Defaults to 60.
+
+    Returns:
+        Completed process result with stdout, stderr, and returncode.
+    """
+    cmd = ["kubectl"]
+    if namespace:
+        cmd.extend(["-n", namespace])
+    cmd.extend(args)
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def run_helm(
+    args: list[str],
+    timeout: int = 900,
+) -> subprocess.CompletedProcess[str]:
+    """Run helm command with timeout.
+
+    Shared helper for E2E tests. Uses the real helm binary — no mocks.
+
+    Args:
+        args: helm arguments (e.g., ["status", "floe-platform"]).
+        timeout: Command timeout in seconds. Defaults to 900.
+
+    Returns:
+        Completed process result with stdout, stderr, and returncode.
+    """
+    return subprocess.run(
+        ["helm"] + args,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
 
 
 @pytest.fixture(scope="session")
@@ -255,42 +308,6 @@ def wait_for_service() -> Callable[..., None]:
         )
 
     return _wait_for_service
-
-
-@pytest.fixture(scope="session")
-def compiled_artifacts() -> Callable[[Path], Any]:
-    """Factory fixture that compiles floe.yaml through the real 6-stage pipeline.
-
-    Uses the real compile_pipeline() function from floe-core, ensuring E2E tests
-    validate actual compilation behavior rather than hand-crafted test doubles.
-
-    Returns:
-        Factory function that compiles specs via the real compiler.
-
-    Example:
-        artifacts = compiled_artifacts(Path("demo/customer-360/floe.yaml"))
-        assert artifacts.version == "0.5.0"
-    """
-    from floe_core.compilation.stages import compile_pipeline
-
-    project_root = Path(__file__).parent.parent.parent
-    manifest_path = project_root / "demo" / "manifest.yaml"
-
-    def _compile_artifacts(spec_path: Path) -> Any:
-        """Compile floe.yaml to CompiledArtifacts via real 6-stage pipeline.
-
-        Args:
-            spec_path: Path to floe.yaml file.
-
-        Returns:
-            CompiledArtifacts object from real compilation.
-
-        Raises:
-            CompilationException: If any compilation stage fails.
-        """
-        return compile_pipeline(spec_path, manifest_path)
-
-    return _compile_artifacts
 
 
 @pytest.fixture(scope="session")

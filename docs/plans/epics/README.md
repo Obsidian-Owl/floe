@@ -64,6 +64,8 @@ This directory contains detailed documentation for each of the 26 Epics.
 | [10B](10-contributor/epic-10b-agent-memory-validation.md) | Agent Memory Validation | 8 | Planned | TBD |
 | **Tech Debt** |
 | [12A](12-tech-debt/epic-12a-jan2026-tech-debt.md) | January 2026 Tech Debt | 19 | Planned | [Epic 12A: Tech Debt Q1 2026](https://linear.app/obsidianowl/project/epic-12a-tech-debt-q1-2026-3797f63d2107) |
+| **Quality** |
+| [15](15-e2e-platform-gaps/epic-15-e2e-platform-gaps.md) | E2E Test Infra & Platform Gaps | 15 | Planned | [Epic 15](https://linear.app/obsidianowl/project/epic-15-e2e-test-infrastructure-and-platform-gaps-fee2596b0f75) |
 
 ---
 
@@ -133,6 +135,10 @@ Internal tooling for AI coding agents and maintainers contributing to floe.
 ### Tech Debt (Epic 12A)
 Periodic technical debt reduction sprints.
 - [Epic 12A: January 2026 Tech Debt](12-tech-debt/epic-12a-jan2026-tech-debt.md)
+
+### Quality (Epic 15)
+E2E test infrastructure and platform gap remediation.
+- [Epic 15: E2E Test Infra & Platform Gaps](15-e2e-platform-gaps/epic-15-e2e-platform-gaps.md) - *11 root causes, 61 test failures*
 
 ---
 
