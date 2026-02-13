@@ -14,8 +14,8 @@
     }
   ],
   "workUnits": [
-    { "id": "wu-1-bootstrap", "description": "Polaris Bootstrap + MinIO Bucket Reliability", "status": "verifying", "order": 1 },
-    { "id": "wu-2-cube", "description": "Cube Multi-Arch + Pod Scheduling", "status": "pending", "order": 2 },
+    { "id": "wu-1-bootstrap", "description": "Polaris Bootstrap + MinIO Bucket Reliability", "status": "shipped", "order": 1, "pr": "https://github.com/Obsidian-Owl/floe/pull/74" },
+    { "id": "wu-2-cube", "description": "Cube Multi-Arch + Pod Scheduling", "status": "verifying", "order": 2, "tasksCompleted": ["T8", "T9", "T10", "T11"] },
     { "id": "wu-3-dagster", "description": "Dagster 2.x SDK Migration (Full Audit)", "status": "pending", "order": 3 },
     { "id": "wu-4-otel", "description": "OTel Pipeline + Label Alignment", "status": "pending", "order": 4 },
     { "id": "wu-5-dbt", "description": "dbt Demo Product Pipeline", "status": "pending", "order": 5 },
@@ -30,6 +30,13 @@
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-13T15:30:00Z" },
       "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 4 }, "timestamp": "2026-02-13T15:30:00Z" },
       "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 0 }, "timestamp": "2026-02-13T15:30:00Z" }
+    },
+    "wu-2-cube": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T16:00:00Z" },
+      "gate-tests": { "status": "WARN", "findings": { "block": 0, "warn": 5, "info": 5 }, "timestamp": "2026-02-13T16:05:00Z" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 4 }, "timestamp": "2026-02-13T16:05:00Z" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 2, "info": 5 }, "timestamp": "2026-02-13T16:10:00Z", "note": "Initially FAIL (2 BLOCK) — fixed in commit 0c5e8c5" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T16:05:00Z" }
     }
   }
 }
