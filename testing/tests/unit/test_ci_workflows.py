@@ -203,3 +203,23 @@ class TestValuesTestCubeStore:
 
         assert tag, "Cube Store image tag must be set"
         assert tag != "latest", "Cube Store image tag must not be 'latest'"
+
+
+class TestCubeStoreRollbackPath:
+    """Verify rollback xfail markers exist on Cube Store E2E tests."""
+
+    E2E_DEPLOY_TEST = REPO_ROOT / "tests" / "e2e" / "test_platform_deployment_e2e.py"
+
+    @pytest.mark.requirement("WU2-AC5")
+    def test_xfail_markers_on_cube_store_tests(self) -> None:
+        """Verify Cube Store E2E tests have xfail markers for rollback.
+
+        When the multi-arch image is unavailable, xfail prevents these
+        tests from blocking the entire E2E suite.
+        """
+        content = self.E2E_DEPLOY_TEST.read_text()
+        assert "test_cube_store_pod_running" in content, (
+            "Missing test_cube_store_pod_running in E2E deployment tests"
+        )
+        assert "@pytest.mark.xfail" in content, "Missing xfail marker on Cube Store tests"
+        assert "ARM64" in content, "xfail reason should reference ARM64 image availability"

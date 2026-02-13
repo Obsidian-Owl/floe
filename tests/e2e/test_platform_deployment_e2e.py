@@ -398,6 +398,81 @@ class TestPlatformDeployment:
             f"Dagster version should be non-empty string, got: {version!r}"
         )
 
+    @pytest.mark.requirement("WU2-AC5")
+    @pytest.mark.xfail(
+        reason="Multi-arch Cube Store image may not be available yet (ARM64 pending nightly build)",
+        strict=False,
+    )
+    def test_cube_store_pod_running(self) -> None:
+        """Verify Cube Store StatefulSet has a running pod.
+
+        This test validates that the multi-arch Cube Store image was
+        successfully pulled and the pod is running. If the nightly build
+        hasn't produced the image yet, this test fails with xfail.
+        """
+        result = run_kubectl(
+            [
+                "get",
+                "pods",
+                "-l",
+                "app.kubernetes.io/component=cube-store",
+                "-o",
+                "jsonpath={.items[*].status.phase}",
+            ],
+            namespace=NAMESPACE,
+        )
+        assert result.returncode == 0, f"kubectl failed: {result.stderr}"
+
+        phases = result.stdout.strip()
+        assert phases, (
+            "No Cube Store pods found. "
+            "Ensure cube.cubeStore.enabled=true in values-test.yaml "
+            "and the multi-arch image is available at ghcr.io/obsidian-owl/cube-store"
+        )
+        assert "Running" in phases, (
+            f"Cube Store pod not running. Phase(s): {phases}. "
+            "Check: kubectl get pods -l app.kubernetes.io/component=cube-store "
+            f"-n {NAMESPACE}"
+        )
+
+    @pytest.mark.requirement("WU2-AC5")
+    @pytest.mark.xfail(
+        reason="Multi-arch Cube Store image may not be available yet (ARM64 pending nightly build)",
+        strict=False,
+    )
+    def test_cube_store_ready(self) -> None:
+        """Verify Cube Store pod has Ready condition.
+
+        Goes beyond Running phase — validates the pod's readiness probe
+        is passing, meaning Cube Store is accepting connections.
+        """
+        result = run_kubectl(
+            [
+                "get",
+                "pods",
+                "-l",
+                "app.kubernetes.io/component=cube-store",
+                "-o",
+                "json",
+            ],
+            namespace=NAMESPACE,
+        )
+        assert result.returncode == 0, f"kubectl failed: {result.stderr}"
+
+        pods = json.loads(result.stdout)
+        pod_items = pods.get("items", [])
+        assert len(pod_items) > 0, "No Cube Store pods found"
+
+        pod = pod_items[0]
+        conditions = pod.get("status", {}).get("conditions", [])
+        ready = next(
+            (c for c in conditions if c.get("type") == "Ready"),
+            None,
+        )
+        assert ready is not None and ready.get("status") == "True", (
+            f"Cube Store pod not Ready. Conditions: {conditions}"
+        )
+
     @pytest.mark.requirement("AC-2.1")
     def test_postgresql_functional(self) -> None:
         """Verify PostgreSQL accepts queries via kubectl exec.
