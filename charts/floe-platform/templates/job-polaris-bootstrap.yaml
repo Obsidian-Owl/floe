@@ -91,6 +91,20 @@ spec:
               fi
               echo "Token acquired successfully"
 
+              {{- if .Values.polaris.storage.s3.enabled }}
+              # Verify MinIO bucket exists before creating catalog
+              echo "Verifying MinIO bucket '{{ .Values.polaris.bootstrap.catalogName | default "floe-iceberg" }}' exists..."
+              MINIO_URL="{{ .Values.polaris.storage.s3.endpoint }}"
+              BUCKET_NAME=$(echo "{{ .Values.polaris.bootstrap.defaultBaseLocation }}" | sed 's|s3://||' | cut -d'/' -f1)
+              BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "$MINIO_URL/$BUCKET_NAME/" 2>/dev/null)
+              if [ "$BUCKET_CODE" = "404" ]; then
+                echo "ERROR: MinIO bucket '$BUCKET_NAME' does not exist (HTTP 404)" >&2
+                echo "Ensure MinIO provisioning job completed successfully." >&2
+                exit 1
+              fi
+              echo "MinIO bucket '$BUCKET_NAME' accessible (HTTP $BUCKET_CODE)"
+              {{- end }}
+
               echo "Creating catalog '{{ .Values.polaris.bootstrap.catalogName }}'..."
               {{- if .Values.polaris.storage.s3.enabled }}
               # Build catalog JSON with S3 credentials from environment
@@ -156,6 +170,26 @@ spec:
                 cat /tmp/response.txt >&2
                 exit 1
               fi
+
+              # Verify catalog exists via management API
+              echo "Verifying catalog '{{ .Values.polaris.bootstrap.catalogName }}' via management API..."
+              VERIFY_CODE=$(curl -s -o /tmp/verify.txt -w '%{http_code}' \
+                -H "Authorization: Bearer $TOKEN" \
+                "$POLARIS_URL/api/management/v1/catalogs/{{ .Values.polaris.bootstrap.catalogName }}")
+
+              if [ "$VERIFY_CODE" != "200" ]; then
+                echo "ERROR: Catalog verification failed (HTTP $VERIFY_CODE)" >&2
+                cat /tmp/verify.txt >&2
+                exit 1
+              fi
+
+              # Verify response contains expected catalog name
+              if ! grep -q '"name"' /tmp/verify.txt; then
+                echo "ERROR: Catalog verification response missing 'name' field" >&2
+                cat /tmp/verify.txt >&2
+                exit 1
+              fi
+              echo "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' verified successfully"
 
               echo "Bootstrap complete!"
           resources:
