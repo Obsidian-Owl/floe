@@ -49,8 +49,8 @@ class TestOtelLabelAlignment:
         """
         content = CONFIGMAP_OTEL.read_text()
         assert "app.kubernetes.io/component: otel" in content, (
-            f"configmap-otel.yaml must contain 'app.kubernetes.io/component: otel'. "
-            f"This is the source-of-truth label that E2E tests must match."
+            "configmap-otel.yaml must contain 'app.kubernetes.io/component: otel'. "
+            "This is the source-of-truth label that E2E tests must match."
         )
 
     @pytest.mark.requirement("WU4-AC1")
