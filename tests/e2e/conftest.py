@@ -575,3 +575,39 @@ def jaeger_client(wait_for_service: Callable[..., None]) -> httpx.Client:
     wait_for_service(f"{jaeger_url}/api/services", timeout=60, description="Jaeger query API")
 
     return httpx.Client(base_url=jaeger_url, timeout=30.0)
+
+
+@pytest.fixture(scope="session")
+def otel_tracer_provider() -> Generator[Any, None, None]:
+    """Initialize OTel TracerProvider for E2E test session.
+
+    Sets up a TracerProvider with OTLP gRPC exporter pointing to the
+    OTel Collector. Uses BatchSpanProcessor for non-blocking export.
+    Service name is set to 'floe-platform' to match Jaeger queries.
+
+    Yields:
+        TracerProvider configured for the E2E test environment.
+
+    Note:
+        This fixture ensures traces generated during E2E tests
+        (compilation, pipeline execution) flow through the OTel
+        Collector to Jaeger.
+    """
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+        OTLPSpanExporter,
+    )
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    otel_endpoint = os.environ.get("OTEL_ENDPOINT", "http://localhost:4317")
+
+    resource = Resource.create({"service.name": "floe-platform"})
+    provider = TracerProvider(resource=resource)
+    exporter = OTLPSpanExporter(endpoint=otel_endpoint, insecure=True)
+    processor = BatchSpanProcessor(exporter)
+    provider.add_span_processor(processor)
+
+    yield provider
+
+    provider.shutdown()

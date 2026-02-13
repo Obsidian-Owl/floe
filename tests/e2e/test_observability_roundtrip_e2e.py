@@ -72,7 +72,7 @@ class TestObservabilityRoundTrip:
                 response = jaeger_client.get(
                     "/api/traces",
                     params={
-                        "service": "floe",
+                        "service": "floe-platform",
                         "start": start_time,
                         "end": end_time + 60_000_000,  # +60s buffer
                         "limit": 20,
@@ -93,7 +93,7 @@ class TestObservabilityRoundTrip:
             raise_on_timeout=False,
         )
 
-        # If no traces found with "floe" service, check what services exist
+        # If no traces found with "floe-platform" service, check what services exist
         if not traces_found:
             services_response = jaeger_client.get("/api/services")
             services: list[str] = []
@@ -102,7 +102,7 @@ class TestObservabilityRoundTrip:
 
             pytest.fail(
                 f"No compilation traces found in Jaeger after 30s.\n"
-                f"Expected service: 'floe'\n"
+                f"Expected service: 'floe-platform'\n"
                 f"Available services: {services}\n"
                 f"OTel Collector may not be forwarding to Jaeger.\n"
                 f"Check: kubectl logs -n floe-test -l app.kubernetes.io/name=otel --tail=20"
@@ -112,7 +112,7 @@ class TestObservabilityRoundTrip:
         traces_response = jaeger_client.get(
             "/api/traces",
             params={
-                "service": "floe",
+                "service": "floe-platform",
                 "start": start_time,
                 "end": end_time + 60_000_000,
                 "limit": 5,
