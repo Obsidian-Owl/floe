@@ -126,13 +126,6 @@ class TestCompileDeployMaterialize:
         )
 
     @pytest.mark.requirement("AC-2.2")
-    @pytest.mark.xfail(
-        reason=(
-            "Pipeline gap: compile_pipeline() does not pass enforcement_result "
-            "to build_artifacts() — see stages.py:368"
-        ),
-        strict=True,
-    )
     def test_compiled_artifacts_enforcement(
         self,
         compiled_artifacts: Callable[[Path], Any],

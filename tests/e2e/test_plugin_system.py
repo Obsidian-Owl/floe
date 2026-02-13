@@ -30,7 +30,6 @@ from floe_core.plugin_metadata import HealthState, PluginMetadata
 from floe_core.plugin_registry import PluginRegistry, get_registry
 from floe_core.plugin_types import PluginType
 from floe_core.plugins import (
-    AlertChannelPlugin,
     CatalogPlugin,
     ComputePlugin,
     DBTPlugin,
@@ -44,6 +43,7 @@ from floe_core.plugins import (
     StoragePlugin,
     TelemetryBackendPlugin,
 )
+from floe_core.plugins.alert_channel import AlertChannelPlugin
 from floe_core.plugins.rbac import RBACPlugin
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
