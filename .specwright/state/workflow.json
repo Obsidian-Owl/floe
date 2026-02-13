@@ -16,7 +16,7 @@
   "workUnits": [
     { "id": "wu-1-bootstrap", "description": "Polaris Bootstrap + MinIO Bucket Reliability", "status": "shipped", "order": 1, "pr": "https://github.com/Obsidian-Owl/floe/pull/74" },
     { "id": "wu-2-cube", "description": "Cube Multi-Arch + Pod Scheduling", "status": "shipped", "order": 2, "tasksCompleted": ["T8", "T9", "T10", "T11"], "pr": "https://github.com/Obsidian-Owl/floe/pull/75" },
-    { "id": "wu-3-dagster", "description": "Dagster 2.x SDK Migration (Full Audit)", "status": "building", "order": 3, "tasksCompleted": [] },
+    { "id": "wu-3-dagster", "description": "Dagster 2.x SDK Migration (Full Audit)", "status": "building", "order": 3, "tasksCompleted": ["T16", "T17", "T18", "T19"] },
     { "id": "wu-4-otel", "description": "OTel Pipeline + Label Alignment", "status": "pending", "order": 4 },
     { "id": "wu-5-dbt", "description": "dbt Demo Product Pipeline", "status": "pending", "order": 5 },
     { "id": "wu-6-plugin-pipeline", "description": "Plugin Registry + Compilation Pipeline", "status": "pending", "order": 6 },
