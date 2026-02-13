@@ -47,10 +47,10 @@
     },
     "wu-4-otel": {
       "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T18:05:00Z" },
-      "gate-tests": { "status": "WARN", "findings": { "block": 0, "warn": 5, "info": 3 }, "timestamp": "2026-02-13T18:10:00Z" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-13T18:30:00Z", "note": "5 WARNs resolved in commit da7415f" },
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-13T18:10:00Z" },
-      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 2, "info": 6 }, "timestamp": "2026-02-13T18:10:00Z" },
-      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 0 }, "timestamp": "2026-02-13T18:10:00Z", "note": "2 F541 ruff violations auto-fixed" }
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 6 }, "timestamp": "2026-02-13T18:30:00Z", "note": "Dead fixture + operator precedence resolved" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T18:30:00Z", "note": "F541 + all WARNs resolved" }
     }
   }
 }
