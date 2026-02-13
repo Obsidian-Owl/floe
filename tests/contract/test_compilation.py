@@ -294,22 +294,25 @@ class TestCompilation:
         assert artifacts.version == COMPILED_ARTIFACTS_VERSION
         assert artifacts.metadata.product_name == "customer-360"
 
-        # GAP: ENFORCE stage does not produce enforcement_result for default
-        # demo manifest despite governance config being present. This is a
-        # compilation pipeline gap — tracked for follow-up.
-        # When enforcement_result IS present, validate its structure.
-        if artifacts.enforcement_result is not None:
-            assert isinstance(artifacts.enforcement_result.passed, bool), (
-                "Enforcement result must have a boolean passed field"
-            )
-            validated = artifacts.enforcement_result.models_validated
-            assert validated > 0, f"Enforcement must validate at least one model, got {validated}"
-            level = artifacts.enforcement_result.enforcement_level
-            assert level in (
-                "off",
-                "warn",
-                "strict",
-            ), f"Enforcement level must be off/warn/strict, got {level}"
+        # ENFORCE stage produces pre-manifest EnforcementResultSummary
+        # from plugin instrumentation audit and sink whitelist checks.
+        # Model-level validation (models_validated > 0) happens post-dbt
+        # compilation via run_enforce_stage(), not during compile_pipeline().
+        assert artifacts.enforcement_result is not None, (
+            "enforcement_result must be populated by Stage 4 (ENFORCE)"
+        )
+        assert isinstance(artifacts.enforcement_result.passed, bool), (
+            "Enforcement result must have a boolean passed field"
+        )
+        assert "plugin_instrumentation" in artifacts.enforcement_result.policy_types_checked, (
+            "ENFORCE stage must check plugin instrumentation"
+        )
+        level = artifacts.enforcement_result.enforcement_level
+        assert level in (
+            "off",
+            "warn",
+            "strict",
+        ), f"Enforcement level must be off/warn/strict, got {level}"
 
     @pytest.mark.contract
     @pytest.mark.requirement("FR-012")
