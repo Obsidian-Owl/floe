@@ -110,11 +110,28 @@ class TestSensorTargetParameter:
 
     @pytest.mark.requirement("WU3-AC5")
     def test_sensor_definition_importable(self) -> None:
-        """Verify sensor definition imports without error."""
+        """Verify sensor definition imports and has correct metadata."""
+        from dagster import SensorDefinition
+
         from floe_orchestrator_dagster.sensors import health_check_sensor
 
-        assert health_check_sensor is not None
+        assert isinstance(health_check_sensor, SensorDefinition)
         assert health_check_sensor.name == "health_check_sensor"
+
+    @pytest.mark.requirement("WU3-AC5")
+    def test_sensor_has_asset_selection_at_runtime(self) -> None:
+        """Verify sensor definition targets assets via asset_selection.
+
+        Without an explicit target, RunRequest yields create no-op
+        sensor evaluations. This test validates the runtime attribute,
+        not just source code presence.
+        """
+        from floe_orchestrator_dagster.sensors import health_check_sensor
+
+        assert health_check_sensor.asset_selection is not None, (
+            "Sensor must have asset_selection defined at runtime, "
+            "not just in source code."
+        )
 
 
 class TestDagsterImportCompatibility:
@@ -157,24 +174,36 @@ class TestDagsterImportCompatibility:
 
     @pytest.mark.requirement("WU3-AC7")
     def test_configurable_io_manager_available(self) -> None:
-        """Verify ConfigurableIOManager exists in current dagster."""
+        """Verify ConfigurableIOManager is a class in current dagster."""
+        import inspect
+
         from dagster import ConfigurableIOManager
 
-        assert ConfigurableIOManager is not None
+        assert inspect.isclass(ConfigurableIOManager), (
+            "ConfigurableIOManager must be a class, not a re-exported alias"
+        )
 
     @pytest.mark.requirement("WU3-AC8")
     def test_configurable_resource_available(self) -> None:
-        """Verify ConfigurableResource exists in current dagster."""
+        """Verify ConfigurableResource is a class in current dagster."""
+        import inspect
+
         from dagster import ConfigurableResource
 
-        assert ConfigurableResource is not None
+        assert inspect.isclass(ConfigurableResource), (
+            "ConfigurableResource must be a class, not a re-exported alias"
+        )
 
     @pytest.mark.requirement("WU3-AC9")
     def test_dagster_dlt_translator_available(self) -> None:
-        """Verify DagsterDltTranslator exists in dagster-dlt."""
+        """Verify DagsterDltTranslator is a class in dagster-dlt."""
+        import inspect
+
         from dagster_dlt import DagsterDltTranslator
 
-        assert DagsterDltTranslator is not None
+        assert inspect.isclass(DagsterDltTranslator), (
+            "DagsterDltTranslator must be a class, not a re-exported alias"
+        )
 
 
 class TestSourceFileImportAudit:
