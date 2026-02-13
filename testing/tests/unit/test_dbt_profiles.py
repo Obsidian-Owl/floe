@@ -27,9 +27,7 @@ DEMO_PRODUCTS: dict[str, str] = {
 def project_root() -> Path:
     """Project root directory for structural validation tests."""
     root = Path(__file__).parent.parent.parent.parent
-    assert (root / "demo").exists(), (
-        f"Project root {root} does not contain 'demo' directory"
-    )
+    assert (root / "demo").exists(), f"Project root {root} does not contain 'demo' directory"
     return root
 
 
@@ -137,15 +135,13 @@ class TestDbtProfiles:
 
         # Must have 'target: dev'
         assert profile.get("target") == "dev", (
-            f"Profile '{profile_name}' must have 'target: dev', "
-            f"got target={profile.get('target')}"
+            f"Profile '{profile_name}' must have 'target: dev', got target={profile.get('target')}"
         )
 
         # Must have outputs.dev
         outputs = profile.get("outputs", {})
         assert "dev" in outputs, (
-            f"Profile '{profile_name}' must have 'outputs.dev', "
-            f"got outputs: {list(outputs.keys())}"
+            f"Profile '{profile_name}' must have 'outputs.dev', got outputs: {list(outputs.keys())}"
         )
 
         # Dev output must use DuckDB
@@ -184,8 +180,7 @@ class TestDbtProfiles:
         )
         path_value = dev_output["path"]
         assert isinstance(path_value, str) and len(path_value) > 0, (
-            f"Profile '{profile_name}' DuckDB path must be a non-empty string, "
-            f"got: {path_value!r}"
+            f"Profile '{profile_name}' DuckDB path must be a non-empty string, got: {path_value!r}"
         )
 
     @pytest.mark.requirement("WU5-AC1")
@@ -208,9 +203,7 @@ class TestDbtProfiles:
         at runtime.
         """
         dbt_project_path = project_root / "demo" / product / "dbt_project.yml"
-        assert dbt_project_path.exists(), (
-            f"dbt_project.yml not found for {product}"
-        )
+        assert dbt_project_path.exists(), f"dbt_project.yml not found for {product}"
 
         dbt_project = yaml.safe_load(dbt_project_path.read_text())
         project_profile = dbt_project.get("profile")

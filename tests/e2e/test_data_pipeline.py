@@ -75,9 +75,7 @@ class TestDataPipeline(IntegrationTestBase):
         ("minio", 9000),
     ]
 
-    def _get_demo_project_path(
-        self, project_root: Path, product: str = "customer-360"
-    ) -> Path:
+    def _get_demo_project_path(self, project_root: Path, product: str = "customer-360") -> Path:
         """Get path to a demo project directory.
 
         Args:
@@ -1126,9 +1124,7 @@ class TestDataPipeline(IntegrationTestBase):
         project_dir = self._get_demo_project_path(project_root)
 
         # Test 1: Verify demo values have snapshot retention configuration
-        values_demo_path = (
-            project_root / "charts" / "floe-platform" / "values-demo.yaml"
-        )
+        values_demo_path = project_root / "charts" / "floe-platform" / "values-demo.yaml"
         assert values_demo_path.exists(), (
             f"Demo values file not found at {values_demo_path}\n"
             "Expected: charts/floe-platform/values-demo.yaml"
