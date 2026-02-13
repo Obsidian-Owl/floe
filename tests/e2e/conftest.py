@@ -163,6 +163,33 @@ def run_helm(
     )
 
 
+@pytest.fixture(scope="session", autouse=True)
+def helm_release_health() -> None:
+    """Check Helm release health before E2E suite starts.
+
+    Detects stuck Helm releases (pending-upgrade, pending-install, failed)
+    and recovers via rollback. Runs automatically before all E2E tests.
+
+    This prevents cascading test failures when a previous test run left
+    the Helm release in a broken state (RC-3).
+
+    Raises:
+        RuntimeError: If recovery fails after detecting stuck state.
+        ValueError: If helm status output is not valid JSON.
+    """
+    from testing.fixtures.helm import recover_stuck_helm_release
+
+    release = "floe-platform"
+    namespace = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
+
+    recover_stuck_helm_release(
+        release,
+        namespace,
+        rollback_timeout="5m",
+        helm_runner=run_helm,
+    )
+
+
 @pytest.fixture(scope="session")
 def e2e_namespace() -> str:
     """Generate unique namespace for E2E test session.

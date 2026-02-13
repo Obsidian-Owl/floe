@@ -31,6 +31,29 @@ NAMESPACE = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
 HELM_RELEASE = "floe-platform"
 
 
+def _recover_stuck_release(release: str, namespace: str) -> None:
+    """Detect and recover from stuck Helm release states.
+
+    Delegates to the shared ``recover_stuck_helm_release`` utility.
+
+    Args:
+        release: Helm release name.
+        namespace: K8s namespace.
+
+    Raises:
+        RuntimeError: If recovery fails.
+        ValueError: If helm status output is not valid JSON.
+    """
+    from testing.fixtures.helm import recover_stuck_helm_release
+
+    recover_stuck_helm_release(
+        release,
+        namespace,
+        rollback_timeout="5m",
+        helm_runner=run_helm,
+    )
+
+
 @pytest.mark.e2e
 @pytest.mark.requirement("AC-2.9")
 class TestHelmUpgrade:
@@ -44,9 +67,14 @@ class TestHelmUpgrade:
     def test_helm_upgrade_succeeds(self) -> None:
         """Verify helm upgrade completes without error.
 
+        Detects and recovers from stuck release states (pending-upgrade,
+        pending-install, failed) before attempting the upgrade.
         Runs helm upgrade with a minor change (annotation bump) and
         verifies the release transitions to 'deployed' state.
         """
+        # Recover from stuck release state if needed (RC-3)
+        _recover_stuck_release(HELM_RELEASE, NAMESPACE)
+
         # Get current revision
         status_result = run_helm(
             ["status", HELM_RELEASE, "-n", NAMESPACE, "-o", "json"],

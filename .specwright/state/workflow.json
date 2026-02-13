@@ -1,36 +1,35 @@
 {
   "version": "0.2.0",
   "currentWork": {
-    "id": "test-hardening-audit",
-    "phase": "verifying",
-    "startedAt": "2026-02-12T06:45:00Z"
+    "id": "e2e-platform-gaps",
+    "phase": "building",
+    "startedAt": "2026-02-13T10:40:00Z"
   },
-  "completedWork": [],
+  "completedWork": [
+    {
+      "id": "test-hardening-audit",
+      "phase": "shipped",
+      "startedAt": "2026-02-12T06:45:00Z",
+      "completedAt": "2026-02-12T14:30:00Z"
+    }
+  ],
+  "workUnits": [
+    { "id": "wu-1-bootstrap", "description": "Polaris Bootstrap + MinIO Bucket Reliability", "status": "verifying", "order": 1 },
+    { "id": "wu-2-cube", "description": "Cube Multi-Arch + Pod Scheduling", "status": "pending", "order": 2 },
+    { "id": "wu-3-dagster", "description": "Dagster 2.x SDK Migration (Full Audit)", "status": "pending", "order": 3 },
+    { "id": "wu-4-otel", "description": "OTel Pipeline + Label Alignment", "status": "pending", "order": 4 },
+    { "id": "wu-5-dbt", "description": "dbt Demo Product Pipeline", "status": "pending", "order": 5 },
+    { "id": "wu-6-plugin-pipeline", "description": "Plugin Registry + Compilation Pipeline", "status": "pending", "order": 6 },
+    { "id": "wu-7-secrets-cve", "description": "Secrets Verification + CVE Bumps", "status": "pending", "order": 7 },
+    { "id": "wu-8-polish", "description": "Polaris Health Check + Final Verification", "status": "pending", "order": 8 }
+  ],
   "gates": {
-    "gate-build": {
-      "status": "PASS",
-      "timestamp": "2026-02-12T10:30:00Z",
-      "findings": { "blocker": 0, "warning": 0, "info": 1 }
-    },
-    "gate-tests": {
-      "status": "PASS",
-      "timestamp": "2026-02-12T14:30:00Z",
-      "findings": { "blocker": 0, "warning": 0, "info": 1 }
-    },
-    "gate-security": {
-      "status": "PASS",
-      "timestamp": "2026-02-12T10:45:00Z",
-      "findings": { "blocker": 0, "warning": 0, "info": 2 }
-    },
-    "gate-wiring": {
-      "status": "PASS",
-      "timestamp": "2026-02-12T14:30:00Z",
-      "findings": { "blocker": 0, "warning": 1, "info": 0 }
-    },
-    "gate-spec": {
-      "status": "PASS",
-      "timestamp": "2026-02-12T14:30:00Z",
-      "findings": { "blocker": 0, "warning": 1, "info": 1 }
+    "wu-1-bootstrap": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T15:30:00Z" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 5, "info": 0 }, "timestamp": "2026-02-13T15:30:00Z" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-13T15:30:00Z" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 4 }, "timestamp": "2026-02-13T15:30:00Z" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 0 }, "timestamp": "2026-02-13T15:30:00Z" }
     }
   }
 }
