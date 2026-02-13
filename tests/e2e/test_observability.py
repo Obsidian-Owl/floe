@@ -436,6 +436,14 @@ class TestObservability(IntegrationTestBase):
             check=False,
         )
 
+        # Verify old label is NOT used in this query (negative assertion)
+        # The old label 'opentelemetry-collector' would find zero pods since
+        # the chart uses 'otel' as the component label (configmap-otel.yaml).
+        assert "opentelemetry-collector" not in " ".join(pod_result.args), (
+            "Pod query uses old label 'opentelemetry-collector'. "
+            "Must use 'otel' to match configmap-otel.yaml."
+        )
+
         # Pod query MUST succeed -- no silent fallback
         assert pod_result.returncode == 0, (
             f"INFRASTRUCTURE ERROR: Failed to query OTel Collector pods.\n"

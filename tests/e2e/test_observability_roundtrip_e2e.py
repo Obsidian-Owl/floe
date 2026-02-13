@@ -161,44 +161,31 @@ class TestObservabilityRoundTrip:
     @pytest.mark.requirement("AC-2.3")
     def test_otel_collector_accepts_spans(
         self,
-        wait_for_service: Callable[..., None],
+        otel_tracer_provider: Any,
     ) -> None:
         """Verify OTel Collector accepts OTLP spans.
 
-        Sends a test span directly to the OTel Collector and verifies it's
-        accepted without error. This validates the Collector is running and
-        configured to receive OTLP gRPC spans.
+        Uses the shared otel_tracer_provider fixture (conftest.py) to send a
+        test span to the OTel Collector and verifies it's accepted without
+        error. This validates the Collector is running and configured to
+        receive OTLP gRPC spans.
+
+        Args:
+            otel_tracer_provider: Session-scoped TracerProvider from conftest.
         """
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-            OTLPSpanExporter,
-        )
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-        otel_endpoint = os.environ.get("OTEL_ENDPOINT", "http://localhost:4317")
-        test_service = f"e2e-otel-test-{int(time.time())}"
-
-        resource = Resource.create({"service.name": test_service})
-        provider = TracerProvider(resource=resource)
-        exporter = OTLPSpanExporter(endpoint=otel_endpoint, insecure=True)
-        processor = BatchSpanProcessor(exporter)
-        provider.add_span_processor(processor)
-
-        # Create and export test span
-        tracer = provider.get_tracer("e2e-test")
+        # Use the shared TracerProvider fixture
+        tracer = otel_tracer_provider.get_tracer("e2e-test")
         with tracer.start_as_current_span("e2e_observability_test") as span:
             span.set_attribute("test.type", "observability_roundtrip")
 
         # Force flush — this will raise if collector rejects
-        flush_ok = provider.force_flush(timeout_millis=10_000)
+        otel_endpoint = os.environ.get("OTEL_ENDPOINT", "http://localhost:4317")
+        flush_ok = otel_tracer_provider.force_flush(timeout_millis=10_000)
         assert flush_ok, (
             f"OTel Collector did not accept span within 10s.\n"
             f"Endpoint: {otel_endpoint}\n"
             f"Check collector: kubectl logs -n floe-test -l app.kubernetes.io/name=otel --tail=20"
         )
-
-        provider.shutdown()
 
     @pytest.mark.requirement("AC-2.3")
     def test_jaeger_query_api_functional(
