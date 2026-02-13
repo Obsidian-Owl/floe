@@ -132,7 +132,10 @@ class TestValuesTestCubeStore:
         """
         values = yaml.safe_load(VALUES_TEST.read_text())
         cube = values.get("cube", {})
-        cubestore = cube.get("cubestore", cube.get("cubeStore", {}))
+        assert "cubeStore" in cube, (
+            f"Key must be 'cubeStore' (camelCase) to match Helm subchart. Found keys: {list(cube.keys())}"
+        )
+        cubestore = cube["cubeStore"]
         assert cubestore.get("enabled") is True, (
             f"cube.cubeStore.enabled must be true. Got: {cubestore.get('enabled')}"
         )
@@ -146,7 +149,7 @@ class TestValuesTestCubeStore:
         """
         values = yaml.safe_load(VALUES_TEST.read_text())
         cube = values.get("cube", {})
-        cubestore = cube.get("cubestore", cube.get("cubeStore", {}))
+        cubestore = cube.get("cubeStore", {})
         image = cubestore.get("image", {})
         repo = image.get("repository", "")
         assert repo == "ghcr.io/obsidian-owl/cube-store", (
@@ -178,7 +181,7 @@ class TestValuesTestCubeStore:
         """
         values = yaml.safe_load(VALUES_TEST.read_text())
         cube = values.get("cube", {})
-        cubestore = cube.get("cubestore", cube.get("cubeStore", {}))
+        cubestore = cube.get("cubeStore", {})
         resources = cubestore.get("resources", {})
         requests = resources.get("requests", {})
 
@@ -197,7 +200,7 @@ class TestValuesTestCubeStore:
         """
         values = yaml.safe_load(VALUES_TEST.read_text())
         cube = values.get("cube", {})
-        cubestore = cube.get("cubestore", cube.get("cubeStore", {}))
+        cubestore = cube.get("cubeStore", {})
         image = cubestore.get("image", {})
         tag = image.get("tag", "")
 

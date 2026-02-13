@@ -313,7 +313,7 @@ cube:
       limits:
         cpu: 250m
         memory: 512Mi
-  cubestore:
+  cubeStore:
     enabled: true
     image:
       repository: ghcr.io/obsidian-owl/cube-store
