@@ -173,10 +173,30 @@ def helm_release_health() -> None:
     This prevents cascading test failures when a previous test run left
     the Helm release in a broken state (RC-3).
 
+    When no K8s cluster is available (e.g., running DuckDB-only dbt tests
+    locally), the fixture returns early as a no-op. K8s-dependent tests
+    will still fail at their own service fixtures.
+
     Raises:
         RuntimeError: If recovery fails after detecting stuck state.
         ValueError: If helm status output is not valid JSON.
     """
+    # Guard: skip Helm recovery when no K8s cluster is reachable.
+    # This allows DuckDB-only E2E tests to run without a Kind cluster.
+    try:
+        cluster_check = subprocess.run(
+            ["kubectl", "cluster-info"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if cluster_check.returncode != 0:
+            return
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        # kubectl not installed or cluster unreachable
+        return
+
     from testing.fixtures.helm import recover_stuck_helm_release
 
     release = "floe-platform"
