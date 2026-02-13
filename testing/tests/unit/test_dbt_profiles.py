@@ -23,14 +23,6 @@ DEMO_PRODUCTS: dict[str, str] = {
 }
 
 
-@pytest.fixture
-def project_root() -> Path:
-    """Project root directory for structural validation tests."""
-    root = Path(__file__).parent.parent.parent.parent
-    assert (root / "demo").exists(), f"Project root {root} does not contain 'demo' directory"
-    return root
-
-
 @pytest.mark.requirement("WU5-AC1")
 class TestDbtProfiles:
     """Validate dbt profiles.yml structure for each demo product.
