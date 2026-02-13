@@ -122,11 +122,14 @@ def _health_check_sensor_impl(
         )
 
 
-# Create the actual sensor by decorating the implementation
+# Create the actual sensor by decorating the implementation.
+# asset_selection targets all assets — when the sensor yields a RunRequest,
+# Dagster materializes the full asset graph (demo pipeline).
 health_check_sensor = sensor(
     name="health_check_sensor",
     description="Triggers first pipeline run when platform services are healthy",
     minimum_interval_seconds=60,  # Check every minute
+    asset_selection="*",
 )(_health_check_sensor_impl)
 
 
