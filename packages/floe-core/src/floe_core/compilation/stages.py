@@ -333,15 +333,10 @@ def compile_pipeline(
             governance = getattr(spec, "governance", None)
             enforcement_level: Literal["off", "warn", "strict"] = "warn"
             if governance is not None:
-                enforcement_level = getattr(
-                    governance, "enforcement_level", "warn"
-                ) or "warn"
+                enforcement_level = getattr(governance, "enforcement_level", "warn") or "warn"
 
             policy_types_checked: list[str] = ["plugin_instrumentation"]
-            if (
-                manifest.approved_sinks is not None
-                and spec.destinations is not None
-            ):
+            if manifest.approved_sinks is not None and spec.destinations is not None:
                 policy_types_checked.append("sink_whitelist")
 
             enforcement_result = EnforcementResultSummary(
