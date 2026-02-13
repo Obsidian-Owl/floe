@@ -18,7 +18,7 @@
     { "id": "wu-2-cube", "description": "Cube Multi-Arch + Pod Scheduling", "status": "shipped", "order": 2, "tasksCompleted": ["T8", "T9", "T10", "T11"], "pr": "https://github.com/Obsidian-Owl/floe/pull/75" },
     { "id": "wu-3-dagster", "description": "Dagster 2.x SDK Migration (Full Audit)", "status": "shipped", "order": 3, "tasksCompleted": ["T16", "T17", "T18", "T19"], "pr": "https://github.com/Obsidian-Owl/floe/pull/76" },
     { "id": "wu-4-otel", "description": "OTel Pipeline + Label Alignment", "status": "shipped", "order": 4, "tasksCompleted": ["T20", "T21", "T22", "T23", "T24"], "pr": "https://github.com/Obsidian-Owl/floe/pull/77" },
-    { "id": "wu-5-dbt", "description": "dbt Demo Product Pipeline", "status": "building", "order": 5, "tasksCompleted": ["T25", "T26", "T27", "T28", "T29"] },
+    { "id": "wu-5-dbt", "description": "dbt Demo Product Pipeline", "status": "verifying", "order": 5, "tasksCompleted": ["T25", "T26", "T27", "T28", "T29"] },
     { "id": "wu-6-plugin-pipeline", "description": "Plugin Registry + Compilation Pipeline", "status": "pending", "order": 6 },
     { "id": "wu-7-secrets-cve", "description": "Secrets Verification + CVE Bumps", "status": "pending", "order": 7 },
     { "id": "wu-8-polish", "description": "Polaris Health Check + Final Verification", "status": "pending", "order": 8 }
@@ -51,6 +51,13 @@
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-13T18:10:00Z" },
       "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 6 }, "timestamp": "2026-02-13T18:30:00Z", "note": "Dead fixture + operator precedence resolved" },
       "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T18:30:00Z", "note": "F541 + all WARNs resolved" }
+    },
+    "wu-5-dbt": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T19:30:00Z", "note": "Format fix committed in 4dfe43d, 18/18 tests pass" },
+      "gate-tests": { "status": "WARN", "findings": { "block": 0, "warn": 10, "info": 5 }, "timestamp": "2026-02-13T19:35:00Z", "note": "8 tests missing individual docstring classification, strict=False on xfail, silent continue as implicit skip" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-13T19:35:00Z", "note": "1 Medium theoretical (path traversal in glob), 2 Low" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-13T19:35:00Z", "note": "Duplicate project_root fixture (INFO), unused profile_name ARG002 (INFO)" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T19:45:00Z", "note": "WU5-AC2 WARN resolved: helm_release_health guard added in d94335f" }
     }
   }
 }
