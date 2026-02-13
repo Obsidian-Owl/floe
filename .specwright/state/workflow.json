@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "currentWork": {
     "id": "e2e-platform-gaps",
-    "phase": "building",
+    "phase": "verifying",
     "startedAt": "2026-02-13T10:40:00Z"
   },
   "completedWork": [
@@ -15,9 +15,9 @@
   ],
   "workUnits": [
     { "id": "wu-1-bootstrap", "description": "Polaris Bootstrap + MinIO Bucket Reliability", "status": "shipped", "order": 1, "pr": "https://github.com/Obsidian-Owl/floe/pull/74" },
-    { "id": "wu-2-cube", "description": "Cube Multi-Arch + Pod Scheduling", "status": "verifying", "order": 2, "tasksCompleted": ["T8", "T9", "T10", "T11"] },
-    { "id": "wu-3-dagster", "description": "Dagster 2.x SDK Migration (Full Audit)", "status": "pending", "order": 3 },
-    { "id": "wu-4-otel", "description": "OTel Pipeline + Label Alignment", "status": "building", "order": 4, "tasksCompleted": [] },
+    { "id": "wu-2-cube", "description": "Cube Multi-Arch + Pod Scheduling", "status": "shipped", "order": 2, "tasksCompleted": ["T8", "T9", "T10", "T11"], "pr": "https://github.com/Obsidian-Owl/floe/pull/75" },
+    { "id": "wu-3-dagster", "description": "Dagster 2.x SDK Migration (Full Audit)", "status": "shipped", "order": 3, "tasksCompleted": ["T16", "T17", "T18", "T19"], "pr": "https://github.com/Obsidian-Owl/floe/pull/76" },
+    { "id": "wu-4-otel", "description": "OTel Pipeline + Label Alignment", "status": "building", "order": 4, "tasksCompleted": ["T20", "T21", "T22", "T23", "T24"] },
     { "id": "wu-5-dbt", "description": "dbt Demo Product Pipeline", "status": "pending", "order": 5 },
     { "id": "wu-6-plugin-pipeline", "description": "Plugin Registry + Compilation Pipeline", "status": "pending", "order": 6 },
     { "id": "wu-7-secrets-cve", "description": "Secrets Verification + CVE Bumps", "status": "pending", "order": 7 },
@@ -37,6 +37,13 @@
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 4 }, "timestamp": "2026-02-13T16:05:00Z" },
       "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 2, "info": 5 }, "timestamp": "2026-02-13T16:10:00Z", "note": "Initially FAIL (2 BLOCK) — fixed in commit 0c5e8c5" },
       "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T16:05:00Z" }
+    },
+    "wu-3-dagster": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 0 }, "timestamp": "2026-02-13T17:00:00Z" },
+      "gate-tests": { "status": "WARN", "findings": { "block": 0, "warn": 5, "info": 4 }, "timestamp": "2026-02-13T17:00:00Z", "note": "Initially 2 BLOCK — fixed in commit 3e81fc6" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 2 }, "timestamp": "2026-02-13T17:00:00Z" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 3, "info": 1 }, "timestamp": "2026-02-13T17:00:00Z" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 2, "info": 0 }, "timestamp": "2026-02-13T17:00:00Z", "note": "WU3-AC1/AC2 WARN: Dagster 2.0 unreleased, user-approved deviation" }
     }
   }
 }

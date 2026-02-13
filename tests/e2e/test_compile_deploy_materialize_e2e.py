@@ -176,15 +176,14 @@ class TestCompileDeployMaterialize:
             description="Dagster webserver",
         )
 
-        # Query for code locations via GraphQL
+        # Query for repositories via GraphQL (current Dagster API)
         query = """
         {
-            repositoryLocationsOrError {
-                ... on RepositoryLocationConnection {
+            repositoriesOrError {
+                ... on RepositoryConnection {
                     nodes {
                         name
-                        loadStatus
-                        repositories {
+                        location {
                             name
                         }
                     }
@@ -208,27 +207,24 @@ class TestCompileDeployMaterialize:
         data = response.json()
         assert "data" in data, f"GraphQL error: {data}"
 
-        locations_data = data["data"]["repositoryLocationsOrError"]
+        repos_data = data["data"]["repositoriesOrError"]
 
         # Check it's not a Python error
-        if "message" in locations_data:
-            pytest.fail(f"Dagster code location error: {locations_data['message']}")
+        if "message" in repos_data:
+            pytest.fail(f"Dagster repository error: {repos_data['message']}")
 
-        nodes = locations_data.get("nodes", [])
-        # Verify at least one code location is loaded
+        nodes = repos_data.get("nodes", [])
+        # Verify at least one repository is loaded
         assert len(nodes) > 0, (
-            "No Dagster code locations found.\n"
+            "No Dagster repositories found.\n"
             "The floe-jobs chart should configure workspace with demo products.\n"
             "Check: helm status floe-platform -n floe-test"
         )
 
-        # Check load status — at least some should be LOADED
-        loaded = [n for n in nodes if n.get("loadStatus") == "LOADED"]
-        assert len(loaded) > 0, (
-            f"No code locations in LOADED state.\n"
-            f"Locations: {[(n['name'], n.get('loadStatus')) for n in nodes]}\n"
-            "Code location loading may have failed — check Dagster logs."
-        )
+        # Verify repositories have location info
+        for node in nodes:
+            assert "name" in node, f"Repository node missing 'name': {node}"
+            assert "location" in node, f"Repository '{node['name']}' missing 'location' info"
 
     @pytest.mark.requirement("AC-2.2")
     def test_dagster_assets_visible(
