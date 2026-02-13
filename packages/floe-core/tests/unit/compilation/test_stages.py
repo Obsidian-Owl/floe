@@ -351,6 +351,96 @@ plugins:
         assert "compute" in exc_info.value.error.message.lower()
 
 
+class TestEnforcementResult:
+    """Tests for enforcement result in compilation pipeline."""
+
+    @pytest.mark.requirement("FR-031")
+    def test_compile_pipeline_produces_enforcement_result(self, tmp_path: Path) -> None:
+        """Test that compile_pipeline produces non-None enforcement_result.
+
+        The ENFORCE stage builds an EnforcementResultSummary from
+        pre-manifest policy checks (plugin instrumentation, sink whitelist).
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text("""
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: customers
+    tags: []
+""")
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+""")
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result is not None
+        assert result.enforcement_result.passed is True
+        assert result.enforcement_result.error_count == 0
+        assert "plugin_instrumentation" in result.enforcement_result.policy_types_checked
+        assert result.enforcement_result.enforcement_level == "warn"
+
+    @pytest.mark.requirement("FR-031")
+    def test_enforcement_result_counts_audit_warnings(self, tmp_path: Path) -> None:
+        """Test that enforcement_result warning_count reflects instrumentation audit.
+
+        Warning count should be >= 0 based on uninstrumented plugins found
+        during the ENFORCE stage.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text("""
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: customers
+    tags: []
+""")
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+""")
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result is not None
+        assert isinstance(result.enforcement_result.warning_count, int)
+        assert result.enforcement_result.warning_count >= 0
+
+
 class TestOpenTelemetryTracing:
     """Tests for OpenTelemetry tracing in compilation pipeline (FR-013)."""
 
