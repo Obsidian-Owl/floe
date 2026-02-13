@@ -155,7 +155,8 @@ class TestValuesTestCubeStore:
         values = yaml.safe_load(VALUES_TEST.read_text())
         cube = values.get("cube", {})
         assert "cubeStore" in cube, (
-            f"Key must be 'cubeStore' (camelCase) to match Helm subchart. Found keys: {list(cube.keys())}"
+            "Key must be 'cubeStore' (camelCase) to match Helm subchart."
+            f" Found keys: {list(cube.keys())}"
         )
         cubestore = cube["cubeStore"]
         assert cubestore.get("enabled") is True, (
