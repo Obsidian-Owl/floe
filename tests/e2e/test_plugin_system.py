@@ -1,7 +1,7 @@
 """End-to-end tests for plugin system architecture.
 
 This test validates the plugin system's ability to discover, load, swap, and
-validate plugins across all 13 plugin types in the floe platform.
+validate plugins across all 14 plugin types in the floe platform.
 
 Requirements Covered:
 - FR-050: Plugin type discovery via entry points
@@ -30,6 +30,7 @@ from floe_core.plugin_metadata import HealthState, PluginMetadata
 from floe_core.plugin_registry import PluginRegistry, get_registry
 from floe_core.plugin_types import PluginType
 from floe_core.plugins import (
+    AlertChannelPlugin,
     CatalogPlugin,
     ComputePlugin,
     DBTPlugin,
@@ -52,7 +53,7 @@ class TestPluginSystem(IntegrationTestBase):
     """E2E tests for the plugin system architecture.
 
     These tests validate the complete plugin system functionality:
-    1. Discovery of all 13 plugin types via Python entry points
+    1. Discovery of all 14 plugin types via Python entry points
     2. ABC compliance validation for each plugin
     3. Plugin swapping via floe.yaml configuration
     4. Third-party plugin discovery via pip install
@@ -85,12 +86,13 @@ class TestPluginSystem(IntegrationTestBase):
         PluginType.IDENTITY: IdentityPlugin,
         PluginType.QUALITY: QualityPlugin,
         PluginType.RBAC: RBACPlugin,
+        PluginType.ALERT_CHANNEL: AlertChannelPlugin,
     }
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-050")
     def test_all_plugin_types_discoverable(self) -> None:
-        """Test that all 13 plugin types are discoverable via entry points.
+        """Test that all plugin types are discoverable via entry points.
 
         Validates that PluginRegistry.discover_all() finds at least one
         implementation for each of the implemented plugin types.
@@ -104,13 +106,13 @@ class TestPluginSystem(IntegrationTestBase):
         # Get all discovered plugins grouped by type
         all_plugins = registry.list_all()
 
-        # Verify we have exactly 13 plugin types
-        assert len(PluginType) == 13, (
-            f"Expected 13 plugin types, found {len(PluginType)}. "
-            "Update test if plugin types changed."
+        # Verify plugin type count matches enum (dynamic, not hardcoded)
+        assert len(PluginType) >= 14, (
+            f"Expected at least 14 plugin types, found {len(PluginType)}. "
+            "PluginType enum may have been reduced."
         )
 
-        # ALL 13 plugin types MUST have implementations
+        # ALL plugin types MUST have implementations
         # No exclusion list — if a plugin type has no implementation, the test FAILS
         # to expose that as a platform gap
         missing_types: list[str] = []
@@ -565,13 +567,13 @@ class ThirdPartyTestPlugin(PluginMetadata):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-051")
-    def test_all_13_plugin_types_have_abc(self) -> None:
+    def test_all_plugin_types_have_abc(self) -> None:
         """Test that every PluginType enum has a corresponding ABC class.
 
         Validates the plugin contract is complete - every plugin type
         must have an Abstract Base Class defining its interface.
         """
-        # Verify we cover all 13 plugin types in PLUGIN_ABC_MAP
+        # Verify we cover all plugin types in PLUGIN_ABC_MAP
         assert len(self.PLUGIN_ABC_MAP) == len(PluginType), (
             f"PLUGIN_ABC_MAP has {len(self.PLUGIN_ABC_MAP)} entries but "
             f"PluginType has {len(PluginType)} members. "

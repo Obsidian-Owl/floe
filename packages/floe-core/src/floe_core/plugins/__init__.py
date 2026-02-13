@@ -4,7 +4,7 @@ This module provides:
 1. Abstract base classes (ABCs) for all pluggable component types
 2. Registry components for plugin discovery, loading, and lifecycle management
 
-Plugin Categories (12 types):
+Plugin Categories (14 types):
     Compute: Database execution engines (DuckDB, Snowflake, BigQuery)
     Orchestrator: Workflow schedulers (Dagster, Airflow)
     Catalog: Iceberg catalog providers (Polaris, AWS Glue, Hive)
@@ -17,6 +17,8 @@ Plugin Categories (12 types):
     Secrets: Credential managers (Vault, AWS Secrets Manager)
     Identity: Authentication providers (OAuth2, OIDC)
     Quality: Data quality validators (Great Expectations, Soda, dbt-expectations)
+    RBAC: Kubernetes RBAC manifest generation
+    Alert Channel: Contract violation alert delivery (Slack, webhook, email)
 
 Registry Components (Epic 12B US4):
     PluginDiscovery: Entry point scanning for installed plugins
@@ -35,6 +37,9 @@ See Also:
 """
 
 from __future__ import annotations
+
+# Alert channel plugin
+from floe_core.plugins.alert_channel import AlertChannelPlugin
 
 # Catalog plugin
 from floe_core.plugins.catalog import (
@@ -130,6 +135,8 @@ from floe_core.plugins.storage import (
 from floe_core.plugins.telemetry import TelemetryBackendPlugin
 
 __all__ = [
+    # Alert Channel
+    "AlertChannelPlugin",
     # Catalog
     "Catalog",
     "CatalogPlugin",
