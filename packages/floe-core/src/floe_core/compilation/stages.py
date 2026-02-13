@@ -324,10 +324,35 @@ def compile_pipeline(
             for _warn_msg in _audit_warnings:
                 log.warning("uninstrumented_plugin", message=_warn_msg)
 
-            # Placeholder: Full enforcement requires dbt manifest.json which is
-            # generated later by dbt compile. The run_enforce_stage() function
-            # is used directly after dbt compilation for policy enforcement.
-            # See: packages/floe-core/tests/integration/enforcement/ for usage
+            # Build pre-manifest enforcement summary from spec-level checks
+            # Full post-dbt enforcement uses run_enforce_stage() separately
+            from floe_core.schemas.compiled_artifacts import (
+                EnforcementResultSummary,
+            )
+
+            governance = getattr(spec, "governance", None)
+            enforcement_level: Literal["off", "warn", "strict"] = "warn"
+            if governance is not None:
+                enforcement_level = getattr(
+                    governance, "enforcement_level", "warn"
+                ) or "warn"
+
+            policy_types_checked: list[str] = ["plugin_instrumentation"]
+            if (
+                manifest.approved_sinks is not None
+                and spec.destinations is not None
+            ):
+                policy_types_checked.append("sink_whitelist")
+
+            enforcement_result = EnforcementResultSummary(
+                passed=True,
+                error_count=0,
+                warning_count=len(_audit_warnings),
+                policy_types_checked=policy_types_checked,
+                models_validated=0,
+                enforcement_level=enforcement_level,
+            )
+
             duration_ms = (time.perf_counter() - stage_start) * 1000
             log.info(
                 "compilation_stage_complete",
@@ -373,6 +398,7 @@ def compile_pipeline(
                 dbt_profiles=dbt_profiles,
                 spec_path=spec_path,
                 manifest_path=manifest_path,
+                enforcement_result=enforcement_result,
                 quality_config=quality_config,
             )
             generate_span.set_attribute("compile.artifacts_version", artifacts.version)
