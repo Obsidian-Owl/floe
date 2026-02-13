@@ -141,8 +141,7 @@ class TestOtelJaegerExporter:
         endpoint = jaeger_exporter.get("endpoint", "")
 
         assert ":4317" in endpoint, (
-            f"otlp/jaeger exporter must use gRPC port 4317. "
-            f"Got endpoint: '{endpoint}'"
+            f"otlp/jaeger exporter must use gRPC port 4317. Got endpoint: '{endpoint}'"
         )
 
     @pytest.mark.requirement("WU4-AC2")
@@ -196,9 +195,7 @@ class TestOtelJaegerExporter:
         grpc_config = otlp_receiver.get("protocols", {}).get("grpc", {})
         endpoint = grpc_config.get("endpoint", "")
 
-        assert "4317" in endpoint, (
-            f"OTLP receiver must listen on gRPC port 4317. Got: '{endpoint}'"
-        )
+        assert "4317" in endpoint, f"OTLP receiver must listen on gRPC port 4317. Got: '{endpoint}'"
 
 
 class TestValuesTestOtelJaeger:
@@ -298,10 +295,10 @@ class TestE2EJaegerTraceQuery:
         # Look for patterns like: assert len(traces) > 0, len(data) > 0,
         # or pytest.fail when no traces found
         has_non_empty_assertion = (
-            re.search(r'assert\s+len\([^)]*traces[^)]*\)\s*>\s*0', content) is not None
-            or re.search(r'assert\s+len\([^)]*data[^)]*\)\s*>\s*0', content) is not None
-            or re.search(r'pytest\.fail.*[Nn]o.*trace', content) is not None
-            or re.search(r'assert\s+traces_found', content) is not None
+            re.search(r"assert\s+len\([^)]*traces[^)]*\)\s*>\s*0", content) is not None
+            or re.search(r"assert\s+len\([^)]*data[^)]*\)\s*>\s*0", content) is not None
+            or re.search(r"pytest\.fail.*[Nn]o.*trace", content) is not None
+            or re.search(r"assert\s+traces_found", content) is not None
         )
         assert has_non_empty_assertion, (
             "test_observability_roundtrip_e2e.py must assert traces are non-empty. "
@@ -325,9 +322,7 @@ class TestE2EJaegerTraceQuery:
         # Extract all service name strings used in Jaeger queries
         # Pattern: "service": "<name>" or 'service': '<name>'
         # or params={"service": "<name>"}
-        service_names_in_queries = re.findall(
-            r'"service"[:\s]+["\']([^"\']+)["\']', content
-        )
+        service_names_in_queries = re.findall(r'"service"[:\s]+["\']([^"\']+)["\']', content)
 
         assert len(service_names_in_queries) > 0, (
             "Could not find any service name in Jaeger queries. "
@@ -337,7 +332,8 @@ class TestE2EJaegerTraceQuery:
         # Filter out sentinel/dummy names used in API validation tests
         sentinel_patterns = {"non-existent", "dummy", "test-only", "fake"}
         real_service_names = {
-            name for name in service_names_in_queries
+            name
+            for name in service_names_in_queries
             if not any(sentinel in name.lower() for sentinel in sentinel_patterns)
         }
 
@@ -381,12 +377,8 @@ class TestE2EJaegerTraceQuery:
         rt_content = TEST_ROUNDTRIP.read_text()
 
         # Extract service names from both files
-        obs_service_names = set(re.findall(
-            r'"service"[:\s]+["\']([^"\']+)["\']', obs_content
-        ))
-        rt_service_names = set(re.findall(
-            r'"service"[:\s]+["\']([^"\']+)["\']', rt_content
-        ))
+        obs_service_names = set(re.findall(r'"service"[:\s]+["\']([^"\']+)["\']', obs_content))
+        rt_service_names = set(re.findall(r'"service"[:\s]+["\']([^"\']+)["\']', rt_content))
 
         # Filter out obvious non-service-name strings like "non-existent-service"
         obs_real = {s for s in obs_service_names if "non-existent" not in s}
@@ -441,9 +433,8 @@ class TestE2EConftestTracerProvider:
         """
         content = E2E_CONFTEST.read_text()
 
-        has_otlp_exporter = (
-            "OTLPSpanExporter" in content
-            or ("otlp" in content.lower() and "exporter" in content.lower())
+        has_otlp_exporter = "OTLPSpanExporter" in content or (
+            "otlp" in content.lower() and "exporter" in content.lower()
         )
         assert has_otlp_exporter, (
             "tests/e2e/conftest.py must import OTLPSpanExporter "
@@ -513,10 +504,7 @@ class TestE2EConftestTracerProvider:
         """
         content = E2E_CONFTEST.read_text()
 
-        has_service_name_config = (
-            "service.name" in content
-            or "service_name" in content
-        )
+        has_service_name_config = "service.name" in content or "service_name" in content
         assert has_service_name_config, (
             "tests/e2e/conftest.py must configure service.name in TracerProvider "
             "Resource. Without it, traces appear as 'unknown_service' in Jaeger "

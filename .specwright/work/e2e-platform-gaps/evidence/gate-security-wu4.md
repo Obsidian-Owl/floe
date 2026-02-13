@@ -1,7 +1,7 @@
 # Gate: Security — WU-4 Evidence
 
-**Status**: PASS  
-**Findings**: Critical: 0, High: 0, Medium: 0, Low: 1  
+**Status**: PASS
+**Findings**: Critical: 0, High: 0, Medium: 0, Low: 1
 **Risk Level**: LOW
 
 ---
@@ -230,8 +230,8 @@ Prevents resource exhaustion from hung processes.
 ## Findings Summary
 
 ### LOW-001: Test Credentials Documentation
-**Severity**: Low  
-**CWE**: CWE-798 (Hardcoded Credentials)  
+**Severity**: Low
+**CWE**: CWE-798 (Hardcoded Credentials)
 **Location**:
 - `tests/e2e/conftest.py:417` (demo-admin:demo-secret)
 - `tests/e2e/conftest.py:430-433` (minioadmin credentials)
@@ -239,7 +239,7 @@ Prevents resource exhaustion from hung processes.
 
 **Issue**: Demo credentials hardcoded in test fixtures.
 
-**Mitigation**: 
+**Mitigation**:
 - ✅ Credentials scoped to test-only fixtures
 - ✅ `# pragma: allowlist secret` markers for scanners
 - ✅ Environment variable overrides available
