@@ -305,5 +305,25 @@ cube:
   enabled: true
   secret:
     apiSecret: "test-cube-api-secret-32chars000"  # pragma: allowlist secret
+  api:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 512Mi
   cubestore:
-    enabled: false  # No ARM64 image available for Cube Store
+    enabled: true
+    image:
+      repository: ghcr.io/obsidian-owl/cube-store
+      tag: "0.36.0"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    persistence:
+      enabled: false  # No persistent storage needed in CI

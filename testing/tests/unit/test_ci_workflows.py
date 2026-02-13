@@ -1,10 +1,15 @@
-"""CI workflow structural validation tests.
+"""CI workflow and test values structural validation tests.
 
-Tests that validate GitHub Actions workflow files have the correct structure
-and configuration. These are unit tests that parse YAML — no external services.
+Tests that validate GitHub Actions workflow files and Helm test values
+have the correct structure. These are unit tests that parse YAML — no
+external services or Helm CLI required.
 
 Requirements:
     WU2-AC1: nightly.yml builds multi-arch Cube Store for linux/amd64 and linux/arm64
+    WU2-AC2: values-test.yaml enables Cube Store with overridden image repository
+    WU2-AC3: Resource requests fit Kind: API 50m/128Mi, Store 100m/256Mi
+    WU2-AC4: StatefulSet supports image override via values
+    WU2-AC5: Rollback path: cubeStore.enabled: false + xfail markers
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 NIGHTLY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "nightly.yml"
 CUBE_STORE_DOCKERFILE = REPO_ROOT / "docker" / "cube-store" / "Dockerfile"
+VALUES_TEST = REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
 
 
 class TestNightlyWorkflow:
@@ -112,3 +118,88 @@ class TestNightlyWorkflow:
         ]
         has_from = any(line.upper().startswith("FROM") for line in lines)
         assert has_from, "Dockerfile missing FROM instruction"
+
+
+class TestValuesTestCubeStore:
+    """Structural validation of Cube Store config in values-test.yaml."""
+
+    @pytest.mark.requirement("WU2-AC2")
+    def test_cube_store_enabled(self) -> None:
+        """Verify cubeStore.enabled is true in test values.
+
+        Cube Store must be enabled for E2E tests to validate the full
+        Cube stack (API + Store).
+        """
+        values = yaml.safe_load(VALUES_TEST.read_text())
+        cube = values.get("cube", {})
+        cubestore = cube.get("cubestore", cube.get("cubeStore", {}))
+        assert cubestore.get("enabled") is True, (
+            f"cube.cubeStore.enabled must be true. Got: {cubestore.get('enabled')}"
+        )
+
+    @pytest.mark.requirement("WU2-AC2")
+    def test_cube_store_image_uses_ghcr(self) -> None:
+        """Verify Cube Store image points to multi-arch GHCR registry.
+
+        The image repository must be ghcr.io/obsidian-owl/cube-store,
+        not the upstream cubejs/cubestore (which is AMD64-only).
+        """
+        values = yaml.safe_load(VALUES_TEST.read_text())
+        cube = values.get("cube", {})
+        cubestore = cube.get("cubestore", cube.get("cubeStore", {}))
+        image = cubestore.get("image", {})
+        repo = image.get("repository", "")
+        assert repo == "ghcr.io/obsidian-owl/cube-store", (
+            f"Cube Store image must use GHCR multi-arch image. Got: {repo}"
+        )
+
+    @pytest.mark.requirement("WU2-AC3")
+    def test_cube_api_resources_fit_kind(self) -> None:
+        """Verify Cube API resource requests fit Kind single-node capacity.
+
+        API pods must request at most 50m CPU and 128Mi memory.
+        """
+        values = yaml.safe_load(VALUES_TEST.read_text())
+        cube = values.get("cube", {})
+        api_resources = cube.get("api", {}).get("resources", {})
+        requests = api_resources.get("requests", {})
+
+        cpu = requests.get("cpu", "")
+        memory = requests.get("memory", "")
+
+        assert cpu == "50m", f"Cube API CPU request must be 50m. Got: {cpu}"
+        assert memory == "128Mi", f"Cube API memory request must be 128Mi. Got: {memory}"
+
+    @pytest.mark.requirement("WU2-AC3")
+    def test_cube_store_resources_fit_kind(self) -> None:
+        """Verify Cube Store resource requests fit Kind single-node capacity.
+
+        Store pods must request at most 100m CPU and 256Mi memory.
+        """
+        values = yaml.safe_load(VALUES_TEST.read_text())
+        cube = values.get("cube", {})
+        cubestore = cube.get("cubestore", cube.get("cubeStore", {}))
+        resources = cubestore.get("resources", {})
+        requests = resources.get("requests", {})
+
+        cpu = requests.get("cpu", "")
+        memory = requests.get("memory", "")
+
+        assert cpu == "100m", f"Cube Store CPU request must be 100m. Got: {cpu}"
+        assert memory == "256Mi", f"Cube Store memory request must be 256Mi. Got: {memory}"
+
+    @pytest.mark.requirement("WU2-AC4")
+    def test_cube_store_image_has_explicit_tag(self) -> None:
+        """Verify Cube Store image tag is explicitly set, not 'latest'.
+
+        Per WU2-BC3, the StatefulSet must use an explicit tag to prevent
+        accidental version drift.
+        """
+        values = yaml.safe_load(VALUES_TEST.read_text())
+        cube = values.get("cube", {})
+        cubestore = cube.get("cubestore", cube.get("cubeStore", {}))
+        image = cubestore.get("image", {})
+        tag = image.get("tag", "")
+
+        assert tag, "Cube Store image tag must be set"
+        assert tag != "latest", "Cube Store image tag must not be 'latest'"
