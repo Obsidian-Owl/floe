@@ -167,9 +167,11 @@ repos:
       # GHSA-hm8f-75xx-w2vr: sigstore <4.2.0 - mitigated by network isolation (Epic 8B)
       # GHSA-2q4j-m29v-hq73: pypdf in devtools/agent-memory - internal tool only
       # GHSA-wp53-j4wj-2cfg: python-multipart in devtools/agent-memory - internal tool only
+      # GHSA-cfh3-3jmp-rvhc: pillow in devtools/agent-memory - cognee pins <12.0, internal tool
+      # GHSA-w8v5-vhqr-4h9v: diskcache in devtools/agent-memory - no fix available, internal tool
       - id: uv-secure
         name: uv-secure (vulnerability audit)
-        entry: uv run --no-sync uv-secure --no-check-uv-tool --ignore-vulns GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7,GHSA-hm8f-75xx-w2vr,GHSA-2q4j-m29v-hq73,GHSA-wp53-j4wj-2cfg .
+        entry: uv run --no-sync uv-secure --no-check-uv-tool --ignore-vulns GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7,GHSA-hm8f-75xx-w2vr,GHSA-2q4j-m29v-hq73,GHSA-wp53-j4wj-2cfg,GHSA-cfh3-3jmp-rvhc,GHSA-w8v5-vhqr-4h9v .
         language: system
         stages: [pre-push]
         pass_filenames: false
