@@ -38,9 +38,6 @@ See Also:
 
 from __future__ import annotations
 
-# Alert channel plugin
-from floe_core.plugins.alert_channel import AlertChannelPlugin
-
 # Catalog plugin
 from floe_core.plugins.catalog import (
     Catalog,
@@ -135,8 +132,8 @@ from floe_core.plugins.storage import (
 from floe_core.plugins.telemetry import TelemetryBackendPlugin
 
 __all__ = [
-    # Alert Channel
-    "AlertChannelPlugin",
+    # Alert Channel: imported directly from floe_core.plugins.alert_channel
+    # to avoid circular import (alert_channel → violations → alert_router → alert_channel)
     # Catalog
     "Catalog",
     "CatalogPlugin",
