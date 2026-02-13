@@ -82,7 +82,7 @@ class TestNightlyWorkflow:
             (s for s in steps if "docker/build-push-action" in s.get("uses", "")),
             None,
         )
-        assert build_step is not None
+        assert build_step is not None, "No docker/build-push-action step in build-cube-store job"
 
         tags = build_step.get("with", {}).get("tags", "")
         assert "ghcr.io/obsidian-owl/cube-store" in tags, (
@@ -97,6 +97,28 @@ class TestNightlyWorkflow:
         permissions = job.get("permissions", {})
         assert permissions.get("packages") == "write", (
             f"Missing 'packages: write' permission. Got: {permissions}"
+        )
+
+    @pytest.mark.requirement("WU2-AC1")
+    def test_cube_store_job_push_enabled(self) -> None:
+        """Verify build-push-action has push: true to publish images.
+
+        Without push: true, images are built locally but never pushed
+        to GHCR, making the entire multi-arch build pipeline a no-op.
+        """
+        workflow = yaml.safe_load(NIGHTLY_WORKFLOW.read_text())
+        job = workflow["jobs"]["build-cube-store"]
+        steps = job.get("steps", [])
+
+        build_step = next(
+            (s for s in steps if "docker/build-push-action" in s.get("uses", "")),
+            None,
+        )
+        assert build_step is not None, "No docker/build-push-action step in build-cube-store job"
+
+        push = build_step.get("with", {}).get("push")
+        assert push is True or push == "true", (
+            f"build-push-action must have push: true. Got: {push}"
         )
 
     @pytest.mark.requirement("WU2-AC1")
