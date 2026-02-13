@@ -67,7 +67,11 @@ jobs:
       - name: Install dbt Fusion CLI
         run: |
           # Install official dbt Fusion CLI from dbt Labs
-          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
+          # Download first, then execute (CWE-78 mitigation — no pipe-to-shell)
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh -o /tmp/dbt-install.sh
+          chmod +x /tmp/dbt-install.sh
+          /tmp/dbt-install.sh --update
+          rm -f /tmp/dbt-install.sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           ~/.local/bin/dbt --version
 
