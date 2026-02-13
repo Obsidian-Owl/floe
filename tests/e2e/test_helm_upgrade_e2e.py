@@ -31,6 +31,52 @@ NAMESPACE = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
 HELM_RELEASE = "floe-platform"
 
 
+def _recover_stuck_release(release: str, namespace: str) -> None:
+    """Detect and recover from stuck Helm release states.
+
+    Checks for pending-upgrade, pending-install, pending-rollback, and failed
+    states and performs rollback to the last known good revision.
+
+    Args:
+        release: Helm release name.
+        namespace: K8s namespace.
+
+    Raises:
+        AssertionError: If recovery fails.
+    """
+    status_result = run_helm(
+        ["status", release, "-n", namespace, "-o", "json"],
+    )
+    if status_result.returncode != 0:
+        return  # Release doesn't exist, nothing to recover
+
+    import json as _json
+
+    current = _json.loads(status_result.stdout)
+    release_status = current.get("info", {}).get("status", "")
+
+    stuck_states = ("pending-upgrade", "pending-install", "pending-rollback", "failed")
+    if release_status not in stuck_states:
+        return
+
+    current_revision = current.get("version", 1)
+    rollback_revision = max(1, current_revision - 1)
+    print(
+        f"WARNING: Helm release '{release}' in '{release_status}' state. "
+        f"Rolling back to revision {rollback_revision}..."
+    )
+
+    rollback_result = run_helm(
+        ["rollback", release, str(rollback_revision), "-n", namespace, "--wait", "--timeout", "3m"],
+    )
+    assert rollback_result.returncode == 0, (
+        f"Helm rollback failed: {rollback_result.stderr}\n"
+        f"Release stuck in '{release_status}'. Manual intervention required:\n"
+        f"  helm rollback {release} {rollback_revision} -n {namespace}"
+    )
+    print(f"Recovery complete: rolled back to revision {rollback_revision}")
+
+
 @pytest.mark.e2e
 @pytest.mark.requirement("AC-2.9")
 class TestHelmUpgrade:
@@ -44,9 +90,14 @@ class TestHelmUpgrade:
     def test_helm_upgrade_succeeds(self) -> None:
         """Verify helm upgrade completes without error.
 
+        Detects and recovers from stuck release states (pending-upgrade,
+        pending-install, failed) before attempting the upgrade.
         Runs helm upgrade with a minor change (annotation bump) and
         verifies the release transitions to 'deployed' state.
         """
+        # Recover from stuck release state if needed (RC-3)
+        _recover_stuck_release(HELM_RELEASE, NAMESPACE)
+
         # Get current revision
         status_result = run_helm(
             ["status", HELM_RELEASE, "-n", NAMESPACE, "-o", "json"],

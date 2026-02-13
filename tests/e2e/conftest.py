@@ -163,6 +163,57 @@ def run_helm(
     )
 
 
+@pytest.fixture(scope="session", autouse=True)
+def helm_release_health() -> None:
+    """Check Helm release health before E2E suite starts.
+
+    Detects stuck Helm releases (pending-upgrade, pending-install, failed)
+    and recovers via rollback. Runs automatically before all E2E tests.
+
+    This prevents cascading test failures when a previous test run left
+    the Helm release in a broken state (RC-3).
+
+    Raises:
+        AssertionError: If recovery fails after detecting stuck state.
+    """
+    import json as _json
+
+    release = "floe-platform"
+    namespace = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
+
+    status_result = run_helm(
+        ["status", release, "-n", namespace, "-o", "json"],
+    )
+    if status_result.returncode != 0:
+        # Release doesn't exist — nothing to check
+        return
+
+    current = _json.loads(status_result.stdout)
+    release_status = current.get("info", {}).get("status", "")
+
+    stuck_states = ("pending-upgrade", "pending-install", "pending-rollback", "failed")
+    if release_status not in stuck_states:
+        return
+
+    current_revision = current.get("version", 1)
+    rollback_revision = max(1, current_revision - 1)
+    print(
+        f"\nWARNING: Helm release '{release}' in '{release_status}' state. "
+        f"Rolling back to revision {rollback_revision} before E2E suite..."
+    )
+
+    rollback_result = run_helm(
+        ["rollback", release, str(rollback_revision), "-n", namespace, "--wait", "--timeout", "5m"],
+    )
+    assert rollback_result.returncode == 0, (
+        f"Helm release recovery failed: {rollback_result.stderr}\n"
+        f"Release stuck in '{release_status}'. Manual fix required:\n"
+        f"  helm rollback {release} {rollback_revision} -n {namespace}\n"
+        f"  # or: helm uninstall {release} -n {namespace} && re-deploy"
+    )
+    print(f"Helm release recovered: rolled back to revision {rollback_revision}")
+
+
 @pytest.fixture(scope="session")
 def e2e_namespace() -> str:
     """Generate unique namespace for E2E test session.
