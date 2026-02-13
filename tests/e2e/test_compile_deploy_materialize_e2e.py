@@ -224,9 +224,7 @@ class TestCompileDeployMaterialize:
         # Verify repositories have location info
         for node in nodes:
             assert "name" in node, f"Repository node missing 'name': {node}"
-            assert "location" in node, (
-                f"Repository '{node['name']}' missing 'location' info"
-            )
+            assert "location" in node, f"Repository '{node['name']}' missing 'location' info"
 
     @pytest.mark.requirement("AC-2.2")
     def test_dagster_assets_visible(

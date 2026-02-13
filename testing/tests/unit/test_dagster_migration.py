@@ -18,9 +18,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-E2E_DEPLOY_TEST = (
-    REPO_ROOT / "tests" / "e2e" / "test_compile_deploy_materialize_e2e.py"
-)
+E2E_DEPLOY_TEST = REPO_ROOT / "tests" / "e2e" / "test_compile_deploy_materialize_e2e.py"
 SENSOR_MODULE = (
     REPO_ROOT
     / "plugins"
@@ -30,11 +28,7 @@ SENSOR_MODULE = (
     / "sensors.py"
 )
 DAGSTER_SRC_DIR = (
-    REPO_ROOT
-    / "plugins"
-    / "floe-orchestrator-dagster"
-    / "src"
-    / "floe_orchestrator_dagster"
+    REPO_ROOT / "plugins" / "floe-orchestrator-dagster" / "src" / "floe_orchestrator_dagster"
 )
 
 
@@ -84,8 +78,7 @@ class TestGraphQLQueryCompatibility:
         """Verify deprecated RepositoryLocationConnection is not used."""
         content = E2E_DEPLOY_TEST.read_text()
         assert "RepositoryLocationConnection" not in content, (
-            "E2E test must NOT use deprecated "
-            "'RepositoryLocationConnection' type."
+            "E2E test must NOT use deprecated 'RepositoryLocationConnection' type."
         )
 
 
@@ -112,7 +105,6 @@ class TestSensorTargetParameter:
     def test_sensor_definition_importable(self) -> None:
         """Verify sensor definition imports and has correct metadata."""
         from dagster import SensorDefinition
-
         from floe_orchestrator_dagster.sensors import health_check_sensor
 
         assert isinstance(health_check_sensor, SensorDefinition)
@@ -129,8 +121,7 @@ class TestSensorTargetParameter:
         from floe_orchestrator_dagster.sensors import health_check_sensor
 
         assert health_check_sensor.asset_selection is not None, (
-            "Sensor must have asset_selection defined at runtime, "
-            "not just in source code."
+            "Sensor must have asset_selection defined at runtime, not just in source code."
         )
 
 
@@ -229,7 +220,4 @@ class TestSourceFileImportAudit:
             try:
                 ast.parse(py_file.read_text())
             except SyntaxError as e:
-                pytest.fail(
-                    f"Syntax error in {py_file.relative_to(REPO_ROOT)}: "
-                    f"{e}"
-                )
+                pytest.fail(f"Syntax error in {py_file.relative_to(REPO_ROOT)}: {e}")

@@ -57,7 +57,7 @@ if "errors" in launch_result:
     pytest.fail(f"Run config invalid: {errors}")
 ```
 - **Context**: Test code propagates GraphQL error messages verbatim to pytest output
-- **Risk Assessment**: 
+- **Risk Assessment**:
   - **Test Code**: ACCEPTABLE - detailed errors aid debugging
   - **Production Code**: Would require sanitization to avoid exposing internal paths/stack traces
 - **Remediation**: None required for test code. For production error handling:
