@@ -3,6 +3,7 @@
   "currentWork": {
     "id": "e2e-platform-gaps",
     "phase": "verifying",
+    "verifyStartedAt": "2026-02-14T08:35:00Z",
     "startedAt": "2026-02-13T10:40:00Z"
   },
   "completedWork": [
@@ -18,8 +19,8 @@
     { "id": "wu-2-cube", "description": "Cube Multi-Arch + Pod Scheduling", "status": "shipped", "order": 2, "tasksCompleted": ["T8", "T9", "T10", "T11"], "pr": "https://github.com/Obsidian-Owl/floe/pull/75" },
     { "id": "wu-3-dagster", "description": "Dagster 2.x SDK Migration (Full Audit)", "status": "shipped", "order": 3, "tasksCompleted": ["T16", "T17", "T18", "T19"], "pr": "https://github.com/Obsidian-Owl/floe/pull/76" },
     { "id": "wu-4-otel", "description": "OTel Pipeline + Label Alignment", "status": "shipped", "order": 4, "tasksCompleted": ["T20", "T21", "T22", "T23", "T24"], "pr": "https://github.com/Obsidian-Owl/floe/pull/77" },
-    { "id": "wu-5-dbt", "description": "dbt Demo Product Pipeline", "status": "verifying", "order": 5, "tasksCompleted": ["T25", "T26", "T27", "T28", "T29"] },
-    { "id": "wu-6-plugin-pipeline", "description": "Plugin Registry + Compilation Pipeline", "status": "pending", "order": 6 },
+    { "id": "wu-5-dbt", "description": "dbt Demo Product Pipeline", "status": "shipped", "order": 5, "tasksCompleted": ["T25", "T26", "T27", "T28", "T29"], "pr": "https://github.com/Obsidian-Owl/floe/pull/78" },
+    { "id": "wu-6-plugin-pipeline", "description": "Plugin Registry + Compilation Pipeline", "status": "building", "order": 6, "tasksCompleted": ["T30", "T31", "T32", "T33", "T34", "T35", "T36", "T37"] },
     { "id": "wu-7-secrets-cve", "description": "Secrets Verification + CVE Bumps", "status": "pending", "order": 7 },
     { "id": "wu-8-polish", "description": "Polaris Health Check + Final Verification", "status": "pending", "order": 8 }
   ],
@@ -58,6 +59,13 @@
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-13T19:35:00Z", "note": "1 Medium theoretical (path traversal in glob), 2 Low" },
       "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-13T19:35:00Z", "note": "Duplicate project_root fixture (INFO), unused profile_name ARG002 (INFO)" },
       "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T19:45:00Z", "note": "WU5-AC2 WARN resolved: helm_release_health guard added in d94335f" }
+    },
+    "wu-6-plugin-pipeline": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T08:40:00Z", "note": "7732 unit + 820 contract tests pass, lint/format clean" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-14T08:40:00Z", "note": "All 4 BLOCKs + 12 WARNs + 6 INFOs resolved. 3 remaining INFOs are pre-existing/justified." },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-14T08:40:00Z", "note": "Token/principal validation added, debug logging added. 1 INFO: internal paths in logs." },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T08:40:00Z", "note": "All findings resolved: re-exports added, logging added, RBACPlugin comment added." },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-14T08:40:00Z", "note": "All 8 ACs mapped with evidence. AC7 INFO: E2E env unavailable (Helm pending-rollback)." }
     }
   }
 }

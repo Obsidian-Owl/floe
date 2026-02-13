@@ -74,6 +74,7 @@ pip-delete-this-directory.txt
 *.local
 .agent/
 .omc/
+.claude/hooks/
 .pre-commit.log
 
 # Local tool state (rebuilt on demand)
