@@ -72,7 +72,7 @@ class TestPluginSystem(IntegrationTestBase):
 
     # Map PluginType enum members to their ABC classes
     # Using Any to satisfy mypy --strict with abstract base classes
-    PLUGIN_ABC_MAP: dict[PluginType, Any] = {
+    PLUGIN_ABC_MAP: ClassVar[dict[PluginType, Any]] = {
         PluginType.COMPUTE: ComputePlugin,
         PluginType.ORCHESTRATOR: OrchestratorPlugin,
         PluginType.CATALOG: CatalogPlugin,
@@ -224,7 +224,7 @@ class TestPluginSystem(IntegrationTestBase):
 
                     self.logger.info(f"ABC compliance passed: {plugin_type.name}:{plugin_name}")
 
-                except Exception as e:
+                except (AssertionError, AttributeError, TypeError) as e:
                     non_compliant.append(f"{plugin_type.name}:{plugin_name} - {e}")
                     self.logger.error(
                         f"ABC compliance failed: {plugin_type.name}:{plugin_name} - {e}"
@@ -281,24 +281,27 @@ class TestPluginSystem(IntegrationTestBase):
         )
 
         # If multiple compute plugins available, verify they produce different dbt profiles
-        if len(compute_plugins) >= 2:
-            profiles_by_plugin: dict[str, Any] = {}
-            for compute_name in compute_plugins:
-                plugin = registry.get(PluginType.COMPUTE, compute_name)
-                if hasattr(plugin, "generate_dbt_profile") and callable(
-                    plugin.generate_dbt_profile
-                ):
-                    profile = plugin.generate_dbt_profile(target="dev", config={})
-                    profiles_by_plugin[compute_name] = profile
+        if len(compute_plugins) < 2:
+            pytest.xfail(
+                f"Plugin swap requires >= 2 compute plugins, found {len(compute_plugins)}. "
+                "Register a second compute plugin to enable swap validation."
+            )
 
-            if len(profiles_by_plugin) >= 2:
-                profile_types = {
-                    p.get("type") for p in profiles_by_plugin.values() if isinstance(p, dict)
-                }
-                assert len(profile_types) >= 2, (
-                    f"SWAP GAP: Different compute plugins produce same dbt profile type: "
-                    f"{profile_types}. Plugin swap should produce functionally different configs."
-                )
+        profiles_by_plugin: dict[str, Any] = {}
+        for compute_name in compute_plugins:
+            plugin = registry.get(PluginType.COMPUTE, compute_name)
+            if hasattr(plugin, "generate_dbt_profile") and callable(plugin.generate_dbt_profile):
+                profile = plugin.generate_dbt_profile(target="dev", config={})
+                profiles_by_plugin[compute_name] = profile
+
+        if len(profiles_by_plugin) >= 2:
+            profile_types = {
+                p.get("type") for p in profiles_by_plugin.values() if isinstance(p, dict)
+            }
+            assert len(profile_types) >= 2, (
+                f"SWAP GAP: Different compute plugins produce same dbt profile type: "
+                f"{profile_types}. Plugin swap should produce functionally different configs."
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-055")
