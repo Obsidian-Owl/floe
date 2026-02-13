@@ -83,6 +83,7 @@ pip-delete-this-directory.txt
 .agentlint/
 .aikido
 .deepeval/
+.specwright/
 
 # Testing artifacts
 target/
