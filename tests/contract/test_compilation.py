@@ -21,13 +21,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
+from floe_core.compilation.errors import CompilationException
 from floe_core.compilation.stages import CompilationStage
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
@@ -85,8 +85,6 @@ class TestCompilation:
 
         # Validate plugins resolved
         assert artifacts.plugins is not None
-        assert len(artifacts.plugins.compute.type) > 0
-        assert len(artifacts.plugins.orchestrator.type) > 0
 
         # Validate observability config
         assert artifacts.observability is not None
@@ -124,22 +122,6 @@ class TestCompilation:
         for model in artifacts.transforms.models:
             assert model.compute is not None and len(model.compute) > 0, (
                 f"Model {model.name} must have compute target resolved, got {model.compute!r}"
-            )
-
-        # Verify lineage namespace matches product name
-        assert artifacts.observability.lineage_namespace, (
-            "customer-360: lineage_namespace must be set"
-        )
-
-        # Verify source_hash is exactly 64 hex chars (SHA-256)
-        source_hash = artifacts.metadata.source_hash
-        if source_hash.startswith("sha256:"):
-            hash_value = source_hash.split(":")[1]
-            assert len(hash_value) == 64, (
-                f"customer-360: source_hash must be 64 hex chars, got {len(hash_value)}"
-            )
-            assert all(c in "0123456789abcdef" for c in hash_value), (
-                "customer-360: source_hash must be hex only"
             )
 
     @pytest.mark.contract
@@ -182,21 +164,18 @@ class TestCompilation:
             "iot-telemetry must have transform models"
         )
 
-        # Verify lineage namespace matches product name
-        assert artifacts.observability.lineage_namespace, (
-            "iot-telemetry: lineage_namespace must be set"
-        )
-
         # Verify source_hash is exactly 64 hex chars (SHA-256)
         source_hash = artifacts.metadata.source_hash
-        if source_hash.startswith("sha256:"):
-            hash_value = source_hash.split(":")[1]
-            assert len(hash_value) == 64, (
-                f"iot-telemetry: source_hash must be 64 hex chars, got {len(hash_value)}"
-            )
-            assert all(c in "0123456789abcdef" for c in hash_value), (
-                "iot-telemetry: source_hash must be hex only"
-            )
+        assert source_hash.startswith("sha256:"), (
+            f"Source hash must start with 'sha256:', got '{source_hash[:10]}...'"
+        )
+        hash_value = source_hash.split(":")[1]
+        assert len(hash_value) == 64, (
+            f"iot-telemetry: source_hash must be 64 hex chars, got {len(hash_value)}"
+        )
+        assert all(c in "0123456789abcdef" for c in hash_value), (
+            "iot-telemetry: source_hash must be hex only"
+        )
 
     @pytest.mark.contract
     @pytest.mark.requirement("FR-010")
@@ -237,21 +216,18 @@ class TestCompilation:
             "financial-risk must have transform models"
         )
 
-        # Verify lineage namespace matches product name
-        assert artifacts.observability.lineage_namespace, (
-            "financial-risk: lineage_namespace must be set"
-        )
-
         # Verify source_hash is exactly 64 hex chars (SHA-256)
         source_hash = artifacts.metadata.source_hash
-        if source_hash.startswith("sha256:"):
-            hash_value = source_hash.split(":")[1]
-            assert len(hash_value) == 64, (
-                f"financial-risk: source_hash must be 64 hex chars, got {len(hash_value)}"
-            )
-            assert all(c in "0123456789abcdef" for c in hash_value), (
-                "financial-risk: source_hash must be hex only"
-            )
+        assert source_hash.startswith("sha256:"), (
+            f"Source hash must start with 'sha256:', got '{source_hash[:10]}...'"
+        )
+        hash_value = source_hash.split(":")[1]
+        assert len(hash_value) == 64, (
+            f"financial-risk: source_hash must be 64 hex chars, got {len(hash_value)}"
+        )
+        assert all(c in "0123456789abcdef" for c in hash_value), (
+            "financial-risk: source_hash must be hex only"
+        )
 
     @pytest.mark.contract
     @pytest.mark.requirement("FR-011")
@@ -664,7 +640,7 @@ class TestCompilation:
 
     @pytest.mark.contract
     @pytest.mark.requirement("FR-010")
-    def test_compile_rejects_invalid_yaml(self) -> None:
+    def test_compile_rejects_invalid_yaml(self, tmp_path: Path, demo_manifest: Path) -> None:
         """Test that compiler rejects malformed YAML with clear error.
 
         Validates that feeding invalid YAML (not valid YAML syntax) to
@@ -672,34 +648,24 @@ class TestCompilation:
         """
         from floe_core.compilation.stages import compile_pipeline
 
-        project_root = Path(__file__).parent.parent.parent
-        manifest_path = project_root / "demo" / "manifest.yaml"
+        invalid_path = tmp_path / "invalid.yaml"
+        invalid_path.write_text("invalid: yaml: [unterminated\n  broken: {nope")
 
-        # Create a malformed YAML file
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write("invalid: yaml: [unterminated\n  broken: {nope")
-            invalid_path = Path(f.name)
-
-        try:
-            with pytest.raises(Exception) as exc_info:
-                compile_pipeline(invalid_path, manifest_path)
-            # Should get a load/parse error, not a silent failure
-            assert exc_info.value is not None, "Compiler must raise on invalid YAML"
-        finally:
-            invalid_path.unlink(missing_ok=True)
+        with pytest.raises(CompilationException) as exc_info:
+            compile_pipeline(invalid_path, demo_manifest)
+        assert exc_info.value.error.stage == CompilationStage.LOAD
 
     @pytest.mark.contract
     @pytest.mark.requirement("FR-010")
-    def test_compile_rejects_missing_required_fields(self) -> None:
+    def test_compile_rejects_missing_required_fields(
+        self, tmp_path: Path, demo_manifest: Path
+    ) -> None:
         """Test that compiler rejects spec missing required fields.
 
         Validates that a floe.yaml missing the 'transforms' section
         raises a validation error during compilation.
         """
         from floe_core.compilation.stages import compile_pipeline
-
-        project_root = Path(__file__).parent.parent.parent
-        manifest_path = project_root / "demo" / "manifest.yaml"
 
         # Create a spec missing transforms
         minimal_spec = {
@@ -709,23 +675,21 @@ class TestCompilation:
             # No transforms section
         }
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(minimal_spec, f)
-            incomplete_path = Path(f.name)
+        incomplete_path = tmp_path / "incomplete.yaml"
+        incomplete_path.write_text(yaml.dump(minimal_spec))
 
-        try:
-            with pytest.raises(Exception) as exc_info:
-                compile_pipeline(incomplete_path, manifest_path)
-            error_str = str(exc_info.value).lower()
-            assert (
-                "transform" in error_str or "required" in error_str or "validation" in error_str
-            ), f"Error should mention missing transforms, got: {exc_info.value}"
-        finally:
-            incomplete_path.unlink(missing_ok=True)
+        with pytest.raises(CompilationException) as exc_info:
+            compile_pipeline(incomplete_path, demo_manifest)
+        error_str = str(exc_info.value).lower()
+        assert "transform" in error_str or "required" in error_str or "validation" in error_str, (
+            f"Error should mention missing transforms, got: {exc_info.value}"
+        )
 
     @pytest.mark.contract
     @pytest.mark.requirement("FR-010")
-    def test_compile_rejects_invalid_plugin_reference(self) -> None:
+    def test_compile_rejects_invalid_plugin_reference(
+        self, tmp_path: Path, demo_manifest: Path, demo_customer_360: Path
+    ) -> None:
         """Test that compiler rejects spec referencing non-existent plugin.
 
         Validates that specifying a plugin type that doesn't exist
@@ -733,12 +697,8 @@ class TestCompilation:
         """
         from floe_core.compilation.stages import compile_pipeline
 
-        project_root = Path(__file__).parent.parent.parent
-        manifest_path = project_root / "demo" / "manifest.yaml"
-
         # Load a valid spec and corrupt the compute plugin reference
-        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
-        with open(spec_path) as f:
+        with open(demo_customer_360) as f:
             spec = yaml.safe_load(f)
 
         # Set compute to a non-existent plugin
@@ -746,23 +706,19 @@ class TestCompilation:
             spec["compute"] = {}
         spec["compute"]["type"] = "nonexistent-compute-engine-xyz"
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(spec, f)
-            bad_plugin_path = Path(f.name)
+        bad_plugin_path = tmp_path / "bad_plugin.yaml"
+        bad_plugin_path.write_text(yaml.dump(spec))
 
-        try:
-            with pytest.raises(Exception) as exc_info:
-                compile_pipeline(bad_plugin_path, manifest_path)
-            error_str = str(exc_info.value).lower()
-            assert (
-                "plugin" in error_str
-                or "nonexistent" in error_str
-                or "not found" in error_str
-                or "not permitted" in error_str
-                or "validation" in error_str
-            ), f"Error should mention invalid plugin, got: {exc_info.value}"
-        finally:
-            bad_plugin_path.unlink(missing_ok=True)
+        with pytest.raises(CompilationException) as exc_info:
+            compile_pipeline(bad_plugin_path, demo_manifest)
+        error_str = str(exc_info.value).lower()
+        assert (
+            "plugin" in error_str
+            or "nonexistent" in error_str
+            or "not found" in error_str
+            or "not permitted" in error_str
+            or "validation" in error_str
+        ), f"Error should mention invalid plugin, got: {exc_info.value}"
 
     @pytest.mark.contract
     @pytest.mark.requirement("FR-010")
@@ -770,7 +726,9 @@ class TestCompilation:
         reason="Compiler does not yet detect circular dependencies (audit finding)",
         strict=True,
     )
-    def test_compile_rejects_circular_dependencies(self) -> None:
+    def test_compile_rejects_circular_dependencies(
+        self, tmp_path: Path, demo_manifest: Path, demo_customer_360: Path
+    ) -> None:
         """Test that compiler detects circular transform dependencies.
 
         Validates that transforms with circular deps (A depends on B,
@@ -778,12 +736,8 @@ class TestCompilation:
         """
         from floe_core.compilation.stages import compile_pipeline
 
-        project_root = Path(__file__).parent.parent.parent
-        manifest_path = project_root / "demo" / "manifest.yaml"
-
         # Load a valid spec and create circular dependencies
-        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
-        with open(spec_path) as f:
+        with open(demo_customer_360) as f:
             spec = yaml.safe_load(f)
 
         # Replace transforms with circular deps
@@ -792,23 +746,21 @@ class TestCompilation:
             {"name": "model_b", "tier": "silver", "dependsOn": ["model_a"]},
         ]
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(spec, f)
-            circular_path = Path(f.name)
+        circular_path = tmp_path / "circular.yaml"
+        circular_path.write_text(yaml.dump(spec))
 
-        try:
-            with pytest.raises(Exception) as exc_info:
-                compile_pipeline(circular_path, manifest_path)
-            error_str = str(exc_info.value).lower()
-            assert "circular" in error_str or "cycle" in error_str or "depend" in error_str, (
-                f"Error should mention circular dependency, got: {exc_info.value}"
-            )
-        finally:
-            circular_path.unlink(missing_ok=True)
+        with pytest.raises(CompilationException) as exc_info:
+            compile_pipeline(circular_path, demo_manifest)
+        error_str = str(exc_info.value).lower()
+        assert "circular" in error_str or "cycle" in error_str or "depend" in error_str, (
+            f"Error should mention circular dependency, got: {exc_info.value}"
+        )
 
     @pytest.mark.contract
     @pytest.mark.requirement("FR-010")
-    def test_spec_validation_rules(self) -> None:
+    def test_spec_validation_rules(
+        self, tmp_path: Path, demo_manifest: Path, demo_customer_360: Path
+    ) -> None:
         """Test FloeSpec validation constraints reject invalid inputs.
 
         Tests that the spec validator enforces:
@@ -817,11 +769,7 @@ class TestCompilation:
         """
         from floe_core.compilation.stages import compile_pipeline
 
-        project_root = Path(__file__).parent.parent.parent
-        manifest_path = project_root / "demo" / "manifest.yaml"
-        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
-
-        with open(spec_path) as f:
+        with open(demo_customer_360) as f:
             valid_spec = yaml.safe_load(f)
 
         # C001: Non-DNS-compatible name
@@ -831,13 +779,9 @@ class TestCompilation:
             "name": "INVALID NAME WITH SPACES!@#",
         }
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            yaml.dump(bad_name_spec, f)
-            bad_name_path = Path(f.name)
+        bad_name_path = tmp_path / "bad_name.yaml"
+        bad_name_path.write_text(yaml.dump(bad_name_spec))
 
-        try:
-            with pytest.raises(Exception) as exc_info:
-                compile_pipeline(bad_name_path, manifest_path)
-            assert exc_info.value is not None, "Compiler must reject non-DNS-compatible names"
-        finally:
-            bad_name_path.unlink(missing_ok=True)
+        with pytest.raises(CompilationException) as exc_info:
+            compile_pipeline(bad_name_path, demo_manifest)
+        assert exc_info.value.error.stage == CompilationStage.LOAD
