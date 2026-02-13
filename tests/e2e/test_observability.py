@@ -426,7 +426,7 @@ class TestObservability(IntegrationTestBase):
                 "-n",
                 "floe-test",
                 "-l",
-                "app.kubernetes.io/component=opentelemetry-collector",
+                "app.kubernetes.io/component=otel",
                 "-o",
                 "jsonpath={.items[*].status.phase}",
             ],
@@ -434,6 +434,14 @@ class TestObservability(IntegrationTestBase):
             text=True,
             timeout=30,
             check=False,
+        )
+
+        # Verify old label is NOT used in this query (negative assertion)
+        # The old label 'opentelemetry-collector' would find zero pods since
+        # the chart uses 'otel' as the component label (configmap-otel.yaml).
+        assert "opentelemetry-collector" not in " ".join(pod_result.args), (
+            "Pod query uses old label 'opentelemetry-collector'. "
+            "Must use 'otel' to match configmap-otel.yaml."
         )
 
         # Pod query MUST succeed -- no silent fallback
@@ -444,7 +452,7 @@ class TestObservability(IntegrationTestBase):
         )
         assert pod_result.stdout.strip(), (
             "INFRASTRUCTURE GAP: No OTel Collector pods found matching label "
-            "app.kubernetes.io/component=opentelemetry-collector.\n"
+            "app.kubernetes.io/component=otel.\n"
             "OTel Collector service exists but no pods are scheduled."
         )
         phases = pod_result.stdout.strip().split()
