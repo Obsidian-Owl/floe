@@ -50,11 +50,13 @@ from floe_core.compilation.quality_inheritance import (
     merge_gate_tiers,
     resolve_quality_inheritance,
 )
-from floe_core.compilation.stages import CompilationStage
+from floe_core.compilation.stages import CompilationStage, compile_pipeline, run_enforce_stage
 
 __all__ = [
     # Stages
     "CompilationStage",
+    "compile_pipeline",
+    "run_enforce_stage",
     # dbt profiles
     "format_env_var_placeholder",
     "generate_dbt_profiles",

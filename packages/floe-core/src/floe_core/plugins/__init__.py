@@ -134,6 +134,8 @@ from floe_core.plugins.telemetry import TelemetryBackendPlugin
 __all__ = [
     # Alert Channel: imported directly from floe_core.plugins.alert_channel
     # to avoid circular import (alert_channel → violations → alert_router → alert_channel)
+    # RBAC: imported directly from floe_core.plugins.rbac
+    # (same pattern as AlertChannelPlugin — omitted from __all__ to avoid circular imports)
     # Catalog
     "Catalog",
     "CatalogPlugin",

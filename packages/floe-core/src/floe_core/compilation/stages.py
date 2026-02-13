@@ -143,7 +143,12 @@ def _discover_plugins_for_audit() -> list[tuple[PluginType, PluginMetadata]]:
     for plugin_type in PluginType:
         try:
             eps = entry_points(group=plugin_type.value)
-        except Exception:
+        except Exception as exc:
+            logger.debug(
+                "audit_entry_point_group_failed",
+                plugin_type=plugin_type.name,
+                error=str(exc),
+            )
             continue
 
         for ep in eps:
@@ -466,6 +471,18 @@ def run_enforce_stage(
     """
     # Local imports to avoid circular dependency
     from floe_core.enforcement.errors import PolicyEnforcementError
+
+    # Validate optional string parameters
+    if token is not None:
+        if not token.strip():
+            raise ValueError("token must be non-empty when provided")
+        if len(token) > 10_000:
+            raise ValueError("token exceeds maximum length")
+    if principal is not None:
+        if not principal.strip():
+            raise ValueError("principal must be non-empty when provided")
+        if len(principal) > 1_000:
+            raise ValueError("principal exceeds maximum length")
 
     log = logger.bind(
         component="run_enforce_stage",
