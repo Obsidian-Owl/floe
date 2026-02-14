@@ -241,7 +241,7 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-023")
     @pytest.mark.xfail(
-        reason="Requires Polaris/Iceberg infrastructure (RC-1/WU-1)",
+        reason="Iceberg-dependent: needs K8s stack. Verify in E2E run.",
         strict=False,
     )
     @pytest.mark.parametrize("product", ALL_PRODUCTS)
@@ -315,7 +315,7 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-020")
     @pytest.mark.xfail(
-        reason="Requires Polaris/Iceberg infrastructure (RC-1/WU-1)",
+        reason="Iceberg-dependent: needs K8s stack. Verify in E2E run.",
         strict=False,
     )
     @pytest.mark.parametrize("product", ALL_PRODUCTS)
@@ -409,7 +409,7 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-021")
     @pytest.mark.xfail(
-        reason="Requires Polaris/Iceberg infrastructure (RC-1/WU-1)",
+        reason="Iceberg-dependent: needs K8s stack. Verify in E2E run.",
         strict=False,
     )
     def test_medallion_layers(
@@ -490,7 +490,7 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-022")
     @pytest.mark.xfail(
-        reason="Requires Polaris/Iceberg infrastructure (RC-1/WU-1)",
+        reason="Iceberg-dependent: needs K8s stack. Verify in E2E run.",
         strict=False,
     )
     def test_iceberg_tables_created(
@@ -567,7 +567,7 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-024")
     @pytest.mark.xfail(
-        reason="Requires Polaris/Iceberg infrastructure (RC-1/WU-1)",
+        reason="Iceberg-dependent: needs K8s stack. Verify in E2E run.",
         strict=False,
     )
     @pytest.mark.parametrize("product", ALL_PRODUCTS)
@@ -636,7 +636,7 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-025")
     @pytest.mark.xfail(
-        reason="Requires Polaris/Iceberg infrastructure (RC-1/WU-1)",
+        reason="Iceberg-dependent: needs K8s stack. Verify in E2E run.",
         strict=False,
     )
     def test_incremental_model_merge(
@@ -689,7 +689,7 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-026")
     @pytest.mark.xfail(
-        reason="Requires Polaris/Iceberg infrastructure (RC-1/WU-1)",
+        reason="Iceberg-dependent: needs K8s stack. Verify in E2E run.",
         strict=False,
     )
     @pytest.mark.parametrize("product", ALL_PRODUCTS)
@@ -749,7 +749,7 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-027")
     @pytest.mark.xfail(
-        reason="Requires Polaris/Iceberg infrastructure (RC-1/WU-1)",
+        reason="Iceberg-dependent: needs K8s stack. Verify in E2E run.",
         strict=False,
     )
     def test_pipeline_failure_recording(
@@ -807,7 +807,7 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-028")
     @pytest.mark.xfail(
-        reason="Requires Polaris/Iceberg infrastructure (RC-1/WU-1)",
+        reason="Iceberg-dependent: needs K8s stack. Verify in E2E run.",
         strict=False,
     )
     def test_pipeline_retry(
@@ -872,7 +872,7 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-029")
     @pytest.mark.xfail(
-        reason="Requires Polaris/Iceberg infrastructure (RC-1/WU-1)",
+        reason="Iceberg-dependent: needs K8s stack. Verify in E2E run.",
         strict=False,
     )
     def test_auto_trigger_sensor_e2e(
@@ -1009,7 +1009,7 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-031")
     @pytest.mark.xfail(
-        reason="Requires Polaris/Iceberg infrastructure (RC-1/WU-1)",
+        reason="Iceberg-dependent: needs K8s stack. Verify in E2E run.",
         strict=False,
     )
     def test_data_retention_enforcement(
@@ -1098,7 +1098,7 @@ class TestDataPipeline(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-032")
     @pytest.mark.xfail(
-        reason="Requires Polaris/Iceberg infrastructure (RC-1/WU-1)",
+        reason="Iceberg-dependent: needs K8s stack. Verify in E2E run.",
         strict=False,
     )
     def test_snapshot_expiry_enforcement(

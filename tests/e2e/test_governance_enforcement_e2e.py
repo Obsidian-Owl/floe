@@ -15,11 +15,9 @@ See Also:
     - .specwright/work/test-hardening-audit/spec.md: AC-2.5
     - packages/floe-core/src/floe_core/compilation/stages.py: ENFORCE stage
 
-Known Gap:
-    compile_pipeline() runs the ENFORCE stage but does NOT pass enforcement_result
-    to build_artifacts(). Tests asserting enforcement_result is not None are marked
-    xfail until the pipeline is fixed. See stages.py:368 — enforcement_result param
-    is missing from the build_artifacts() call.
+Resolved (WU-6 T35):
+    compile_pipeline() now passes enforcement_result to build_artifacts().
+    Previous xfail markers removed — tests should pass.
 """
 
 from __future__ import annotations
@@ -71,13 +69,6 @@ class TestGovernanceEnforcement:
     """
 
     @pytest.mark.requirement("AC-2.5")
-    @pytest.mark.xfail(
-        reason=(
-            "Pipeline gap: compile_pipeline() does not pass enforcement_result "
-            "to build_artifacts() — see stages.py:368"
-        ),
-        strict=True,
-    )
     def test_warn_mode_allows_compilation(
         self,
         compiled_artifacts: Any,
@@ -160,11 +151,10 @@ class TestGovernanceEnforcement:
             f"Expected customer-360, got {artifacts.metadata.product_name}"
         )
 
-        # GAP: enforcement_result is None due to pipeline bug (stages.py:368).
-        # When the pipeline is fixed, uncomment these assertions:
-        # assert artifacts.enforcement_result is not None
-        # assert artifacts.enforcement_result.enforcement_level == "strict"
-        # assert artifacts.enforcement_result.passed is True
+        # Enforcement result populated (WU-6 T35 fixed the pipeline gap)
+        assert artifacts.enforcement_result is not None
+        assert artifacts.enforcement_result.enforcement_level == "strict"
+        assert artifacts.enforcement_result.passed is True
 
     @pytest.mark.requirement("AC-2.5")
     def test_enforcement_level_off_skips_checks(
@@ -205,19 +195,11 @@ class TestGovernanceEnforcement:
         # Compilation should succeed
         assert artifacts.version, "Compilation failed with enforcement=off"
 
-        # GAP: enforcement_result is None due to pipeline bug (stages.py:368).
-        # When the pipeline is fixed, uncomment these assertions:
-        # assert artifacts.enforcement_result is not None
-        # assert artifacts.enforcement_result.passed
+        # Enforcement result populated (WU-6 T35 fixed the pipeline gap)
+        assert artifacts.enforcement_result is not None
+        assert artifacts.enforcement_result.passed
 
     @pytest.mark.requirement("AC-2.5")
-    @pytest.mark.xfail(
-        reason=(
-            "Pipeline gap: compile_pipeline() does not pass enforcement_result "
-            "to build_artifacts() — see stages.py:368"
-        ),
-        strict=True,
-    )
     def test_governance_violations_in_artifacts(
         self,
         compiled_artifacts: Any,
