@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import fnmatch
 import time
+from typing import TYPE_CHECKING
 
 import structlog
 
@@ -19,7 +20,9 @@ from floe_core.contracts.monitoring.violations import (
     ContractViolationEvent,
     ViolationSeverity,
 )
-from floe_core.plugins.alert_channel import AlertChannelPlugin
+
+if TYPE_CHECKING:
+    from floe_core.plugins.alert_channel import AlertChannelPlugin
 
 logger = structlog.get_logger(__name__)
 

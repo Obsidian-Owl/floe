@@ -7,6 +7,7 @@ They ensure that changes to one package don't break consumers.
 from __future__ import annotations
 
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 
@@ -61,3 +62,25 @@ def reset_otel_global_state(
 
     metrics._internal._METER_PROVIDER_SET_ONCE._done = False
     metrics._internal._METER_PROVIDER = MeterProvider()
+
+
+@pytest.fixture(scope="module")
+def project_root() -> Path:
+    """Path to the repository root."""
+    return Path(__file__).parent.parent.parent
+
+
+@pytest.fixture(scope="module")
+def demo_manifest(project_root: Path) -> Path:
+    """Path to demo/manifest.yaml."""
+    path = project_root / "demo" / "manifest.yaml"
+    assert path.exists(), f"Demo manifest not found: {path}"
+    return path
+
+
+@pytest.fixture(scope="module")
+def demo_customer_360(project_root: Path) -> Path:
+    """Path to demo/customer-360/floe.yaml."""
+    path = project_root / "demo" / "customer-360" / "floe.yaml"
+    assert path.exists(), f"Demo spec not found: {path}"
+    return path

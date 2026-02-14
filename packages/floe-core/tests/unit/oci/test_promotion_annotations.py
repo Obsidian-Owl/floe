@@ -1,4 +1,4 @@
-"""Unit tests for OCI annotation size limit handling (T031c).
+"""Unit tests for OCI annotation size limit handling (T032a).
 
 Tests for scenarios where PromotionRecord exceeds OCI annotation size limits:
 - Graceful degradation when record exceeds 64KB
@@ -7,17 +7,19 @@ Tests for scenarios where PromotionRecord exceeds OCI annotation size limits:
 
 Requirements tested:
     NFR-005: OCI annotation size limits
-
-⚠️ TDD: Tests WILL FAIL until T032 implements full promote() logic.
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, Mock, patch
+from typing import TYPE_CHECKING
+from unittest.mock import Mock, patch
 
 import pytest
 
 from floe_core.schemas.promotion import GateResult, GateStatus, PromotionGate
+
+if TYPE_CHECKING:
+    from floe_core.oci.promotion import PromotionController
 
 # OCI annotation size limit (64KB per annotation, 256KB total)
 OCI_ANNOTATION_SIZE_LIMIT = 64 * 1024  # 64KB
@@ -30,7 +32,7 @@ class TestAnnotationSizeLimitHandling:
     """Unit tests for OCI annotation size limit handling (T031c)."""
 
     @pytest.fixture
-    def controller(self) -> MagicMock:
+    def controller(self) -> PromotionController:
         """Create a PromotionController with mocked dependencies."""
         from floe_core.oci.client import OCIClient
         from floe_core.oci.promotion import PromotionController
@@ -69,10 +71,10 @@ class TestAnnotationSizeLimitHandling:
         )
 
     @pytest.mark.requirement("8C-NFR-005")
-    def test_promote_handles_large_promotion_record_gracefully(self, controller: MagicMock) -> None:
+    def test_promote_handles_large_promotion_record_gracefully(
+        self, controller: PromotionController
+    ) -> None:
         """Test promote() handles PromotionRecord exceeding 64KB gracefully.
-
-        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
 
         When a PromotionRecord's serialized size exceeds 64KB, the system should:
         1. Truncate large fields (gate result details)
@@ -114,13 +116,10 @@ class TestAnnotationSizeLimitHandling:
             mock_store.assert_called_once()
 
     @pytest.mark.requirement("8C-NFR-005")
-    @pytest.mark.xfail(reason="T032a: Annotation truncation logic not yet implemented")
     def test_promote_truncates_gate_details_when_exceeding_limit(
-        self, controller: MagicMock
+        self, controller: PromotionController
     ) -> None:
         """Test promote() truncates gate details when record exceeds size limit.
-
-        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
 
         Large gate result details should be truncated while preserving:
         - Gate name
@@ -162,7 +161,7 @@ class TestAnnotationSizeLimitHandling:
             )
 
             # Check the stored record was truncated
-            stored_record = mock_store.call_args[0][0]
+            stored_record = mock_store.call_args[0][1]
 
             # Core fields must be preserved
             assert stored_record.promotion_id is not None
@@ -182,11 +181,11 @@ class TestAnnotationSizeLimitHandling:
             assert len(serialized.encode("utf-8")) < OCI_ANNOTATION_SIZE_LIMIT
 
     @pytest.mark.requirement("8C-NFR-005")
-    @pytest.mark.xfail(reason="T032a: Annotation truncation warning logging not yet implemented")
-    def test_promote_logs_warning_when_truncation_occurs(self, controller: MagicMock) -> None:
+    def test_promote_logs_warning_when_truncation_occurs(
+        self,
+        controller: PromotionController,
+    ) -> None:
         """Test promote() logs warning when record truncation occurs.
-
-        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
 
         When truncation is needed, a warning should be logged indicating:
         - Original size
@@ -204,7 +203,7 @@ class TestAnnotationSizeLimitHandling:
             patch.object(controller, "_create_env_tag") as mock_create_tag,
             patch.object(controller, "_update_latest_tag"),
             patch.object(controller, "_store_promotion_record"),
-            patch("floe_core.oci.promotion.logger") as mock_logger,
+            patch.object(controller, "_log") as mock_log,
         ):
             mock_gates.return_value = [large_gate_result]
             mock_verify.return_value = Mock(status="valid")
@@ -221,22 +220,16 @@ class TestAnnotationSizeLimitHandling:
             # Warning should have been logged about truncation
             warning_calls = [
                 call
-                for call in mock_logger.warning.call_args_list
+                for call in mock_log.warning.call_args_list
                 if "truncat" in str(call).lower() or "size" in str(call).lower()
             ]
             assert len(warning_calls) >= 1, "Expected warning about truncation"
 
     @pytest.mark.requirement("8C-NFR-005")
-    @pytest.mark.xfail(
-        reason="T032a: TEST_SUITE gate not in PromotionGate enum, "
-        "error preservation logic incomplete"
-    )
     def test_promote_preserves_error_messages_during_truncation(
-        self, controller: MagicMock
+        self, controller: PromotionController
     ) -> None:
         """Test promote() preserves error messages when truncating gate details.
-
-        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
 
         Error messages are critical for debugging and should be preserved
         even when other details are truncated.
@@ -244,7 +237,7 @@ class TestAnnotationSizeLimitHandling:
 
         # Gate with error and large details
         gate_with_error = GateResult(
-            gate=PromotionGate.TEST_SUITE,
+            gate=PromotionGate.TESTS,
             status=GateStatus.PASSED,
             duration_ms=5000,
             error="Test suite had 3 flaky tests but passed on retry",
@@ -276,7 +269,7 @@ class TestAnnotationSizeLimitHandling:
             )
 
             # Check stored record preserves error message
-            stored_record = mock_store.call_args[0][0]
+            stored_record = mock_store.call_args[0][1]
             assert len(stored_record.gate_results) == 1
 
             # Error message must be preserved
@@ -284,14 +277,8 @@ class TestAnnotationSizeLimitHandling:
             assert stored_gate.error == "Test suite had 3 flaky tests but passed on retry"
 
     @pytest.mark.requirement("8C-NFR-005")
-    @pytest.mark.xfail(
-        reason="T032a: _store_promotion_record mock interface mismatch - "
-        "stores string not PromotionRecord"
-    )
-    def test_promote_small_record_not_truncated(self, controller: MagicMock) -> None:
+    def test_promote_small_record_not_truncated(self, controller: PromotionController) -> None:
         """Test promote() does not truncate records under size limit.
-
-        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
 
         Records under 64KB should be stored as-is without any truncation.
         """
@@ -329,7 +316,7 @@ class TestAnnotationSizeLimitHandling:
             )
 
             # Check stored record has full details
-            stored_record = mock_store.call_args[0][0]
+            stored_record = mock_store.call_args[0][1]
             stored_gate = stored_record.gate_results[0]
 
             # Details should be preserved as-is
@@ -339,13 +326,11 @@ class TestAnnotationSizeLimitHandling:
             }
 
     @pytest.mark.requirement("8C-NFR-005")
-    @pytest.mark.xfail(
-        reason="T032a: TEST_SUITE gate not in PromotionGate enum, truncation logic incomplete"
-    )
-    def test_promote_handles_multiple_large_gates_efficiently(self, controller: MagicMock) -> None:
+    def test_promote_handles_multiple_large_gates_efficiently(
+        self,
+        controller: PromotionController,
+    ) -> None:
         """Test promote() handles multiple large gate results efficiently.
-
-        ⚠️ TDD: This test WILL FAIL until T032 implements full promote() logic.
 
         When multiple gates have large details, truncation should be applied
         proportionally to keep total size under limit.
@@ -367,7 +352,7 @@ class TestAnnotationSizeLimitHandling:
                 details={"output": "b" * 30000},  # 30KB
             ),
             GateResult(
-                gate=PromotionGate.TEST_SUITE,
+                gate=PromotionGate.TESTS,
                 status=GateStatus.PASSED,
                 duration_ms=300,
                 details={"output": "c" * 30000},  # 30KB
@@ -400,7 +385,7 @@ class TestAnnotationSizeLimitHandling:
             assert isinstance(result, PromotionRecord)
 
             # All gates should be present
-            stored_record = mock_store.call_args[0][0]
+            stored_record = mock_store.call_args[0][1]
             assert len(stored_record.gate_results) == 3
 
             # Total size should be under limit
