@@ -15,11 +15,9 @@ See Also:
     - .specwright/work/test-hardening-audit/spec.md: AC-2.5
     - packages/floe-core/src/floe_core/compilation/stages.py: ENFORCE stage
 
-Known Gap:
-    compile_pipeline() runs the ENFORCE stage but does NOT pass enforcement_result
-    to build_artifacts(). Tests asserting enforcement_result is not None are marked
-    xfail until the pipeline is fixed. See stages.py:368 — enforcement_result param
-    is missing from the build_artifacts() call.
+Resolved (WU-6 T35):
+    compile_pipeline() now passes enforcement_result to build_artifacts().
+    Previous xfail markers removed — tests should pass.
 """
 
 from __future__ import annotations
@@ -71,13 +69,6 @@ class TestGovernanceEnforcement:
     """
 
     @pytest.mark.requirement("AC-2.5")
-    @pytest.mark.xfail(
-        reason=(
-            "Pipeline gap: compile_pipeline() does not pass enforcement_result "
-            "to build_artifacts() — see stages.py:368"
-        ),
-        strict=True,
-    )
     def test_warn_mode_allows_compilation(
         self,
         compiled_artifacts: Any,
@@ -102,6 +93,10 @@ class TestGovernanceEnforcement:
         )
 
         # In warn mode, enforcement should pass (warnings don't block)
+        assert artifacts.enforcement_result.enforcement_level == "warn", (
+            f"Expected enforcement_level='warn', got "
+            f"'{artifacts.enforcement_result.enforcement_level}'"
+        )
         assert artifacts.enforcement_result.passed, (
             f"Enforcement FAILED in warn mode (should only warn).\n"
             f"Error count: {artifacts.enforcement_result.error_count}\n"
@@ -109,7 +104,7 @@ class TestGovernanceEnforcement:
         )
 
     @pytest.mark.requirement("AC-2.5")
-    def test_strict_mode_blocks_violation(
+    def test_strict_mode_passes_valid_spec(
         self,
         project_root: Path,
         tmp_path: Path,
@@ -160,11 +155,76 @@ class TestGovernanceEnforcement:
             f"Expected customer-360, got {artifacts.metadata.product_name}"
         )
 
-        # GAP: enforcement_result is None due to pipeline bug (stages.py:368).
-        # When the pipeline is fixed, uncomment these assertions:
-        # assert artifacts.enforcement_result is not None
-        # assert artifacts.enforcement_result.enforcement_level == "strict"
-        # assert artifacts.enforcement_result.passed is True
+        # Enforcement result populated (WU-6 T35 fixed the pipeline gap)
+        assert artifacts.enforcement_result is not None
+        assert artifacts.enforcement_result.enforcement_level == "strict"
+        assert artifacts.enforcement_result.passed is True
+
+    @pytest.mark.requirement("AC-2.5")
+    def test_strict_mode_rejects_undocumented_models(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Verify strict mode enforcement rejects models missing descriptions.
+
+        Uses run_enforce_stage() directly with a dbt manifest containing a
+        model without a description and governance requiring descriptions.
+        This is the negative-path test: strict mode MUST reject violations.
+        """
+        from floe_core.compilation.stages import run_enforce_stage
+        from floe_core.enforcement.errors import PolicyEnforcementError
+        from floe_core.schemas.governance import QualityGatesConfig
+        from floe_core.schemas.manifest import GovernanceConfig
+
+        # dbt manifest with a model that has NO description
+        dbt_manifest: dict[str, Any] = {
+            "metadata": {"dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json"},
+            "nodes": {
+                "model.test.undocumented_model": {
+                    "resource_type": "model",
+                    "name": "undocumented_model",
+                    "schema": "public",
+                    "description": "",
+                    "columns": {
+                        "id": {"name": "id", "description": "", "data_type": "integer"},
+                    },
+                    "config": {"materialized": "table"},
+                    "fqn": ["test", "undocumented_model"],
+                    "unique_id": "model.test.undocumented_model",
+                    "path": "undocumented_model.sql",
+                },
+            },
+        }
+
+        # Strict governance with require_descriptions
+        governance = GovernanceConfig(
+            policy_enforcement_level="strict",
+            audit_logging="enabled",
+            data_retention_days=1,
+            quality_gates=QualityGatesConfig(
+                minimum_test_coverage=0,
+                require_descriptions=True,
+                require_column_descriptions=True,
+                block_on_failure=True,
+            ),
+        )
+
+        with pytest.raises(PolicyEnforcementError) as exc_info:
+            run_enforce_stage(
+                governance_config=governance,
+                dbt_manifest=dbt_manifest,
+                dry_run=False,
+                project_dir=tmp_path,
+            )
+
+        # Verify violation details — PolicyEnforcementError stores violations
+        assert len(exc_info.value.violations) > 0, (
+            "PolicyEnforcementError raised but contains no violations"
+        )
+        error_violations = [v for v in exc_info.value.violations if v.severity == "error"]
+        assert len(error_violations) > 0, (
+            "Expected error-severity violations for missing descriptions"
+        )
 
     @pytest.mark.requirement("AC-2.5")
     def test_enforcement_level_off_skips_checks(
@@ -205,19 +265,15 @@ class TestGovernanceEnforcement:
         # Compilation should succeed
         assert artifacts.version, "Compilation failed with enforcement=off"
 
-        # GAP: enforcement_result is None due to pipeline bug (stages.py:368).
-        # When the pipeline is fixed, uncomment these assertions:
-        # assert artifacts.enforcement_result is not None
-        # assert artifacts.enforcement_result.passed
+        # Enforcement result populated (WU-6 T35 fixed the pipeline gap)
+        assert artifacts.enforcement_result is not None
+        assert artifacts.enforcement_result.enforcement_level == "off", (
+            f"Expected enforcement_level='off', got "
+            f"'{artifacts.enforcement_result.enforcement_level}'"
+        )
+        assert artifacts.enforcement_result.passed
 
     @pytest.mark.requirement("AC-2.5")
-    @pytest.mark.xfail(
-        reason=(
-            "Pipeline gap: compile_pipeline() does not pass enforcement_result "
-            "to build_artifacts() — see stages.py:368"
-        ),
-        strict=True,
-    )
     def test_governance_violations_in_artifacts(
         self,
         compiled_artifacts: Any,

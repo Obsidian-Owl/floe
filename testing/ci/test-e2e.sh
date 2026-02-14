@@ -124,8 +124,8 @@ echo "Setting up port-forwards for Helm chart services..."
 kubectl port-forward svc/floe-platform-dagster-webserver 3000:80 -n "${TEST_NAMESPACE}" &
 DAGSTER_PF_PID=$!
 
-# Polaris (port 8181 -> localhost:8181)
-kubectl port-forward svc/floe-platform-polaris 8181:8181 -n "${TEST_NAMESPACE}" &
+# Polaris catalog API (8181) + management health (8182) — single process, two ports
+kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n "${TEST_NAMESPACE}" &
 POLARIS_PF_PID=$!
 
 # MinIO API (port 9000 -> localhost:9000)
@@ -160,6 +160,7 @@ POSTGRES_PF_PID=$!
 # Wait for port-forwards to establish
 wait_for_port localhost 3000 15
 wait_for_port localhost 8181 15
+wait_for_port localhost 8182 15
 wait_for_port localhost 9000 15
 wait_for_port localhost 4317 15
 wait_for_port localhost 5432 15
