@@ -85,6 +85,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
     # Only NodePort-accessible services (ClusterIP-only services checked individually)
     required_services = [
         ("polaris", 8181),
+        ("polaris-mgmt", 8182),
         ("dagster-webserver", 3000),
         ("minio", 9000),
         ("jaeger-query", 16686),
@@ -173,7 +174,8 @@ class TestPlatformBootstrap(IntegrationTestBase):
 
         Validates FR-003 by querying each exposed NodePort service:
         - Dagster webserver: localhost:3000
-        - Polaris catalog: localhost:8181
+        - Polaris catalog API: localhost:8181
+        - Polaris management health: localhost:8182
         - MinIO API: localhost:9000
         - MinIO UI: localhost:9001
         - Jaeger query: localhost:16686
@@ -190,6 +192,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
         # Define core NodePort service endpoints (always deployed)
         core_services = [
             ("http://localhost:3000/server_info", "Dagster webserver"),
+            ("http://localhost:8181/api/catalog/v1/config", "Polaris catalog API"),
             ("http://localhost:8182/q/health/ready", "Polaris management health"),
             ("http://localhost:9000/minio/health/live", "MinIO API"),
             ("http://localhost:9001/minio/health/live", "MinIO UI"),

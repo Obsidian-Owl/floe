@@ -19,6 +19,7 @@ fi
 # Required ports: Polaris, Dagster, MinIO, Jaeger, Marquez
 declare -A PORTS=(
   [Polaris]=8181
+  [Polaris-mgmt]=8182
   [Dagster]=3000
   [MinIO]=9000
   [Jaeger]=16686

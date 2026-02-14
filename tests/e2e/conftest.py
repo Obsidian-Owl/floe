@@ -328,6 +328,8 @@ def wait_for_service() -> Callable[..., None]:
         url: str,
         timeout: float = 60.0,
         description: str | None = None,
+        *,
+        strict_status: bool = False,
     ) -> None:
         """Wait for HTTP service to become available.
 
@@ -335,6 +337,9 @@ def wait_for_service() -> Callable[..., None]:
             url: URL to poll for HTTP 200 response.
             timeout: Maximum wait time in seconds. Defaults to 60.0.
             description: Description for error messages.
+            strict_status: If True, require HTTP 200 exactly. If False,
+                accept any non-5xx response. Use True for health endpoints
+                that return 503 when not ready.
 
         Raises:
             TimeoutError: If service not ready within timeout.
@@ -344,6 +349,8 @@ def wait_for_service() -> Callable[..., None]:
         def check_http() -> bool:
             try:
                 response = httpx.get(url, timeout=5.0)
+                if strict_status:
+                    return response.status_code == 200
                 return response.status_code < 500
             except (httpx.HTTPError, OSError):
                 return False
@@ -422,6 +429,7 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         f"{polaris_mgmt_url}/q/health/ready",
         timeout=polaris_timeout,
         description="Polaris management health",
+        strict_status=True,
     )
 
     # Import here to fail properly if not installed
