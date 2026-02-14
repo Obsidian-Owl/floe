@@ -77,6 +77,15 @@ prerelease = "allow"
 # CI installs from lock file directly (no re-resolution)
 # See: https://mkennedy.codes/posts/devops-python-supply-chain-security/
 
+# Minimum version floors for transitive dependencies with known CVEs.
+# constraint-dependencies sets floors without forcing resolution — if a package
+# appears in the tree, it must be at least this version.
+constraint-dependencies = [
+    "diskcache>=5.6.4",
+    "pillow>=12.1.1",
+    "protobuf>=6.33.5",
+]
+
 [tool.uv.sources]
 floe-core = { path = "packages/floe-core", editable = true }
 floe-iceberg = { path = "packages/floe-iceberg", editable = true }
