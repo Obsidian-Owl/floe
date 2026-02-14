@@ -23,6 +23,7 @@ See Also:
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -72,7 +73,10 @@ class TestCompileDeployMaterialize:
             artifacts = compiled_artifacts(spec_path)
 
             # Verify version is valid semver
-            assert artifacts.version, f"CompiledArtifacts.version is empty for {product_name}"
+            assert re.match(r"^\d+\.\d+\.\d+$", artifacts.version), (
+                f"CompiledArtifacts.version must be semver, "
+                f"got '{artifacts.version}' for {product_name}"
+            )
 
             # Verify metadata has correct product name
             assert artifacts.metadata.product_name == product_name, (
@@ -126,13 +130,6 @@ class TestCompileDeployMaterialize:
         )
 
     @pytest.mark.requirement("AC-2.2")
-    @pytest.mark.xfail(
-        reason=(
-            "Pipeline gap: compile_pipeline() does not pass enforcement_result "
-            "to build_artifacts() — see stages.py:368"
-        ),
-        strict=True,
-    )
     def test_compiled_artifacts_enforcement(
         self,
         compiled_artifacts: Callable[[Path], Any],
@@ -214,7 +211,7 @@ class TestCompileDeployMaterialize:
             pytest.fail(f"Dagster repository error: {repos_data['message']}")
 
         nodes = repos_data.get("nodes", [])
-        # Verify at least one repository is loaded
+        # Dynamic count depends on deployment config — cannot assert exact value
         assert len(nodes) > 0, (
             "No Dagster repositories found.\n"
             "The floe-jobs chart should configure workspace with demo products.\n"
@@ -351,7 +348,7 @@ class TestCompileDeployMaterialize:
     @pytest.mark.requirement("AC-2.2")
     @pytest.mark.xfail(
         reason="Requires code location mounting in Kind — validates intent",
-        strict=False,
+        strict=True,
     )
     def test_trigger_asset_materialization(
         self,
@@ -475,7 +472,7 @@ class TestCompileDeployMaterialize:
     @pytest.mark.requirement("AC-2.2")
     @pytest.mark.xfail(
         reason="Requires code location mounting in Kind — validates intent",
-        strict=False,
+        strict=True,
     )
     def test_iceberg_tables_exist_after_materialization(
         self,

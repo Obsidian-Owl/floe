@@ -1760,6 +1760,64 @@ class PromotionController:
 
         return latest_tag
 
+    # OCI annotation size limit: 64KB per annotation (NFR-005)
+    _OCI_ANNOTATION_SIZE_LIMIT = 64 * 1024
+
+    def _truncate_record_for_storage(
+        self,
+        record: PromotionRecord,
+    ) -> PromotionRecord:
+        """Truncate a PromotionRecord to fit within OCI annotation size limit.
+
+        Progressively truncates gate_results[].details while preserving
+        core fields (gate, status, duration_ms, error).
+
+        Args:
+            record: Original promotion record.
+
+        Returns:
+            Record with truncated gate details if over limit, or original.
+        """
+        serialized = record.model_dump_json()
+        original_size = len(serialized.encode("utf-8"))
+
+        if original_size <= self._OCI_ANNOTATION_SIZE_LIMIT:
+            return record
+
+        # Truncate gate result details to fit within limit
+        self._log.warning(
+            "promotion_record_truncation_required",
+            original_size=original_size,
+            size_limit=self._OCI_ANNOTATION_SIZE_LIMIT,
+            gate_count=len(record.gate_results),
+        )
+
+        truncated_gates = [
+            GateResult(
+                gate=gr.gate,
+                status=gr.status,
+                duration_ms=gr.duration_ms,
+                error=gr.error,
+                details={"_truncated": True},
+            )
+            for gr in record.gate_results
+        ]
+
+        truncated_record = record.model_copy(
+            update={"gate_results": truncated_gates},
+        )
+
+        truncated_size = len(truncated_record.model_dump_json().encode("utf-8"))
+
+        self._log.warning(
+            "promotion_record_truncated",
+            original_size=original_size,
+            truncated_size=truncated_size,
+            size_limit=self._OCI_ANNOTATION_SIZE_LIMIT,
+        )
+
+        return truncated_record
+
     def _store_promotion_record(
         self,
         tag: str,
@@ -2189,10 +2247,13 @@ class PromotionController:
                     warnings=warnings.copy(),  # Copy current warnings
                 )
 
+                # Truncate record for storage if it exceeds annotation size limit (NFR-005)
+                storage_record = self._truncate_record_for_storage(preliminary_record)
+
                 for attempt in range(max_retries):
                     try:
                         env_tag = f"{tag}-{to_env}"
-                        self._store_promotion_record(env_tag, preliminary_record)
+                        self._store_promotion_record(env_tag, storage_record)
                         break
                     except Exception as e:
                         if attempt < max_retries - 1:

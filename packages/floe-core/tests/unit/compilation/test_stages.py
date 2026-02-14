@@ -10,46 +10,12 @@ Requirements:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-from unittest.mock import patch
+from typing import Any
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
-
-if TYPE_CHECKING:
-    pass
-
-
-@pytest.fixture(autouse=True)
-def patch_version_compat() -> Any:
-    """Patch version compatibility to allow DuckDB plugin (1.0) with platform (0.1)."""
-    with patch("floe_core.plugins.loader.is_compatible", return_value=True):
-        yield
-
-
-@pytest.fixture(autouse=True)
-def mock_compute_plugin() -> Any:
-    """Mock get_compute_plugin to return a plugin with no config schema (like DuckDB).
-
-    This allows unit tests to run without the actual DuckDB plugin installed.
-    The mock plugin returns None for get_config_schema(), simulating DuckDB's
-    behavior of requiring no credentials.
-    """
-    from unittest.mock import MagicMock
-
-    mock_plugin = MagicMock()
-    mock_plugin.get_config_schema.return_value = None  # DuckDB has no required config
-    mock_plugin.generate_dbt_profile.return_value = {
-        "type": "duckdb",
-        "path": ":memory:",
-    }
-
-    with patch(
-        "floe_core.compilation.dbt_profiles.get_compute_plugin",
-        return_value=mock_plugin,
-    ):
-        yield
 
 
 class TestCompilationStage:
@@ -72,12 +38,16 @@ class TestCompilationStage:
 
     @pytest.mark.requirement("FR-031")
     def test_stage_descriptions(self) -> None:
-        """Test that all stages have descriptions."""
+        """Test that all stages have unique descriptions."""
         from floe_core.compilation.stages import CompilationStage
 
-        for stage in CompilationStage:
-            assert isinstance(stage.description, str)
-            assert len(stage.description) > 0
+        descriptions = [stage.description for stage in CompilationStage]
+        for desc in descriptions:
+            assert isinstance(desc, str)
+            assert len(desc) > 0
+
+        # W5: Verify descriptions are unique
+        assert len(set(descriptions)) == len(descriptions), "Stage descriptions must be unique"
 
     @pytest.mark.requirement("FR-031")
     def test_all_six_stages_exist(self) -> None:
@@ -92,116 +62,40 @@ class TestCompilationStage:
 class TestCompilePipeline:
     """Tests for compile_pipeline orchestrator function."""
 
+    @pytest.fixture(autouse=True)
+    def _apply_mocks(self, patch_version_compat: Any, mock_compute_plugin: Any) -> None:
+        """Apply plugin mocks for compilation tests."""
+
     @pytest.mark.requirement("FR-031")
-    def test_compile_pipeline_returns_compiled_artifacts(self, tmp_path: Path) -> None:
+    def test_compile_pipeline_returns_compiled_artifacts(
+        self, spec_path: Path, manifest_path: Path
+    ) -> None:
         """Test that compile_pipeline returns CompiledArtifacts."""
         from floe_core.compilation.stages import compile_pipeline
         from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
-        # Create minimal valid spec
-        spec_path = tmp_path / "floe.yaml"
-        spec_path.write_text("""
-apiVersion: floe.dev/v1
-kind: FloeSpec
-metadata:
-  name: test-product
-  version: 1.0.0
-transforms:
-  - name: customers
-    tags: []
-""")
-
-        # Create minimal valid manifest
-        manifest_path = tmp_path / "manifest.yaml"
-        manifest_path.write_text("""
-apiVersion: floe.dev/v1
-kind: Manifest
-metadata:
-  name: test-platform
-  version: 1.0.0
-  owner: test@example.com
-plugins:
-  compute:
-    type: duckdb
-  orchestrator:
-    type: dagster
-""")
-
         result = compile_pipeline(spec_path, manifest_path)
 
         assert isinstance(result, CompiledArtifacts)
+        # I22: Verify actual content, not just type
+        assert result.metadata.product_name == "test-product"
 
     @pytest.mark.requirement("FR-031")
-    def test_compile_pipeline_version(self, tmp_path: Path) -> None:
-        """Test that compile_pipeline produces version 0.2.0 artifacts."""
+    def test_compile_pipeline_version(self, spec_path: Path, manifest_path: Path) -> None:
+        """Test that compile_pipeline produces correct version artifacts."""
         from floe_core.compilation.stages import compile_pipeline
-
-        spec_path = tmp_path / "floe.yaml"
-        spec_path.write_text("""
-apiVersion: floe.dev/v1
-kind: FloeSpec
-metadata:
-  name: test-product
-  version: 1.0.0
-transforms:
-  - name: customers
-    tags: []
-""")
-
-        manifest_path = tmp_path / "manifest.yaml"
-        manifest_path.write_text("""
-apiVersion: floe.dev/v1
-kind: Manifest
-metadata:
-  name: test-platform
-  version: 1.0.0
-  owner: test@example.com
-plugins:
-  compute:
-    type: duckdb
-  orchestrator:
-    type: dagster
-""")
 
         result = compile_pipeline(spec_path, manifest_path)
 
         assert result.version == COMPILED_ARTIFACTS_VERSION
 
     @pytest.mark.requirement("FR-031")
-    def test_compile_pipeline_has_plugins(self, tmp_path: Path) -> None:
+    def test_compile_pipeline_has_plugins(self, spec_path: Path, manifest_path: Path) -> None:
         """Test that compile_pipeline produces resolved plugins."""
         from floe_core.compilation.stages import compile_pipeline
 
-        spec_path = tmp_path / "floe.yaml"
-        spec_path.write_text("""
-apiVersion: floe.dev/v1
-kind: FloeSpec
-metadata:
-  name: test-product
-  version: 1.0.0
-transforms:
-  - name: customers
-    tags: []
-""")
-
-        manifest_path = tmp_path / "manifest.yaml"
-        manifest_path.write_text("""
-apiVersion: floe.dev/v1
-kind: Manifest
-metadata:
-  name: test-platform
-  version: 1.0.0
-  owner: test@example.com
-plugins:
-  compute:
-    type: duckdb
-  orchestrator:
-    type: dagster
-""")
-
         result = compile_pipeline(spec_path, manifest_path)
 
-        assert result.plugins is not None
         assert result.plugins.compute.type == "duckdb"
         assert result.plugins.orchestrator.type == "dagster"
 
@@ -248,36 +142,9 @@ plugins:
         assert result.transforms.models[1].name == "orders"
 
     @pytest.mark.requirement("FR-031")
-    def test_compile_pipeline_has_dbt_profiles(self, tmp_path: Path) -> None:
+    def test_compile_pipeline_has_dbt_profiles(self, spec_path: Path, manifest_path: Path) -> None:
         """Test that compile_pipeline generates dbt profiles."""
         from floe_core.compilation.stages import compile_pipeline
-
-        spec_path = tmp_path / "floe.yaml"
-        spec_path.write_text("""
-apiVersion: floe.dev/v1
-kind: FloeSpec
-metadata:
-  name: test-product
-  version: 1.0.0
-transforms:
-  - name: customers
-    tags: []
-""")
-
-        manifest_path = tmp_path / "manifest.yaml"
-        manifest_path.write_text("""
-apiVersion: floe.dev/v1
-kind: Manifest
-metadata:
-  name: test-platform
-  version: 1.0.0
-  owner: test@example.com
-plugins:
-  compute:
-    type: duckdb
-  orchestrator:
-    type: dagster
-""")
 
         result = compile_pipeline(spec_path, manifest_path)
 
@@ -351,11 +218,74 @@ plugins:
         assert "compute" in exc_info.value.error.message.lower()
 
 
+class TestEnforcementResult:
+    """Tests for enforcement result in compilation pipeline."""
+
+    @pytest.fixture(autouse=True)
+    def _apply_mocks(self, patch_version_compat: Any, mock_compute_plugin: Any) -> None:
+        """Apply plugin mocks for compilation tests."""
+
+    @pytest.mark.requirement("FR-031")
+    def test_compile_pipeline_produces_enforcement_result(
+        self, spec_path: Path, manifest_path: Path
+    ) -> None:
+        """Test that compile_pipeline produces non-None enforcement_result.
+
+        The ENFORCE stage builds an EnforcementResultSummary from
+        pre-manifest policy checks (plugin instrumentation, sink whitelist).
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        # W6: Remove redundant `is not None` -- access attributes directly
+        assert result.enforcement_result.passed is True
+        assert result.enforcement_result.error_count == 0
+        assert "plugin_instrumentation" in result.enforcement_result.policy_types_checked
+        assert result.enforcement_result.enforcement_level == "warn"
+
+    @pytest.mark.requirement("FR-031")
+    def test_enforcement_result_counts_audit_warnings(
+        self, spec_path: Path, manifest_path: Path
+    ) -> None:
+        """Test that enforcement_result warning_count reflects instrumentation audit.
+
+        B2: Monkeypatch _discover_plugins_for_audit with known instrumented/uninstrumented
+        plugins, then assert exact warning count == 1.
+        """
+        from floe_core.compilation import stages as stages_mod
+        from floe_core.compilation.stages import compile_pipeline
+        from floe_core.plugin_types import PluginType
+
+        instrumented = MagicMock()
+        type(instrumented).tracer_name = PropertyMock(return_value="my.tracer")
+        uninstrumented = MagicMock()
+        type(uninstrumented).tracer_name = PropertyMock(return_value=None)
+
+        with patch.object(
+            stages_mod,
+            "_discover_plugins_for_audit",
+            return_value=[
+                (PluginType.COMPUTE, instrumented),
+                (PluginType.CATALOG, uninstrumented),
+            ],
+        ):
+            result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result.warning_count == 1
+
+
 class TestOpenTelemetryTracing:
     """Tests for OpenTelemetry tracing in compilation pipeline (FR-013)."""
 
+    @pytest.fixture(autouse=True)
+    def _apply_mocks(self, patch_version_compat: Any, mock_compute_plugin: Any) -> None:
+        """Apply plugin mocks for compilation tests."""
+
     @pytest.mark.requirement("FR-013")
-    def test_compile_pipeline_creates_parent_span(self, tmp_path: Path) -> None:
+    def test_compile_pipeline_creates_parent_span(
+        self, spec_path: Path, manifest_path: Path
+    ) -> None:
         """Test that compile_pipeline creates a parent span for the pipeline."""
         from opentelemetry import trace
         from opentelemetry.sdk.trace import TracerProvider
@@ -364,7 +294,6 @@ class TestOpenTelemetryTracing:
             InMemorySpanExporter,
         )
 
-        from floe_core.compilation.stages import compile_pipeline
         from floe_core.telemetry.tracing import set_tracer
 
         # Set up in-memory span exporter
@@ -375,34 +304,9 @@ class TestOpenTelemetryTracing:
         set_tracer(provider.get_tracer("floe_core.telemetry"))
 
         try:
-            # Create minimal valid spec
-            spec_path = tmp_path / "floe.yaml"
-            spec_path.write_text("""
-apiVersion: floe.dev/v1
-kind: FloeSpec
-metadata:
-  name: test-product
-  version: 1.0.0
-transforms:
-  - name: customers
-    tags: []
-""")
-
-            manifest_path = tmp_path / "manifest.yaml"
-            manifest_path.write_text("""
-apiVersion: floe.dev/v1
-kind: Manifest
-metadata:
-  name: test-platform
-  version: 1.0.0
-  owner: test@example.com
-plugins:
-  compute:
-    type: duckdb
-  orchestrator:
-    type: dagster
-""")
-
+            compile_pipeline = __import__(
+                "floe_core.compilation.stages", fromlist=["compile_pipeline"]
+            ).compile_pipeline
             compile_pipeline(spec_path, manifest_path)
 
             # Get exported spans
@@ -425,7 +329,7 @@ plugins:
             set_tracer(None)
 
     @pytest.mark.requirement("FR-013")
-    def test_compile_pipeline_span_attributes(self, tmp_path: Path) -> None:
+    def test_compile_pipeline_span_attributes(self, spec_path: Path, manifest_path: Path) -> None:
         """Test that compilation spans have correct attributes."""
         from opentelemetry import trace
         from opentelemetry.sdk.trace import TracerProvider
@@ -445,33 +349,6 @@ plugins:
         set_tracer(provider.get_tracer("floe_core.telemetry"))
 
         try:
-            spec_path = tmp_path / "floe.yaml"
-            spec_path.write_text("""
-apiVersion: floe.dev/v1
-kind: FloeSpec
-metadata:
-  name: test-product
-  version: 1.0.0
-transforms:
-  - name: customers
-    tags: []
-""")
-
-            manifest_path = tmp_path / "manifest.yaml"
-            manifest_path.write_text("""
-apiVersion: floe.dev/v1
-kind: Manifest
-metadata:
-  name: test-platform
-  version: 1.0.0
-  owner: test@example.com
-plugins:
-  compute:
-    type: duckdb
-  orchestrator:
-    type: dagster
-""")
-
             compile_pipeline(spec_path, manifest_path)
 
             spans = exporter.get_finished_spans()
@@ -495,10 +372,15 @@ plugins:
 class TestTimingLogging:
     """Tests for timing information logging in compilation pipeline (T067)."""
 
+    @pytest.fixture(autouse=True)
+    def _apply_mocks(self, patch_version_compat: Any, mock_compute_plugin: Any) -> None:
+        """Apply plugin mocks for compilation tests."""
+
     @pytest.mark.requirement("SC-001")
     def test_compile_pipeline_logs_duration_ms(
         self,
-        tmp_path: Path,
+        spec_path: Path,
+        manifest_path: Path,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test that compile_pipeline logs duration_ms for each stage."""
@@ -516,33 +398,6 @@ class TestTimingLogging:
             logger_factory=structlog.PrintLoggerFactory(),
             cache_logger_on_first_use=True,
         )
-
-        spec_path = tmp_path / "floe.yaml"
-        spec_path.write_text("""
-apiVersion: floe.dev/v1
-kind: FloeSpec
-metadata:
-  name: test-product
-  version: 1.0.0
-transforms:
-  - name: customers
-    tags: []
-""")
-
-        manifest_path = tmp_path / "manifest.yaml"
-        manifest_path.write_text("""
-apiVersion: floe.dev/v1
-kind: Manifest
-metadata:
-  name: test-platform
-  version: 1.0.0
-  owner: test@example.com
-plugins:
-  compute:
-    type: duckdb
-  orchestrator:
-    type: dagster
-""")
 
         # Capture stdout where structlog prints
         import io
@@ -567,7 +422,8 @@ plugins:
     @pytest.mark.requirement("SC-001")
     def test_compile_pipeline_logs_total_duration(
         self,
-        tmp_path: Path,
+        spec_path: Path,
+        manifest_path: Path,
     ) -> None:
         """Test that compile_pipeline logs total compilation duration."""
         from opentelemetry import trace
@@ -588,33 +444,6 @@ plugins:
         set_tracer(provider.get_tracer("floe_core.telemetry"))
 
         try:
-            spec_path = tmp_path / "floe.yaml"
-            spec_path.write_text("""
-apiVersion: floe.dev/v1
-kind: FloeSpec
-metadata:
-  name: test-product
-  version: 1.0.0
-transforms:
-  - name: customers
-    tags: []
-""")
-
-            manifest_path = tmp_path / "manifest.yaml"
-            manifest_path.write_text("""
-apiVersion: floe.dev/v1
-kind: Manifest
-metadata:
-  name: test-platform
-  version: 1.0.0
-  owner: test@example.com
-plugins:
-  compute:
-    type: duckdb
-  orchestrator:
-    type: dagster
-""")
-
             compile_pipeline(spec_path, manifest_path)
 
             spans = exporter.get_finished_spans()
