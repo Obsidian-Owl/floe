@@ -414,12 +414,14 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         tables = polaris_client.list_tables("my_namespace")
     """
     polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
+    polaris_mgmt_url = os.environ.get("POLARIS_MGMT_URL", "http://localhost:8182")
     # Extended timeout for CI environments where startup may be slower
     polaris_timeout = float(os.environ.get("POLARIS_TIMEOUT", "90"))
+    # Use management health endpoint (port 8182) — does not require auth
     wait_for_service(
-        f"{polaris_url}/api/catalog/v1/config",
+        f"{polaris_mgmt_url}/q/health/ready",
         timeout=polaris_timeout,
-        description="Polaris catalog",
+        description="Polaris management health",
     )
 
     # Import here to fail properly if not installed

@@ -79,6 +79,7 @@ wait_for_port() {
 cleanup_port_forwards() {
     [[ -n "${DAGSTER_PF_PID:-}" ]] && kill "${DAGSTER_PF_PID}" 2>/dev/null || true
     [[ -n "${POLARIS_PF_PID:-}" ]] && kill "${POLARIS_PF_PID}" 2>/dev/null || true
+    [[ -n "${POLARIS_MGMT_PF_PID:-}" ]] && kill "${POLARIS_MGMT_PF_PID}" 2>/dev/null || true
     [[ -n "${MINIO_API_PF_PID:-}" ]] && kill "${MINIO_API_PF_PID}" 2>/dev/null || true
     [[ -n "${MINIO_UI_PF_PID:-}" ]] && kill "${MINIO_UI_PF_PID}" 2>/dev/null || true
     [[ -n "${OTEL_PF_PID:-}" ]] && kill "${OTEL_PF_PID}" 2>/dev/null || true
@@ -124,9 +125,13 @@ echo "Setting up port-forwards for Helm chart services..."
 kubectl port-forward svc/floe-platform-dagster-webserver 3000:80 -n "${TEST_NAMESPACE}" &
 DAGSTER_PF_PID=$!
 
-# Polaris (port 8181 -> localhost:8181)
+# Polaris catalog API (port 8181 -> localhost:8181)
 kubectl port-forward svc/floe-platform-polaris 8181:8181 -n "${TEST_NAMESPACE}" &
 POLARIS_PF_PID=$!
+
+# Polaris management health (port 8182 -> localhost:8182)
+kubectl port-forward svc/floe-platform-polaris 8182:8182 -n "${TEST_NAMESPACE}" &
+POLARIS_MGMT_PF_PID=$!
 
 # MinIO API (port 9000 -> localhost:9000)
 kubectl port-forward svc/floe-platform-minio 9000:9000 -n "${TEST_NAMESPACE}" &
@@ -160,6 +165,7 @@ POSTGRES_PF_PID=$!
 # Wait for port-forwards to establish
 wait_for_port localhost 3000 15
 wait_for_port localhost 8181 15
+wait_for_port localhost 8182 15
 wait_for_port localhost 9000 15
 wait_for_port localhost 4317 15
 wait_for_port localhost 5432 15

@@ -190,7 +190,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
         # Define core NodePort service endpoints (always deployed)
         core_services = [
             ("http://localhost:3000/server_info", "Dagster webserver"),
-            ("http://localhost:8181/api/catalog/v1/config", "Polaris catalog"),
+            ("http://localhost:8182/q/health/ready", "Polaris management health"),
             ("http://localhost:9000/minio/health/live", "MinIO API"),
             ("http://localhost:9001/minio/health/live", "MinIO UI"),
         ]
