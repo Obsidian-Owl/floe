@@ -15,10 +15,11 @@ Implements:
 
 from __future__ import annotations
 
+import re
 import warnings
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from floe_core.schemas.governance import (
     CustomRule,
@@ -241,6 +242,22 @@ class GovernanceConfig(BaseModel):
     )
 
 
+_PRIVATE_NETWORK_PATTERN = re.compile(
+    r"://(?:127\.|192\.168\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.|::1|localhost)"
+)
+
+
+def _validate_endpoint(v: str | None) -> str | None:
+    """Validate that an endpoint URL uses http/https and does not target private networks."""
+    if v is None:
+        return v
+    if not re.match(r"^https?://", v):
+        raise ValueError("Endpoint must use http or https scheme")
+    if _PRIVATE_NETWORK_PATTERN.search(v):
+        raise ValueError("Endpoint cannot target private/internal networks")
+    return v
+
+
 class TracingManifestConfig(BaseModel):
     """Tracing settings from manifest.yaml."""
 
@@ -250,6 +267,12 @@ class TracingManifestConfig(BaseModel):
         default="otlp", description="Trace exporter type"
     )
     endpoint: str | None = Field(default=None, description="OTLP collector endpoint")
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint_url(cls, v: str | None) -> str | None:
+        """Validate endpoint uses http/https and does not target private networks."""
+        return _validate_endpoint(v)
 
 
 class LineageManifestConfig(BaseModel):
@@ -261,6 +284,12 @@ class LineageManifestConfig(BaseModel):
         default="http", description="OpenLineage transport type"
     )
     endpoint: str | None = Field(default=None, description="OpenLineage API endpoint")
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint_url(cls, v: str | None) -> str | None:
+        """Validate endpoint uses http/https and does not target private networks."""
+        return _validate_endpoint(v)
 
 
 class LoggingManifestConfig(BaseModel):

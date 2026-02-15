@@ -1111,6 +1111,58 @@ class TestObservabilityManifestConfigModel:
         assert logging_cfg.format == "json"
 
     @pytest.mark.requirement("AC-9.1")
+    def test_tracing_endpoint_rejects_non_http_scheme(self) -> None:
+        """Test that tracing endpoint rejects non-http/https URLs (CWE-918)."""
+        from floe_core.schemas.manifest import TracingManifestConfig
+
+        with pytest.raises(ValidationError, match="http or https scheme"):
+            TracingManifestConfig(endpoint="ftp://otel-collector:4317")
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_tracing_endpoint_rejects_private_network(self) -> None:
+        """Test that tracing endpoint rejects private network targets (CWE-918)."""
+        from floe_core.schemas.manifest import TracingManifestConfig
+
+        with pytest.raises(ValidationError, match="private/internal"):
+            TracingManifestConfig(endpoint="http://127.0.0.1:4317")
+
+        with pytest.raises(ValidationError, match="private/internal"):
+            TracingManifestConfig(endpoint="http://localhost:4317")
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_lineage_endpoint_rejects_non_http_scheme(self) -> None:
+        """Test that lineage endpoint rejects non-http/https URLs (CWE-918)."""
+        from floe_core.schemas.manifest import LineageManifestConfig
+
+        with pytest.raises(ValidationError, match="http or https scheme"):
+            LineageManifestConfig(endpoint="file:///etc/passwd")
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_lineage_endpoint_rejects_private_network(self) -> None:
+        """Test that lineage endpoint rejects private network targets (CWE-918)."""
+        from floe_core.schemas.manifest import LineageManifestConfig
+
+        with pytest.raises(ValidationError, match="private/internal"):
+            LineageManifestConfig(endpoint="http://192.168.1.1:5000")
+
+        with pytest.raises(ValidationError, match="private/internal"):
+            LineageManifestConfig(endpoint="http://10.0.0.1:5000")
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_endpoint_accepts_valid_k8s_hostnames(self) -> None:
+        """Test that endpoint validation accepts valid K8s service hostnames."""
+        from floe_core.schemas.manifest import (
+            LineageManifestConfig,
+            TracingManifestConfig,
+        )
+
+        tracing = TracingManifestConfig(endpoint="http://floe-otel:4317")
+        assert tracing.endpoint == "http://floe-otel:4317"
+
+        lineage = LineageManifestConfig(endpoint="https://marquez.prod.svc:5000/api/v1")
+        assert lineage.endpoint == "https://marquez.prod.svc:5000/api/v1"
+
+    @pytest.mark.requirement("AC-9.1")
     def test_observability_config_is_frozen(self) -> None:
         """Test that ObservabilityManifestConfig is immutable (frozen).
 

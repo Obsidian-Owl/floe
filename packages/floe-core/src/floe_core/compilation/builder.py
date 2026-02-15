@@ -16,6 +16,7 @@ See Also:
 from __future__ import annotations
 
 import hashlib
+import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -214,11 +215,15 @@ def get_git_commit() -> str | None:
             capture_output=True,
             text=True,
             check=False,
+            timeout=10,
         )
         if result.returncode == 0:
-            return result.stdout.strip()
+            commit = result.stdout.strip()
+            if not re.match(r"^[a-f0-9]{40}$", commit):
+                return None
+            return commit
         return None
-    except (FileNotFoundError, subprocess.SubprocessError):
+    except (FileNotFoundError, subprocess.SubprocessError, subprocess.TimeoutExpired):
         return None
 
 

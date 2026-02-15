@@ -20,6 +20,7 @@ See Also:
 
 from __future__ import annotations
 
+import re
 import time
 from datetime import datetime, timezone
 from enum import Enum
@@ -517,13 +518,17 @@ def run_enforce_stage(
     if token is not None:
         if not token.strip():
             raise ValueError("token must be non-empty when provided")
-        if len(token) > 10_000:
+        if len(token) > 2_048:
             raise ValueError("token exceeds maximum length")
+        if not re.match(r"^[A-Za-z0-9._\-]+$", token):
+            raise ValueError("token contains invalid characters")
     if principal is not None:
         if not principal.strip():
             raise ValueError("principal must be non-empty when provided")
         if len(principal) > 1_000:
             raise ValueError("principal exceeds maximum length")
+        if not re.match(r"^[A-Za-z0-9@._\-]+$", principal):
+            raise ValueError("principal contains invalid characters")
 
     log = logger.bind(
         component="run_enforce_stage",
