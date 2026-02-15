@@ -401,7 +401,7 @@ class TestPlatformDeployment:
     @pytest.mark.requirement("WU2-AC5")
     @pytest.mark.xfail(
         reason="Multi-arch Cube Store image may not be available yet (ARM64 pending nightly build)",
-        strict=False,
+        strict=True,
     )
     def test_cube_store_pod_running(self) -> None:
         """Verify Cube Store StatefulSet has a running pod.
@@ -438,7 +438,7 @@ class TestPlatformDeployment:
     @pytest.mark.requirement("WU2-AC5")
     @pytest.mark.xfail(
         reason="Multi-arch Cube Store image may not be available yet (ARM64 pending nightly build)",
-        strict=False,
+        strict=True,
     )
     def test_cube_store_ready(self) -> None:
         """Verify Cube Store pod has Ready condition.
