@@ -346,10 +346,6 @@ class TestCompileDeployMaterialize:
         )
 
     @pytest.mark.requirement("AC-2.2")
-    @pytest.mark.xfail(
-        reason="Needs Dagster code location mounting in Kind (Epic-15).",
-        strict=True,
-    )
     def test_trigger_asset_materialization(
         self,
         wait_for_service: Callable[..., None],
@@ -470,10 +466,6 @@ class TestCompileDeployMaterialize:
         )
 
     @pytest.mark.requirement("AC-2.2")
-    @pytest.mark.xfail(
-        reason="Needs Dagster code location mounting in Kind (Epic-15).",
-        strict=True,
-    )
     def test_iceberg_tables_exist_after_materialization(
         self,
         polaris_client: Any,
