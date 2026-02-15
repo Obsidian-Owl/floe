@@ -258,10 +258,18 @@ class DuckDBComputePlugin(ComputePlugin):
             if extensions:
                 profile["extensions"] = extensions
 
-            # Add optional settings if specified
-            settings = connection.get("settings")
-            if settings:
-                profile["settings"] = settings
+            # Normalize DuckDB settings: manifest config may place keys like
+            # memory_limit at the connection top level rather than nested under
+            # "settings".  Merge them so the dbt-duckdb adapter sees them.
+            _DUCKDB_SETTING_KEYS = {"memory_limit", "access_mode"}
+            normalized: dict[str, Any] = {
+                k: v for k, v in connection.items() if k in _DUCKDB_SETTING_KEYS
+            }
+            explicit_settings = connection.get("settings")
+            if explicit_settings:
+                normalized.update(explicit_settings)  # explicit wins
+            if normalized:
+                profile["settings"] = normalized
 
             # Add optional attach blocks if specified (for attaching external databases)
             attach_configs = connection.get("attach")
