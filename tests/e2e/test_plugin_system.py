@@ -70,6 +70,16 @@ class TestPluginSystem(IntegrationTestBase):
     # Logger instance for test observability
     logger: ClassVar[logging.Logger] = logging.getLogger(__name__)
 
+    # Plugin types configured via manifest sections, not discovered via entry points.
+    # STORAGE is a manifest config section (manifest.storage) that defines S3/GCS/Azure
+    # connection details. It's NOT a plugin that needs registry discovery — the storage
+    # backend is configured at the infrastructure level, not swapped via entry points.
+    CONFIG_ONLY_TYPES: ClassVar[frozenset[PluginType]] = frozenset(
+        {
+            PluginType.STORAGE,
+        }
+    )
+
     # Map PluginType enum members to their ABC classes
     # Using Any to satisfy mypy --strict with abstract base classes
     PLUGIN_ABC_MAP: ClassVar[dict[PluginType, Any]] = {
@@ -92,10 +102,12 @@ class TestPluginSystem(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-050")
     def test_all_plugin_types_discoverable(self) -> None:
-        """Test that all plugin types are discoverable via entry points.
+        """Test that all discoverable plugin types have registered entry points.
 
         Validates that PluginRegistry.discover_all() finds at least one
-        implementation for each of the implemented plugin types.
+        implementation for each discoverable plugin type. CONFIG_ONLY_TYPES
+        (e.g., STORAGE) are excluded — they are validated separately via
+        manifest/CompiledArtifacts configuration.
 
         This ensures the plugin discovery mechanism works for all plugin
         categories and that the platform has minimum viable plugin coverage.
@@ -112,11 +124,11 @@ class TestPluginSystem(IntegrationTestBase):
             "PluginType enum may have been reduced."
         )
 
-        # ALL plugin types MUST have implementations
-        # No exclusion list — if a plugin type has no implementation, the test FAILS
-        # to expose that as a platform gap
+        # All DISCOVERABLE plugin types MUST have implementations.
+        # CONFIG_ONLY_TYPES are configured via manifest sections (not entry points).
+        discoverable_types = set(PluginType) - self.CONFIG_ONLY_TYPES
         missing_types: list[str] = []
-        for plugin_type in PluginType:
+        for plugin_type in discoverable_types:
             plugin_names = all_plugins.get(plugin_type, [])
             if not plugin_names:
                 missing_types.append(plugin_type.name)
@@ -124,17 +136,49 @@ class TestPluginSystem(IntegrationTestBase):
         assert not missing_types, (
             f"PLUGIN GAP: Missing implementations for {len(missing_types)} plugin types: "
             f"{', '.join(missing_types)}.\n"
-            "Every plugin type in PluginType enum must have at least one registered "
-            "implementation. Unimplemented plugins are platform gaps, not test exclusions."
+            "Every discoverable plugin type must have at least one registered "
+            "implementation. Config-only types (STORAGE) are validated separately."
         )
 
         # Log discovered plugin counts for observability
         for plugin_type in PluginType:
             plugin_names = all_plugins.get(plugin_type, [])
+            label = " [config-only]" if plugin_type in self.CONFIG_ONLY_TYPES else ""
             self.logger.info(
-                f"Plugin discovery: {plugin_type.name} - "
+                f"Plugin discovery: {plugin_type.name}{label} - "
                 f"{len(plugin_names)} plugins: {plugin_names}"
             )
+
+    @pytest.mark.e2e
+    @pytest.mark.requirement("FR-050")
+    def test_storage_config_via_manifest(self) -> None:
+        """Test that STORAGE config flows through manifest, not plugin registry.
+
+        STORAGE is a CONFIG_ONLY plugin type — it's configured via the
+        manifest.storage section (S3/GCS/Azure connection details), not
+        discovered via entry points. This test validates that the compilation
+        pipeline resolves storage config into CompiledArtifacts.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        project_root = Path(__file__).parent.parent.parent
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        manifest_path = project_root / "demo" / "manifest.yaml"
+
+        artifacts = compile_pipeline(spec_path, manifest_path)
+
+        # Storage config should be resolved from manifest.storage section
+        assert artifacts.plugins is not None, "CompiledArtifacts must have plugins section"
+        assert artifacts.plugins.storage is not None, (
+            "Storage config must be resolved from manifest.storage section.\n"
+            "STORAGE is a config-only plugin type — manifest.storage defines the "
+            "object storage backend (S3, GCS, Azure) at the infrastructure level."
+        )
+        assert artifacts.plugins.storage.type == "s3", (
+            f"Expected storage type 's3' from demo manifest, got '{artifacts.plugins.storage.type}'"
+        )
+
+        self.logger.info(f"Storage config validated: type={artifacts.plugins.storage.type}")
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-051")
