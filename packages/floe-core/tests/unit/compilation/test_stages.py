@@ -7,6 +7,7 @@ Requirements:
     - FR-032: Structured logging for each stage
     - AC-9.4: Governance wiring from manifest to CompiledArtifacts
     - AC-9.5: Enforcement level precedence rule (stricter wins)
+    - AC-9.6: Observability wiring from manifest to CompiledArtifacts
 """
 
 from __future__ import annotations
@@ -530,12 +531,8 @@ class TestGovernanceFlow:
         from floe_core.compilation.stages import compile_pipeline
 
         # Use the real demo manifest which has a governance section
-        demo_manifest_path = (
-            Path(__file__).resolve().parents[5] / "demo" / "manifest.yaml"
-        )
-        assert demo_manifest_path.exists(), (
-            f"Demo manifest not found at {demo_manifest_path}"
-        )
+        demo_manifest_path = Path(__file__).resolve().parents[5] / "demo" / "manifest.yaml"
+        assert demo_manifest_path.exists(), f"Demo manifest not found at {demo_manifest_path}"
 
         result = compile_pipeline(spec_path, demo_manifest_path)
 
@@ -757,9 +754,7 @@ class TestEnforcementLevelPrecedence:
         result = compile_pipeline(spec_path, manifest_path)
 
         # The enforcement_level must be "warn" -- sourced from manifest
-        assert result.enforcement_result is not None, (
-            "enforcement_result must be populated"
-        )
+        assert result.enforcement_result is not None, "enforcement_result must be populated"
         assert result.enforcement_result.enforcement_level == "warn", (
             "When manifest sets policy_enforcement_level=warn and spec has no "
             "governance, enforcement_level must be 'warn' from the manifest"
@@ -816,9 +811,7 @@ class TestEnforcementLevelPrecedence:
         ):
             result = compile_pipeline(spec_path, manifest_path)
 
-        assert result.enforcement_result is not None, (
-            "enforcement_result must be populated"
-        )
+        assert result.enforcement_result is not None, "enforcement_result must be populated"
         assert result.enforcement_result.enforcement_level == "strict", (
             "When manifest=warn and spec=strict, enforcement_level must be "
             "'strict' because spec strengthens (stricter wins rule)"
@@ -865,9 +858,7 @@ class TestEnforcementLevelPrecedence:
         ):
             result = compile_pipeline(spec_path, manifest_path)
 
-        assert result.enforcement_result is not None, (
-            "enforcement_result must be populated"
-        )
+        assert result.enforcement_result is not None, "enforcement_result must be populated"
         assert result.enforcement_result.enforcement_level == "strict", (
             "When manifest=strict and spec=warn, enforcement_level must be "
             "'strict' because manifest sets the floor -- spec cannot weaken "
@@ -892,9 +883,7 @@ class TestEnforcementLevelPrecedence:
 
         result = compile_pipeline(spec_path, manifest_path)
 
-        assert result.enforcement_result is not None, (
-            "enforcement_result must be populated"
-        )
+        assert result.enforcement_result is not None, "enforcement_result must be populated"
         assert result.enforcement_result.enforcement_level == "warn", (
             "When neither manifest nor spec has governance, enforcement_level "
             "must default to 'warn'"
@@ -923,9 +912,7 @@ class TestEnforcementLevelPrecedence:
 
         result = compile_pipeline(spec_path, manifest_path)
 
-        assert result.enforcement_result is not None, (
-            "enforcement_result must be populated"
-        )
+        assert result.enforcement_result is not None, "enforcement_result must be populated"
         assert result.enforcement_result.enforcement_level == "strict", (
             "When manifest sets policy_enforcement_level=strict and spec has "
             "no governance, enforcement_level must be 'strict' from the manifest. "
@@ -986,9 +973,7 @@ governance:
         ):
             result = compile_pipeline(spec_path, manifest_path)
 
-        assert result.enforcement_result is not None, (
-            "enforcement_result must be populated"
-        )
+        assert result.enforcement_result is not None, "enforcement_result must be populated"
         assert result.enforcement_result.enforcement_level == "warn", (
             "When manifest=off and spec=warn, enforcement_level must be "
             "'warn' because spec strengthens (stricter wins: warn > off)"
@@ -1033,11 +1018,619 @@ governance:
         ):
             result = compile_pipeline(spec_path, manifest_path)
 
-        assert result.enforcement_result is not None, (
-            "enforcement_result must be populated"
-        )
+        assert result.enforcement_result is not None, "enforcement_result must be populated"
         assert result.enforcement_result.enforcement_level == "strict", (
             "When manifest=strict and spec=off, enforcement_level must be "
             "'strict' because manifest sets the floor -- spec cannot weaken "
             "enforcement even to 'off' (stricter wins rule)"
+        )
+
+
+# ==============================================================================
+# YAML constant for manifests WITHOUT observability section
+# ==============================================================================
+
+MANIFEST_NO_OBSERVABILITY_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+"""
+
+SPEC_MINIMAL_YAML = """\
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: customers
+    tags: []
+"""
+
+
+class TestObservabilityFromManifest:
+    """Tests for observability wiring from manifest to CompiledArtifacts (AC-9.6).
+
+    Verifies that compile_pipeline reads observability settings from the
+    manifest's observability section (tracing endpoint, lineage endpoint,
+    lineage transport) instead of hardcoding defaults in builder.py.
+
+    Current state: builder.py (lines 114-129) hardcodes ObservabilityConfig
+    with no reference to manifest.observability. These tests MUST FAIL
+    before implementation.
+
+    Mapping from manifest to CompiledArtifacts:
+        manifest.observability.tracing.endpoint  -> artifacts.observability.telemetry.otlp_endpoint
+        manifest.observability.lineage.enabled   -> artifacts.observability.lineage
+        manifest.observability.lineage.endpoint  -> artifacts.observability.lineage_endpoint
+        manifest.observability.lineage.transport -> artifacts.observability.lineage_transport
+        spec.metadata.name -> artifacts.observability.telemetry
+                              .resource_attributes.service_name
+    """
+
+    @pytest.fixture(autouse=True)
+    def _apply_mocks(self, patch_version_compat: Any, mock_compute_plugin: Any) -> None:
+        """Apply plugin mocks for compilation tests."""
+
+    @pytest.mark.requirement("AC-9.6")
+    def test_compile_pipeline_reads_tracing_endpoint_from_manifest(self, spec_path: Path) -> None:
+        """Test that tracing endpoint comes from manifest, not hardcoded default.
+
+        The demo manifest has observability.tracing.endpoint =
+        'http://floe-platform-otel:4317'. The builder currently hardcodes
+        TelemetryConfig() which defaults otlp_endpoint to 'http://localhost:4317'.
+
+        This test MUST FAIL because the builder ignores manifest.observability
+        and always uses the TelemetryConfig default.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        demo_manifest_path = Path(__file__).resolve().parents[5] / "demo" / "manifest.yaml"
+        assert demo_manifest_path.exists(), f"Demo manifest not found at {demo_manifest_path}"
+
+        result = compile_pipeline(spec_path, demo_manifest_path)
+
+        # AC-9.6: otlp_endpoint MUST come from manifest.observability.tracing.endpoint
+        assert result.observability.telemetry.otlp_endpoint == "http://floe-platform-otel:4317", (
+            f"Expected otlp_endpoint from manifest "
+            f"('http://floe-platform-otel:4317') but got "
+            f"'{result.observability.telemetry.otlp_endpoint}'. "
+            f"The builder is hardcoding defaults instead of reading "
+            f"from manifest.observability.tracing.endpoint."
+        )
+
+    @pytest.mark.requirement("AC-9.6")
+    def test_compile_pipeline_reads_lineage_endpoint_from_manifest(self, spec_path: Path) -> None:
+        """Test that lineage endpoint comes from manifest.
+
+        The demo manifest has observability.lineage.endpoint =
+        'http://floe-platform-marquez:5000/api/v1/lineage'.
+        The builder currently does not set lineage_endpoint at all
+        (it defaults to None on ObservabilityConfig).
+
+        This test MUST FAIL because the builder ignores
+        manifest.observability.lineage.endpoint.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        demo_manifest_path = Path(__file__).resolve().parents[5] / "demo" / "manifest.yaml"
+        assert demo_manifest_path.exists(), f"Demo manifest not found at {demo_manifest_path}"
+
+        result = compile_pipeline(spec_path, demo_manifest_path)
+
+        # AC-9.6: lineage_endpoint MUST come from manifest.observability.lineage.endpoint
+        assert result.observability.lineage_endpoint == (
+            "http://floe-platform-marquez:5000/api/v1/lineage"
+        ), (
+            f"Expected lineage_endpoint from manifest "
+            f"('http://floe-platform-marquez:5000/api/v1/lineage') but got "
+            f"'{result.observability.lineage_endpoint}'. "
+            f"The builder does not read manifest.observability.lineage.endpoint."
+        )
+
+    @pytest.mark.requirement("AC-9.6")
+    def test_compile_pipeline_reads_lineage_transport_from_manifest(self, spec_path: Path) -> None:
+        """Test that lineage transport comes from manifest.
+
+        The demo manifest has observability.lineage.transport = 'http'.
+        The builder currently does not set lineage_transport at all
+        (it defaults to None on ObservabilityConfig).
+
+        This test MUST FAIL because the builder ignores
+        manifest.observability.lineage.transport.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        demo_manifest_path = Path(__file__).resolve().parents[5] / "demo" / "manifest.yaml"
+        assert demo_manifest_path.exists(), f"Demo manifest not found at {demo_manifest_path}"
+
+        result = compile_pipeline(spec_path, demo_manifest_path)
+
+        # AC-9.6: lineage_transport MUST come from manifest.observability.lineage.transport
+        assert result.observability.lineage_transport == "http", (
+            f"Expected lineage_transport from manifest ('http') but got "
+            f"'{result.observability.lineage_transport}'. "
+            f"The builder does not read manifest.observability.lineage.transport."
+        )
+
+    @pytest.mark.requirement("AC-9.6")
+    def test_compile_pipeline_reads_lineage_enabled_from_manifest(self, spec_path: Path) -> None:
+        """Test that lineage enabled comes from manifest.
+
+        The demo manifest has observability.lineage.enabled = true.
+        The builder currently hardcodes lineage=True, so this test passes
+        as a regression guard. If someone changes the hardcoded default
+        to False, this test will catch it.
+
+        This test is a REGRESSION GUARD -- it currently passes because
+        the hardcoded value happens to match the manifest value.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        demo_manifest_path = Path(__file__).resolve().parents[5] / "demo" / "manifest.yaml"
+        assert demo_manifest_path.exists(), f"Demo manifest not found at {demo_manifest_path}"
+
+        result = compile_pipeline(spec_path, demo_manifest_path)
+
+        # AC-9.6: lineage MUST be True (from manifest.observability.lineage.enabled)
+        assert result.observability.lineage is True, (
+            f"Expected lineage=True from manifest but got {result.observability.lineage!r}"
+        )
+
+    @pytest.mark.requirement("AC-9.6")
+    def test_compile_pipeline_observability_defaults_without_manifest_section(
+        self, tmp_path: Path
+    ) -> None:
+        """Test observability defaults when manifest has no observability section.
+
+        When the manifest does not include an observability section, the
+        builder should use sensible defaults:
+          - otlp_endpoint: 'http://localhost:4317' (TelemetryConfig default)
+          - lineage: True (ObservabilityConfig default)
+          - lineage_endpoint: None (no endpoint configured)
+          - lineage_transport: None (no transport configured)
+
+        This test verifies the fallback path. It MUST FAIL because the
+        current builder does not distinguish between "manifest has
+        observability" and "manifest lacks observability" -- it hardcodes
+        everything, so there is no code path that reads the manifest and
+        falls back to defaults.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_NO_OBSERVABILITY_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        # Without manifest observability, otlp_endpoint should be the default
+        assert result.observability.telemetry.otlp_endpoint == "http://localhost:4317", (
+            f"Without manifest observability section, otlp_endpoint should "
+            f"default to 'http://localhost:4317' but got "
+            f"'{result.observability.telemetry.otlp_endpoint}'"
+        )
+        # Without manifest observability, lineage_endpoint should be None
+        assert result.observability.lineage_endpoint is None, (
+            f"Without manifest observability section, lineage_endpoint should "
+            f"be None but got '{result.observability.lineage_endpoint}'"
+        )
+        # Without manifest observability, lineage_transport should be None
+        assert result.observability.lineage_transport is None, (
+            f"Without manifest observability section, lineage_transport should "
+            f"be None but got '{result.observability.lineage_transport}'"
+        )
+        # Without manifest observability, lineage should default to True
+        assert result.observability.lineage is True, (
+            f"Without manifest observability section, lineage should "
+            f"default to True but got {result.observability.lineage!r}"
+        )
+
+    @pytest.mark.requirement("AC-9.6")
+    def test_compile_pipeline_service_name_from_spec_not_manifest(self, spec_path: Path) -> None:
+        """Test that service_name always comes from spec, not manifest.
+
+        The resource_attributes.service_name must be populated from
+        spec.metadata.name (the data product name), NOT from the manifest.
+        This ensures each data product is identified by its own name
+        in telemetry regardless of which platform manifest it uses.
+
+        This is a REGRESSION GUARD -- currently passes because the builder
+        correctly reads service_name from spec.metadata.name.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        demo_manifest_path = Path(__file__).resolve().parents[5] / "demo" / "manifest.yaml"
+        assert demo_manifest_path.exists(), f"Demo manifest not found at {demo_manifest_path}"
+
+        result = compile_pipeline(spec_path, demo_manifest_path)
+
+        # AC-9.6: service_name must come from spec.metadata.name, not manifest
+        assert result.observability.telemetry.resource_attributes.service_name == "test-product", (
+            f"Expected service_name from spec.metadata.name ('test-product') "
+            f"but got "
+            f"'{result.observability.telemetry.resource_attributes.service_name}'. "
+            f"service_name must always come from the spec, not the manifest."
+        )
+
+    @pytest.mark.requirement("AC-9.6")
+    def test_compile_pipeline_tracing_endpoint_not_hardcoded(self, tmp_path: Path) -> None:
+        """Test that different manifest endpoints produce different artifact endpoints.
+
+        This test uses a custom manifest with a UNIQUE tracing endpoint to
+        ensure the builder actually reads the manifest rather than returning
+        a hardcoded value. If the builder hardcodes any specific endpoint,
+        this test will catch it because the custom endpoint is deliberately
+        different from both the demo manifest and the default.
+
+        This test MUST FAIL because the builder hardcodes observability.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        custom_endpoint = "http://my-custom-otel-collector:4317"
+        custom_lineage_endpoint = "http://my-custom-marquez:5000/api/v1/lineage"
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_with_custom_otel = tmp_path / "manifest.yaml"
+        manifest_with_custom_otel.write_text(f"""\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+observability:
+  tracing:
+    enabled: true
+    exporter: otlp
+    endpoint: {custom_endpoint}
+  lineage:
+    enabled: true
+    transport: http
+    endpoint: {custom_lineage_endpoint}
+""")
+
+        result = compile_pipeline(spec_path, manifest_with_custom_otel)
+
+        # Verify the custom endpoint is used -- not the default, not the demo value
+        assert result.observability.telemetry.otlp_endpoint == custom_endpoint, (
+            f"Expected custom otlp_endpoint '{custom_endpoint}' from manifest "
+            f"but got '{result.observability.telemetry.otlp_endpoint}'. "
+            f"The builder must read the endpoint from manifest.observability."
+        )
+        assert result.observability.lineage_endpoint == custom_lineage_endpoint, (
+            f"Expected custom lineage_endpoint '{custom_lineage_endpoint}' "
+            f"from manifest but got '{result.observability.lineage_endpoint}'. "
+            f"The builder must read lineage_endpoint from manifest.observability."
+        )
+
+
+# ==============================================================================
+# Boundary condition tests for governance + observability flow (BC-9.x)
+# ==============================================================================
+
+# YAML constants for boundary condition tests
+
+MANIFEST_EMPTY_OBSERVABILITY_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+observability: {}
+"""
+
+MANIFEST_GOVERNANCE_NO_ENFORCEMENT_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  pii_encryption: required
+  audit_logging: enabled
+"""
+
+MANIFEST_GOVERNANCE_NO_RETENTION_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: warn
+  pii_encryption: optional
+"""
+
+
+class TestBoundaryConditions:
+    """Boundary condition tests for governance+observability flow (BC-9.x).
+
+    These tests validate that edge cases in manifest configuration produce
+    correct CompiledArtifacts when passed through compile_pipeline. They
+    target specific boundary conditions where defaults, missing sections,
+    and partial configurations must be handled correctly.
+
+    Each test writes custom YAML manifests to tmp_path and runs the full
+    compile_pipeline, asserting exact field values -- not vague truthiness.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _apply_mocks(self, patch_version_compat: Any, mock_compute_plugin: Any) -> None:
+        """Apply plugin mocks for compilation tests."""
+
+    @pytest.mark.requirement("BC-9.1")
+    def test_empty_observability_section_uses_defaults(self, tmp_path: Path) -> None:
+        """Test that observability: {} uses all defaults correctly.
+
+        When the manifest has an empty observability section (observability: {}),
+        ObservabilityManifestConfig is instantiated with default_factory sub-sections.
+        The builder sees manifest_obs is not None, so it reads from the defaults:
+          - tracing.endpoint is None -> otlp_endpoint stays at TelemetryConfig default
+          - lineage.enabled is True -> lineage = True
+          - lineage.endpoint is None -> lineage_endpoint = None
+          - lineage.transport is "http" -> lineage_transport = "http"
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_EMPTY_OBSERVABILITY_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        # otlp_endpoint must be the TelemetryConfig default since
+        # TracingManifestConfig().endpoint is None
+        assert result.observability.telemetry.otlp_endpoint == "http://localhost:4317", (
+            f"With observability: {{}}, otlp_endpoint should be TelemetryConfig default "
+            f"'http://localhost:4317' but got "
+            f"'{result.observability.telemetry.otlp_endpoint}'"
+        )
+
+        # lineage must be True from LineageManifestConfig default
+        assert result.observability.lineage is True, (
+            f"With observability: {{}}, lineage should be True "
+            f"(LineageManifestConfig.enabled default) but got "
+            f"{result.observability.lineage!r}"
+        )
+
+        # lineage_endpoint must be None since LineageManifestConfig().endpoint is None
+        assert result.observability.lineage_endpoint is None, (
+            f"With observability: {{}}, lineage_endpoint should be None "
+            f"(no endpoint configured) but got "
+            f"'{result.observability.lineage_endpoint}'"
+        )
+
+        # lineage_transport should be "http" from LineageManifestConfig default
+        # (the builder sets lineage_transport from manifest_obs.lineage.transport
+        # when manifest_obs is not None)
+        assert result.observability.lineage_transport == "http", (
+            f"With observability: {{}}, lineage_transport should be 'http' "
+            f"(LineageManifestConfig.transport default) but got "
+            f"'{result.observability.lineage_transport}'"
+        )
+
+    @pytest.mark.requirement("BC-9.2")
+    def test_partial_observability_tracing_only(self, tmp_path: Path) -> None:
+        """Test that partial observability with only tracing endpoint works.
+
+        When the manifest specifies only a tracing endpoint and nothing else,
+        the tracing endpoint flows through to artifacts while lineage fields
+        use their defaults from LineageManifestConfig.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        custom_tracing_endpoint = "http://custom-otel-collector:4317"
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(f"""\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+observability:
+  tracing:
+    endpoint: {custom_tracing_endpoint}
+""")
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        # The custom tracing endpoint must flow through
+        assert result.observability.telemetry.otlp_endpoint == custom_tracing_endpoint, (
+            f"Custom tracing endpoint '{custom_tracing_endpoint}' should flow "
+            f"through to otlp_endpoint but got "
+            f"'{result.observability.telemetry.otlp_endpoint}'"
+        )
+
+        # Lineage fields must use defaults since only tracing was specified
+        assert result.observability.lineage is True, (
+            f"Lineage should default to True when not specified, "
+            f"got {result.observability.lineage!r}"
+        )
+        assert result.observability.lineage_endpoint is None, (
+            f"lineage_endpoint should be None when not specified, "
+            f"got '{result.observability.lineage_endpoint}'"
+        )
+        # lineage_transport comes from LineageManifestConfig default ("http")
+        assert result.observability.lineage_transport == "http", (
+            f"lineage_transport should be 'http' (default) when not specified, "
+            f"got '{result.observability.lineage_transport}'"
+        )
+
+    @pytest.mark.requirement("BC-9.3")
+    def test_governance_without_enforcement_level(self, tmp_path: Path) -> None:
+        """Test governance without policy_enforcement_level produces None.
+
+        When the manifest has governance with pii_encryption and audit_logging
+        but no policy_enforcement_level, the ResolvedGovernance must have
+        policy_enforcement_level=None -- not a hardcoded default.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_GOVERNANCE_NO_ENFORCEMENT_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        # governance MUST be populated since manifest has a governance section
+        assert result.governance is not None, (
+            "artifacts.governance must be populated when manifest has governance section"
+        )
+
+        # policy_enforcement_level must be None -- it was not specified
+        assert result.governance.policy_enforcement_level is None, (
+            f"policy_enforcement_level should be None when not specified in "
+            f"manifest, but got '{result.governance.policy_enforcement_level}'"
+        )
+
+        # Other governance fields that WERE specified must be correct
+        assert result.governance.pii_encryption == "required", (
+            f"pii_encryption should be 'required' from manifest but got "
+            f"'{result.governance.pii_encryption}'"
+        )
+        assert result.governance.audit_logging == "enabled", (
+            f"audit_logging should be 'enabled' from manifest but got "
+            f"'{result.governance.audit_logging}'"
+        )
+
+        # data_retention_days was not specified, must be None
+        assert result.governance.data_retention_days is None, (
+            f"data_retention_days should be None when not specified, "
+            f"got {result.governance.data_retention_days!r}"
+        )
+
+    @pytest.mark.requirement("BC-9.3")
+    def test_governance_without_data_retention_days(self, tmp_path: Path) -> None:
+        """Test governance without data_retention_days produces None.
+
+        When the manifest has governance with policy_enforcement_level and
+        pii_encryption but no data_retention_days, the ResolvedGovernance
+        must have data_retention_days=None.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_GOVERNANCE_NO_RETENTION_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        # governance MUST be populated since manifest has a governance section
+        assert result.governance is not None, (
+            "artifacts.governance must be populated when manifest has governance section"
+        )
+
+        # data_retention_days must be None -- it was not specified
+        assert result.governance.data_retention_days is None, (
+            f"data_retention_days should be None when not specified in "
+            f"manifest, but got {result.governance.data_retention_days!r}"
+        )
+
+        # Fields that WERE specified must be correct
+        assert result.governance.policy_enforcement_level == "warn", (
+            f"policy_enforcement_level should be 'warn' from manifest but got "
+            f"'{result.governance.policy_enforcement_level}'"
+        )
+        assert result.governance.pii_encryption == "optional", (
+            f"pii_encryption should be 'optional' from manifest but got "
+            f"'{result.governance.pii_encryption}'"
+        )
+
+        # audit_logging was not specified, must be None
+        assert result.governance.audit_logging is None, (
+            f"audit_logging should be None when not specified, "
+            f"got '{result.governance.audit_logging}'"
+        )
+
+    @pytest.mark.requirement("BC-9.2")
+    def test_lineage_disabled_in_manifest(self, tmp_path: Path) -> None:
+        """Test that lineage.enabled: false in manifest produces lineage=False.
+
+        When the manifest explicitly disables lineage, the artifact must
+        reflect lineage=False, not the ObservabilityConfig default of True.
+        This verifies the builder reads the manifest value, not a hardcoded
+        default.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+observability:
+  lineage:
+    enabled: false
+""")
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        # lineage must be False because manifest explicitly disabled it
+        assert result.observability.lineage is False, (
+            f"lineage should be False when manifest sets lineage.enabled=false, "
+            f"but got {result.observability.lineage!r}. "
+            f"The builder must read lineage from manifest, not use a hardcoded default."
         )
