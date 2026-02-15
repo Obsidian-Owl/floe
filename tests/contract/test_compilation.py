@@ -38,7 +38,11 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedPlugins,
 )
 from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
-from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION, FLOE_VERSION
+from floe_core.schemas.versions import (
+    COMPILED_ARTIFACTS_VERSION,
+    COMPILED_ARTIFACTS_VERSION_HISTORY,
+    FLOE_VERSION,
+)
 from pydantic import ValidationError
 
 
@@ -785,3 +789,285 @@ class TestCompilation:
         with pytest.raises(CompilationException) as exc_info:
             compile_pipeline(bad_name_path, demo_manifest)
         assert exc_info.value.error.stage == CompilationStage.LOAD
+
+
+def _make_telemetry() -> TelemetryConfig:
+    """Create a minimal valid TelemetryConfig for testing.
+
+    Returns:
+        TelemetryConfig with all required fields populated.
+    """
+    return TelemetryConfig(
+        enabled=True,
+        resource_attributes=ResourceAttributes(
+            service_name="test",
+            service_version="1.0.0",
+            deployment_environment="dev",
+            floe_namespace="default",
+            floe_product_name="test",
+            floe_product_version="1.0.0",
+            floe_mode="dev",
+        ),
+    )
+
+
+class TestObservabilityConfigLineageFields:
+    """Contract tests for lineage_endpoint and lineage_transport fields on ObservabilityConfig.
+
+    These tests validate AC-9.2 (new optional fields) and AC-9.3 (version bump).
+    All tests are expected to FAIL until the implementation adds the new fields
+    and bumps the version.
+    """
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.2")
+    def test_observability_config_accepts_lineage_endpoint(self) -> None:
+        """Test that ObservabilityConfig accepts lineage_endpoint and lineage_transport.
+
+        Constructs ObservabilityConfig with the new optional fields populated.
+        This must succeed after implementation but will fail now because
+        extra='forbid' rejects unknown fields.
+        """
+        config = ObservabilityConfig(
+            telemetry=_make_telemetry(),
+            lineage_namespace="my-pipeline",
+            lineage_endpoint="http://marquez:5000/api/v1/lineage",
+            lineage_transport="http",
+        )
+        assert config.lineage_endpoint == "http://marquez:5000/api/v1/lineage"
+        assert config.lineage_transport == "http"
+        # Existing fields must still be populated correctly
+        assert config.lineage_namespace == "my-pipeline"
+        assert config.lineage is True
+        assert config.telemetry.enabled is True
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.2")
+    def test_observability_config_lineage_endpoint_defaults_to_none(self) -> None:
+        """Test that lineage_endpoint and lineage_transport default to None.
+
+        Constructs ObservabilityConfig WITHOUT the new fields. Both must
+        default to None for backwards compatibility.
+        """
+        config = ObservabilityConfig(
+            telemetry=_make_telemetry(),
+            lineage_namespace="my-pipeline",
+        )
+        assert config.lineage_endpoint is None, (
+            "lineage_endpoint must default to None when not provided"
+        )
+        assert config.lineage_transport is None, (
+            "lineage_transport must default to None when not provided"
+        )
+        # Existing defaults must be preserved
+        assert config.lineage is True
+        assert config.lineage_namespace == "my-pipeline"
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.3")
+    def test_compiled_artifacts_version_is_0_8_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION has been bumped to 0.8.0.
+
+        AC-9.3 requires the version bump to reflect the new lineage fields.
+        """
+        assert COMPILED_ARTIFACTS_VERSION == "0.8.0", (
+            f"COMPILED_ARTIFACTS_VERSION must be '0.8.0' after adding lineage fields, "
+            f"got '{COMPILED_ARTIFACTS_VERSION}'"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.3")
+    def test_version_history_has_0_8_0_entry(self) -> None:
+        """Test that version history documents the 0.8.0 change.
+
+        The history entry must exist and must describe the lineage fields addition.
+        This prevents a lazy implementation that bumps the version but forgets
+        the history entry, or adds a vague description.
+        """
+        assert "0.8.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
+            "COMPILED_ARTIFACTS_VERSION_HISTORY must contain a '0.8.0' entry"
+        )
+        description = COMPILED_ARTIFACTS_VERSION_HISTORY["0.8.0"]
+        assert "lineage_endpoint" in description, (
+            f"0.8.0 history entry must mention 'lineage_endpoint', got: '{description}'"
+        )
+        assert "lineage_transport" in description, (
+            f"0.8.0 history entry must mention 'lineage_transport', got: '{description}'"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.2")
+    def test_observability_config_lineage_transport_rejects_invalid_values(self) -> None:
+        """Test that lineage_transport rejects values outside the allowed set.
+
+        lineage_transport should be constrained to known transport types
+        (e.g., 'http', 'console', 'noop'). An arbitrary string like
+        'carrier-pigeon' must be rejected with a literal/enum validation error,
+        NOT an extra_forbidden error (which would mean the field doesn't exist).
+
+        First, confirm valid values ARE accepted (proving the field exists),
+        then confirm invalid values are rejected with the right error type.
+        """
+        # Step 1: A valid transport must succeed (proves the field exists)
+        valid_config = ObservabilityConfig(
+            telemetry=_make_telemetry(),
+            lineage_namespace="my-pipeline",
+            lineage_endpoint="http://marquez:5000/api/v1/lineage",
+            lineage_transport="http",
+        )
+        assert valid_config.lineage_transport == "http"
+
+        # Step 2: An invalid transport must be rejected
+        with pytest.raises(ValidationError) as exc_info:
+            ObservabilityConfig(
+                telemetry=_make_telemetry(),
+                lineage_namespace="my-pipeline",
+                lineage_endpoint="http://marquez:5000/api/v1/lineage",
+                lineage_transport="carrier-pigeon",
+            )
+        error_str = str(exc_info.value).lower()
+        # Must NOT be extra_forbidden (that means field doesn't exist)
+        assert "extra_forbidden" not in error_str, (
+            "Error must be about invalid value, not about the field being unknown. "
+            "This means lineage_transport field was not added to ObservabilityConfig."
+        )
+        assert "lineage_transport" in error_str or "input" in error_str, (
+            f"Error should reference lineage_transport field, got: {exc_info.value}"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.2")
+    def test_observability_config_lineage_transport_accepts_valid_values(self) -> None:
+        """Test that lineage_transport accepts all valid transport types.
+
+        Each known transport type ('http', 'console', 'noop') must be accepted.
+        This prevents an implementation that only allows one value.
+        """
+        valid_transports = ["http", "console", "noop"]
+        for transport in valid_transports:
+            config = ObservabilityConfig(
+                telemetry=_make_telemetry(),
+                lineage_namespace="test-ns",
+                lineage_endpoint="http://marquez:5000/api/v1/lineage",
+                lineage_transport=transport,
+            )
+            assert config.lineage_transport == transport, (
+                f"lineage_transport must accept '{transport}', "
+                f"got '{config.lineage_transport}'"
+            )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.2")
+    def test_observability_config_serialization_with_lineage_fields(
+        self, tmp_path: Path,
+    ) -> None:
+        """Test that lineage fields survive serialization round-trip.
+
+        Constructs ObservabilityConfig with lineage fields, serializes to dict,
+        verifies the fields appear in the serialized form, then deserializes
+        back and verifies equality. This catches implementations that add the
+        fields but exclude them from serialization.
+        """
+        config = ObservabilityConfig(
+            telemetry=_make_telemetry(),
+            lineage_namespace="round-trip-test",
+            lineage_endpoint="http://marquez:5000/api/v1/lineage",
+            lineage_transport="http",
+        )
+
+        # Serialize to dict
+        config_dict = config.model_dump()
+        assert "lineage_endpoint" in config_dict, (
+            "lineage_endpoint must appear in serialized dict"
+        )
+        assert config_dict["lineage_endpoint"] == "http://marquez:5000/api/v1/lineage"
+        assert "lineage_transport" in config_dict, (
+            "lineage_transport must appear in serialized dict"
+        )
+        assert config_dict["lineage_transport"] == "http"
+
+        # Deserialize back
+        restored = ObservabilityConfig.model_validate(config_dict)
+        assert restored.lineage_endpoint == config.lineage_endpoint
+        assert restored.lineage_transport == config.lineage_transport
+        assert restored.lineage_namespace == config.lineage_namespace
+
+        # JSON round-trip (catches JSON serialization issues)
+        json_str = config.model_dump_json()
+        json_restored = ObservabilityConfig.model_validate_json(json_str)
+        assert json_restored.lineage_endpoint == "http://marquez:5000/api/v1/lineage"
+        assert json_restored.lineage_transport == "http"
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.2")
+    def test_observability_config_none_lineage_fields_serialization(self) -> None:
+        """Test that None-valued lineage fields serialize correctly.
+
+        When lineage_endpoint and lineage_transport are not provided (None),
+        they must still appear in serialized output as null/None, and
+        deserialization must restore them as None.
+        """
+        config = ObservabilityConfig(
+            telemetry=_make_telemetry(),
+            lineage_namespace="null-test",
+        )
+
+        config_dict = config.model_dump()
+        # Fields must exist in the dict even when None
+        assert "lineage_endpoint" in config_dict, (
+            "lineage_endpoint must appear in serialized dict even when None"
+        )
+        assert config_dict["lineage_endpoint"] is None
+        assert "lineage_transport" in config_dict, (
+            "lineage_transport must appear in serialized dict even when None"
+        )
+        assert config_dict["lineage_transport"] is None
+
+        # Round-trip with None values
+        restored = ObservabilityConfig.model_validate(config_dict)
+        assert restored.lineage_endpoint is None
+        assert restored.lineage_transport is None
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.2")
+    def test_observability_config_frozen_with_lineage_fields(self) -> None:
+        """Test that ObservabilityConfig remains frozen (immutable) with new fields.
+
+        ObservabilityConfig uses model_config = ConfigDict(frozen=True).
+        The new fields must also be immutable. This prevents an implementation
+        that accidentally removes the frozen constraint.
+        """
+        config = ObservabilityConfig(
+            telemetry=_make_telemetry(),
+            lineage_namespace="frozen-test",
+            lineage_endpoint="http://marquez:5000/api/v1/lineage",
+            lineage_transport="http",
+        )
+
+        with pytest.raises(ValidationError):
+            config.lineage_endpoint = "http://other:9999"  # type: ignore[misc]
+
+        with pytest.raises(ValidationError):
+            config.lineage_transport = "console"  # type: ignore[misc]
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.2")
+    def test_observability_config_extra_forbid_still_enforced(self) -> None:
+        """Test that extra='forbid' is still enforced after adding new fields.
+
+        Adding lineage_endpoint and lineage_transport must not weaken the
+        extra='forbid' constraint. An unknown field like 'bogus_field' must
+        still be rejected.
+        """
+        with pytest.raises(ValidationError) as exc_info:
+            ObservabilityConfig(
+                telemetry=_make_telemetry(),
+                lineage_namespace="extra-test",
+                lineage_endpoint="http://marquez:5000/api/v1/lineage",
+                lineage_transport="http",
+                bogus_field="should-be-rejected",  # type: ignore[call-arg]
+            )
+        error_str = str(exc_info.value).lower()
+        assert "extra" in error_str or "bogus" in error_str, (
+            f"Error should mention extra/unknown field, got: {exc_info.value}"
+        )
