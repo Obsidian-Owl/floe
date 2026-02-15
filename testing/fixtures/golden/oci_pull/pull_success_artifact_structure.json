@@ -1,13 +1,13 @@
 {
   "name": "pull_success_artifact_structure",
   "function_name": "",
-  "captured_at": "2026-01-28T08:57:39.713107+00:00",
-  "checksum": "4ded5316db2dafd8",
+  "captured_at": "2026-02-15T08:45:26.776153+00:00",
+  "checksum": "abf20ea57e1e7b7d",
   "output": {
-    "version": "0.5.0",
+    "version": "0.8.0",
     "metadata": {
       "compiled_at": "2026-01-15 10:30:00+00:00",
-      "floe_version": "0.5.0",
+      "floe_version": "0.8.0",
       "source_hash": "sha256:golden123abc",
       "product_name": "golden-product",
       "product_version": "1.0.0"
@@ -54,7 +54,9 @@
         "backend": "console"
       },
       "lineage": true,
-      "lineage_namespace": "golden-namespace"
+      "lineage_namespace": "golden-namespace",
+      "lineage_endpoint": null,
+      "lineage_transport": null
     },
     "plugins": {
       "compute": {

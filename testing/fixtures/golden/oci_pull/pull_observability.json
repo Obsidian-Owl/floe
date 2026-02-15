@@ -1,8 +1,8 @@
 {
   "name": "pull_observability",
   "function_name": "",
-  "captured_at": "2026-01-28T08:57:39.723084+00:00",
-  "checksum": "d1cdd8b77301ec5f",
+  "captured_at": "2026-02-15T08:45:26.801910+00:00",
+  "checksum": "ca02f8aae09fb6ff",
   "output": {
     "telemetry": {
       "enabled": true,
@@ -36,6 +36,8 @@
       "backend": "console"
     },
     "lineage": true,
-    "lineage_namespace": "golden-namespace"
+    "lineage_namespace": "golden-namespace",
+    "lineage_endpoint": null,
+    "lineage_transport": null
   }
 }

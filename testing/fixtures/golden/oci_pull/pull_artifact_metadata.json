@@ -1,13 +1,13 @@
 {
   "name": "pull_artifact_metadata",
   "function_name": "",
-  "captured_at": "2026-01-28T08:57:39.715786+00:00",
-  "checksum": "912e649feba711d0",
+  "captured_at": "2026-02-15T08:45:26.779807+00:00",
+  "checksum": "251cb9c47b469871",
   "output": {
-    "version": "0.5.0",
+    "version": "0.8.0",
     "metadata": {
       "compiled_at": "2026-01-15 10:30:00+00:00",
-      "floe_version": "0.5.0",
+      "floe_version": "0.8.0",
       "source_hash": "sha256:golden123abc",
       "product_name": "golden-product",
       "product_version": "1.0.0"

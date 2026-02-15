@@ -952,14 +952,14 @@ class TestObservabilityConfigLineageFields:
                 lineage_transport=transport,
             )
             assert config.lineage_transport == transport, (
-                f"lineage_transport must accept '{transport}', "
-                f"got '{config.lineage_transport}'"
+                f"lineage_transport must accept '{transport}', got '{config.lineage_transport}'"
             )
 
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.2")
     def test_observability_config_serialization_with_lineage_fields(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Test that lineage fields survive serialization round-trip.
 
@@ -977,9 +977,7 @@ class TestObservabilityConfigLineageFields:
 
         # Serialize to dict
         config_dict = config.model_dump()
-        assert "lineage_endpoint" in config_dict, (
-            "lineage_endpoint must appear in serialized dict"
-        )
+        assert "lineage_endpoint" in config_dict, "lineage_endpoint must appear in serialized dict"
         assert config_dict["lineage_endpoint"] == "http://marquez:5000/api/v1/lineage"
         assert "lineage_transport" in config_dict, (
             "lineage_transport must appear in serialized dict"
@@ -1092,7 +1090,8 @@ class TestGovernanceObservabilityContract:
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.4")
     def test_governance_present_when_manifest_has_governance(
-        self, compiled_artifacts: Any,
+        self,
+        compiled_artifacts: Any,
     ) -> None:
         """Test that compile_pipeline with demo manifest produces non-None governance.
 
@@ -1114,7 +1113,8 @@ class TestGovernanceObservabilityContract:
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.7")
     def test_governance_policy_enforcement_level_matches_manifest(
-        self, compiled_artifacts: Any,
+        self,
+        compiled_artifacts: Any,
     ) -> None:
         """Test that governance.policy_enforcement_level matches demo manifest value.
 
@@ -1133,7 +1133,8 @@ class TestGovernanceObservabilityContract:
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.7")
     def test_governance_audit_logging_matches_manifest(
-        self, compiled_artifacts: Any,
+        self,
+        compiled_artifacts: Any,
     ) -> None:
         """Test that governance.audit_logging matches demo manifest value.
 
@@ -1152,7 +1153,8 @@ class TestGovernanceObservabilityContract:
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.7")
     def test_governance_data_retention_days_matches_manifest(
-        self, compiled_artifacts: Any,
+        self,
+        compiled_artifacts: Any,
     ) -> None:
         """Test that governance.data_retention_days matches demo manifest value.
 
@@ -1171,7 +1173,8 @@ class TestGovernanceObservabilityContract:
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.4")
     def test_governance_none_when_manifest_lacks_governance(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Test that compile_pipeline with manifest lacking governance produces None governance.
 
@@ -1197,7 +1200,11 @@ class TestGovernanceObservabilityContract:
             },
             "observability": {
                 "tracing": {"enabled": True, "exporter": "otlp", "endpoint": "http://otel:4317"},
-                "lineage": {"enabled": True, "transport": "http", "endpoint": "http://marquez:5000/api/v1/lineage"},
+                "lineage": {
+                    "enabled": True,
+                    "transport": "http",
+                    "endpoint": "http://marquez:5000/api/v1/lineage",
+                },
                 "logging": {"level": "INFO", "format": "json"},
             },
         }
@@ -1218,7 +1225,8 @@ class TestGovernanceObservabilityContract:
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.6")
     def test_observability_otlp_endpoint_matches_manifest(
-        self, compiled_artifacts: Any,
+        self,
+        compiled_artifacts: Any,
     ) -> None:
         """Test that telemetry OTLP endpoint matches demo manifest tracing endpoint.
 
@@ -1228,15 +1236,18 @@ class TestGovernanceObservabilityContract:
         spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
         artifacts = compiled_artifacts(spec_path)
 
-        assert artifacts.observability.telemetry.otlp_endpoint == "http://floe-platform-otel:4317", (
-            f"otlp_endpoint must be 'http://floe-platform-otel:4317' (from demo manifest), "
-            f"got '{artifacts.observability.telemetry.otlp_endpoint}'"
+        expected_endpoint = "http://floe-platform-otel:4317"
+        actual_endpoint = artifacts.observability.telemetry.otlp_endpoint
+        assert actual_endpoint == expected_endpoint, (
+            f"otlp_endpoint must be '{expected_endpoint}' (from demo manifest), "
+            f"got '{actual_endpoint}'"
         )
 
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.6")
     def test_observability_lineage_endpoint_matches_manifest(
-        self, compiled_artifacts: Any,
+        self,
+        compiled_artifacts: Any,
     ) -> None:
         """Test that lineage_endpoint matches demo manifest lineage endpoint.
 
@@ -1255,7 +1266,8 @@ class TestGovernanceObservabilityContract:
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.6")
     def test_observability_lineage_transport_matches_manifest(
-        self, compiled_artifacts: Any,
+        self,
+        compiled_artifacts: Any,
     ) -> None:
         """Test that lineage_transport matches demo manifest lineage transport.
 
@@ -1273,7 +1285,8 @@ class TestGovernanceObservabilityContract:
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.6")
     def test_observability_service_name_from_spec_not_manifest(
-        self, compiled_artifacts: Any,
+        self,
+        compiled_artifacts: Any,
     ) -> None:
         """Test that service_name in resource_attributes comes from spec, not manifest.
 
@@ -1289,18 +1302,17 @@ class TestGovernanceObservabilityContract:
         service_name = artifacts.observability.telemetry.resource_attributes.service_name
         # Must contain the spec name, not the manifest name
         assert "customer-360" in service_name, (
-            f"service_name must derive from spec name 'customer-360', "
-            f"got '{service_name}'"
+            f"service_name must derive from spec name 'customer-360', got '{service_name}'"
         )
         assert "floe-demo-platform" not in service_name, (
-            f"service_name must NOT be the manifest name 'floe-demo-platform', "
-            f"got '{service_name}'"
+            f"service_name must NOT be the manifest name 'floe-demo-platform', got '{service_name}'"
         )
 
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.6")
     def test_observability_lineage_enabled_when_manifest_configures_lineage(
-        self, compiled_artifacts: Any,
+        self,
+        compiled_artifacts: Any,
     ) -> None:
         """Test that lineage is enabled when manifest configures lineage section.
 
@@ -1317,7 +1329,8 @@ class TestGovernanceObservabilityContract:
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.6")
     def test_observability_telemetry_enabled_when_manifest_enables_tracing(
-        self, compiled_artifacts: Any,
+        self,
+        compiled_artifacts: Any,
     ) -> None:
         """Test that telemetry.enabled is True when manifest sets tracing.enabled: true.
 
@@ -1334,7 +1347,8 @@ class TestGovernanceObservabilityContract:
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.4")
     def test_governance_pii_encryption_not_fabricated_when_absent(
-        self, compiled_artifacts: Any,
+        self,
+        compiled_artifacts: Any,
     ) -> None:
         """Test that pii_encryption is None when not set in demo manifest governance section.
 
@@ -1357,7 +1371,8 @@ class TestGovernanceObservabilityContract:
     @pytest.mark.requirement("AC-9.6")
     @pytest.mark.requirement("AC-9.4")
     def test_governance_and_observability_consistent_across_demo_pipelines(
-        self, compiled_artifacts: Any,
+        self,
+        compiled_artifacts: Any,
     ) -> None:
         """Test that all demo pipelines sharing the same manifest get same governance/observability.
 
