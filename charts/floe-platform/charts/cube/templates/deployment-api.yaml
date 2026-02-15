@@ -68,9 +68,13 @@ spec:
               mountPath: /tmp
             - name: cube-conf
               mountPath: /cube/conf
+            - name: duckdb-home
+              mountPath: /home/node/.duckdb
       volumes:
         - name: tmp
           emptyDir: {}
         - name: cube-conf
+          emptyDir: {}
+        - name: duckdb-home
           emptyDir: {}
 {{- end }}
