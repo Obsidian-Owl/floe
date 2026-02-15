@@ -254,9 +254,10 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
             FR-049: Configurable timeout
             FR-050: Response time measurement
         """
-        # Resolve effective timeout. When no explicit timeout is provided and the
-        # plugin isn't started, config may be a MagicMock (loader.py discovery
-        # fallback). Return early to avoid comparing MagicMock with float.
+        # Resolve effective timeout. An unstarted plugin has no initialised
+        # config, so reading self._config.health_check_timeout would fail.
+        # Return UNHEALTHY immediately — callers should pass an explicit
+        # timeout or call startup() first.
         if timeout is not None:
             effective_timeout = timeout
         elif not self._started:

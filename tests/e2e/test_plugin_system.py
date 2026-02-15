@@ -376,9 +376,11 @@ class TestPluginSystem(IntegrationTestBase):
                     # Load the plugin instance (registry.get handles instantiation)
                     plugin = registry.get(plugin_type, plugin_name)
 
-                    # Call health check with timing
+                    # Call health check with explicit timeout.
+                    # Plugins may not have been started (no startup() call),
+                    # so we provide a timeout to avoid accessing uninitialised config.
                     start = time.monotonic()
-                    health_status = plugin.health_check()
+                    health_status = plugin.health_check(timeout=5.0)
                     elapsed = time.monotonic() - start
 
                     # Verify health checks complete promptly (not hung)
@@ -703,8 +705,8 @@ class ThirdPartyTestPlugin(PluginMetadata):
                     "resource_requirements": None,
                 }
 
-                # 1. Validate health check passes
-                health_status = compute_plugin.health_check()
+                # 1. Validate health check passes (explicit timeout — plugin not started)
+                health_status = compute_plugin.health_check(timeout=5.0)
                 assert health_status.state == HealthState.HEALTHY, (
                     f"Plugin {compute_name} health check failed: {health_status.message}"
                 )
