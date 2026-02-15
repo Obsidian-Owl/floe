@@ -1071,3 +1071,335 @@ class TestObservabilityConfigLineageFields:
         assert "extra" in error_str or "bogus" in error_str, (
             f"Error should mention extra/unknown field, got: {exc_info.value}"
         )
+
+
+class TestGovernanceObservabilityContract:
+    """Contract tests for governance and observability flow through compilation.
+
+    These tests validate that governance settings from manifest.yaml and
+    observability configuration (telemetry endpoints, lineage transport)
+    flow correctly through the 6-stage compilation pipeline into
+    CompiledArtifacts.
+
+    Covers:
+        - AC-9.4: Governance flows through compilation
+        - AC-9.6: Observability flows from manifest
+        - AC-9.7: Governance fields match manifest values
+    """
+
+    # -- Governance flow tests (AC-9.4, AC-9.7) --
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.4")
+    def test_governance_present_when_manifest_has_governance(
+        self, compiled_artifacts: Any,
+    ) -> None:
+        """Test that compile_pipeline with demo manifest produces non-None governance.
+
+        The demo manifest.yaml has a governance section. After compilation,
+        artifacts.governance must be a ResolvedGovernance instance, not None.
+        """
+        from floe_core.schemas.compiled_artifacts import ResolvedGovernance
+
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+
+        assert artifacts.governance is not None, (
+            "artifacts.governance must not be None when manifest has governance section"
+        )
+        assert isinstance(artifacts.governance, ResolvedGovernance), (
+            f"governance must be ResolvedGovernance, got {type(artifacts.governance).__name__}"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.7")
+    def test_governance_policy_enforcement_level_matches_manifest(
+        self, compiled_artifacts: Any,
+    ) -> None:
+        """Test that governance.policy_enforcement_level matches demo manifest value.
+
+        The demo manifest.yaml sets policy_enforcement_level: warn.
+        This must flow through compilation exactly, not be defaulted or hardcoded.
+        """
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+
+        assert artifacts.governance is not None
+        assert artifacts.governance.policy_enforcement_level == "warn", (
+            f"policy_enforcement_level must be 'warn' (from demo manifest), "
+            f"got '{artifacts.governance.policy_enforcement_level}'"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.7")
+    def test_governance_audit_logging_matches_manifest(
+        self, compiled_artifacts: Any,
+    ) -> None:
+        """Test that governance.audit_logging matches demo manifest value.
+
+        The demo manifest.yaml sets audit_logging: enabled.
+        This must flow through compilation exactly.
+        """
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+
+        assert artifacts.governance is not None
+        assert artifacts.governance.audit_logging == "enabled", (
+            f"audit_logging must be 'enabled' (from demo manifest), "
+            f"got '{artifacts.governance.audit_logging}'"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.7")
+    def test_governance_data_retention_days_matches_manifest(
+        self, compiled_artifacts: Any,
+    ) -> None:
+        """Test that governance.data_retention_days matches demo manifest value.
+
+        The demo manifest.yaml sets data_retention_days: 1.
+        This must flow through compilation exactly as an integer.
+        """
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+
+        assert artifacts.governance is not None
+        assert artifacts.governance.data_retention_days == 1, (
+            f"data_retention_days must be 1 (from demo manifest), "
+            f"got {artifacts.governance.data_retention_days}"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.4")
+    def test_governance_none_when_manifest_lacks_governance(
+        self, tmp_path: Path,
+    ) -> None:
+        """Test that compile_pipeline with manifest lacking governance produces None governance.
+
+        Creates a minimal manifest without governance section, compiles with it,
+        and verifies artifacts.governance is None (not a default-constructed object).
+        This prevents a sloppy implementation that always creates governance with defaults.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        # Create minimal manifest without governance
+        manifest_no_governance: dict[str, Any] = {
+            "apiVersion": "floe.dev/v1",
+            "kind": "Manifest",
+            "metadata": {
+                "name": "no-governance-manifest",
+                "version": "1.0.0",
+                "description": "Test manifest without governance",
+                "owner": "test@floe.dev",
+            },
+            "plugins": {
+                "compute": {"type": "duckdb", "config": {"threads": 1}},
+                "orchestrator": {"type": "dagster", "config": {}},
+            },
+            "observability": {
+                "tracing": {"enabled": True, "exporter": "otlp", "endpoint": "http://otel:4317"},
+                "lineage": {"enabled": True, "transport": "http", "endpoint": "http://marquez:5000/api/v1/lineage"},
+                "logging": {"level": "INFO", "format": "json"},
+            },
+        }
+
+        manifest_path = tmp_path / "manifest_no_gov.yaml"
+        manifest_path.write_text(yaml.dump(manifest_no_governance))
+
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compile_pipeline(spec_path, manifest_path)
+
+        assert artifacts.governance is None, (
+            f"governance must be None when manifest has no governance section, "
+            f"got {artifacts.governance!r}"
+        )
+
+    # -- Observability flow tests (AC-9.6) --
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.6")
+    def test_observability_otlp_endpoint_matches_manifest(
+        self, compiled_artifacts: Any,
+    ) -> None:
+        """Test that telemetry OTLP endpoint matches demo manifest tracing endpoint.
+
+        The demo manifest.yaml sets tracing.endpoint: http://floe-platform-otel:4317.
+        This must flow into artifacts.observability.telemetry.otlp_endpoint.
+        """
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+
+        assert artifacts.observability.telemetry.otlp_endpoint == "http://floe-platform-otel:4317", (
+            f"otlp_endpoint must be 'http://floe-platform-otel:4317' (from demo manifest), "
+            f"got '{artifacts.observability.telemetry.otlp_endpoint}'"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.6")
+    def test_observability_lineage_endpoint_matches_manifest(
+        self, compiled_artifacts: Any,
+    ) -> None:
+        """Test that lineage_endpoint matches demo manifest lineage endpoint.
+
+        The demo manifest.yaml sets lineage.endpoint: http://floe-platform-marquez:5000/api/v1/lineage.
+        This must flow into artifacts.observability.lineage_endpoint.
+        """
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+
+        expected_endpoint = "http://floe-platform-marquez:5000/api/v1/lineage"
+        assert artifacts.observability.lineage_endpoint == expected_endpoint, (
+            f"lineage_endpoint must be '{expected_endpoint}' (from demo manifest), "
+            f"got '{artifacts.observability.lineage_endpoint}'"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.6")
+    def test_observability_lineage_transport_matches_manifest(
+        self, compiled_artifacts: Any,
+    ) -> None:
+        """Test that lineage_transport matches demo manifest lineage transport.
+
+        The demo manifest.yaml sets lineage.transport: http.
+        This must flow into artifacts.observability.lineage_transport.
+        """
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+
+        assert artifacts.observability.lineage_transport == "http", (
+            f"lineage_transport must be 'http' (from demo manifest), "
+            f"got '{artifacts.observability.lineage_transport}'"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.6")
+    def test_observability_service_name_from_spec_not_manifest(
+        self, compiled_artifacts: Any,
+    ) -> None:
+        """Test that service_name in resource_attributes comes from spec, not manifest.
+
+        The demo spec's metadata.name is 'customer-360'. The manifest metadata.name
+        is 'floe-demo-platform'. The service_name in resource_attributes must derive
+        from the spec (product), not the manifest (platform).
+
+        This prevents a sloppy implementation that uses the manifest name as service_name.
+        """
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+
+        service_name = artifacts.observability.telemetry.resource_attributes.service_name
+        # Must contain the spec name, not the manifest name
+        assert "customer-360" in service_name, (
+            f"service_name must derive from spec name 'customer-360', "
+            f"got '{service_name}'"
+        )
+        assert "floe-demo-platform" not in service_name, (
+            f"service_name must NOT be the manifest name 'floe-demo-platform', "
+            f"got '{service_name}'"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.6")
+    def test_observability_lineage_enabled_when_manifest_configures_lineage(
+        self, compiled_artifacts: Any,
+    ) -> None:
+        """Test that lineage is enabled when manifest configures lineage section.
+
+        The demo manifest.yaml has lineage.enabled: true. The compiled artifacts
+        must reflect this in observability.lineage (boolean flag).
+        """
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+
+        assert artifacts.observability.lineage is True, (
+            f"lineage must be True when manifest enables it, got {artifacts.observability.lineage}"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.6")
+    def test_observability_telemetry_enabled_when_manifest_enables_tracing(
+        self, compiled_artifacts: Any,
+    ) -> None:
+        """Test that telemetry.enabled is True when manifest sets tracing.enabled: true.
+
+        Validates the tracing enabled flag flows from manifest to compiled artifacts.
+        """
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+
+        assert artifacts.observability.telemetry.enabled is True, (
+            f"telemetry.enabled must be True when manifest enables tracing, "
+            f"got {artifacts.observability.telemetry.enabled}"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.4")
+    def test_governance_pii_encryption_not_fabricated_when_absent(
+        self, compiled_artifacts: Any,
+    ) -> None:
+        """Test that pii_encryption is None when not set in demo manifest governance section.
+
+        The demo manifest governance section does not include pii_encryption.
+        The compiled governance must have pii_encryption=None, not a fabricated default.
+        This prevents a sloppy implementation that always populates optional fields.
+        """
+        spec_path = Path(__file__).parent.parent.parent / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+
+        assert artifacts.governance is not None
+        # pii_encryption is NOT in the demo manifest governance section,
+        # so it should be None (the default)
+        assert artifacts.governance.pii_encryption is None, (
+            f"pii_encryption should be None (not in demo manifest governance), "
+            f"got '{artifacts.governance.pii_encryption}'"
+        )
+
+    @pytest.mark.contract
+    @pytest.mark.requirement("AC-9.6")
+    @pytest.mark.requirement("AC-9.4")
+    def test_governance_and_observability_consistent_across_demo_pipelines(
+        self, compiled_artifacts: Any,
+    ) -> None:
+        """Test that all demo pipelines sharing the same manifest get same governance/observability.
+
+        Compiles customer-360 and iot-telemetry (both reference the same manifest).
+        Governance settings and observability endpoints must be identical across both.
+        Only service_name should differ (derived from spec, not manifest).
+        """
+        root = Path(__file__).parent.parent.parent
+        customer_spec = root / "demo" / "customer-360" / "floe.yaml"
+        iot_spec = root / "demo" / "iot-telemetry" / "floe.yaml"
+
+        customer_artifacts = compiled_artifacts(customer_spec)
+        iot_artifacts = compiled_artifacts(iot_spec)
+
+        # Governance must be identical (both inherit from same manifest)
+        assert customer_artifacts.governance is not None
+        assert iot_artifacts.governance is not None
+        assert customer_artifacts.governance.policy_enforcement_level == (
+            iot_artifacts.governance.policy_enforcement_level
+        ), "policy_enforcement_level must be identical across pipelines sharing same manifest"
+        assert customer_artifacts.governance.audit_logging == (
+            iot_artifacts.governance.audit_logging
+        ), "audit_logging must be identical across pipelines sharing same manifest"
+        assert customer_artifacts.governance.data_retention_days == (
+            iot_artifacts.governance.data_retention_days
+        ), "data_retention_days must be identical across pipelines sharing same manifest"
+
+        # Observability endpoints must be identical
+        assert customer_artifacts.observability.telemetry.otlp_endpoint == (
+            iot_artifacts.observability.telemetry.otlp_endpoint
+        ), "otlp_endpoint must be identical across pipelines sharing same manifest"
+        assert customer_artifacts.observability.lineage_endpoint == (
+            iot_artifacts.observability.lineage_endpoint
+        ), "lineage_endpoint must be identical across pipelines sharing same manifest"
+        assert customer_artifacts.observability.lineage_transport == (
+            iot_artifacts.observability.lineage_transport
+        ), "lineage_transport must be identical across pipelines sharing same manifest"
+
+        # But service_name must differ (derived from each spec's metadata.name)
+        customer_svc = customer_artifacts.observability.telemetry.resource_attributes.service_name
+        iot_svc = iot_artifacts.observability.telemetry.resource_attributes.service_name
+        assert customer_svc != iot_svc, (
+            f"service_name must differ between pipelines (spec-derived), "
+            f"but both got '{customer_svc}'"
+        )
