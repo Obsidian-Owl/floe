@@ -336,10 +336,39 @@ def compile_pipeline(
                 ResolvedGovernance,
             )
 
-            governance = getattr(spec, "governance", None)
+            # Enforcement level precedence: "stricter wins"
+            # Strength ordering: off < warn < strict
+            # Manifest is authoritative; spec can only strengthen (never weaken)
+            _ENFORCEMENT_STRENGTH: dict[str, int] = {"off": 0, "warn": 1, "strict": 2}
+
+            manifest_level: Literal["off", "warn", "strict"] | None = None
+            if manifest.governance is not None:
+                manifest_level = manifest.governance.policy_enforcement_level
+
+            spec_governance = getattr(spec, "governance", None)
+            spec_level: Literal["off", "warn", "strict"] | None = None
+            if spec_governance is not None:
+                raw_level = getattr(spec_governance, "enforcement_level", None)
+                if raw_level in ("off", "warn", "strict"):
+                    spec_level = raw_level
+
+            # Start with default "warn"
             enforcement_level: Literal["off", "warn", "strict"] = "warn"
-            if governance is not None:
-                enforcement_level = getattr(governance, "enforcement_level", "warn") or "warn"
+
+            # Apply "stricter wins" merge
+            if manifest_level is not None and spec_level is not None:
+                # Both present — pick the stricter one
+                spec_strength = _ENFORCEMENT_STRENGTH.get(spec_level, 1)
+                manifest_strength = _ENFORCEMENT_STRENGTH.get(manifest_level, 1)
+                if spec_strength >= manifest_strength:
+                    enforcement_level = spec_level
+                else:
+                    enforcement_level = manifest_level
+            elif manifest_level is not None:
+                enforcement_level = manifest_level
+            elif spec_level is not None:
+                enforcement_level = spec_level
+            # else: both None, keep default "warn"
 
             policy_types_checked: list[str] = ["plugin_instrumentation"]
             if manifest.approved_sinks is not None and spec.destinations is not None:

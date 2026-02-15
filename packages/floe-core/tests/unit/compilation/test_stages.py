@@ -6,6 +6,7 @@ Requirements:
     - FR-031: 6-stage compilation pipeline
     - FR-032: Structured logging for each stage
     - AC-9.4: Governance wiring from manifest to CompiledArtifacts
+    - AC-9.5: Enforcement level precedence rule (stricter wins)
 """
 
 from __future__ import annotations
@@ -646,3 +647,397 @@ class TestGovernanceFlow:
         assert result.governance.pii_encryption is None
         assert result.governance.audit_logging is None
         assert result.governance.data_retention_days is None
+
+
+# ==============================================================================
+# YAML constants for enforcement level precedence tests (AC-9.5)
+# ==============================================================================
+
+MANIFEST_GOVERNANCE_WARN_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: warn
+"""
+
+MANIFEST_GOVERNANCE_STRICT_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: strict
+"""
+
+MANIFEST_NO_GOVERNANCE_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+"""
+
+SPEC_NO_GOVERNANCE_YAML = """\
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: customers
+    tags: []
+"""
+
+
+class TestEnforcementLevelPrecedence:
+    """Tests for enforcement level precedence rule (AC-9.5).
+
+    The "stricter wins" rule governs how enforcement levels from manifest
+    and spec are combined:
+      - Strength ordering: strict > warn > off
+      - Manifest is authoritative; spec can only strengthen, never weaken.
+      - Default when neither is set: "warn"
+
+    These tests MUST fail before the implementation is added, because the
+    current logic (stages.py lines 339-342) reads enforcement_level from
+    spec.governance ONLY and completely ignores manifest.governance.
+
+    Key failing test: test 3 (manifest=strict, spec=warn) -- the current
+    code would return "warn" because it reads from spec, but the correct
+    answer is "strict" because the manifest sets the floor.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _apply_mocks(self, patch_version_compat: Any, mock_compute_plugin: Any) -> None:
+        """Apply plugin mocks for compilation tests."""
+
+    @pytest.mark.requirement("AC-9.5")
+    def test_manifest_warn_spec_none_produces_warn(self, tmp_path: Path) -> None:
+        """Test: manifest=warn, spec=None -> enforcement_level="warn".
+
+        When the manifest sets policy_enforcement_level to "warn" and the
+        spec has no governance section, the resulting enforcement_level must
+        be "warn". The value MUST come from the manifest, not from the
+        hardcoded default.
+
+        This test distinguishes between "warn because of manifest" vs
+        "warn because of hardcoded default" by also verifying the
+        governance object is populated from the manifest.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_NO_GOVERNANCE_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_GOVERNANCE_WARN_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        # The enforcement_level must be "warn" -- sourced from manifest
+        assert result.enforcement_result is not None, (
+            "enforcement_result must be populated"
+        )
+        assert result.enforcement_result.enforcement_level == "warn", (
+            "When manifest sets policy_enforcement_level=warn and spec has no "
+            "governance, enforcement_level must be 'warn' from the manifest"
+        )
+        # Also verify that governance was wired from the manifest,
+        # proving the value came from manifest, not hardcoded default
+        assert result.governance is not None, (
+            "governance must be populated from manifest to prove enforcement_level "
+            "came from manifest, not hardcoded default"
+        )
+        assert result.governance.policy_enforcement_level == "warn", (
+            "governance.policy_enforcement_level must mirror the manifest value"
+        )
+
+    @pytest.mark.requirement("AC-9.5")
+    def test_manifest_warn_spec_strict_produces_strict(self, tmp_path: Path) -> None:
+        """Test: manifest=warn, spec=strict -> enforcement_level="strict".
+
+        When the manifest sets policy_enforcement_level to "warn" and the
+        spec sets enforcement_level to "strict", the result must be "strict"
+        because the spec is strengthening (making stricter) the manifest.
+
+        Since FloeSpec currently has extra="forbid" and no governance field,
+        this test patches load_floe_spec to simulate a spec with governance.
+        The implementation must either add a governance field to FloeSpec or
+        handle spec-level enforcement through another mechanism.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_NO_GOVERNANCE_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_GOVERNANCE_WARN_YAML)
+
+        # Simulate spec.governance.enforcement_level = "strict"
+        # by patching the loaded spec to have a governance attribute.
+        # Import the real loader BEFORE patching to avoid recursion.
+        from floe_core.compilation.loader import load_floe_spec as real_load
+
+        spec_governance = MagicMock()
+        spec_governance.enforcement_level = "strict"
+
+        def _patched_load(path: Path) -> Any:
+            """Load spec, then attach governance attribute."""
+            spec = real_load(path)
+            # FloeSpec is frozen, so we use object.__setattr__
+            object.__setattr__(spec, "governance", spec_governance)
+            return spec
+
+        with patch(
+            "floe_core.compilation.loader.load_floe_spec",
+            side_effect=_patched_load,
+        ):
+            result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result is not None, (
+            "enforcement_result must be populated"
+        )
+        assert result.enforcement_result.enforcement_level == "strict", (
+            "When manifest=warn and spec=strict, enforcement_level must be "
+            "'strict' because spec strengthens (stricter wins rule)"
+        )
+
+    @pytest.mark.requirement("AC-9.5")
+    def test_manifest_strict_spec_warn_produces_strict(self, tmp_path: Path) -> None:
+        """Test: manifest=strict, spec=warn -> enforcement_level="strict".
+
+        When the manifest sets policy_enforcement_level to "strict" and the
+        spec tries to weaken it to "warn", the result MUST be "strict"
+        because the manifest sets the floor and specs cannot weaken it.
+
+        THIS IS THE KEY FAILING TEST. The current implementation reads
+        enforcement_level from spec.governance only and ignores the manifest.
+        With spec.governance.enforcement_level="warn", the current code
+        returns "warn" instead of the correct "strict".
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_NO_GOVERNANCE_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_GOVERNANCE_STRICT_YAML)
+
+        # Simulate spec.governance.enforcement_level = "warn"
+        # (attempting to weaken the manifest's "strict" to "warn")
+        # Import the real loader BEFORE patching to avoid recursion.
+        from floe_core.compilation.loader import load_floe_spec as real_load
+
+        spec_governance = MagicMock()
+        spec_governance.enforcement_level = "warn"
+
+        def _patched_load(path: Path) -> Any:
+            """Load spec, then attach governance attribute."""
+            spec = real_load(path)
+            object.__setattr__(spec, "governance", spec_governance)
+            return spec
+
+        with patch(
+            "floe_core.compilation.loader.load_floe_spec",
+            side_effect=_patched_load,
+        ):
+            result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result is not None, (
+            "enforcement_result must be populated"
+        )
+        assert result.enforcement_result.enforcement_level == "strict", (
+            "When manifest=strict and spec=warn, enforcement_level must be "
+            "'strict' because manifest sets the floor -- spec cannot weaken "
+            "the enforcement level (stricter wins rule)"
+        )
+
+    @pytest.mark.requirement("AC-9.5")
+    def test_manifest_none_spec_none_produces_warn_default(self, tmp_path: Path) -> None:
+        """Test: manifest=None, spec=None -> enforcement_level="warn" (default).
+
+        When neither the manifest nor the spec sets a governance section,
+        the enforcement_level must default to "warn". This is a regression
+        guard to ensure the default is stable.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_NO_GOVERNANCE_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_NO_GOVERNANCE_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result is not None, (
+            "enforcement_result must be populated"
+        )
+        assert result.enforcement_result.enforcement_level == "warn", (
+            "When neither manifest nor spec has governance, enforcement_level "
+            "must default to 'warn'"
+        )
+
+    @pytest.mark.requirement("AC-9.5")
+    def test_manifest_strict_spec_none_produces_strict(self, tmp_path: Path) -> None:
+        """Test: manifest=strict, spec=None -> enforcement_level="strict".
+
+        When the manifest sets policy_enforcement_level to "strict" and the
+        spec has no governance section, the result must be "strict" because
+        the manifest is authoritative.
+
+        THIS ALSO FAILS with the current implementation because the code
+        reads enforcement_level from spec.governance only (which is None here),
+        so it falls through to the hardcoded default "warn" instead of using
+        the manifest's "strict".
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_NO_GOVERNANCE_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_GOVERNANCE_STRICT_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result is not None, (
+            "enforcement_result must be populated"
+        )
+        assert result.enforcement_result.enforcement_level == "strict", (
+            "When manifest sets policy_enforcement_level=strict and spec has "
+            "no governance, enforcement_level must be 'strict' from the manifest. "
+            "Current bug: code ignores manifest.governance and defaults to 'warn'."
+        )
+
+    @pytest.mark.requirement("AC-9.5")
+    def test_manifest_off_spec_warn_produces_warn(self, tmp_path: Path) -> None:
+        """Test: manifest=off, spec=warn -> enforcement_level="warn".
+
+        When the manifest sets enforcement to "off" and the spec
+        strengthens it to "warn", the result must be "warn" because
+        the spec can only strengthen, and "warn" is stricter than "off".
+
+        Validates the spec-strengthening path works for all levels,
+        not just strict. Also guards against implementations that
+        only check strict vs warn and forget about the "off" level.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        manifest_off_yaml = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: "off"
+"""
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_NO_GOVERNANCE_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(manifest_off_yaml)
+
+        # Simulate spec.governance.enforcement_level = "warn"
+        # Import the real loader BEFORE patching to avoid recursion.
+        from floe_core.compilation.loader import load_floe_spec as real_load
+
+        spec_governance = MagicMock()
+        spec_governance.enforcement_level = "warn"
+
+        def _patched_load(path: Path) -> Any:
+            """Load spec, then attach governance attribute."""
+            spec = real_load(path)
+            object.__setattr__(spec, "governance", spec_governance)
+            return spec
+
+        with patch(
+            "floe_core.compilation.loader.load_floe_spec",
+            side_effect=_patched_load,
+        ):
+            result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result is not None, (
+            "enforcement_result must be populated"
+        )
+        assert result.enforcement_result.enforcement_level == "warn", (
+            "When manifest=off and spec=warn, enforcement_level must be "
+            "'warn' because spec strengthens (stricter wins: warn > off)"
+        )
+
+    @pytest.mark.requirement("AC-9.5")
+    def test_manifest_strict_spec_off_produces_strict(self, tmp_path: Path) -> None:
+        """Test: manifest=strict, spec=off -> enforcement_level="strict".
+
+        When the manifest sets enforcement to "strict" and the spec tries
+        to weaken it to "off", the result must be "strict" because the
+        manifest sets the floor and spec cannot weaken it.
+
+        This is the extreme weakening case -- from strict all the way down
+        to off. Tests that the floor enforcement from the manifest is always
+        respected regardless of how much the spec tries to weaken it.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_NO_GOVERNANCE_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_GOVERNANCE_STRICT_YAML)
+
+        # Simulate spec.governance.enforcement_level = "off"
+        # Import the real loader BEFORE patching to avoid recursion.
+        from floe_core.compilation.loader import load_floe_spec as real_load
+
+        spec_governance = MagicMock()
+        spec_governance.enforcement_level = "off"
+
+        def _patched_load(path: Path) -> Any:
+            """Load spec, then attach governance attribute."""
+            spec = real_load(path)
+            object.__setattr__(spec, "governance", spec_governance)
+            return spec
+
+        with patch(
+            "floe_core.compilation.loader.load_floe_spec",
+            side_effect=_patched_load,
+        ):
+            result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result is not None, (
+            "enforcement_result must be populated"
+        )
+        assert result.enforcement_result.enforcement_level == "strict", (
+            "When manifest=strict and spec=off, enforcement_level must be "
+            "'strict' because manifest sets the floor -- spec cannot weaken "
+            "enforcement even to 'off' (stricter wins rule)"
+        )
