@@ -5,6 +5,7 @@ Tests the compile_pipeline orchestrator and CompilationStage enum.
 Requirements:
     - FR-031: 6-stage compilation pipeline
     - FR-032: Structured logging for each stage
+    - AC-9.4: Governance wiring from manifest to CompiledArtifacts
 """
 
 from __future__ import annotations
@@ -16,6 +17,42 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+
+# YAML constants for governance tests - manifests WITH and WITHOUT governance
+MANIFEST_WITH_GOVERNANCE_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: strict
+  audit_logging: enabled
+  data_retention_days: 30
+  pii_encryption: required
+"""
+
+MANIFEST_WITH_PARTIAL_GOVERNANCE_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: warn
+"""
 
 
 class TestCompilationStage:
@@ -458,3 +495,154 @@ class TestTimingLogging:
 
         finally:
             set_tracer(None)
+
+
+class TestGovernanceFlow:
+    """Tests for governance wiring from manifest to CompiledArtifacts (AC-9.4).
+
+    Verifies that the compile_pipeline reads governance settings from the
+    manifest (not the spec) and populates artifacts.governance with a
+    ResolvedGovernance object containing the correct field values.
+
+    Current state: governance is NEVER wired through -- artifacts.governance
+    is always None. These tests MUST FAIL before implementation.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _apply_mocks(self, patch_version_compat: Any, mock_compute_plugin: Any) -> None:
+        """Apply plugin mocks for compilation tests."""
+
+    @pytest.mark.requirement("AC-9.4")
+    def test_compile_pipeline_populates_governance_from_demo_manifest(
+        self, spec_path: Path
+    ) -> None:
+        """Test that compile_pipeline populates governance from demo manifest.
+
+        Uses the real demo manifest which has governance section with:
+          policy_enforcement_level: warn
+          audit_logging: enabled
+          data_retention_days: 1
+
+        Asserts exact values match the demo manifest, not vague truthiness.
+        Will FAIL because governance is never wired to build_artifacts().
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        # Use the real demo manifest which has a governance section
+        demo_manifest_path = (
+            Path(__file__).resolve().parents[5] / "demo" / "manifest.yaml"
+        )
+        assert demo_manifest_path.exists(), (
+            f"Demo manifest not found at {demo_manifest_path}"
+        )
+
+        result = compile_pipeline(spec_path, demo_manifest_path)
+
+        # AC-9.4: governance MUST be populated when manifest has governance
+        assert result.governance is not None, (
+            "artifacts.governance is None but manifest has governance section. "
+            "Governance must be wired from manifest through build_artifacts()."
+        )
+        assert result.governance.policy_enforcement_level == "warn"
+        assert result.governance.audit_logging == "enabled"
+        assert result.governance.data_retention_days == 1
+
+    @pytest.mark.requirement("AC-9.4")
+    def test_compile_pipeline_governance_none_without_manifest_governance(
+        self, spec_path: Path, manifest_path: Path
+    ) -> None:
+        """Test that governance is None when manifest has no governance section.
+
+        The minimal manifest fixture (from conftest.py) has no governance
+        section. This test ensures backwards compatibility -- governance should
+        be None, not an empty object or a default.
+
+        This currently passes (governance is always None) but serves as a
+        regression guard against implementations that unconditionally create
+        a ResolvedGovernance.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.governance is None, (
+            "artifacts.governance should be None when manifest has no governance section"
+        )
+
+    @pytest.mark.requirement("AC-9.4")
+    def test_compile_pipeline_governance_maps_pii_encryption(
+        self, spec_path: Path, tmp_path: Path
+    ) -> None:
+        """Test that pii_encryption from manifest maps to artifacts.governance.
+
+        Creates a manifest with pii_encryption='required' and verifies
+        the exact value is preserved in the compiled artifacts.
+        Will FAIL because governance is never wired.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        manifest_with_pii = tmp_path / "manifest.yaml"
+        manifest_with_pii.write_text(MANIFEST_WITH_GOVERNANCE_YAML)
+
+        result = compile_pipeline(spec_path, manifest_with_pii)
+
+        assert result.governance is not None, (
+            "artifacts.governance is None but manifest has governance section"
+        )
+        assert result.governance.pii_encryption == "required", (
+            "pii_encryption must be mapped from manifest governance to artifacts"
+        )
+
+    @pytest.mark.requirement("AC-9.4")
+    def test_compile_pipeline_governance_maps_all_fields(
+        self, spec_path: Path, tmp_path: Path
+    ) -> None:
+        """Test that ALL four governance fields are wired from manifest.
+
+        Verifies exact values for every ResolvedGovernance field to prevent
+        partial implementations that only wire one or two fields.
+        Will FAIL because governance is never wired.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        manifest_with_gov = tmp_path / "manifest.yaml"
+        manifest_with_gov.write_text(MANIFEST_WITH_GOVERNANCE_YAML)
+
+        result = compile_pipeline(spec_path, manifest_with_gov)
+
+        assert result.governance is not None, (
+            "artifacts.governance is None but manifest has governance section"
+        )
+        # Verify ALL four fields, not just one
+        assert result.governance.policy_enforcement_level == "strict"
+        assert result.governance.audit_logging == "enabled"
+        assert result.governance.data_retention_days == 30
+        assert result.governance.pii_encryption == "required"
+
+    @pytest.mark.requirement("AC-9.4")
+    def test_compile_pipeline_governance_partial_fields(
+        self, spec_path: Path, tmp_path: Path
+    ) -> None:
+        """Test governance with only some fields set in manifest.
+
+        When the manifest has governance but only sets policy_enforcement_level
+        (not pii_encryption, audit_logging, or data_retention_days), the
+        unset fields should be None -- not defaulted to arbitrary values.
+        Will FAIL because governance is never wired.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        manifest_partial_gov = tmp_path / "manifest.yaml"
+        manifest_partial_gov.write_text(MANIFEST_WITH_PARTIAL_GOVERNANCE_YAML)
+
+        result = compile_pipeline(spec_path, manifest_partial_gov)
+
+        assert result.governance is not None, (
+            "artifacts.governance is None but manifest has governance section"
+        )
+        # The one field that IS set must be correct
+        assert result.governance.policy_enforcement_level == "warn"
+        # Fields NOT set in the manifest must be None, not hardcoded defaults
+        assert result.governance.pii_encryption is None
+        assert result.governance.audit_logging is None
+        assert result.governance.data_retention_days is None

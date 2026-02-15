@@ -333,6 +333,7 @@ def compile_pipeline(
             # Full post-dbt enforcement uses run_enforce_stage() separately
             from floe_core.schemas.compiled_artifacts import (
                 EnforcementResultSummary,
+                ResolvedGovernance,
             )
 
             governance = getattr(spec, "governance", None)
@@ -352,6 +353,16 @@ def compile_pipeline(
                 models_validated=0,
                 enforcement_level=enforcement_level,
             )
+
+            # Convert manifest governance to ResolvedGovernance for artifacts
+            resolved_governance: ResolvedGovernance | None = None
+            if manifest.governance is not None:
+                resolved_governance = ResolvedGovernance(
+                    pii_encryption=manifest.governance.pii_encryption,
+                    audit_logging=manifest.governance.audit_logging,
+                    policy_enforcement_level=manifest.governance.policy_enforcement_level,
+                    data_retention_days=manifest.governance.data_retention_days,
+                )
 
             duration_ms = (time.perf_counter() - stage_start) * 1000
             log.info(
@@ -400,6 +411,7 @@ def compile_pipeline(
                 manifest_path=manifest_path,
                 enforcement_result=enforcement_result,
                 quality_config=quality_config,
+                governance=resolved_governance,
             )
             generate_span.set_attribute("compile.artifacts_version", artifacts.version)
             duration_ms = (time.perf_counter() - stage_start) * 1000

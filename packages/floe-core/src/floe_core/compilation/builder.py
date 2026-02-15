@@ -27,6 +27,7 @@ from floe_core.schemas.compiled_artifacts import (
     EnforcementResultSummary,
     ObservabilityConfig,
     ProductIdentity,
+    ResolvedGovernance,
     ResolvedPlugins,
     ResolvedTransforms,
 )
@@ -51,6 +52,7 @@ def build_artifacts(
     manifest_path: Path | None = None,
     enforcement_result: EnforcementResultSummary | None = None,
     quality_config: QualityConfig | None = None,
+    governance: ResolvedGovernance | None = None,
 ) -> CompiledArtifacts:
     """Build CompiledArtifacts from resolved configuration.
 
@@ -62,8 +64,9 @@ def build_artifacts(
     - Generated dbt profiles
     - Enforcement result summary (optional, v0.3.0+)
     - Quality configuration (optional, v0.4.0+)
+    - Governance configuration (optional, v0.5.0+)
 
-    Task: T063, T039
+    Task: T063, T039, T051
     Requirements: FR-024, FR-025, FR-026 (Pipeline Integration)
 
     Args:
@@ -76,6 +79,7 @@ def build_artifacts(
         manifest_path: Optional path to manifest file (for source hash).
         enforcement_result: Optional enforcement result summary (v0.3.0+).
         quality_config: Optional quality configuration (v0.4.0+).
+        governance: Optional governance configuration (v0.5.0+).
 
     Returns:
         Complete CompiledArtifacts ready for output.
@@ -136,6 +140,7 @@ def build_artifacts(
         dbt_profiles=dbt_profiles,
         enforcement_result=enforcement_result,
         quality_config=quality_config,
+        governance=governance,
     )
 
 
