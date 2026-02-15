@@ -316,7 +316,7 @@ cube:
   cubeStore:
     enabled: true
     image:
-      repository: cubejs/cubestore
+      repository: ghcr.io/obsidian-owl/cube-store
       tag: "v0.36.0"
       pullPolicy: Never
     resources:
