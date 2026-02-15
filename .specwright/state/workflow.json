@@ -1,10 +1,9 @@
 {
   "version": "0.2.0",
   "currentWork": {
-    "id": "e2e-platform-gaps",
-    "phase": "verifying",
-    "verifyStartedAt": "2026-02-14T08:35:00Z",
-    "startedAt": "2026-02-13T10:40:00Z"
+    "id": "platform-integration",
+    "phase": "building",
+    "startedAt": "2026-02-15T18:35:00Z"
   },
   "completedWork": [
     {
@@ -12,6 +11,12 @@
       "phase": "shipped",
       "startedAt": "2026-02-12T06:45:00Z",
       "completedAt": "2026-02-12T14:30:00Z"
+    },
+    {
+      "id": "e2e-platform-gaps",
+      "phase": "shipped",
+      "startedAt": "2026-02-13T10:40:00Z",
+      "completedAt": "2026-02-15T18:00:00Z"
     }
   ],
   "workUnits": [
@@ -20,9 +25,12 @@
     { "id": "wu-3-dagster", "description": "Dagster 2.x SDK Migration (Full Audit)", "status": "shipped", "order": 3, "tasksCompleted": ["T16", "T17", "T18", "T19"], "pr": "https://github.com/Obsidian-Owl/floe/pull/76" },
     { "id": "wu-4-otel", "description": "OTel Pipeline + Label Alignment", "status": "shipped", "order": 4, "tasksCompleted": ["T20", "T21", "T22", "T23", "T24"], "pr": "https://github.com/Obsidian-Owl/floe/pull/77" },
     { "id": "wu-5-dbt", "description": "dbt Demo Product Pipeline", "status": "shipped", "order": 5, "tasksCompleted": ["T25", "T26", "T27", "T28", "T29"], "pr": "https://github.com/Obsidian-Owl/floe/pull/78" },
-    { "id": "wu-6-plugin-pipeline", "description": "Plugin Registry + Compilation Pipeline", "status": "building", "order": 6, "tasksCompleted": ["T30", "T31", "T32", "T33", "T34", "T35", "T36", "T37"] },
-    { "id": "wu-7-secrets-cve", "description": "Secrets Verification + CVE Bumps", "status": "pending", "order": 7 },
-    { "id": "wu-8-polish", "description": "Polaris Health Check + Final Verification", "status": "pending", "order": 8 }
+    { "id": "wu-6-plugin-pipeline", "description": "Plugin Registry + Compilation Pipeline", "status": "shipped", "order": 6, "tasksCompleted": ["T30", "T31", "T32", "T33", "T34", "T35", "T36", "T37"], "pr": "https://github.com/Obsidian-Owl/floe/pull/79" },
+    { "id": "wu-7-secrets-cve", "description": "Secrets Verification + CVE Bumps", "status": "shipped", "order": 7, "tasksCompleted": ["T38", "T39", "T40", "T41"], "pr": "https://github.com/Obsidian-Owl/floe/pull/80" },
+    { "id": "wu-8-polish", "description": "Polaris Health Check + Final Verification", "status": "shipped", "order": 8, "tasksCompleted": ["T42", "T43", "T44", "T45", "T48"], "pr": "https://github.com/Obsidian-Owl/floe/pull/82" },
+    { "id": "wu-9-config-pipeline-flow", "description": "Schema changes + governance/observability flow through builder", "status": "planning", "order": 9 },
+    { "id": "wu-10-polaris-test-fixes", "description": "Pin Polaris 1.2.1, xfail cleanup, test assertion fixes", "status": "pending", "order": 10 },
+    { "id": "wu-11-demo-packaging", "description": "Custom Dagster test image with demo code", "status": "pending", "order": 11 }
   ],
   "gates": {
     "wu-1-bootstrap": {
@@ -66,6 +74,20 @@
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-14T08:40:00Z", "note": "Token/principal validation added, debug logging added. 1 INFO: internal paths in logs." },
       "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T08:40:00Z", "note": "All findings resolved: re-exports added, logging added, RBACPlugin comment added." },
       "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-14T08:40:00Z", "note": "All 8 ACs mapped with evidence. AC7 INFO: E2E env unavailable (Helm pending-rollback)." }
+    },
+    "wu-7-secrets-cve": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T11:15:00Z", "note": "7725 unit + 820 contract pass, lint/format clean" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-14T11:15:00Z", "note": "No new tests — config-only change. I1: expected for pyproject.toml edits." },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T11:15:00Z", "note": "Bandit HIGH=0, pip-audit 0 CVEs. protobuf 6.33.4→6.33.5 fixes CVE-2026-0994." },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T11:15:00Z", "note": "Config-only change, no wiring applicable." },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T11:15:00Z", "note": "All 5 ACs mapped with evidence, all 3 BCs addressed." }
+    },
+    "wu-8-polish": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-15T07:25:00Z", "note": "7732 unit + 820 contract pass, lint/format clean (v2 post-fix)" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-15T07:30:00Z", "note": "All 7 prior WARNs resolved. Negative-path governance test added. strict=True on all xfails." },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-15T07:30:00Z", "note": "No new security issues. 7 advisory observations (pre-existing test credentials, shell patterns)." },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 6 }, "timestamp": "2026-02-15T07:30:00Z", "note": "Previous WARN resolved. Port 8182 consistent across all 5 layers. Combined port-forward cleanup correct." },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-15T07:30:00Z", "note": "All 6 ACs mapped. 2 INFO: T46/T47 need K8s for verification." }
     }
   }
 }

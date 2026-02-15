@@ -16,6 +16,7 @@ See Also:
 from __future__ import annotations
 
 import hashlib
+import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -27,6 +28,7 @@ from floe_core.schemas.compiled_artifacts import (
     EnforcementResultSummary,
     ObservabilityConfig,
     ProductIdentity,
+    ResolvedGovernance,
     ResolvedPlugins,
     ResolvedTransforms,
 )
@@ -51,6 +53,7 @@ def build_artifacts(
     manifest_path: Path | None = None,
     enforcement_result: EnforcementResultSummary | None = None,
     quality_config: QualityConfig | None = None,
+    governance: ResolvedGovernance | None = None,
 ) -> CompiledArtifacts:
     """Build CompiledArtifacts from resolved configuration.
 
@@ -62,8 +65,9 @@ def build_artifacts(
     - Generated dbt profiles
     - Enforcement result summary (optional, v0.3.0+)
     - Quality configuration (optional, v0.4.0+)
+    - Governance configuration (optional, v0.5.0+)
 
-    Task: T063, T039
+    Task: T063, T039, T051
     Requirements: FR-024, FR-025, FR-026 (Pipeline Integration)
 
     Args:
@@ -76,6 +80,7 @@ def build_artifacts(
         manifest_path: Optional path to manifest file (for source hash).
         enforcement_result: Optional enforcement result summary (v0.3.0+).
         quality_config: Optional quality configuration (v0.4.0+).
+        governance: Optional governance configuration (v0.5.0+).
 
     Returns:
         Complete CompiledArtifacts ready for output.
@@ -106,22 +111,40 @@ def build_artifacts(
         repository="",  # Would come from git remote in production
     )
 
-    # Build observability config
-    observability = ObservabilityConfig(
-        telemetry=TelemetryConfig(
-            enabled=True,
-            resource_attributes=ResourceAttributes(
-                service_name=spec.metadata.name,
-                service_version=spec.metadata.version,
-                deployment_environment="dev",
-                floe_namespace="default",
-                floe_product_name=spec.metadata.name,
-                floe_product_version=spec.metadata.version,
-                floe_mode="dev",
-            ),
+    # Build observability config from manifest + spec
+    manifest_obs = manifest.observability
+
+    # Tracing endpoint from manifest (or default)
+    otlp_kwargs: dict[str, Any] = {}
+    if manifest_obs is not None and manifest_obs.tracing.endpoint is not None:
+        otlp_kwargs["otlp_endpoint"] = manifest_obs.tracing.endpoint
+
+    telemetry = TelemetryConfig(
+        enabled=True,
+        resource_attributes=ResourceAttributes(
+            service_name=spec.metadata.name,
+            service_version=spec.metadata.version,
+            deployment_environment="dev",
+            floe_namespace="default",
+            floe_product_name=spec.metadata.name,
+            floe_product_version=spec.metadata.version,
+            floe_mode="dev",
         ),
-        lineage=True,
+        **otlp_kwargs,
+    )
+
+    # Lineage from manifest (or defaults)
+    lineage_kwargs: dict[str, Any] = {}
+    if manifest_obs is not None:
+        lineage_kwargs["lineage"] = manifest_obs.lineage.enabled
+        lineage_kwargs["lineage_transport"] = manifest_obs.lineage.transport
+        if manifest_obs.lineage.endpoint is not None:
+            lineage_kwargs["lineage_endpoint"] = manifest_obs.lineage.endpoint
+
+    observability = ObservabilityConfig(
+        telemetry=telemetry,
         lineage_namespace=spec.metadata.name,
+        **lineage_kwargs,
     )
 
     return CompiledArtifacts(
@@ -136,6 +159,7 @@ def build_artifacts(
         dbt_profiles=dbt_profiles,
         enforcement_result=enforcement_result,
         quality_config=quality_config,
+        governance=governance,
     )
 
 
@@ -191,11 +215,15 @@ def get_git_commit() -> str | None:
             capture_output=True,
             text=True,
             check=False,
+            timeout=10,
         )
         if result.returncode == 0:
-            return result.stdout.strip()
+            commit = result.stdout.strip()
+            if not re.match(r"^[a-f0-9]{40}$", commit):
+                return None
+            return commit
         return None
-    except (FileNotFoundError, subprocess.SubprocessError):
+    except (FileNotFoundError, subprocess.SubprocessError, subprocess.TimeoutExpired):
         return None
 
 

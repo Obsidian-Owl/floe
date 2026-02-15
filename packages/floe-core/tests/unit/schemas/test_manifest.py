@@ -3,16 +3,18 @@
 Tests validation of manifest loading including valid configurations,
 required fields, field validation, and forward compatibility.
 
-Task: T011, T012, T013, T014, T058, T059
-Requirements: FR-001, FR-002, FR-011, FR-013, FR-015, FR-016
+Task: T011, T012, T013, T014, T049, T058, T059
+Requirements: FR-001, FR-002, FR-011, FR-013, FR-015, FR-016, AC-9.1
 """
 
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 
@@ -642,3 +644,549 @@ class TestEnvironmentAgnosticConfiguration:
             f"Serialized manifest should not contain environment keys. "
             f"Found: {all_keys.intersection(forbidden_keys)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Helper: minimal manifest dict factory
+# ---------------------------------------------------------------------------
+_MINIMAL_MANIFEST: dict[str, Any] = {
+    "api_version": "floe.dev/v1",
+    "kind": "Manifest",
+    "metadata": {
+        "name": "test",
+        "version": "1.0.0",
+        "owner": "test@example.com",
+    },
+    "plugins": {},
+}
+"""Reusable minimal manifest dict for observability tests."""
+
+
+def _minimal_manifest(**overrides: Any) -> dict[str, Any]:
+    """Build a minimal manifest dict with optional overrides.
+
+    Args:
+        **overrides: Keys to merge into the base manifest dict.
+
+    Returns:
+        A fresh copy of the minimal manifest with overrides applied.
+    """
+    data = {**_MINIMAL_MANIFEST}
+    data.update(overrides)
+    return data
+
+
+class TestObservabilityManifestConfigImport:
+    """Tests that ObservabilityManifestConfig and sub-models are importable (T049).
+
+    These tests will fail with ImportError until the models are defined
+    in floe_core.schemas.manifest.
+    """
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_import_observability_manifest_config(self) -> None:
+        """Test ObservabilityManifestConfig is importable from manifest module."""
+        from floe_core.schemas.manifest import ObservabilityManifestConfig  # noqa: F401
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_import_tracing_manifest_config(self) -> None:
+        """Test TracingManifestConfig is importable from manifest module."""
+        from floe_core.schemas.manifest import TracingManifestConfig  # noqa: F401
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_import_lineage_manifest_config(self) -> None:
+        """Test LineageManifestConfig is importable from manifest module."""
+        from floe_core.schemas.manifest import LineageManifestConfig  # noqa: F401
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_import_logging_manifest_config(self) -> None:
+        """Test LoggingManifestConfig is importable from manifest module."""
+        from floe_core.schemas.manifest import LoggingManifestConfig  # noqa: F401
+
+
+class TestObservabilityDemoManifestLoading:
+    """Tests that loading demo/manifest.yaml populates observability as a typed field (T049).
+
+    Validates AC-9.1: loading the demo manifest.yaml populates
+    manifest.observability as a typed ObservabilityManifestConfig.
+    """
+
+    @staticmethod
+    def _load_demo_manifest() -> Any:
+        """Load the demo manifest.yaml and parse via PlatformManifest.
+
+        Returns:
+            A PlatformManifest instance loaded from the demo manifest file.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        demo_path = Path(__file__).resolve().parents[5] / "demo" / "manifest.yaml"
+        assert demo_path.exists(), f"Demo manifest not found at {demo_path}"
+
+        with open(demo_path) as f:
+            data: dict[str, Any] = yaml.safe_load(f)
+
+        return PlatformManifest.model_validate(data)
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_demo_manifest_observability_is_typed(self) -> None:
+        """Test that demo manifest.observability is an ObservabilityManifestConfig instance.
+
+        Not a plain dict and not stuffed into model_extra.
+        """
+        from floe_core.schemas.manifest import ObservabilityManifestConfig
+
+        manifest = self._load_demo_manifest()
+        assert isinstance(manifest.observability, ObservabilityManifestConfig), (
+            f"Expected ObservabilityManifestConfig, got {type(manifest.observability)}"
+        )
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_demo_manifest_tracing_endpoint(self) -> None:
+        """Test manifest.observability.tracing.endpoint matches demo value."""
+        manifest = self._load_demo_manifest()
+        assert manifest.observability.tracing.endpoint == "http://floe-platform-otel:4317"
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_demo_manifest_lineage_endpoint(self) -> None:
+        """Test manifest.observability.lineage.endpoint matches demo value."""
+        manifest = self._load_demo_manifest()
+        assert (
+            manifest.observability.lineage.endpoint
+            == "http://floe-platform-marquez:5000/api/v1/lineage"
+        )
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_demo_manifest_logging_level(self) -> None:
+        """Test manifest.observability.logging.level matches demo value."""
+        manifest = self._load_demo_manifest()
+        assert manifest.observability.logging.level == "INFO"
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_demo_manifest_tracing_sub_fields(self) -> None:
+        """Test tracing sub-model fields are populated from demo manifest.
+
+        Verifies enabled and exporter are set correctly, ensuring
+        the model actually parses nested YAML fields rather than
+        accepting any dict shape.
+        """
+        from floe_core.schemas.manifest import TracingManifestConfig
+
+        manifest = self._load_demo_manifest()
+        tracing = manifest.observability.tracing
+        assert isinstance(tracing, TracingManifestConfig)
+        assert tracing.enabled is True
+        assert tracing.exporter == "otlp"
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_demo_manifest_lineage_sub_fields(self) -> None:
+        """Test lineage sub-model fields are populated from demo manifest.
+
+        Verifies enabled and transport are set correctly.
+        """
+        from floe_core.schemas.manifest import LineageManifestConfig
+
+        manifest = self._load_demo_manifest()
+        lineage = manifest.observability.lineage
+        assert isinstance(lineage, LineageManifestConfig)
+        assert lineage.enabled is True
+        assert lineage.transport == "http"
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_demo_manifest_logging_sub_fields(self) -> None:
+        """Test logging sub-model fields are populated from demo manifest.
+
+        Verifies format is set correctly.
+        """
+        from floe_core.schemas.manifest import LoggingManifestConfig
+
+        manifest = self._load_demo_manifest()
+        logging_cfg = manifest.observability.logging
+        assert isinstance(logging_cfg, LoggingManifestConfig)
+        assert logging_cfg.format == "json"
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_demo_manifest_observability_not_in_model_extra(self) -> None:
+        """Test that 'observability' does NOT appear in model_extra keys.
+
+        After adding the typed field, observability should be parsed
+        as a proper field, not captured as an unknown extra.
+        """
+        manifest = self._load_demo_manifest()
+        extra_keys = set(manifest.model_extra.keys()) if manifest.model_extra else set()
+        assert "observability" not in extra_keys, (
+            f"'observability' should NOT be in model_extra, but found: {extra_keys}"
+        )
+
+
+class TestObservabilityOptionalField:
+    """Tests that PlatformManifest without observability still loads (T049).
+
+    AC-9.1: PlatformManifest without observability still loads (field is Optional).
+    """
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_manifest_without_observability_loads(self) -> None:
+        """Test that manifest without observability field is valid.
+
+        The observability field must be Optional with a default of None.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        manifest = PlatformManifest.model_validate(_minimal_manifest())
+        assert manifest.observability is None
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_manifest_without_observability_has_no_extra(self) -> None:
+        """Test that omitting observability does not pollute model_extra."""
+        from floe_core.schemas.manifest import PlatformManifest
+
+        manifest = PlatformManifest.model_validate(_minimal_manifest())
+        extra_keys = set(manifest.model_extra.keys()) if manifest.model_extra else set()
+        assert "observability" not in extra_keys
+
+
+class TestObservabilityDefaults:
+    """Tests for boundary conditions BC-9.1 and BC-9.2 (T049).
+
+    BC-9.1: Empty observability uses all defaults.
+    BC-9.2: Partial observability uses defaults for missing sub-sections.
+    """
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_empty_observability_uses_defaults(self) -> None:
+        """Test that observability: {} populates all sub-models with defaults.
+
+        BC-9.1: Empty observability block should result in
+        tracing.enabled=True, lineage defaults, logging defaults.
+        """
+        from floe_core.schemas.manifest import (
+            ObservabilityManifestConfig,
+            PlatformManifest,
+        )
+
+        data = _minimal_manifest(observability={})
+        manifest = PlatformManifest.model_validate(data)
+
+        assert manifest.observability is not None
+        assert isinstance(manifest.observability, ObservabilityManifestConfig)
+
+        # Tracing defaults
+        assert manifest.observability.tracing is not None
+        assert manifest.observability.tracing.enabled is True
+
+        # Lineage defaults
+        assert manifest.observability.lineage is not None
+        assert manifest.observability.lineage.enabled is True
+
+        # Logging defaults
+        assert manifest.observability.logging is not None
+        assert manifest.observability.logging.level == "INFO"
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_empty_observability_tracing_has_no_endpoint(self) -> None:
+        """Test that default tracing does not have a hardcoded endpoint.
+
+        When tracing is defaulted (no explicit config), endpoint should
+        be None or a sensible default -- NOT the demo manifest endpoint.
+        A sloppy implementation that hardcodes the demo value would fail this.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        data = _minimal_manifest(observability={})
+        manifest = PlatformManifest.model_validate(data)
+
+        # Default endpoint should be None since no endpoint was provided
+        assert manifest.observability.tracing.endpoint is None
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_partial_observability_tracing_only(self) -> None:
+        """Test that providing only tracing uses defaults for lineage and logging.
+
+        BC-9.2: Manifest with observability.tracing only should
+        still have lineage and logging with their default values.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        data = _minimal_manifest(
+            observability={
+                "tracing": {
+                    "enabled": True,
+                    "exporter": "otlp",
+                    "endpoint": "http://custom-otel:4317",
+                },
+            }
+        )
+        manifest = PlatformManifest.model_validate(data)
+
+        # Tracing should have the explicit values
+        assert manifest.observability.tracing.enabled is True
+        assert manifest.observability.tracing.exporter == "otlp"
+        assert manifest.observability.tracing.endpoint == "http://custom-otel:4317"
+
+        # Lineage and logging should exist with defaults
+        assert manifest.observability.lineage is not None
+        assert manifest.observability.logging is not None
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_partial_observability_lineage_only(self) -> None:
+        """Test that providing only lineage uses defaults for tracing and logging.
+
+        BC-9.2: Ensures that omitting tracing and logging sub-sections
+        still produces valid default sub-models.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        data = _minimal_manifest(
+            observability={
+                "lineage": {
+                    "enabled": True,
+                    "transport": "http",
+                    "endpoint": "http://marquez:5000/api/v1/lineage",
+                },
+            }
+        )
+        manifest = PlatformManifest.model_validate(data)
+
+        # Lineage should have explicit values
+        assert manifest.observability.lineage.enabled is True
+        assert manifest.observability.lineage.transport == "http"
+        assert manifest.observability.lineage.endpoint == "http://marquez:5000/api/v1/lineage"
+
+        # Tracing and logging should exist with defaults
+        assert manifest.observability.tracing is not None
+        assert manifest.observability.tracing.enabled is True
+        assert manifest.observability.logging is not None
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_partial_observability_logging_only(self) -> None:
+        """Test that providing only logging uses defaults for tracing and lineage.
+
+        BC-9.2: Symmetric test for the logging-only case.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        data = _minimal_manifest(
+            observability={
+                "logging": {
+                    "level": "DEBUG",
+                    "format": "text",
+                },
+            }
+        )
+        manifest = PlatformManifest.model_validate(data)
+
+        # Logging should have explicit values
+        assert manifest.observability.logging.level == "DEBUG"
+        assert manifest.observability.logging.format == "text"
+
+        # Tracing and lineage should exist with defaults
+        assert manifest.observability.tracing is not None
+        assert manifest.observability.lineage is not None
+
+
+class TestObservabilityForwardCompatibility:
+    """Tests that observability no longer triggers unknown-field warnings (T049).
+
+    AC-9.1: observability is now a known field and must NOT appear
+    in the warn_on_extra_fields warning list.
+    """
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_observability_does_not_trigger_unknown_field_warning(self) -> None:
+        """Test that providing observability does not emit an unknown-field warning.
+
+        After implementation, observability is a declared field, so the
+        warn_on_extra_fields model_validator must not fire for it.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            PlatformManifest.model_validate(
+                _minimal_manifest(
+                    observability={
+                        "tracing": {"enabled": True, "endpoint": "http://otel:4317"},
+                    }
+                )
+            )
+
+            observability_warnings = [
+                warning for warning in w if "observability" in str(warning.message).lower()
+            ]
+            assert len(observability_warnings) == 0, (
+                f"Observability should not trigger unknown-field warnings, "
+                f"but got: {[str(ww.message) for ww in observability_warnings]}"
+            )
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_other_unknown_fields_still_warn(self) -> None:
+        """Test that truly unknown fields still trigger warnings.
+
+        Ensures that adding observability did not break the
+        warn_on_extra_fields mechanism for other unknown fields.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            PlatformManifest.model_validate(
+                _minimal_manifest(
+                    observability={},
+                    totally_unknown_field="surprise",  # Should still warn
+                )
+            )
+
+            unknown_warnings = [
+                warning for warning in w if "unknown" in str(warning.message).lower()
+            ]
+            assert len(unknown_warnings) >= 1, (
+                "Unknown fields other than observability should still trigger warnings"
+            )
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_observability_is_in_model_fields(self) -> None:
+        """Test that 'observability' is a declared field on PlatformManifest.
+
+        This verifies it is part of the Pydantic schema, not just
+        captured in model_extra.
+        """
+        from floe_core.schemas.manifest import PlatformManifest
+
+        assert "observability" in PlatformManifest.model_fields, (
+            "'observability' must be a declared field on PlatformManifest, "
+            f"but model_fields keys are: {list(PlatformManifest.model_fields.keys())}"
+        )
+
+
+class TestObservabilityManifestConfigModel:
+    """Tests for ObservabilityManifestConfig model structure (T049).
+
+    Validates that the model is a proper Pydantic BaseModel with
+    the expected sub-fields and behavior.
+    """
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_observability_config_default_construction(self) -> None:
+        """Test that ObservabilityManifestConfig() works with no args.
+
+        All fields have defaults, so constructing with no args must succeed.
+        """
+        from floe_core.schemas.manifest import ObservabilityManifestConfig
+
+        config = ObservabilityManifestConfig()
+        assert config.tracing is not None
+        assert config.tracing.enabled is True
+        assert config.lineage is not None
+        assert config.lineage.enabled is True
+        assert config.logging is not None
+        assert config.logging.level == "INFO"
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_tracing_config_default_construction(self) -> None:
+        """Test that TracingManifestConfig() works with no args and has defaults."""
+        from floe_core.schemas.manifest import TracingManifestConfig
+
+        tracing = TracingManifestConfig()
+        assert tracing.enabled is True
+        assert tracing.endpoint is None
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_lineage_config_default_construction(self) -> None:
+        """Test that LineageManifestConfig() works with no args and has defaults."""
+        from floe_core.schemas.manifest import LineageManifestConfig
+
+        lineage = LineageManifestConfig()
+        assert lineage.enabled is True
+        assert lineage.transport == "http"
+        assert lineage.endpoint is None
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_logging_config_default_construction(self) -> None:
+        """Test that LoggingManifestConfig() works with no args and has defaults."""
+        from floe_core.schemas.manifest import LoggingManifestConfig
+
+        logging_cfg = LoggingManifestConfig()
+        assert logging_cfg.level == "INFO"
+        assert logging_cfg.format == "json"
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_tracing_endpoint_rejects_non_http_scheme(self) -> None:
+        """Test that tracing endpoint rejects non-http/https URLs (CWE-918)."""
+        from floe_core.schemas.manifest import TracingManifestConfig
+
+        with pytest.raises(ValidationError, match="http or https scheme"):
+            TracingManifestConfig(endpoint="ftp://otel-collector:4317")
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_tracing_endpoint_rejects_private_network(self) -> None:
+        """Test that tracing endpoint rejects private network targets (CWE-918)."""
+        from floe_core.schemas.manifest import TracingManifestConfig
+
+        with pytest.raises(ValidationError, match="private/internal"):
+            TracingManifestConfig(endpoint="http://127.0.0.1:4317")
+
+        with pytest.raises(ValidationError, match="private/internal"):
+            TracingManifestConfig(endpoint="http://localhost:4317")
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_lineage_endpoint_rejects_non_http_scheme(self) -> None:
+        """Test that lineage endpoint rejects non-http/https URLs (CWE-918)."""
+        from floe_core.schemas.manifest import LineageManifestConfig
+
+        with pytest.raises(ValidationError, match="http or https scheme"):
+            LineageManifestConfig(endpoint="file:///etc/passwd")
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_lineage_endpoint_rejects_private_network(self) -> None:
+        """Test that lineage endpoint rejects private network targets (CWE-918)."""
+        from floe_core.schemas.manifest import LineageManifestConfig
+
+        with pytest.raises(ValidationError, match="private/internal"):
+            LineageManifestConfig(endpoint="http://192.168.1.1:5000")
+
+        with pytest.raises(ValidationError, match="private/internal"):
+            LineageManifestConfig(endpoint="http://10.0.0.1:5000")
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_endpoint_accepts_valid_k8s_hostnames(self) -> None:
+        """Test that endpoint validation accepts valid K8s service hostnames."""
+        from floe_core.schemas.manifest import (
+            LineageManifestConfig,
+            TracingManifestConfig,
+        )
+
+        tracing = TracingManifestConfig(endpoint="http://floe-otel:4317")
+        assert tracing.endpoint == "http://floe-otel:4317"
+
+        lineage = LineageManifestConfig(endpoint="https://marquez.prod.svc:5000/api/v1")
+        assert lineage.endpoint == "https://marquez.prod.svc:5000/api/v1"
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_observability_config_is_frozen(self) -> None:
+        """Test that ObservabilityManifestConfig is immutable (frozen).
+
+        Consistent with PlatformManifest and GovernanceConfig being frozen.
+        """
+        from floe_core.schemas.manifest import ObservabilityManifestConfig
+
+        config = ObservabilityManifestConfig()
+        with pytest.raises(ValidationError):
+            config.tracing = None  # type: ignore[misc]
+
+    @pytest.mark.requirement("AC-9.1")
+    def test_observability_roundtrip_serialization(self) -> None:
+        """Test that ObservabilityManifestConfig roundtrips through dict.
+
+        Construct, dump to dict, re-validate from dict, verify equality.
+        A sloppy implementation that drops fields or changes types would fail.
+        """
+        from floe_core.schemas.manifest import ObservabilityManifestConfig
+
+        original = ObservabilityManifestConfig()
+        dumped = original.model_dump()
+        restored = ObservabilityManifestConfig.model_validate(dumped)
+
+        assert restored.tracing.enabled == original.tracing.enabled
+        assert restored.lineage.endpoint == original.lineage.endpoint
+        assert restored.logging.level == original.logging.level

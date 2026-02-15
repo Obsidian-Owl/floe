@@ -15,10 +15,11 @@ Implements:
 
 from __future__ import annotations
 
+import re
 import warnings
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from floe_core.schemas.governance import (
     CustomRule,
@@ -241,6 +242,81 @@ class GovernanceConfig(BaseModel):
     )
 
 
+_PRIVATE_NETWORK_PATTERN = re.compile(
+    r"://(?:127\.|192\.168\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.|::1|localhost)"
+)
+
+
+def _validate_endpoint(v: str | None) -> str | None:
+    """Validate that an endpoint URL uses http/https and does not target private networks."""
+    if v is None:
+        return v
+    if not re.match(r"^https?://", v):
+        raise ValueError("Endpoint must use http or https scheme")
+    if _PRIVATE_NETWORK_PATTERN.search(v):
+        raise ValueError("Endpoint cannot target private/internal networks")
+    return v
+
+
+class TracingManifestConfig(BaseModel):
+    """Tracing settings from manifest.yaml."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    enabled: bool = Field(default=True, description="Enable distributed tracing")
+    exporter: Literal["otlp", "console", "none"] = Field(
+        default="otlp", description="Trace exporter type"
+    )
+    endpoint: str | None = Field(default=None, description="OTLP collector endpoint")
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint_url(cls, v: str | None) -> str | None:
+        """Validate endpoint uses http/https and does not target private networks."""
+        return _validate_endpoint(v)
+
+
+class LineageManifestConfig(BaseModel):
+    """Lineage settings from manifest.yaml."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    enabled: bool = Field(default=True, description="Enable data lineage tracking")
+    transport: Literal["http", "console", "noop"] = Field(
+        default="http", description="OpenLineage transport type"
+    )
+    endpoint: str | None = Field(default=None, description="OpenLineage API endpoint")
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint_url(cls, v: str | None) -> str | None:
+        """Validate endpoint uses http/https and does not target private networks."""
+        return _validate_endpoint(v)
+
+
+class LoggingManifestConfig(BaseModel):
+    """Logging settings from manifest.yaml."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
+        default="INFO", description="Log level"
+    )
+    format: Literal["json", "text"] = Field(default="json", description="Log output format")
+
+
+class ObservabilityManifestConfig(BaseModel):
+    """Observability settings from manifest.yaml."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    tracing: TracingManifestConfig = Field(
+        default_factory=TracingManifestConfig, description="Tracing configuration"
+    )
+    lineage: LineageManifestConfig = Field(
+        default_factory=LineageManifestConfig, description="Lineage configuration"
+    )
+    logging: LoggingManifestConfig = Field(
+        default_factory=LoggingManifestConfig, description="Logging configuration"
+    )
+
+
 class PlatformManifest(BaseModel):
     """Root configuration entity for platform manifests.
 
@@ -359,6 +435,10 @@ class PlatformManifest(BaseModel):
         default=None,
         description="OCI artifact storage and promotion lifecycle configuration (Epic 8C)",
     )
+    observability: ObservabilityManifestConfig | None = Field(
+        default=None,
+        description="Observability configuration (tracing, lineage, logging)",
+    )
 
     @model_validator(mode="after")
     def validate_scope_constraints(self) -> PlatformManifest:
@@ -457,6 +537,10 @@ __all__ = [
     "ArtifactsConfig",
     "FORBIDDEN_ENVIRONMENT_FIELDS",
     "GovernanceConfig",
+    "LineageManifestConfig",
+    "LoggingManifestConfig",
     "ManifestScope",
+    "ObservabilityManifestConfig",
     "PlatformManifest",
+    "TracingManifestConfig",
 ]

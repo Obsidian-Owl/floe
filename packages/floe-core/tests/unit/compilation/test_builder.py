@@ -526,3 +526,126 @@ class TestBuildArtifactsEdgeCases:
         assert artifacts.enforcement_result is not None
         assert artifacts.enforcement_result.passed is True
         assert artifacts.enforcement_result.error_count == 0
+
+
+class TestBuildArtifactsGovernance:
+    """Tests for governance parameter in build_artifacts (AC-9.7).
+
+    Verifies that build_artifacts() accepts a governance keyword argument
+    and passes it through to the CompiledArtifacts constructor.
+
+    Current state: build_artifacts() does NOT have a governance parameter.
+    These tests MUST FAIL before implementation (TypeError on unknown kwarg).
+    """
+
+    @pytest.mark.requirement("AC-9.7")
+    def test_build_artifacts_accepts_governance_parameter(
+        self,
+        sample_spec: FloeSpec,
+        sample_manifest: PlatformManifest,
+        sample_plugins: ResolvedPlugins,
+        sample_transforms: ResolvedTransforms,
+        sample_dbt_profiles: dict[str, object],
+    ) -> None:
+        """Test that build_artifacts accepts governance as a keyword argument.
+
+        Calls build_artifacts() with governance=ResolvedGovernance(...).
+        Will FAIL with TypeError because the parameter does not exist yet.
+        """
+        from floe_core.compilation.builder import build_artifacts
+        from floe_core.schemas.compiled_artifacts import ResolvedGovernance
+
+        governance = ResolvedGovernance(
+            policy_enforcement_level="strict",
+            audit_logging="enabled",
+            pii_encryption="required",
+            data_retention_days=90,
+        )
+
+        artifacts = build_artifacts(
+            sample_spec,
+            sample_manifest,
+            sample_plugins,
+            sample_transforms,
+            sample_dbt_profiles,
+            governance=governance,
+        )
+
+        # Verify the governance is populated with exact values
+        assert artifacts.governance is not None
+        assert artifacts.governance.policy_enforcement_level == "strict"
+        assert artifacts.governance.audit_logging == "enabled"
+        assert artifacts.governance.pii_encryption == "required"
+        assert artifacts.governance.data_retention_days == 90
+
+    @pytest.mark.requirement("AC-9.7")
+    def test_build_artifacts_governance_none_by_default(
+        self,
+        sample_spec: FloeSpec,
+        sample_manifest: PlatformManifest,
+        sample_plugins: ResolvedPlugins,
+        sample_transforms: ResolvedTransforms,
+        sample_dbt_profiles: dict[str, object],
+    ) -> None:
+        """Test that build_artifacts defaults governance to None.
+
+        Calling build_artifacts() without the governance parameter must
+        produce artifacts with governance=None for backwards compatibility.
+
+        NOTE: This test currently passes because governance defaults to None
+        on CompiledArtifacts. It serves as a regression guard.
+        """
+        from floe_core.compilation.builder import build_artifacts
+
+        artifacts = build_artifacts(
+            sample_spec,
+            sample_manifest,
+            sample_plugins,
+            sample_transforms,
+            sample_dbt_profiles,
+        )
+
+        assert artifacts.governance is None
+
+    @pytest.mark.requirement("AC-9.7")
+    def test_build_artifacts_governance_passes_through_exact_values(
+        self,
+        sample_spec: FloeSpec,
+        sample_manifest: PlatformManifest,
+        sample_plugins: ResolvedPlugins,
+        sample_transforms: ResolvedTransforms,
+        sample_dbt_profiles: dict[str, object],
+    ) -> None:
+        """Test that governance values round-trip exactly through build_artifacts.
+
+        Prevents implementations that accept the parameter but ignore it,
+        or that hardcode specific values instead of passing through.
+        Uses deliberately non-default values to catch hardcoding.
+        Will FAIL with TypeError because the parameter does not exist yet.
+        """
+        from floe_core.compilation.builder import build_artifacts
+        from floe_core.schemas.compiled_artifacts import ResolvedGovernance
+
+        # Use values that are NOT the demo defaults to catch hardcoding
+        governance = ResolvedGovernance(
+            policy_enforcement_level="off",
+            audit_logging="disabled",
+            pii_encryption="optional",
+            data_retention_days=365,
+        )
+
+        artifacts = build_artifacts(
+            sample_spec,
+            sample_manifest,
+            sample_plugins,
+            sample_transforms,
+            sample_dbt_profiles,
+            governance=governance,
+        )
+
+        # Exact value assertions -- no wiggle room for hardcoded returns
+        assert artifacts.governance is not None
+        assert artifacts.governance.policy_enforcement_level == "off"
+        assert artifacts.governance.audit_logging == "disabled"
+        assert artifacts.governance.pii_encryption == "optional"
+        assert artifacts.governance.data_retention_days == 365

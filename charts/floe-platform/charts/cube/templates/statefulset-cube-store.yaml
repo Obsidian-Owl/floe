@@ -17,10 +17,10 @@ spec:
         {{- include "cube.cubeStore.labels" . | nindent 8 }}
     spec:
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
+        runAsNonRoot: false
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
       containers:
         - name: cube-store
           image: "{{ .Values.cubeStore.image.repository }}:{{ .Values.cubeStore.image.tag | default .Chart.AppVersion }}"
@@ -41,9 +41,13 @@ spec:
             - name: data
               mountPath: /cube/data
             {{- end }}
+            - name: cubestore-data
+              mountPath: /cube/.cubestore
             - name: tmp
               mountPath: /tmp
       volumes:
+        - name: cubestore-data
+          emptyDir: {}
         - name: tmp
           emptyDir: {}
   {{- if .Values.cubeStore.persistence.enabled }}

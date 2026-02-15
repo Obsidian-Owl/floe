@@ -15,9 +15,10 @@ data:
   # Cache and queue driver
   CUBEJS_CACHE_AND_QUEUE_DRIVER: {{ .Values.config.cacheDriver | quote }}
 
-  # Cube Store host (only if enabled)
+  # Cube Store connection (only if enabled)
   {{- if .Values.cubeStore.enabled }}
-  CUBEJS_CUBESTORE_HOST: {{ include "cube.fullname" . }}-cube-store:{{ .Values.cubeStore.port }}
+  CUBEJS_CUBESTORE_HOST: {{ include "cube.fullname" . }}-cube-store
+  CUBEJS_CUBESTORE_PORT: {{ .Values.cubeStore.port | quote }}
   {{- end }}
 
   # Telemetry

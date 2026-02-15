@@ -506,18 +506,20 @@ class TestEnforcementResultSummary3EExtension:
         assert summary_with_3e.network_policy_violations == 2
 
     @pytest.mark.requirement("3E-FR-032")
-    def test_version_bump_to_0_7_0(self) -> None:
-        """Contract: COMPILED_ARTIFACTS_VERSION bumps to 0.7.0 for Epic 3E.
+    def test_version_at_least_0_7_0(self) -> None:
+        """Contract: COMPILED_ARTIFACTS_VERSION is at least 0.7.0 for Epic 3E.
 
-        Verifies that the CompiledArtifacts contract version is updated to 0.7.0
-        to reflect the breaking changes from Epic 3E.
-
-        TDD: This will FAIL until T012 updates COMPILED_ARTIFACTS_VERSION.
+        Verifies that the CompiledArtifacts contract version is at least 0.7.0
+        to reflect the breaking changes from Epic 3E. Version may be higher
+        due to subsequent additive changes (e.g., 0.8.0 for lineage fields).
         """
         from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
-        # TDD: Will pass after T012 implements version bump
-        assert COMPILED_ARTIFACTS_VERSION == "0.7.0"
+        major, minor, patch = (int(x) for x in COMPILED_ARTIFACTS_VERSION.split("."))
+        assert (major, minor) >= (0, 7), (
+            f"COMPILED_ARTIFACTS_VERSION must be >= 0.7.0 for Epic 3E, "
+            f"got {COMPILED_ARTIFACTS_VERSION}"
+        )
 
 
 class TestPolicyDefinitionConfig3EContract:

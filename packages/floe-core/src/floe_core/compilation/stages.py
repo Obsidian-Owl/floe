@@ -20,6 +20,7 @@ See Also:
 
 from __future__ import annotations
 
+import re
 import time
 from datetime import datetime, timezone
 from enum import Enum
@@ -333,12 +334,42 @@ def compile_pipeline(
             # Full post-dbt enforcement uses run_enforce_stage() separately
             from floe_core.schemas.compiled_artifacts import (
                 EnforcementResultSummary,
+                ResolvedGovernance,
             )
 
-            governance = getattr(spec, "governance", None)
+            # Enforcement level precedence: "stricter wins"
+            # Strength ordering: off < warn < strict
+            # Manifest is authoritative; spec can only strengthen (never weaken)
+            _ENFORCEMENT_STRENGTH: dict[str, int] = {"off": 0, "warn": 1, "strict": 2}
+
+            manifest_level: Literal["off", "warn", "strict"] | None = None
+            if manifest.governance is not None:
+                manifest_level = manifest.governance.policy_enforcement_level
+
+            spec_governance = getattr(spec, "governance", None)
+            spec_level: Literal["off", "warn", "strict"] | None = None
+            if spec_governance is not None:
+                raw_level = getattr(spec_governance, "enforcement_level", None)
+                if raw_level in ("off", "warn", "strict"):
+                    spec_level = raw_level
+
+            # Start with default "warn"
             enforcement_level: Literal["off", "warn", "strict"] = "warn"
-            if governance is not None:
-                enforcement_level = getattr(governance, "enforcement_level", "warn") or "warn"
+
+            # Apply "stricter wins" merge
+            if manifest_level is not None and spec_level is not None:
+                # Both present — pick the stricter one
+                spec_strength = _ENFORCEMENT_STRENGTH.get(spec_level, 1)
+                manifest_strength = _ENFORCEMENT_STRENGTH.get(manifest_level, 1)
+                if spec_strength >= manifest_strength:
+                    enforcement_level = spec_level
+                else:
+                    enforcement_level = manifest_level
+            elif manifest_level is not None:
+                enforcement_level = manifest_level
+            elif spec_level is not None:
+                enforcement_level = spec_level
+            # else: both None, keep default "warn"
 
             policy_types_checked: list[str] = ["plugin_instrumentation"]
             if manifest.approved_sinks is not None and spec.destinations is not None:
@@ -352,6 +383,16 @@ def compile_pipeline(
                 models_validated=0,
                 enforcement_level=enforcement_level,
             )
+
+            # Convert manifest governance to ResolvedGovernance for artifacts
+            resolved_governance: ResolvedGovernance | None = None
+            if manifest.governance is not None:
+                resolved_governance = ResolvedGovernance(
+                    pii_encryption=manifest.governance.pii_encryption,
+                    audit_logging=manifest.governance.audit_logging,
+                    policy_enforcement_level=manifest.governance.policy_enforcement_level,
+                    data_retention_days=manifest.governance.data_retention_days,
+                )
 
             duration_ms = (time.perf_counter() - stage_start) * 1000
             log.info(
@@ -400,6 +441,7 @@ def compile_pipeline(
                 manifest_path=manifest_path,
                 enforcement_result=enforcement_result,
                 quality_config=quality_config,
+                governance=resolved_governance,
             )
             generate_span.set_attribute("compile.artifacts_version", artifacts.version)
             duration_ms = (time.perf_counter() - stage_start) * 1000
@@ -476,13 +518,17 @@ def run_enforce_stage(
     if token is not None:
         if not token.strip():
             raise ValueError("token must be non-empty when provided")
-        if len(token) > 10_000:
+        if len(token) > 2_048:
             raise ValueError("token exceeds maximum length")
+        if not re.match(r"^[A-Za-z0-9._\-]+$", token):
+            raise ValueError("token contains invalid characters")
     if principal is not None:
         if not principal.strip():
             raise ValueError("principal must be non-empty when provided")
         if len(principal) > 1_000:
             raise ValueError("principal exceeds maximum length")
+        if not re.match(r"^[A-Za-z0-9@._\-]+$", principal):
+            raise ValueError("principal contains invalid characters")
 
     log = logger.bind(
         component="run_enforce_stage",

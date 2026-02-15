@@ -317,7 +317,8 @@ cube:
     enabled: true
     image:
       repository: ghcr.io/obsidian-owl/cube-store
-      tag: "0.36.0"
+      tag: "v0.36.0"
+      pullPolicy: Never
     resources:
       requests:
         cpu: 100m

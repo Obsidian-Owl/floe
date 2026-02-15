@@ -29,7 +29,7 @@ FLOE_VERSION: str = "0.3.0"
 # Increment MAJOR for breaking changes (remove fields, change types)
 # Increment MINOR for backward-compatible additions (new optional fields)
 # Increment PATCH for documentation/metadata only changes
-COMPILED_ARTIFACTS_VERSION: str = "0.7.0"
+COMPILED_ARTIFACTS_VERSION: str = "0.8.0"
 
 # Version history (for documentation and compatibility checks)
 COMPILED_ARTIFACTS_VERSION_HISTORY: dict[str, str] = {
@@ -40,6 +40,7 @@ COMPILED_ARTIFACTS_VERSION_HISTORY: dict[str, str] = {
     "0.5.0": "Add lineage_backend to ResolvedPlugins (Epic 6B)",
     "0.6.0": "Add ingestion to ResolvedPlugins (Epic 4F)",
     "0.7.0": "Add rbac_principal, secrets_scanned to EnforcementResultSummary (Epic 3E)",
+    "0.8.0": "Add lineage_endpoint, lineage_transport to ObservabilityConfig",
 }
 
 

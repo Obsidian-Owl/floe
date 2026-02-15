@@ -430,6 +430,14 @@ class ObservabilityConfig(BaseModel):
         min_length=1,
         description="Namespace for lineage events",
     )
+    lineage_endpoint: str | None = Field(
+        default=None,
+        description="OpenLineage HTTP endpoint for lineage events",
+    )
+    lineage_transport: Literal["http", "console", "noop"] | None = Field(
+        default=None,
+        description="OpenLineage transport type",
+    )
 
 
 # ==============================================================================
