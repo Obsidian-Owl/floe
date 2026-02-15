@@ -241,6 +241,53 @@ class GovernanceConfig(BaseModel):
     )
 
 
+class TracingManifestConfig(BaseModel):
+    """Tracing settings from manifest.yaml."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    enabled: bool = Field(default=True, description="Enable distributed tracing")
+    exporter: Literal["otlp", "console", "none"] = Field(
+        default="otlp", description="Trace exporter type"
+    )
+    endpoint: str | None = Field(default=None, description="OTLP collector endpoint")
+
+
+class LineageManifestConfig(BaseModel):
+    """Lineage settings from manifest.yaml."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    enabled: bool = Field(default=True, description="Enable data lineage tracking")
+    transport: Literal["http", "console", "noop"] = Field(
+        default="http", description="OpenLineage transport type"
+    )
+    endpoint: str | None = Field(default=None, description="OpenLineage API endpoint")
+
+
+class LoggingManifestConfig(BaseModel):
+    """Logging settings from manifest.yaml."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
+        default="INFO", description="Log level"
+    )
+    format: Literal["json", "text"] = Field(default="json", description="Log output format")
+
+
+class ObservabilityManifestConfig(BaseModel):
+    """Observability settings from manifest.yaml."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    tracing: TracingManifestConfig = Field(
+        default_factory=TracingManifestConfig, description="Tracing configuration"
+    )
+    lineage: LineageManifestConfig = Field(
+        default_factory=LineageManifestConfig, description="Lineage configuration"
+    )
+    logging: LoggingManifestConfig = Field(
+        default_factory=LoggingManifestConfig, description="Logging configuration"
+    )
+
+
 class PlatformManifest(BaseModel):
     """Root configuration entity for platform manifests.
 
@@ -359,6 +406,10 @@ class PlatformManifest(BaseModel):
         default=None,
         description="OCI artifact storage and promotion lifecycle configuration (Epic 8C)",
     )
+    observability: ObservabilityManifestConfig | None = Field(
+        default=None,
+        description="Observability configuration (tracing, lineage, logging)",
+    )
 
     @model_validator(mode="after")
     def validate_scope_constraints(self) -> PlatformManifest:
@@ -457,6 +508,10 @@ __all__ = [
     "ArtifactsConfig",
     "FORBIDDEN_ENVIRONMENT_FIELDS",
     "GovernanceConfig",
+    "LineageManifestConfig",
+    "LoggingManifestConfig",
     "ManifestScope",
+    "ObservabilityManifestConfig",
     "PlatformManifest",
+    "TracingManifestConfig",
 ]
