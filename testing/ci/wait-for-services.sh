@@ -10,6 +10,8 @@
 #   JOB_TIMEOUT           Job completion timeout in seconds (default: 180)
 #   POLARIS_URL           Polaris API URL (default: http://localhost:8181)
 #   POLARIS_CATALOG_NAME  Catalog name to verify (default: floe-e2e)
+#   MINIO_URL             MinIO API URL (default: http://localhost:9000)
+#   MINIO_BUCKET          Expected bucket name (default: floe-iceberg)
 #   POLARIS_CLIENT_ID     OAuth client ID (default: demo-admin)
 #   POLARIS_CLIENT_SECRET OAuth client secret (default: demo-secret)
 
@@ -49,20 +51,42 @@ if ! kubectl wait --for=condition=ready pods --all -n "${NAMESPACE}" --timeout="
     exit 1
 fi
 
-# Wait for setup Jobs to complete (if they exist)
-# NOTE: polaris-setup (bootstrap) has hook-delete-policy: hook-succeeded,
-# so kubectl wait will fail after it succeeds. We verify via API instead.
-echo "Waiting for setup Jobs to complete (timeout: ${JOB_TIMEOUT}s)..."
-
-for job in minio-setup minio-iam-setup; do
-    if kubectl get job "${job}" -n "${NAMESPACE}" &> /dev/null; then
-        echo "  Waiting for ${job}..."
-        if ! kubectl wait --for=condition=complete "job/${job}" -n "${NAMESPACE}" --timeout="${JOB_TIMEOUT}s"; then
-            echo "ERROR: Job ${job} failed to complete" >&2
-            kubectl logs "job/${job}" -n "${NAMESPACE}" --tail=50 >&2
-            exit 1
-        fi
+# Wait for MinIO provisioning job to complete (if it exists).
+# Bitnami MinIO subchart names it {release}-minio-provisioning.
+# Use label selector to avoid hard-coding the release name.
+echo "Waiting for MinIO provisioning job (timeout: ${JOB_TIMEOUT}s)..."
+MINIO_JOBS=$(kubectl get jobs -n "${NAMESPACE}" -l app.kubernetes.io/name=minio -o name 2>/dev/null || true)
+for job in ${MINIO_JOBS}; do
+    echo "  Waiting for ${job}..."
+    if ! kubectl wait --for=condition=complete "${job}" -n "${NAMESPACE}" --timeout="${JOB_TIMEOUT}s"; then
+        echo "ERROR: ${job} failed to complete" >&2
+        kubectl logs "${job}" -n "${NAMESPACE}" --tail=50 >&2
+        exit 1
     fi
+done
+
+# Verify MinIO bucket exists (defense-in-depth: Helm hooks should have
+# created the bucket, but we confirm the OUTCOME, not the mechanism).
+MINIO_URL="${MINIO_URL:-http://localhost:9000}"
+MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
+echo "Verifying MinIO bucket '${MINIO_BUCKET}' exists..."
+MINIO_ATTEMPT=0
+MINIO_MAX_ATTEMPTS=30
+while true; do
+    MINIO_ATTEMPT=$((MINIO_ATTEMPT + 1))
+    BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "${MINIO_URL}/${MINIO_BUCKET}/" 2>/dev/null) || true
+    # MinIO returns 200 for existing buckets, 403 when auth required (bucket exists)
+    if [[ "$BUCKET_CODE" == "200" ]] || [[ "$BUCKET_CODE" == "403" ]]; then
+        echo "MinIO bucket '${MINIO_BUCKET}' verified (HTTP ${BUCKET_CODE})"
+        break
+    fi
+    if [[ $MINIO_ATTEMPT -ge $MINIO_MAX_ATTEMPTS ]]; then
+        echo "ERROR: MinIO bucket '${MINIO_BUCKET}' not available after ${MINIO_MAX_ATTEMPTS} attempts (last HTTP ${BUCKET_CODE})" >&2
+        echo "Check MinIO provisioning job: kubectl get jobs -n ${NAMESPACE} -l app.kubernetes.io/name=minio" >&2
+        exit 1
+    fi
+    echo "  Attempt ${MINIO_ATTEMPT}/${MINIO_MAX_ATTEMPTS} - bucket not ready (HTTP ${BUCKET_CODE}), waiting 3s..."
+    sleep 3
 done
 
 # Verify Polaris catalog exists via management API (AD-1)
