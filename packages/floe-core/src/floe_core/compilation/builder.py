@@ -110,22 +110,40 @@ def build_artifacts(
         repository="",  # Would come from git remote in production
     )
 
-    # Build observability config
-    observability = ObservabilityConfig(
-        telemetry=TelemetryConfig(
-            enabled=True,
-            resource_attributes=ResourceAttributes(
-                service_name=spec.metadata.name,
-                service_version=spec.metadata.version,
-                deployment_environment="dev",
-                floe_namespace="default",
-                floe_product_name=spec.metadata.name,
-                floe_product_version=spec.metadata.version,
-                floe_mode="dev",
-            ),
+    # Build observability config from manifest + spec
+    manifest_obs = manifest.observability
+
+    # Tracing endpoint from manifest (or default)
+    otlp_kwargs: dict[str, Any] = {}
+    if manifest_obs is not None and manifest_obs.tracing.endpoint is not None:
+        otlp_kwargs["otlp_endpoint"] = manifest_obs.tracing.endpoint
+
+    telemetry = TelemetryConfig(
+        enabled=True,
+        resource_attributes=ResourceAttributes(
+            service_name=spec.metadata.name,
+            service_version=spec.metadata.version,
+            deployment_environment="dev",
+            floe_namespace="default",
+            floe_product_name=spec.metadata.name,
+            floe_product_version=spec.metadata.version,
+            floe_mode="dev",
         ),
-        lineage=True,
+        **otlp_kwargs,
+    )
+
+    # Lineage from manifest (or defaults)
+    lineage_kwargs: dict[str, Any] = {}
+    if manifest_obs is not None:
+        lineage_kwargs["lineage"] = manifest_obs.lineage.enabled
+        lineage_kwargs["lineage_transport"] = manifest_obs.lineage.transport
+        if manifest_obs.lineage.endpoint is not None:
+            lineage_kwargs["lineage_endpoint"] = manifest_obs.lineage.endpoint
+
+    observability = ObservabilityConfig(
+        telemetry=telemetry,
         lineage_namespace=spec.metadata.name,
+        **lineage_kwargs,
     )
 
     return CompiledArtifacts(
