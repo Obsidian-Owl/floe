@@ -877,9 +877,11 @@ class TestObservabilityDefaults:
 
         # Lineage defaults
         assert manifest.observability.lineage is not None
+        assert manifest.observability.lineage.enabled is True
 
         # Logging defaults
         assert manifest.observability.logging is not None
+        assert manifest.observability.logging.level == "INFO"
 
     @pytest.mark.requirement("AC-9.1")
     def test_empty_observability_tracing_has_no_endpoint(self) -> None:
@@ -1010,9 +1012,7 @@ class TestObservabilityForwardCompatibility:
             )
 
             observability_warnings = [
-                warning
-                for warning in w
-                if "observability" in str(warning.message).lower()
+                warning for warning in w if "observability" in str(warning.message).lower()
             ]
             assert len(observability_warnings) == 0, (
                 f"Observability should not trigger unknown-field warnings, "
@@ -1076,8 +1076,11 @@ class TestObservabilityManifestConfigModel:
 
         config = ObservabilityManifestConfig()
         assert config.tracing is not None
+        assert config.tracing.enabled is True
         assert config.lineage is not None
+        assert config.lineage.enabled is True
         assert config.logging is not None
+        assert config.logging.level == "INFO"
 
     @pytest.mark.requirement("AC-9.1")
     def test_tracing_config_default_construction(self) -> None:
@@ -1094,6 +1097,8 @@ class TestObservabilityManifestConfigModel:
         from floe_core.schemas.manifest import LineageManifestConfig
 
         lineage = LineageManifestConfig()
+        assert lineage.enabled is True
+        assert lineage.transport == "http"
         assert lineage.endpoint is None
 
     @pytest.mark.requirement("AC-9.1")
@@ -1102,8 +1107,8 @@ class TestObservabilityManifestConfigModel:
         from floe_core.schemas.manifest import LoggingManifestConfig
 
         logging_cfg = LoggingManifestConfig()
-        # Should have a default level (e.g., INFO)
-        assert logging_cfg.level is not None
+        assert logging_cfg.level == "INFO"
+        assert logging_cfg.format == "json"
 
     @pytest.mark.requirement("AC-9.1")
     def test_observability_config_is_frozen(self) -> None:

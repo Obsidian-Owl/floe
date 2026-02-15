@@ -129,13 +129,17 @@ from floe_core.schemas.json_schema import (
     validate_against_schema,
 )
 
-# Manifest models (T018, T019, T001a Epic 8C)
+# Manifest models (T018, T019, T001a Epic 8C, T049 WU-9)
 from floe_core.schemas.manifest import (
     FORBIDDEN_ENVIRONMENT_FIELDS,
     ArtifactsConfig,
     GovernanceConfig,
+    LineageManifestConfig,
+    LoggingManifestConfig,
     ManifestScope,
+    ObservabilityManifestConfig,
     PlatformManifest,
+    TracingManifestConfig,
 )
 
 # Metadata models (T007)
@@ -402,12 +406,16 @@ __all__: list[str] = [
     "validate_plugin_selection",
     "validate_domain_plugin_whitelist",
     "validate_sink_whitelist",
-    # Manifest (Phase 3, Epic 8C)
+    # Manifest (Phase 3, Epic 8C, WU-9)
     "ArtifactsConfig",
     "FORBIDDEN_ENVIRONMENT_FIELDS",
     "GovernanceConfig",
+    "LineageManifestConfig",
+    "LoggingManifestConfig",
     "ManifestScope",
+    "ObservabilityManifestConfig",
     "PlatformManifest",
+    "TracingManifestConfig",
     # JSON Schema (Phase 6)
     "JSON_SCHEMA_DRAFT",
     "MANIFEST_SCHEMA_ID",
