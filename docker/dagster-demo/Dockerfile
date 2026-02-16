@@ -87,16 +87,24 @@ RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
 # Copy workspace package source trees (selective per P16 — only installed packages)
 COPY packages/floe-core /build/packages/floe-core
+COPY plugins/floe-catalog-polaris /build/plugins/floe-catalog-polaris
 COPY plugins/floe-orchestrator-dagster /build/plugins/floe-orchestrator-dagster
 COPY plugins/floe-compute-duckdb /build/plugins/floe-compute-duckdb
 COPY plugins/floe-dbt-core /build/plugins/floe-dbt-core
 
-# Install workspace packages from source (deps already installed above)
-RUN pip install --no-deps --no-cache-dir \
-        /build/packages/floe-core \
-        /build/plugins/floe-orchestrator-dagster \
-        /build/plugins/floe-compute-duckdb \
-        /build/plugins/floe-dbt-core
+# Install workspace packages from source (deps already installed above).
+# Uses FLOE_PLUGINS ARG to dynamically install only the target packages.
+ARG FLOE_PLUGINS
+# shellcheck disable=SC2086
+RUN set -e; \
+    for pkg in $FLOE_PLUGINS; do \
+        dir=""; \
+        for prefix in /build/packages /build/plugins; do \
+            if [ -d "$prefix/$pkg" ]; then dir="$prefix/$pkg"; break; fi; \
+        done; \
+        if [ -z "$dir" ]; then echo "ERROR: source for $pkg not found" && exit 1; fi; \
+        pip install --no-deps --no-cache-dir "$dir"; \
+    done
 
 # Validate dependency tree is consistent
 RUN pip check
