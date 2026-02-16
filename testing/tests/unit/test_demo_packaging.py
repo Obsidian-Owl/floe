@@ -2157,11 +2157,8 @@ class TestOrchestratorDockerExtras:
     def test_docker_extras_group_exists(self) -> None:
         """The pyproject.toml MUST have a [project.optional-dependencies] docker group."""
         content = ORCHESTRATOR_PYPROJECT.read_text()
-        # Use a TOML parser for reliability
-        try:
-            import tomllib
-        except ModuleNotFoundError:
-            import tomli as tomllib  # type: ignore[no-redef]
+        import tomllib
+
         data: dict[str, Any] = tomllib.loads(content)
         opt_deps = data.get("project", {}).get("optional-dependencies", {})
         assert "docker" in opt_deps, (
@@ -2175,10 +2172,8 @@ class TestOrchestratorDockerExtras:
     @pytest.mark.parametrize("package", REQUIRED_DOCKER_EXTRAS)
     def test_docker_extras_contains_required_package(self, package: str) -> None:
         """Each required Dagster runtime package MUST appear in docker extras."""
-        try:
-            import tomllib
-        except ModuleNotFoundError:
-            import tomli as tomllib  # type: ignore[no-redef]
+        import tomllib
+
         data: dict[str, Any] = tomllib.loads(ORCHESTRATOR_PYPROJECT.read_text())
         docker_deps: list[str] = data["project"]["optional-dependencies"].get("docker", [])
         # Normalize: extract package names (strip version specifiers)
@@ -2188,10 +2183,8 @@ class TestOrchestratorDockerExtras:
     @pytest.mark.requirement("WU12-AC3")
     def test_base_orchestrator_does_not_include_docker_deps(self) -> None:
         """Base dependencies MUST NOT include webserver/daemon/k8s (BC for AC-12.3)."""
-        try:
-            import tomllib
-        except ModuleNotFoundError:
-            import tomli as tomllib  # type: ignore[no-redef]
+        import tomllib
+
         data: dict[str, Any] = tomllib.loads(ORCHESTRATOR_PYPROJECT.read_text())
         base_deps: list[str] = data.get("project", {}).get("dependencies", [])
         base_names = [re.split(r"[><=!~;]", dep.strip())[0].strip() for dep in base_deps]
