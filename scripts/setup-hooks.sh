@@ -9,7 +9,7 @@
 # 2. Cognee sync for knowledge graph updates
 #
 # Run this after cloning, or after running `pre-commit install`
-# which would otherwise overwrite the chained hooks.
+# which would otherwise overwrite the hooks.
 
 set -euo pipefail
 
