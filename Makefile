@@ -42,7 +42,7 @@ help: ## Show this help message
 	@echo "  make helm-uninstall  Uninstall floe (NAMESPACE=... required)"
 	@echo ""
 	@echo "Demo:"
-	@echo "  make compile-demo    Compile dbt models for all demo products"
+	@echo "  make compile-demo    Compile dbt models + generate definitions for demo products"
 	@echo "  make build-demo-image Build Dagster demo Docker image"
 	@echo "  make demo            Deploy platform with all 3 demo data products (PRODUCTS=...)"
 	@echo "  make demo-stop       Stop demo and clean up resources"
@@ -259,11 +259,20 @@ helm-test-infra: ## Verify test infrastructure is healthy
 
 .PHONY: compile-demo build-demo-image demo demo-stop
 
-compile-demo: ## Compile dbt models for all demo products (generates target/manifest.json)
+compile-demo: ## Compile dbt models and generate Dagster definitions for all demo products
 	@echo "Compiling dbt models for all demo products..."
 	@for product in customer-360 iot-telemetry financial-risk; do \
 		echo "Compiling $$product..."; \
 		uv run dbt compile --project-dir demo/$$product || exit 1; \
+	done
+	@echo "Generating Dagster definitions.py for all demo products..."
+	@for product in customer-360 iot-telemetry financial-risk; do \
+		echo "Generating definitions for $$product..."; \
+		uv run floe platform compile \
+			--spec demo/$$product/floe.yaml \
+			--manifest demo/manifest.yaml \
+			--output demo/$$product/compiled_artifacts.json \
+			--generate-definitions || exit 1; \
 	done
 	@echo "All demo products compiled successfully!"
 
