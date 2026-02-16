@@ -152,42 +152,80 @@ WU-9 is the critical path. WU-10 and WU-11 have no dependencies on WU-9 or each 
 
 ---
 
-## WU-11: Demo Packaging
+## WU-11: Demo Packaging (Production-Like Workflow)
 
 **Branch**: `feat/wu-11-demo-packaging`
-**Estimated tasks**: 3
+**Design**: [wu-11-design.md](./wu-11-design.md)
+**Estimated tasks**: 5
 
-### Task T61: Create testing/Dockerfile.dagster
-
-**Files**:
-- `testing/Dockerfile.dagster` — NEW file. Extends `dagster/dagster-celery-k8s` base image. `COPY demo/ /app/demo/`. `pip install` demo dependencies (floe-core, etc.).
-
-**ACs**: AC-11.1
-
-### Task T62: Override Dagster image in values-test.yaml
+### Task T61: Create Dockerfile + .dockerignore
 
 **Files**:
-- `charts/floe-platform/values-test.yaml` — Add Dagster image override to use custom test image.
-- `Makefile` or `testing/ci/` — Add build step for the custom Dagster image before E2E tests.
+- `docker/dagster-demo/Dockerfile` — NEW. Extends `dagster/dagster-celery-k8s:1.9.6`. Installs floe packages (`--no-deps` + `pip check`). COPY demo code with hyphen→underscore rename. Adds `__init__.py` per product.
+- `.dockerignore` — NEW. Excludes `.git/`, `.venv/`, caches, `.specwright/`, `.beads/`, `.claude/`.
 
-**ACs**: AC-11.2
+**ACs**: AC-11.1, AC-11.7
+**Tests**: Unit test (T64) validates Dockerfile structure and .dockerignore content.
 
-### Task T63: Verify workspace module resolution
+### Task T62: Add Makefile targets (compile-demo, build-demo-image)
 
 **Files**:
-- No new files — verification via E2E test run.
-- May need `demo/setup.py` or `demo/pyproject.toml` if demo modules need to be pip-installable.
+- `Makefile` — ADD `compile-demo` target (runs `dbt compile` for each product). ADD `build-demo-image` target (depends on `compile-demo`, runs `docker build` + `kind load`). UPDATE `demo` target to depend on `build-demo-image`.
 
-**ACs**: AC-11.3, BC-11.1, BC-11.2
+**ACs**: AC-11.2, AC-11.6
+**Note**: `compile-demo` must run before `docker build` so `target/manifest.json` is in the build context. The `@dbt_assets` decorator reads this at import time.
+
+### Task T63: Update Helm values for image override + module paths
+
+**Files**:
+- `charts/floe-platform/values-test.yaml` — EDIT: Add `dagster.dagsterWebserver.image` and `dagster.dagsterDaemon.image` overrides. Change `moduleName` from `demo.customer_360.definitions` to `customer_360.definitions`. Change `workingDirectory` from `/app/demo` to `/app/demo` (keep as-is for sys.path).
+- `charts/floe-platform/values-demo.yaml` — EDIT: Same image override and module path changes.
+
+**ACs**: AC-11.3, AC-11.5
+**Key detail**: `workingDirectory: /app/demo` adds `/app/demo` to sys.path. `moduleName: customer_360.definitions` resolves to `/app/demo/customer_360/definitions.py`. Both webserver and daemon use the same image.
+
+### Task T64: Add structural validation unit tests
+
+**Files**:
+- `testing/tests/unit/test_demo_packaging.py` — NEW. Structural validation tests (YAML parsing, no K8s required):
+  - Dockerfile exists at `docker/dagster-demo/Dockerfile` and has correct FROM instruction
+  - Dockerfile COPYs all 3 products with underscore names
+  - Dockerfile creates `__init__.py` for each product
+  - `.dockerignore` exists and excludes key directories
+  - `values-test.yaml` has Dagster image override with `pullPolicy: Never`
+  - `values-demo.yaml` has Dagster image override
+  - Module names use underscores (not hyphens), no `demo.` prefix
+  - `workingDirectory` is `/app/demo` (not per-product)
+  - Shared macros COPY'd to `/app/demo/macros/`
+  - Each dbt_project.yml `macro-paths: ["../macros"]` — validates relative path works with directory layout
+
+**ACs**: AC-11.1, AC-11.3, AC-11.5, AC-11.7, AC-11.9
+**Pattern**: Same as `test_ci_workflows.py` — YAML parsing tests, no external services.
+
+### Task T65: Validate generated definitions.py (Phase 2)
+
+**Files**:
+- `Makefile` — EDIT: Add `--generate-definitions` flag to `compile-demo` target.
+- `demo/customer-360/definitions.py` — REPLACED by generated output
+- `demo/iot-telemetry/definitions.py` — REPLACED by generated output
+- `demo/financial-risk/definitions.py` — REPLACED by generated output
+- `testing/tests/unit/test_demo_packaging.py` — ADD: Test that generated `definitions.py` exports `defs` attribute.
+
+**ACs**: AC-11.8
+**Verification**: Generated `definitions.py` must export `defs` (a `Definitions` object) with `@dbt_assets` and `DbtCliResource`. Functional equivalence, not source code identity.
+**Depends on**: T61-T64 (packaging infrastructure must work first).
 
 ### File Change Map (WU-11)
 
 | File | Change Type | Tasks |
 |------|-------------|-------|
-| `testing/Dockerfile.dagster` | NEW | T61 |
-| `charts/floe-platform/values-test.yaml` | EDIT image override | T62 |
-| `Makefile` | EDIT add build step | T62 |
-| `demo/pyproject.toml` or `demo/setup.py` | NEW or EDIT | T63 |
+| `docker/dagster-demo/Dockerfile` | NEW | T61 |
+| `.dockerignore` | NEW | T61 |
+| `Makefile` | EDIT (add targets) | T62, T65 |
+| `charts/floe-platform/values-test.yaml` | EDIT (image + modules) | T63 |
+| `charts/floe-platform/values-demo.yaml` | EDIT (image + modules) | T63 |
+| `testing/tests/unit/test_demo_packaging.py` | NEW | T64, T65 |
+| `demo/*/definitions.py` | REPLACED (generated) | T65 |
 
 ---
 

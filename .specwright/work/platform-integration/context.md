@@ -78,3 +78,84 @@
 6. **OpenLineage at compile time**: The lineage emitter infrastructure exists but is correctly NOT called during compilation. Lineage events are emitted when the orchestrator actually runs transformations. E2E tests that check for lineage after compilation only will fail — need to run actual pipelines.
 
 7. **STORAGE plugin type**: `PluginType.STORAGE` exists in the enum but no entry point is registered. The `s3` storage config in manifest is a config section, not a plugin that needs discovery. The E2E test incorrectly expects a registered storage plugin.
+
+---
+
+## WU-11 Research Findings (2026-02-16)
+
+### Demo Directory Structure
+
+3 products, all following identical pattern:
+```
+demo/
+├── manifest.yaml           (shared platform config)
+├── macros/                 (shared dbt macros)
+├── customer-360/
+│   ├── definitions.py      (hand-written Dagster definitions)
+│   ├── floe.yaml           (product spec)
+│   ├── dbt_project.yml     (dbt project config)
+│   ├── profiles.yml        (DuckDB profile)
+│   ├── models/             (staging/intermediate/marts SQL)
+│   ├── seeds/              (CSV seed data)
+│   └── target/             (dbt compiled output)
+├── iot-telemetry/          (same structure)
+└── financial-risk/         (same structure)
+```
+
+**No `__init__.py` files** exist anywhere in demo/ — Python cannot import as package.
+
+### Code Generation Pipeline (Fully Implemented)
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| CLI flag `--generate-definitions` | `compile.py:99-103` | Implemented |
+| Wiring `_generate_orchestrator_entry_point()` | `compile.py:281-354` | Implemented |
+| `DagsterOrchestratorPlugin.generate_entry_point_code()` | `plugin.py:1066-1178` | Implemented |
+| Name sanitization (hyphens→underscores) | `plugin.py:1092-1098` | Implemented |
+
+Generated code matches hand-written pattern: `@dbt_assets` + `DbtCliResource` + `defs = Definitions(...)`.
+
+### Working Directory Issue
+
+Current values-test.yaml:
+```yaml
+moduleName: demo.customer_360.definitions
+workingDirectory: /app/demo
+```
+
+**Problem**: `workingDirectory` is added to sys.path by Dagster. So Python looks for `demo/customer_460/definitions.py` relative to `/app/demo`, which would be `/app/demo/demo/customer_460/definitions.py` — **double nesting**.
+
+**Fix**: Change to `moduleName: customer_360.definitions` with `workingDirectory: /app/demo/customer_360` (or set PYTHONPATH properly in the Dockerfile).
+
+### Directory Naming
+
+Source repo: `customer-360` (hyphens, conventional for dbt project names)
+Python imports: `customer_360` (underscores, required for packages)
+Solution: Dockerfile COPY renames at build time
+
+### Dagster Helm Chart Image Override
+
+The Dagster subchart supports image overrides via values:
+```yaml
+dagster:
+  dagsterWebserver:
+    image: { repository, tag, pullPolicy }
+  dagsterDaemon:
+    image: { repository, tag, pullPolicy }
+```
+Both webserver and daemon need the same image (both load code locations).
+
+### Makefile Current State
+
+- `make demo` exists (lines 260-281): runs `floe compile` but does NOT use `--generate-definitions`
+- `make test-integration-image`: builds `floe-test-runner:latest` from testing/Dockerfile
+- No `build-demo-image` target exists
+- No `kind load docker-image` for Dagster demo image
+
+### Existing Custom Image Pattern
+
+`docker/cube-store/Dockerfile`:
+- Multi-stage build from official base
+- Custom labels, security scanning
+- Multi-arch support via `docker buildx`
+- Pattern: separate directory under `docker/`
