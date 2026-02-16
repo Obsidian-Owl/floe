@@ -31,7 +31,7 @@
     { "id": "wu-8-polish", "description": "Polaris Health Check + Final Verification", "status": "shipped", "order": 8, "tasksCompleted": ["T42", "T43", "T44", "T45", "T48"], "pr": "https://github.com/Obsidian-Owl/floe/pull/82" },
     { "id": "wu-9-config-pipeline-flow", "description": "Schema changes + governance/observability flow through builder", "status": "shipped", "order": 9, "tasksCompleted": ["T49", "T50", "T51", "T52", "T53", "T54", "T55"], "pr": "https://github.com/Obsidian-Owl/floe/pull/84" },
     { "id": "wu-10-polaris-test-fixes", "description": "Pin Polaris 1.2.1, xfail cleanup, test assertion fixes", "status": "shipped", "order": 10, "tasksCompleted": ["T56", "T57", "T58", "T59", "T60"], "pr": "https://github.com/Obsidian-Owl/floe/pull/85" },
-    { "id": "wu-11-demo-packaging", "description": "Production-like demo packaging: Dockerfile, Makefile targets, Helm values, generated definitions", "status": "building", "order": 11, "tasksCompleted": ["T61", "T62"] }
+    { "id": "wu-11-demo-packaging", "description": "Production-like demo packaging: Dockerfile, Makefile targets, Helm values, generated definitions", "status": "building", "order": 11, "tasksCompleted": ["T61", "T62", "T63", "T64"] }
   ],
   "gates": {
     "wu-1-bootstrap": {

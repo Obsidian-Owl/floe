@@ -1,8 +1,10 @@
-"""Demo packaging structural validation tests (WU-11, T61/T62).
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
+"""Demo packaging structural validation tests (WU-11, T61/T62/T63/T64).
 
-Tests that validate the Dagster demo Dockerfile, .dockerignore, and Makefile
-have the correct structure. These are unit tests that parse files on disk --
-no Docker build or K8s cluster required.
+Tests that validate the Dagster demo Dockerfile, .dockerignore, Makefile,
+Helm values files, and dbt project files have the correct structure.
+These are unit tests that parse files on disk -- no Docker build or K8s
+cluster required.
 
 Requirements:
     AC-11.1: Dockerfile extends dagster/dagster-celery-k8s:1.9.6, COPYs all 3
@@ -10,16 +12,21 @@ Requirements:
              copies manifest.yaml and macros/, runs pip check
     AC-11.2: dbt compile produces target/manifest.json for each product;
              Makefile has compile-demo target that runs dbt compile for all 3
+    AC-11.3: Helm values override Dagster image for webserver and daemon
+    AC-11.5: Module names resolve correctly (no demo. prefix)
     AC-11.6: Makefile chain: compile-demo -> build-demo-image -> demo
     AC-11.7: .dockerignore exists at repo root with required exclusions
+    AC-11.9: dbt relative paths work with container layout
 """
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DOCKERFILE = REPO_ROOT / "docker" / "dagster-demo" / "Dockerfile"
@@ -31,6 +38,21 @@ DEMO_PRODUCTS: dict[str, str] = {
     "customer-360": "customer_360",
     "iot-telemetry": "iot_telemetry",
     "financial-risk": "financial_risk",
+}
+
+# Helm values files for AC-11.3 / AC-11.5
+VALUES_TEST = REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
+VALUES_DEMO = REPO_ROOT / "charts" / "floe-platform" / "values-demo.yaml"
+
+# Expected image override values
+EXPECTED_IMAGE_REPOSITORY = "floe-dagster-demo"
+EXPECTED_IMAGE_TAG = "latest"
+
+# Expected module names (without demo. prefix) keyed by code location name
+EXPECTED_MODULE_NAMES: dict[str, str] = {
+    "customer-360": "customer_360.definitions",
+    "iot-telemetry": "iot_telemetry.definitions",
+    "financial-risk": "financial_risk.definitions",
 }
 
 # Required .dockerignore exclusions from AC-11.7
@@ -986,4 +1008,544 @@ class TestMakefileDemoChain:
         assert deploy_pattern.search(body), (
             f"demo target must still deploy via Helm (upgrade/install) or "
             f"'floe platform deploy'. Recipe body:\n{body}"
+        )
+
+
+# ============================================================
+# Helm Values File Parsing Helpers (T63/T64)
+# ============================================================
+
+
+def _load_values_yaml(path: Path) -> dict[str, Any]:
+    """Load a Helm values YAML file with safe loader.
+
+    Args:
+        path: Absolute path to the YAML file.
+
+    Returns:
+        Parsed YAML content as a dictionary.
+
+    Raises:
+        FileNotFoundError: If the values file does not exist.
+        yaml.YAMLError: If YAML parsing fails.
+    """
+    content = path.read_text()
+    raw = yaml.safe_load(content)
+    assert isinstance(raw, dict), f"{path.name} did not parse to a dict, got {type(raw)}"
+    return cast(dict[str, Any], raw)
+
+
+def _get_nested(data: dict[str, Any], *keys: str) -> Any:
+    """Traverse nested dicts by key path, returning empty dict on missing keys.
+
+    Args:
+        data: Root dictionary.
+        *keys: Key path to traverse (e.g. "dagster", "dagsterWebserver", "image").
+
+    Returns:
+        Value at the nested key path, or empty dict if any key is missing.
+    """
+    current: Any = data
+    for key in keys:
+        if isinstance(current, dict):
+            current = current.get(key, {})
+        else:
+            return {}
+    return current
+
+
+def _get_code_locations(values: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract the codeLocations list from parsed Helm values.
+
+    Args:
+        values: Parsed YAML values dict.
+
+    Returns:
+        List of code location dicts. Empty if not defined.
+    """
+    locations: Any = _get_nested(values, "dagster", "codeLocations")
+    if isinstance(locations, list):
+        return cast(list[dict[str, Any]], locations)
+    return []
+
+
+# ============================================================
+# T63: Helm Values Image Override Tests (AC-11.3)
+# ============================================================
+
+
+class TestHelmValuesImageOverride:
+    """Verify Helm values files override Dagster image for webserver and daemon.
+
+    AC-11.3 requires that both values-test.yaml and values-demo.yaml override
+    the Dagster webserver and daemon images to use the locally-built
+    floe-dagster-demo image. Without these overrides, Dagster pods pull
+    the upstream image which does not contain demo code.
+    """
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_test_has_webserver_image_override(self) -> None:
+        """Verify values-test.yaml overrides dagsterWebserver image repository.
+
+        The webserver must use the custom floe-dagster-demo image, not the
+        default Dagster image. This ensures the demo code is available to
+        the webserver process.
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        webserver_image = values.get("dagster", {}).get("dagsterWebserver", {}).get("image", {})
+        assert isinstance(webserver_image, dict), (
+            "dagster.dagsterWebserver.image must be a dict with repository/tag/pullPolicy. "
+            f"Got: {webserver_image!r}"
+        )
+        assert webserver_image.get("repository") == EXPECTED_IMAGE_REPOSITORY, (
+            f"dagster.dagsterWebserver.image.repository must be '{EXPECTED_IMAGE_REPOSITORY}'. "
+            f"Got: {webserver_image.get('repository')!r}"
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_test_has_daemon_image_override(self) -> None:
+        """Verify values-test.yaml overrides dagsterDaemon image repository.
+
+        The daemon must use the custom floe-dagster-demo image. The daemon
+        runs schedules and sensors, which reference demo code.
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        daemon_image = values.get("dagster", {}).get("dagsterDaemon", {}).get("image", {})
+        assert isinstance(daemon_image, dict), (
+            "dagster.dagsterDaemon.image must be a dict with repository/tag/pullPolicy. "
+            f"Got: {daemon_image!r}"
+        )
+        assert daemon_image.get("repository") == EXPECTED_IMAGE_REPOSITORY, (
+            f"dagster.dagsterDaemon.image.repository must be '{EXPECTED_IMAGE_REPOSITORY}'. "
+            f"Got: {daemon_image.get('repository')!r}"
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_test_webserver_pull_policy_never(self) -> None:
+        """Verify values-test.yaml webserver pullPolicy is 'Never'.
+
+        For Kind-loaded images, pullPolicy must be 'Never' so Kubernetes
+        uses the locally-loaded image instead of trying to pull from a
+        registry. 'IfNotPresent' or 'Always' would fail in Kind.
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        webserver_image = values.get("dagster", {}).get("dagsterWebserver", {}).get("image", {})
+        assert webserver_image.get("pullPolicy") == "Never", (
+            f"dagster.dagsterWebserver.image.pullPolicy must be 'Never' for Kind. "
+            f"Got: {webserver_image.get('pullPolicy')!r}"
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_test_daemon_pull_policy_never(self) -> None:
+        """Verify values-test.yaml daemon pullPolicy is 'Never'.
+
+        Same rationale as webserver: Kind-loaded images require pullPolicy: Never.
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        daemon_image = values.get("dagster", {}).get("dagsterDaemon", {}).get("image", {})
+        assert daemon_image.get("pullPolicy") == "Never", (
+            f"dagster.dagsterDaemon.image.pullPolicy must be 'Never' for Kind. "
+            f"Got: {daemon_image.get('pullPolicy')!r}"
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_has_webserver_image_override(self) -> None:
+        """Verify values-demo.yaml overrides dagsterWebserver image repository.
+
+        The demo values file must also override the webserver image so that
+        the demo deployment uses the locally-built image.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        webserver_image = values.get("dagster", {}).get("dagsterWebserver", {}).get("image", {})
+        assert isinstance(webserver_image, dict), (
+            "dagster.dagsterWebserver.image must be a dict in values-demo.yaml. "
+            f"Got: {webserver_image!r}"
+        )
+        assert webserver_image.get("repository") == EXPECTED_IMAGE_REPOSITORY, (
+            f"dagster.dagsterWebserver.image.repository must be '{EXPECTED_IMAGE_REPOSITORY}' "
+            f"in values-demo.yaml. Got: {webserver_image.get('repository')!r}"
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_has_daemon_image_override(self) -> None:
+        """Verify values-demo.yaml overrides dagsterDaemon image repository.
+
+        The demo values file must also override the daemon image so that
+        schedules and sensors can reference the demo code.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        daemon_image = values.get("dagster", {}).get("dagsterDaemon", {}).get("image", {})
+        assert isinstance(daemon_image, dict), (
+            f"dagster.dagsterDaemon.image must be a dict in values-demo.yaml. Got: {daemon_image!r}"
+        )
+        assert daemon_image.get("repository") == EXPECTED_IMAGE_REPOSITORY, (
+            f"dagster.dagsterDaemon.image.repository must be '{EXPECTED_IMAGE_REPOSITORY}' "
+            f"in values-demo.yaml. Got: {daemon_image.get('repository')!r}"
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_image_tag_is_latest(self) -> None:
+        """Verify both webserver and daemon image tags are 'latest' in values-test.yaml.
+
+        The locally-built demo image is tagged 'latest' by the Makefile.
+        Both webserver and daemon must reference this exact tag, not a
+        version number or empty/missing tag.
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        webserver_tag = (
+            values.get("dagster", {}).get("dagsterWebserver", {}).get("image", {}).get("tag")
+        )
+        daemon_tag = values.get("dagster", {}).get("dagsterDaemon", {}).get("image", {}).get("tag")
+        assert webserver_tag == EXPECTED_IMAGE_TAG, (
+            f"dagster.dagsterWebserver.image.tag must be '{EXPECTED_IMAGE_TAG}'. "
+            f"Got: {webserver_tag!r}"
+        )
+        assert daemon_tag == EXPECTED_IMAGE_TAG, (
+            f"dagster.dagsterDaemon.image.tag must be '{EXPECTED_IMAGE_TAG}'. Got: {daemon_tag!r}"
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_webserver_and_daemon_use_same_repository(self) -> None:
+        """Verify webserver and daemon use the exact same image repository.
+
+        A misconfiguration where webserver uses one image and daemon uses
+        another would cause subtle runtime errors. Both must reference
+        the identical repository name.
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        webserver_repo = (
+            values.get("dagster", {}).get("dagsterWebserver", {}).get("image", {}).get("repository")
+        )
+        daemon_repo = (
+            values.get("dagster", {}).get("dagsterDaemon", {}).get("image", {}).get("repository")
+        )
+        assert webserver_repo is not None, "dagsterWebserver.image.repository is missing"
+        assert daemon_repo is not None, "dagsterDaemon.image.repository is missing"
+        assert webserver_repo == daemon_repo, (
+            f"Webserver and daemon must use the same image repository. "
+            f"Webserver: {webserver_repo!r}, Daemon: {daemon_repo!r}"
+        )
+
+
+# ============================================================
+# T63: Helm Values Module Name Tests (AC-11.5)
+# ============================================================
+
+
+class TestHelmValuesModuleNames:
+    """Verify module names in Helm values resolve correctly.
+
+    AC-11.5 requires that moduleName in codeLocations uses the bare
+    module name (e.g. customer_360.definitions) without a 'demo.' prefix.
+    The workingDirectory of /app/demo adds /app/demo to sys.path, making
+    customer_360 importable as a top-level package.
+    """
+
+    @pytest.mark.requirement("WU11-AC5")
+    def test_values_test_module_names_no_demo_prefix(self) -> None:
+        """Verify no code location in values-test.yaml has a 'demo.' module prefix.
+
+        If moduleName starts with 'demo.', Python will look for a 'demo'
+        package inside workingDirectory, which does not exist. The correct
+        pattern is 'customer_360.definitions' with workingDirectory=/app/demo.
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        locations = _get_code_locations(values)
+        assert len(locations) >= 3, (
+            f"Expected at least 3 code locations in values-test.yaml, got {len(locations)}"
+        )
+
+        bad_modules: list[str] = []
+        for loc in locations:
+            module_name: str = loc.get("pythonModule", {}).get("moduleName", "")
+            if module_name.startswith("demo."):
+                bad_modules.append(f"{loc.get('name', '?')}: {module_name}")
+
+        assert not bad_modules, (
+            f"Module names must NOT start with 'demo.' prefix. "
+            f"Offending locations: {bad_modules}. "
+            f"Use 'customer_360.definitions' not 'demo.customer_360.definitions'."
+        )
+
+    @pytest.mark.requirement("WU11-AC5")
+    def test_values_test_module_names_use_underscores(self) -> None:
+        """Verify module names use underscores, not hyphens.
+
+        Python module names cannot contain hyphens (PEP 8). A module name
+        like 'customer-360.definitions' would cause an ImportError.
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        locations = _get_code_locations(values)
+        assert len(locations) >= 3, f"Expected at least 3 code locations, got {len(locations)}"
+
+        hyphenated: list[str] = []
+        for loc in locations:
+            module_name = loc.get("pythonModule", {}).get("moduleName", "")
+            # The module name itself (before .definitions) must not have hyphens
+            if "-" in module_name:
+                hyphenated.append(f"{loc.get('name', '?')}: {module_name}")
+
+        assert not hyphenated, (
+            f"Module names must use underscores, not hyphens. "
+            f"Offending: {hyphenated}. "
+            f"Use 'customer_360' not 'customer-360'."
+        )
+
+    @pytest.mark.requirement("WU11-AC5")
+    def test_values_test_module_names_match_expected(self) -> None:
+        """Verify each code location has the exact expected module name.
+
+        This is the strongest assertion: checks that each code location
+        maps to the specific expected module name, catching typos and
+        wrong product-to-module mappings.
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        locations = _get_code_locations(values)
+
+        location_map: dict[str, str] = {}
+        for loc in locations:
+            name: str = loc.get("name", "")
+            module_name = loc.get("pythonModule", {}).get("moduleName", "")
+            if name in EXPECTED_MODULE_NAMES:
+                location_map[name] = module_name
+
+        assert len(location_map) == len(EXPECTED_MODULE_NAMES), (
+            f"Expected code locations for {list(EXPECTED_MODULE_NAMES.keys())}. "
+            f"Found: {list(location_map.keys())}"
+        )
+
+        for loc_name, expected_module in EXPECTED_MODULE_NAMES.items():
+            actual_module = location_map.get(loc_name, "")
+            assert actual_module == expected_module, (
+                f"Code location '{loc_name}' must have moduleName='{expected_module}'. "
+                f"Got: '{actual_module}'"
+            )
+
+    @pytest.mark.requirement("WU11-AC5")
+    def test_values_test_working_directory_is_app_demo(self) -> None:
+        """Verify workingDirectory is '/app/demo' for all code locations in values-test.yaml.
+
+        The workingDirectory adds to Python's sys.path, making product
+        packages importable as top-level modules. It must be /app/demo
+        (matching the Dockerfile COPY layout).
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        locations = _get_code_locations(values)
+        assert len(locations) >= 3, f"Expected at least 3 code locations, got {len(locations)}"
+
+        wrong_dirs: list[str] = []
+        for loc in locations:
+            working_dir = loc.get("pythonModule", {}).get("workingDirectory", "")
+            if working_dir != "/app/demo":
+                wrong_dirs.append(f"{loc.get('name', '?')}: {working_dir!r}")
+
+        assert not wrong_dirs, (
+            f"All code locations must have workingDirectory='/app/demo'. Wrong: {wrong_dirs}"
+        )
+
+    @pytest.mark.requirement("WU11-AC5")
+    def test_values_demo_module_names_no_demo_prefix(self) -> None:
+        """Verify no code location in values-demo.yaml has a 'demo.' module prefix.
+
+        Same requirement as values-test.yaml: module names must not start
+        with 'demo.' because workingDirectory already handles the path.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        locations = _get_code_locations(values)
+        assert len(locations) >= 3, (
+            f"Expected at least 3 code locations in values-demo.yaml, got {len(locations)}"
+        )
+
+        bad_modules: list[str] = []
+        for loc in locations:
+            module_name = loc.get("pythonModule", {}).get("moduleName", "")
+            if module_name.startswith("demo."):
+                bad_modules.append(f"{loc.get('name', '?')}: {module_name}")
+
+        assert not bad_modules, (
+            f"Module names in values-demo.yaml must NOT start with 'demo.' prefix. "
+            f"Offending: {bad_modules}."
+        )
+
+    @pytest.mark.requirement("WU11-AC5")
+    def test_values_demo_module_names_match_expected(self) -> None:
+        """Verify each code location in values-demo.yaml has the exact expected module name.
+
+        Validates that values-demo.yaml and values-test.yaml agree on
+        module names, catching divergence between the two configuration files.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        locations = _get_code_locations(values)
+
+        location_map: dict[str, str] = {}
+        for loc in locations:
+            name = loc.get("name", "")
+            module_name = loc.get("pythonModule", {}).get("moduleName", "")
+            if name in EXPECTED_MODULE_NAMES:
+                location_map[name] = module_name
+
+        assert len(location_map) == len(EXPECTED_MODULE_NAMES), (
+            "Expected code locations for "
+            f"{list(EXPECTED_MODULE_NAMES.keys())} in values-demo.yaml. "
+            f"Found: {list(location_map.keys())}"
+        )
+
+        for loc_name, expected_module in EXPECTED_MODULE_NAMES.items():
+            actual_module = location_map.get(loc_name, "")
+            assert actual_module == expected_module, (
+                f"Code location '{loc_name}' in values-demo.yaml must have "
+                f"moduleName='{expected_module}'. Got: '{actual_module}'"
+            )
+
+    @pytest.mark.requirement("WU11-AC5")
+    def test_values_demo_working_directory_is_app_demo(self) -> None:
+        """Verify workingDirectory is '/app/demo' for all code locations in values-demo.yaml.
+
+        Must match values-test.yaml to avoid environment-specific import failures.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        locations = _get_code_locations(values)
+        assert len(locations) >= 3, (
+            f"Expected at least 3 code locations in values-demo.yaml, got {len(locations)}"
+        )
+
+        wrong_dirs: list[str] = []
+        for loc in locations:
+            working_dir = loc.get("pythonModule", {}).get("workingDirectory", "")
+            if working_dir != "/app/demo":
+                wrong_dirs.append(f"{loc.get('name', '?')}: {working_dir!r}")
+
+        assert not wrong_dirs, (
+            f"All code locations in values-demo.yaml must have workingDirectory='/app/demo'. "
+            f"Wrong: {wrong_dirs}"
+        )
+
+    @pytest.mark.requirement("WU11-AC5")
+    def test_values_test_all_locations_have_attribute_defs(self) -> None:
+        """Verify all code locations specify attribute='defs'.
+
+        The Dagster Definitions object is named 'defs' in each product's
+        definitions.py. Missing or wrong attribute would cause Dagster
+        to fail at startup.
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        locations = _get_code_locations(values)
+
+        wrong_attr: list[str] = []
+        for loc in locations:
+            attr = loc.get("pythonModule", {}).get("attribute", "")
+            if attr != "defs":
+                wrong_attr.append(f"{loc.get('name', '?')}: attribute={attr!r}")
+
+        assert not wrong_attr, f"All code locations must have attribute='defs'. Wrong: {wrong_attr}"
+
+
+# ============================================================
+# T63: dbt Relative Path Tests (AC-11.9)
+# ============================================================
+
+
+class TestDbtRelativePaths:
+    """Verify dbt project files use relative macro paths for container layout.
+
+    AC-11.9 requires each demo product's dbt_project.yml to have
+    macro-paths: ["../macros"], which resolves correctly when the
+    Dockerfile copies the layout:
+        /app/demo/macros/
+        /app/demo/customer_360/
+        /app/demo/iot_telemetry/
+        /app/demo/financial_risk/
+    """
+
+    @pytest.mark.requirement("WU11-AC9")
+    @pytest.mark.parametrize(
+        "product_dir",
+        ["customer-360", "iot-telemetry", "financial-risk"],
+        ids=["customer-360", "iot-telemetry", "financial-risk"],
+    )
+    def test_dbt_project_macro_paths_relative(self, product_dir: str) -> None:
+        """Verify each product's dbt_project.yml has macro-paths with '../macros'.
+
+        The relative path '../macros' resolves from /app/demo/<product>/
+        up to /app/demo/macros/, matching the Dockerfile COPY layout.
+        An absolute path or missing macro-paths would break dbt compilation
+        inside the container.
+        """
+        dbt_project_path = REPO_ROOT / "demo" / product_dir / "dbt_project.yml"
+        assert dbt_project_path.exists(), f"dbt_project.yml not found at {dbt_project_path}"
+
+        content = dbt_project_path.read_text()
+        raw = yaml.safe_load(content)
+        assert isinstance(raw, dict), f"dbt_project.yml for {product_dir} did not parse to a dict"
+        data: dict[str, Any] = raw
+
+        macro_paths: list[str] = data.get("macro-paths", [])
+        assert isinstance(macro_paths, list), (
+            f"macro-paths must be a list in {product_dir}/dbt_project.yml. Got: {type(macro_paths)}"
+        )
+        assert "../macros" in macro_paths, (
+            f"macro-paths must contain '../macros' in {product_dir}/dbt_project.yml. "
+            f"Got: {macro_paths}. This is required for container layout compatibility."
+        )
+
+    @pytest.mark.requirement("WU11-AC9")
+    def test_all_products_have_macro_paths(self) -> None:
+        """Verify all 3 demo products have macro-paths configured.
+
+        Guards against a partial implementation where only one product
+        has macro-paths set. Each product must independently resolve
+        the shared macros directory.
+        """
+        products_without_macro_paths: list[str] = []
+        expected_products = ["customer-360", "iot-telemetry", "financial-risk"]
+
+        for product_dir in expected_products:
+            dbt_project_path = REPO_ROOT / "demo" / product_dir / "dbt_project.yml"
+            if not dbt_project_path.exists():
+                products_without_macro_paths.append(f"{product_dir} (file missing)")
+                continue
+
+            data = yaml.safe_load(dbt_project_path.read_text())
+            if not isinstance(data, dict):
+                products_without_macro_paths.append(f"{product_dir} (invalid YAML)")
+                continue
+
+            macro_paths = data.get("macro-paths", [])
+            if not isinstance(macro_paths, list) or "../macros" not in macro_paths:
+                products_without_macro_paths.append(product_dir)
+
+        assert not products_without_macro_paths, (
+            f"All 3 products must have macro-paths: ['../macros']. "
+            f"Missing/wrong: {products_without_macro_paths}"
+        )
+
+    @pytest.mark.requirement("WU11-AC9")
+    def test_macro_paths_not_absolute(self) -> None:
+        """Verify no product uses absolute macro paths.
+
+        An absolute path like '/app/demo/macros' would work on the
+        developer's machine but break in CI or different container layouts.
+        Only relative paths are portable.
+        """
+        expected_products = ["customer-360", "iot-telemetry", "financial-risk"]
+        absolute_paths: list[str] = []
+
+        for product_dir in expected_products:
+            dbt_project_path = REPO_ROOT / "demo" / product_dir / "dbt_project.yml"
+            if not dbt_project_path.exists():
+                continue
+
+            data = yaml.safe_load(dbt_project_path.read_text())
+            if not isinstance(data, dict):
+                continue
+
+            macro_paths = data.get("macro-paths", [])
+            if isinstance(macro_paths, list):
+                for mp in macro_paths:
+                    if isinstance(mp, str) and mp.startswith("/"):
+                        absolute_paths.append(f"{product_dir}: {mp}")
+
+        assert not absolute_paths, (
+            f"macro-paths must use relative paths, not absolute. "
+            f"Found absolute paths: {absolute_paths}"
         )
