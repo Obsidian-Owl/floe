@@ -4,7 +4,7 @@
     "id": "platform-integration",
     "phase": "building",
     "startedAt": "2026-02-15T18:35:00Z",
-    "activeWorkUnit": "wu-10-polaris-test-fixes"
+    "activeWorkUnit": "wu-11-demo-packaging"
   },
   "completedWork": [
     {
@@ -30,7 +30,7 @@
     { "id": "wu-7-secrets-cve", "description": "Secrets Verification + CVE Bumps", "status": "shipped", "order": 7, "tasksCompleted": ["T38", "T39", "T40", "T41"], "pr": "https://github.com/Obsidian-Owl/floe/pull/80" },
     { "id": "wu-8-polish", "description": "Polaris Health Check + Final Verification", "status": "shipped", "order": 8, "tasksCompleted": ["T42", "T43", "T44", "T45", "T48"], "pr": "https://github.com/Obsidian-Owl/floe/pull/82" },
     { "id": "wu-9-config-pipeline-flow", "description": "Schema changes + governance/observability flow through builder", "status": "shipped", "order": 9, "tasksCompleted": ["T49", "T50", "T51", "T52", "T53", "T54", "T55"], "pr": "https://github.com/Obsidian-Owl/floe/pull/84" },
-    { "id": "wu-10-polaris-test-fixes", "description": "Pin Polaris 1.2.1, xfail cleanup, test assertion fixes", "status": "building", "order": 10, "tasksCompleted": [] },
+    { "id": "wu-10-polaris-test-fixes", "description": "Pin Polaris 1.2.1, xfail cleanup, test assertion fixes", "status": "shipped", "order": 10, "tasksCompleted": ["T56", "T57", "T58", "T59", "T60"], "pr": "https://github.com/Obsidian-Owl/floe/pull/85" },
     { "id": "wu-11-demo-packaging", "description": "Custom Dagster test image with demo code", "status": "pending", "order": 11 }
   ],
   "gates": {
@@ -89,6 +89,13 @@
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-15T07:30:00Z", "note": "No new security issues. 7 advisory observations (pre-existing test credentials, shell patterns)." },
       "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 6 }, "timestamp": "2026-02-15T07:30:00Z", "note": "Previous WARN resolved. Port 8182 consistent across all 5 layers. Combined port-forward cleanup correct." },
       "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-15T07:30:00Z", "note": "All 6 ACs mapped. 2 INFO: T46/T47 need K8s for verification." }
+    },
+    "wu-10-polaris-test-fixes": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T09:45:00Z", "note": "7794 unit + 843 contract tests pass, lint/format clean" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 8 }, "timestamp": "2026-02-16T09:50:00Z", "note": "2 WARNs resolved: storage config → contract tier, health_check call site fix. 8 INFO remaining." },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T09:50:00Z", "note": "No secrets, injection, or CVE issues. 1 INFO: pre-existing shell patterns." },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T09:50:00Z", "note": "All patterns verified correct." },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-16T09:55:00Z", "note": "All 7 ACs mapped with evidence. 2 INFO: BC-10.1/BC-10.2 need K8s for verification." }
     }
   }
 }
