@@ -290,19 +290,6 @@ demo: build-demo-image ## Deploy platform and run all 3 demo data products with 
 	@echo "Installing floe-platform Helm chart with demo overrides..."
 	@uv run floe platform deploy --env dev --chart ./charts/floe-platform \
 		--values ./charts/floe-platform/values-demo.yaml
-	@echo "Compiling demo data products..."
-	@if [ -n "$(PRODUCTS)" ]; then \
-		for product in $(shell echo $(PRODUCTS) | tr ',' ' '); do \
-			echo "Compiling $$product..."; \
-			uv run floe compile demo/$$product/floe.yaml || exit 1; \
-		done; \
-	else \
-		for product in customer-360 iot-telemetry financial-risk; do \
-			echo "Compiling $$product..."; \
-			uv run floe compile demo/$$product/floe.yaml || exit 1; \
-		done; \
-	fi
-	@echo "Deploying to Dagster..."
 	@echo "=== Demo Ready ==="
 	@echo "Dagster UI:    http://localhost:3000"
 	@echo "Polaris:       http://localhost:8181"

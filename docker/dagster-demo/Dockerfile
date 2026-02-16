@@ -18,8 +18,11 @@ FROM dagster/dagster-celery-k8s:1.9.6
 
 # Install floe packages needed by generated definitions.py
 # Use --no-deps to avoid conflicts with pre-installed dagster packages
-COPY packages/ /build/packages/
-COPY plugins/ /build/plugins/
+# Copy only the specific packages installed below (not the entire directories)
+COPY packages/floe-core /build/packages/floe-core
+COPY plugins/floe-orchestrator-dagster /build/plugins/floe-orchestrator-dagster
+COPY plugins/floe-compute-duckdb /build/plugins/floe-compute-duckdb
+COPY plugins/floe-dbt-core /build/plugins/floe-dbt-core
 RUN pip install --no-deps \
         /build/packages/floe-core \
         /build/plugins/floe-orchestrator-dagster \
