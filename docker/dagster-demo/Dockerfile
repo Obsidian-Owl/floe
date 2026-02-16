@@ -94,6 +94,7 @@ COPY plugins/floe-dbt-core /build/plugins/floe-dbt-core
 
 # Install workspace packages from source (deps already installed above).
 # Uses FLOE_PLUGINS ARG to dynamically install only the target packages.
+# Re-declare ARG — Docker does not propagate ARGs across stages.
 ARG FLOE_PLUGINS
 # shellcheck disable=SC2086
 RUN set -e; \
@@ -102,7 +103,7 @@ RUN set -e; \
         for prefix in /build/packages /build/plugins; do \
             if [ -d "$prefix/$pkg" ]; then dir="$prefix/$pkg"; break; fi; \
         done; \
-        if [ -z "$dir" ]; then echo "ERROR: source for $pkg not found" && exit 1; fi; \
+        if [ -z "$dir" ]; then echo "ERROR: source for $pkg not found" >&2 && exit 1; fi; \
         pip install --no-deps --no-cache-dir "$dir"; \
     done
 

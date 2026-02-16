@@ -388,7 +388,7 @@ class TestDockerfileMacrosAndManifest:
             for line in content.splitlines()
             if line.strip().upper().startswith("COPY") and "macros" in line.lower()
         ]
-        assert len(copy_lines) >= 1, "No COPY instruction for macros found"
+        assert len(copy_lines) == 1, "Expected exactly 1 COPY instruction for macros"
 
         for copy_line in copy_lines:
             parts = copy_line.split()
@@ -415,9 +415,9 @@ class TestDockerfilePipOperations:
         run_pip_check = [
             line for line in lines if line.upper().startswith("RUN") and "pip check" in line.lower()
         ]
-        assert len(run_pip_check) >= 1, (
-            "Dockerfile must have 'RUN pip check' to validate dependencies. "
-            "No matching RUN instruction found."
+        assert len(run_pip_check) == 1, (
+            "Dockerfile must have exactly 1 'RUN pip check' to validate dependencies. "
+            f"Found {len(run_pip_check)} matching RUN instructions."
         )
 
     @pytest.mark.requirement("WU11-AC1")
@@ -430,8 +430,8 @@ class TestDockerfilePipOperations:
         pip_check_instructions = [
             line for line in lines if line.upper().startswith("RUN") and "pip check" in line.lower()
         ]
-        assert len(pip_check_instructions) >= 1, (
-            "pip check must appear in a RUN instruction (not just a comment)"
+        assert len(pip_check_instructions) == 1, (
+            "pip check must appear in exactly 1 RUN instruction (not just a comment)"
         )
 
     @pytest.mark.requirement("WU12-AC5")
@@ -451,8 +451,8 @@ class TestDockerfilePipOperations:
             and "pip install" in line.lower()
             and "requirements.txt" in line.lower()
         ]
-        assert len(pip_install_lines) >= 1, (
-            "Dockerfile must have a pip install that references requirements.txt"
+        assert len(pip_install_lines) == 1, (
+            "Dockerfile must have exactly 1 pip install that references requirements.txt"
         )
         for pip_line in pip_install_lines:
             assert "--require-hashes" in pip_line, (
@@ -478,8 +478,8 @@ class TestDockerfilePipOperations:
             and "pip install" in line.lower()
             and "requirements.txt" not in line.lower()
         ]
-        assert len(pip_install_lines) >= 1, (
-            "Dockerfile must have at least one pip install for workspace packages"
+        assert len(pip_install_lines) == 1, (
+            "Dockerfile must have exactly 1 pip install for workspace packages"
         )
         for pip_line in pip_install_lines:
             assert "--no-deps" in pip_line, (
@@ -682,7 +682,7 @@ class TestDockerfileExportStage:
             for line in content.splitlines()
             if "uv export" in line.lower() and not line.strip().startswith("#")
         ]
-        assert len(uv_export_lines) >= 1, "Dockerfile must have a uv export instruction"
+        assert len(uv_export_lines) == 1, "Dockerfile must have exactly 1 uv export instruction"
         # Check across logical lines (uv export may be on a continuation line)
         lines = _read_dockerfile_lines()
         uv_lines = [line for line in lines if "uv export" in line.lower()]
@@ -889,7 +889,7 @@ class TestDockerfileSupplyChain:
         """
         lines = _read_dockerfile_lines()
         from_lines = [line for line in lines if line.upper().startswith("FROM")]
-        assert len(from_lines) >= 3, f"Expected at least 3 FROM lines, got {len(from_lines)}"
+        assert len(from_lines) == 3, f"Expected exactly 3 FROM lines, got {len(from_lines)}"
 
         # Build stage (index 1) and runtime stage (index 2) must be digest-pinned
         for idx, label in [(1, "build"), (2, "runtime")]:
@@ -1639,8 +1639,8 @@ class TestHelmValuesModuleNames:
         """
         values = _load_values_yaml(VALUES_TEST)
         locations = _get_code_locations(values)
-        assert len(locations) >= 3, (
-            f"Expected at least 3 code locations in values-test.yaml, got {len(locations)}"
+        assert len(locations) == 3, (
+            f"Expected exactly 3 code locations in values-test.yaml, got {len(locations)}"
         )
 
         bad_modules: list[str] = []
@@ -1664,7 +1664,7 @@ class TestHelmValuesModuleNames:
         """
         values = _load_values_yaml(VALUES_TEST)
         locations = _get_code_locations(values)
-        assert len(locations) >= 3, f"Expected at least 3 code locations, got {len(locations)}"
+        assert len(locations) == 3, f"Expected exactly 3 code locations, got {len(locations)}"
 
         hyphenated: list[str] = []
         for loc in locations:
@@ -1719,7 +1719,7 @@ class TestHelmValuesModuleNames:
         """
         values = _load_values_yaml(VALUES_TEST)
         locations = _get_code_locations(values)
-        assert len(locations) >= 3, f"Expected at least 3 code locations, got {len(locations)}"
+        assert len(locations) == 3, f"Expected exactly 3 code locations, got {len(locations)}"
 
         wrong_dirs: list[str] = []
         for loc in locations:
@@ -1793,8 +1793,8 @@ class TestHelmValuesModuleNames:
         """
         values = _load_values_yaml(VALUES_DEMO)
         locations = _get_code_locations(values)
-        assert len(locations) >= 3, (
-            f"Expected at least 3 code locations in values-demo.yaml, got {len(locations)}"
+        assert len(locations) == 3, (
+            f"Expected exactly 3 code locations in values-demo.yaml, got {len(locations)}"
         )
 
         wrong_dirs: list[str] = []
