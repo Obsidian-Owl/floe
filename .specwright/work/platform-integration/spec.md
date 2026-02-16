@@ -145,35 +145,91 @@ WU-9 is the critical path (core pipeline fix). WU-10 and WU-11 are independent.
 
 ---
 
-## WU-11: Demo Packaging
+## WU-11: Demo Packaging (Production-Like Workflow)
 
-### AC-11.1: Custom Dagster test image with demo code
+**Design**: [wu-11-design.md](./wu-11-design.md)
 
-**How we know it works**: `testing/Dockerfile.dagster` builds successfully, extends base Dagster image with demo code.
+### AC-11.1: Dockerfile builds and contains demo code at importable paths
 
-- `docker build -f testing/Dockerfile.dagster .` succeeds
-- `/app/demo/customer_360/definitions.py` exists in image
-- `/app/demo/iot_telemetry/definitions.py` exists in image
-- `/app/demo/financial_risk/definitions.py` exists in image
+**How we know it works**: `docker build -f docker/dagster-demo/Dockerfile .` succeeds.
 
-### AC-11.2: values-test.yaml overrides Dagster image
+- Dockerfile extends `dagster/dagster-celery-k8s:1.9.6` base image
+- Demo code COPY'd with underscore directory names: `customer_360/`, `iot_telemetry/`, `financial_risk/`
+- Each product directory has `__init__.py` for Python package discovery
+- `manifest.yaml` and `macros/` copied to `/app/demo/`
+- `pip check` passes inside image (no broken dependency metadata)
+- Shared macros at `/app/demo/macros/` accessible via `../macros` from each product dir
 
-**How we know it works**: `values-test.yaml` sets the Dagster image to the custom test image.
+### AC-11.2: dbt compile produces target/manifest.json for each product
 
-- Dagster webserver pod runs custom image (not stock `dagster-celery-k8s`)
-- Dagster daemon pod runs custom image
-- Production `values.yaml` is NOT changed (still uses stock image)
+**How we know it works**: Makefile `compile-demo` target runs `dbt compile` for all 3 products.
 
-### AC-11.3: Workspace module references resolve
+- `demo/customer-360/target/manifest.json` exists after `make compile-demo`
+- `demo/iot-telemetry/target/manifest.json` exists
+- `demo/financial-risk/target/manifest.json` exists
+- These files are present in the Docker build context (not gitignored from the build)
 
-**How we know it works**: Dagster pods can import demo modules.
+### AC-11.3: Helm values override Dagster image for webserver and daemon
 
-- `demo.customer_360.definitions` resolves inside the Dagster container
-- `demo.iot_telemetry.definitions` resolves
-- `demo.financial_risk.definitions` resolves
-- Dagster webserver starts without code location errors
+**How we know it works**: Both `values-test.yaml` and `values-demo.yaml` set custom image.
+
+- `dagster.dagsterWebserver.image.repository` == `floe-dagster-demo`
+- `dagster.dagsterDaemon.image.repository` == `floe-dagster-demo`
+- `dagster.dagsterWebserver.image.pullPolicy` == `Never` (Kind-loaded)
+- Production `values.yaml` is NOT changed (still uses stock Dagster image)
+
+### AC-11.4: Dagster pods start with custom image, code locations discoverable
+
+**How we know it works**: After `make demo`, Dagster webserver discovers all 3 code locations.
+
+- Dagster webserver pod runs `floe-dagster-demo:latest` image
+- No `ModuleNotFoundError` in webserver logs
+- All 3 code locations appear in Dagster UI workspace (K8s verification)
+
+### AC-11.5: Module imports resolve correctly inside container
+
+**How we know it works**: Module path configuration is correct.
+
+- `moduleName: customer_360.definitions` with `workingDirectory: /app/demo`
+- Dagster adds `/app/demo` to `sys.path` → `customer_360/definitions.py` found at `/app/demo/customer_360/definitions.py`
+- Same for `iot_telemetry.definitions` and `financial_risk.definitions`
+- `defs` attribute is importable from each module
+
+### AC-11.6: Makefile chain works end-to-end
+
+**How we know it works**: `make demo` runs the full production-like flow.
+
+- `compile-demo` → `build-demo-image` → `demo` dependency chain
+- `make compile-demo` runs `dbt compile` for each product
+- `make build-demo-image` builds Docker image and loads to Kind
+- `make demo` deploys via Helm upgrade
+
+### AC-11.7: .dockerignore limits build context
+
+**How we know it works**: `.dockerignore` exists at repo root.
+
+- Excludes `.git/`, `.venv/`, `__pycache__/`, `.mypy_cache/`, `.pytest_cache/`, `.ruff_cache/`, `.specwright/`, `.beads/`, `.claude/`
+- Docker build context is manageable size
+
+### AC-11.8: Generated definitions.py produces functionally equivalent Dagster definitions
+
+**How we know it works**: `floe platform compile --generate-definitions` output replaces hand-written files.
+
+- Generated `definitions.py` written to each product directory
+- Generated code exports `defs` attribute with Dagster Definitions
+- Generated code uses `@dbt_assets` decorator with `DbtCliResource`
+- Dagster webserver starts and discovers code locations with generated code
+
+### AC-11.9: dbt relative paths resolve correctly inside container
+
+**How we know it works**: `macro-paths: ["../macros"]` in each `dbt_project.yml` resolves.
+
+- From `/app/demo/customer_360/`, `../macros` → `/app/demo/macros/` (exists in image)
+- `profiles.yml` references are relative to project dir (DuckDB path: `target/demo.duckdb`)
 
 ### Boundary Conditions (WU-11)
 
-- BC-11.1: Image builds on both amd64 and arm64 (multi-arch or Rosetta)
-- BC-11.2: Demo code changes don't require Helm chart changes (just image rebuild)
+- BC-11.1: Dockerfile builds on local architecture (amd64 or arm64 via Rosetta)
+- BC-11.2: Demo code changes only require image rebuild, not Helm chart changes
+- BC-11.3: Empty `target/` directory (no prior dbt compile) → `compile-demo` creates it
+- BC-11.4: `pip install --no-deps` with `pip check` catches missing transitive deps

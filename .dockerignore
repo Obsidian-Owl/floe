@@ -1,0 +1,25 @@
+# Docker build context exclusions
+# Reduces context size for faster builds
+
+# Version control
+.git/
+
+# Python environments and caches
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# IDE and editor
+.vscode/
+.idea/
+
+# Project tooling (not needed in images)
+.specwright/
+.beads/
+.claude/
+
+# Node (if any)
+node_modules/

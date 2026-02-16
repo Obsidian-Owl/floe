@@ -27,23 +27,27 @@ dagster:
   codeLocations:
     - name: customer-360
       pythonModule:
-        moduleName: demo.customer_360.definitions
+        moduleName: customer_360.definitions
         workingDirectory: /app/demo
         attribute: defs
     - name: iot-telemetry
       pythonModule:
-        moduleName: demo.iot_telemetry.definitions
+        moduleName: iot_telemetry.definitions
         workingDirectory: /app/demo
         attribute: defs
     - name: financial-risk
       pythonModule:
-        moduleName: demo.financial_risk.definitions
+        moduleName: financial_risk.definitions
         workingDirectory: /app/demo
         attribute: defs
 
   # Dagster webserver configuration
   dagsterWebserver:
     replicaCount: 1
+    image:
+      repository: floe-dagster-demo
+      tag: latest
+      pullPolicy: Never
     resources:
       requests:
         cpu: 100m
@@ -55,6 +59,10 @@ dagster:
   # Dagster daemon configuration
   dagsterDaemon:
     enabled: true
+    image:
+      repository: floe-dagster-demo
+      tag: latest
+      pullPolicy: Never
     resources:
       requests:
         cpu: 100m
