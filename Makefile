@@ -263,7 +263,7 @@ compile-demo: ## Compile dbt models and generate Dagster definitions for all dem
 	@echo "Compiling dbt models for all demo products..."
 	@for product in customer-360 iot-telemetry financial-risk; do \
 		echo "Compiling $$product..."; \
-		uv run dbt compile --project-dir demo/$$product || exit 1; \
+		uv run dbt compile --project-dir demo/$$product --profiles-dir demo/$$product || exit 1; \
 	done
 	@echo "Generating Dagster definitions.py for all demo products..."
 	@for product in customer-360 iot-telemetry financial-risk; do \
