@@ -437,9 +437,9 @@ class TestDockerfilePipOperations:
         pip_check_instructions = [
             line for line in lines if line.upper().startswith("RUN") and "pip check" in line.lower()
         ]
-        assert (
-            len(pip_check_instructions) == 1
-        ), "pip check must appear in exactly 1 RUN instruction (not just a comment)"
+        assert len(pip_check_instructions) == 1, (
+            "pip check must appear in exactly 1 RUN instruction (not just a comment)"
+        )
 
     @pytest.mark.requirement("WU12-AC5")
     def test_build_stage_uses_require_hashes(self) -> None:
@@ -458,13 +458,13 @@ class TestDockerfilePipOperations:
             and "pip install" in line.lower()
             and "requirements.txt" in line.lower()
         ]
-        assert (
-            len(pip_install_lines) == 1
-        ), "Dockerfile must have exactly 1 pip install that references requirements.txt"
+        assert len(pip_install_lines) == 1, (
+            "Dockerfile must have exactly 1 pip install that references requirements.txt"
+        )
         for pip_line in pip_install_lines:
-            assert (
-                "--require-hashes" in pip_line
-            ), f"pip install for requirements.txt must use --require-hashes. Line: {pip_line}"
+            assert "--require-hashes" in pip_line, (
+                f"pip install for requirements.txt must use --require-hashes. Line: {pip_line}"
+            )
 
     @pytest.mark.requirement("WU12-AC2")
     def test_workspace_packages_use_no_deps(self) -> None:
@@ -485,13 +485,13 @@ class TestDockerfilePipOperations:
             and "pip install" in line.lower()
             and "requirements.txt" not in line.lower()
         ]
-        assert (
-            len(pip_install_lines) == 1
-        ), "Dockerfile must have exactly 1 pip install for workspace packages"
+        assert len(pip_install_lines) == 1, (
+            "Dockerfile must have exactly 1 pip install for workspace packages"
+        )
         for pip_line in pip_install_lines:
-            assert (
-                "--no-deps" in pip_line
-            ), f"Workspace package pip install must use --no-deps. Line: {pip_line}"
+            assert "--no-deps" in pip_line, (
+                f"Workspace package pip install must use --no-deps. Line: {pip_line}"
+            )
 
 
 class TestDockerignoreExists:
@@ -538,9 +538,9 @@ class TestDockerignoreExclusions:
             line == exclusion or line == f"{exclusion}/" or line.startswith(f"{exclusion}/")
             for line in lines
         )
-        assert (
-            matched
-        ), f".dockerignore must exclude '{exclusion}'. None of the patterns match. Lines: {lines}"
+        assert matched, (
+            f".dockerignore must exclude '{exclusion}'. None of the patterns match. Lines: {lines}"
+        )
 
     @pytest.mark.requirement("WU11-AC7")
     def test_dockerignore_excludes_all_required_patterns(self) -> None:
@@ -632,9 +632,9 @@ class TestDockerfileStructuralIntegrity:
         for line in lines:
             if line.upper().startswith("ARG"):
                 continue
-            assert line.upper().startswith(
-                "FROM"
-            ), f"First non-ARG instruction must be FROM, got: {line}"
+            assert line.upper().startswith("FROM"), (
+                f"First non-ARG instruction must be FROM, got: {line}"
+            )
             break
 
     @pytest.mark.requirement("WU11-AC1")
@@ -693,9 +693,9 @@ class TestDockerfileExportStage:
         # Check across logical lines (uv export may be on a continuation line)
         lines = _read_dockerfile_lines()
         uv_lines = [line for line in lines if "uv export" in line.lower()]
-        assert any(
-            "--frozen" in line for line in uv_lines
-        ), f"uv export must use --frozen flag. Found uv export lines: {uv_lines}"
+        assert any("--frozen" in line for line in uv_lines), (
+            f"uv export must use --frozen flag. Found uv export lines: {uv_lines}"
+        )
 
     @pytest.mark.requirement("WU12-AC2")
     def test_export_stage_uses_package_flag(self) -> None:
@@ -733,9 +733,9 @@ class TestDockerfileExportStage:
         """
         content = _read_dockerfile_raw()
         # Look for > requirements.txt redirect
-        assert (
-            "requirements.txt" in content
-        ), "Dockerfile must produce a requirements.txt file in the export stage"
+        assert "requirements.txt" in content, (
+            "Dockerfile must produce a requirements.txt file in the export stage"
+        )
 
 
 class TestDockerfileBuildStage:
@@ -752,12 +752,12 @@ class TestDockerfileBuildStage:
         from_lines = [line for line in lines if line.upper().startswith("FROM")]
         # Second FROM is the build stage
         build_from = from_lines[1]
-        assert (
-            "@sha256:" in build_from
-        ), f"Build stage must use digest-pinned base image (@sha256:). Got FROM line: {build_from}"
-        assert (
-            "python:" in build_from.lower() or "python:" in build_from
-        ), f"Build stage must use a python base image. Got FROM line: {build_from}"
+        assert "@sha256:" in build_from, (
+            f"Build stage must use digest-pinned base image (@sha256:). Got FROM line: {build_from}"
+        )
+        assert "python:" in build_from.lower() or "python:" in build_from, (
+            f"Build stage must use a python base image. Got FROM line: {build_from}"
+        )
 
     @pytest.mark.requirement("WU12-AC7")
     def test_build_stage_installs_build_deps(self) -> None:
@@ -785,9 +785,9 @@ class TestDockerfileBuildStage:
             if in_build_stage:
                 build_stage_content += line + "\n"
 
-        assert (
-            "gcc" in build_stage_content
-        ), "Build stage must install gcc for C extension compilation"
+        assert "gcc" in build_stage_content, (
+            "Build stage must install gcc for C extension compilation"
+        )
 
     @pytest.mark.requirement("WU12-AC1")
     def test_build_stage_has_smoke_test(self) -> None:
@@ -830,9 +830,9 @@ class TestDockerfileRuntimeStage:
         not reinstall them. This keeps the runtime image minimal.
         """
         content = _read_dockerfile_raw()
-        assert re.search(
-            r"COPY\s+--from=build.*site-packages", content
-        ), "Runtime stage must COPY --from=build site-packages"
+        assert re.search(r"COPY\s+--from=build.*site-packages", content), (
+            "Runtime stage must COPY --from=build site-packages"
+        )
 
     @pytest.mark.requirement("WU12-AC8")
     def test_runtime_stage_sets_workdir(self) -> None:
@@ -875,12 +875,12 @@ class TestDockerfileRuntimeStage:
             if from_count == 3 and not stripped.startswith("#"):
                 runtime_content += line + "\n"
 
-        assert (
-            "apt-get" not in runtime_content
-        ), "Runtime stage must not run apt-get (no build tools needed)"
-        assert (
-            "pip install" not in runtime_content
-        ), "Runtime stage must not run pip install (packages copied from build stage)"
+        assert "apt-get" not in runtime_content, (
+            "Runtime stage must not run apt-get (no build tools needed)"
+        )
+        assert "pip install" not in runtime_content, (
+            "Runtime stage must not run pip install (packages copied from build stage)"
+        )
 
 
 class TestDockerfileSupplyChain:
@@ -900,9 +900,9 @@ class TestDockerfileSupplyChain:
 
         # Build stage (index 1) and runtime stage (index 2) must be digest-pinned
         for idx, label in [(1, "build"), (2, "runtime")]:
-            assert (
-                "@sha256:" in from_lines[idx]
-            ), f"{label} stage FROM must use @sha256: digest pin. Got: {from_lines[idx]}"
+            assert "@sha256:" in from_lines[idx], (
+                f"{label} stage FROM must use @sha256: digest pin. Got: {from_lines[idx]}"
+            )
 
     @pytest.mark.requirement("WU12-AC5")
     def test_no_latest_tag_in_from(self) -> None:
@@ -925,9 +925,9 @@ class TestDockerfileSupplyChain:
         """
         lines = _read_dockerfile_lines()
         uv_lines = [line for line in lines if "uv export" in line.lower()]
-        assert any(
-            "--no-dev" in line for line in uv_lines
-        ), f"uv export must use --no-dev flag. Found: {uv_lines}"
+        assert any("--no-dev" in line for line in uv_lines), (
+            f"uv export must use --no-dev flag. Found: {uv_lines}"
+        )
 
 
 # ============================================================
@@ -1073,9 +1073,9 @@ class TestMakefileCompileDemo:
         """
         content = _read_makefile_content()
         phony_targets = _get_phony_targets(content)
-        assert (
-            "compile-demo" in phony_targets
-        ), f"compile-demo must be declared .PHONY. Found .PHONY targets: {sorted(phony_targets)}"
+        assert "compile-demo" in phony_targets, (
+            f"compile-demo must be declared .PHONY. Found .PHONY targets: {sorted(phony_targets)}"
+        )
 
     @pytest.mark.requirement("WU11-AC2")
     def test_compile_demo_runs_dbt_compile(self) -> None:
@@ -1093,9 +1093,9 @@ class TestMakefileCompileDemo:
         )
         # Match variations: dbt compile, dbt-core compile, uv run dbt compile
         dbt_compile_pattern = re.compile(r"dbt[\s-]*(core\s+)?compile", re.IGNORECASE)
-        assert dbt_compile_pattern.search(
-            body
-        ), f"compile-demo recipe must invoke 'dbt compile' (or variant). Recipe body:\n{body}"
+        assert dbt_compile_pattern.search(body), (
+            f"compile-demo recipe must invoke 'dbt compile' (or variant). Recipe body:\n{body}"
+        )
 
     @pytest.mark.requirement("WU11-AC2")
     def test_compile_demo_handles_all_three_products(self) -> None:
@@ -1146,9 +1146,9 @@ class TestMakefileCompileDemo:
             # Loop-based: all 3 products must appear in the loop variable list
             for product in expected_products:
                 underscore_form = product.replace("-", "_")
-                assert (
-                    product in body or underscore_form in body
-                ), f"Product '{product}' not found in compile-demo loop. Recipe body:\n{body}"
+                assert product in body or underscore_form in body, (
+                    f"Product '{product}' not found in compile-demo loop. Recipe body:\n{body}"
+                )
         else:
             # Sequential: need at least 3 dbt compile invocations (one per product)
             assert dbt_compile_count >= 3, (
@@ -1208,9 +1208,9 @@ class TestMakefileBuildDemoImage:
         body = _extract_target_body(content, "build-demo-image")
         assert body.strip(), "build-demo-image target has no recipe body."
         docker_build_pattern = re.compile(r"docker\s+build", re.IGNORECASE)
-        assert docker_build_pattern.search(
-            body
-        ), f"build-demo-image recipe must contain 'docker build'. Recipe body:\n{body}"
+        assert docker_build_pattern.search(body), (
+            f"build-demo-image recipe must contain 'docker build'. Recipe body:\n{body}"
+        )
 
     @pytest.mark.requirement("WU11-AC6")
     def test_build_demo_image_references_dockerfile(self) -> None:
@@ -1256,9 +1256,9 @@ class TestMakefileBuildDemoImage:
         """
         content = _read_makefile_content()
         prereqs = _extract_target_prerequisites(content, "build-demo-image")
-        assert (
-            "compile-demo" in prereqs
-        ), f"build-demo-image must depend on compile-demo. Found prerequisites: {prereqs}"
+        assert "compile-demo" in prereqs, (
+            f"build-demo-image must depend on compile-demo. Found prerequisites: {prereqs}"
+        )
 
 
 # ============================================================
@@ -1297,15 +1297,15 @@ class TestMakefileDemoChain:
         content = _read_makefile_content()
         # Extract the help target body, which contains @echo lines
         help_body = _extract_target_body(content, "help")
-        assert (
-            help_body.strip()
-        ), "help target has no recipe body -- cannot verify target documentation."
-        assert (
-            "compile-demo" in help_body
-        ), "compile-demo must appear in 'make help' output. Not found in help target body."
-        assert (
-            "build-demo-image" in help_body
-        ), "build-demo-image must appear in 'make help' output. Not found in help target body."
+        assert help_body.strip(), (
+            "help target has no recipe body -- cannot verify target documentation."
+        )
+        assert "compile-demo" in help_body, (
+            "compile-demo must appear in 'make help' output. Not found in help target body."
+        )
+        assert "build-demo-image" in help_body, (
+            "build-demo-image must appear in 'make help' output. Not found in help target body."
+        )
 
     @pytest.mark.requirement("WU11-AC6")
     def test_full_chain_is_connected(self) -> None:
@@ -1322,15 +1322,15 @@ class TestMakefileDemoChain:
 
         # Verify build-demo-image -> compile-demo
         build_prereqs = _extract_target_prerequisites(content, "build-demo-image")
-        assert (
-            "compile-demo" in build_prereqs
-        ), f"build-demo-image must depend on compile-demo. Prerequisites: {build_prereqs}"
+        assert "compile-demo" in build_prereqs, (
+            f"build-demo-image must depend on compile-demo. Prerequisites: {build_prereqs}"
+        )
 
         # Verify demo -> build-demo-image
         demo_prereqs = _extract_target_prerequisites(content, "demo")
-        assert (
-            "build-demo-image" in demo_prereqs
-        ), f"demo must depend on build-demo-image. Prerequisites: {demo_prereqs}"
+        assert "build-demo-image" in demo_prereqs, (
+            f"demo must depend on build-demo-image. Prerequisites: {demo_prereqs}"
+        )
 
     @pytest.mark.requirement("WU11-AC6")
     def test_demo_target_still_deploys_via_helm(self) -> None:
@@ -1517,9 +1517,9 @@ class TestHelmValuesImageOverride:
         """
         values = _load_values_yaml(VALUES_DEMO)
         daemon_image = values.get("dagster", {}).get("dagsterDaemon", {}).get("image", {})
-        assert isinstance(
-            daemon_image, dict
-        ), f"dagster.dagsterDaemon.image must be a dict in values-demo.yaml. Got: {daemon_image!r}"
+        assert isinstance(daemon_image, dict), (
+            f"dagster.dagsterDaemon.image must be a dict in values-demo.yaml. Got: {daemon_image!r}"
+        )
         assert daemon_image.get("repository") == EXPECTED_IMAGE_REPOSITORY, (
             f"dagster.dagsterDaemon.image.repository must be '{EXPECTED_IMAGE_REPOSITORY}' "
             f"in values-demo.yaml. Got: {daemon_image.get('repository')!r}"
@@ -1542,9 +1542,9 @@ class TestHelmValuesImageOverride:
             f"dagster.dagsterWebserver.image.tag must be '{EXPECTED_IMAGE_TAG}'. "
             f"Got: {webserver_tag!r}"
         )
-        assert (
-            daemon_tag == EXPECTED_IMAGE_TAG
-        ), f"dagster.dagsterDaemon.image.tag must be '{EXPECTED_IMAGE_TAG}'. Got: {daemon_tag!r}"
+        assert daemon_tag == EXPECTED_IMAGE_TAG, (
+            f"dagster.dagsterDaemon.image.tag must be '{EXPECTED_IMAGE_TAG}'. Got: {daemon_tag!r}"
+        )
 
     @pytest.mark.requirement("WU11-AC3")
     def test_webserver_and_daemon_use_same_repository(self) -> None:
@@ -1646,9 +1646,9 @@ class TestHelmValuesModuleNames:
         """
         values = _load_values_yaml(VALUES_TEST)
         locations = _get_code_locations(values)
-        assert (
-            len(locations) == 3
-        ), f"Expected exactly 3 code locations in values-test.yaml, got {len(locations)}"
+        assert len(locations) == 3, (
+            f"Expected exactly 3 code locations in values-test.yaml, got {len(locations)}"
+        )
 
         bad_modules: list[str] = []
         for loc in locations:
@@ -1734,9 +1734,9 @@ class TestHelmValuesModuleNames:
             if working_dir != "/app/demo":
                 wrong_dirs.append(f"{loc.get('name', '?')}: {working_dir!r}")
 
-        assert (
-            not wrong_dirs
-        ), f"All code locations must have workingDirectory='/app/demo'. Wrong: {wrong_dirs}"
+        assert not wrong_dirs, (
+            f"All code locations must have workingDirectory='/app/demo'. Wrong: {wrong_dirs}"
+        )
 
     @pytest.mark.requirement("WU11-AC5")
     def test_values_demo_module_names_no_demo_prefix(self) -> None:
@@ -1747,9 +1747,9 @@ class TestHelmValuesModuleNames:
         """
         values = _load_values_yaml(VALUES_DEMO)
         locations = _get_code_locations(values)
-        assert (
-            len(locations) >= 3
-        ), f"Expected at least 3 code locations in values-demo.yaml, got {len(locations)}"
+        assert len(locations) >= 3, (
+            f"Expected at least 3 code locations in values-demo.yaml, got {len(locations)}"
+        )
 
         bad_modules: list[str] = []
         for loc in locations:
@@ -1800,9 +1800,9 @@ class TestHelmValuesModuleNames:
         """
         values = _load_values_yaml(VALUES_DEMO)
         locations = _get_code_locations(values)
-        assert (
-            len(locations) == 3
-        ), f"Expected exactly 3 code locations in values-demo.yaml, got {len(locations)}"
+        assert len(locations) == 3, (
+            f"Expected exactly 3 code locations in values-demo.yaml, got {len(locations)}"
+        )
 
         wrong_dirs: list[str] = []
         for loc in locations:
@@ -1897,9 +1897,9 @@ class TestDbtRelativePaths:
         data: dict[str, Any] = raw
 
         macro_paths: list[str] = data.get("macro-paths", [])
-        assert isinstance(
-            macro_paths, list
-        ), f"macro-paths must be a list in {product_dir}/dbt_project.yml. Got: {type(macro_paths)}"
+        assert isinstance(macro_paths, list), (
+            f"macro-paths must be a list in {product_dir}/dbt_project.yml. Got: {type(macro_paths)}"
+        )
         assert "../macros" in macro_paths, (
             f"macro-paths must contain '../macros' in {product_dir}/dbt_project.yml. "
             f"Got: {macro_paths}. This is required for container layout compatibility."
@@ -2067,9 +2067,9 @@ class TestGeneratedDefinitions:
         """
         definitions_path = REPO_ROOT / "demo" / product_dir / "definitions.py"
         content = definitions_path.read_text()
-        assert (
-            "DbtCliResource" in content
-        ), f"definitions.py for '{product_dir}' must use 'DbtCliResource' from dagster-dbt."
+        assert "DbtCliResource" in content, (
+            f"definitions.py for '{product_dir}' must use 'DbtCliResource' from dagster-dbt."
+        )
 
     @pytest.mark.requirement("WU11-AC8")
     @pytest.mark.parametrize("product_dir", _DEMO_PRODUCT_DIRS, ids=_DEMO_PRODUCT_DIRS)
@@ -2134,9 +2134,9 @@ class TestGeneratedDefinitions:
         """
         content = _read_makefile_content()
         body = _extract_target_body(content, "compile-demo")
-        assert (
-            body.strip()
-        ), "compile-demo target has no recipe body. Cannot verify --generate-definitions flag."
+        assert body.strip(), (
+            "compile-demo target has no recipe body. Cannot verify --generate-definitions flag."
+        )
         assert "--generate-definitions" in body, (
             f"compile-demo target must include '--generate-definitions' flag "
             f"to generate definitions.py files. Recipe body:\n{body}"
