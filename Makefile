@@ -42,6 +42,8 @@ help: ## Show this help message
 	@echo "  make helm-uninstall  Uninstall floe (NAMESPACE=... required)"
 	@echo ""
 	@echo "Demo:"
+	@echo "  make compile-demo    Compile dbt models for all demo products"
+	@echo "  make build-demo-image Build Dagster demo Docker image"
 	@echo "  make demo            Deploy platform with all 3 demo data products (PRODUCTS=...)"
 	@echo "  make demo-stop       Stop demo and clean up resources"
 	@echo ""
@@ -255,9 +257,24 @@ helm-test-infra: ## Verify test infrastructure is healthy
 # Demo Targets
 # ============================================================
 
-.PHONY: demo demo-stop
+.PHONY: compile-demo build-demo-image demo demo-stop
 
-demo: ## Deploy platform and run all 3 demo data products with dashboards
+compile-demo: ## Compile dbt models for all demo products (generates target/manifest.json)
+	@echo "Compiling dbt models for all demo products..."
+	@for product in customer-360 iot-telemetry financial-risk; do \
+		echo "Compiling $$product..."; \
+		uv run dbt compile --project-dir demo/$$product || exit 1; \
+	done
+	@echo "All demo products compiled successfully!"
+
+build-demo-image: compile-demo ## Build Dagster demo Docker image and load to Kind
+	@echo "Building Dagster demo Docker image..."
+	@docker build -f docker/dagster-demo/Dockerfile -t floe-dagster-demo:latest .
+	@echo "Loading image to Kind cluster..."
+	@kind load docker-image floe-dagster-demo:latest --name floe-test
+	@echo "Demo image built and loaded to Kind successfully!"
+
+demo: build-demo-image ## Deploy platform and run all 3 demo data products with dashboards
 	@echo "=== Starting floe Platform Demo ==="
 	@echo "Ensuring Kind cluster is running..."
 	$(MAKE) kind-up

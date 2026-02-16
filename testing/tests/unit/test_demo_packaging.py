@@ -1,13 +1,16 @@
-"""Demo packaging structural validation tests (WU-11, T61).
+"""Demo packaging structural validation tests (WU-11, T61/T62).
 
-Tests that validate the Dagster demo Dockerfile and .dockerignore have the
-correct structure. These are unit tests that parse files on disk -- no Docker
-build or K8s cluster required.
+Tests that validate the Dagster demo Dockerfile, .dockerignore, and Makefile
+have the correct structure. These are unit tests that parse files on disk --
+no Docker build or K8s cluster required.
 
 Requirements:
     AC-11.1: Dockerfile extends dagster/dagster-celery-k8s:1.9.6, COPYs all 3
              products with underscore names, creates __init__.py for each,
              copies manifest.yaml and macros/, runs pip check
+    AC-11.2: dbt compile produces target/manifest.json for each product;
+             Makefile has compile-demo target that runs dbt compile for all 3
+    AC-11.6: Makefile chain: compile-demo -> build-demo-image -> demo
     AC-11.7: .dockerignore exists at repo root with required exclusions
 """
 
@@ -21,6 +24,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DOCKERFILE = REPO_ROOT / "docker" / "dagster-demo" / "Dockerfile"
 DOCKERIGNORE = REPO_ROOT / ".dockerignore"
+MAKEFILE = REPO_ROOT / "Makefile"
 
 # The three demo products: disk name (hyphenated) -> container name (underscore)
 DEMO_PRODUCTS: dict[str, str] = {
@@ -559,4 +563,427 @@ class TestDockerfileStructuralIntegrity:
         assert len(lines) >= 8, (
             f"Dockerfile has only {len(lines)} instructions. "
             f"Expected at least 8 (FROM, WORKDIR, COPYs, RUNs)."
+        )
+
+
+# ============================================================
+# Makefile Parsing Helpers (T62)
+# ============================================================
+
+
+def _read_makefile_content() -> str:
+    """Read the root Makefile raw content.
+
+    Returns:
+        Full file content as a string.
+
+    Raises:
+        FileNotFoundError: If Makefile does not exist at REPO_ROOT.
+    """
+    return MAKEFILE.read_text()
+
+
+def _extract_target_body(content: str, target_name: str) -> str:
+    """Extract the recipe body of a Makefile target.
+
+    Finds the target definition line (e.g. ``compile-demo: dep1 dep2``) and
+    collects all subsequent tab-indented lines (the recipe body) until the
+    next non-indented, non-blank, non-comment line or end-of-file.
+
+    Args:
+        content: Full Makefile text.
+        target_name: The target name to look for (e.g. 'compile-demo').
+
+    Returns:
+        Concatenated recipe body lines (tab prefix stripped). Empty string
+        if the target is not found or has no recipe.
+    """
+    lines = content.splitlines()
+    in_body = False
+    body_lines: list[str] = []
+
+    for line in lines:
+        if in_body:
+            # Recipe lines start with a tab character
+            if line.startswith("\t"):
+                body_lines.append(line[1:])  # strip leading tab
+            elif line.strip() == "" or line.strip().startswith("#"):
+                # Blank lines and comments within recipe are fine
+                body_lines.append(line.strip())
+            else:
+                # Non-tab line means we hit the next target or directive
+                break
+        else:
+            # Look for the target definition
+            match = re.match(rf"^{re.escape(target_name)}:\s*(.*)", line)
+            if match:
+                in_body = True
+
+    return "\n".join(body_lines)
+
+
+def _extract_target_prerequisites(content: str, target_name: str) -> list[str]:
+    """Extract the prerequisite targets from a Makefile target line.
+
+    Parses the ``target: dep1 dep2 ## comment`` line and returns the
+    dependency names. The ``## comment`` suffix (help text convention) is
+    stripped before parsing.
+
+    Args:
+        content: Full Makefile text.
+        target_name: The target name to look for.
+
+    Returns:
+        List of prerequisite target names. Empty list if none found.
+    """
+    pattern = re.compile(rf"^{re.escape(target_name)}:\s*(.*)", re.MULTILINE)
+    match = pattern.search(content)
+    if not match:
+        return []
+
+    rest = match.group(1)
+    # Strip inline help comment: "dep1 dep2 ## Some help text"
+    if "##" in rest:
+        rest = rest[: rest.index("##")]
+    # Strip any trailing comments (single #)
+    if "#" in rest:
+        rest = rest[: rest.index("#")]
+
+    return rest.split()
+
+
+def _get_phony_targets(content: str) -> set[str]:
+    """Extract all target names declared as .PHONY in the Makefile.
+
+    Handles both single-line ``.PHONY: a b c`` and multiple ``.PHONY:``
+    declarations scattered through the file.
+
+    Args:
+        content: Full Makefile text.
+
+    Returns:
+        Set of target names declared as PHONY.
+    """
+    phony_targets: set[str] = set()
+    for match in re.finditer(r"^\.PHONY:\s*(.+)", content, re.MULTILINE):
+        targets_str = match.group(1)
+        # Strip inline comments
+        if "#" in targets_str:
+            targets_str = targets_str[: targets_str.index("#")]
+        phony_targets.update(targets_str.split())
+    return phony_targets
+
+
+# ============================================================
+# T62: Makefile compile-demo Target Tests (AC-11.2)
+# ============================================================
+
+
+class TestMakefileCompileDemo:
+    """Verify the Makefile has a well-formed compile-demo target.
+
+    AC-11.2 requires a compile-demo target that runs dbt compile for
+    all 3 demo products (customer-360, iot-telemetry, financial-risk).
+    """
+
+    @pytest.mark.requirement("WU11-AC2")
+    def test_makefile_has_compile_demo_target(self) -> None:
+        """Verify Makefile contains a compile-demo: target definition.
+
+        The target must be a real Makefile target (line starting with
+        'compile-demo:'), not just a mention in a comment or help text.
+        """
+        content = _read_makefile_content()
+        target_pattern = re.compile(r"^compile-demo:", re.MULTILINE)
+        assert target_pattern.search(content), (
+            "Makefile must contain a 'compile-demo:' target definition. "
+            "No line matching '^compile-demo:' found."
+        )
+
+    @pytest.mark.requirement("WU11-AC2")
+    def test_compile_demo_is_phony(self) -> None:
+        """Verify compile-demo appears in a .PHONY declaration.
+
+        Without .PHONY, if a file named 'compile-demo' exists on disk,
+        Make would consider the target up-to-date and skip execution.
+        """
+        content = _read_makefile_content()
+        phony_targets = _get_phony_targets(content)
+        assert "compile-demo" in phony_targets, (
+            f"compile-demo must be declared .PHONY. Found .PHONY targets: {sorted(phony_targets)}"
+        )
+
+    @pytest.mark.requirement("WU11-AC2")
+    def test_compile_demo_runs_dbt_compile(self) -> None:
+        """Verify the compile-demo target body invokes dbt compile.
+
+        The recipe must contain a dbt compile invocation. This accepts
+        'dbt compile', 'dbt-core compile', or 'uv run dbt compile'
+        variants, but NOT just a comment mentioning dbt.
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "compile-demo")
+        assert body.strip(), (
+            "compile-demo target has no recipe body (no tab-indented lines). "
+            "It must contain dbt compile invocations."
+        )
+        # Match variations: dbt compile, dbt-core compile, uv run dbt compile
+        dbt_compile_pattern = re.compile(r"dbt[\s-]*(core\s+)?compile", re.IGNORECASE)
+        assert dbt_compile_pattern.search(body), (
+            f"compile-demo recipe must invoke 'dbt compile' (or variant). Recipe body:\n{body}"
+        )
+
+    @pytest.mark.requirement("WU11-AC2")
+    def test_compile_demo_handles_all_three_products(self) -> None:
+        """Verify all 3 products are referenced in the compile-demo target.
+
+        A sloppy implementation might compile only one product. The recipe
+        must reference all three: customer-360, iot-telemetry, financial-risk.
+        We check the target body, not the entire Makefile, to ensure the
+        references are in the compile-demo target specifically.
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "compile-demo")
+        assert body.strip(), "compile-demo target has no recipe body."
+
+        expected_products = ["customer-360", "iot-telemetry", "financial-risk"]
+        missing_products: list[str] = []
+        for product in expected_products:
+            # Accept hyphenated or underscore form in the recipe
+            underscore_form = product.replace("-", "_")
+            if product not in body and underscore_form not in body:
+                missing_products.append(product)
+
+        assert not missing_products, (
+            f"compile-demo recipe must reference all 3 products. "
+            f"Missing: {missing_products}. Recipe body:\n{body}"
+        )
+
+    @pytest.mark.requirement("WU11-AC2")
+    def test_compile_demo_references_each_product_with_dbt(self) -> None:
+        """Verify each product is compiled, not just listed.
+
+        Guards against a target that mentions product names in echo/comment
+        but only compiles one of them. Each product name must appear near
+        a dbt compile invocation within the recipe body.
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "compile-demo")
+
+        expected_products = ["customer-360", "iot-telemetry", "financial-risk"]
+        # The body should contain dbt compile AND all three product references.
+        # A loop-based recipe (for product in ...) is acceptable if all 3 are
+        # in the loop list. A sequential recipe with separate dbt compile lines
+        # is also fine.
+        dbt_compile_count = len(re.findall(r"dbt[\s-]*(core\s+)?compile", body, re.IGNORECASE))
+        has_loop = "for " in body.lower() or "for\t" in body.lower()
+
+        if has_loop:
+            # Loop-based: all 3 products must appear in the loop variable list
+            for product in expected_products:
+                underscore_form = product.replace("-", "_")
+                assert product in body or underscore_form in body, (
+                    f"Product '{product}' not found in compile-demo loop. Recipe body:\n{body}"
+                )
+        else:
+            # Sequential: need at least 3 dbt compile invocations (one per product)
+            assert dbt_compile_count >= 3, (
+                f"compile-demo has {dbt_compile_count} dbt compile invocation(s), "
+                f"but needs at least 3 (one per product) when not using a loop. "
+                f"Recipe body:\n{body}"
+            )
+
+
+# ============================================================
+# T62: Makefile build-demo-image Target Tests (AC-11.6)
+# ============================================================
+
+
+class TestMakefileBuildDemoImage:
+    """Verify the Makefile has a well-formed build-demo-image target.
+
+    AC-11.6 requires build-demo-image to build a Docker image and load
+    it into the Kind cluster, with compile-demo as a prerequisite.
+    """
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_makefile_has_build_demo_image_target(self) -> None:
+        """Verify Makefile contains a build-demo-image: target definition.
+
+        Must be a real target, not just a mention in help text or comments.
+        """
+        content = _read_makefile_content()
+        target_pattern = re.compile(r"^build-demo-image:", re.MULTILINE)
+        assert target_pattern.search(content), (
+            "Makefile must contain a 'build-demo-image:' target definition. "
+            "No line matching '^build-demo-image:' found."
+        )
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_build_demo_image_is_phony(self) -> None:
+        """Verify build-demo-image appears in a .PHONY declaration.
+
+        Without .PHONY, if a file named 'build-demo-image' exists on disk,
+        Make would skip execution.
+        """
+        content = _read_makefile_content()
+        phony_targets = _get_phony_targets(content)
+        assert "build-demo-image" in phony_targets, (
+            f"build-demo-image must be declared .PHONY. "
+            f"Found .PHONY targets: {sorted(phony_targets)}"
+        )
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_build_demo_image_runs_docker_build(self) -> None:
+        """Verify build-demo-image recipe contains a docker build command.
+
+        The target must actually build a Docker image, not just echo or
+        reference one.
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "build-demo-image")
+        assert body.strip(), "build-demo-image target has no recipe body."
+        docker_build_pattern = re.compile(r"docker\s+build", re.IGNORECASE)
+        assert docker_build_pattern.search(body), (
+            f"build-demo-image recipe must contain 'docker build'. Recipe body:\n{body}"
+        )
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_build_demo_image_references_dockerfile(self) -> None:
+        """Verify build-demo-image references docker/dagster-demo/Dockerfile.
+
+        The target must use the specific Dockerfile for the demo image,
+        not a generic Dockerfile or default Docker context.
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "build-demo-image")
+        assert body.strip(), "build-demo-image target has no recipe body."
+        # Accept -f docker/dagster-demo/Dockerfile or --file=docker/...
+        # Also accept ./docker/dagster-demo/Dockerfile (with leading ./)
+        dockerfile_ref_pattern = re.compile(r"docker/dagster-demo/Dockerfile", re.IGNORECASE)
+        assert dockerfile_ref_pattern.search(body), (
+            f"build-demo-image recipe must reference 'docker/dagster-demo/Dockerfile'. "
+            f"Recipe body:\n{body}"
+        )
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_build_demo_image_loads_to_kind(self) -> None:
+        """Verify build-demo-image loads the built image into Kind.
+
+        After building, the image must be loaded into the Kind cluster
+        using 'kind load docker-image'. Without this, K8s pods cannot
+        pull the locally-built image.
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "build-demo-image")
+        assert body.strip(), "build-demo-image target has no recipe body."
+        kind_load_pattern = re.compile(r"kind\s+load\s+docker-image", re.IGNORECASE)
+        assert kind_load_pattern.search(body), (
+            f"build-demo-image recipe must contain 'kind load docker-image' "
+            f"to load the image into the Kind cluster. Recipe body:\n{body}"
+        )
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_build_demo_image_depends_on_compile_demo(self) -> None:
+        """Verify build-demo-image has compile-demo as a prerequisite.
+
+        The dependency chain requires compile-demo to run first so that
+        dbt manifests are available when building the Docker image.
+        """
+        content = _read_makefile_content()
+        prereqs = _extract_target_prerequisites(content, "build-demo-image")
+        assert "compile-demo" in prereqs, (
+            f"build-demo-image must depend on compile-demo. Found prerequisites: {prereqs}"
+        )
+
+
+# ============================================================
+# T62: Makefile Demo Chain Tests (AC-11.6)
+# ============================================================
+
+
+class TestMakefileDemoChain:
+    """Verify the end-to-end Makefile dependency chain for demo packaging.
+
+    AC-11.6 requires: compile-demo -> build-demo-image -> demo.
+    """
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_demo_target_depends_on_build_demo_image(self) -> None:
+        """Verify the demo target has build-demo-image as a prerequisite.
+
+        The demo target must depend on build-demo-image so that running
+        'make demo' triggers the full chain: compile -> build -> deploy.
+        """
+        content = _read_makefile_content()
+        prereqs = _extract_target_prerequisites(content, "demo")
+        assert "build-demo-image" in prereqs, (
+            f"demo target must depend on build-demo-image. "
+            f"Found prerequisites: {prereqs}. "
+            f"Expected chain: compile-demo -> build-demo-image -> demo"
+        )
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_makefile_targets_in_help(self) -> None:
+        """Verify compile-demo and build-demo-image appear in the help section.
+
+        The help target (or help echo block) must document these targets
+        so users can discover them via 'make help'.
+        """
+        content = _read_makefile_content()
+        # Extract the help target body, which contains @echo lines
+        help_body = _extract_target_body(content, "help")
+        assert help_body.strip(), (
+            "help target has no recipe body -- cannot verify target documentation."
+        )
+        assert "compile-demo" in help_body, (
+            "compile-demo must appear in 'make help' output. Not found in help target body."
+        )
+        assert "build-demo-image" in help_body, (
+            "build-demo-image must appear in 'make help' output. Not found in help target body."
+        )
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_full_chain_is_connected(self) -> None:
+        """Verify the complete dependency chain: compile-demo -> build-demo-image -> demo.
+
+        This test verifies the transitive chain is intact. A sloppy
+        implementation might have build-demo-image depend on compile-demo
+        but forget to wire demo -> build-demo-image, breaking the chain.
+        """
+        content = _read_makefile_content()
+
+        # Verify compile-demo target exists
+        assert re.search(r"^compile-demo:", content, re.MULTILINE), "compile-demo target not found"
+
+        # Verify build-demo-image -> compile-demo
+        build_prereqs = _extract_target_prerequisites(content, "build-demo-image")
+        assert "compile-demo" in build_prereqs, (
+            f"build-demo-image must depend on compile-demo. Prerequisites: {build_prereqs}"
+        )
+
+        # Verify demo -> build-demo-image
+        demo_prereqs = _extract_target_prerequisites(content, "demo")
+        assert "build-demo-image" in demo_prereqs, (
+            f"demo must depend on build-demo-image. Prerequisites: {demo_prereqs}"
+        )
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_demo_target_still_deploys_via_helm(self) -> None:
+        """Verify demo target still contains Helm deploy logic.
+
+        Adding the build-demo-image dependency must NOT remove the
+        existing deployment logic from the demo target. The demo target
+        must still deploy via Helm (upgrade or install).
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "demo")
+        assert body.strip(), "demo target has no recipe body"
+        # Accept both direct helm calls and $(MAKE) or floe platform deploy
+        deploy_pattern = re.compile(
+            r"(helm\s+(upgrade|install)|floe\s+platform\s+deploy)", re.IGNORECASE
+        )
+        assert deploy_pattern.search(body), (
+            f"demo target must still deploy via Helm (upgrade/install) or "
+            f"'floe platform deploy'. Recipe body:\n{body}"
         )
