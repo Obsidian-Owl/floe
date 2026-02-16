@@ -276,9 +276,28 @@ compile-demo: ## Compile dbt models and generate Dagster definitions for all dem
 	done
 	@echo "All demo products compiled successfully!"
 
+# Plugin name exception map: manifest type → package name
+# Default convention: plugins.<category>.type: <name> → floe-<category>-<name>
+# Exception map handles non-standard names (e.g., dbt → floe-dbt-core, not floe-dbt-dbt)
+PLUGIN_NAME_MAP := dbt:floe-dbt-core
+
+# Multi-arch platform (override with: make build-demo-image DOCKER_PLATFORM=linux/arm64)
+DOCKER_PLATFORM ?= linux/amd64
+
+# Extract demo plugin list from manifest.yaml
+# - Reads plugins section, maps each to package name via convention + exception map
+# - Only includes packages that exist in the workspace (packages/ or plugins/)
+# - Always includes floe-core (all plugins depend on it) and floe-dbt-core (demo products need it)
+DEMO_PLUGINS := $(shell .venv/bin/python -c "from pathlib import Path; import yaml, os; m = yaml.safe_load(Path('demo/manifest.yaml').read_text()); plugins = m.get('plugins', {}); nm = dict(x.split(':') for x in '$(PLUGIN_NAME_MAP)'.split() if ':' in x); names = set(['floe-core', 'floe-dbt-core']); [names.add(nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type',''))) for k,v in plugins.items() if os.path.isdir('packages/'+nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type',''))) or os.path.isdir('plugins/'+nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type','')))]; print(' '.join(sorted(names)))")
+
 build-demo-image: compile-demo ## Build Dagster demo Docker image and load to Kind
 	@echo "Building Dagster demo Docker image..."
-	@docker build -f docker/dagster-demo/Dockerfile -t floe-dagster-demo:latest .
+	@echo "  Plugins: $(DEMO_PLUGINS)"
+	@echo "  Platform: $(DOCKER_PLATFORM)"
+	@docker build -f docker/dagster-demo/Dockerfile \
+		--build-arg FLOE_PLUGINS="$(DEMO_PLUGINS)" \
+		--platform $(DOCKER_PLATFORM) \
+		-t floe-dagster-demo:latest .
 	@echo "Loading image to Kind cluster..."
 	@kind load docker-image floe-dagster-demo:latest --name floe-test
 	@echo "Demo image built and loaded to Kind successfully!"

@@ -1,10 +1,10 @@
 {
   "version": "0.2.0",
   "currentWork": {
-    "id": "platform-integration",
-    "phase": "building",
-    "startedAt": "2026-02-15T18:35:00Z",
-    "activeWorkUnit": "wu-11-demo-packaging"
+    "id": "docker-packaging-strategy",
+    "phase": "verifying",
+    "tasksCompleted": ["T66", "T67", "T68", "T69", "T70"],
+    "startedAt": "2026-02-16T18:00:00Z"
   },
   "completedWork": [
     {
@@ -18,6 +18,12 @@
       "phase": "shipped",
       "startedAt": "2026-02-13T10:40:00Z",
       "completedAt": "2026-02-15T18:00:00Z"
+    },
+    {
+      "id": "platform-integration",
+      "phase": "shipped",
+      "startedAt": "2026-02-15T18:35:00Z",
+      "completedAt": "2026-02-16T17:00:00Z"
     }
   ],
   "workUnits": [
@@ -31,7 +37,7 @@
     { "id": "wu-8-polish", "description": "Polaris Health Check + Final Verification", "status": "shipped", "order": 8, "tasksCompleted": ["T42", "T43", "T44", "T45", "T48"], "pr": "https://github.com/Obsidian-Owl/floe/pull/82" },
     { "id": "wu-9-config-pipeline-flow", "description": "Schema changes + governance/observability flow through builder", "status": "shipped", "order": 9, "tasksCompleted": ["T49", "T50", "T51", "T52", "T53", "T54", "T55"], "pr": "https://github.com/Obsidian-Owl/floe/pull/84" },
     { "id": "wu-10-polaris-test-fixes", "description": "Pin Polaris 1.2.1, xfail cleanup, test assertion fixes", "status": "shipped", "order": 10, "tasksCompleted": ["T56", "T57", "T58", "T59", "T60"], "pr": "https://github.com/Obsidian-Owl/floe/pull/85" },
-    { "id": "wu-11-demo-packaging", "description": "Production-like demo packaging: Dockerfile, Makefile targets, Helm values, generated definitions", "status": "building", "order": 11, "tasksCompleted": ["T61", "T62", "T63", "T64", "T65"] }
+    { "id": "wu-11-demo-packaging", "description": "Production-like demo packaging: Dockerfile, Makefile targets, Helm values, generated definitions", "status": "shipped", "order": 11, "tasksCompleted": ["T61", "T62", "T63", "T64", "T65"], "pr": "https://github.com/Obsidian-Owl/floe/pull/88" }
   ],
   "gates": {
     "wu-1-bootstrap": {
@@ -96,6 +102,20 @@
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T09:50:00Z", "note": "No secrets, injection, or CVE issues. 1 INFO: pre-existing shell patterns." },
       "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T09:50:00Z", "note": "All patterns verified correct." },
       "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-16T09:55:00Z", "note": "All 7 ACs mapped with evidence. 2 INFO: BC-10.1/BC-10.2 need K8s for verification." }
+    },
+    "wu-11-demo-packaging": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T16:00:00Z", "note": "7794 unit + 843 contract tests pass, lint/format clean" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 5, "info": 8 }, "timestamp": "2026-02-16T16:20:00Z", "note": "2 BLOCKs resolved: requirement markers + assertion strength. 3 WARNs resolved: values-demo parity tests added. 5 remaining WARNs justified (precondition assertions, redundant pip test, helper behavior, import parser scope)." },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T16:05:00Z", "note": "No vulnerabilities. 1 INFO: test credentials expected for Kind cluster." },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-16T16:05:00Z", "note": "All wiring correct: Dockerfile reachable via Makefile, Helm values consistent, module names align." },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T16:10:00Z", "note": "8/9 ACs PASS, 4/4 BCs PASS. 1 WARN: AC-11.4 needs K8s runtime verification." }
+    },
+    "docker-packaging-strategy": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T18:45:00Z", "note": "118 unit + 843 contract tests pass, ruff lint/format clean" },
+      "gate-tests": { "status": "WARN", "findings": { "block": 0, "warn": 3, "info": 3 }, "timestamp": "2026-02-16T18:50:00Z", "note": "All 118 tests have requirement markers. 3 WARN: weak >= assertions (pre-existing from WU-11). 3 INFO: missing edge case tests." },
+      "gate-security": { "status": "WARN", "findings": { "block": 0, "warn": 2, "info": 3 }, "timestamp": "2026-02-16T18:50:00Z", "note": "2 WARN: shell expansion quoting in Dockerfile, Makefile input validation. 3 INFO: stderr redirect, demo credentials, non-root USER." },
+      "gate-wiring": { "status": "WARN", "findings": { "block": 0, "warn": 3, "info": 2 }, "timestamp": "2026-02-16T18:50:00Z", "note": "3 WARN: vendor image in default values.yaml (out of WU-12 scope), hardcoded COPY list, ARG re-declaration comment. 2 INFO: floe-iceberg in export (correct), s3 maps to no package (correct)." },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T18:55:00Z", "note": "All 10 ACs mapped to evidence. All 4 BCs satisfied. 1 INFO: AC-12.6 multi-arch tested via Makefile --platform, not runtime verified." }
     }
   }
 }

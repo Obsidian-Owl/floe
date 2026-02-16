@@ -38,6 +38,11 @@ dev = [
     "mypy>=1.8",
     "ruff>=0.3",
 ]
+docker = [
+    "dagster-webserver>=1.10.0,<2.0.0",
+    "dagster-daemon>=1.10.0,<2.0.0",
+    "dagster-k8s>=1.10.0,<2.0.0",
+]
 ingestion = [
     "dagster-dlt>=0.25.0",
 ]

@@ -1601,8 +1601,11 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "dagster", specifier = ">=1.10.0,<2.0.0" },
+    { name = "dagster-daemon", marker = "extra == 'docker'", specifier = ">=1.10.0,<2.0.0" },
     { name = "dagster-dbt", specifier = ">=0.26.0" },
     { name = "dagster-dlt", marker = "extra == 'ingestion'", specifier = ">=0.25.0" },
+    { name = "dagster-k8s", marker = "extra == 'docker'", specifier = ">=1.10.0,<2.0.0" },
+    { name = "dagster-webserver", marker = "extra == 'docker'", specifier = ">=1.10.0,<2.0.0" },
     { name = "floe-core", specifier = ">=0.1.0" },
     { name = "httpx", specifier = ">=0.24.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },

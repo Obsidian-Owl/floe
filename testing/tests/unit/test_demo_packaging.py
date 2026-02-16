@@ -1,5 +1,5 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
-"""Demo packaging structural validation tests (WU-11, T61/T62/T63/T64).
+"""Demo packaging structural validation tests (WU-11 + WU-12).
 
 Tests that validate the Dagster demo Dockerfile, .dockerignore, Makefile,
 Helm values files, and dbt project files have the correct structure.
@@ -7,23 +7,37 @@ These are unit tests that parse files on disk -- no Docker build or K8s
 cluster required.
 
 Requirements:
-    AC-11.1: Dockerfile extends dagster/dagster-celery-k8s:1.9.6, COPYs all 3
-             products with underscore names, creates __init__.py for each,
-             copies manifest.yaml and macros/, runs pip check
-    AC-11.2: dbt compile produces target/manifest.json for each product;
-             Makefile has compile-demo target that runs dbt compile for all 3
-    AC-11.3: Helm values override Dagster image for webserver and daemon
-    AC-11.5: Module names resolve correctly (no demo. prefix)
-    AC-11.6: Makefile chain: compile-demo -> build-demo-image -> demo
-    AC-11.7: .dockerignore exists at repo root with required exclusions
-    AC-11.9: dbt relative paths work with container layout
+    WU-11:
+        AC-11.1: Dockerfile COPYs all 3 products with underscore names,
+                 creates __init__.py for each, copies manifest.yaml and macros/
+        AC-11.2: Makefile has compile-demo target that runs dbt compile
+        AC-11.3: Helm values override Dagster image for webserver and daemon
+        AC-11.5: Module names resolve correctly (no demo. prefix)
+        AC-11.6: Makefile chain: compile-demo -> build-demo-image -> demo
+        AC-11.7: .dockerignore exists at repo root with required exclusions
+        AC-11.9: dbt relative paths work with container layout
+    WU-12:
+        AC-12.1: 3-stage Dockerfile (export, build, runtime) from python:3.11-slim
+        AC-12.2: uv export with --frozen, --package, --no-dev
+        AC-12.3: Docker extras on orchestrator plugin
+        AC-12.5: Supply chain security (digest pins, --require-hashes)
+        AC-12.6: Minimal runtime stage (no build tools)
+        AC-12.7: Build deps for C extensions
+        AC-12.8: Demo product layout preserved
+        AC-12.9: Structural tests updated for 3-stage build
 """
 
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 from typing import Any, cast
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 import pytest
 import yaml
@@ -133,50 +147,68 @@ class TestDockerfileExists:
         assert DOCKERFILE.stat().st_size > 0, "Dockerfile exists but is empty"
 
 
-class TestDockerfileBaseImage:
-    """Verify the Dockerfile extends the correct Dagster base image."""
+class TestDockerfileStages:
+    """Verify the Dockerfile uses a 3-stage build (export, build, runtime).
 
-    @pytest.mark.requirement("WU11-AC1")
-    def test_dockerfile_from_dagster_celery_k8s(self) -> None:
-        """Verify Dockerfile starts with FROM dagster/dagster-celery-k8s.
+    WU-12 replaced the vendor base image (dagster/dagster-celery-k8s) with a
+    3-stage uv build from python:3.11-slim. These tests validate stage
+    structure, naming, and absence of vendor base images.
+    """
 
-        The base image must be dagster/dagster-celery-k8s, not some other
-        Dagster variant (e.g. dagster/dagster-k8s or a generic python image).
+    @pytest.mark.requirement("WU12-AC1")
+    def test_dockerfile_has_three_stages(self) -> None:
+        """Verify Dockerfile contains exactly 3 named FROM ... AS stages.
+
+        The 3-stage design separates export (uv), build (pip + compilers),
+        and runtime (minimal). Fewer stages means missing separation;
+        more stages suggests unnecessary complexity.
+        """
+        lines = _read_dockerfile_lines()
+        from_as_lines = [
+            line for line in lines if line.upper().startswith("FROM") and " AS " in line.upper()
+        ]
+        assert len(from_as_lines) == 3, (
+            f"Dockerfile must have exactly 3 named stages (FROM ... AS). "
+            f"Found {len(from_as_lines)}: {from_as_lines}"
+        )
+
+    @pytest.mark.requirement("WU12-AC1")
+    def test_dockerfile_stage_names(self) -> None:
+        """Verify the 3 stages are named export, build, and runtime.
+
+        Stage names are referenced in COPY --from directives and must match
+        exactly. Wrong names would break cross-stage COPY instructions.
+        """
+        lines = _read_dockerfile_lines()
+        from_as_lines = [
+            line for line in lines if line.upper().startswith("FROM") and " AS " in line.upper()
+        ]
+        stage_names: list[str] = []
+        for line in from_as_lines:
+            # Extract name after AS (case-insensitive search, preserve original case)
+            match = re.search(r"\bAS\s+(\w+)", line, re.IGNORECASE)
+            if match:
+                stage_names.append(match.group(1))
+
+        assert stage_names == ["export", "build", "runtime"], (
+            f"Dockerfile stages must be named [export, build, runtime]. Found: {stage_names}"
+        )
+
+    @pytest.mark.requirement("WU12-AC1")
+    def test_dockerfile_no_vendor_base_image(self) -> None:
+        """Verify no FROM line references a Dagster vendor image.
+
+        WU-12 eliminates the dagster/dagster-celery-k8s base image. No FROM
+        line should reference dagster/ images. The Dockerfile should only
+        use python:3.11-slim and the uv image.
         """
         lines = _read_dockerfile_lines()
         from_lines = [line for line in lines if line.upper().startswith("FROM")]
-        assert len(from_lines) >= 1, "Dockerfile has no FROM instruction"
-
-        first_from = from_lines[0]
-        assert "dagster/dagster-celery-k8s" in first_from, (
-            f"Dockerfile must extend dagster/dagster-celery-k8s. Got FROM line: {first_from}"
+        vendor_lines = [line for line in from_lines if "dagster/" in line.lower()]
+        assert not vendor_lines, (
+            f"Dockerfile must NOT use vendor Dagster base images. "
+            f"Found vendor FROM lines: {vendor_lines}"
         )
-
-    @pytest.mark.requirement("WU11-AC1")
-    def test_dockerfile_base_image_version_pinned(self) -> None:
-        """Verify the base image has a version tag, not 'latest' or untagged.
-
-        Using an untagged or 'latest' base image causes non-reproducible builds.
-        AC-11.1 specifies version 1.9.6.
-        """
-        lines = _read_dockerfile_lines()
-        from_lines = [line for line in lines if line.upper().startswith("FROM")]
-        first_from = from_lines[0]
-
-        # Check for version tag -- could be direct or via ARG substitution
-        # Direct: FROM dagster/dagster-celery-k8s:1.9.6
-        # ARG:    FROM dagster/dagster-celery-k8s:${VERSION}
-        has_direct_version = re.search(r"dagster/dagster-celery-k8s:\d+\.\d+\.\d+", first_from)
-        has_arg_version = re.search(r"dagster/dagster-celery-k8s:\$\{?\w+\}?", first_from)
-        assert has_direct_version or has_arg_version, (
-            f"Base image must have a pinned version tag (e.g. :1.9.6). Got FROM line: {first_from}"
-        )
-
-        # If direct version, verify it is specifically 1.9.6 per AC
-        if has_direct_version:
-            assert "1.9.6" in first_from, (
-                f"AC-11.1 specifies version 1.9.6. Got FROM line: {first_from}"
-            )
 
 
 class TestDockerfileCopyProducts:
@@ -362,7 +394,7 @@ class TestDockerfileMacrosAndManifest:
             for line in content.splitlines()
             if line.strip().upper().startswith("COPY") and "macros" in line.lower()
         ]
-        assert len(copy_lines) >= 1, "No COPY instruction for macros found"
+        assert len(copy_lines) == 1, "Expected exactly 1 COPY instruction for macros"
 
         for copy_line in copy_lines:
             parts = copy_line.split()
@@ -375,7 +407,7 @@ class TestDockerfileMacrosAndManifest:
 
 
 class TestDockerfilePipOperations:
-    """Verify the Dockerfile uses pip correctly (--no-deps, pip check)."""
+    """Verify the Dockerfile uses pip correctly (require-hashes, no-deps, pip check)."""
 
     @pytest.mark.requirement("WU11-AC1")
     def test_dockerfile_has_pip_check(self) -> None:
@@ -389,9 +421,9 @@ class TestDockerfilePipOperations:
         run_pip_check = [
             line for line in lines if line.upper().startswith("RUN") and "pip check" in line.lower()
         ]
-        assert len(run_pip_check) >= 1, (
-            "Dockerfile must have 'RUN pip check' to validate dependencies. "
-            "No matching RUN instruction found."
+        assert len(run_pip_check) == 1, (
+            "Dockerfile must have exactly 1 'RUN pip check' to validate dependencies. "
+            f"Found {len(run_pip_check)} matching RUN instructions."
         )
 
     @pytest.mark.requirement("WU11-AC1")
@@ -404,29 +436,61 @@ class TestDockerfilePipOperations:
         pip_check_instructions = [
             line for line in lines if line.upper().startswith("RUN") and "pip check" in line.lower()
         ]
-        assert len(pip_check_instructions) >= 1, (
-            "pip check must appear in a RUN instruction (not just a comment)"
+        assert len(pip_check_instructions) == 1, (
+            "pip check must appear in exactly 1 RUN instruction (not just a comment)"
         )
 
-    @pytest.mark.requirement("WU11-AC1")
-    def test_dockerfile_uses_no_deps_for_pip_install(self) -> None:
-        """Verify pip install uses --no-deps flag.
+    @pytest.mark.requirement("WU12-AC5")
+    def test_build_stage_uses_require_hashes(self) -> None:
+        """Verify pip install for third-party deps uses --require-hashes.
 
-        Using --no-deps prevents pip from pulling in transitive dependencies
-        that might conflict with the base image's pre-installed packages.
+        The 3-stage build installs third-party deps from requirements.txt
+        with --require-hashes to verify every package against SHA256 hashes
+        produced by uv export. This is a supply chain security measure.
         """
         content = _read_dockerfile_raw()
         pip_install_lines = [
             line.strip()
             for line in content.splitlines()
-            if line.strip() and not line.strip().startswith("#") and "pip install" in line.lower()
+            if line.strip()
+            and not line.strip().startswith("#")
+            and "pip install" in line.lower()
+            and "requirements.txt" in line.lower()
         ]
-        # If there are pip install lines, they must use --no-deps
-        assert len(pip_install_lines) >= 1, (
-            "Dockerfile must have at least one pip install instruction"
+        assert len(pip_install_lines) == 1, (
+            "Dockerfile must have exactly 1 pip install that references requirements.txt"
         )
         for pip_line in pip_install_lines:
-            assert "--no-deps" in pip_line, f"pip install must use --no-deps flag. Line: {pip_line}"
+            assert "--require-hashes" in pip_line, (
+                f"pip install for requirements.txt must use --require-hashes. Line: {pip_line}"
+            )
+
+    @pytest.mark.requirement("WU12-AC2")
+    def test_workspace_packages_use_no_deps(self) -> None:
+        """Verify workspace package pip install uses --no-deps.
+
+        Workspace packages are installed from source with --no-deps because
+        their dependencies were already installed from requirements.txt.
+        This prevents pip from pulling in conflicting transitive deps.
+        """
+        content = _read_dockerfile_raw()
+        # Find pip install lines that don't reference requirements.txt
+        # These are the workspace package installs
+        pip_install_lines = [
+            line.strip()
+            for line in content.splitlines()
+            if line.strip()
+            and not line.strip().startswith("#")
+            and "pip install" in line.lower()
+            and "requirements.txt" not in line.lower()
+        ]
+        assert len(pip_install_lines) == 1, (
+            "Dockerfile must have exactly 1 pip install for workspace packages"
+        )
+        for pip_line in pip_install_lines:
+            assert "--no-deps" in pip_line, (
+                f"Workspace package pip install must use --no-deps. Line: {pip_line}"
+            )
 
 
 class TestDockerignoreExists:
@@ -585,6 +649,283 @@ class TestDockerfileStructuralIntegrity:
         assert len(lines) >= 8, (
             f"Dockerfile has only {len(lines)} instructions. "
             f"Expected at least 8 (FROM, WORKDIR, COPYs, RUNs)."
+        )
+
+
+# ============================================================
+# WU-12: 3-Stage Dockerfile Structural Tests (T69)
+# ============================================================
+
+
+class TestDockerfileExportStage:
+    """Verify the export stage uses uv to produce requirements.txt from the lockfile."""
+
+    @pytest.mark.requirement("WU12-AC2")
+    def test_export_stage_uses_uv_image(self) -> None:
+        """Verify the export stage is based on a uv image.
+
+        The export stage must use the official uv image (ghcr.io/astral-sh/uv)
+        to produce requirements.txt from the workspace lockfile.
+        """
+        lines = _read_dockerfile_lines()
+        from_lines = [line for line in lines if line.upper().startswith("FROM")]
+        export_from = from_lines[0]  # First FROM is the export stage
+        assert "astral-sh/uv" in export_from, (
+            f"Export stage must use the uv image (ghcr.io/astral-sh/uv). "
+            f"Got FROM line: {export_from}"
+        )
+
+    @pytest.mark.requirement("WU12-AC2")
+    def test_export_stage_uses_frozen_flag(self) -> None:
+        """Verify uv export uses --frozen to prevent re-resolution.
+
+        The --frozen flag ensures the lockfile is used as-is without
+        re-resolving dependencies. This catches stale lockfiles at build time.
+        """
+        content = _read_dockerfile_raw()
+        uv_export_lines = [
+            line.strip()
+            for line in content.splitlines()
+            if "uv export" in line.lower() and not line.strip().startswith("#")
+        ]
+        assert len(uv_export_lines) == 1, "Dockerfile must have exactly 1 uv export instruction"
+        # Check across logical lines (uv export may be on a continuation line)
+        lines = _read_dockerfile_lines()
+        uv_lines = [line for line in lines if "uv export" in line.lower()]
+        assert any("--frozen" in line for line in uv_lines), (
+            f"uv export must use --frozen flag. Found uv export lines: {uv_lines}"
+        )
+
+    @pytest.mark.requirement("WU12-AC2")
+    def test_export_stage_uses_package_flag(self) -> None:
+        """Verify uv export uses --package to select specific packages.
+
+        The --package flag targets specific workspace packages rather than
+        exporting all 21+ members. This produces a minimal requirements.txt.
+        """
+        lines = _read_dockerfile_lines()
+        uv_lines = [line for line in lines if "uv export" in line.lower()]
+        assert any("--package" in line for line in uv_lines), (
+            f"uv export must use --package flag for selective export. "
+            f"Found uv export lines: {uv_lines}"
+        )
+
+    @pytest.mark.requirement("WU12-AC2")
+    def test_export_stage_no_uv_sync(self) -> None:
+        """Verify the export stage does NOT use uv sync.
+
+        uv sync installs all workspace members. The export stage should only
+        produce requirements.txt via uv export, not install packages.
+        """
+        content = _read_dockerfile_raw()
+        assert "uv sync" not in content.lower(), (
+            "Dockerfile must NOT use 'uv sync'. Use 'uv export' to produce "
+            "requirements.txt without installing all workspace members."
+        )
+
+    @pytest.mark.requirement("WU12-AC2")
+    def test_export_stage_produces_requirements_txt(self) -> None:
+        """Verify uv export output is redirected to requirements.txt.
+
+        The export stage must write to requirements.txt so the build stage
+        can install from it with --require-hashes.
+        """
+        content = _read_dockerfile_raw()
+        # Look for > requirements.txt redirect
+        assert "requirements.txt" in content, (
+            "Dockerfile must produce a requirements.txt file in the export stage"
+        )
+
+
+class TestDockerfileBuildStage:
+    """Verify the build stage installs deps, compiles, and validates."""
+
+    @pytest.mark.requirement("WU12-AC5")
+    def test_build_stage_uses_digest_pinned_image(self) -> None:
+        """Verify the build stage base image is digest-pinned with @sha256:.
+
+        Digest pinning ensures reproducible builds regardless of tag mutations.
+        The build stage must use python:3.11-slim@sha256:... format.
+        """
+        lines = _read_dockerfile_lines()
+        from_lines = [line for line in lines if line.upper().startswith("FROM")]
+        # Second FROM is the build stage
+        build_from = from_lines[1]
+        assert "@sha256:" in build_from, (
+            f"Build stage must use digest-pinned base image (@sha256:). Got FROM line: {build_from}"
+        )
+        assert "python:" in build_from.lower() or "python:" in build_from, (
+            f"Build stage must use a python base image. Got FROM line: {build_from}"
+        )
+
+    @pytest.mark.requirement("WU12-AC7")
+    def test_build_stage_installs_build_deps(self) -> None:
+        """Verify the build stage installs C extension build dependencies.
+
+        grpcio, greenlet, pyarrow, and duckdb require gcc and development
+        headers for compilation. The build stage must install these.
+        """
+        content = _read_dockerfile_raw()
+        # Check for essential build tools in the build stage area
+        # (between second FROM and third FROM)
+        lines = content.splitlines()
+        in_build_stage = False
+        build_stage_content = ""
+        from_count = 0
+        for line in lines:
+            stripped = line.strip()
+            if stripped.upper().startswith("FROM"):
+                from_count += 1
+                if from_count == 2:
+                    in_build_stage = True
+                    continue
+                elif from_count == 3:
+                    break
+            if in_build_stage:
+                build_stage_content += line + "\n"
+
+        assert "gcc" in build_stage_content, (
+            "Build stage must install gcc for C extension compilation"
+        )
+
+    @pytest.mark.requirement("WU12-AC1")
+    def test_build_stage_has_smoke_test(self) -> None:
+        """Verify the build stage runs a smoke test to validate imports.
+
+        After installing all packages, the build stage should verify that
+        core imports resolve correctly (e.g., import dagster, import floe_core).
+        """
+        content = _read_dockerfile_raw()
+        # Look for python -c with import statements
+        assert re.search(r'python\s+-c\s+"import\s+\w+', content), (
+            "Build stage must have a smoke test (python -c 'import ...') "
+            "to verify core packages are importable."
+        )
+
+
+class TestDockerfileRuntimeStage:
+    """Verify the runtime stage is minimal with no build tools."""
+
+    @pytest.mark.requirement("WU12-AC5")
+    def test_runtime_stage_uses_digest_pinned_image(self) -> None:
+        """Verify the runtime stage base image is digest-pinned with @sha256:.
+
+        Same supply chain security requirement as the build stage.
+        """
+        lines = _read_dockerfile_lines()
+        from_lines = [line for line in lines if line.upper().startswith("FROM")]
+        # Third FROM is the runtime stage
+        runtime_from = from_lines[2]
+        assert "@sha256:" in runtime_from, (
+            f"Runtime stage must use digest-pinned base image (@sha256:). "
+            f"Got FROM line: {runtime_from}"
+        )
+
+    @pytest.mark.requirement("WU12-AC6")
+    def test_runtime_stage_copies_site_packages(self) -> None:
+        """Verify the runtime stage copies site-packages from the build stage.
+
+        The runtime stage must COPY --from=build the installed packages,
+        not reinstall them. This keeps the runtime image minimal.
+        """
+        content = _read_dockerfile_raw()
+        assert re.search(r"COPY\s+--from=build.*site-packages", content), (
+            "Runtime stage must COPY --from=build site-packages"
+        )
+
+    @pytest.mark.requirement("WU12-AC8")
+    def test_runtime_stage_sets_workdir(self) -> None:
+        """Verify the runtime stage sets WORKDIR to /app/demo.
+
+        The WORKDIR must match the Helm values workingDirectory setting
+        so that Dagster can discover demo product modules.
+        """
+        content = _read_dockerfile_raw()
+        # Find WORKDIR in the runtime stage (after third FROM)
+        lines = content.splitlines()
+        from_count = 0
+        runtime_content = ""
+        for line in lines:
+            stripped = line.strip()
+            if stripped.upper().startswith("FROM"):
+                from_count += 1
+                continue
+            if from_count == 3:
+                runtime_content += line + "\n"
+
+        assert "WORKDIR /app/demo" in runtime_content, "Runtime stage must set WORKDIR /app/demo"
+
+    @pytest.mark.requirement("WU12-AC6")
+    def test_runtime_stage_no_build_tools(self) -> None:
+        """Verify the runtime stage does not install compilers or build deps.
+
+        The runtime stage should be minimal — no gcc, no apt-get install,
+        no pip install (packages come via COPY --from=build).
+        """
+        content = _read_dockerfile_raw()
+        lines = content.splitlines()
+        from_count = 0
+        runtime_content = ""
+        for line in lines:
+            stripped = line.strip()
+            if stripped.upper().startswith("FROM"):
+                from_count += 1
+                continue
+            if from_count == 3 and not stripped.startswith("#"):
+                runtime_content += line + "\n"
+
+        assert "apt-get" not in runtime_content, (
+            "Runtime stage must not run apt-get (no build tools needed)"
+        )
+        assert "pip install" not in runtime_content, (
+            "Runtime stage must not run pip install (packages copied from build stage)"
+        )
+
+
+class TestDockerfileSupplyChain:
+    """Verify supply chain security measures in the Dockerfile."""
+
+    @pytest.mark.requirement("WU12-AC5")
+    def test_build_and_runtime_stages_use_sha256_digest(self) -> None:
+        """Verify both build and runtime FROM lines use @sha256: digest pins.
+
+        Tag-only references (e.g., python:3.11-slim) are mutable — the same
+        tag can point to different images over time. Digest pins guarantee
+        the exact image content is used.
+        """
+        lines = _read_dockerfile_lines()
+        from_lines = [line for line in lines if line.upper().startswith("FROM")]
+        assert len(from_lines) == 3, f"Expected exactly 3 FROM lines, got {len(from_lines)}"
+
+        # Build stage (index 1) and runtime stage (index 2) must be digest-pinned
+        for idx, label in [(1, "build"), (2, "runtime")]:
+            assert "@sha256:" in from_lines[idx], (
+                f"{label} stage FROM must use @sha256: digest pin. Got: {from_lines[idx]}"
+            )
+
+    @pytest.mark.requirement("WU12-AC5")
+    def test_no_latest_tag_in_from(self) -> None:
+        """Verify no FROM line uses the 'latest' tag.
+
+        The :latest tag is unpinned and non-reproducible. All FROM lines
+        should use either a version tag with digest or a named stage reference.
+        """
+        lines = _read_dockerfile_lines()
+        from_lines = [line for line in lines if line.upper().startswith("FROM")]
+        latest_lines = [line for line in from_lines if ":latest" in line.lower()]
+        assert not latest_lines, f"Dockerfile must not use :latest tag. Found: {latest_lines}"
+
+    @pytest.mark.requirement("WU12-AC5")
+    def test_export_stage_uses_no_dev(self) -> None:
+        """Verify uv export excludes dev dependencies.
+
+        The --no-dev flag ensures pytest, mypy, ruff, and other dev tools
+        are not included in the production image.
+        """
+        lines = _read_dockerfile_lines()
+        uv_lines = [line for line in lines if "uv export" in line.lower()]
+        assert any("--no-dev" in line for line in uv_lines), (
+            f"uv export must use --no-dev flag. Found: {uv_lines}"
         )
 
 
@@ -1304,8 +1645,8 @@ class TestHelmValuesModuleNames:
         """
         values = _load_values_yaml(VALUES_TEST)
         locations = _get_code_locations(values)
-        assert len(locations) >= 3, (
-            f"Expected at least 3 code locations in values-test.yaml, got {len(locations)}"
+        assert len(locations) == 3, (
+            f"Expected exactly 3 code locations in values-test.yaml, got {len(locations)}"
         )
 
         bad_modules: list[str] = []
@@ -1329,7 +1670,7 @@ class TestHelmValuesModuleNames:
         """
         values = _load_values_yaml(VALUES_TEST)
         locations = _get_code_locations(values)
-        assert len(locations) >= 3, f"Expected at least 3 code locations, got {len(locations)}"
+        assert len(locations) == 3, f"Expected exactly 3 code locations, got {len(locations)}"
 
         hyphenated: list[str] = []
         for loc in locations:
@@ -1384,7 +1725,7 @@ class TestHelmValuesModuleNames:
         """
         values = _load_values_yaml(VALUES_TEST)
         locations = _get_code_locations(values)
-        assert len(locations) >= 3, f"Expected at least 3 code locations, got {len(locations)}"
+        assert len(locations) == 3, f"Expected exactly 3 code locations, got {len(locations)}"
 
         wrong_dirs: list[str] = []
         for loc in locations:
@@ -1458,8 +1799,8 @@ class TestHelmValuesModuleNames:
         """
         values = _load_values_yaml(VALUES_DEMO)
         locations = _get_code_locations(values)
-        assert len(locations) >= 3, (
-            f"Expected at least 3 code locations in values-demo.yaml, got {len(locations)}"
+        assert len(locations) == 3, (
+            f"Expected exactly 3 code locations in values-demo.yaml, got {len(locations)}"
         )
 
         wrong_dirs: list[str] = []
@@ -1799,3 +2140,56 @@ class TestGeneratedDefinitions:
             f"compile-demo target must include '--generate-definitions' flag "
             f"to generate definitions.py files. Recipe body:\n{body}"
         )
+
+
+# ============================================================
+# WU-12: Docker Packaging Strategy — Structural Tests
+# ============================================================
+
+ORCHESTRATOR_PYPROJECT = REPO_ROOT / "plugins" / "floe-orchestrator-dagster" / "pyproject.toml"
+
+# Required packages in the [project.optional-dependencies] docker group
+REQUIRED_DOCKER_EXTRAS: list[str] = [
+    "dagster-webserver",
+    "dagster-daemon",
+    "dagster-k8s",
+]
+
+
+class TestOrchestratorDockerExtras:
+    """Validate docker optional dependencies on floe-orchestrator-dagster (AC-12.3)."""
+
+    @pytest.mark.requirement("WU12-AC3")
+    def test_docker_extras_group_exists(self) -> None:
+        """The pyproject.toml MUST have a [project.optional-dependencies] docker group."""
+        content = ORCHESTRATOR_PYPROJECT.read_text()
+        data: dict[str, Any] = tomllib.loads(content)
+        opt_deps = data.get("project", {}).get("optional-dependencies", {})
+        assert "docker" in opt_deps, (
+            "floe-orchestrator-dagster pyproject.toml must have a "
+            "'docker' optional-dependencies group for Dagster runtime deps "
+            "(webserver, daemon, k8s). Found groups: "
+            f"{list(opt_deps.keys())}"
+        )
+
+    @pytest.mark.requirement("WU12-AC3")
+    @pytest.mark.parametrize("package", REQUIRED_DOCKER_EXTRAS)
+    def test_docker_extras_contains_required_package(self, package: str) -> None:
+        """Each required Dagster runtime package MUST appear in docker extras."""
+        data: dict[str, Any] = tomllib.loads(ORCHESTRATOR_PYPROJECT.read_text())
+        docker_deps: list[str] = data["project"]["optional-dependencies"].get("docker", [])
+        # Normalize: extract package names (strip version specifiers)
+        dep_names = [re.split(r"[><=!~;]", dep.strip())[0].strip() for dep in docker_deps]
+        assert package in dep_names, f"'{package}' must be in docker extras. Found: {docker_deps}"
+
+    @pytest.mark.requirement("WU12-AC3")
+    def test_base_orchestrator_does_not_include_docker_deps(self) -> None:
+        """Base dependencies MUST NOT include webserver/daemon/k8s (BC for AC-12.3)."""
+        data: dict[str, Any] = tomllib.loads(ORCHESTRATOR_PYPROJECT.read_text())
+        base_deps: list[str] = data.get("project", {}).get("dependencies", [])
+        base_names = [re.split(r"[><=!~;]", dep.strip())[0].strip() for dep in base_deps]
+        for pkg in REQUIRED_DOCKER_EXTRAS:
+            assert pkg not in base_names, (
+                f"'{pkg}' must be in docker extras ONLY, not base dependencies. "
+                f"Base deps: {base_deps}"
+            )
