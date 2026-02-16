@@ -288,17 +288,7 @@ DOCKER_PLATFORM ?= linux/amd64
 # - Reads plugins section, maps each to package name via convention + exception map
 # - Only includes packages that exist in the workspace (packages/ or plugins/)
 # - Always includes floe-core (all plugins depend on it) and floe-dbt-core (demo products need it)
-DEMO_PLUGINS := $(shell .venv/bin/python -c "\
-import yaml, sys, os; \
-m = yaml.safe_load(open('demo/manifest.yaml')); \
-plugins = m.get('plugins', {}); \
-name_map = dict(x.split(':') for x in '$(PLUGIN_NAME_MAP)'.split() if ':' in x); \
-names = set(['floe-core', 'floe-dbt-core']); \
-[names.add(name_map.get(v.get('type',''), 'floe-' + k + '-' + v.get('type',''))) \
- for k, v in plugins.items() \
- if os.path.isdir('packages/' + name_map.get(v.get('type',''), 'floe-' + k + '-' + v.get('type',''))) \
- or os.path.isdir('plugins/' + name_map.get(v.get('type',''), 'floe-' + k + '-' + v.get('type','')))]; \
-print(' '.join(sorted(names)))")
+DEMO_PLUGINS := $(shell .venv/bin/python -c "from pathlib import Path; import yaml, os; m = yaml.safe_load(Path('demo/manifest.yaml').read_text()); plugins = m.get('plugins', {}); nm = dict(x.split(':') for x in '$(PLUGIN_NAME_MAP)'.split() if ':' in x); names = set(['floe-core', 'floe-dbt-core']); [names.add(nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type',''))) for k,v in plugins.items() if os.path.isdir('packages/'+nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type',''))) or os.path.isdir('plugins/'+nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type','')))]; print(' '.join(sorted(names)))")
 
 build-demo-image: compile-demo ## Build Dagster demo Docker image and load to Kind
 	@echo "Building Dagster demo Docker image..."

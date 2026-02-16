@@ -85,7 +85,10 @@ WORKDIR /build
 COPY --from=export /build/requirements.txt .
 RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
-# Copy workspace package source trees (selective per P16 — only installed packages)
+# Copy workspace package source trees (selective per P16 — only installed packages).
+# NOTE: This list must include every package that may appear in FLOE_PLUGINS.
+# If a new plugin is added to demo/manifest.yaml, add its COPY line here too.
+# A missing COPY will cause the build to fail with "ERROR: source for $pkg not found".
 COPY packages/floe-core /build/packages/floe-core
 COPY plugins/floe-catalog-polaris /build/plugins/floe-catalog-polaris
 COPY plugins/floe-orchestrator-dagster /build/plugins/floe-orchestrator-dagster
@@ -137,5 +140,9 @@ COPY demo/macros/ /app/demo/macros/
 RUN touch /app/demo/customer_360/__init__.py \
           /app/demo/iot_telemetry/__init__.py \
           /app/demo/financial_risk/__init__.py
+
+# Run as non-root user for reduced attack surface
+RUN useradd --create-home --shell /bin/false dagster
+USER dagster
 
 WORKDIR /app/demo
