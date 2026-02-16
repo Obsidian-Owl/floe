@@ -1219,11 +1219,64 @@ class TestHelmValuesImageOverride:
         daemon_repo = (
             values.get("dagster", {}).get("dagsterDaemon", {}).get("image", {}).get("repository")
         )
-        assert webserver_repo is not None, "dagsterWebserver.image.repository is missing"
-        assert daemon_repo is not None, "dagsterDaemon.image.repository is missing"
+        assert webserver_repo == EXPECTED_IMAGE_REPOSITORY, (
+            f"dagsterWebserver.image.repository must be '{EXPECTED_IMAGE_REPOSITORY}'. "
+            f"Got: {webserver_repo!r}"
+        )
+        assert daemon_repo == EXPECTED_IMAGE_REPOSITORY, (
+            f"dagsterDaemon.image.repository must be '{EXPECTED_IMAGE_REPOSITORY}'. "
+            f"Got: {daemon_repo!r}"
+        )
         assert webserver_repo == daemon_repo, (
             f"Webserver and daemon must use the same image repository. "
             f"Webserver: {webserver_repo!r}, Daemon: {daemon_repo!r}"
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_webserver_pull_policy_never(self) -> None:
+        """Verify values-demo.yaml webserver pullPolicy is 'Never'.
+
+        Same as values-test.yaml: Kind-loaded images require pullPolicy: Never.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        webserver_image = values.get("dagster", {}).get("dagsterWebserver", {}).get("image", {})
+        assert webserver_image.get("pullPolicy") == "Never", (
+            f"dagster.dagsterWebserver.image.pullPolicy must be 'Never' in values-demo.yaml. "
+            f"Got: {webserver_image.get('pullPolicy')!r}"
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_daemon_pull_policy_never(self) -> None:
+        """Verify values-demo.yaml daemon pullPolicy is 'Never'.
+
+        Same as values-test.yaml: Kind-loaded images require pullPolicy: Never.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        daemon_image = values.get("dagster", {}).get("dagsterDaemon", {}).get("image", {})
+        assert daemon_image.get("pullPolicy") == "Never", (
+            f"dagster.dagsterDaemon.image.pullPolicy must be 'Never' in values-demo.yaml. "
+            f"Got: {daemon_image.get('pullPolicy')!r}"
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_image_tag_is_latest(self) -> None:
+        """Verify both webserver and daemon image tags are 'latest' in values-demo.yaml.
+
+        The locally-built demo image is tagged 'latest'. Both components
+        must reference this exact tag in values-demo.yaml.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        webserver_tag = (
+            values.get("dagster", {}).get("dagsterWebserver", {}).get("image", {}).get("tag")
+        )
+        daemon_tag = values.get("dagster", {}).get("dagsterDaemon", {}).get("image", {}).get("tag")
+        assert webserver_tag == EXPECTED_IMAGE_TAG, (
+            f"dagster.dagsterWebserver.image.tag must be '{EXPECTED_IMAGE_TAG}' "
+            f"in values-demo.yaml. Got: {webserver_tag!r}"
+        )
+        assert daemon_tag == EXPECTED_IMAGE_TAG, (
+            f"dagster.dagsterDaemon.image.tag must be '{EXPECTED_IMAGE_TAG}' "
+            f"in values-demo.yaml. Got: {daemon_tag!r}"
         )
 
 
@@ -1439,6 +1492,28 @@ class TestHelmValuesModuleNames:
 
         assert not wrong_attr, f"All code locations must have attribute='defs'. Wrong: {wrong_attr}"
 
+    @pytest.mark.requirement("WU11-AC5")
+    def test_values_demo_all_locations_have_attribute_defs(self) -> None:
+        """Verify all code locations in values-demo.yaml specify attribute='defs'.
+
+        The Dagster Definitions object is named 'defs' in each product's
+        definitions.py. Missing or wrong attribute would cause Dagster
+        to fail at startup.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        locations = _get_code_locations(values)
+
+        wrong_attr: list[str] = []
+        for loc in locations:
+            attr = loc.get("pythonModule", {}).get("attribute", "")
+            if attr != "defs":
+                wrong_attr.append(f"{loc.get('name', '?')}: attribute={attr!r}")
+
+        assert not wrong_attr, (
+            f"All code locations in values-demo.yaml must have attribute='defs'. "
+            f"Wrong: {wrong_attr}"
+        )
+
 
 # ============================================================
 # T63: dbt Relative Path Tests (AC-11.9)
@@ -1573,6 +1648,7 @@ class TestGeneratedDefinitions:
     modules that only appear in hand-written versions.
     """
 
+    @pytest.mark.requirement("WU11-AC8")
     @pytest.mark.parametrize("product_dir", _DEMO_PRODUCT_DIRS, ids=_DEMO_PRODUCT_DIRS)
     def test_definitions_py_exists_for_all_products(self, product_dir: str) -> None:
         """Verify each demo product directory contains a definitions.py file.
@@ -1586,6 +1662,7 @@ class TestGeneratedDefinitions:
             f"AC-11.8 requires a generated definitions.py for each demo product."
         )
 
+    @pytest.mark.requirement("WU11-AC8")
     @pytest.mark.parametrize("product_dir", _DEMO_PRODUCT_DIRS, ids=_DEMO_PRODUCT_DIRS)
     def test_definitions_has_auto_generated_marker(self, product_dir: str) -> None:
         """Verify definitions.py contains the AUTO-GENERATED marker in its docstring.
@@ -1606,6 +1683,7 @@ class TestGeneratedDefinitions:
             f"'floe compile --generate-definitions'."
         )
 
+    @pytest.mark.requirement("WU11-AC8")
     @pytest.mark.parametrize("product_dir", _DEMO_PRODUCT_DIRS, ids=_DEMO_PRODUCT_DIRS)
     def test_definitions_exports_defs_variable(self, product_dir: str) -> None:
         """Verify definitions.py exports a defs variable with Definitions.
@@ -1621,6 +1699,7 @@ class TestGeneratedDefinitions:
             f"using 'defs = Definitions('. This is the Dagster entry point."
         )
 
+    @pytest.mark.requirement("WU11-AC8")
     @pytest.mark.parametrize("product_dir", _DEMO_PRODUCT_DIRS, ids=_DEMO_PRODUCT_DIRS)
     def test_definitions_uses_dbt_assets_decorator(self, product_dir: str) -> None:
         """Verify definitions.py uses the @dbt_assets decorator.
@@ -1636,6 +1715,7 @@ class TestGeneratedDefinitions:
             f"decorator from dagster-dbt."
         )
 
+    @pytest.mark.requirement("WU11-AC8")
     @pytest.mark.parametrize("product_dir", _DEMO_PRODUCT_DIRS, ids=_DEMO_PRODUCT_DIRS)
     def test_definitions_uses_dbt_cli_resource(self, product_dir: str) -> None:
         """Verify definitions.py references DbtCliResource.
@@ -1649,6 +1729,7 @@ class TestGeneratedDefinitions:
             f"definitions.py for '{product_dir}' must use 'DbtCliResource' from dagster-dbt."
         )
 
+    @pytest.mark.requirement("WU11-AC8")
     @pytest.mark.parametrize("product_dir", _DEMO_PRODUCT_DIRS, ids=_DEMO_PRODUCT_DIRS)
     def test_definitions_does_not_import_unused_modules(self, product_dir: str) -> None:
         """Verify generated definitions.py does not import hand-written leftovers.
@@ -1700,6 +1781,7 @@ class TestGeneratedDefinitions:
             "Definitions, DbtCliResource, dbt_assets, Path."
         )
 
+    @pytest.mark.requirement("WU11-AC8")
     def test_compile_demo_has_generate_definitions_flag(self) -> None:
         """Verify the Makefile compile-demo target includes --generate-definitions.
 
