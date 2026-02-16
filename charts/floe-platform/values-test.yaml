@@ -96,14 +96,14 @@ dagster:
     deployments: []
 
 # =============================================================================
-# Polaris Configuration (Quarkus 1.3.0 for Tests)
+# Polaris Configuration (Pinned to 1.2.1 — compatible with PyIceberg 0.11.x)
 # =============================================================================
 polaris:
   enabled: true
   replicaCount: 1
   image:
     repository: apache/polaris
-    tag: "1.3.0-incubating"
+    tag: "1.2.1-incubating"
     pullPolicy: IfNotPresent
   resources:
     requests:

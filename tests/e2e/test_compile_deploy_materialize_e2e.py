@@ -129,6 +129,44 @@ class TestCompileDeployMaterialize:
             f"dbt_profiles should be dict, got {type(artifacts.dbt_profiles)}"
         )
 
+    @pytest.mark.requirement("AC-10.6")
+    def test_dbt_profile_correct_for_in_cluster_execution(
+        self,
+        compiled_artifacts: Callable[[Path], Any],
+        project_root: Path,
+    ) -> None:
+        """Verify dbt profile is correct for DuckDB in-cluster execution.
+
+        The generated profile must:
+        - Use DuckDB adapter type matching compute plugin
+        - Use :memory: path (always writable, no volume mounts needed)
+        - Carry memory_limit from manifest into settings dict
+        - Have a valid target
+        """
+        spec_path = project_root / DEMO_PRODUCTS["customer-360"]
+        artifacts = compiled_artifacts(spec_path)
+
+        assert artifacts.dbt_profiles is not None
+        profile = artifacts.dbt_profiles["customer-360"]
+        assert profile["target"] == "dev"
+
+        dev_output = profile["outputs"]["dev"]
+        assert dev_output["type"] == "duckdb", f"Expected duckdb adapter, got {dev_output['type']}"
+        assert dev_output["path"] == ":memory:", (
+            f"DuckDB path must be :memory: for container writability, got {dev_output['path']}"
+        )
+        assert dev_output["threads"] == 4, (
+            f"threads should match manifest config (4), got {dev_output['threads']}"
+        )
+        # memory_limit from manifest must flow through to settings
+        assert "settings" in dev_output, (
+            "memory_limit from manifest must flow through to profile settings"
+        )
+        assert dev_output["settings"]["memory_limit"] == "2GB", (
+            f"Expected memory_limit=2GB from manifest, "
+            f"got {dev_output['settings'].get('memory_limit')}"
+        )
+
     @pytest.mark.requirement("AC-2.2")
     def test_compiled_artifacts_enforcement(
         self,
@@ -346,10 +384,6 @@ class TestCompileDeployMaterialize:
         )
 
     @pytest.mark.requirement("AC-2.2")
-    @pytest.mark.xfail(
-        reason="Needs Dagster code location mounting in Kind (Epic-15).",
-        strict=True,
-    )
     def test_trigger_asset_materialization(
         self,
         wait_for_service: Callable[..., None],
@@ -470,10 +504,6 @@ class TestCompileDeployMaterialize:
         )
 
     @pytest.mark.requirement("AC-2.2")
-    @pytest.mark.xfail(
-        reason="Needs Dagster code location mounting in Kind (Epic-15).",
-        strict=True,
-    )
     def test_iceberg_tables_exist_after_materialization(
         self,
         polaris_client: Any,

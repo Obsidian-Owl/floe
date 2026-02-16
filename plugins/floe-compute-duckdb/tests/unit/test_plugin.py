@@ -148,6 +148,51 @@ class TestGenerateDBTProfile:
 
         assert profile["settings"]["memory_limit"] == "4GB"
 
+    def test_generate_dbt_profile_normalizes_top_level_settings(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test profile normalizes memory_limit from top-level connection to settings.
+
+        When manifest config places memory_limit at the connection top level
+        (not nested under 'settings'), the plugin must move it into
+        profile['settings'] so the dbt-duckdb adapter picks it up.
+        """
+        from floe_core.compute_config import ComputeConfig
+
+        config = ComputeConfig(
+            plugin="duckdb",
+            threads=4,
+            connection={
+                "memory_limit": "2GB",
+            },
+        )
+
+        profile = duckdb_plugin.generate_dbt_profile(config)
+
+        assert "settings" in profile
+        assert profile["settings"]["memory_limit"] == "2GB"
+
+    def test_generate_dbt_profile_explicit_settings_override_top_level(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Test explicit settings dict takes precedence over top-level keys."""
+        from floe_core.compute_config import ComputeConfig
+
+        config = ComputeConfig(
+            plugin="duckdb",
+            connection={
+                "memory_limit": "2GB",
+                "settings": {"memory_limit": "8GB", "threads": 2},
+            },
+        )
+
+        profile = duckdb_plugin.generate_dbt_profile(config)
+
+        assert profile["settings"]["memory_limit"] == "8GB"
+        assert profile["settings"]["threads"] == 2
+
     def test_generate_dbt_profile_with_file_path(
         self,
         duckdb_plugin: DuckDBComputePlugin,

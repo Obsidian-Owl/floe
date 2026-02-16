@@ -168,6 +168,19 @@ wait_for_port localhost 5000 15 || true  # Marquez API port (optional)
 wait_for_port localhost 16686 15 || true  # Jaeger optional
 
 echo "Port-forwards established."
+
+# Verify MinIO bucket exists before running tests (defense-in-depth)
+MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
+echo "Verifying MinIO bucket '${MINIO_BUCKET}'..."
+BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:9000/${MINIO_BUCKET}/" 2>/dev/null) || true
+if [[ "$BUCKET_CODE" == "404" ]]; then
+    echo "ERROR: MinIO bucket '${MINIO_BUCKET}' does not exist (HTTP 404)" >&2
+    echo "MinIO provisioning may have failed. Check:" >&2
+    echo "  kubectl get jobs -n ${TEST_NAMESPACE} -l app.kubernetes.io/name=minio" >&2
+    exit 1
+fi
+echo "MinIO bucket '${MINIO_BUCKET}' accessible (HTTP ${BUCKET_CODE})"
+
 echo ""
 echo "Running E2E tests..."
 

@@ -104,6 +104,16 @@ class TestCompilation:
             f"Expected dagster orchestrator, got {artifacts.plugins.orchestrator.type}"
         )
 
+        # Storage config flows from manifest (AC-10.3: STORAGE is config-only,
+        # not discovered via entry points — validated here at contract tier)
+        assert artifacts.plugins.storage is not None, (
+            "Storage config must be resolved from manifest.storage section. "
+            "STORAGE is a config-only plugin type configured at infrastructure level."
+        )
+        assert artifacts.plugins.storage.type == "s3", (
+            f"Expected s3 storage from demo manifest, got '{artifacts.plugins.storage.type}'"
+        )
+
         # Observability assertions
         assert artifacts.observability.lineage is True, "Lineage must be enabled for customer-360"
 

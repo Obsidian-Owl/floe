@@ -232,20 +232,19 @@ class TestValuesTestCubeStore:
 
 
 class TestCubeStoreRollbackPath:
-    """Verify rollback xfail markers exist on Cube Store E2E tests."""
+    """Verify Cube Store E2E tests exist and rollback path is documented."""
 
     E2E_DEPLOY_TEST = REPO_ROOT / "tests" / "e2e" / "test_platform_deployment_e2e.py"
 
     @pytest.mark.requirement("WU2-AC5")
-    def test_xfail_markers_on_cube_store_tests(self) -> None:
-        """Verify Cube Store E2E tests have xfail markers for rollback.
+    def test_cube_store_e2e_test_exists(self) -> None:
+        """Verify Cube Store E2E test exists in deployment suite.
 
-        When the multi-arch image is unavailable, xfail prevents these
-        tests from blocking the entire E2E suite.
+        The rollback path (cubeStore.enabled: false) is available via
+        values-test.yaml. Cube Store tests now pass reliably with the
+        multi-arch GHCR image, so xfail markers have been removed.
         """
         content = self.E2E_DEPLOY_TEST.read_text()
         assert "test_cube_store_pod_running" in content, (
             "Missing test_cube_store_pod_running in E2E deployment tests"
         )
-        assert "@pytest.mark.xfail" in content, "Missing xfail marker on Cube Store tests"
-        assert "ARM64" in content, "xfail reason should reference ARM64 image availability"

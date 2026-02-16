@@ -3,7 +3,8 @@
   "currentWork": {
     "id": "platform-integration",
     "phase": "building",
-    "startedAt": "2026-02-15T18:35:00Z"
+    "startedAt": "2026-02-15T18:35:00Z",
+    "activeWorkUnit": "wu-10-polaris-test-fixes"
   },
   "completedWork": [
     {
@@ -28,8 +29,8 @@
     { "id": "wu-6-plugin-pipeline", "description": "Plugin Registry + Compilation Pipeline", "status": "shipped", "order": 6, "tasksCompleted": ["T30", "T31", "T32", "T33", "T34", "T35", "T36", "T37"], "pr": "https://github.com/Obsidian-Owl/floe/pull/79" },
     { "id": "wu-7-secrets-cve", "description": "Secrets Verification + CVE Bumps", "status": "shipped", "order": 7, "tasksCompleted": ["T38", "T39", "T40", "T41"], "pr": "https://github.com/Obsidian-Owl/floe/pull/80" },
     { "id": "wu-8-polish", "description": "Polaris Health Check + Final Verification", "status": "shipped", "order": 8, "tasksCompleted": ["T42", "T43", "T44", "T45", "T48"], "pr": "https://github.com/Obsidian-Owl/floe/pull/82" },
-    { "id": "wu-9-config-pipeline-flow", "description": "Schema changes + governance/observability flow through builder", "status": "planning", "order": 9 },
-    { "id": "wu-10-polaris-test-fixes", "description": "Pin Polaris 1.2.1, xfail cleanup, test assertion fixes", "status": "pending", "order": 10 },
+    { "id": "wu-9-config-pipeline-flow", "description": "Schema changes + governance/observability flow through builder", "status": "shipped", "order": 9, "tasksCompleted": ["T49", "T50", "T51", "T52", "T53", "T54", "T55"], "pr": "https://github.com/Obsidian-Owl/floe/pull/84" },
+    { "id": "wu-10-polaris-test-fixes", "description": "Pin Polaris 1.2.1, xfail cleanup, test assertion fixes", "status": "building", "order": 10, "tasksCompleted": [] },
     { "id": "wu-11-demo-packaging", "description": "Custom Dagster test image with demo code", "status": "pending", "order": 11 }
   ],
   "gates": {
