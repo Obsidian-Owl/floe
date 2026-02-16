@@ -405,5 +405,4 @@ After completing this skill:
 ## References
 
 - **[speckit.implement](../speckit-implement/SKILL.md)** - Single-task implementation with confirmation
-- **[Linear Workflow Guide](../../../docs/guides/linear-workflow.md)** - Architecture, traceability
 - **`.specify/memory/constitution.md`** - Project principles

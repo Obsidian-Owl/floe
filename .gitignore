@@ -78,7 +78,6 @@ pip-delete-this-directory.txt
 .pre-commit.log
 
 # Local tool state (rebuilt on demand)
-.beads/
 .cognee/
 .sisyphus/
 .agentlint/

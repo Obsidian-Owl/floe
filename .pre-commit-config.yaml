@@ -19,7 +19,7 @@ repos:
   # Ruff: Fast Python linter and formatter
   # Auto-fixes are applied on pre-commit. Pre-push runs check-only versions.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.15.1
     hooks:
       # Linting with auto-fix (pre-commit only - fixes are applied automatically)
       - id: ruff
@@ -38,19 +38,18 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
-        exclude: ^(\.beads/|\.sisyphus/|\.claude/skills/|\.claude/reviews/|\.specify/|tests/fixtures/|docs/reference/)
+        exclude: ^(\.sisyphus/|\.claude/skills/|\.claude/reviews/|\.specify/|tests/fixtures/|docs/reference/)
 
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       # Trailing whitespace
       - id: trailing-whitespace
-        exclude: ^\.beads/
 
       # End of file newline
       - id: end-of-file-fixer
-        exclude: (^\.beads/|\.omc/)
+        exclude: \.omc/
 
       # YAML syntax (exclude Helm templates - Go template syntax not parseable)
       - id: check-yaml
@@ -72,7 +71,7 @@ repos:
 
   # Security scanning
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.8.2
+    rev: 1.9.3
     hooks:
       - id: bandit
         args: [-c, pyproject.toml]

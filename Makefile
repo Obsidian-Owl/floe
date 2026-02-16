@@ -67,7 +67,7 @@ help: ## Show this help message
 	@echo "  make cognee-test       Run quality validation (VERBOSE=1, THRESHOLD=N)"
 	@echo ""
 	@echo "Setup:"
-	@echo "  make setup-hooks     Install chained git hooks (bd + pre-commit + Cognee)"
+	@echo "  make setup-hooks     Install git hooks (pre-commit + Cognee)"
 	@echo "  make install-fusion  Install official dbt Fusion CLI from dbt Labs"
 	@echo "  make check-fusion    Check if dbt Fusion CLI is installed"
 	@echo ""
@@ -327,7 +327,7 @@ demo-stop: ## Stop demo and clean up resources
 # ============================================================
 
 .PHONY: setup-hooks
-setup-hooks: ## Install chained git hooks (bd + pre-commit)
+setup-hooks: ## Install git hooks (pre-commit + Cognee)
 	@./scripts/setup-hooks.sh
 
 .PHONY: install-fusion

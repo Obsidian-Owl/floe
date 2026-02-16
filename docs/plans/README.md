@@ -80,5 +80,4 @@ See [EPIC-OVERVIEW.md](EPIC-OVERVIEW.md) for detailed architecture mapping.
 
 - **Architecture**: [`docs/architecture/`](../architecture/)
 - **Requirements**: [`docs/requirements/`](../requirements/)
-- **Workflow Guide**: [`docs/guides/linear-workflow.md`](../guides/linear-workflow.md)
 - **SpecKit Commands**: [`.claude/commands/`](../../.claude/commands/)

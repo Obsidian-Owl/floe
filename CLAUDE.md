@@ -13,7 +13,6 @@
 ## Quick Start
 
 ```bash
-bd linear sync --pull        # Sync from Linear
 /speckit.implement           # Auto-implement next task
 /speckit.test-review         # Pre-PR quality check
 /speckit.pr                  # Create PR
@@ -77,13 +76,13 @@ Layer 4: DATA           → K8s Jobs (dbt run, dlt ingestion)
 
 ---
 
-## Workflow: SpecKit + Beads + Linear
+## Workflow: SpecKit + Linear
 
-**Source of Truth**: Linear → **Local Cache**: Beads → **Planning**: SpecKit
+**Source of Truth**: Linear → **Planning**: SpecKit
 
 ```
 Planning:   specify → clarify → plan → tasks → taskstolinear
-Implement:  bd linear sync --pull → /speckit.implement → commit → loop
+Implement:  /speckit.implement → commit → loop
 Pre-PR:     test-review → wiring-check → merge-check → /speckit.pr
 ```
 
@@ -157,7 +156,6 @@ Session start hook auto-queries for prior context.
 |-------|----------|
 | Architecture | `docs/architecture/ARCHITECTURE-SUMMARY.md` |
 | Testing | `TESTING.md` |
-| Linear Workflow | `docs/guides/linear-workflow.md` |
 | Constitution | `.specify/memory/constitution.md` |
 | Epic Recovery | `.claude/rules/epic-recovery.md` |
 | Cognee API | `.claude/rules/cognee-api.md` |

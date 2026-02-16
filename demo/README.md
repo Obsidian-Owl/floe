@@ -122,4 +122,3 @@ kind delete cluster
 - [Data Contracts Guide](../docs/architecture/data-contracts.md)
 - [Testing Standards](../TESTING.md)
 - [Architecture Overview](../docs/architecture/ARCHITECTURE-SUMMARY.md)
-- [Linear Workflow](../docs/guides/linear-workflow.md)

@@ -89,7 +89,6 @@ Quick version (skills auto-invoke when you mention these):
 - "Cube semantic layer" → cube-skill
 - "Helm chart" / "K8s pod" → helm-k8s-skill
 - "Writing tests" → testing-skill
-- "Multi-session work" → beads
 ```
 
 ---

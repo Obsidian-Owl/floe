@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # scripts/setup-hooks.sh
-# Sets up git hooks to run BOTH bd (beads) AND pre-commit framework
+# Sets up git hooks to run pre-commit framework
 #
 # Usage: ./scripts/setup-hooks.sh
 #
-# This script creates chained git hooks that run:
-# 1. bd (beads) hooks for issue tracking JSONL sync
-# 2. pre-commit framework for code quality (ruff, bandit, mypy, etc.)
+# This script creates git hooks that run:
+# 1. pre-commit framework for code quality (ruff, bandit, mypy, etc.)
+# 2. Cognee sync for knowledge graph updates
 #
-# Run this after cloning, or after running `bd hooks install` or `pre-commit install`
-# which would otherwise overwrite the chained hooks.
+# Run this after cloning, or after running `pre-commit install`
+# which would otherwise overwrite the hooks.
 
 set -euo pipefail
 
@@ -22,7 +22,7 @@ mkdir -p "$HOOKS_DIR"
 
 # Backup existing hooks if they exist and weren't created by this script
 BACKUP_DIR="$HOOKS_DIR/backup.$(date +%Y%m%d-%H%M%S)"
-HOOKS_TO_INSTALL="pre-commit post-commit pre-push prepare-commit-msg post-checkout post-merge"
+HOOKS_TO_INSTALL="pre-commit post-commit pre-push post-merge"
 NEEDS_BACKUP=false
 
 for hook in $HOOKS_TO_INSTALL; do
@@ -47,22 +47,16 @@ if [ "$NEEDS_BACKUP" = true ]; then
     done
 fi
 
-echo "Installing chained hooks to: $HOOKS_DIR"
+echo "Installing hooks to: $HOOKS_DIR"
 
 # Pre-commit hook (runs on every commit)
 cat > "$HOOKS_DIR/pre-commit" << 'HOOK'
 #!/usr/bin/env sh
 # AUTO-GENERATED - Do not edit manually
-# Chained hook: bd (beads) + pre-commit framework
+# pre-commit framework hook
 # Installed by: scripts/setup-hooks.sh
 # Re-run 'make setup-hooks' to regenerate
 
-# 1. Run bd hooks (beads JSONL sync)
-if command -v bd >/dev/null 2>&1; then
-    bd hooks run pre-commit "$@" || exit $?
-fi
-
-# 2. Run pre-commit framework (ruff, bandit, etc.)
 if command -v uv >/dev/null 2>&1; then
     exec uv run --no-sync pre-commit run --hook-stage pre-commit
 elif command -v pre-commit >/dev/null 2>&1; then
@@ -96,16 +90,10 @@ HOOK
 cat > "$HOOKS_DIR/pre-push" << 'HOOK'
 #!/usr/bin/env sh
 # AUTO-GENERATED - Do not edit manually
-# Chained hook: bd (beads) + pre-commit framework
+# pre-commit framework hook (pre-push stage)
 # Installed by: scripts/setup-hooks.sh
 # Re-run 'make setup-hooks' to regenerate
 
-# 1. Run bd hooks (beads sync)
-if command -v bd >/dev/null 2>&1; then
-    bd hooks run pre-push "$@" || exit $?
-fi
-
-# 2. Run pre-commit framework (mypy, pytest)
 if command -v uv >/dev/null 2>&1; then
     exec uv run --no-sync pre-commit run --hook-stage pre-push --all-files
 elif command -v pre-commit >/dev/null 2>&1; then
@@ -117,46 +105,15 @@ else
 fi
 HOOK
 
-# Prepare-commit-msg hook (bd only - for issue references)
-cat > "$HOOKS_DIR/prepare-commit-msg" << 'HOOK'
-#!/usr/bin/env sh
-# AUTO-GENERATED - Do not edit manually
-# bd (beads) hook for commit message preparation
-# Installed by: scripts/setup-hooks.sh
-# Re-run 'make setup-hooks' to regenerate
-
-if command -v bd >/dev/null 2>&1; then
-    exec bd hooks run prepare-commit-msg "$@"
-fi
-HOOK
-
-# Post-checkout hook (bd only - for branch tracking)
-cat > "$HOOKS_DIR/post-checkout" << 'HOOK'
-#!/usr/bin/env sh
-# AUTO-GENERATED - Do not edit manually
-# bd (beads) hook for checkout tracking
-# Installed by: scripts/setup-hooks.sh
-# Re-run 'make setup-hooks' to regenerate
-
-if command -v bd >/dev/null 2>&1; then
-    exec bd hooks run post-checkout "$@"
-fi
-HOOK
-
-# Post-merge hook (bd + Cognee full rebuild)
+# Post-merge hook (Cognee full rebuild)
 cat > "$HOOKS_DIR/post-merge" << 'HOOK'
 #!/usr/bin/env sh
 # AUTO-GENERATED - Do not edit manually
-# Chained hook: bd (beads) + Cognee full rebuild
+# Cognee full rebuild hook
 # Installed by: scripts/setup-hooks.sh
 # Re-run 'make setup-hooks' to regenerate
 
-# 1. Run bd hooks (beads merge tracking)
-if command -v bd >/dev/null 2>&1; then
-    bd hooks run post-merge "$@"
-fi
-
-# 2. Run Cognee full sync in async mode (non-blocking)
+# Run Cognee full sync in async mode (non-blocking)
 # Full rebuild on merge since many files may have changed
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 if [ -x "$REPO_ROOT/scripts/cognee-sync" ]; then
@@ -168,22 +125,21 @@ HOOK
 chmod +x "$HOOKS_DIR/pre-commit" \
          "$HOOKS_DIR/post-commit" \
          "$HOOKS_DIR/pre-push" \
-         "$HOOKS_DIR/prepare-commit-msg" \
-         "$HOOKS_DIR/post-checkout" \
          "$HOOKS_DIR/post-merge"
+
+# Remove old bd-only hooks that are no longer needed
+rm -f "$HOOKS_DIR/prepare-commit-msg" "$HOOKS_DIR/post-checkout"
 
 echo ""
 echo "Hooks installed successfully:"
-echo "  - pre-commit:         bd + ruff, bandit, secrets, sleep-detection, etc."
-echo "  - post-commit:        Cognee async sync (non-blocking)"
-echo "  - pre-push:           bd + mypy, import-linter, unit tests, contract tests, traceability"
-echo "  - prepare-commit-msg: bd (issue references)"
-echo "  - post-checkout:      bd (branch tracking)"
-echo "  - post-merge:         bd + Cognee full rebuild (non-blocking)"
+echo "  - pre-commit:   ruff, bandit, secrets, sleep-detection, etc."
+echo "  - post-commit:  Cognee async sync (non-blocking)"
+echo "  - pre-push:     mypy, import-linter, unit tests, contract tests, traceability"
+echo "  - post-merge:   Cognee full rebuild (non-blocking)"
 echo ""
 echo "Quality bar alignment:"
 echo "  - Pre-commit: Fast checks (<5s) matching CI lint stage"
 echo "  - Pre-push:   Thorough checks matching CI test stages"
 echo ""
-echo "Note: Run 'make setup-hooks' again after 'bd hooks install' or 'pre-commit install'"
-echo "      to restore chained hooks."
+echo "Note: Run 'make setup-hooks' again after 'pre-commit install'"
+echo "      to restore hooks."

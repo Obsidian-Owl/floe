@@ -229,7 +229,6 @@ After completing this skill:
 
 ## References
 
-- **[Linear Workflow Guide](../../../docs/guides/linear-workflow.md)** - Full workflow documentation
 - **[speckit.test-review](../speckit-test-review/SKILL.md)** - Test quality review
 - **[speckit.wiring-check](../speckit-wiring-check/SKILL.md)** - Code connectivity check
 - **[speckit.merge-check](../speckit-merge-check/SKILL.md)** - Contract and merge readiness

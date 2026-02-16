@@ -18,7 +18,6 @@ __pycache__/
 
 # Project tooling (not needed in images)
 .specwright/
-.beads/
 .claude/
 
 # Node (if any)

@@ -246,4 +246,3 @@ After completing this skill:
 - **Architecture**: `docs/architecture/ARCHITECTURE-SUMMARY.md`
 - **Contracts**: `.claude/rules/pydantic-contracts.md`
 - **Testing**: `TESTING.md`
-- **Linear Workflow**: `docs/guides/linear-workflow.md`

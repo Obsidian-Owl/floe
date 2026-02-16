@@ -78,7 +78,6 @@ REQUIRED_DOCKERIGNORE_EXCLUSIONS: list[str] = [
     ".pytest_cache",
     ".ruff_cache",
     ".specwright",
-    ".beads",
     ".claude",
 ]
 
@@ -190,9 +189,11 @@ class TestDockerfileStages:
             if match:
                 stage_names.append(match.group(1))
 
-        assert stage_names == ["export", "build", "runtime"], (
-            f"Dockerfile stages must be named [export, build, runtime]. Found: {stage_names}"
-        )
+        assert stage_names == [
+            "export",
+            "build",
+            "runtime",
+        ], f"Dockerfile stages must be named [export, build, runtime]. Found: {stage_names}"
 
     @pytest.mark.requirement("WU12-AC1")
     def test_dockerfile_no_vendor_base_image(self) -> None:
