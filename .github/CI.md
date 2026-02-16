@@ -130,12 +130,12 @@ gh workflow run nightly.yml
 ### Install Git Hooks
 
 ```bash
-# Install chained hooks (bd + pre-commit) - run once after cloning
+# Install git hooks (pre-commit + Cognee) - run once after cloning
 make setup-hooks
 ```
 
-> **Note**: This installs hooks that run both bd (beads) for issue tracking AND
-> pre-commit for code quality. Run again after `bd hooks install` or `pre-commit install`.
+> **Note**: This installs hooks for pre-commit code quality checks and Cognee knowledge sync.
+> Run again after `pre-commit install` to restore hooks.
 
 ### What Runs Locally
 

@@ -148,7 +148,7 @@ Keep custom agents for floe-specific concerns only.
 **SpecKit (11)**: specify, clarify, plan, tasks, taskstolinear, implement, implement-epic, test-review, wiring-check, merge-check, pr
 **Tech (5)**: dbt-skill, pydantic-skill, dagster-skill, testing-skill, helm-k8s-skill
 **Analysis (2)**: tech-debt-review, speckit-analyze
-**Infra (3)**: beads, speckit-constitution, speckit-checklist
+**Infra (2)**: speckit-constitution, speckit-checklist
 **Deprecated (1)**: speckit-architecture-check → merge into wiring-check
 
 ---

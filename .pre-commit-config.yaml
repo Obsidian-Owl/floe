@@ -38,7 +38,7 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
-        exclude: ^(\.beads/|\.sisyphus/|\.claude/skills/|\.claude/reviews/|\.specify/|tests/fixtures/|docs/reference/)
+        exclude: ^(\.sisyphus/|\.claude/skills/|\.claude/reviews/|\.specify/|tests/fixtures/|docs/reference/)
 
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -46,11 +46,10 @@ repos:
     hooks:
       # Trailing whitespace
       - id: trailing-whitespace
-        exclude: ^\.beads/
 
       # End of file newline
       - id: end-of-file-fixer
-        exclude: (^\.beads/|\.omc/)
+        exclude: \.omc/
 
       # YAML syntax (exclude Helm templates - Go template syntax not parseable)
       - id: check-yaml
