@@ -214,6 +214,5 @@ This constitution supersedes all other development practices. When in conflict, 
 - **Testing**: `TESTING.md`
 - **Security**: `.claude/rules/security.md`
 - **Component Ownership**: `.claude/rules/component-ownership.md`
-- **Workflow Integration**: `docs/guides/linear-workflow.md`
 
 **Version**: 1.1.0 | **Ratified**: 2026-01-08 | **Last Amended**: 2026-02-05

@@ -20,9 +20,6 @@ This skill creates Linear issues from tasks.md with Project organization, requir
 2. Creates Linear issues under the appropriate Project
 3. Reconciles bidirectionally (Linear status: tasks.md checkboxes)
 4. Sets up blocking dependencies between issues
-5. Syncs to Beads cache
-
-**Detailed patterns**: [Linear Workflow Guide](../../../docs/guides/linear-workflow.md)
 
 ## Memory Integration
 
@@ -196,6 +193,5 @@ After completing this skill:
 
 ## References
 
-- **[Linear Workflow Guide](../../../docs/guides/linear-workflow.md)** - Architecture, mapping format, detailed patterns
 - **[speckit.tasks](../speckit-tasks/SKILL.md)** - Generate tasks.md
 - **[speckit.implement](../speckit-implement/SKILL.md)** - Execute tasks after Linear sync

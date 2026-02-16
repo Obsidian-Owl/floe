@@ -15,7 +15,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 This skill bridges SpecKit planning with Linear/Beads execution tracking.
 
-**Architecture**: Linear is the source of truth. Beads is a local cache. See [Linear Workflow Guide](../../../docs/guides/linear-workflow.md).
+**Architecture**: Linear is the source of truth for issue tracking.
 
 **Modes**:
 - **No arguments**: Auto-select first ready task
@@ -281,7 +281,6 @@ After completing this skill:
 
 ## References
 
-- **[Linear Workflow Guide](../../../docs/guides/linear-workflow.md)** - Architecture, traceability, detailed patterns
 - **[speckit.tasks](../speckit-tasks/SKILL.md)** - Generate tasks.md
 - **[speckit.taskstolinear](../speckit-taskstolinear/SKILL.md)** - Create Linear issues from tasks
 - **`.specify/memory/constitution.md`** - Project principles (TDD, SOLID, atomic commits)

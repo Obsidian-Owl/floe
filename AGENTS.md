@@ -129,7 +129,7 @@ make demo-e2e          # End-to-end validation
 |-------|----------|
 | **Architecture** | `docs/architecture/` - Four-layer model, plugin system, OCI registry |
 | **Testing Strategy** | `TESTING.md` - K8s-native testing, test organization |
-| **Workflow Integration** | `docs/guides/linear-workflow.md` - SpecKit + Beads + Linear |
+| **Workflow Integration** | `CLAUDE.md` - SpecKit + Linear workflow |
 | **ADRs** | `docs/architecture/adr/` - Architectural decisions |
 
 ---
@@ -180,32 +180,26 @@ Layer 4: DATA           → K8s Jobs (dbt run, dlt ingestion)
 
 ## Development Workflow
 
-### SpecKit + Beads + Linear Integration
+### SpecKit + Linear Integration
 
 **Source of Truth**: Linear (issue tracking)
-**Local Cache**: Beads (offline work)
 **Planning**: SpecKit (feature breakdown)
 
 ```bash
-# 1. Sync from Linear
-bd linear sync --pull
-
-# 2. See available work
+# 1. See available work
 /speckit.implement
 
-# 3. Auto-implement next ready task
+# 2. Auto-implement next ready task
 /speckit.implement  # Claims task, updates Linear, commits
 
-# 4. Pre-PR validation
+# 3. Pre-PR validation
 /speckit.test-review   # Test quality
 /speckit.wiring-check  # Is new code wired into system?
 /speckit.merge-check   # Contract stability, merge readiness
 
-# 5. Create PR
+# 4. Create PR
 /speckit.pr  # Links Linear issues, generates summary
 ```
-
-**Complete Workflow**: See `docs/guides/linear-workflow.md`
 
 ### Development Cycle (with Integration Thinking)
 
@@ -222,7 +216,6 @@ Phase 1: Planning (Integration Thinking Starts Here)
 └── /speckit.taskstolinear → Sync to Linear
 
 Phase 2: Implementation (Per-Task Integration Checks)
-├── bd linear sync --pull → Get task status
 ├── /speckit.implement    → Implement task
 │   ├── Step 7: Check integration (new code reachable)
 │   └── Cleanup: Remove replaced code, orphaned tests
@@ -658,8 +651,6 @@ make help                       # Makefile targets
 make test                       # Run all tests (K8s)
 
 # Debugging
-bd stats                        # Beads issue statistics
-bd ready                        # See available work
 Linear app                      # Team progress view
 ```
 
@@ -671,7 +662,6 @@ Linear app                      # Team progress view
 
 - **Architecture**: `docs/architecture/ARCHITECTURE-SUMMARY.md`
 - **Testing**: `TESTING.md`
-- **Linear Workflow**: `docs/guides/linear-workflow.md`
 - **Constitution**: `.specify/memory/constitution.md` (8 core principles)
 
 ---

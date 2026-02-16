@@ -171,7 +171,6 @@ Review the critic's findings:
 
 ## References
 
-- Full workflow guide: `docs/guides/linear-workflow.md`
 - Testing standards: `TESTING.md`
 - Architecture: `docs/architecture/`
 - Constitution: `.specify/memory/constitution.md`
