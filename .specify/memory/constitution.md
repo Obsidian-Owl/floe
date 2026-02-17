@@ -6,10 +6,6 @@ Modified principles: None
 Added sections:
   - Principle IX: Escalation Over Workaround (NON-NEGOTIABLE)
 Removed sections: None
-Templates requiring updates:
-  - .specify/templates/plan-template.md - no changes needed (escalation is behavioral)
-  - .specify/templates/spec-template.md - no changes needed
-  - .specify/templates/tasks-template.md - no changes needed
 Follow-up TODOs:
   - Audit existing codebase for workaround anti-patterns (pytest.skip, except:pass, weak assertions)
   - Review all Skills for escalation trigger integration

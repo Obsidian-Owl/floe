@@ -316,7 +316,7 @@ NEVER leave a workaround without a tracking issue.
 ## Enforcement
 
 This rule is enforced by:
-- **Pre-PR review** (`/speckit.test-review`): Checks for assertion weakening
+- **Pre-PR review** (`/sw-verify`): Checks for assertion weakening
 - **Architect verification**: Final gate before completion claims
 - **Critic agent**: Reviews for workaround anti-patterns
 - **Constitution compliance**: PR review checks for principle violations

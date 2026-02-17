@@ -390,7 +390,7 @@ def test_create_catalog():
 
 ## Directory Structure Validation
 
-These checks are enforced by `/speckit.test-review`:
+These checks are enforced by `/sw-verify`:
 
 ### DIR-001: No `__init__.py` in test directories
 

@@ -214,7 +214,7 @@ Skills are automatically available. When working on a component:
 | Define semantic layer | cube-semantic-layer | dbt-transformations |
 | Implement compiler | pydantic-schemas | All (integration) |
 | Code quality review | tech-debt-review | - |
-| Pre-PR health check | tech-debt-review | speckit-test-review |
+| Pre-PR health check | tech-debt-review | /sw-verify |
 | Monthly audit | tech-debt-review (--all) | - |
 
 ## Skill Development Guidelines

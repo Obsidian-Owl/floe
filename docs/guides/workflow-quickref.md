@@ -1,69 +1,81 @@
 # Workflow Quick Reference
 
-Quick reference for the floe development workflow with quality gates and automation.
+Quick reference for the floe development workflow with Specwright quality gates and automation.
 
-## Quality Agent Overview
+## Specwright Workflow
+
+```
+Design:    /sw-design -> approve design
+Plan:      /sw-plan -> work units with acceptance criteria
+Build:     /sw-build -> TDD implementation, commit per task
+Verify:    /sw-verify -> fix findings -> re-verify
+Ship:      /sw-ship -> PR with evidence
+```
+
+### Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/sw-design` | Research codebase, design solution |
+| `/sw-plan` | Break design into work units with specs |
+| `/sw-build` | TDD implementation of next work unit |
+| `/sw-verify` | Run quality gates (tests, security, wiring, spec) |
+| `/sw-ship` | Create PR with gate evidence |
+| `/sw-status` | Check current work state and gate results |
+| `/sw-audit` | Periodic codebase health check |
+
+## Quality Agents
 
 ### Test Quality Agents
 
 | Agent | Model | Purpose | Invocation |
 |-------|-------|---------|------------|
-| `test-edge-case-analyzer` | Haiku | Empty, null, bounds, error paths | PostToolUse on test files |
-| `test-isolation-checker` | Haiku | Shared state, fixtures, determinism | PostToolUse on test files |
-| `test-flakiness-predictor` | Sonnet | Random seeds, time.sleep, external deps | Pre-PR |
 | `test-requirement-mapper` | Sonnet | @requirement coverage, gap analysis | Pre-PR |
-| `test-duplication-detector` | Sonnet | Overlapping assertions, redundant tests | Pre-PR |
 | `test-design-reviewer` | Opus | Test architecture, patterns, maintainability | Manual/Full review |
+| `test-debt-analyzer` | Sonnet | Consolidated test debt analysis | Pre-PR |
 
 ### Code Quality Agents
 
 | Agent | Model | Purpose | Invocation |
 |-------|-------|---------|------------|
-| `code-pattern-reviewer-low` | Haiku | Single file anti-patterns | PostToolUse on source files |
 | `code-pattern-reviewer` | Sonnet | Module anti-patterns, refactoring | Pre-PR |
 | `security-scanner` | Sonnet | OWASP, secrets, injection | Pre-PR |
-| `docstring-validator` | Haiku | Google-style, type hints | PostToolUse on source files |
+| `dead-code-detector` | Sonnet | Unused code, orphaned files | Pre-PR |
+| `performance-debt-detector` | Sonnet | N+1, O(n²), sync in async | Pre-PR |
 
-### Quality Gate
+### Platform-Specific Agents
 
 | Agent | Model | Purpose | Invocation |
 |-------|-------|---------|------------|
+| `plugin-quality` | Opus | 11 floe plugin types testing | Pre-PR |
+| `contract-stability` | Opus | CompiledArtifacts contract | Pre-PR |
 | `critic` | Opus | Ruthless plan/implementation reviewer | Pre-PR (blocking) |
+| `docker-log-analyser` | Sonnet | Context-efficient container logs | On demand |
+| `helm-debugger` | Sonnet | Context-efficient K8s debugging | On demand |
 
-## Workflow Commands
+## Quality Gates (Specwright)
 
-### Daily Development
+Gate results are tracked in `.specwright/state/workflow.json`:
+
+| Gate | What It Checks |
+|------|---------------|
+| `gate-build` | Build and test commands pass |
+| `gate-tests` | Test quality, assertion strength, mock discipline |
+| `gate-security` | Secrets, injection, sensitive data |
+| `gate-wiring` | Unused exports, orphaned files, layer violations |
+| `gate-spec` | Every acceptance criterion has evidence |
+
+### Running Gates
 
 ```bash
-# Start session - sync from Linear
-bd linear sync --pull
-bd ready                        # Show ready work
+# Run all gates
+/sw-verify
 
-# Implement with auto-quality checks
-/speckit.implement              # Single task (with confirmation)
-/speckit.implement-epic         # All tasks (no confirmation)
+# Check gate status
+/sw-status
 ```
 
-### Pre-PR Checklist
-
-```bash
-# 1. Test quality review
-/speckit.test-review
-
-# 2. Wiring check (is new code connected?)
-/speckit.wiring-check
-
-# 3. Merge check (contracts, conflicts)
-/speckit.merge-check
-
-# 4. Critic approval (automatic via pre-pr-gate)
-# Agent invoked automatically when running gh pr create
-
-# 5. Create PR
-/speckit.pr
-```
-
-### Quality Scripts
+## Quality Scripts
 
 ```bash
 # Architecture drift detection (runs automatically via hook)
@@ -73,7 +85,7 @@ bd ready                        # Show ready work
 ./scripts/pre-pr-gate
 
 # Invoke specific agent
-./scripts/invoke-agent test-edge-case-analyzer tests/unit/test_compiler.py
+./scripts/invoke-agent test-requirement-mapper tests/unit/test_compiler.py
 
 # Generate contract golden files
 ./scripts/generate-contract-golden [--force]
@@ -92,37 +104,13 @@ When you edit/write Python files, these run automatically:
 
 When you run `gh pr create`:
 - Pre-PR quality gate runs
-- Must have passed /speckit.test-review
-- Must have passed /speckit.wiring-check
-- Must have passed /speckit.merge-check
+- Must have passing Specwright gates (`/sw-verify`)
 - Must have critic OKAY verdict
-
-## Quality State
-
-Quality check results are tracked in `.agent/quality-state.json`:
-
-```json
-{
-  "test_review_passed": true,
-  "integration_check_passed": true,
-  "critic_passed": true,
-  "last_updated": "2026-01-21T08:00:00Z"
-}
-```
-
-## Epic Auto-Mode Recovery
-
-If context compacts during `/speckit.implement-epic`:
-
-1. State is saved in `.agent/epic-auto-mode`
-2. SessionStart hook detects the file
-3. Claude automatically continues implementation
-4. NO user confirmation needed
 
 ## Model Tier Routing
 
 | Tier | Model | When Used |
-|------|-------|-----------|
+|------|-------|-----------:|
 | LOW | Haiku | Fast, focused analysis (single file) |
 | MEDIUM | Sonnet | Module analysis, cross-file patterns |
 | HIGH | Opus | Architecture review, critic decisions |
@@ -131,11 +119,9 @@ If context compacts during `/speckit.implement-epic`:
 
 ### "Pre-PR gate failed"
 
-Run the required checks:
+Run the quality gates:
 ```bash
-/speckit.test-review
-/speckit.wiring-check
-/speckit.merge-check
+/sw-verify
 ```
 
 ### "Architecture drift detected"
@@ -161,12 +147,12 @@ Review the critic's findings:
 ## Key Files
 
 | File | Purpose |
-|------|---------|
+|------|---------:|
 | `.claude/settings.json` | Hook configuration |
 | `.claude/agents/*.md` | Agent definitions |
 | `.claude/skills/*/SKILL.md` | Skill definitions |
-| `.agent/epic-auto-mode` | Epic recovery state |
-| `.agent/quality-state.json` | Quality check results |
+| `.specwright/state/workflow.json` | Work unit state and gate results |
+| `.specwright/work/{id}/` | Design, spec, plan, evidence per work unit |
 | `tests/fixtures/golden/` | Contract baselines |
 
 ## References
