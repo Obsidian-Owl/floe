@@ -119,5 +119,5 @@ Cognee MCP server exposes three tools to Claude Code:
 
 - [Cognee GitHub](https://github.com/topoteretes/cognee)
 - [MCP Protocol](https://modelcontextprotocol.io/)
-- [ADR-0042: Linear + Beads Traceability](0042-linear-beads-traceability.md) (related)
+- [ADR-0042: Linear + Beads Traceability](0042-linear-beads-traceability.md) (superseded — beads removed)
 - [Epic 10A: Agent Memory](../../plans/epics/10-contributor/epic-10a-agent-memory.md)

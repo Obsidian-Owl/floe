@@ -1,10 +1,11 @@
 {
   "version": "0.2.0",
   "currentWork": {
-    "id": "docker-packaging-strategy",
-    "phase": "verifying",
-    "tasksCompleted": ["T66", "T67", "T68", "T69", "T70"],
-    "startedAt": "2026-02-16T18:00:00Z"
+    "id": "toolchain-cleanup",
+    "status": "building",
+    "intensity": "full",
+    "workDir": ".specwright/work/toolchain-cleanup",
+    "startedAt": "2026-02-17T12:00:00Z"
   },
   "completedWork": [
     {
@@ -24,6 +25,13 @@
       "phase": "shipped",
       "startedAt": "2026-02-15T18:35:00Z",
       "completedAt": "2026-02-16T17:00:00Z"
+    },
+    {
+      "id": "docker-packaging-strategy",
+      "phase": "shipped",
+      "startedAt": "2026-02-16T18:00:00Z",
+      "completedAt": "2026-02-17T00:00:00Z",
+      "pr": "https://github.com/Obsidian-Owl/floe/pull/89"
     }
   ],
   "workUnits": [
@@ -37,7 +45,8 @@
     { "id": "wu-8-polish", "description": "Polaris Health Check + Final Verification", "status": "shipped", "order": 8, "tasksCompleted": ["T42", "T43", "T44", "T45", "T48"], "pr": "https://github.com/Obsidian-Owl/floe/pull/82" },
     { "id": "wu-9-config-pipeline-flow", "description": "Schema changes + governance/observability flow through builder", "status": "shipped", "order": 9, "tasksCompleted": ["T49", "T50", "T51", "T52", "T53", "T54", "T55"], "pr": "https://github.com/Obsidian-Owl/floe/pull/84" },
     { "id": "wu-10-polaris-test-fixes", "description": "Pin Polaris 1.2.1, xfail cleanup, test assertion fixes", "status": "shipped", "order": 10, "tasksCompleted": ["T56", "T57", "T58", "T59", "T60"], "pr": "https://github.com/Obsidian-Owl/floe/pull/85" },
-    { "id": "wu-11-demo-packaging", "description": "Production-like demo packaging: Dockerfile, Makefile targets, Helm values, generated definitions", "status": "shipped", "order": 11, "tasksCompleted": ["T61", "T62", "T63", "T64", "T65"], "pr": "https://github.com/Obsidian-Owl/floe/pull/88" }
+    { "id": "wu-11-demo-packaging", "description": "Production-like demo packaging: Dockerfile, Makefile targets, Helm values, generated definitions", "status": "shipped", "order": 11, "tasksCompleted": ["T61", "T62", "T63", "T64", "T65"], "pr": "https://github.com/Obsidian-Owl/floe/pull/88" },
+    { "id": "wu-12-docker-packaging-strategy", "description": "3-stage uv build replacing vendor base image", "status": "shipped", "order": 12, "tasksCompleted": ["T66", "T67", "T68", "T69", "T70"], "pr": "https://github.com/Obsidian-Owl/floe/pull/89" }
   ],
   "gates": {
     "wu-1-bootstrap": {
@@ -51,71 +60,72 @@
       "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T16:00:00Z" },
       "gate-tests": { "status": "WARN", "findings": { "block": 0, "warn": 5, "info": 5 }, "timestamp": "2026-02-13T16:05:00Z" },
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 4 }, "timestamp": "2026-02-13T16:05:00Z" },
-      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 2, "info": 5 }, "timestamp": "2026-02-13T16:10:00Z", "note": "Initially FAIL (2 BLOCK) — fixed in commit 0c5e8c5" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 2, "info": 5 }, "timestamp": "2026-02-13T16:10:00Z" },
       "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T16:05:00Z" }
     },
     "wu-3-dagster": {
       "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 0 }, "timestamp": "2026-02-13T17:00:00Z" },
-      "gate-tests": { "status": "WARN", "findings": { "block": 0, "warn": 5, "info": 4 }, "timestamp": "2026-02-13T17:00:00Z", "note": "Initially 2 BLOCK — fixed in commit 3e81fc6" },
+      "gate-tests": { "status": "WARN", "findings": { "block": 0, "warn": 5, "info": 4 }, "timestamp": "2026-02-13T17:00:00Z" },
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 2 }, "timestamp": "2026-02-13T17:00:00Z" },
       "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 3, "info": 1 }, "timestamp": "2026-02-13T17:00:00Z" },
-      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 2, "info": 0 }, "timestamp": "2026-02-13T17:00:00Z", "note": "WU3-AC1/AC2 WARN: Dagster 2.0 unreleased, user-approved deviation" }
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 2, "info": 0 }, "timestamp": "2026-02-13T17:00:00Z" }
     },
     "wu-4-otel": {
       "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T18:05:00Z" },
-      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-13T18:30:00Z", "note": "5 WARNs resolved in commit da7415f" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-13T18:30:00Z" },
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-13T18:10:00Z" },
-      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 6 }, "timestamp": "2026-02-13T18:30:00Z", "note": "Dead fixture + operator precedence resolved" },
-      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T18:30:00Z", "note": "F541 + all WARNs resolved" }
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 6 }, "timestamp": "2026-02-13T18:30:00Z" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T18:30:00Z" }
     },
     "wu-5-dbt": {
-      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T19:30:00Z", "note": "Format fix committed in 4dfe43d, 18/18 tests pass" },
-      "gate-tests": { "status": "WARN", "findings": { "block": 0, "warn": 10, "info": 5 }, "timestamp": "2026-02-13T19:35:00Z", "note": "8 tests missing individual docstring classification, strict=False on xfail, silent continue as implicit skip" },
-      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-13T19:35:00Z", "note": "1 Medium theoretical (path traversal in glob), 2 Low" },
-      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-13T19:35:00Z", "note": "Duplicate project_root fixture (INFO), unused profile_name ARG002 (INFO)" },
-      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T19:45:00Z", "note": "WU5-AC2 WARN resolved: helm_release_health guard added in d94335f" }
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T19:30:00Z" },
+      "gate-tests": { "status": "WARN", "findings": { "block": 0, "warn": 10, "info": 5 }, "timestamp": "2026-02-13T19:35:00Z" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-13T19:35:00Z" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-13T19:35:00Z" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-13T19:45:00Z" }
     },
     "wu-6-plugin-pipeline": {
-      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T08:40:00Z", "note": "7732 unit + 820 contract tests pass, lint/format clean" },
-      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-14T08:40:00Z", "note": "All 4 BLOCKs + 12 WARNs + 6 INFOs resolved. 3 remaining INFOs are pre-existing/justified." },
-      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-14T08:40:00Z", "note": "Token/principal validation added, debug logging added. 1 INFO: internal paths in logs." },
-      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T08:40:00Z", "note": "All findings resolved: re-exports added, logging added, RBACPlugin comment added." },
-      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-14T08:40:00Z", "note": "All 8 ACs mapped with evidence. AC7 INFO: E2E env unavailable (Helm pending-rollback)." }
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T08:40:00Z" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-14T08:40:00Z" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-14T08:40:00Z" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T08:40:00Z" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-14T08:40:00Z" }
     },
     "wu-7-secrets-cve": {
-      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T11:15:00Z", "note": "7725 unit + 820 contract pass, lint/format clean" },
-      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-14T11:15:00Z", "note": "No new tests — config-only change. I1: expected for pyproject.toml edits." },
-      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T11:15:00Z", "note": "Bandit HIGH=0, pip-audit 0 CVEs. protobuf 6.33.4→6.33.5 fixes CVE-2026-0994." },
-      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T11:15:00Z", "note": "Config-only change, no wiring applicable." },
-      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T11:15:00Z", "note": "All 5 ACs mapped with evidence, all 3 BCs addressed." }
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T11:15:00Z" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-14T11:15:00Z" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T11:15:00Z" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T11:15:00Z" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-14T11:15:00Z" }
     },
     "wu-8-polish": {
-      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-15T07:25:00Z", "note": "7732 unit + 820 contract pass, lint/format clean (v2 post-fix)" },
-      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-15T07:30:00Z", "note": "All 7 prior WARNs resolved. Negative-path governance test added. strict=True on all xfails." },
-      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-15T07:30:00Z", "note": "No new security issues. 7 advisory observations (pre-existing test credentials, shell patterns)." },
-      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 6 }, "timestamp": "2026-02-15T07:30:00Z", "note": "Previous WARN resolved. Port 8182 consistent across all 5 layers. Combined port-forward cleanup correct." },
-      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-15T07:30:00Z", "note": "All 6 ACs mapped. 2 INFO: T46/T47 need K8s for verification." }
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-15T07:25:00Z" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-15T07:30:00Z" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-15T07:30:00Z" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 6 }, "timestamp": "2026-02-15T07:30:00Z" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-15T07:30:00Z" }
     },
     "wu-10-polaris-test-fixes": {
-      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T09:45:00Z", "note": "7794 unit + 843 contract tests pass, lint/format clean" },
-      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 8 }, "timestamp": "2026-02-16T09:50:00Z", "note": "2 WARNs resolved: storage config → contract tier, health_check call site fix. 8 INFO remaining." },
-      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T09:50:00Z", "note": "No secrets, injection, or CVE issues. 1 INFO: pre-existing shell patterns." },
-      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T09:50:00Z", "note": "All patterns verified correct." },
-      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-16T09:55:00Z", "note": "All 7 ACs mapped with evidence. 2 INFO: BC-10.1/BC-10.2 need K8s for verification." }
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T09:45:00Z" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 8 }, "timestamp": "2026-02-16T09:50:00Z" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T09:50:00Z" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T09:50:00Z" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-16T09:55:00Z" }
     },
     "wu-11-demo-packaging": {
-      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T16:00:00Z", "note": "7794 unit + 843 contract tests pass, lint/format clean" },
-      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 5, "info": 8 }, "timestamp": "2026-02-16T16:20:00Z", "note": "2 BLOCKs resolved: requirement markers + assertion strength. 3 WARNs resolved: values-demo parity tests added. 5 remaining WARNs justified (precondition assertions, redundant pip test, helper behavior, import parser scope)." },
-      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T16:05:00Z", "note": "No vulnerabilities. 1 INFO: test credentials expected for Kind cluster." },
-      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-16T16:05:00Z", "note": "All wiring correct: Dockerfile reachable via Makefile, Helm values consistent, module names align." },
-      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T16:10:00Z", "note": "8/9 ACs PASS, 4/4 BCs PASS. 1 WARN: AC-11.4 needs K8s runtime verification." }
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T16:00:00Z" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 5, "info": 8 }, "timestamp": "2026-02-16T16:20:00Z" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T16:05:00Z" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-16T16:05:00Z" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T16:10:00Z" }
     },
-    "docker-packaging-strategy": {
-      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T18:45:00Z", "note": "118 unit + 843 contract tests pass, ruff lint/format clean" },
-      "gate-tests": { "status": "WARN", "findings": { "block": 0, "warn": 3, "info": 3 }, "timestamp": "2026-02-16T18:50:00Z", "note": "All 118 tests have requirement markers. 3 WARN: weak >= assertions (pre-existing from WU-11). 3 INFO: missing edge case tests." },
-      "gate-security": { "status": "WARN", "findings": { "block": 0, "warn": 2, "info": 3 }, "timestamp": "2026-02-16T18:50:00Z", "note": "2 WARN: shell expansion quoting in Dockerfile, Makefile input validation. 3 INFO: stderr redirect, demo credentials, non-root USER." },
-      "gate-wiring": { "status": "WARN", "findings": { "block": 0, "warn": 3, "info": 2 }, "timestamp": "2026-02-16T18:50:00Z", "note": "3 WARN: vendor image in default values.yaml (out of WU-12 scope), hardcoded COPY list, ARG re-declaration comment. 2 INFO: floe-iceberg in export (correct), s3 maps to no package (correct)." },
-      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T18:55:00Z", "note": "All 10 ACs mapped to evidence. All 4 BCs satisfied. 1 INFO: AC-12.6 multi-arch tested via Makefile --platform, not runtime verified." }
+    "wu-12-docker-packaging-strategy": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-16T18:45:00Z" },
+      "gate-tests": { "status": "WARN", "findings": { "block": 0, "warn": 3, "info": 3 }, "timestamp": "2026-02-16T18:50:00Z" },
+      "gate-security": { "status": "WARN", "findings": { "block": 0, "warn": 2, "info": 3 }, "timestamp": "2026-02-16T18:50:00Z" },
+      "gate-wiring": { "status": "WARN", "findings": { "block": 0, "warn": 3, "info": 2 }, "timestamp": "2026-02-16T18:50:00Z" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-16T18:55:00Z" }
     }
-  }
+  },
+  "lastUpdated": "2026-02-17T12:00:00Z"
 }

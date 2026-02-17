@@ -1,0 +1,166 @@
+{
+  "version": "0.3.0",
+  "project": {
+    "name": "floe",
+    "description": "Open-source data platform framework with plugin architecture",
+    "languages": ["python"],
+    "pythonVersion": "3.11",
+    "packageManager": "uv",
+    "testRunner": "pytest",
+    "linter": "ruff",
+    "formatter": "ruff",
+    "typeChecker": "mypy --strict",
+    "securityScanner": "bandit",
+    "framework": "dagster",
+    "monorepo": true,
+    "packages": [
+      "packages/floe-core",
+      "packages/floe-iceberg"
+    ],
+    "plugins": [
+      "plugins/floe-alert-alertmanager",
+      "plugins/floe-alert-email",
+      "plugins/floe-alert-slack",
+      "plugins/floe-alert-webhook",
+      "plugins/floe-catalog-polaris",
+      "plugins/floe-compute-duckdb",
+      "plugins/floe-dbt-core",
+      "plugins/floe-dbt-fusion",
+      "plugins/floe-identity-keycloak",
+      "plugins/floe-ingestion-dlt",
+      "plugins/floe-lineage-marquez",
+      "plugins/floe-network-security-k8s",
+      "plugins/floe-orchestrator-dagster",
+      "plugins/floe-quality-dbt",
+      "plugins/floe-quality-gx",
+      "plugins/floe-rbac-k8s",
+      "plugins/floe-secrets-infisical",
+      "plugins/floe-secrets-k8s",
+      "plugins/floe-semantic-cube",
+      "plugins/floe-telemetry-console",
+      "plugins/floe-telemetry-jaeger"
+    ],
+    "helm": {
+      "chartPath": "charts/floe-platform",
+      "valuesFiles": ["values.yaml", "values-test.yaml"]
+    }
+  },
+  "commands": {
+    "build": "make check",
+    "test": "uv run pytest",
+    "testUnit": "uv run pytest packages/ plugins/ --ignore-glob='**/integration/**' --ignore-glob='**/e2e/**' -v --tb=short -x",
+    "testContract": "uv run pytest tests/contract/ -v --tb=short -x",
+    "testE2e": "make test-e2e",
+    "lint": "uv run ruff check .",
+    "format": "uv run ruff format --check .",
+    "typecheck": "uv run mypy --strict packages/ testing/",
+    "security": "uv run bandit -c pyproject.toml -r packages/ -ll",
+    "helmLint": "./testing/ci/lint-helm.sh"
+  },
+  "gates": {
+    "enabled": ["gate-build", "gate-tests", "gate-security", "gate-wiring", "gate-spec"],
+    "thresholds": {
+      "coverage": 80,
+      "traceability": 80,
+      "securitySeverity": "high"
+    }
+  },
+  "git": {
+    "strategy": "trunk-based",
+    "baseBranch": "main",
+    "branchPrefix": "feat/",
+    "mergeStrategy": "squash",
+    "prRequired": true,
+    "commitFormat": "conventional",
+    "commitTemplate": null,
+    "branchPerWorkUnit": true,
+    "cleanupBranch": true,
+    "prTool": "gh"
+  },
+  "conventions": {
+    "testTiers": ["unit", "contract", "integration", "e2e"],
+    "testLocations": {
+      "unit": "{package}/tests/unit/",
+      "contract": "tests/contract/",
+      "integration": "{package}/tests/integration/",
+      "e2e": "tests/e2e/"
+    }
+  },
+  "anchorDocs": {
+    "constitution": ".specwright/CONSTITUTION.md",
+    "charter": ".specwright/CHARTER.md",
+    "architecture": "docs/architecture/ARCHITECTURE-SUMMARY.md",
+    "testing": "TESTING.md",
+    "claudeMd": "CLAUDE.md"
+  },
+  "guardrails": {
+    "session": {
+      "provider": "claude-code-hooks",
+      "configFile": ".claude/settings.json",
+      "checks": [
+        "session-recover",
+        "save-epic-checkpoint",
+        "check-forbidden-git-patterns",
+        "pre-pr-gate",
+        "check-sw-gates",
+        "check-e2e-ports",
+        "ruff-format-on-save",
+        "ruff-check-fix-on-save",
+        "check-architecture-drift",
+        "validate-pydantic-contract",
+        "sql-dbt-reminder"
+      ]
+    },
+    "commit": {
+      "provider": "pre-commit",
+      "configFile": ".pre-commit-config.yaml",
+      "checks": [
+        "ruff-lint-fix",
+        "ruff-format",
+        "detect-secrets",
+        "trailing-whitespace",
+        "end-of-file-fixer",
+        "check-yaml",
+        "check-added-large-files",
+        "check-merge-conflict",
+        "debug-statements",
+        "check-case-conflict",
+        "bandit",
+        "constitution-check",
+        "no-hardcoded-sleep",
+        "no-dbt-runner-in-orchestrator",
+        "agent-lint"
+      ]
+    },
+    "push": {
+      "provider": "pre-commit",
+      "configFile": ".pre-commit-config.yaml",
+      "checks": [
+        "ruff-check",
+        "ruff-format-check",
+        "mypy-strict",
+        "bandit-security",
+        "uv-secure",
+        "import-linter",
+        "pytest-unit",
+        "pytest-contract",
+        "no-hardcoded-sleep",
+        "traceability-80pct",
+        "helm-lint"
+      ]
+    },
+    "ci": {
+      "provider": "github-actions",
+      "configDir": ".github/workflows/",
+      "workflows": [
+        "ci.yml",
+        "helm-ci.yaml",
+        "security.yml",
+        "nightly.yml",
+        "codspeed.yml",
+        "release.yml",
+        "helm-release.yaml"
+      ]
+    }
+  }
+}

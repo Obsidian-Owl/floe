@@ -2,7 +2,7 @@
 
 **Date**: 2026-02-07
 **Spec**: `specs/4f-ingestion-plugin/spec.md`
-**Prior Research**: `.omc/research/epic-4f-ingestion-plugin-research.md`
+**Prior Research**: migrated from legacy OMC research notes
 
 ## Prior Decisions (from Agent Memory & Research Synthesis)
 
