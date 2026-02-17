@@ -147,7 +147,7 @@ Review the critic's findings:
 ## Key Files
 
 | File | Purpose |
-|------|---------:|
+|------|---------|
 | `.claude/settings.json` | Hook configuration |
 | `.claude/agents/*.md` | Agent definitions |
 | `.claude/skills/*/SKILL.md` | Skill definitions |
