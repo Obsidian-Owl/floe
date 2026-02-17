@@ -110,7 +110,7 @@ When you run `gh pr create`:
 ## Model Tier Routing
 
 | Tier | Model | When Used |
-|------|-------|-----------:|
+|------|-------|-----------|
 | LOW | Haiku | Fast, focused analysis (single file) |
 | MEDIUM | Sonnet | Module analysis, cross-file patterns |
 | HIGH | Opus | Architecture review, critic decisions |
