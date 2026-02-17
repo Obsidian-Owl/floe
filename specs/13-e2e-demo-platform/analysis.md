@@ -81,4 +81,4 @@ All findings resolved:
 
 ## Next Action
 
-Proceed to `/speckit-taskstolinear` to push tasks to Linear project.
+Push tasks to Linear via Linear MCP plugin.

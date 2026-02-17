@@ -2,7 +2,7 @@
 name: contract-stability
 description: >
   Specialized agent for floe contract regression testing.
-  Invoked by /speckit.test-review command in parallel with other agents.
+  Invoked by /sw-verify command in parallel with other agents.
   Validates CompiledArtifacts schema stability and cross-package contracts.
 tools: Read, Grep, Glob, Bash
 model: opus

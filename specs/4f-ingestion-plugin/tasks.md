@@ -35,7 +35,7 @@ Key differences:
 | Phase 3: Testing (T016–T028) | 13 | Phases 3–10 (integrated with stories) | 28 |
 | **Total** | **28** | **Total** | **52+** |
 
-See detailed mapping in `.omc/research/epic-4f-tasks-research-items-5-6.md`.
+See detailed mapping in prior research (migrated from legacy OMC research notes).
 
 ## Path Conventions
 

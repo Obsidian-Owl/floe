@@ -424,7 +424,7 @@ Starting Score: 100
 After completing this skill:
 - **Fix P0 issues**: Address critical issues immediately
 - **Track P1 issues**: Create Linear tickets for high-priority debt
-- **Continue workflow**: Run `/speckit.test-review`, `/speckit.wiring-check`, and `/speckit.merge-check` before PR
+- **Continue workflow**: Run `/sw-verify` before PR to validate all quality gates
 
 ## References
 

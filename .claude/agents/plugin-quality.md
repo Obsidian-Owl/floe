@@ -2,7 +2,7 @@
 name: plugin-quality
 description: >
   Specialized agent for floe plugin testing completeness.
-  Invoked by /speckit.test-review command in parallel with other agents.
+  Invoked by /sw-verify command in parallel with other agents.
   Validates that all 11 plugin types are tested with proper lifecycle coverage.
 tools: Read, Grep, Glob, Bash
 model: opus

@@ -54,7 +54,7 @@ ADR numbers are **immutable** once assigned. Gaps in numbering occur when:
 | [0039](0039-multi-environment-promotion.md) | Multi-Environment Artifact Promotion | Accepted |
 | [0040](0040-artifact-immutability-gc.md) | Artifact Immutability and Garbage Collection | Accepted |
 | [0041](0041-artifact-signing-verification.md) | Artifact Signing and Verification | Accepted |
-| [0042](0042-linear-beads-traceability.md) | Linear + Beads Traceability Integration | Accepted |
+| [0042](0042-linear-beads-traceability.md) | Linear + Beads Traceability Integration | Superseded |
 | [0043](0043-dbt-runtime-abstraction.md) | dbt Compilation Environment Abstraction | Accepted |
 | [0044](0044-unified-data-quality-plugin.md) | Unified Data Quality Plugin Architecture | Accepted |
 | [0045](0045-compilation-caching-strategy.md) | Compilation Caching Strategy | Accepted |

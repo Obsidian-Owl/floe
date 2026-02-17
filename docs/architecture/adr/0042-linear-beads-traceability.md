@@ -21,4 +21,4 @@ Replace custom traceability module with Linear (source of truth) + Beads (local 
 
 ## Status
 
-Accepted - Implemented in Epic 1
+Superseded — beads removed, Linear MCP used directly (2026-02)

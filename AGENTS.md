@@ -116,7 +116,7 @@ make lint              # Ruff linting + formatting
 make typecheck         # mypy --strict
 
 # Pre-PR Review
-/speckit.test-review   # Validate test quality before PR
+/sw-verify             # Pre-PR quality gates
 
 # Deployment
 make deploy-local      # Deploy platform services to Kind
@@ -129,7 +129,7 @@ make demo-e2e          # End-to-end validation
 |-------|----------|
 | **Architecture** | `docs/architecture/` - Four-layer model, plugin system, OCI registry |
 | **Testing Strategy** | `TESTING.md` - K8s-native testing, test organization |
-| **Workflow Integration** | `CLAUDE.md` - SpecKit + Linear workflow |
+| **Workflow Integration** | `CLAUDE.md` - Specwright + Linear workflow |
 | **ADRs** | `docs/architecture/adr/` - Architectural decisions |
 
 ---
@@ -180,25 +180,24 @@ Layer 4: DATA           → K8s Jobs (dbt run, dlt ingestion)
 
 ## Development Workflow
 
-### SpecKit + Linear Integration
+### Specwright + Linear Integration
 
 **Source of Truth**: Linear (issue tracking)
-**Planning**: SpecKit (feature breakdown)
+**Planning**: Specwright (design, plan, build, verify, ship)
 
 ```bash
-# 1. See available work
-/speckit.implement
+# 1. Design and plan
+/sw-design               # Research and design solution
+/sw-plan                 # Break into work units with acceptance criteria
 
-# 2. Auto-implement next ready task
-/speckit.implement  # Claims task, updates Linear, commits
+# 2. Implement
+/sw-build                # TDD implementation of next work unit
 
 # 3. Pre-PR validation
-/speckit.test-review   # Test quality
-/speckit.wiring-check  # Is new code wired into system?
-/speckit.merge-check   # Contract stability, merge readiness
+/sw-verify               # Quality gates (tests, security, wiring, spec)
 
 # 4. Create PR
-/speckit.pr  # Links Linear issues, generates summary
+/sw-ship                 # Links Linear issues, generates summary
 ```
 
 ### Development Cycle (with Integration Thinking)
@@ -206,26 +205,23 @@ Layer 4: DATA           → K8s Jobs (dbt run, dlt ingestion)
 Integration is planned upfront (Phase 1), not discovered later. Each phase has integration checkpoints.
 
 ```
-Phase 1: Planning (Integration Thinking Starts Here)
-├── /speckit.specify     → Create spec.md
+Phase 1: Design + Planning (Integration Thinking Starts Here)
+├── /sw-design           → Research codebase, design solution
 │   └── Document: entry points, dependencies, outputs
-├── /speckit.clarify     → Resolve ambiguities (incl. integration)
-├── /speckit.plan        → Generate plan.md
+├── /sw-plan             → Break into work units with specs
 │   └── Document: integration design, cleanup required
-├── /speckit.tasks       → Create tasks.md
-└── /speckit.taskstolinear → Sync to Linear
+└── Linear MCP           → Sync issues to Linear
 
 Phase 2: Implementation (Per-Task Integration Checks)
-├── /speckit.implement    → Implement task
-│   ├── Step 7: Check integration (new code reachable)
-│   └── Cleanup: Remove replaced code, orphaned tests
-└── Repeat until all tasks complete
+├── /sw-build            → TDD implementation per work unit
+│   ├── RED: Tests written first (tester agent)
+│   ├── GREEN: Minimal code to pass (executor agent)
+│   └── REFACTOR: Clean up, one commit per task
+└── Repeat until all work units complete
 
 Phase 3: Pre-PR Validation
-├── /speckit.test-review   → Test quality
-├── /speckit.wiring-check  → Is new code wired into system?
-├── /speckit.merge-check   → Safe to merge? (contracts, conflicts)
-└── /speckit.pr            → Create PR
+├── /sw-verify           → Quality gates (test, security, wiring, spec)
+└── /sw-ship             → Create PR
 
 Phase 4: Merge
 └── Merge when CI passes
@@ -455,7 +451,7 @@ def create_assets(spec: FloeSpec):  # NO! Use CompiledArtifacts
 
 **Pre-PR Review**:
 ```bash
-/speckit.test-review  # Validates quality, traceability, security
+/sw-verify            # Validates quality, traceability, security
 ```
 
 **See**: `TESTING.md` for complete testing guide
@@ -511,7 +507,7 @@ floe/
 │   ├── base_classes/    # IntegrationTestBase, BaseProfileGeneratorTests
 │   ├── fixtures/        # Shared test fixtures
 │   ├── k8s/             # Kind configuration, Helm values
-│   └── traceability/    # Test quality analysis (/speckit.test-review)
+│   └── traceability/    # Test quality analysis (/sw-verify)
 └── docs/
 ```
 
@@ -625,7 +621,7 @@ The **agent-memory** system provides persistent context across sessions via a Co
 ### Automatic Integration
 
 - **Session Start**: Hook automatically queries for prior context (see startup logs)
-- **SpecKit Skills**: `/speckit.plan` and `/speckit.specify` search memory before decisions
+- **Specwright Skills**: `/sw-design` and `/sw-plan` search memory before decisions
 - **Epic Recovery**: SessionStart hook detects `.agent/epic-auto-mode` after compaction
 
 ### If Agent-Memory Unavailable
@@ -647,7 +643,7 @@ All memory operations are **non-blocking**. If `COGNEE_API_KEY` or `OPENAI_API_K
 make help                       # Makefile targets
 
 # Testing
-/speckit.test-review            # Pre-PR test quality review
+/sw-verify                      # Pre-PR quality gates
 make test                       # Run all tests (K8s)
 
 # Debugging

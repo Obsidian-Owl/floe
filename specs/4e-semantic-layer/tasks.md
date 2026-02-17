@@ -385,4 +385,4 @@ With multiple developers:
 - DuckDB extension (US4) only modifies an existing plugin file - no new package needed
 - Total: 51 tasks across 12 phases (including Phase 6a: Orchestrator Wiring)
 - Task IDs in this file (T001-T051) are organized by user story and do not map 1:1 to plan.md task IDs.
-- T047-T051 (Orchestrator Wiring) were added by /speckit-analyze gap analysis to ensure the semantic layer plugin is properly wired into the orchestrator abstractions.
+- T047-T051 (Orchestrator Wiring) were added by gap analysis to ensure the semantic layer plugin is properly wired into the orchestrator abstractions.

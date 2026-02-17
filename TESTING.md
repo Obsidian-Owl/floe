@@ -39,7 +39,7 @@ make test
 make check
 
 # Pre-PR test quality review
-/speckit.test-review
+/sw-verify
 ```
 
 ---
@@ -172,7 +172,7 @@ Tests run in stages:
 Before creating a PR, validate test quality:
 
 ```bash
-/speckit.test-review
+/sw-verify
 ```
 
 **Validates**:
@@ -185,7 +185,7 @@ Before creating a PR, validate test quality:
 
 **Output**: Structured findings table with severity levels (CRITICAL, MAJOR, MINOR)
 
-**See**: `.claude/commands/speckit.test-review.md`
+**See**: Specwright `/sw-verify` gate-tests
 
 ---
 
@@ -873,10 +873,10 @@ kubectl wait --for=condition=ready pod -l app=polaris --timeout=120s
 - **Migration Plan**: `docs/plan/MIGRATION-ROADMAP.md` (Epic 2: K8s-Native Testing)
 - **Test Organization Rules**: `.claude/rules/test-organization.md`
 - **Testing Standards**: `.claude/rules/testing-standards.md`
-- **Pre-PR Review Command**: `.claude/commands/speckit.test-review.md`
+- **Pre-PR Review**: Specwright `/sw-verify` quality gates
 - **Kind Configuration**: `testing/k8s/kind-config.yaml`
 - **Helm Values**: `testing/k8s/values-test.yaml`
 
 ---
 
-**Remember**: All integration and E2E tests run in Kubernetes for production parity. Use `/speckit.test-review` before every PR.
+**Remember**: All integration and E2E tests run in Kubernetes for production parity. Use `/sw-verify` before every PR.

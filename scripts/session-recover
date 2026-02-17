@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Session Recovery Script for Claude Code Integration
 #
-# This script integrates agent-memory session recovery with bd prime.
+# This script integrates agent-memory session recovery.
 # It attempts to recover prior session context from the knowledge graph
 # based on the current working directory or specified work area.
 #
@@ -103,33 +103,33 @@ output_phase_context() {
         planning)
             cat << 'EOF'
 PHASE: Planning
-CONTEXT: Constitution, architecture, SpecKit workflow
-SKILLS: specify, clarify, plan, tasks
-NEXT: /speckit.specify or /speckit.plan
+CONTEXT: Constitution, architecture, Specwright workflow
+SKILLS: sw-design, sw-plan
+NEXT: /sw-design or /sw-plan
 EOF
             ;;
         coding)
             cat << 'EOF'
 PHASE: Coding
 CONTEXT: Type hints, Pydantic v2, atomic commits
-SKILLS: implement, dbt-skill, pydantic-skill, dagster-skill
-NEXT: /speckit.implement
+SKILLS: sw-build, dbt-skill, pydantic-skill, dagster-skill
+NEXT: /sw-build
 EOF
             ;;
         testing)
             cat << 'EOF'
 PHASE: Testing
 CONTEXT: K8s-native, 100% markers, >80% coverage
-SKILLS: testing-skill, test-review
-NEXT: make test-unit or /speckit.test-review
+SKILLS: testing-skill, sw-verify
+NEXT: make test-unit or /sw-verify
 EOF
             ;;
         pre-pr)
             cat << 'EOF'
 PHASE: Pre-PR
 CONTEXT: Quality gates MUST pass
-SKILLS: test-review, wiring-check, merge-check
-NEXT: /speckit.test-review then /speckit.pr
+SKILLS: sw-verify, sw-ship
+NEXT: /sw-verify then /sw-ship
 EOF
             ;;
         epic-implementation)
@@ -140,7 +140,7 @@ EOF
 PHASE: Exploration
 CONTEXT: Codebase familiarization
 SKILLS: Use Task(Explore) for codebase search
-NEXT: Ask questions or /speckit.specify for new feature
+NEXT: Ask questions or /sw-design for new feature
 EOF
             ;;
     esac
@@ -238,10 +238,10 @@ EPIC AUTO-MODE DETECTED
 You were implementing tasks in auto-mode before context compaction.
 
 To continue automatic implementation:
-  /speckit.implement-epic
+  /sw-build
 
 To implement tasks one at a time:
-  /speckit.implement
+  /sw-build
 
 ================================================================================
 EOF

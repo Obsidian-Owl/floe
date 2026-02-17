@@ -307,7 +307,7 @@ When escalation identifies a problem that won't be fixed immediately:
 
 1. **Create a GitHub Issue** in the repo with label `tech-debt` or `architecture`
 2. **Add a code comment** with the issue reference: `# TODO(FLO-XXX): description`
-3. **Record in session notes** via `bd update` or notepad
+3. **Record in session notes** via notepad or session memory
 
 NEVER leave a workaround without a tracking issue.
 
@@ -316,7 +316,7 @@ NEVER leave a workaround without a tracking issue.
 ## Enforcement
 
 This rule is enforced by:
-- **Pre-PR review** (`/speckit.test-review`): Checks for assertion weakening
+- **Pre-PR review** (`/sw-verify`): Checks for assertion weakening
 - **Architect verification**: Final gate before completion claims
 - **Critic agent**: Reviews for workaround anti-patterns
 - **Constitution compliance**: PR review checks for principle violations

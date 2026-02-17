@@ -123,7 +123,7 @@ Quick version (skills auto-invoke when you mention these):
 - [ ] Link to detailed docs rather than duplicate content
 - [ ] Update skill descriptions with current year (2026) in research queries
 - [ ] Archive rules that haven't been referenced in 60 days
-- [ ] Run `bd stats` monthly to verify rule effectiveness
+- [ ] Review `/sw-audit` findings monthly for rule effectiveness
 
 ---
 

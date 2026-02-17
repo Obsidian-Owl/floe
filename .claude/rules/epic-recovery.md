@@ -15,7 +15,7 @@ fi
 1. **Read the state file** to understand current context
 2. **Continue implementing automatically** - do NOT wait for user prompt
 3. **Follow the workflow**:
-   - Sync from Linear: `bd linear sync --pull`
+   - Check workflow state in `.specwright/state/workflow.json`
    - Find next ready task (status: backlog/unstarted)
    - Implement (TDD, SOLID, atomic commits)
    - Update Linear status to Done

@@ -10,12 +10,20 @@
 | `**/assets.py`, `**/resources.py`, `**/io_managers.py` | `dagster-skill` | Orchestration |
 | `**/test_*.py`, `**/conftest.py` | `testing-skill` | Test writing |
 
-## Skill Chains (See `.claude/skill-chains.json`)
+## Specwright Workflow
+
+| Command | Purpose | When |
+|---------|---------|------|
+| `/sw-design` | Research codebase, design solution | New feature or significant change |
+| `/sw-plan` | Break design into work units with specs | After design approval |
+| `/sw-build` | TDD implementation of work unit | Implementation phase |
+| `/sw-verify` | Quality gates (tests, security, wiring, spec) | Pre-PR validation |
+| `/sw-ship` | Create PR with evidence | After all gates pass |
+
+## Skill Chains
 
 | Chain | Skills | Trigger |
 |-------|--------|---------|
-| `epic-planning` | specify→clarify→plan→tasks→taskstolinear | "plan epic" |
-| `pre-pr` | test-review + wiring-check + merge-check (parallel) | "pre-pr check" |
 | `dbt-work` | dbt-skill→pydantic-skill | `*.sql` files |
 | `k8s-deploy` | helm-k8s-skill | `charts/**` |
 | `plugin-dev` | pydantic-skill→dagster-skill→testing-skill | `plugins/**` |
@@ -50,18 +58,6 @@ For less frequent technology work, reference docs are in `docs/reference/`:
 - `docs/reference/cube-skill.md` - Cube semantic layer
 - `docs/reference/duckdb-lakehouse.md` - DuckDB compute
 - `docs/reference/arch-review.md` - Architecture review (use `tech-debt-review --arch`)
-
-## OMC Agent Integration
-
-For generic tasks, use OMC agents instead of custom:
-
-| Task | OMC Agent |
-|------|-----------|
-| Code quality review | `oh-my-claudecode:code-reviewer` |
-| Architecture analysis | `oh-my-claudecode:architect` |
-| Build fixes | `oh-my-claudecode:build-fixer` |
-| Security review | `oh-my-claudecode:security-reviewer` |
-| Codebase search | `oh-my-claudecode:explore` |
 
 ## Custom Agents (floe-Specific)
 

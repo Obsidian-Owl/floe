@@ -2,6 +2,7 @@
 name: test-debt-analyzer
 model: sonnet
 description: Consolidated test debt analysis - flakiness, isolation, edge cases, duplication, coverage gaps. Use for comprehensive test quality audits.
+tools: Read, Glob, Grep, Bash
 ---
 
 # Test Debt Analyzer
