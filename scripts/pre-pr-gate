@@ -69,17 +69,17 @@ check_quality_state() {
     critic_passed=$(jq -r '.critic_passed // false' "$QUALITY_STATE")
 
     if [[ "$test_review_passed" != "true" ]]; then
-        log_error "Test review not passed. Run /speckit.test-review first."
+        log_error "Test review not passed. Run /sw-verify first."
         return 1
     fi
 
     if [[ "$wiring_check_passed" != "true" ]]; then
-        log_error "Wiring check not passed. Run /speckit.wiring-check first."
+        log_error "Wiring check not passed. Run /sw-verify first."
         return 1
     fi
 
     if [[ "$merge_check_passed" != "true" ]]; then
-        log_error "Merge check not passed. Run /speckit.merge-check first."
+        log_error "Merge check not passed. Run /sw-verify first."
         return 1
     fi
 
@@ -152,9 +152,9 @@ main() {
     else
         log_warn "No quality state file found."
         log_warn "For full quality gate, run:"
-        log_warn "  1. /speckit.test-review"
-        log_warn "  2. /speckit.wiring-check"
-        log_warn "  3. /speckit.merge-check"
+        log_warn "  1. /sw-verify"
+        log_warn "  2. Fix any gate findings"
+        log_warn "  3. Re-run /sw-verify until all gates pass"
         log_warn "  4. Critic agent approval"
         log_warn ""
         log_warn "Proceeding with basic checks only..."
@@ -170,9 +170,9 @@ main() {
         log_error "========================================="
         log_error ""
         log_error "Required actions:"
-        log_error "  1. Run /speckit.test-review"
-        log_error "  2. Run /speckit.wiring-check"
-        log_error "  3. Run /speckit.merge-check"
+        log_error "  1. Run /sw-verify"
+        log_error "  2. Fix any gate findings"
+        log_error "  3. Re-run /sw-verify until all gates pass"
         log_error "  4. Get critic agent approval"
         log_error "  5. Commit all changes"
         log_error ""

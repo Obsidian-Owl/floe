@@ -13,9 +13,9 @@
 ## Quick Start
 
 ```bash
-/speckit.implement           # Auto-implement next task
-/speckit.test-review         # Pre-PR quality check
-/speckit.pr                  # Create PR
+/sw-build                    # Implement next work unit
+/sw-verify                   # Pre-PR quality gates
+/sw-ship                     # Create PR
 ```
 
 | Command | Purpose |
@@ -44,10 +44,10 @@
 
 | Phase | Key Context | Skills |
 |-------|-------------|--------|
-| **Planning** | Constitution, architecture | specify, clarify, plan, tasks |
-| **Coding** | Type hints, Pydantic v2, atomic commits | implement, dbt-skill, pydantic-skill |
-| **Testing** | K8s-native, 100% markers, >80% coverage | test-review, testing-skill |
-| **Pre-PR** | Quality gates MUST pass | wiring-check, merge-check, arch-review |
+| **Planning** | Constitution, architecture | sw-design, sw-plan |
+| **Coding** | Type hints, Pydantic v2, atomic commits | sw-build, dbt-skill, pydantic-skill |
+| **Testing** | K8s-native, 100% markers, >80% coverage | sw-verify, testing-skill |
+| **Pre-PR** | Quality gates MUST pass | sw-verify (gates), sw-ship |
 
 ---
 
@@ -76,14 +76,16 @@ Layer 4: DATA           → K8s Jobs (dbt run, dlt ingestion)
 
 ---
 
-## Workflow: SpecKit + Linear
+## Workflow: Specwright + Linear
 
-**Source of Truth**: Linear → **Planning**: SpecKit
+**Source of Truth**: Linear → **Planning**: Specwright
 
 ```
-Planning:   specify → clarify → plan → tasks → taskstolinear
-Implement:  /speckit.implement → commit → loop
-Pre-PR:     test-review → wiring-check → merge-check → /speckit.pr
+Design:    /sw-design -> approve
+Plan:      /sw-plan -> work units
+Build:     /sw-build -> commit -> loop
+Verify:    /sw-verify -> fix -> re-verify
+Ship:      /sw-ship -> PR
 ```
 
 ---
