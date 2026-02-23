@@ -23,8 +23,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    # PyIceberg 0.11.0rc2+ pre-alpha for testing new features
-    "pyiceberg>=0.11.0rc2",
+    # TODO(pyiceberg-0.11.1): Change to pyiceberg>=0.11.1 once released
+    # 0.11.0 incompatible with Polaris 1.2.0+ (missing PUT in HttpMethod enum)
+    # Tracking: https://github.com/apache/iceberg-python/pull/3010
+    "pyiceberg>=0.11.0rc2,!=0.11.0",
     # Pydantic v2 for configuration models (FR-045); pin upper bound (12B-DEP-001)
     "pydantic>=2.12.5,<3.0",
     # Structured logging; pin upper bound (12B-DEP T049)
