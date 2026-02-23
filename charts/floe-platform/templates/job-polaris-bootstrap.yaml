@@ -31,7 +31,7 @@ spec:
               MAX_ATTEMPTS=60
               until curl -sf http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.managementPort | default 8182 }}/q/health/ready > /dev/null 2>&1; do
                 ATTEMPT=$((ATTEMPT + 1))
-                if [[ $ATTEMPT -ge $MAX_ATTEMPTS ]]; then
+                if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
                   echo "ERROR: Polaris not ready after $MAX_ATTEMPTS attempts" >&2
                   exit 1
                 fi
