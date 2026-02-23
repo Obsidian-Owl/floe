@@ -20,7 +20,7 @@
 # =============================================================================
 # Stage 1: EXPORT — Produce requirements.txt from workspace lockfile
 # =============================================================================
-FROM ghcr.io/astral-sh/uv:0.6 AS export
+FROM ghcr.io/astral-sh/uv:0.7.2-debian AS export
 
 WORKDIR /build
 
@@ -56,17 +56,17 @@ COPY plugins/floe-telemetry-jaeger/pyproject.toml plugins/floe-telemetry-jaeger/
 # Target plugin list — overridden by Makefile via --build-arg
 ARG FLOE_PLUGINS="floe-core floe-orchestrator-dagster floe-compute-duckdb floe-dbt-core"
 
-# Export transitive closure of target packages with SHA256 hashes.
+# Export transitive closure of all workspace packages with SHA256 hashes.
 # --frozen: fail if lockfile is stale (no re-resolution)
 # --no-dev: exclude dev dependencies
 # --no-editable: produce installable requirements (not editable paths)
 # --extra docker: include dagster-webserver/daemon/k8s from orchestrator extras
-# shellcheck disable=SC2086
-RUN set -e; \
-    pkg_args=""; \
-    for pkg in $FLOE_PLUGINS; do pkg_args="$pkg_args --package $pkg"; done; \
-    uv export --frozen --no-dev --no-editable $pkg_args --extra docker \
-        > requirements.txt
+# NOTE: uv 0.7+ only allows --package once. We use --all-packages to export
+# the full workspace closure, then pip install only the target packages.
+# --no-emit-workspace should suppress local paths but has a known bug in 0.7.2,
+# so we also strip any residual ./path lines that pip cannot resolve.
+RUN uv export --frozen --no-dev --no-editable --all-packages --no-emit-workspace --extra docker \
+        | grep -v '^\.\/' > requirements.txt
 
 # =============================================================================
 # Stage 2: BUILD — Install deps + workspace packages from source
@@ -74,8 +74,9 @@ RUN set -e; \
 FROM python:3.11-slim@sha256:0b23cfb7425d065008b778022a17b1551c82f8b4866ee5a7a200084b7e2eafbf AS build
 
 # Build dependencies for C extensions (grpcio, greenlet, pyarrow, duckdb)
+# git: required for pip install from git URLs (pyiceberg pinned commit)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        gcc python3-dev libffi-dev \
+        gcc python3-dev libffi-dev git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -98,7 +99,7 @@ COPY plugins/floe-dbt-core /build/plugins/floe-dbt-core
 # Install workspace packages from source (deps already installed above).
 # Uses FLOE_PLUGINS ARG to dynamically install only the target packages.
 # Re-declare ARG — Docker does not propagate ARGs across stages.
-ARG FLOE_PLUGINS
+ARG FLOE_PLUGINS="floe-core floe-orchestrator-dagster floe-compute-duckdb floe-dbt-core"
 # shellcheck disable=SC2086
 RUN set -e; \
     for pkg in $FLOE_PLUGINS; do \
@@ -110,11 +111,26 @@ RUN set -e; \
         pip install --no-deps --no-cache-dir "$dir"; \
     done
 
+# Install orchestrator Docker extras not in the uv lockfile.
+# dagster-daemon is bundled with core dagster; dagster-k8s uses 0.x versioning
+# and is only needed for K8s job execution (not required in-container).
+RUN pip install --no-cache-dir \
+        "dagster-webserver==1.12.14" "dagster-postgres==0.28.14" "dagster==1.12.14" \
+        "sqlalchemy>=2.0,<2.1"
+
+# TODO(pyiceberg-0.11.1): Remove git install once PyPI release available
+# PyIceberg 0.11.0 rejects Polaris 1.2.0+ PUT in HttpMethod enum.
+# Fixed in PR #3010, pinned to merge commit for reproducibility.
+# Tracking: https://github.com/apache/iceberg-python/pull/3010
+RUN pip install --no-cache-dir \
+    "pyiceberg @ git+https://github.com/apache/iceberg-python.git@9687d080f28951464cf02fb2645e2a1185838b21"
+
 # Validate dependency tree is consistent
 RUN pip check
 
-# Smoke test: verify core imports resolve
-RUN python -c "import dagster; import floe_core; import dagster_webserver"
+# Smoke test: verify core imports resolve and PyIceberg PUT fix present
+RUN python -c "import dagster; import floe_core; import dagster_webserver" \
+ && python -c "from pyiceberg.catalog.rest import HttpMethod; assert 'PUT' in HttpMethod.__members__"
 
 # =============================================================================
 # Stage 3: RUNTIME — Minimal production image
@@ -142,7 +158,11 @@ RUN touch /app/demo/customer_360/__init__.py \
           /app/demo/financial_risk/__init__.py
 
 # Run as non-root user for reduced attack surface
-RUN useradd --create-home --shell /bin/false dagster
+RUN useradd --create-home --shell /bin/false dagster \
+    && mkdir -p /opt/dagster/dagster_home \
+    && chown -R dagster:dagster /opt/dagster
 USER dagster
+
+ENV DAGSTER_HOME=/opt/dagster/dagster_home
 
 WORKDIR /app/demo

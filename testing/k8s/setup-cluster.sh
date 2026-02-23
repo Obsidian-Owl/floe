@@ -166,13 +166,22 @@ deploy_services_helm() {
 
     log_info "Deploying services via Helm to namespace: ${NAMESPACE}"
 
+    # Build and load the Dagster demo image into Kind (required by values-test.yaml)
+    # The dagster webserver and daemon use floe-dagster-demo:latest with pullPolicy: Never
+    if [[ -f "${PROJECT_ROOT}/docker/dagster-demo/Dockerfile" ]]; then
+        log_info "Building Dagster demo image..."
+        make -C "${PROJECT_ROOT}" build-demo-image 2>&1 || {
+            log_warn "Dagster demo image build failed — Dagster pods will be in ErrImageNeverPull"
+        }
+    fi
+
     # Update Helm dependencies
     log_info "Updating Helm chart dependencies..."
     helm dependency update "${PROJECT_ROOT}/charts/floe-platform" 2>/dev/null || true
 
     # Install floe-platform with test values
     log_info "Installing floe-platform chart..."
-    # --skip-schema-validation: Dagster subchart references dead kubernetesjsonschema.dev URLs (Helm 4.x)
+    # --skip-schema-validation: Dagster subchart references dead kubernetesjsonschema.dev URLs
     helm upgrade --install floe-platform "${PROJECT_ROOT}/charts/floe-platform" \
         --namespace "${NAMESPACE}" --create-namespace \
         --values "${PROJECT_ROOT}/charts/floe-platform/values-test.yaml" \
@@ -223,6 +232,18 @@ wait_for_services_helm() {
     log_info "All Helm-deployed services are ready"
 }
 
+# Install PyIceberg from git for Polaris 1.2.0 compatibility
+install_pyiceberg_fix() {
+    # TODO(pyiceberg-0.11.1): Remove git install once PyPI release available
+    # PyIceberg 0.11.0 rejects Polaris 1.2.0+ PUT in HttpMethod enum.
+    # Fixed in PR #3010, pinned to merge commit for reproducibility.
+    # Tracking: https://github.com/apache/iceberg-python/pull/3010
+    log_info "Installing PyIceberg from git (Polaris 1.2.0 PUT fix)..."
+    uv pip install "pyiceberg @ git+https://github.com/apache/iceberg-python.git@9687d080f28951464cf02fb2645e2a1185838b21" 2>&1 || {
+        log_warn "PyIceberg git install failed — E2E tests may fail with HttpMethod errors"
+    }
+}
+
 # Print cluster info
 print_info() {
     log_info "Cluster is ready!"
@@ -267,6 +288,7 @@ main() {
     deploy_services_helm
     wait_for_services_helm
     deploy_monitoring_stack
+    install_pyiceberg_fix
     print_info
 }
 

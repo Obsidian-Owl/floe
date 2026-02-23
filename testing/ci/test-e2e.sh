@@ -120,8 +120,8 @@ echo "Setting up port-forwards for Helm chart services..."
 # Port-forward all Helm chart services to localhost for E2E tests
 # These services use ClusterIP by default
 
-# Dagster webserver (port 80 -> localhost:3000)
-kubectl port-forward svc/floe-platform-dagster-webserver 3000:80 -n "${TEST_NAMESPACE}" &
+# Dagster webserver (port 3000 -> localhost:3000)
+kubectl port-forward svc/floe-platform-dagster-webserver 3000:3000 -n "${TEST_NAMESPACE}" &
 DAGSTER_PF_PID=$!
 
 # Polaris catalog API (8181) + management health (8182) — single process, two ports
@@ -185,7 +185,11 @@ echo ""
 echo "Running E2E tests..."
 
 # Run E2E tests
-uv run pytest \
+# TODO(pyiceberg-0.11.1): Remove UV_NO_SYNC once PyPI release available
+# UV_NO_SYNC=1: Prevent uv from reverting manually-installed packages (e.g.,
+# pyiceberg from git with Polaris 1.2.0 PUT fix).
+# Tracking: https://github.com/apache/iceberg-python/pull/3010
+UV_NO_SYNC=1 uv run pytest \
     tests/e2e/ \
     -v \
     --tb=short \
