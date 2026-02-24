@@ -710,8 +710,7 @@ class TestDockerfileExportStage:
         lines = _read_dockerfile_lines()
         uv_lines = [line for line in lines if "uv export" in line.lower()]
         assert any("--all-packages" in line for line in uv_lines), (
-            f"uv export must use --all-packages flag. "
-            f"Found uv export lines: {uv_lines}"
+            f"uv export must use --all-packages flag. Found uv export lines: {uv_lines}"
         )
 
     @pytest.mark.requirement("WU12-AC2")
