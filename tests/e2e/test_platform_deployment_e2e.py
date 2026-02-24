@@ -236,9 +236,7 @@ class TestPlatformDeployment:
         the Quarkus management port (8182). The catalog API (8181) requires
         OAuth credentials, so health checks use the management endpoint.
         """
-        polaris_health_url = os.environ.get(
-            "POLARIS_HEALTH_URL", "http://localhost:8182"
-        )
+        polaris_health_url = os.environ.get("POLARIS_HEALTH_URL", "http://localhost:8182")
         wait_for_service(
             f"{polaris_health_url}/q/health/ready",
             timeout=90,
@@ -254,9 +252,7 @@ class TestPlatformDeployment:
             f"Polaris /q/health/ready returned {response.status_code}"
         )
         health = response.json()
-        assert health.get("status") == "UP", (
-            f"Polaris health status not UP: {health}"
-        )
+        assert health.get("status") == "UP", f"Polaris health status not UP: {health}"
 
     @pytest.mark.requirement("AC-2.1")
     def test_minio_health(

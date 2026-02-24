@@ -116,9 +116,7 @@ class TestServiceFailureResilience:
 
         Similar to MinIO test but for the Polaris catalog service.
         """
-        polaris_health_url = os.environ.get(
-            "POLARIS_HEALTH_URL", "http://localhost:8182"
-        )
+        polaris_health_url = os.environ.get("POLARIS_HEALTH_URL", "http://localhost:8182")
 
         # Verify Polaris is healthy (management endpoint, no OAuth needed)
         response = httpx.get(
