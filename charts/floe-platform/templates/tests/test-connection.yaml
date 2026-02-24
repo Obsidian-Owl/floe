@@ -55,7 +55,7 @@ spec:
           memory: 32Mi
     {{- end }}
 
-    # Test Polaris API
+    # Test Polaris health (management port, no OAuth required)
     {{- if .Values.polaris.enabled }}
     - name: test-polaris
       image: curlimages/curl:8.5.0
@@ -63,17 +63,17 @@ spec:
         - /bin/sh
         - -c
         - |
-          echo "Testing Polaris API connectivity..."
-          POLARIS_URL="http://{{ .Release.Name }}-polaris:8181"
+          echo "Testing Polaris health connectivity..."
+          POLARIS_HEALTH_URL="http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.managementPort | default 8182 }}"
           for i in 1 2 3 4 5; do
-            if curl -sf "${POLARIS_URL}/api/catalog/v1/config" > /dev/null 2>&1; then
-              echo "SUCCESS: Polaris API is reachable"
+            if curl -sf "${POLARIS_HEALTH_URL}/q/health/ready" > /dev/null 2>&1; then
+              echo "SUCCESS: Polaris is healthy"
               exit 0
             fi
             echo "Attempt $i: Polaris not ready, waiting..."
             sleep 5
           done
-          echo "FAILED: Polaris API not reachable after 5 attempts"
+          echo "FAILED: Polaris health not reachable after 5 attempts"
           exit 1
       resources:
         limits:

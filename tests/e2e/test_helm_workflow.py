@@ -261,7 +261,7 @@ class TestHelmWorkflow:
         )
         # PostgreSQL might be a StatefulSet or managed by parent chart
         if result.returncode != 0:
-            # Try checking for any postgresql pods
+            # Fallback: check for postgresql pods by component label
             result = _kubectl(
                 [
                     "get",
@@ -269,7 +269,7 @@ class TestHelmWorkflow:
                     "-n",
                     e2e_namespace,
                     "-l",
-                    "app.kubernetes.io/name=postgresql",
+                    "app.kubernetes.io/component=postgresql",
                 ]
             )
 

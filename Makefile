@@ -246,9 +246,9 @@ helm-test-infra: ## Verify test infrastructure is healthy
 	@echo "Checking test infrastructure health..."
 	@kubectl get pods -n floe-test --no-headers 2>/dev/null || { echo "Test namespace not found. Run: make helm-install-test"; exit 1; }
 	@echo "Checking Polaris..."
-	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=polaris -n floe-test --timeout=60s 2>/dev/null || echo "Polaris not ready"
+	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=polaris -n floe-test --timeout=60s 2>/dev/null || echo "Polaris not ready"
 	@echo "Checking PostgreSQL..."
-	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgresql -n floe-test --timeout=60s 2>/dev/null || echo "PostgreSQL not ready"
+	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=postgresql -n floe-test --timeout=60s 2>/dev/null || echo "PostgreSQL not ready"
 	@echo "Checking MinIO..."
 	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=minio -n floe-test --timeout=60s 2>/dev/null || echo "MinIO not ready"
 	@echo "Test infrastructure health check complete!"
