@@ -1,11 +1,11 @@
 {
   "version": "0.2.0",
   "currentWork": {
-    "id": "toolchain-cleanup",
+    "id": "e2e-infra-fixes",
     "status": "verifying",
     "intensity": "full",
-    "workDir": ".specwright/work/toolchain-cleanup",
-    "startedAt": "2026-02-17T12:00:00Z"
+    "workDir": ".specwright/work/e2e-infra-fixes",
+    "startedAt": "2026-02-23T00:00:00Z"
   },
   "completedWork": [
     {
@@ -32,6 +32,13 @@
       "startedAt": "2026-02-16T18:00:00Z",
       "completedAt": "2026-02-17T00:00:00Z",
       "pr": "https://github.com/Obsidian-Owl/floe/pull/89"
+    },
+    {
+      "id": "toolchain-cleanup",
+      "phase": "shipped",
+      "startedAt": "2026-02-17T12:00:00Z",
+      "completedAt": "2026-02-17T12:00:00Z",
+      "pr": "https://github.com/Obsidian-Owl/floe/pull/91"
     }
   ],
   "workUnits": [
@@ -46,7 +53,14 @@
     { "id": "wu-9-config-pipeline-flow", "description": "Schema changes + governance/observability flow through builder", "status": "shipped", "order": 9, "tasksCompleted": ["T49", "T50", "T51", "T52", "T53", "T54", "T55"], "pr": "https://github.com/Obsidian-Owl/floe/pull/84" },
     { "id": "wu-10-polaris-test-fixes", "description": "Pin Polaris 1.2.1, xfail cleanup, test assertion fixes", "status": "shipped", "order": 10, "tasksCompleted": ["T56", "T57", "T58", "T59", "T60"], "pr": "https://github.com/Obsidian-Owl/floe/pull/85" },
     { "id": "wu-11-demo-packaging", "description": "Production-like demo packaging: Dockerfile, Makefile targets, Helm values, generated definitions", "status": "shipped", "order": 11, "tasksCompleted": ["T61", "T62", "T63", "T64", "T65"], "pr": "https://github.com/Obsidian-Owl/floe/pull/88" },
-    { "id": "wu-12-docker-packaging-strategy", "description": "3-stage uv build replacing vendor base image", "status": "shipped", "order": 12, "tasksCompleted": ["T66", "T67", "T68", "T69", "T70"], "pr": "https://github.com/Obsidian-Owl/floe/pull/89" }
+    { "id": "wu-12-docker-packaging-strategy", "description": "3-stage uv build replacing vendor base image", "status": "shipped", "order": 12, "tasksCompleted": ["T66", "T67", "T68", "T69", "T70"], "pr": "https://github.com/Obsidian-Owl/floe/pull/89" },
+    { "id": "wu-13-pyiceberg-compat", "description": "PyIceberg compatibility & Docker build (Categories 1+3, 30 tests)", "status": "verified", "order": 13, "tasksCompleted": ["T1", "T2", "T3", "T4", "T5"] },
+    { "id": "wu-14-bootstrap-reliability", "description": "Bootstrap & provisioning reliability (Category 2, 5 tests)", "status": "backlog", "order": 14 },
+    { "id": "wu-15-label-alignment", "description": "Label & service discovery alignment + PDB/NetworkPolicy production fixes (Categories 5+6, 4 tests)", "status": "backlog", "order": 15 },
+    { "id": "wu-16-test-bug-fixes", "description": "Test code & plugin bug fixes (Categories 4/10/11/12, 4 tests)", "status": "backlog", "order": 16 },
+    { "id": "wu-17-otel-openlineage", "description": "OTel/OpenLineage pipeline wiring (Category 8, 5 tests)", "status": "backlog", "order": 17 },
+    { "id": "wu-18-governance-secrets", "description": "Governance pipeline wiring + Helm secrets (Category 9, 3 tests)", "status": "backlog", "order": 18 },
+    { "id": "wu-19-marquez-stability", "description": "Marquez stability investigation & fix (Category 7, 4 tests)", "status": "backlog", "order": 19 }
   ],
   "gates": {
     "wu-1-bootstrap": {
@@ -132,7 +146,13 @@
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-17T11:30:00Z" },
       "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-17T11:30:00Z" },
       "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-17T11:35:00Z" }
+    },
+    "wu-13-pyiceberg-compat": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 0 }, "timestamp": "2026-02-23T12:30:00Z" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 2, "info": 3 }, "timestamp": "2026-02-23T12:30:00Z" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 4 }, "timestamp": "2026-02-23T12:30:00Z", "note": "WARN for floe-iceberg !=0.11.0 fixed in commit 8c23e66" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-23T12:30:00Z" }
     }
   },
-  "lastUpdated": "2026-02-17T11:35:00Z"
+  "lastUpdated": "2026-02-23T12:35:00Z"
 }

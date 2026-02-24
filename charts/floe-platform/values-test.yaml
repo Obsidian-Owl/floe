@@ -72,6 +72,16 @@ dagster:
       repository: floe-dagster-demo
       tag: latest
       pullPolicy: Never
+    service:
+      type: ClusterIP
+      port: 3000
+    readinessProbe:
+      httpGet:
+        path: /server_info
+        port: 3000
+      periodSeconds: 20
+      timeoutSeconds: 10
+      failureThreshold: 3
     workspace:
       enabled: true
       servers: []  # Must be empty when using externalConfigmap
@@ -79,10 +89,10 @@ dagster:
     resources:
       requests:
         cpu: 100m
-        memory: 256Mi
-      limits:
-        cpu: 500m
         memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1536Mi
   dagsterDaemon:
     replicaCount: 1
     image:
@@ -92,10 +102,10 @@ dagster:
     resources:
       requests:
         cpu: 100m
-        memory: 256Mi
-      limits:
-        cpu: 500m
         memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1536Mi
   # Enable user deployments to allow workspace.yaml to be mounted
   # Even with no actual code locations, this enables the workspace file mount
   dagster-user-deployments:
@@ -104,14 +114,14 @@ dagster:
     deployments: []
 
 # =============================================================================
-# Polaris Configuration (Pinned to 1.2.1 — compatible with PyIceberg 0.11.x)
+# Polaris Configuration (Pinned to 1.2.0 — compatible with PyIceberg 0.11.x)
 # =============================================================================
 polaris:
   enabled: true
   replicaCount: 1
   image:
     repository: apache/polaris
-    tag: "1.2.1-incubating"
+    tag: "1.2.0-incubating"
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -324,9 +334,9 @@ cube:
   cubeStore:
     enabled: true
     image:
-      repository: ghcr.io/obsidian-owl/cube-store
+      repository: cubejs/cubestore
       tag: "v0.36.0"
-      pullPolicy: Never
+      pullPolicy: IfNotPresent
     resources:
       requests:
         cpu: 100m

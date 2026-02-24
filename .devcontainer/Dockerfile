@@ -31,6 +31,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3-venv \
   python3-dev \
   build-essential \
+  # Shell script linting (used by quality gates)
+  shellcheck \
   # Network utilities for E2E test port checks
   netcat-openbsd \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -41,10 +43,9 @@ RUN mkdir -p /usr/local/share/npm-global && \
 
 ARG USERNAME=node
 
-# Persist bash history
-RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
-  && mkdir /commandhistory \
-  && touch /commandhistory/.bash_history \
+# Persist shell history (zsh).
+RUN mkdir /commandhistory \
+  && touch /commandhistory/.zsh_history \
   && chown -R $USERNAME /commandhistory
 
 ENV DEVCONTAINER=true
@@ -77,7 +78,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
   curl -Lo kind "https://kind.sigs.k8s.io/dl/v${KIND_VERSION}/kind-linux-${ARCH}" && \
   chmod +x kind && mv kind /usr/local/bin/kind
 
-ARG HELM_VERSION=3.14.0
+ARG HELM_VERSION=3.16.4
 RUN ARCH=$(dpkg --print-architecture) && \
   curl -LO "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${ARCH}.tar.gz" && \
   tar -xzf "helm-v${HELM_VERSION}-linux-${ARCH}.tar.gz" && \
@@ -91,7 +92,7 @@ COPY init-firewall.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/init-firewall.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall && \
-  echo "node ALL=(root) NOPASSWD: /usr/sbin/dockerd, /usr/bin/dockerd" > /etc/sudoers.d/node-docker && \
+  echo "node ALL=(root) NOPASSWD: /usr/local/share/docker-init.sh, /usr/sbin/dockerd, /usr/bin/dockerd, /bin/sh" > /etc/sudoers.d/node-docker && \
   chmod 0440 /etc/sudoers.d/node-docker
 
 # ============================================================
@@ -123,7 +124,10 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
   -p helm \
   -a "source /usr/share/doc/fzf/examples/key-bindings.zsh" \
   -a "source /usr/share/doc/fzf/examples/completion.zsh" \
-  -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
+  -a "export HISTFILE=/commandhistory/.zsh_history" \
+  -a "export HISTSIZE=10000" \
+  -a "export SAVEHIST=10000" \
+  -a "setopt APPEND_HISTORY SHARE_HISTORY INC_APPEND_HISTORY HIST_IGNORE_DUPS" \
   -a 'export PATH="/home/node/.local/bin:$PATH"' \
   -x
 
@@ -131,3 +135,6 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
 # Claude Code CLI
 # ============================================================
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+
+# Set zsh as the default entry point for Warp Terminal connections
+ENTRYPOINT ["/bin/zsh"]

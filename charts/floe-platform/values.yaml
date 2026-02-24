@@ -136,8 +136,8 @@ dagster:
       enabled: true
       servers: []  # Must be empty when using externalConfigmap
       externalConfigmap: "floe-platform-dagster-workspace"
-    # Additional environment variables
-    env: {}
+    # Additional environment variables (list format for Dagster subchart compat)
+    env: []
     envSecrets: []
     envConfigMaps: []
 
@@ -155,8 +155,8 @@ dagster:
       limits:
         cpu: 500m
         memory: 512Mi
-    # Additional environment variables
-    env: {}
+    # Additional environment variables (list format for Dagster subchart compat)
+    env: []
     envSecrets: []
     envConfigMaps: []
 
