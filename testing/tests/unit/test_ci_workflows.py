@@ -164,19 +164,19 @@ class TestValuesTestCubeStore:
         )
 
     @pytest.mark.requirement("WU2-AC2")
-    def test_cube_store_image_uses_ghcr(self) -> None:
-        """Verify Cube Store image points to multi-arch GHCR registry.
+    def test_cube_store_image_is_public(self) -> None:
+        """Verify Cube Store image uses a publicly accessible registry.
 
-        The image repository must be ghcr.io/obsidian-owl/cube-store,
-        not the upstream cubejs/cubestore (which is AMD64-only).
+        The image repository must be cubejs/cubestore (official public image)
+        to avoid private registry authentication failures in CI/Kind.
         """
         values = yaml.safe_load(VALUES_TEST.read_text())
         cube = values.get("cube", {})
         cubestore = cube.get("cubeStore", {})
         image = cubestore.get("image", {})
         repo = image.get("repository", "")
-        assert repo == "ghcr.io/obsidian-owl/cube-store", (
-            f"Cube Store image must use GHCR multi-arch image. Got: {repo}"
+        assert repo == "cubejs/cubestore", (
+            f"Cube Store image must use public cubejs/cubestore. Got: {repo}"
         )
 
     @pytest.mark.requirement("WU2-AC3")

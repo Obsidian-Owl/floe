@@ -114,8 +114,13 @@ RUN set -e; \
 # Install orchestrator Docker extras not in the uv lockfile.
 # dagster-daemon is bundled with core dagster; dagster-k8s uses 0.x versioning
 # and is only needed for K8s job execution (not required in-container).
+# Versions MUST match uv.lock — update these when bumping dagster in pyproject.toml.
+ARG DAGSTER_VERSION=1.12.14
+ARG DAGSTER_POSTGRES_VERSION=0.28.14
 RUN pip install --no-cache-dir \
-        "dagster-webserver==1.12.14" "dagster-postgres==0.28.14" "dagster==1.12.14" \
+        "dagster-webserver==${DAGSTER_VERSION}" \
+        "dagster-postgres==${DAGSTER_POSTGRES_VERSION}" \
+        "dagster==${DAGSTER_VERSION}" \
         "sqlalchemy>=2.0,<2.1"
 
 # TODO(pyiceberg-0.11.1): Remove git install once PyPI release available
