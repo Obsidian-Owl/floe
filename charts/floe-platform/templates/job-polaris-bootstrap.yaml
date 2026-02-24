@@ -119,10 +119,11 @@ spec:
               echo "Token acquired successfully"
 
               {{- if .Values.polaris.storage.s3.enabled }}
+              {{- $bucketName := trimPrefix "s3://" .Values.polaris.bootstrap.defaultBaseLocation | splitList "/" | first }}
               # Verify MinIO bucket exists before creating catalog
-              echo "Verifying MinIO bucket '{{ .Values.polaris.bootstrap.catalogName | default "floe-iceberg" }}' exists..."
+              echo "Verifying MinIO bucket '{{ $bucketName }}' exists..."
               MINIO_URL="{{ .Values.polaris.storage.s3.endpoint }}"
-              BUCKET_NAME=$(echo "{{ .Values.polaris.bootstrap.defaultBaseLocation }}" | sed 's|s3://||' | cut -d'/' -f1)
+              BUCKET_NAME="{{ $bucketName }}"
               BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "$MINIO_URL/$BUCKET_NAME/" 2>/dev/null)
               if [ "$BUCKET_CODE" = "404" ]; then
                 echo "ERROR: MinIO bucket '$BUCKET_NAME' does not exist (HTTP 404)" >&2
