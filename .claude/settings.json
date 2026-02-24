@@ -92,10 +92,10 @@
   },
   "enabledPlugins": {
     "security-guidance@claude-plugins-official": true,
-    "linear@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
-    "claude-code-setup@claude-plugins-official": true
+    "claude-code-setup@claude-plugins-official": true,
+    "specwright@specwright": true
   },
   "companyAnnouncements": [
     "🔒 Security: Never commit secrets or use eval()/exec()",

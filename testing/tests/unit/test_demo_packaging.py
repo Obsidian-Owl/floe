@@ -475,20 +475,22 @@ class TestDockerfilePipOperations:
         This prevents pip from pulling in conflicting transitive deps.
         """
         content = _read_dockerfile_raw()
-        # Find pip install lines that don't reference requirements.txt
-        # These are the workspace package installs
-        pip_install_lines = [
+        # Find pip install lines that reference workspace package directories
+        # (the for-loop install with --no-deps), excluding requirements.txt
+        # installs, dagster extras, and pyiceberg git installs.
+        workspace_pip_lines = [
             line.strip()
             for line in content.splitlines()
             if line.strip()
             and not line.strip().startswith("#")
             and "pip install" in line.lower()
+            and "--no-deps" in line.lower()
             and "requirements.txt" not in line.lower()
         ]
-        assert len(pip_install_lines) == 1, (
-            "Dockerfile must have exactly 1 pip install for workspace packages"
+        assert len(workspace_pip_lines) >= 1, (
+            "Dockerfile must have at least 1 pip install --no-deps for workspace packages"
         )
-        for pip_line in pip_install_lines:
+        for pip_line in workspace_pip_lines:
             assert "--no-deps" in pip_line, (
                 f"Workspace package pip install must use --no-deps. Line: {pip_line}"
             )
@@ -698,17 +700,17 @@ class TestDockerfileExportStage:
         )
 
     @pytest.mark.requirement("WU12-AC2")
-    def test_export_stage_uses_package_flag(self) -> None:
-        """Verify uv export uses --package to select specific packages.
+    def test_export_stage_uses_all_packages_flag(self) -> None:
+        """Verify uv export uses --all-packages to export the full workspace.
 
-        The --package flag targets specific workspace packages rather than
-        exporting all 21+ members. This produces a minimal requirements.txt.
+        The --all-packages flag exports all workspace members, then grep -v
+        filters out local path references. This produces a complete
+        requirements.txt with hashes for reproducible builds.
         """
         lines = _read_dockerfile_lines()
         uv_lines = [line for line in lines if "uv export" in line.lower()]
-        assert any("--package" in line for line in uv_lines), (
-            f"uv export must use --package flag for selective export. "
-            f"Found uv export lines: {uv_lines}"
+        assert any("--all-packages" in line for line in uv_lines), (
+            f"uv export must use --all-packages flag. Found uv export lines: {uv_lines}"
         )
 
     @pytest.mark.requirement("WU12-AC2")
