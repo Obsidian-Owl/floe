@@ -104,6 +104,17 @@ create_cluster() {
     kubectl config use-context "kind-${CLUSTER_NAME}"
 }
 
+# Pre-load container images that Helm hooks need (avoids ImagePullBackOff in Kind)
+preload_images() {
+    log_info "Pre-loading images into Kind cluster..."
+    # Bootstrap job uses curlimages/curl for init containers and main container
+    docker pull curlimages/curl:8.5.0 2>&1 || log_warn "Failed to pull curlimages/curl:8.5.0"
+    kind load docker-image curlimages/curl:8.5.0 --name "${CLUSTER_NAME}" 2>&1 || {
+        log_warn "Failed to load curlimages/curl:8.5.0 into Kind — bootstrap may be slow"
+    }
+    log_info "Images pre-loaded"
+}
+
 # Deploy metrics-server (required for kubectl top and Lens metrics)
 deploy_metrics_server() {
     log_info "Deploying metrics-server..."
@@ -284,6 +295,7 @@ print_info() {
 main() {
     check_prerequisites
     create_cluster
+    preload_images
     deploy_metrics_server
     deploy_services_helm
     wait_for_services_helm
