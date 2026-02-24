@@ -216,27 +216,27 @@ deploy_services_helm() {
 wait_for_services_helm() {
     log_info "Waiting for Helm-deployed services to be ready..."
 
-    # Check Polaris
+    # Check Polaris (parent-chart component label)
     log_info "Waiting for Polaris..."
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=polaris -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=polaris -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
         log_warn "Polaris pods not ready within timeout"
     }
 
-    # Check PostgreSQL
+    # Check PostgreSQL (parent-chart component label)
     log_info "Waiting for PostgreSQL..."
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgresql -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=postgresql -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
         log_warn "PostgreSQL pods not ready within timeout"
     }
 
-    # Check MinIO
+    # Check MinIO (subchart name label)
     log_info "Waiting for MinIO..."
     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=minio -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
         log_warn "MinIO pods not ready within timeout"
     }
 
-    # Check Dagster if enabled
+    # Check Dagster if enabled (subchart name label)
     log_info "Waiting for Dagster..."
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=dagster -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=dagster -n "${NAMESPACE}" --timeout="${TIMEOUT}s" 2>/dev/null || {
         log_warn "Dagster pods not ready within timeout (may be disabled)"
     }
 
