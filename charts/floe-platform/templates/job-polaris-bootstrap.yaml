@@ -11,7 +11,7 @@ metadata:
     "helm.sh/hook-weight": "10"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
-  backoffLimit: 3
+  backoffLimit: {{ .Values.polaris.bootstrap.backoffLimit | default 5 }}
   template:
     metadata:
       labels:
@@ -20,6 +20,33 @@ spec:
     spec:
       restartPolicy: Never
       initContainers:
+        - name: wait-for-minio
+          image: curlimages/curl:8.5.0
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for MinIO to be ready..."
+              ATTEMPT=0
+              MAX_ATTEMPTS=60
+              {{- $minioSvc := printf "%s-minio" (include "floe-platform.fullname" .) }}
+              until curl -sf http://{{ $minioSvc }}:9000/minio/health/ready > /dev/null 2>&1; do
+                ATTEMPT=$((ATTEMPT + 1))
+                if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
+                  echo "ERROR: MinIO not ready after $MAX_ATTEMPTS attempts" >&2
+                  exit 1
+                fi
+                echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - MinIO not ready, waiting 2s..."
+                sleep 2
+              done
+              echo "MinIO is ready!"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
         - name: wait-for-polaris
           image: curlimages/curl:8.5.0
           command:
@@ -28,7 +55,7 @@ spec:
             - |
               echo "Waiting for Polaris to be ready..."
               ATTEMPT=0
-              MAX_ATTEMPTS=60
+              MAX_ATTEMPTS=90
               until curl -sf http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.managementPort | default 8182 }}/q/health/ready > /dev/null 2>&1; do
                 ATTEMPT=$((ATTEMPT + 1))
                 if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
@@ -80,7 +107,7 @@ spec:
               POLARIS_URL="http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.port | default 8181 }}"
 
               echo "Acquiring OAuth token..."
-              TOKEN=$(curl -sf -X POST \
+              TOKEN=$(curl -sf --fail-with-body -X POST \
                 "$POLARIS_URL/api/catalog/v1/oauth/tokens" \
                 -d "grant_type=client_credentials&client_id=$POLARIS_CLIENT_ID&client_secret=$POLARIS_CLIENT_SECRET&scope=PRINCIPAL_ROLE:ALL" \
                 | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
@@ -92,10 +119,11 @@ spec:
               echo "Token acquired successfully"
 
               {{- if .Values.polaris.storage.s3.enabled }}
+              {{- $bucketName := trimPrefix "s3://" .Values.polaris.bootstrap.defaultBaseLocation | splitList "/" | first }}
               # Verify MinIO bucket exists before creating catalog
-              echo "Verifying MinIO bucket '{{ .Values.polaris.bootstrap.catalogName | default "floe-iceberg" }}' exists..."
+              echo "Verifying MinIO bucket '{{ $bucketName }}' exists..."
               MINIO_URL="{{ .Values.polaris.storage.s3.endpoint }}"
-              BUCKET_NAME=$(echo "{{ .Values.polaris.bootstrap.defaultBaseLocation }}" | sed 's|s3://||' | cut -d'/' -f1)
+              BUCKET_NAME="{{ $bucketName }}"
               BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "$MINIO_URL/$BUCKET_NAME/" 2>/dev/null)
               if [ "$BUCKET_CODE" = "404" ]; then
                 echo "ERROR: MinIO bucket '$BUCKET_NAME' does not exist (HTTP 404)" >&2
@@ -155,7 +183,7 @@ spec:
               }'
               {{- end }}
 
-              HTTP_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
+              HTTP_CODE=$(curl -s --fail-with-body -o /tmp/response.txt -w '%{http_code}' -X POST \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/catalogs" \
@@ -173,7 +201,7 @@ spec:
 
               # Verify catalog exists via management API
               echo "Verifying catalog '{{ .Values.polaris.bootstrap.catalogName }}' via management API..."
-              VERIFY_CODE=$(curl -s -o /tmp/verify.txt -w '%{http_code}' \
+              VERIFY_CODE=$(curl -sf --fail-with-body -o /tmp/verify.txt -w '%{http_code}' \
                 -H "Authorization: Bearer $TOKEN" \
                 "$POLARIS_URL/api/management/v1/catalogs/{{ .Values.polaris.bootstrap.catalogName }}")
 
