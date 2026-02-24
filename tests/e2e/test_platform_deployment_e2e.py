@@ -230,29 +230,32 @@ class TestPlatformDeployment:
         self,
         wait_for_service: Callable[..., None],
     ) -> None:
-        """Verify Polaris catalog responds at health endpoint.
+        """Verify Polaris catalog responds at management health endpoint.
 
-        Validates that Polaris REST catalog is accepting connections and
-        can serve its configuration endpoint.
+        Validates that Polaris REST catalog is running and healthy via
+        the Quarkus management port (8182). The catalog API (8181) requires
+        OAuth credentials, so health checks use the management endpoint.
         """
-        polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
+        polaris_health_url = os.environ.get(
+            "POLARIS_HEALTH_URL", "http://localhost:8182"
+        )
         wait_for_service(
-            f"{polaris_url}/api/catalog/v1/config",
+            f"{polaris_health_url}/q/health/ready",
             timeout=90,
-            description="Polaris catalog",
+            description="Polaris catalog health",
         )
 
-        # Verify catalog config endpoint returns valid JSON
+        # Verify management health endpoint returns valid JSON
         response = httpx.get(
-            f"{polaris_url}/api/catalog/v1/config",
+            f"{polaris_health_url}/q/health/ready",
             timeout=10.0,
         )
         assert response.status_code == 200, (
-            f"Polaris /api/catalog/v1/config returned {response.status_code}"
+            f"Polaris /q/health/ready returned {response.status_code}"
         )
-        config = response.json()
-        assert "defaults" in config or "overrides" in config, (
-            f"Polaris config response missing expected keys: {config}"
+        health = response.json()
+        assert health.get("status") == "UP", (
+            f"Polaris health status not UP: {health}"
         )
 
     @pytest.mark.requirement("AC-2.1")

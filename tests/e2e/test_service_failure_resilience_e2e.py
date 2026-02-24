@@ -116,11 +116,13 @@ class TestServiceFailureResilience:
 
         Similar to MinIO test but for the Polaris catalog service.
         """
-        polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
+        polaris_health_url = os.environ.get(
+            "POLARIS_HEALTH_URL", "http://localhost:8182"
+        )
 
-        # Verify Polaris is healthy
+        # Verify Polaris is healthy (management endpoint, no OAuth needed)
         response = httpx.get(
-            f"{polaris_url}/api/catalog/v1/config",
+            f"{polaris_health_url}/q/health/ready",
             timeout=5.0,
         )
         assert response.status_code == 200, "Polaris not healthy before test"
@@ -145,7 +147,7 @@ class TestServiceFailureResilience:
         for _ in range(5):
             try:
                 response = httpx.get(
-                    f"{polaris_url}/api/catalog/v1/config",
+                    f"{polaris_health_url}/q/health/ready",
                     timeout=2.0,
                 )
                 if response.status_code >= 500:

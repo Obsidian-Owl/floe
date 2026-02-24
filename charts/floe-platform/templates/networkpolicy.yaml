@@ -59,11 +59,11 @@ spec:
         - protocol: TCP
           port: 4000
   egress:
-    # Allow egress to PostgreSQL
+    # Allow egress to PostgreSQL (parent-chart component label)
     - to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/name: postgresql
+              app.kubernetes.io/component: postgresql
       ports:
         - protocol: TCP
           port: 5432
@@ -118,11 +118,11 @@ spec:
         - protocol: TCP
           port: 8181
   egress:
-    # Allow egress to PostgreSQL (Polaris uses PostgreSQL backend)
+    # Allow egress to PostgreSQL (parent-chart component label)
     - to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/name: postgresql
+              app.kubernetes.io/component: postgresql
       ports:
         - protocol: TCP
           port: 5432
@@ -155,7 +155,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: postgresql
+      app.kubernetes.io/component: postgresql
   policyTypes:
     - Ingress
   ingress:

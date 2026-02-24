@@ -142,28 +142,34 @@ class TestPlatformBootstrap(IntegrationTestBase):
             f"Check pod status: kubectl get pods -n {self.namespace}"
         )
 
-        # Verify pod count matches expectations
-        result = _run_kubectl(
-            [
-                "get",
-                "pods",
-                "-n",
-                self.namespace,
-                "-o",
-                "jsonpath={.items[*].metadata.labels.app\\.kubernetes\\.io/name}",
-            ]
-        )
-        if result.returncode == 0:
-            pod_labels = result.stdout.strip().split()
-            # Core services that MUST be deployed
-            expected_services = {"postgresql", "minio", "polaris", "dagster"}
-            deployed_services = set(pod_labels)
-            missing = expected_services - deployed_services
-            assert not missing, (
-                f"Missing required platform services: {missing}\n"
-                f"Deployed: {deployed_services}\n"
-                "All core services must be deployed for platform to function."
+        # Verify core services are deployed using their actual label selectors.
+        # Parent-chart components (Polaris, PostgreSQL) use app.kubernetes.io/component
+        # while subcharts (Dagster, MinIO) use app.kubernetes.io/name.
+        core_service_labels: dict[str, str] = {
+            "polaris": "app.kubernetes.io/component=polaris",
+            "postgresql": "app.kubernetes.io/component=postgresql",
+            "dagster": "app.kubernetes.io/name=dagster",
+            "minio": "app.kubernetes.io/name=minio",
+        }
+        missing: list[str] = []
+        for service_name, label_selector in core_service_labels.items():
+            result = _run_kubectl(
+                [
+                    "get",
+                    "pods",
+                    "-n",
+                    self.namespace,
+                    "-l",
+                    label_selector,
+                    "--no-headers",
+                ]
             )
+            if result.returncode != 0 or not result.stdout.strip():
+                missing.append(service_name)
+        assert not missing, (
+            f"Missing required platform services: {set(missing)}\n"
+            "All core services must be deployed for platform to function."
+        )
 
     @pytest.mark.requirement("FR-003")
     def test_nodeport_services_respond(
@@ -192,8 +198,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
         # Define core NodePort service endpoints (always deployed)
         core_services = [
             ("http://localhost:3000/server_info", "Dagster webserver"),
-            ("http://localhost:8181/api/catalog/v1/config", "Polaris catalog API"),
-            ("http://localhost:8182/q/health/ready", "Polaris management health"),
+            ("http://localhost:8182/q/health/ready", "Polaris catalog health"),
             ("http://localhost:9000/minio/health/live", "MinIO API"),
             ("http://localhost:9001/minio/health/live", "MinIO UI"),
         ]
