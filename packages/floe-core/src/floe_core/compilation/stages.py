@@ -227,9 +227,11 @@ def compile_pipeline(
 
         parsed = urlparse(marquez_url)
         if parsed.scheme not in ("http", "https"):
+            from floe_core.telemetry.sanitization import sanitize_error_message as _sanitize
+
             logger.warning(
                 "marquez_url_invalid_scheme",
-                url=marquez_url,
+                url=_sanitize(marquez_url),
                 scheme=parsed.scheme,
             )
         else:

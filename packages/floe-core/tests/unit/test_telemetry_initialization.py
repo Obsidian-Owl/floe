@@ -632,6 +632,28 @@ class TestEndpointEdgeCases:
         )
 
     @pytest.mark.requirement("001-FR-040")
+    def test_invalid_scheme_does_not_initialize(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that non-http/https scheme is treated as no-op.
+
+        The implementation validates URL scheme and returns early for
+        exotic schemes like ftp://, gopher://, file://, etc. This
+        prevents SSRF via the OTLPSpanExporter.
+        """
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "ftp://collector:4317")
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        provider = trace.get_tracer_provider()
+        assert not isinstance(provider, TracerProvider), (
+            "ftp:// scheme should not initialize SDK TracerProvider."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
     def test_https_endpoint(
         self,
         monkeypatch: pytest.MonkeyPatch,

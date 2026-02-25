@@ -88,9 +88,11 @@ def ensure_telemetry_initialized() -> None:
     if parsed.scheme not in ("http", "https"):
         import structlog
 
+        from floe_core.telemetry.sanitization import sanitize_error_message as _sanitize
+
         structlog.get_logger(__name__).warning(
             "otel_endpoint_invalid_scheme",
-            endpoint=endpoint,
+            endpoint=_sanitize(endpoint),
             scheme=parsed.scheme,
         )
         return

@@ -695,7 +695,7 @@ class TestTraceCorrelation:
             run_facets = c.kwargs.get("run_facets")
             if not run_facets and len(c.args) > 4:
                 run_facets = c.args[4]
-            if run_facets and "trace_id" in str(run_facets):
+            if isinstance(run_facets, dict) and "traceCorrelation" in run_facets:
                 found_trace_facet = True
                 break
 
@@ -814,6 +814,30 @@ class TestNoOpWhenMarquezAbsent:
             default_namespace="default",
         )
 
+        _run_pipeline_with_patches(
+            compilation_patches,
+            extra_patches={
+                f"{EMITTER_MODULE}.create_emitter": mock_create,
+            },
+        )
+
+        mock_create.assert_not_called()
+
+    @pytest.mark.requirement("AC-17.3")
+    def test_no_emitter_created_with_invalid_marquez_url_scheme(
+        self,
+        compilation_patches: dict[str, MagicMock],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verify create_emitter NOT called when MARQUEZ_URL has invalid scheme.
+
+        The implementation validates URL scheme and skips emitter creation
+        for non-http/https schemes like ftp://, gopher://, etc. This
+        prevents SSRF via the HTTP transport layer.
+        """
+        monkeypatch.setenv(MARQUEZ_URL_ENV_KEY, "ftp://localhost:5000/api/v1/lineage")
+
+        mock_create = MagicMock()
         _run_pipeline_with_patches(
             compilation_patches,
             extra_patches={
