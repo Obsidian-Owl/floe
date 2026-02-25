@@ -133,4 +133,4 @@ health_check_sensor = sensor(
 )(_health_check_sensor_impl)
 
 
-__all__ = ["health_check_sensor", "_health_check_sensor_impl"]
+__all__ = ["health_check_sensor"]

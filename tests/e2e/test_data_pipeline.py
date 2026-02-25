@@ -869,8 +869,14 @@ class TestDataPipeline(IntegrationTestBase):
 
         # Test 2: Verify sensor definition is properly structured
         sensor_def = health_check_sensor
-        assert sensor_def is not None, "Sensor definition should not be None"
-        assert hasattr(sensor_def, "name"), "Sensor should have name attribute"
+        from dagster import SensorDefinition
+
+        assert isinstance(sensor_def, SensorDefinition), (
+            f"Expected SensorDefinition, got {type(sensor_def).__name__}"
+        )
+        assert sensor_def.name == "health_check_sensor", (
+            f"Expected sensor name 'health_check_sensor', got '{sensor_def.name}'"
+        )
         # Verify sensor has a target (modern API) — accessing .job_name is safe
         # when target= is used, but raises DagsterInvalidDefinitionError when
         # only asset_selection= is used.
@@ -880,12 +886,13 @@ class TestDataPipeline(IntegrationTestBase):
         )
 
         # Test 3: Verify sensor function signature (can be called)
-        # The sensor function should accept a context parameter
         import inspect
 
-        if callable(sensor_def):
-            sig = inspect.signature(sensor_def)
-            assert len(sig.parameters) > 0, "Sensor function should accept context parameter"
+        assert callable(sensor_def), (
+            f"Sensor definition should be callable, got {type(sensor_def).__name__}"
+        )
+        sig = inspect.signature(sensor_def)
+        assert len(sig.parameters) > 0, "Sensor function should accept context parameter"
 
         # Test 4: Query Dagster GraphQL for sensor registration status
         query = """

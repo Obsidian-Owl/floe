@@ -50,7 +50,8 @@ def _discover_repository_for_asset(
 
     Queries the Dagster GraphQL API to find which repository and code
     location host the specified asset. Falls back to the first available
-    repository if the specific asset is not found.
+    repository if the asset-level query fails (e.g., assets not yet
+    materialized), with a warning.
 
     Args:
         dagster_url: Base URL of the Dagster webserver.
@@ -62,6 +63,8 @@ def _discover_repository_for_asset(
     Raises:
         RuntimeError: If no repositories are found in Dagster.
     """
+    import warnings
+
     # Try to find the exact asset's repository
     query = """
     {
@@ -85,10 +88,25 @@ def _discover_repository_for_asset(
     )
     if response.status_code == 200:
         data = response.json()
-        for node in data.get("data", {}).get("assetNodes", []):
+        asset_nodes = data.get("data", {}).get("assetNodes", [])
+        for node in asset_nodes:
             if node["assetKey"]["path"] == asset_path:
                 repo = node["repository"]
                 return (repo["name"], repo["location"]["name"])
+        # Asset not found in any repository — log available assets for debugging
+        available = [n["assetKey"]["path"] for n in asset_nodes[:10]]
+        warnings.warn(
+            f"Asset {asset_path} not found in assetNodes. "
+            f"Available assets (first 10): {available}. "
+            "Falling back to first available repository.",
+            stacklevel=2,
+        )
+    else:
+        warnings.warn(
+            f"assetNodes query returned status {response.status_code}. "
+            "Falling back to repository-level discovery.",
+            stacklevel=2,
+        )
 
     # Fallback: use first available repository
     repos_query = """
