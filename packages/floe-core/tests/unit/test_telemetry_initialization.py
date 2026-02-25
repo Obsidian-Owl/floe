@@ -459,13 +459,7 @@ class TestTracerFactoryReset:
         with patch("floe_core.telemetry.initialization.reset_tracer") as mock_reset:
             ensure_telemetry_initialized()
 
-            (
-                mock_reset.assert_called_once(),
-                (
-                    "ensure_telemetry_initialized() must call reset_tracer() "
-                    "after setting the new TracerProvider so cached tracers are invalidated."
-                ),
-            )
+            mock_reset.assert_called_once()
 
     @pytest.mark.requirement("AC-17.1")
     def test_reset_tracer_not_called_when_no_endpoint(
@@ -483,13 +477,7 @@ class TestTracerFactoryReset:
         with patch("floe_core.telemetry.initialization.reset_tracer") as mock_reset:
             ensure_telemetry_initialized()
 
-            (
-                mock_reset.assert_not_called(),
-                (
-                    "reset_tracer() should not be called when OTEL_EXPORTER_OTLP_ENDPOINT "
-                    "is not set (no-op path)."
-                ),
-            )
+            mock_reset.assert_not_called()
 
     @pytest.mark.requirement("AC-17.1")
     def test_create_span_uses_new_provider_after_init(
@@ -539,13 +527,7 @@ class TestConfigureLogging:
         with patch("floe_core.telemetry.initialization.configure_logging") as mock_configure:
             ensure_telemetry_initialized()
 
-            (
-                mock_configure.assert_called_once(),
-                (
-                    "ensure_telemetry_initialized() must call configure_logging() "
-                    "to set up structlog with trace context injection."
-                ),
-            )
+            mock_configure.assert_called_once()
 
     @pytest.mark.requirement("001-FR-040")
     def test_does_not_configure_logging_when_no_endpoint(
@@ -564,10 +546,7 @@ class TestConfigureLogging:
         with patch("floe_core.telemetry.initialization.configure_logging") as mock_configure:
             ensure_telemetry_initialized()
 
-            (
-                mock_configure.assert_not_called(),
-                ("configure_logging() should not be called on the no-op path."),
-            )
+            mock_configure.assert_not_called()
 
 
 class TestReturnValue:

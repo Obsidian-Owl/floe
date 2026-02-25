@@ -223,14 +223,24 @@ def compile_pipeline(
     marquez_url = os.environ.get("MARQUEZ_URL", "").strip()
     lineage_emitter = None
     if marquez_url:
-        from floe_core.lineage.emitter import create_emitter
+        from urllib.parse import urlparse
 
-        transport_config: dict[str, Any] = {"type": "http", "url": marquez_url}
-        lineage_emitter = create_emitter(
-            transport_config,
-            default_namespace="floe-platform",
-            producer="floe",
-        )
+        parsed = urlparse(marquez_url)
+        if parsed.scheme not in ("http", "https"):
+            logger.warning(
+                "marquez_url_invalid_scheme",
+                url=marquez_url,
+                scheme=parsed.scheme,
+            )
+        else:
+            from floe_core.lineage.emitter import create_emitter
+
+            transport_config: dict[str, Any] = {"type": "http", "url": marquez_url}
+            lineage_emitter = create_emitter(
+                transport_config,
+                default_namespace="floe-platform",
+                producer="floe",
+            )
 
     def _emit_sync(coro: Any) -> Any:
         """Bridge async lineage calls into sync context (best-effort)."""
@@ -553,11 +563,13 @@ def compile_pipeline(
         except Exception as exc:
             # Emit pipeline-level FAIL event (best-effort), then re-raise
             if lineage_emitter is not None and pipeline_run_id is not None:
+                from floe_core.telemetry.sanitization import sanitize_error_message
+
                 _emit_sync(
                     lineage_emitter.emit_fail(
                         pipeline_run_id,
                         pipeline_job_name,
-                        error_message=str(exc),
+                        error_message=sanitize_error_message(str(exc)),
                     )
                 )
             raise

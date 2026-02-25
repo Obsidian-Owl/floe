@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from opentelemetry import trace
@@ -269,11 +269,30 @@ class TestCreateSpanProducesRealSpansAfterRegistration:
 class TestCompiledArtifactsFactoryCallsEnsureTelemetry:
     """Tests that compiled_artifacts factory initializes telemetry.
 
-    The factory currently calls compile_pipeline() directly without
-    calling ensure_telemetry_initialized() first. In non-E2E
-    contexts, this means OTel is never initialized and spans are
-    NoOp.
+    Uses inspect.getsource() on the real compiled_artifacts fixture
+    from tests/conftest.py to verify ensure_telemetry_initialized()
+    is called before compile_pipeline().
     """
+
+    @staticmethod
+    def _get_fixture_source() -> str:
+        """Get source of compiled_artifacts fixture from tests/conftest.py.
+
+        Returns:
+            Source code of the compiled_artifacts fixture function.
+        """
+        import importlib.util
+        import inspect
+        from pathlib import Path
+
+        conftest_path = Path(__file__).parent.parent / "conftest.py"
+        loader_spec = importlib.util.spec_from_file_location(
+            "tests_root_conftest", str(conftest_path)
+        )
+        assert loader_spec is not None and loader_spec.loader is not None
+        mod = importlib.util.module_from_spec(loader_spec)
+        loader_spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        return inspect.getsource(mod.compiled_artifacts)
 
     @pytest.mark.requirement("AC-17.2")
     def test_factory_calls_ensure_telemetry_before_compile(
@@ -284,61 +303,13 @@ class TestCompiledArtifactsFactoryCallsEnsureTelemetry:
         Without this call, compile_pipeline() produces NoOp spans
         because the OTel SDK is never initialized from env vars.
 
-        This test replicates the factory logic from
-        tests/conftest.py and verifies ensure_telemetry_initialized
-        is called via call-order tracking.
+        Uses inspect.getsource() on the real compiled_artifacts
+        fixture to verify the call exists in the source code.
         """
-        from pathlib import Path
+        source = self._get_fixture_source()
 
-        call_order: list[str] = []
-
-        def track_ensure() -> None:
-            """Track ensure_telemetry_initialized calls."""
-            call_order.append("ensure_telemetry_initialized")
-
-        mock_artifacts = MagicMock(name="CompiledArtifacts")
-
-        def track_compile(spec_path: Any, manifest_path: Any, **kw: Any) -> MagicMock:
-            """Track compile_pipeline calls."""
-            call_order.append("compile_pipeline")
-            return mock_artifacts
-
-        # Replicate the factory from tests/conftest.py exactly.
-        # The factory imports compile_pipeline at fixture scope,
-        # then the inner function calls it. We patch the module
-        # attribute so the factory's import resolves to our mock.
-        import floe_core.compilation.stages as stages_mod
-        import floe_core.telemetry.initialization as init_mod
-
-        orig_compile = stages_mod.compile_pipeline
-        orig_ensure = init_mod.ensure_telemetry_initialized
-        try:
-            stages_mod.compile_pipeline = track_compile  # type: ignore[assignment]
-            init_mod.ensure_telemetry_initialized = track_ensure  # type: ignore[assignment]
-
-            # Re-import to pick up patched module attribute
-            from floe_core.compilation.stages import (
-                compile_pipeline,
-            )
-
-            root = Path(__file__).parent.parent.parent
-            manifest_path = root / "demo" / "manifest.yaml"
-
-            # This replicates the FIXED factory's inner function:
-            def _compile_artifacts(spec_path: Path) -> Any:
-                """Fixed factory logic (with telemetry init)."""
-                init_mod.ensure_telemetry_initialized()
-                return compile_pipeline(spec_path, manifest_path)
-
-            spec = Path("demo/customer-360/floe.yaml")
-            _compile_artifacts(spec)
-        finally:
-            stages_mod.compile_pipeline = orig_compile
-            init_mod.ensure_telemetry_initialized = orig_ensure
-
-        # Current factory does NOT call ensure_telemetry_initialized
-        assert "ensure_telemetry_initialized" in call_order, (
-            "compiled_artifacts factory must call "
+        assert "ensure_telemetry_initialized" in source, (
+            "compiled_artifacts fixture must call "
             "ensure_telemetry_initialized() before "
             "compile_pipeline(). Without this, the OTel SDK is "
             "never initialized and compile_pipeline() produces "
@@ -351,63 +322,32 @@ class TestCompiledArtifactsFactoryCallsEnsureTelemetry:
 
         Even if both are called, the order matters: telemetry must
         be initialized before any spans are created during
-        compilation.
+        compilation. Verifies by checking source code ordering.
         """
-        from pathlib import Path
+        import re as re_mod
 
-        call_order: list[str] = []
+        source = self._get_fixture_source()
 
-        def track_ensure() -> None:
-            """Track ensure_telemetry_initialized calls."""
-            call_order.append("ensure")
-
-        mock_artifacts = MagicMock(name="CompiledArtifacts")
-
-        def track_compile(spec_path: Any, manifest_path: Any, **kw: Any) -> MagicMock:
-            """Track compile_pipeline calls."""
-            call_order.append("compile")
-            return mock_artifacts
-
-        import floe_core.compilation.stages as stages_mod
-        import floe_core.telemetry.initialization as init_mod
-
-        orig_compile = stages_mod.compile_pipeline
-        orig_ensure = init_mod.ensure_telemetry_initialized
-        try:
-            stages_mod.compile_pipeline = track_compile  # type: ignore[assignment]
-            init_mod.ensure_telemetry_initialized = track_ensure  # type: ignore[assignment]
-
-            from floe_core.compilation.stages import (
-                compile_pipeline,
-            )
-
-            root = Path(__file__).parent.parent.parent
-            manifest_path = root / "demo" / "manifest.yaml"
-            spec = Path("demo/customer-360/floe.yaml")
-
-            # Fixed factory -- ensure telemetry before compile
-            init_mod.ensure_telemetry_initialized()
-            compile_pipeline(spec, manifest_path)
-        finally:
-            stages_mod.compile_pipeline = orig_compile
-            init_mod.ensure_telemetry_initialized = orig_ensure
-
-        # Verify ensure was called
-        assert "ensure" in call_order, (
-            "ensure_telemetry_initialized() was never called. "
-            "The factory must call it before compile_pipeline()."
+        # Match actual call statements, not docstring mentions.
+        # Calls appear as indented statements, not inside triple-quoted strings.
+        ensure_match = re_mod.search(
+            r"^\s+ensure_telemetry_initialized\(\)", source, re_mod.MULTILINE
+        )
+        compile_match = re_mod.search(
+            r"^\s+(?:return\s+)?compile_pipeline\(", source, re_mod.MULTILINE
         )
 
-        # Verify order: ensure before compile
-        if "ensure" in call_order and "compile" in call_order:
-            ensure_idx = call_order.index("ensure")
-            compile_idx = call_order.index("compile")
-            assert ensure_idx < compile_idx, (
-                f"ensure_telemetry_initialized() "
-                f"(index={ensure_idx}) must be called BEFORE "
-                f"compile_pipeline() (index={compile_idx}). "
-                f"Call order was: {call_order}"
-            )
+        assert ensure_match is not None, (
+            "ensure_telemetry_initialized() call not found in fixture source."
+        )
+        assert compile_match is not None, "compile_pipeline() call not found in fixture source."
+
+        assert ensure_match.start() < compile_match.start(), (
+            f"ensure_telemetry_initialized() call "
+            f"(pos={ensure_match.start()}) must appear BEFORE "
+            f"compile_pipeline() call (pos={compile_match.start()}) "
+            f"in the compiled_artifacts fixture source."
+        )
 
 
 class TestCompilePipelineSpanNames:
@@ -450,11 +390,14 @@ class TestCompilePipelineSpanNames:
 
         source = inspect.getsource(compile_pipeline)
 
+        import re
+
         for span_name in self.EXPECTED_SPAN_NAMES:
-            assert f'"{span_name}"' in source, (
-                f"compile_pipeline() source must contain span name "
-                f'"{span_name}". AC-17.2 requires all compilation '
-                f"stages to produce Jaeger-visible traces. "
+            pattern = rf'create_span\(\s*"{re.escape(span_name)}"'
+            assert re.search(pattern, source), (
+                f"compile_pipeline() source must call create_span() "
+                f'with span name "{span_name}". AC-17.2 requires all '
+                f"compilation stages to produce Jaeger-visible traces. "
                 f"Missing span: {span_name}"
             )
 

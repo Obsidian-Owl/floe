@@ -208,7 +208,9 @@ class TestPipelineLevelEmission:
 
         mock_emitter.emit_start.assert_called()
         start_calls = mock_emitter.emit_start.call_args_list
-        pipeline_start_calls = [c for c in start_calls if PIPELINE_JOB_SUBSTRING in str(c)]
+        pipeline_start_calls = [
+            c for c in start_calls if c.args and PIPELINE_JOB_SUBSTRING in c.args[0]
+        ]
         assert len(pipeline_start_calls) >= 1, (
             f"Expected at least one emit_start call with "
             f"'{PIPELINE_JOB_SUBSTRING}' in job_name. "
@@ -244,7 +246,9 @@ class TestPipelineLevelEmission:
 
         mock_emitter.emit_complete.assert_called()
         complete_calls = mock_emitter.emit_complete.call_args_list
-        pipeline_complete_calls = [c for c in complete_calls if PIPELINE_JOB_SUBSTRING in str(c)]
+        pipeline_complete_calls = [
+            c for c in complete_calls if len(c.args) > 1 and PIPELINE_JOB_SUBSTRING in c.args[1]
+        ]
         assert len(pipeline_complete_calls) >= 1, (
             f"Expected at least one emit_complete call with "
             f"'{PIPELINE_JOB_SUBSTRING}' in job_name. "
@@ -279,13 +283,14 @@ class TestPipelineLevelEmission:
         )
 
         complete_calls = mock_emitter.emit_complete.call_args_list
-        pipeline_complete_calls = [c for c in complete_calls if PIPELINE_JOB_SUBSTRING in str(c)]
+        pipeline_complete_calls = [
+            c for c in complete_calls if len(c.args) > 1 and PIPELINE_JOB_SUBSTRING in c.args[1]
+        ]
         assert len(pipeline_complete_calls) >= 1
         complete_call = pipeline_complete_calls[0]
-        all_args = str(complete_call)
-        assert str(pipeline_run_id) in all_args, (
+        assert complete_call.args[0] == pipeline_run_id, (
             f"Pipeline COMPLETE call must use run_id={pipeline_run_id} "
-            f"from START. Actual call: {complete_call}"
+            f"from START. Actual run_id: {complete_call.args[0]}"
         )
 
     @pytest.mark.requirement("AC-17.3")
@@ -412,9 +417,9 @@ class TestPipelineFailEmission:
             )
 
         fail_call = mock_emitter.emit_fail.call_args
-        all_args_str = str(fail_call)
-        assert "missing required" in all_args_str, (
-            f"emit_fail must include error message. Got: {fail_call}"
+        error_msg = fail_call.kwargs.get("error_message", "")
+        assert "missing required" in error_msg, (
+            f"emit_fail must include error message. Got error_message: {error_msg!r}"
         )
 
     @pytest.mark.requirement("AC-17.3")
@@ -449,7 +454,9 @@ class TestPipelineFailEmission:
         mock_emitter.emit_start.assert_called()
 
         complete_calls = mock_emitter.emit_complete.call_args_list
-        pipeline_complete_calls = [c for c in complete_calls if PIPELINE_JOB_SUBSTRING in str(c)]
+        pipeline_complete_calls = [
+            c for c in complete_calls if len(c.args) > 1 and PIPELINE_JOB_SUBSTRING in c.args[1]
+        ]
         assert len(pipeline_complete_calls) == 0, (
             "emit_complete must NOT be called for pipeline job on "
             f"error. Found: {pipeline_complete_calls}"
@@ -543,8 +550,7 @@ class TestPerModelEmission:
         )
 
         start_calls = mock_emitter.emit_start.call_args_list
-        all_call_strs = [str(c) for c in start_calls]
-        all_calls_combined = " ".join(all_call_strs)
+        job_names = [c.args[0] for c in start_calls if c.args]
 
         expected_models = [
             "stg_customers",
@@ -552,9 +558,9 @@ class TestPerModelEmission:
             "dim_products",
         ]
         for model_name in expected_models:
-            assert model_name in all_calls_combined, (
+            assert any(model_name in jn for jn in job_names), (
                 f"Expected model name '{model_name}' in emit_start "
-                f"calls. Actual calls: {all_call_strs}"
+                f"job_names. Actual job_names: {job_names}"
             )
 
     @pytest.mark.requirement("AC-17.3")
@@ -738,10 +744,16 @@ class TestTraceCorrelation:
         all_calls = (
             mock_emitter.emit_start.call_args_list + mock_emitter.emit_complete.call_args_list
         )
-        all_calls_str = str(all_calls)
-        assert specific_trace_id in all_calls_str, (
-            f"trace_id '{specific_trace_id}' not found in any "
-            f"emit call run_facets. Calls: {all_calls_str}"
+        found_trace_id = False
+        for c in all_calls:
+            run_facets = c.kwargs.get("run_facets")
+            if isinstance(run_facets, dict):
+                facet = run_facets.get("traceCorrelation")
+                if isinstance(facet, dict) and facet.get("trace_id") == specific_trace_id:
+                    found_trace_id = True
+                    break
+        assert found_trace_id, (
+            f"trace_id '{specific_trace_id}' not found in any emit call run_facets."
         )
 
     @pytest.mark.requirement("AC-17.5")
@@ -771,7 +783,7 @@ class TestTraceCorrelation:
                 },
             )
 
-        assert result is not None
+        assert result.version == "0.3.0"
         mock_emitter.emit_start.assert_called()
         mock_emitter.emit_complete.assert_called()
 
@@ -809,16 +821,7 @@ class TestNoOpWhenMarquezAbsent:
             },
         )
 
-        # If create_emitter is called, config must NOT have HTTP URL.
-        # OR it should not be called at all.
-        if mock_create.called:
-            create_call = mock_create.call_args
-            call_str = str(create_call)
-            # Must NOT contain the HTTP URL
-            assert "http" not in call_str.lower() or ("None" in call_str), (
-                f"create_emitter should use NoOp transport when "
-                f"MARQUEZ_URL is unset. Got: {create_call}"
-            )
+        mock_create.assert_not_called()
 
     @pytest.mark.requirement("AC-17.3")
     def test_compilation_succeeds_without_marquez_url(
@@ -1061,8 +1064,12 @@ class TestEmitterCreation:
 
         mock_create.assert_called_once()
         create_call = mock_create.call_args
-        call_str = str(create_call)
-        assert MARQUEZ_URL_VALUE in call_str or "http" in call_str, (
-            f"create_emitter must be called with HTTP config "
-            f"containing MARQUEZ_URL. Got: {create_call}"
+        transport_config = (
+            create_call.args[0] if create_call.args else create_call.kwargs.get("transport_config")
+        )
+        assert isinstance(transport_config, dict), (
+            f"create_emitter first arg must be a dict. Got: {type(transport_config)}"
+        )
+        assert transport_config.get("url") == MARQUEZ_URL_VALUE, (
+            f"create_emitter transport_config must contain MARQUEZ_URL. Got: {transport_config}"
         )

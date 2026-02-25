@@ -81,6 +81,20 @@ def ensure_telemetry_initialized() -> None:
         # No endpoint configured — leave default (NoOp/Proxy) provider in place.
         return
 
+    # Validate endpoint scheme is http or https.
+    from urllib.parse import urlparse
+
+    parsed = urlparse(endpoint)
+    if parsed.scheme not in ("http", "https"):
+        import structlog
+
+        structlog.get_logger(__name__).warning(
+            "otel_endpoint_invalid_scheme",
+            endpoint=endpoint,
+            scheme=parsed.scheme,
+        )
+        return
+
     # Resolve service name with fallback to default.
     service_name = os.environ.get("OTEL_SERVICE_NAME", "").strip() or _DEFAULT_SERVICE_NAME
 
