@@ -59,6 +59,9 @@ from floe_core.telemetry.conventions import (
     FloeSpanAttributes,
 )
 
+# Initialization
+from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
 # Propagation utilities
 from floe_core.telemetry.propagation import (
     BAGGAGE_MODE,
@@ -88,9 +91,6 @@ from floe_core.telemetry.provider import ProviderState, TelemetryProvider
 from floe_core.telemetry.sanitization import (
     sanitize_error_message as sanitize_error_message,
 )
-
-# Initialization
-from floe_core.telemetry.initialization import ensure_telemetry_initialized
 
 # Tracing utilities
 from floe_core.telemetry.tracing import (
