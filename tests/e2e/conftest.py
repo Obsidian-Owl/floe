@@ -16,6 +16,7 @@ from typing import Any
 
 import httpx
 import pytest
+from opentelemetry import trace
 
 from testing.fixtures.polling import wait_for_condition
 
@@ -637,6 +638,8 @@ def otel_tracer_provider() -> Generator[Any, None, None]:
     exporter = OTLPSpanExporter(endpoint=otel_endpoint, insecure=True)
     processor = BatchSpanProcessor(exporter)
     provider.add_span_processor(processor)
+
+    trace.set_tracer_provider(provider)
 
     yield provider
 

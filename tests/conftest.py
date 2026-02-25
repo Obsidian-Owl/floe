@@ -93,6 +93,10 @@ def compiled_artifacts() -> Callable[[Path], Any]:
     def _compile_artifacts(spec_path: Path) -> Any:
         """Compile floe.yaml to CompiledArtifacts via real 6-stage pipeline.
 
+        Calls ensure_telemetry_initialized() before compilation so that
+        OTel spans are emitted during the 6-stage pipeline when
+        OTEL_EXPORTER_OTLP_ENDPOINT is set.
+
         Args:
             spec_path: Path to floe.yaml file.
 
@@ -102,6 +106,9 @@ def compiled_artifacts() -> Callable[[Path], Any]:
         Raises:
             CompilationException: If any compilation stage fails.
         """
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
         return compile_pipeline(spec_path, manifest_path)
 
     return _compile_artifacts
