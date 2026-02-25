@@ -871,7 +871,13 @@ class TestDataPipeline(IntegrationTestBase):
         sensor_def = health_check_sensor
         assert sensor_def is not None, "Sensor definition should not be None"
         assert hasattr(sensor_def, "name"), "Sensor should have name attribute"
-        assert hasattr(sensor_def, "job_name"), "Sensor should have job_name or target"
+        # Verify sensor has a target (modern API) — accessing .job_name is safe
+        # when target= is used, but raises DagsterInvalidDefinitionError when
+        # only asset_selection= is used.
+        assert len(sensor_def.targets) > 0, (
+            "Sensor should have at least one target. "
+            "Use target=AssetSelection.all() in the sensor definition."
+        )
 
         # Test 3: Verify sensor function signature (can be called)
         # The sensor function should accept a context parameter
