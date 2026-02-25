@@ -12,25 +12,22 @@ is None -- breaking downstream consumers (e.g., E2E tests) that inspect the
 sensor definition.
 
 Test coverage:
-- Sensor imports without error
 - Sensor is a valid SensorDefinition
-- Sensor name is "health_check_sensor"
 - Sensor uses target (not asset_selection), yielding a non-None _target
 - Sensor has non-empty targets list
 - Sensor job_name is accessible without raising
 - Sensor minimum_interval_seconds is 60
 - Sensor description is correct
 - Sensor evaluation function is the expected implementation
+
+Runtime behavior tests (evaluation, cursor, RunRequest tags, edge cases) are
+in test_health_sensor.py -- this file focuses on definition structure and the
+target= vs asset_selection= regression.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import pytest
-
-if TYPE_CHECKING:
-    pass
 
 
 class TestSensorDefinitionStructure:
@@ -42,14 +39,6 @@ class TestSensorDefinitionStructure:
     """
 
     @pytest.mark.requirement("FR-029")
-    def test_sensor_imports_without_error(self) -> None:
-        """Test that health_check_sensor can be imported from the sensors module."""
-        from floe_orchestrator_dagster.sensors import health_check_sensor
-
-        # Import succeeded -- sensor module is loadable
-        assert health_check_sensor is not None
-
-    @pytest.mark.requirement("FR-029")
     def test_sensor_is_sensor_definition(self) -> None:
         """Test that health_check_sensor is an instance of Dagster SensorDefinition."""
         from dagster import SensorDefinition
@@ -58,15 +47,6 @@ class TestSensorDefinitionStructure:
 
         assert isinstance(health_check_sensor, SensorDefinition), (
             f"Expected SensorDefinition, got {type(health_check_sensor).__name__}"
-        )
-
-    @pytest.mark.requirement("FR-029")
-    def test_sensor_name_is_health_check_sensor(self) -> None:
-        """Test that the sensor name is exactly 'health_check_sensor'."""
-        from floe_orchestrator_dagster.sensors import health_check_sensor
-
-        assert health_check_sensor.name == "health_check_sensor", (
-            f"Expected name 'health_check_sensor', got '{health_check_sensor.name}'"
         )
 
     @pytest.mark.requirement("FR-029")
@@ -181,18 +161,15 @@ class TestSensorDefinitionStructure:
 
         # Verify the sensor was built from this specific function by
         # checking that the sensor's evaluation function name matches.
-        # Dagster stores the fn in _raw_fn or similar internal attribute.
+        # Dagster 1.12.x stores the fn in _raw_fn.
         sensor_fn = getattr(health_check_sensor, "_raw_fn", None)
-        if sensor_fn is not None:
-            assert sensor_fn is _health_check_sensor_impl, (
-                "Sensor's raw function should be _health_check_sensor_impl"
-            )
-        else:
-            # Fallback: verify the sensor's module source matches
-            sensor_module = type(health_check_sensor).__module__
-            assert "dagster" in sensor_module, (
-                f"Sensor should be a Dagster SensorDefinition, but type module is {sensor_module}"
-            )
+        assert sensor_fn is not None, (
+            "Dagster SensorDefinition does not expose _raw_fn attribute. "
+            "Update this test for the current Dagster version's internal API."
+        )
+        assert sensor_fn is _health_check_sensor_impl, (
+            "Sensor's raw function should be _health_check_sensor_impl"
+        )
 
 
 class TestSensorTargetIsAssetSelection:
@@ -212,6 +189,10 @@ class TestSensorTargetIsAssetSelection:
         UnresolvedAssetJobDefinition. When asset_selection='*' is used,
         targets is empty and there is no job definition to resolve.
         """
+        from dagster._core.definitions.unresolved_asset_job_definition import (
+            UnresolvedAssetJobDefinition,
+        )
+
         from floe_orchestrator_dagster.sensors import health_check_sensor
 
         targets = health_check_sensor.targets
@@ -220,13 +201,11 @@ class TestSensorTargetIsAssetSelection:
             "Empty targets means asset_selection= was used instead of target=."
         )
 
-        # The first target should have a resolvable job
+        # The first target should resolve to an UnresolvedAssetJobDefinition
         first_target = targets[0]
-        assert hasattr(first_target, "resolvable_to_job"), (
-            f"Target {first_target} should have resolvable_to_job attribute"
-        )
-        assert first_target.resolvable_to_job is not None, (
-            "Target's resolvable_to_job should not be None"
+        assert isinstance(first_target.resolvable_to_job, UnresolvedAssetJobDefinition), (
+            f"Expected UnresolvedAssetJobDefinition, "
+            f"got {type(first_target.resolvable_to_job).__name__}"
         )
 
     @pytest.mark.requirement("FR-029")

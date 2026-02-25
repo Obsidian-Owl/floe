@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "currentWork": {
     "id": "e2e-infra-fixes",
-    "status": "building",
+    "status": "verifying",
     "intensity": "full",
     "workDir": ".specwright/work/e2e-infra-fixes",
     "startedAt": "2026-02-23T00:00:00Z"
@@ -55,9 +55,9 @@
     { "id": "wu-11-demo-packaging", "description": "Production-like demo packaging: Dockerfile, Makefile targets, Helm values, generated definitions", "status": "shipped", "order": 11, "tasksCompleted": ["T61", "T62", "T63", "T64", "T65"], "pr": "https://github.com/Obsidian-Owl/floe/pull/88" },
     { "id": "wu-12-docker-packaging-strategy", "description": "3-stage uv build replacing vendor base image", "status": "shipped", "order": 12, "tasksCompleted": ["T66", "T67", "T68", "T69", "T70"], "pr": "https://github.com/Obsidian-Owl/floe/pull/89" },
     { "id": "wu-13-pyiceberg-compat", "description": "PyIceberg compatibility & Docker build (Categories 1+3, 30 tests)", "status": "shipped", "order": 13, "tasksCompleted": ["T1", "T2", "T3", "T4", "T5"], "pr": "https://github.com/Obsidian-Owl/floe/pull/100" },
-    { "id": "wu-14-bootstrap-reliability", "description": "Bootstrap & provisioning reliability (Category 2, 5 tests)", "status": "building", "order": 14, "tasksCompleted": ["T6", "T7", "T8", "T9", "T10", "T11", "T12"] },
-    { "id": "wu-15-label-alignment", "description": "Label & service discovery alignment + PDB/NetworkPolicy production fixes (Categories 5+6, 4 tests)", "status": "backlog", "order": 15 },
-    { "id": "wu-16-test-bug-fixes", "description": "Test code & plugin bug fixes (Categories 4/10/11/12, 4 tests)", "status": "backlog", "order": 16 },
+    { "id": "wu-14-bootstrap-reliability", "description": "Bootstrap & provisioning reliability (Category 2, 5 tests)", "status": "shipped", "order": 14, "tasksCompleted": ["T6", "T7", "T8", "T9", "T10", "T11", "T12"], "pr": "https://github.com/Obsidian-Owl/floe/pull/101" },
+    { "id": "wu-15-label-alignment", "description": "Label & service discovery alignment + PDB/NetworkPolicy production fixes (Categories 5+6, 4 tests)", "status": "shipped", "order": 15, "tasksCompleted": ["T13", "T14", "T15", "T16", "T17", "T18", "T19"], "pr": "https://github.com/Obsidian-Owl/floe/pull/102" },
+    { "id": "wu-16-test-bug-fixes", "description": "Test code & plugin bug fixes (Categories 4/10/11/12, 4 tests)", "status": "building", "order": 16, "tasksCompleted": ["T21", "T22", "T23", "T24", "T25"] },
     { "id": "wu-17-otel-openlineage", "description": "OTel/OpenLineage pipeline wiring (Category 8, 5 tests)", "status": "backlog", "order": 17 },
     { "id": "wu-18-governance-secrets", "description": "Governance pipeline wiring + Helm secrets (Category 9, 3 tests)", "status": "backlog", "order": 18 },
     { "id": "wu-19-marquez-stability", "description": "Marquez stability investigation & fix (Category 7, 4 tests)", "status": "backlog", "order": 19 }
@@ -152,7 +152,27 @@
       "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 2, "info": 3 }, "timestamp": "2026-02-23T12:30:00Z" },
       "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 4 }, "timestamp": "2026-02-23T12:30:00Z", "note": "WARN for floe-iceberg !=0.11.0 fixed in commit 8c23e66" },
       "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 2 }, "timestamp": "2026-02-23T12:30:00Z" }
+    },
+    "wu-14-bootstrap-reliability": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-24T10:00:00Z" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 2 }, "timestamp": "2026-02-24T10:00:00Z" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-24T10:00:00Z" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 1 }, "timestamp": "2026-02-24T10:00:00Z" }
+    },
+    "wu-15-label-alignment": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-24T14:30:00Z" },
+      "gate-tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 5 }, "timestamp": "2026-02-24T14:30:00Z" },
+      "gate-security": { "status": "WARN", "findings": { "block": 0, "warn": 3, "info": 2 }, "timestamp": "2026-02-24T14:30:00Z", "note": "All 3 WARN are pre-existing (MinIO creds, Grafana password, NetworkPolicy ingress)" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-24T14:30:00Z" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 1 }, "timestamp": "2026-02-24T14:30:00Z", "note": "AC-15.6 deferred to runtime" }
+    },
+    "wu-16-test-bug-fixes": {
+      "gate-build": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 0 }, "timestamp": "2026-02-25T06:00:00Z", "note": "Pre-existing: Dagster subchart schema URL 404 on helm lint" },
+      "gate-tests": { "status": "BLOCK", "findings": { "block": 3, "warn": 7, "info": 9 }, "timestamp": "2026-02-25T06:10:00Z", "note": "3 BLOCKs in test_sensors.py: trivial assertion, silent fallback, weak hasattr" },
+      "gate-security": { "status": "PASS", "findings": { "block": 0, "warn": 1, "info": 5 }, "timestamp": "2026-02-25T06:05:00Z", "note": "WARN: empty TYPE_CHECKING block (code quality, not security)" },
+      "gate-wiring": { "status": "PASS", "findings": { "block": 0, "warn": 2, "info": 8 }, "timestamp": "2026-02-25T06:05:00Z", "note": "WARNs: private _health_check_sensor_impl in __all__, test file overlap with test_health_sensor.py" },
+      "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 3 }, "timestamp": "2026-02-25T06:10:00Z", "note": "11/11 sub-criteria PASS. E2E runtime verification requires K8s cluster." }
     }
   },
-  "lastUpdated": "2026-02-23T12:35:00Z"
+  "lastUpdated": "2026-02-25T06:15:00Z"
 }
