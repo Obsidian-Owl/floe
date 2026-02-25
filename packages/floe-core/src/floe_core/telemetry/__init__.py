@@ -89,6 +89,9 @@ from floe_core.telemetry.sanitization import (
     sanitize_error_message as sanitize_error_message,
 )
 
+# Initialization
+from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
 # Tracing utilities
 from floe_core.telemetry.tracing import (
     create_span,
@@ -147,4 +150,6 @@ __all__: list[str] = [
     "reset_tracer",
     # Sanitization
     "sanitize_error_message",
+    # Initialization
+    "ensure_telemetry_initialized",
 ]
