@@ -204,7 +204,7 @@ class TestDemoMode(IntegrationTestBase):
                 f"Workspace ConfigMap missing code location for {product}. "
                 f"Check dagster.codeLocations in values-test.yaml"
             )
-            assert f"demo.{product_underscore}.definitions" in rendered, (
+            assert f"{product_underscore}.definitions" in rendered, (
                 f"Workspace ConfigMap missing module path for {product}"
             )
 

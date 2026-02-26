@@ -42,6 +42,104 @@ DEMO_PRODUCTS = {
 }
 
 
+def _discover_repository_for_asset(
+    dagster_url: str,
+    asset_path: list[str],
+) -> tuple[str, str]:
+    """Discover the repository name and location for a given asset.
+
+    Queries the Dagster GraphQL API to find which repository and code
+    location host the specified asset. Falls back to the first available
+    repository if the asset-level query fails (e.g., assets not yet
+    materialized), with a warning.
+
+    Args:
+        dagster_url: Base URL of the Dagster webserver.
+        asset_path: Asset key path, e.g. ["stg_customers"].
+
+    Returns:
+        Tuple of (repositoryName, repositoryLocationName).
+
+    Raises:
+        RuntimeError: If no repositories are found in Dagster.
+    """
+    import warnings
+
+    # Try to find the exact asset's repository
+    query = """
+    {
+        assetNodes {
+            assetKey {
+                path
+            }
+            repository {
+                name
+                location {
+                    name
+                }
+            }
+        }
+    }
+    """
+    response = httpx.post(
+        f"{dagster_url}/graphql",
+        json={"query": query},
+        timeout=30.0,
+    )
+    if response.status_code == 200:
+        data = response.json()
+        asset_nodes = data.get("data", {}).get("assetNodes", [])
+        for node in asset_nodes:
+            if node["assetKey"]["path"] == asset_path:
+                repo = node["repository"]
+                return (repo["name"], repo["location"]["name"])
+        # Asset not found in any repository — log available assets for debugging
+        available = [n["assetKey"]["path"] for n in asset_nodes[:10]]
+        warnings.warn(
+            f"Asset {asset_path} not found in assetNodes. "
+            f"Available assets (first 10): {available}. "
+            "Falling back to first available repository.",
+            stacklevel=2,
+        )
+    else:
+        warnings.warn(
+            f"assetNodes query returned status {response.status_code}. "
+            "Falling back to repository-level discovery.",
+            stacklevel=2,
+        )
+
+    # Fallback: use first available repository
+    repos_query = """
+    {
+        repositoriesOrError {
+            ... on RepositoryConnection {
+                nodes {
+                    name
+                    location {
+                        name
+                    }
+                }
+            }
+        }
+    }
+    """
+    response = httpx.post(
+        f"{dagster_url}/graphql",
+        json={"query": repos_query},
+        timeout=30.0,
+    )
+    if response.status_code == 200:
+        data = response.json()
+        nodes = data.get("data", {}).get("repositoriesOrError", {}).get("nodes", [])
+        if nodes:
+            return (nodes[0]["name"], nodes[0]["location"]["name"])
+
+    raise RuntimeError(
+        "No repositories found in Dagster. "
+        "Check that code locations are loaded: helm status floe-platform -n floe-test"
+    )
+
+
 @pytest.mark.e2e
 @pytest.mark.requirement("AC-2.2")
 class TestCompileDeployMaterialize:
@@ -423,9 +521,14 @@ class TestCompileDeployMaterialize:
         }
         """
 
+        # Discover repository context for the target asset (AC-16.1)
+        repo_name, location_name = _discover_repository_for_asset(dagster_url, ["stg_customers"])
+
         variables = {
             "executionParams": {
                 "selector": {
+                    "repositoryName": repo_name,
+                    "repositoryLocationName": location_name,
                     "assetSelection": [{"path": ["stg_customers"]}],
                 },
                 "mode": "default",

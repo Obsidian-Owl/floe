@@ -94,10 +94,10 @@ class TestSensorTargetParameter:
         """
         content = SENSOR_MODULE.read_text()
         has_job = "job=" in content or "job_name=" in content
-        has_asset_selection = "asset_selection=" in content
+        has_asset_selection = "asset_selection=" in content or "target=" in content
         assert has_job or has_asset_selection, (
-            "Sensor must have explicit 'job=' or "
-            "'asset_selection=' parameter. Without a target, "
+            "Sensor must have explicit 'job=', 'asset_selection=', or "
+            "'target=' parameter. Without a target, "
             "RunRequest yields create no-op sensor evaluations."
         )
 
@@ -111,17 +111,20 @@ class TestSensorTargetParameter:
         assert health_check_sensor.name == "health_check_sensor"
 
     @pytest.mark.requirement("WU3-AC5")
-    def test_sensor_has_asset_selection_at_runtime(self) -> None:
-        """Verify sensor definition targets assets via asset_selection.
+    def test_sensor_has_target_at_runtime(self) -> None:
+        """Verify sensor definition targets assets via target parameter.
 
         Without an explicit target, RunRequest yields create no-op
         sensor evaluations. This test validates the runtime attribute,
-        not just source code presence.
+        not just source code presence. Dagster's current API uses
+        ``target=`` which populates the ``targets`` attribute (a list
+        of AutomationTarget objects), rather than the legacy
+        ``asset_selection`` attribute.
         """
         from floe_orchestrator_dagster.sensors import health_check_sensor
 
-        assert health_check_sensor.asset_selection is not None, (
-            "Sensor must have asset_selection defined at runtime, not just in source code."
+        assert health_check_sensor.targets, (
+            "Sensor must have targets defined at runtime, not just in source code."
         )
 
 
