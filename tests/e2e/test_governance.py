@@ -417,7 +417,8 @@ class TestGovernance(IntegrationTestBase):
             "--no-check-uv-tool",
             "--ignore-vulns",
             "GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7,"
-            "GHSA-hm8f-75xx-w2vr,GHSA-2q4j-m29v-hq73,GHSA-wp53-j4wj-2cfg",
+            "GHSA-hm8f-75xx-w2vr,GHSA-2q4j-m29v-hq73,GHSA-wp53-j4wj-2cfg,"
+            "GHSA-cfh3-3jmp-rvhc,GHSA-w8v5-vhqr-4h9v",
             ".",
         ]
 

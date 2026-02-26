@@ -314,9 +314,7 @@ class TestEnforcementResult:
         assert result.enforcement_result.warning_count == 1
 
     @pytest.mark.requirement("AC-18.1")
-    def test_compile_pipeline_runs_enforce_stage_with_models(
-        self, tmp_path: Path
-    ) -> None:
+    def test_compile_pipeline_runs_enforce_stage_with_models(self, tmp_path: Path) -> None:
         """Test that compile_pipeline calls run_enforce_stage() after COMPILE.
 
         When manifest has governance config and spec has transforms,
@@ -368,9 +366,7 @@ governance:
         )
 
     @pytest.mark.requirement("AC-18.2")
-    def test_enforcement_result_has_policy_types_checked(
-        self, tmp_path: Path
-    ) -> None:
+    def test_enforcement_result_has_policy_types_checked(self, tmp_path: Path) -> None:
         """Test that enforcement result has non-empty policy_types_checked.
 
         AC-18.2: enforcement_result.policy_types_checked is non-empty.
