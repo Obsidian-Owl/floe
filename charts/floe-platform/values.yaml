@@ -137,7 +137,11 @@ dagster:
       servers: []  # Must be empty when using externalConfigmap
       externalConfigmap: "floe-platform-dagster-workspace"
     # Additional environment variables (list format for Dagster subchart compat)
-    env: []
+    env:
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://floe-platform-otel-collector:4317"
+      - name: OTEL_SERVICE_NAME
+        value: "floe-platform"
     envSecrets: []
     envConfigMaps: []
 
@@ -156,7 +160,11 @@ dagster:
         cpu: 500m
         memory: 512Mi
     # Additional environment variables (list format for Dagster subchart compat)
-    env: []
+    env:
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://floe-platform-otel-collector:4317"
+      - name: OTEL_SERVICE_NAME
+        value: "floe-platform"
     envSecrets: []
     envConfigMaps: []
 

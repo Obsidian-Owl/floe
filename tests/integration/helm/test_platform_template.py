@@ -5,12 +5,14 @@ Template tests catch rendering errors without requiring a running cluster.
 
 Requirements:
     FR-081: Helm template rendering validation
+    AC-17.6: OTEL env vars in Dagster deployments
 """
 
 from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -296,3 +298,186 @@ class TestPlatformChartTemplate:
         assert len(namespaced_resources) > 0 or len(documents) == 0, (
             f"No resources have namespace '{namespace}'"
         )
+
+
+def _render_template(chart_path: Path) -> list[dict[str, Any]]:
+    """Render Helm template and return parsed YAML documents.
+
+    Args:
+        chart_path: Path to the Helm chart.
+
+    Returns:
+        List of parsed Kubernetes resource documents.
+    """
+    result = subprocess.run(
+        [
+            "helm",
+            "template",
+            "--skip-schema-validation",
+            "floe-platform",
+            str(chart_path),
+        ],
+        capture_output=True,
+        timeout=60,
+        check=True,
+    )
+    output = result.stdout.decode()
+    docs = list(yaml.safe_load_all(output))
+    return [d for d in docs if d is not None]
+
+
+def _find_dagster_deployments(
+    documents: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Find Dagster Deployment resources from rendered templates.
+
+    Searches for Deployments with 'dagster' in their name, targeting
+    the webserver and daemon components.
+
+    Args:
+        documents: Parsed K8s resource documents.
+
+    Returns:
+        List of Dagster Deployment resources.
+    """
+    dagster_deps: list[dict[str, Any]] = []
+    for doc in documents:
+        if doc.get("kind") != "Deployment":
+            continue
+        name = doc.get("metadata", {}).get("name", "")
+        if "dagster" in name.lower():
+            dagster_deps.append(doc)
+    return dagster_deps
+
+
+def _get_container_env_vars(
+    deployment: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Extract env vars from all containers in a Deployment.
+
+    Args:
+        deployment: Parsed Deployment resource.
+
+    Returns:
+        Flattened list of env var dicts from all containers.
+    """
+    all_envs: list[dict[str, Any]] = []
+    pod_spec = deployment.get("spec", {}).get("template", {}).get("spec", {})
+    for container in pod_spec.get("containers", []):
+        all_envs.extend(container.get("env", []))
+    return all_envs
+
+
+class TestDagsterOtelEnvVars:
+    """Tests verifying OTEL env vars in Dagster Helm deployments (AC-17.6)."""
+
+    @pytest.mark.requirement("AC-17.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_dagster_deployments_have_otel_endpoint(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Verify OTEL_EXPORTER_OTLP_ENDPOINT in Dagster Deployments.
+
+        AC-17.6 requires helm template to show OTEL_EXPORTER_OTLP_ENDPOINT
+        in Dagster webserver/daemon Deployment env.
+        """
+        documents = _render_template(platform_chart_path)
+        dagster_deps = _find_dagster_deployments(documents)
+
+        assert len(dagster_deps) > 0, (
+            "No Dagster Deployments found in helm template output. "
+            "Expected webserver and daemon Deployments."
+        )
+
+        for dep in dagster_deps:
+            name = dep["metadata"]["name"]
+            envs = _get_container_env_vars(dep)
+            env_names = [e.get("name") for e in envs]
+            assert "OTEL_EXPORTER_OTLP_ENDPOINT" in env_names, (
+                f"Dagster Deployment '{name}' missing "
+                "OTEL_EXPORTER_OTLP_ENDPOINT env var.\n"
+                f"Env vars found: {env_names}"
+            )
+
+    @pytest.mark.requirement("AC-17.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_dagster_deployments_have_otel_service_name(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Verify OTEL_SERVICE_NAME in Dagster Deployments.
+
+        AC-17.6 requires helm template to show OTEL_SERVICE_NAME
+        in Dagster webserver/daemon Deployment env.
+        """
+        documents = _render_template(platform_chart_path)
+        dagster_deps = _find_dagster_deployments(documents)
+
+        assert len(dagster_deps) > 0, "No Dagster Deployments found"
+
+        for dep in dagster_deps:
+            name = dep["metadata"]["name"]
+            envs = _get_container_env_vars(dep)
+            env_names = [e.get("name") for e in envs]
+            assert "OTEL_SERVICE_NAME" in env_names, (
+                f"Dagster Deployment '{name}' missing "
+                "OTEL_SERVICE_NAME env var.\n"
+                f"Env vars found: {env_names}"
+            )
+
+    @pytest.mark.requirement("AC-17.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_otel_endpoint_points_to_collector(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Verify OTEL endpoint resolves to OTel Collector service.
+
+        The endpoint value must reference the OTel Collector service
+        in K8s DNS format (e.g., http://<release>-otel-collector:4317).
+        """
+        documents = _render_template(platform_chart_path)
+        dagster_deps = _find_dagster_deployments(documents)
+
+        assert len(dagster_deps) > 0, "No Dagster Deployments found"
+
+        for dep in dagster_deps:
+            name = dep["metadata"]["name"]
+            envs = _get_container_env_vars(dep)
+            endpoint_envs = [e for e in envs if e.get("name") == "OTEL_EXPORTER_OTLP_ENDPOINT"]
+            assert len(endpoint_envs) > 0
+            endpoint_val = endpoint_envs[0].get("value", "")
+            assert "otel-collector" in endpoint_val, (
+                f"Dagster '{name}' OTEL endpoint does not "
+                f"reference otel-collector service. "
+                f"Got: {endpoint_val}"
+            )
+            assert ":4317" in endpoint_val, (
+                f"Dagster '{name}' OTEL endpoint missing port 4317. Got: {endpoint_val}"
+            )
+
+    @pytest.mark.requirement("AC-17.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_otel_service_name_is_floe_platform(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Verify OTEL_SERVICE_NAME is set to floe-platform.
+
+        All Dagster containers should identify as floe-platform service.
+        """
+        documents = _render_template(platform_chart_path)
+        dagster_deps = _find_dagster_deployments(documents)
+
+        assert len(dagster_deps) > 0, "No Dagster Deployments found"
+
+        for dep in dagster_deps:
+            name = dep["metadata"]["name"]
+            envs = _get_container_env_vars(dep)
+            svc_envs = [e for e in envs if e.get("name") == "OTEL_SERVICE_NAME"]
+            assert len(svc_envs) > 0
+            svc_val = svc_envs[0].get("value", "")
+            assert svc_val == "floe-platform", (
+                f"Dagster '{name}' OTEL_SERVICE_NAME should be 'floe-platform'. Got: '{svc_val}'"
+            )
