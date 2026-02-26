@@ -22,6 +22,7 @@ from collections.abc import Generator
 from unittest.mock import patch
 
 import pytest
+import structlog
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.trace import ProxyTracerProvider
@@ -35,6 +36,8 @@ def _reset_otel_state() -> Generator[None, None, None]:
     1. Resetting the global TracerProvider to a ProxyTracerProvider
     2. Clearing the tracer_factory cache via reset_tracer()
     3. Resetting any module-level initialization flag in initialization.py
+    4. Restoring structlog defaults so configure_logging() side effects
+       don't leak into subsequent tests.
 
     Yields:
         None after resetting state.
@@ -65,6 +68,11 @@ def _reset_otel_state() -> Generator[None, None, None]:
             init_mod._initialized = False
     except (ImportError, AttributeError):
         pass
+
+    # Restore structlog defaults so configure_logging() side effects
+    # (LoggerFactory, JSONRenderer, cache_logger_on_first_use) don't
+    # leak into other test modules.
+    structlog.reset_defaults()
 
 
 class TestEnsureTelemetryInitializedImport:
