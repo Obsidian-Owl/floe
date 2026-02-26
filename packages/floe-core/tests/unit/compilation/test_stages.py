@@ -313,6 +313,122 @@ class TestEnforcementResult:
 
         assert result.enforcement_result.warning_count == 1
 
+    @pytest.mark.requirement("AC-18.1")
+    def test_compile_pipeline_runs_enforce_stage_with_models(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that compile_pipeline calls run_enforce_stage() after COMPILE.
+
+        When manifest has governance config and spec has transforms,
+        enforcement must validate models (models_validated > 0).
+        AC-18.1: compile_pipeline() calls run_enforce_stage() after COMPILE.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text("""\
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: bronze_customers
+    tags: [raw]
+  - name: silver_orders
+    tags: [staging]
+    dependsOn: [bronze_customers]
+""")
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: warn
+""")
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result.models_validated > 0, (
+            f"Expected models_validated > 0, got {result.enforcement_result.models_validated}. "
+            "run_enforce_stage() must be called after COMPILE to validate models."
+        )
+        assert result.enforcement_result.enforcement_level in ("warn", "strict"), (
+            "Enforcement level must reflect governance config"
+        )
+
+    @pytest.mark.requirement("AC-18.2")
+    def test_enforcement_result_has_policy_types_checked(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that enforcement result has non-empty policy_types_checked.
+
+        AC-18.2: enforcement_result.policy_types_checked is non-empty.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text("""\
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: bronze_customers
+    tags: [raw]
+""")
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: warn
+""")
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert len(result.enforcement_result.policy_types_checked) > 0, (
+            "policy_types_checked must be non-empty when governance is enabled"
+        )
+
+    @pytest.mark.requirement("AC-18.1")
+    def test_enforcement_without_governance_keeps_zero_models(
+        self, spec_path: Path, manifest_path: Path
+    ) -> None:
+        """Test that without governance config, models_validated stays 0.
+
+        When manifest has NO governance section, run_enforce_stage() should
+        NOT be called and models_validated remains 0.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result.models_validated == 0, (
+            "Without governance config, models_validated should be 0"
+        )
+
 
 class TestOpenTelemetryTracing:
     """Tests for OpenTelemetry tracing in compilation pipeline (FR-013)."""
