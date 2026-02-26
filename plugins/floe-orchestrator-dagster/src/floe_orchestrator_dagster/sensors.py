@@ -19,7 +19,7 @@ import logging
 import os
 from collections.abc import Generator
 
-from dagster import RunRequest, SensorEvaluationContext, sensor
+from dagster import AssetSelection, RunRequest, SensorEvaluationContext, sensor
 
 logger = logging.getLogger(__name__)
 
@@ -123,14 +123,14 @@ def _health_check_sensor_impl(
 
 
 # Create the actual sensor by decorating the implementation.
-# asset_selection targets all assets — when the sensor yields a RunRequest,
+# target=AssetSelection.all() targets all assets — when the sensor yields a RunRequest,
 # Dagster materializes the full asset graph (demo pipeline).
 health_check_sensor = sensor(
     name="health_check_sensor",
     description="Triggers first pipeline run when platform services are healthy",
     minimum_interval_seconds=60,  # Check every minute
-    asset_selection="*",
+    target=AssetSelection.all(),
 )(_health_check_sensor_impl)
 
 
-__all__ = ["health_check_sensor", "_health_check_sensor_impl"]
+__all__ = ["health_check_sensor"]

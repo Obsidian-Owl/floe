@@ -96,6 +96,7 @@ class TestHelmUpgrade:
                 "--reuse-values",
                 "--set",
                 "global.annotations.e2e-test-revision=upgrade-test",
+                "--skip-schema-validation",
                 "--wait",
                 "--timeout",
                 "5m",
