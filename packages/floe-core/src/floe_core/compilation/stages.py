@@ -708,7 +708,7 @@ def run_enforce_stage(
 
     # Run policy enforcement with OTel span
     with create_span(
-        "compile.enforce",
+        "compile.enforce_post_compile",
         attributes={
             "compile.stage": CompilationStage.ENFORCE.value,
             "enforcement.level": enforcement_level,

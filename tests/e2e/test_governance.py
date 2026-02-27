@@ -654,8 +654,8 @@ class TestGovernance(IntegrationTestBase):
                 "Governance policies must be checked during compilation.\n"
                 "enforcement_result being None means no policies were evaluated."
             )
-            assert hasattr(artifacts.enforcement_result, "passed"), (
-                "Enforcement result must indicate pass/fail status"
+            assert isinstance(artifacts.enforcement_result.passed, bool), (
+                "Enforcement result.passed must be a bool indicating pass/fail"
             )
 
         except Exception as e:
@@ -701,17 +701,17 @@ class TestGovernance(IntegrationTestBase):
             "Governance policies must be checked during compilation.\n"
             "enforcement_result being None means no policies were evaluated."
         )
-        assert hasattr(artifacts.enforcement_result, "passed"), (
-            "Enforcement result must indicate pass/fail status"
+        assert isinstance(artifacts.enforcement_result.passed, bool), (
+            "Enforcement result.passed must be a bool indicating pass/fail"
         )
         assert artifacts.enforcement_result.models_validated > 0, (
             "Enforcement must validate at least one model.\n"
             f"Got models_validated={artifacts.enforcement_result.models_validated}\n"
             "This indicates governance policies are not being checked."
         )
-        assert artifacts.enforcement_result.enforcement_level is not None, (
-            "Enforcement must specify enforcement level (strict/warn/none).\n"
-            "Enforcement level determines whether policy violations block deployment."
+        assert artifacts.enforcement_result.enforcement_level in ("warn", "strict"), (
+            f"Enforcement level must be 'warn' or 'strict' when governance is enabled, "
+            f"got {artifacts.enforcement_result.enforcement_level!r}"
         )
 
     @pytest.mark.e2e
