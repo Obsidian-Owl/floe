@@ -7,8 +7,8 @@
     "intensity": "full",
     "workDir": ".specwright/work/e2e-infra-fixes",
     "startedAt": "2026-02-27T15:00:00Z",
-    "currentTask": "T39",
-    "tasksCompleted": [],
+    "currentTask": "T41",
+    "tasksCompleted": ["T39", "T40"],
     "tasksTotal": 4,
     "gates": {}
   },
