@@ -49,6 +49,17 @@ SENSITIVE_FIELD_PATTERNS = [
 ]
 """Regex patterns for identifying sensitive field names in deployment manifests."""
 
+# Env vars that match SENSITIVE_FIELD_PATTERNS but are NOT credentials.
+# Each entry must have a justification comment. Review periodically.
+KNOWN_NON_SECRET_ENV_VARS: frozenset[str] = frozenset(
+    {
+        # Bitnami MinIO subchart: configures Prometheus auth *type* ("public"/"jwt"),
+        # not a credential. We don't control subchart env var naming.
+        "MINIO_PROMETHEUS_AUTH_TYPE",
+    }
+)
+"""Env vars excluded from secret-in-template scanning (false positives)."""
+
 
 class TestGovernance(IntegrationTestBase):
     """E2E tests for platform governance and security controls.
@@ -201,7 +212,9 @@ class TestGovernance(IntegrationTestBase):
                 for env_var in env_vars:
                     env_name = env_var.get("name", "")
 
-                    if sensitive_regex.search(env_name):
+                    is_sensitive = sensitive_regex.search(env_name)
+                    is_excluded = env_name in KNOWN_NON_SECRET_ENV_VARS
+                    if is_sensitive and not is_excluded:
                         value = env_var.get("value")
                         value_from = env_var.get("valueFrom", {})
                         secret_ref = value_from.get("secretKeyRef")
