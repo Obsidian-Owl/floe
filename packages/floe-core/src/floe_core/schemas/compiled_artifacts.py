@@ -461,7 +461,7 @@ class EnforcementResultSummary(BaseModel):
         models_validated: Number of models that were validated.
         enforcement_level: Applied enforcement level (off, warn, strict).
         rbac_principal: Authenticated principal name from RBAC validation (Epic 3E).
-        secrets_scanned: Number of files scanned for secrets (Epic 3E).
+        secrets_scanned: Count of secret scanning violations found (Epic 3E).
 
     Example:
         >>> summary = EnforcementResultSummary(
@@ -517,7 +517,7 @@ class EnforcementResultSummary(BaseModel):
     secrets_scanned: int = Field(
         default=0,
         ge=0,
-        description="Number of files scanned for secrets",
+        description="Count of secret scanning violations found",
     )
 
 

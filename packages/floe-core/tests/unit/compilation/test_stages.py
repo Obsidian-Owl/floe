@@ -12,6 +12,7 @@ Requirements:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, PropertyMock, patch
@@ -312,6 +313,315 @@ class TestEnforcementResult:
             result = compile_pipeline(spec_path, manifest_path)
 
         assert result.enforcement_result.warning_count == 1
+
+    @pytest.mark.requirement("AC-18.1")
+    def test_compile_pipeline_runs_enforce_stage_with_models(self, tmp_path: Path) -> None:
+        """Test that compile_pipeline calls run_enforce_stage() after COMPILE.
+
+        When manifest has governance config and spec has transforms,
+        enforcement must validate models (models_validated > 0).
+        AC-18.1: compile_pipeline() calls run_enforce_stage() after COMPILE.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text("""\
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: bronze_customers
+    tags: [raw]
+  - name: silver_orders
+    tags: [staging]
+    dependsOn: [bronze_customers]
+""")
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: warn
+""")
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result.models_validated == 2, (
+            f"Expected models_validated == 2 (bronze_customers, silver_orders), "
+            f"got {result.enforcement_result.models_validated}. "
+            "run_enforce_stage() must validate all models from spec transforms."
+        )
+        assert result.enforcement_result.enforcement_level in ("warn", "strict"), (
+            "Enforcement level must reflect governance config"
+        )
+
+    @pytest.mark.requirement("AC-18.2")
+    def test_enforcement_result_has_policy_types_checked(self, tmp_path: Path) -> None:
+        """Test that enforcement result has non-empty policy_types_checked.
+
+        AC-18.2: enforcement_result.policy_types_checked is non-empty.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text("""\
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: bronze_customers
+    tags: [raw]
+""")
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: warn
+""")
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        # Verify specific policy types from pre-manifest + post-compile merge
+        actual_types = set(result.enforcement_result.policy_types_checked)
+        # Pre-manifest contributes plugin_instrumentation;
+        # post-compile contributes coverage/documentation/naming (defaults)
+        expected_types = {
+            "plugin_instrumentation",
+            "coverage",
+            "documentation",
+            "naming",
+        }
+        assert expected_types.issubset(actual_types), (
+            f"Expected policy types {expected_types} to be present, "
+            f"got {actual_types}. Both pre-manifest and post-compile "
+            "enforcement must contribute policy types."
+        )
+        # Verify passed reflects actual enforcement outcome
+        assert result.enforcement_result.passed is True, (
+            "passed must be True when governance has no violations"
+        )
+
+    @pytest.mark.requirement("AC-18.1")
+    def test_enforcement_without_governance_keeps_zero_models(
+        self, spec_path: Path, manifest_path: Path
+    ) -> None:
+        """Test that without governance config, models_validated stays 0.
+
+        When manifest has NO governance section, run_enforce_stage() should
+        NOT be called and models_validated remains 0.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.enforcement_result.models_validated == 0, (
+            "Without governance config, models_validated should be 0"
+        )
+
+    @pytest.mark.requirement("AC-18.1")
+    def test_compile_pipeline_invokes_run_enforce_stage(self, tmp_path: Path) -> None:
+        """Test that compile_pipeline actually calls run_enforce_stage().
+
+        F1: Side-effect verification — patches run_enforce_stage and asserts
+        it was invoked when governance is present and transforms exist.
+        """
+        from floe_core.compilation import stages as stages_mod
+        from floe_core.compilation.stages import compile_pipeline
+        from floe_core.enforcement.result import (
+            EnforcementResult,
+            EnforcementSummary,
+        )
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text("""apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: bronze_customers
+    tags: [raw]
+""")
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: warn
+""")
+
+        # Create a realistic mock return value
+        mock_result = EnforcementResult(
+            passed=True,
+            violations=[],
+            summary=EnforcementSummary(
+                total_models=1,
+                models_validated=1,
+                naming_violations=0,
+                coverage_violations=0,
+                documentation_violations=0,
+                duration_ms=0.0,
+            ),
+            enforcement_level="warn",
+            manifest_version="1.0.0",
+            timestamp=datetime.now(timezone.utc),
+        )
+
+        with patch.object(
+            stages_mod,
+            "run_enforce_stage",
+            return_value=mock_result,
+        ) as mock_enforce:
+            compile_pipeline(spec_path, manifest_path)
+
+            mock_enforce.assert_called_once()
+            call_kwargs = mock_enforce.call_args
+            # Verify the synthetic dbt manifest was passed
+            dbt_manifest = call_kwargs.kwargs.get(
+                "dbt_manifest", call_kwargs[1] if len(call_kwargs[1]) > 1 else None
+            )
+            if dbt_manifest is None:
+                # Positional arg
+                dbt_manifest = call_kwargs[0][1]
+            assert "nodes" in dbt_manifest, (
+                "run_enforce_stage must receive a dbt manifest with nodes"
+            )
+            assert len(dbt_manifest["nodes"]) == 1, (
+                f"Expected 1 node (bronze_customers), got {len(dbt_manifest['nodes'])}"
+            )
+
+    @pytest.mark.requirement("AC-18.2")
+    def test_enforcement_merge_combines_violations_from_both_stages(self, tmp_path: Path) -> None:
+        """Test enforcement result merge when both stages produce violations.
+
+        F7: Verifies that when pre-manifest enforcement has warnings and
+        post-compile enforcement also has violations, the merged result
+        correctly combines error_count, warning_count, passed, and
+        policy_types_checked from both stages.
+        """
+        from floe_core.compilation import stages as stages_mod
+        from floe_core.compilation.stages import compile_pipeline
+        from floe_core.enforcement.result import (
+            EnforcementResult,
+            EnforcementSummary,
+            Violation,
+        )
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text("""apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: test-product
+  version: 1.0.0
+transforms:
+  - name: bronze_customers
+    tags: [raw]
+""")
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("""apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: warn
+""")
+
+        # Return a result WITH violations from post-compile enforcement
+        post_violation = Violation(
+            error_code="FLOE-E201",
+            policy_type="naming",
+            model_name="bronze_customers",
+            message="Model name violates naming convention",
+            severity="error",
+            expected="^(bronze|silver|gold)_.*$",
+            actual="bronze_customers",
+            suggestion="Rename to match medallion pattern",
+            documentation_url="https://floe.dev/docs/naming",
+        )
+        mock_result = EnforcementResult(
+            passed=False,
+            violations=[post_violation],
+            summary=EnforcementSummary(
+                total_models=1,
+                models_validated=1,
+                naming_violations=1,
+                coverage_violations=0,
+                documentation_violations=0,
+                duration_ms=5.0,
+            ),
+            enforcement_level="warn",
+            manifest_version="1.0.0",
+            timestamp=datetime.now(timezone.utc),
+        )
+
+        with patch.object(
+            stages_mod,
+            "run_enforce_stage",
+            return_value=mock_result,
+        ):
+            result = compile_pipeline(spec_path, manifest_path)
+
+        # Pre-manifest enforcement: passed=True, warning_count >= 0
+        # Post-compile enforcement: passed=False, error_count=1
+        # Merged: passed = True AND False = False
+        assert result.enforcement_result.passed is False, (
+            "Merged passed must be False when post-compile has violations"
+        )
+        # Post-compile contributes 1 error
+        assert result.enforcement_result.error_count >= 1, (
+            f"Expected error_count >= 1 from post-compile violations, "
+            f"got {result.enforcement_result.error_count}"
+        )
+        # Merged policy types must include both pre-manifest and post-compile types
+        actual_types = set(result.enforcement_result.policy_types_checked)
+        assert "plugin_instrumentation" in actual_types, (
+            "Pre-manifest policy type must survive merge"
+        )
+        assert "naming" in actual_types, (
+            "Post-compile violation policy type must appear in merged result"
+        )
 
 
 class TestOpenTelemetryTracing:

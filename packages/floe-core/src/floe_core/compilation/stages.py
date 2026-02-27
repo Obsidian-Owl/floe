@@ -501,6 +501,47 @@ def compile_pipeline(
                             )
                         )
 
+            # Post-COMPILE enforcement: validate models from resolved transforms
+            # Only runs when governance config is present in the manifest
+            if manifest.governance is not None:
+                synthetic_dbt_manifest: dict[str, Any] = {"nodes": {}}
+                for model in transforms.models:
+                    node_key = f"model.floe.{model.name}"
+                    synthetic_dbt_manifest["nodes"][node_key] = {
+                        "name": model.name,
+                        "resource_type": "model",
+                        "tags": list(model.tags) if model.tags else [],
+                        "depends_on": {
+                            "nodes": [f"model.floe.{d}" for d in (model.depends_on or [])]
+                        },
+                        "description": "",
+                        "columns": {},
+                    }
+
+                enforce_result = run_enforce_stage(
+                    governance_config=manifest.governance,
+                    dbt_manifest=synthetic_dbt_manifest,
+                    dry_run=dry_run,
+                )
+
+                from floe_core.enforcement.result import create_enforcement_summary
+
+                post_summary = create_enforcement_summary(enforce_result)
+
+                merged_policy_types = sorted(
+                    set(enforcement_result.policy_types_checked)
+                    | set(post_summary.policy_types_checked)
+                )
+                enforcement_result = EnforcementResultSummary(
+                    passed=enforcement_result.passed and post_summary.passed,
+                    error_count=enforcement_result.error_count + post_summary.error_count,
+                    warning_count=enforcement_result.warning_count + post_summary.warning_count,
+                    policy_types_checked=merged_policy_types,
+                    models_validated=post_summary.models_validated,
+                    enforcement_level=enforcement_result.enforcement_level,
+                    secrets_scanned=post_summary.secrets_scanned,
+                )
+
             # Stage 6: GENERATE - Build final CompiledArtifacts
             stage_start = time.perf_counter()
             with create_span(
@@ -667,7 +708,7 @@ def run_enforce_stage(
 
     # Run policy enforcement with OTel span
     with create_span(
-        "compile.enforce",
+        "compile.enforce_post_compile",
         attributes={
             "compile.stage": CompilationStage.ENFORCE.value,
             "enforcement.level": enforcement_level,

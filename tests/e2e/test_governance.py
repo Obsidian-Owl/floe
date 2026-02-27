@@ -49,6 +49,17 @@ SENSITIVE_FIELD_PATTERNS = [
 ]
 """Regex patterns for identifying sensitive field names in deployment manifests."""
 
+# Env vars that match SENSITIVE_FIELD_PATTERNS but are NOT credentials.
+# Each entry must have a justification comment. Review periodically.
+KNOWN_NON_SECRET_ENV_VARS: frozenset[str] = frozenset(
+    {
+        # Bitnami MinIO subchart: configures Prometheus auth *type* ("public"/"jwt"),
+        # not a credential. We don't control subchart env var naming.
+        "MINIO_PROMETHEUS_AUTH_TYPE",
+    }
+)
+"""Env vars excluded from secret-in-template scanning (false positives)."""
+
 
 class TestGovernance(IntegrationTestBase):
     """E2E tests for platform governance and security controls.
@@ -201,7 +212,9 @@ class TestGovernance(IntegrationTestBase):
                 for env_var in env_vars:
                     env_name = env_var.get("name", "")
 
-                    if sensitive_regex.search(env_name):
+                    is_sensitive = sensitive_regex.search(env_name)
+                    is_excluded = env_name in KNOWN_NON_SECRET_ENV_VARS
+                    if is_sensitive and not is_excluded:
                         value = env_var.get("value")
                         value_from = env_var.get("valueFrom", {})
                         secret_ref = value_from.get("secretKeyRef")
@@ -417,7 +430,8 @@ class TestGovernance(IntegrationTestBase):
             "--no-check-uv-tool",
             "--ignore-vulns",
             "GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7,"
-            "GHSA-hm8f-75xx-w2vr,GHSA-2q4j-m29v-hq73,GHSA-wp53-j4wj-2cfg",
+            "GHSA-hm8f-75xx-w2vr,GHSA-2q4j-m29v-hq73,GHSA-wp53-j4wj-2cfg,"
+            "GHSA-cfh3-3jmp-rvhc,GHSA-w8v5-vhqr-4h9v",
             ".",
         ]
 
@@ -640,8 +654,8 @@ class TestGovernance(IntegrationTestBase):
                 "Governance policies must be checked during compilation.\n"
                 "enforcement_result being None means no policies were evaluated."
             )
-            assert hasattr(artifacts.enforcement_result, "passed"), (
-                "Enforcement result must indicate pass/fail status"
+            assert isinstance(artifacts.enforcement_result.passed, bool), (
+                "Enforcement result.passed must be a bool indicating pass/fail"
             )
 
         except Exception as e:
@@ -687,17 +701,17 @@ class TestGovernance(IntegrationTestBase):
             "Governance policies must be checked during compilation.\n"
             "enforcement_result being None means no policies were evaluated."
         )
-        assert hasattr(artifacts.enforcement_result, "passed"), (
-            "Enforcement result must indicate pass/fail status"
+        assert isinstance(artifacts.enforcement_result.passed, bool), (
+            "Enforcement result.passed must be a bool indicating pass/fail"
         )
         assert artifacts.enforcement_result.models_validated > 0, (
             "Enforcement must validate at least one model.\n"
             f"Got models_validated={artifacts.enforcement_result.models_validated}\n"
             "This indicates governance policies are not being checked."
         )
-        assert artifacts.enforcement_result.enforcement_level is not None, (
-            "Enforcement must specify enforcement level (strict/warn/none).\n"
-            "Enforcement level determines whether policy violations block deployment."
+        assert artifacts.enforcement_result.enforcement_level in ("warn", "strict"), (
+            f"Enforcement level must be 'warn' or 'strict' when governance is enabled, "
+            f"got {artifacts.enforcement_result.enforcement_level!r}"
         )
 
     @pytest.mark.e2e

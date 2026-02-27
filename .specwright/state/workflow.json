@@ -2,15 +2,14 @@
   "version": "0.2.0",
   "currentWork": {
     "id": "e2e-infra-fixes",
-    "unitId": "wu-17-otel-openlineage",
-    "status": "verifying",
+    "unitId": "wu-18-governance-secrets",
+    "status": "building",
     "intensity": "full",
-    "verifyStartedAt": "2026-02-25T14:00:00Z",
     "workDir": ".specwright/work/e2e-infra-fixes",
-    "startedAt": "2026-02-23T00:00:00Z",
+    "startedAt": "2026-02-25T16:00:00Z",
     "currentTask": null,
-    "tasksCompleted": ["T26", "T27", "T30", "T32"],
-    "tasksTotal": 4,
+    "tasksCompleted": ["T33", "T37", "T35", "T36", "T34", "T38"],
+    "tasksTotal": 6,
     "gates": {}
   },
   "completedWork": [
@@ -64,8 +63,8 @@
     { "id": "wu-14-bootstrap-reliability", "description": "Bootstrap & provisioning reliability (Category 2, 5 tests)", "status": "shipped", "order": 14, "tasksCompleted": ["T6", "T7", "T8", "T9", "T10", "T11", "T12"], "pr": "https://github.com/Obsidian-Owl/floe/pull/101" },
     { "id": "wu-15-label-alignment", "description": "Label & service discovery alignment + PDB/NetworkPolicy production fixes (Categories 5+6, 4 tests)", "status": "shipped", "order": 15, "tasksCompleted": ["T13", "T14", "T15", "T16", "T17", "T18", "T19"], "pr": "https://github.com/Obsidian-Owl/floe/pull/102" },
     { "id": "wu-16-test-bug-fixes", "description": "Test code & plugin bug fixes (Categories 4/10/11/12, 4 tests)", "status": "shipped", "order": 16, "tasksCompleted": ["T21", "T22", "T23", "T24", "T25"], "pr": "https://github.com/Obsidian-Owl/floe/pull/104" },
-    { "id": "wu-17-otel-openlineage", "description": "OTel/OpenLineage pipeline wiring (Category 8, 5 tests)", "status": "building", "order": 17 },
-    { "id": "wu-18-governance-secrets", "description": "Governance pipeline wiring + Helm secrets (Category 9, 3 tests)", "status": "backlog", "order": 18 },
+    { "id": "wu-17-otel-openlineage", "description": "OTel/OpenLineage pipeline wiring (Category 8, 5 tests)", "status": "shipped", "order": 17, "tasksCompleted": ["T26", "T27", "T30", "T32"], "pr": "https://github.com/Obsidian-Owl/floe/pull/105" },
+    { "id": "wu-18-governance-secrets", "description": "Governance pipeline wiring + Helm secrets (Category 9, 3 tests)", "status": "building", "order": 18 },
     { "id": "wu-19-marquez-stability", "description": "Marquez stability investigation & fix (Category 7, 4 tests)", "status": "backlog", "order": 19 }
   ],
   "gates": {
@@ -187,5 +186,5 @@
       "gate-spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "timestamp": "2026-02-25T14:15:00Z", "note": "7/7 acceptance criteria PASS. 80 tests pass. AC-17.2/17.3/17.4/17.7 E2E runtime deferred to cluster." }
     }
   },
-  "lastUpdated": "2026-02-25T14:15:00Z"
+  "lastUpdated": "2026-02-25T16:00:00Z"
 }
