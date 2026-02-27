@@ -229,13 +229,28 @@ def update_helm_dependencies(
         pytest.fail: If dependency update fails.
     """
     _ = helm_available  # Used for fixture ordering
-    result = subprocess.run(
-        ["helm", "dependency", "update", str(platform_chart_path)],
-        capture_output=True,
-        timeout=120,
-        check=False,
-    )
+    # Check if dependencies are already cached (charts/*.tgz files exist)
+    charts_subdir = platform_chart_path / "charts"
+    cached_deps = list(charts_subdir.glob("*.tgz")) if charts_subdir.exists() else []
+    try:
+        result = subprocess.run(
+            ["helm", "dependency", "update", str(platform_chart_path)],
+            capture_output=True,
+            timeout=120,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        if cached_deps:
+            # Dependencies already cached — continue without update
+            return
+        _fail(
+            "Helm dependency update timed out and no cached dependencies found.\n"
+            "Ensure you have internet access for subchart downloads."
+        )
     if result.returncode != 0:
+        if cached_deps:
+            # Dependencies already cached — repo unreachable but charts present
+            return
         stderr = result.stderr.decode() if result.stderr else "Unknown error"
         _fail(
             f"Failed to update Helm dependencies:\n{stderr}\n"
