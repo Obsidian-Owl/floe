@@ -11,7 +11,9 @@ from __future__ import annotations
 import os
 import subprocess
 import uuid
+import warnings
 from collections.abc import Callable, Generator
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -644,3 +646,59 @@ def otel_tracer_provider() -> Generator[Any, None, None]:
     yield provider
 
     provider.shutdown()
+
+
+@pytest.fixture(scope="session")
+def seed_observability(
+    otel_tracer_provider: Any,
+    marquez_client: httpx.Client,
+) -> bool:
+    """Seed Marquez and Jaeger with real pipeline data via compile_pipeline().
+
+    Runs compile_pipeline() with MARQUEZ_URL set so OpenLineage events flow
+    to Marquez, and with OTel tracing active so spans flow to Jaeger via
+    the OTel Collector.
+
+    The fixture temporarily sets MARQUEZ_URL for the compilation, then
+    restores the original value to avoid colliding with the marquez_client
+    fixture (which uses MARQUEZ_URL as the base URL for reads).
+
+    Args:
+        otel_tracer_provider: OTel TracerProvider fixture (ensures tracing active).
+        marquez_client: Marquez HTTP client (ensures Marquez is ready).
+
+    Returns:
+        True if seeding succeeded, False if it failed (best-effort).
+    """
+    old_marquez = os.environ.get("MARQUEZ_URL")
+    # compile_pipeline posts events directly to this URL
+    os.environ["MARQUEZ_URL"] = "http://localhost:5000/api/v1/lineage"
+
+    try:
+        from floe_core.compilation.stages import compile_pipeline
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        root = Path(__file__).parent.parent.parent
+        spec_path = root / "demo" / "customer-360" / "floe.yaml"
+        manifest_path = root / "demo" / "manifest.yaml"
+
+        compile_pipeline(spec_path, manifest_path)
+
+        # Flush OTel spans to ensure they reach Jaeger
+        otel_tracer_provider.force_flush(timeout_millis=5000)
+
+        return True
+    except Exception as exc:
+        # Best-effort: warn but don't fail tests that depend on this
+        warnings.warn(
+            f"Observability seeding failed (compile_pipeline): {exc}",
+            stacklevel=2,
+        )
+        return False
+    finally:
+        if old_marquez is None:
+            os.environ.pop("MARQUEZ_URL", None)
+        else:
+            os.environ["MARQUEZ_URL"] = old_marquez

@@ -244,10 +244,20 @@ def compile_pipeline(
                 producer="floe",
             )
 
+    # Persistent event loop for lineage emission — asyncio.run() creates and
+    # destroys a loop per call, which cancels the HttpLineageTransport's background
+    # consumer task before events are POSTed. A persistent loop keeps the consumer
+    # alive across emit_start/emit_complete calls.
+    _lineage_loop: asyncio.AbstractEventLoop | None = None
+    if lineage_emitter is not None:
+        _lineage_loop = asyncio.new_event_loop()
+
     def _emit_sync(coro: Any) -> Any:
         """Bridge async lineage calls into sync context (best-effort)."""
+        if _lineage_loop is None:
+            return None
         try:
-            return asyncio.run(coro)
+            return _lineage_loop.run_until_complete(coro)
         except Exception:
             logger.debug("lineage_emission_failed", exc_info=True)
             return None
@@ -577,9 +587,19 @@ def compile_pipeline(
             raise
 
         finally:
-            # Always close the emitter to flush pending events and release resources
-            if lineage_emitter is not None:
-                lineage_emitter.close()
+            # Drain the async queue and close the emitter to flush pending events
+            if lineage_emitter is not None and _lineage_loop is not None:
+                try:
+                    transport = lineage_emitter.transport
+                    if hasattr(transport, "close_async"):
+                        _lineage_loop.run_until_complete(transport.close_async())
+                    else:
+                        lineage_emitter.close()
+                except Exception:
+                    logger.debug("lineage_close_failed", exc_info=True)
+                    lineage_emitter.close()
+                finally:
+                    _lineage_loop.close()
 
 
 def run_enforce_stage(

@@ -141,6 +141,7 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         marquez_client: httpx.Client,
         dagster_client: Any,
+        seed_observability: bool,
     ) -> None:
         """Validate that Marquez contains real OpenLineage jobs from pipeline execution.
 
@@ -211,11 +212,12 @@ class TestObservability(IntegrationTestBase):
         default_jobs_json = default_jobs.json()
         all_jobs: list[dict[str, Any]] = default_jobs_json.get("jobs", [])
 
-        # Also check customer-360 namespace
-        c360_jobs = marquez_client.get("/api/v1/namespaces/customer-360/jobs")
-        if c360_jobs.status_code == 200:
-            c360_jobs_json = c360_jobs.json()
-            all_jobs.extend(c360_jobs_json.get("jobs", []))
+        # Also check customer-360 and floe-platform namespaces
+        for ns_name in ("customer-360", "floe-platform"):
+            ns_jobs = marquez_client.get(f"/api/v1/namespaces/{ns_name}/jobs")
+            if ns_jobs.status_code == 200:
+                ns_jobs_json = ns_jobs.json()
+                all_jobs.extend(ns_jobs_json.get("jobs", []))
 
         # We need REAL OpenLineage events from pipeline execution
         assert len(all_jobs) > 0, (
@@ -223,7 +225,7 @@ class TestObservability(IntegrationTestBase):
             "The platform is not emitting OpenLineage events during pipeline execution.\n"
             "Fix: Configure dbt-openlineage or Dagster OpenLineage integration to emit "
             "RunEvent.START and RunEvent.COMPLETE events.\n"
-            f"Namespaces checked: default, customer-360, {test_namespace}"
+            f"Namespaces checked: default, customer-360, floe-platform, {test_namespace}"
         )
 
         # Validate jobs are from THIS pipeline (match expected product names)
@@ -245,6 +247,7 @@ class TestObservability(IntegrationTestBase):
         jaeger_client: httpx.Client,
         marquez_client: httpx.Client,
         dagster_client: Any,
+        seed_observability: bool,
     ) -> None:
         """Validate that trace_id correlates between Jaeger traces and Marquez lineage events.
 
@@ -274,7 +277,8 @@ class TestObservability(IntegrationTestBase):
         # Query for REAL traces in Jaeger for any floe-related service
         all_services_response = jaeger_client.get("/api/services")
         assert all_services_response.status_code == 200
-        all_services = all_services_response.json().get("data", [])
+        # Jaeger returns {"data": null} when no services exist — coalesce to []
+        all_services = all_services_response.json().get("data") or []
 
         floe_services = [s for s in all_services if "floe" in s.lower() or "dagster" in s.lower()]
 
@@ -634,6 +638,7 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         marquez_client: httpx.Client,
         dagster_client: Any,
+        seed_observability: bool,
     ) -> None:
         """Validate that Marquez contains real lineage data queryable via the lineage graph API.
 
