@@ -11,7 +11,6 @@ from __future__ import annotations
 import os
 import subprocess
 import uuid
-import warnings
 from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
@@ -533,13 +532,16 @@ def polaris_with_write_grants(
     """
     polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
 
-    # Get admin token
+    # Get admin token - read credentials from env, consistent with polaris_client
+    default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
+    cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
+    client_id, client_secret = cred.split(":", 1)
     token_response = httpx.post(
         f"{polaris_url}/api/catalog/v1/oauth/tokens",
         data={
             "grant_type": "client_credentials",
-            "client_id": "demo-admin",  # pragma: allowlist secret
-            "client_secret": "demo-secret",  # pragma: allowlist secret
+            "client_id": client_id,
+            "client_secret": client_secret,
             "scope": "PRINCIPAL_ROLE:ALL",
         },
         timeout=10.0,
@@ -637,6 +639,7 @@ def otel_tracer_provider() -> Generator[Any, None, None]:
 
     resource = Resource.create({"service.name": "floe-platform"})
     provider = TracerProvider(resource=resource)
+    # insecure=True: local Kind cluster does not expose TLS on gRPC port
     exporter = OTLPSpanExporter(endpoint=otel_endpoint, insecure=True)
     processor = BatchSpanProcessor(exporter)
     provider.add_span_processor(processor)
@@ -652,7 +655,7 @@ def otel_tracer_provider() -> Generator[Any, None, None]:
 def seed_observability(
     otel_tracer_provider: Any,
     marquez_client: httpx.Client,
-) -> bool:
+) -> None:
     """Seed Marquez and Jaeger with real pipeline data via compile_pipeline().
 
     Runs compile_pipeline() with MARQUEZ_URL set so OpenLineage events flow
@@ -667,8 +670,8 @@ def seed_observability(
         otel_tracer_provider: OTel TracerProvider fixture (ensures tracing active).
         marquez_client: Marquez HTTP client (ensures Marquez is ready).
 
-    Returns:
-        True if seeding succeeded, False if it failed (best-effort).
+    Raises:
+        pytest.Failed: If seeding fails (compilation error).
     """
     old_marquez = os.environ.get("MARQUEZ_URL")
     # compile_pipeline posts events directly to this URL
@@ -688,15 +691,8 @@ def seed_observability(
 
         # Flush OTel spans to ensure they reach Jaeger
         otel_tracer_provider.force_flush(timeout_millis=5000)
-
-        return True
     except Exception as exc:
-        # Best-effort: warn but don't fail tests that depend on this
-        warnings.warn(
-            f"Observability seeding failed (compile_pipeline): {exc}",
-            stacklevel=2,
-        )
-        return False
+        pytest.fail(f"Observability seeding failed (compile_pipeline): {exc}")
     finally:
         if old_marquez is None:
             os.environ.pop("MARQUEZ_URL", None)

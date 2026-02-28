@@ -235,6 +235,24 @@ def compile_pipeline(
                 scheme=parsed.scheme,
             )
         else:
+            # Strip userinfo (credentials) from URL before transport construction
+            if parsed.username or parsed.password:
+                from urllib.parse import urlunparse
+
+                clean_netloc = parsed.hostname or ""
+                if parsed.port:
+                    clean_netloc += f":{parsed.port}"
+                marquez_url = urlunparse(
+                    (
+                        parsed.scheme,
+                        clean_netloc,
+                        parsed.path,
+                        parsed.params,
+                        parsed.query,
+                        parsed.fragment,
+                    )
+                )
+
             from floe_core.lineage.emitter import create_emitter
 
             transport_config: dict[str, Any] = {"type": "http", "url": marquez_url}
@@ -259,7 +277,7 @@ def compile_pipeline(
         try:
             return _lineage_loop.run_until_complete(coro)
         except Exception:
-            logger.debug("lineage_emission_failed", exc_info=True)
+            logger.warning("lineage_emission_failed", exc_info=True)
             return None
 
     # Track total compilation time
@@ -591,12 +609,9 @@ def compile_pipeline(
             if lineage_emitter is not None and _lineage_loop is not None:
                 try:
                     transport = lineage_emitter.transport
-                    if hasattr(transport, "close_async"):
-                        _lineage_loop.run_until_complete(transport.close_async())
-                    else:
-                        lineage_emitter.close()
+                    _lineage_loop.run_until_complete(transport.close_async())
                 except Exception:
-                    logger.debug("lineage_close_failed", exc_info=True)
+                    logger.warning("lineage_close_failed", exc_info=True)
                     lineage_emitter.close()
                 finally:
                     _lineage_loop.close()

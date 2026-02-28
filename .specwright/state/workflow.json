@@ -3,12 +3,12 @@
   "currentWork": {
     "id": "e2e-infra-fixes",
     "unitId": "wu-19-marquez-stability",
-    "status": "building",
+    "status": "verifying",
     "intensity": "full",
     "workDir": ".specwright/work/e2e-infra-fixes",
     "startedAt": "2026-02-27T15:00:00Z",
-    "currentTask": "T41",
-    "tasksCompleted": ["T39", "T40"],
+    "currentTask": null,
+    "tasksCompleted": ["T39", "T40", "T41", "T42"],
     "tasksTotal": 4,
     "gates": {}
   },
@@ -295,7 +295,8 @@
       "id": "wu-19-marquez-stability",
       "description": "Marquez stability investigation & fix (Category 7, 4 tests)",
       "status": "building",
-      "order": 19
+      "order": 19,
+      "tasksCompleted": ["T39", "T40", "T41", "T42"]
     }
   ],
   "gates": {
@@ -1144,7 +1145,59 @@
         "timestamp": "2026-02-27T14:35:00Z",
         "note": "AC-18.1 PASS, AC-18.2 PASS, AC-18.3 PASS, AC-18.4 PASS. AC-18.5 WARN: E2E runtime deferred to K8s cluster."
       }
+    },
+    "wu-19-marquez-stability": {
+      "gate-build": {
+        "status": "PASS",
+        "findings": {
+          "block": 0,
+          "warn": 0,
+          "info": 1
+        },
+        "timestamp": "2026-03-01T10:00:00Z",
+        "note": "3rd verify. 26 unit + 843 contract tests pass. Ruff lint + format clean. mypy --strict clean."
+      },
+      "gate-tests": {
+        "status": "PASS",
+        "findings": {
+          "block": 0,
+          "warn": 0,
+          "info": 5
+        },
+        "timestamp": "2026-03-01T10:00:00Z",
+        "note": "All 6 prior WARNs resolved (4 from 1st run + 2 from 2nd run). Empty-string and whitespace boundary tests added. Redundant compile_pipeline() removed."
+      },
+      "gate-security": {
+        "status": "PASS",
+        "findings": {
+          "block": 0,
+          "warn": 0,
+          "info": 3
+        },
+        "timestamp": "2026-03-01T10:00:00Z",
+        "note": "All 6 prior WARNs resolved (2 from 1st run + 4 from 2nd run). urlunparse replaces _replace(), HttpLineageTransport strips userinfo, insecure=True commented, demo creds env-var-driven."
+      },
+      "gate-wiring": {
+        "status": "PASS",
+        "findings": {
+          "block": 0,
+          "warn": 0,
+          "info": 0
+        },
+        "timestamp": "2026-03-01T10:00:00Z",
+        "note": "Both prior WARNs (W-wiring-1, W-wiring-2) fully resolved. All 7 structural checks pass."
+      },
+      "gate-spec": {
+        "status": "PASS",
+        "findings": {
+          "block": 0,
+          "warn": 0,
+          "info": 0
+        },
+        "timestamp": "2026-03-01T10:00:00Z",
+        "note": "All 5 criteria PASS: AC-19.1 (root cause), AC-19.2 (pod stable), AC-19.3 (port-forward), AC-19.4 (Cat 7 resolved), CC-2 (no assertions weakened). Prior W-spec-1 resolved."
+      }
     }
   },
-  "lastUpdated": "2026-02-27T14:35:00Z"
+  "lastUpdated": "2026-03-01T10:00:00Z"
 }
