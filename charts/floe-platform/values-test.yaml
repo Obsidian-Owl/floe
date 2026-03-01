@@ -73,8 +73,9 @@ dagster:
       tag: latest
       pullPolicy: Never
     service:
-      type: ClusterIP
+      type: NodePort
       port: 3000
+      nodePort: 30300
     readinessProbe:
       httpGet:
         path: /server_info
@@ -155,8 +156,10 @@ polaris:
     allowedLocations:
       - "s3://floe-iceberg"
   service:
-    type: ClusterIP
+    type: NodePort
     port: 8181
+    nodePort: 30181
+    managementPort: 8182
   # Adjusted probes for test environment (slower startup)
   livenessProbe:
     httpGet:
@@ -216,7 +219,8 @@ minio:
     - name: floe-iceberg
       policy: none
   service:
-    type: ClusterIP
+    type: NodePort
+    nodePort: 30900
 
 # =============================================================================
 # OpenTelemetry Collector (Disabled for Basic Tests)

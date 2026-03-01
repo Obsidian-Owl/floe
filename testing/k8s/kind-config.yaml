@@ -57,9 +57,10 @@ nodes:
       - containerPort: 30181
         hostPort: 8181
         protocol: TCP
-      # Dagster Webserver (NodePort 30300 -> localhost 3000)
+      # Dagster Webserver (NodePort 30300 -> localhost 3100)
+      # Remapped from 3000 to avoid conflict with local dev servers
       - containerPort: 30300
-        hostPort: 3000
+        hostPort: 3100
         protocol: TCP
       # MinIO API (NodePort 30900 -> localhost 9000)
       - containerPort: 30900

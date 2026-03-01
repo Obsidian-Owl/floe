@@ -91,7 +91,9 @@
     "charter": ".specwright/CHARTER.md",
     "architecture": "docs/architecture/ARCHITECTURE-SUMMARY.md",
     "testing": "TESTING.md",
-    "claudeMd": "CLAUDE.md"
+    "claudeMd": "CLAUDE.md",
+    "landscape": ".specwright/LANDSCAPE.md",
+    "patterns": ".specwright/patterns.md"
   },
   "guardrails": {
     "session": {
