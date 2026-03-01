@@ -691,9 +691,7 @@ class TestMarquezStability:
         )
 
         path = http_get.get("path", "")
-        assert path != "", (
-            "Marquez startupProbe httpGet must specify a path."
-        )
+        assert path != "", "Marquez startupProbe httpGet must specify a path."
 
     @pytest.mark.requirement("AC-19.2")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
@@ -942,8 +940,7 @@ class TestMarquezStability:
 
         # Limit must be >= 512Mi absolute minimum
         assert memory_limit_mib >= 512, (
-            f"Marquez memory limit is {memory_limit_str} ({memory_limit_mib}Mi). "
-            "Must be >= 512Mi."
+            f"Marquez memory limit is {memory_limit_str} ({memory_limit_mib}Mi). Must be >= 512Mi."
         )
 
         # Limit must be >= 1.5x request to allow headroom for spikes
@@ -977,8 +974,7 @@ class TestMarquezStability:
 
         http_get = liveness_probe.get("httpGet")
         assert http_get is not None, (
-            "Marquez livenessProbe must use httpGet. "
-            f"Probe config: {liveness_probe}"
+            f"Marquez livenessProbe must use httpGet. Probe config: {liveness_probe}"
         )
 
     @pytest.mark.requirement("AC-19.2")
@@ -1004,6 +1000,5 @@ class TestMarquezStability:
 
         http_get = readiness_probe.get("httpGet")
         assert http_get is not None, (
-            "Marquez readinessProbe must use httpGet. "
-            f"Probe config: {readiness_probe}"
+            f"Marquez readinessProbe must use httpGet. Probe config: {readiness_probe}"
         )
