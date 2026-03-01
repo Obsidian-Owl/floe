@@ -141,6 +141,7 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         marquez_client: httpx.Client,
         dagster_client: Any,
+        seed_observability: None,
     ) -> None:
         """Validate that Marquez contains real OpenLineage jobs from pipeline execution.
 
@@ -211,11 +212,12 @@ class TestObservability(IntegrationTestBase):
         default_jobs_json = default_jobs.json()
         all_jobs: list[dict[str, Any]] = default_jobs_json.get("jobs", [])
 
-        # Also check customer-360 namespace
-        c360_jobs = marquez_client.get("/api/v1/namespaces/customer-360/jobs")
-        if c360_jobs.status_code == 200:
-            c360_jobs_json = c360_jobs.json()
-            all_jobs.extend(c360_jobs_json.get("jobs", []))
+        # Also check customer-360 and floe-platform namespaces
+        for ns_name in ("customer-360", "floe-platform"):
+            ns_jobs = marquez_client.get(f"/api/v1/namespaces/{ns_name}/jobs")
+            if ns_jobs.status_code == 200:
+                ns_jobs_json = ns_jobs.json()
+                all_jobs.extend(ns_jobs_json.get("jobs", []))
 
         # We need REAL OpenLineage events from pipeline execution
         assert len(all_jobs) > 0, (
@@ -223,7 +225,7 @@ class TestObservability(IntegrationTestBase):
             "The platform is not emitting OpenLineage events during pipeline execution.\n"
             "Fix: Configure dbt-openlineage or Dagster OpenLineage integration to emit "
             "RunEvent.START and RunEvent.COMPLETE events.\n"
-            f"Namespaces checked: default, customer-360, {test_namespace}"
+            f"Namespaces checked: default, customer-360, floe-platform, {test_namespace}"
         )
 
         # Validate jobs are from THIS pipeline (match expected product names)
@@ -245,6 +247,7 @@ class TestObservability(IntegrationTestBase):
         jaeger_client: httpx.Client,
         marquez_client: httpx.Client,
         dagster_client: Any,
+        seed_observability: None,
     ) -> None:
         """Validate that trace_id correlates between Jaeger traces and Marquez lineage events.
 
@@ -274,7 +277,8 @@ class TestObservability(IntegrationTestBase):
         # Query for REAL traces in Jaeger for any floe-related service
         all_services_response = jaeger_client.get("/api/services")
         assert all_services_response.status_code == 200
-        all_services = all_services_response.json().get("data", [])
+        # Jaeger returns {"data": null} when no services exist — coalesce to []
+        all_services = all_services_response.json().get("data") or []
 
         floe_services = [s for s in all_services if "floe" in s.lower() or "dagster" in s.lower()]
 
@@ -634,12 +638,19 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         marquez_client: httpx.Client,
         dagster_client: Any,
+        seed_observability: None,
     ) -> None:
         """Validate that Marquez contains real lineage data queryable via the lineage graph API.
 
         Demands that:
         1. At least one Marquez namespace contains real OpenLineage jobs
         2. Lineage graph API returns data for those jobs
+        3. Lineage response contains a 'graph' key with actual lineage data
+
+        This test also validates port-forward stability (AC-19.3) implicitly:
+        it performs multiple sequential Marquez API calls (namespace listing,
+        per-namespace job queries, lineage graph query). If the port-forward
+        drops mid-test, these calls fail with clear connection errors.
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -710,6 +721,11 @@ class TestObservability(IntegrationTestBase):
         assert lineage_response.status_code == 200, (
             f"Lineage graph query failed for job {first_job['name']}: "
             f"{lineage_response.status_code} - {lineage_response.text}"
+        )
+
+        lineage_data = lineage_response.json()
+        assert "graph" in lineage_data, (
+            f"Lineage response missing 'graph' key: {list(lineage_data.keys())}"
         )
 
     @pytest.mark.e2e
@@ -808,6 +824,7 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         marquez_client: httpx.Client,
         dagster_client: Any,
+        seed_observability: None,
     ) -> None:
         """Validate platform emits OpenLineage events at all 4 required lifecycle points.
 
@@ -828,10 +845,6 @@ class TestObservability(IntegrationTestBase):
             marquez_client: Marquez HTTP client.
             dagster_client: Dagster GraphQL client.
         """
-        from pathlib import Path
-
-        from floe_core.compilation.stages import compile_pipeline
-
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster", 3000)
         try:
@@ -842,13 +855,8 @@ class TestObservability(IntegrationTestBase):
                 "Run via make test-e2e or: kubectl port-forward svc/marquez 5000:5000 -n floe-test"
             )
 
-        # Trigger real compilation (should emit OpenLineage events)
-        project_root = Path(__file__).parent.parent.parent
-        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
-        manifest_path = project_root / "demo" / "manifest.yaml"
-
-        artifacts = compile_pipeline(spec_path, manifest_path)
-        assert artifacts is not None, "Compilation must succeed before checking emission points"
+        # seed_observability fixture already ran compile_pipeline() with MARQUEZ_URL
+        # set, emitting OpenLineage events to Marquez. Query those events directly.
 
         # Query Marquez for events emitted BY the platform after compilation
         # Check known namespaces where the platform would emit events

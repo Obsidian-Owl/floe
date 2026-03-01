@@ -45,6 +45,10 @@ class LineageTransport(Protocol):
         """Close the transport and clean up resources."""
         ...
 
+    async def close_async(self) -> None:
+        """Async close — drain queue before shutdown. Default calls sync close()."""
+        self.close()
+
 
 @runtime_checkable
 class LineageExtractor(Protocol):

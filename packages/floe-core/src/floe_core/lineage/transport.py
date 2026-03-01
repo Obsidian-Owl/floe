@@ -89,6 +89,9 @@ class NoOpLineageTransport:
     def close(self) -> None:
         """No-op close."""
 
+    async def close_async(self) -> None:
+        """No-op async close."""
+
 
 class ConsoleLineageTransport:
     """Transport that logs events as JSON via structlog.
@@ -119,6 +122,9 @@ class ConsoleLineageTransport:
 
     def close(self) -> None:
         """No-op close."""
+
+    async def close_async(self) -> None:
+        """No-op async close."""
 
 
 class CompositeLineageTransport:
@@ -166,6 +172,17 @@ class CompositeLineageTransport:
                     extra={"transport": type(transport).__name__},
                 )
 
+    async def close_async(self) -> None:
+        """Async close all child transports."""
+        for transport in self._transports:
+            try:
+                await transport.close_async()
+            except Exception:
+                logger.exception(
+                    "Child transport failed to close_async",
+                    extra={"transport": type(transport).__name__},
+                )
+
 
 class HttpLineageTransport:
     """Non-blocking HTTP transport for lineage events.
@@ -208,6 +225,17 @@ class HttpLineageTransport:
             )
         if not parsed.netloc:
             raise ValueError(f"Invalid URL: missing host in {url!r}")
+
+        # Strip userinfo (credentials) from URL for defense-in-depth
+        if parsed.username or parsed.password:
+            clean_netloc = parsed.hostname or ""
+            if parsed.port:
+                clean_netloc += f":{parsed.port}"
+            url = f"{parsed.scheme}://{clean_netloc}{parsed.path}"
+            if parsed.query:
+                url += f"?{parsed.query}"
+            if parsed.fragment:
+                url += f"#{parsed.fragment}"
 
         self._url = url
         self._timeout = timeout

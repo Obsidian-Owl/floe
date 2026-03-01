@@ -67,6 +67,14 @@ dependencies = [
     "floe-alert-webhook",
 ]
 
+[project.optional-dependencies]
+# Docker image build extras — forwarded from workspace members.
+# uv export --all-packages --extra docker needs the extra at workspace root.
+docker = [
+    "dagster-webserver>=1.10.0,<2.0.0",
+    "dagster-postgres>=0.28.0,<1.0.0",
+]
+
 [tool.uv]
 # Enable prereleases for sigstore dependencies (betterproto, sigstore-protobuf-specs)
 prerelease = "allow"

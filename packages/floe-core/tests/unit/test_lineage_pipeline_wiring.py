@@ -125,7 +125,8 @@ def mock_emitter() -> MagicMock:
     """Create a mock LineageEmitter with async methods.
 
     The mock has emit_start, emit_complete, emit_fail as AsyncMocks,
-    and close as a regular MagicMock. emit_start returns a UUID.
+    close as a regular MagicMock, and transport.close_async as an
+    AsyncMock. emit_start returns a UUID.
 
     Returns:
         Mock LineageEmitter instance.
@@ -136,6 +137,7 @@ def mock_emitter() -> MagicMock:
     emitter.emit_complete = AsyncMock(return_value=None)
     emitter.emit_fail = AsyncMock(return_value=None)
     emitter.close = MagicMock()
+    emitter.transport.close_async = AsyncMock(return_value=None)
     emitter.default_namespace = "default"
     return emitter
 
@@ -321,6 +323,7 @@ class TestPipelineLevelEmission:
         emitter.emit_complete = AsyncMock(side_effect=mock_complete)
         emitter.emit_fail = AsyncMock()
         emitter.close = MagicMock()
+        emitter.transport.close_async = AsyncMock(return_value=None)
         emitter.default_namespace = "default"
 
         _run_pipeline_with_patches(
@@ -620,6 +623,7 @@ class TestPerModelEmission:
         emitter.emit_complete = AsyncMock(return_value=None)
         emitter.emit_fail = AsyncMock(return_value=None)
         emitter.close = MagicMock()
+        emitter.transport.close_async = AsyncMock(return_value=None)
         emitter.default_namespace = "default"
 
         _run_pipeline_with_patches(
@@ -865,21 +869,69 @@ class TestNoOpWhenMarquezAbsent:
         assert result is not None
         assert result.version == "0.3.0"
 
+    @pytest.mark.requirement("AC-17.3")
+    def test_no_emitter_created_with_empty_marquez_url(
+        self,
+        compilation_patches: dict[str, MagicMock],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verify create_emitter NOT called when MARQUEZ_URL is empty string.
+
+        An empty string should be treated the same as absent — no emitter
+        should be created. This is a boundary condition: the implementation
+        uses ``os.environ.get("MARQUEZ_URL", "").strip()``, so both ``""``
+        and ``"  "`` should be no-ops.
+        """
+        monkeypatch.setenv(MARQUEZ_URL_ENV_KEY, "")
+
+        mock_create = MagicMock()
+        _run_pipeline_with_patches(
+            compilation_patches,
+            extra_patches={
+                f"{EMITTER_MODULE}.create_emitter": mock_create,
+            },
+        )
+
+        mock_create.assert_not_called()
+
+    @pytest.mark.requirement("AC-17.3")
+    def test_no_emitter_created_with_whitespace_marquez_url(
+        self,
+        compilation_patches: dict[str, MagicMock],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verify create_emitter NOT called when MARQUEZ_URL is whitespace only.
+
+        Whitespace-only values like ``"  "`` should be treated the same as
+        absent after strip().
+        """
+        monkeypatch.setenv(MARQUEZ_URL_ENV_KEY, "   ")
+
+        mock_create = MagicMock()
+        _run_pipeline_with_patches(
+            compilation_patches,
+            extra_patches={
+                f"{EMITTER_MODULE}.create_emitter": mock_create,
+            },
+        )
+
+        mock_create.assert_not_called()
+
 
 class TestEmitterLifecycle:
     """Tests verifying emitter resource management."""
 
     @pytest.mark.requirement("AC-17.3")
-    def test_emitter_close_called_on_success(
+    def test_transport_close_async_called_on_success(
         self,
         mock_emitter: MagicMock,
         compilation_patches: dict[str, MagicMock],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Verify emitter.close() is called after successful compilation.
+        """Verify transport.close_async() is awaited after successful compilation.
 
-        The emitter must be properly closed to flush any pending events
-        and release transport resources.
+        The transport's async close drains the event queue before shutdown,
+        ensuring all pending OpenLineage events are flushed.
         """
         monkeypatch.setenv(MARQUEZ_URL_ENV_KEY, MARQUEZ_URL_VALUE)
 
@@ -892,19 +944,19 @@ class TestEmitterLifecycle:
             },
         )
 
-        mock_emitter.close.assert_called_once()
+        mock_emitter.transport.close_async.assert_awaited_once()
 
     @pytest.mark.requirement("AC-17.3")
-    def test_emitter_close_called_on_failure(
+    def test_transport_close_async_called_on_failure(
         self,
         mock_emitter: MagicMock,
         compilation_patches: dict[str, MagicMock],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Verify emitter.close() called even when compilation fails.
+        """Verify transport.close_async() is awaited even when compilation fails.
 
-        close() must be in a finally block to ensure cleanup regardless
-        of compilation outcome.
+        close_async() must be in the finally block to ensure the event
+        queue is drained regardless of compilation outcome.
         """
         monkeypatch.setenv(MARQUEZ_URL_ENV_KEY, MARQUEZ_URL_VALUE)
 
@@ -922,7 +974,7 @@ class TestEmitterLifecycle:
                 },
             )
 
-        mock_emitter.close.assert_called_once()
+        mock_emitter.transport.close_async.assert_awaited_once()
 
     @pytest.mark.requirement("AC-17.3")
     def test_emitter_error_does_not_crash_pipeline(
@@ -946,6 +998,7 @@ class TestEmitterLifecycle:
         )
         broken_emitter.emit_fail = AsyncMock()
         broken_emitter.close = MagicMock()
+        broken_emitter.transport.close_async = AsyncMock(return_value=None)
         broken_emitter.default_namespace = "default"
 
         mock_create = MagicMock(return_value=broken_emitter)
@@ -1076,6 +1129,7 @@ class TestEmitterCreation:
         dummy_emitter.emit_complete = AsyncMock()
         dummy_emitter.emit_fail = AsyncMock()
         dummy_emitter.close = MagicMock()
+        dummy_emitter.transport.close_async = AsyncMock(return_value=None)
         dummy_emitter.default_namespace = "default"
         mock_create.return_value = dummy_emitter
 

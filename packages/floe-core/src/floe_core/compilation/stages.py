@@ -235,6 +235,24 @@ def compile_pipeline(
                 scheme=parsed.scheme,
             )
         else:
+            # Strip userinfo (credentials) from URL before transport construction
+            if parsed.username or parsed.password:
+                from urllib.parse import urlunparse
+
+                clean_netloc = parsed.hostname or ""
+                if parsed.port:
+                    clean_netloc += f":{parsed.port}"
+                marquez_url = urlunparse(
+                    (
+                        parsed.scheme,
+                        clean_netloc,
+                        parsed.path,
+                        parsed.params,
+                        parsed.query,
+                        parsed.fragment,
+                    )
+                )
+
             from floe_core.lineage.emitter import create_emitter
 
             transport_config: dict[str, Any] = {"type": "http", "url": marquez_url}
@@ -244,12 +262,22 @@ def compile_pipeline(
                 producer="floe",
             )
 
+    # Persistent event loop for lineage emission — asyncio.run() creates and
+    # destroys a loop per call, which cancels the HttpLineageTransport's background
+    # consumer task before events are POSTed. A persistent loop keeps the consumer
+    # alive across emit_start/emit_complete calls.
+    _lineage_loop: asyncio.AbstractEventLoop | None = None
+    if lineage_emitter is not None:
+        _lineage_loop = asyncio.new_event_loop()
+
     def _emit_sync(coro: Any) -> Any:
         """Bridge async lineage calls into sync context (best-effort)."""
+        if _lineage_loop is None:
+            return None
         try:
-            return asyncio.run(coro)
+            return _lineage_loop.run_until_complete(coro)
         except Exception:
-            logger.debug("lineage_emission_failed", exc_info=True)
+            logger.warning("lineage_emission_failed", exc_info=True)
             return None
 
     # Track total compilation time
@@ -618,9 +646,16 @@ def compile_pipeline(
             raise
 
         finally:
-            # Always close the emitter to flush pending events and release resources
-            if lineage_emitter is not None:
-                lineage_emitter.close()
+            # Drain the async queue and close the emitter to flush pending events
+            if lineage_emitter is not None and _lineage_loop is not None:
+                try:
+                    transport = lineage_emitter.transport
+                    _lineage_loop.run_until_complete(transport.close_async())
+                except Exception:
+                    logger.warning("lineage_close_failed", exc_info=True)
+                    lineage_emitter.close()
+                finally:
+                    _lineage_loop.close()
 
 
 def run_enforce_stage(

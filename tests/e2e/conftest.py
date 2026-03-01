@@ -12,6 +12,7 @@ import os
 import subprocess
 import uuid
 from collections.abc import Callable, Generator
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -531,13 +532,16 @@ def polaris_with_write_grants(
     """
     polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
 
-    # Get admin token
+    # Get admin token - read credentials from env, consistent with polaris_client
+    default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
+    cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
+    client_id, client_secret = cred.split(":", 1)
     token_response = httpx.post(
         f"{polaris_url}/api/catalog/v1/oauth/tokens",
         data={
             "grant_type": "client_credentials",
-            "client_id": "demo-admin",  # pragma: allowlist secret
-            "client_secret": "demo-secret",  # pragma: allowlist secret
+            "client_id": client_id,
+            "client_secret": client_secret,
             "scope": "PRINCIPAL_ROLE:ALL",
         },
         timeout=10.0,
@@ -635,6 +639,7 @@ def otel_tracer_provider() -> Generator[Any, None, None]:
 
     resource = Resource.create({"service.name": "floe-platform"})
     provider = TracerProvider(resource=resource)
+    # insecure=True: local Kind cluster does not expose TLS on gRPC port
     exporter = OTLPSpanExporter(endpoint=otel_endpoint, insecure=True)
     processor = BatchSpanProcessor(exporter)
     provider.add_span_processor(processor)
@@ -644,3 +649,52 @@ def otel_tracer_provider() -> Generator[Any, None, None]:
     yield provider
 
     provider.shutdown()
+
+
+@pytest.fixture(scope="session")
+def seed_observability(
+    otel_tracer_provider: Any,
+    marquez_client: httpx.Client,
+) -> None:
+    """Seed Marquez and Jaeger with real pipeline data via compile_pipeline().
+
+    Runs compile_pipeline() with MARQUEZ_URL set so OpenLineage events flow
+    to Marquez, and with OTel tracing active so spans flow to Jaeger via
+    the OTel Collector.
+
+    The fixture temporarily sets MARQUEZ_URL for the compilation, then
+    restores the original value to avoid colliding with the marquez_client
+    fixture (which uses MARQUEZ_URL as the base URL for reads).
+
+    Args:
+        otel_tracer_provider: OTel TracerProvider fixture (ensures tracing active).
+        marquez_client: Marquez HTTP client (ensures Marquez is ready).
+
+    Raises:
+        pytest.Failed: If seeding fails (compilation error).
+    """
+    old_marquez = os.environ.get("MARQUEZ_URL")
+    # compile_pipeline posts events directly to this URL
+    os.environ["MARQUEZ_URL"] = "http://localhost:5000/api/v1/lineage"
+
+    try:
+        from floe_core.compilation.stages import compile_pipeline
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        root = Path(__file__).parent.parent.parent
+        spec_path = root / "demo" / "customer-360" / "floe.yaml"
+        manifest_path = root / "demo" / "manifest.yaml"
+
+        compile_pipeline(spec_path, manifest_path)
+
+        # Flush OTel spans to ensure they reach Jaeger
+        otel_tracer_provider.force_flush(timeout_millis=5000)
+    except Exception as exc:
+        pytest.fail(f"Observability seeding failed (compile_pipeline): {exc}")
+    finally:
+        if old_marquez is None:
+            os.environ.pop("MARQUEZ_URL", None)
+        else:
+            os.environ["MARQUEZ_URL"] = old_marquez
