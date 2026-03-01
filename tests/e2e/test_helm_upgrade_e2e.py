@@ -207,9 +207,18 @@ class TestHelmUpgrade:
             f"Expected at least 2 revisions (initial + upgrade), got {len(history)}"
         )
 
-        # All revisions should be in deployed or superseded state
+        # Latest revision must be "deployed"; earlier revisions may be
+        # "superseded" or "failed" (e.g., initial install timed out,
+        # then recovered via rollback).
+        latest_revision = history[-1].get("revision")
         for entry in history:
             status = entry.get("status", "")
-            assert status in ("deployed", "superseded"), (
-                f"Unexpected revision status: {status} for revision {entry.get('revision')}"
-            )
+            revision = entry.get("revision")
+            if revision == latest_revision:
+                assert status == "deployed", (
+                    f"Latest revision {revision} not deployed: {status}"
+                )
+            else:
+                assert status in ("deployed", "superseded", "failed"), (
+                    f"Unexpected revision status: {status} for revision {revision}"
+                )
