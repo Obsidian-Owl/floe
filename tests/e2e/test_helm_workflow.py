@@ -162,6 +162,8 @@ def deployed_platform(
             "--set",
             "polaris.enabled=true",
             "--set",
+            "polaris.service.type=ClusterIP",  # Avoid NodePort conflict with main release
+            "--set",
             "dagster.enabled=false",  # Skip dagster for basic test
             "--set",
             "otel.enabled=false",

@@ -9,6 +9,9 @@
 #   TEST_NAMESPACE      K8s namespace for tests (default: floe-test)
 #   E2E_TIMEOUT         E2E test timeout in seconds (default: 600)
 #   COLLECT_LOGS        Collect logs on failure: true/false (default: true)
+#   DAGSTER_HOST_PORT   Dagster localhost port (default: 3100)
+#   MINIO_USER          MinIO admin username (default: minioadmin)
+#   MINIO_PASS          MinIO admin password (default: minioadmin123)
 
 set -euo pipefail
 
@@ -17,10 +20,18 @@ KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
 TEST_NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 E2E_TIMEOUT="${E2E_TIMEOUT:-600}"
 COLLECT_LOGS="${COLLECT_LOGS:-true}"
+MINIO_USER="${MINIO_USER:-minioadmin}"
+MINIO_PASS="${MINIO_PASS:-minioadmin123}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 cd "${PROJECT_ROOT}"
+
+# Validate namespace format (K8s DNS label: lowercase alphanumeric + hyphens)
+if [[ ! "${TEST_NAMESPACE}" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
+    echo "ERROR: Invalid namespace format: '${TEST_NAMESPACE}'" >&2
+    exit 1
+fi
 
 echo "Running E2E tests..."
 echo "Namespace: ${TEST_NAMESPACE}"
@@ -68,11 +79,16 @@ collect_logs() {
 wait_for_port() {
     local host=$1 port=$2 timeout=${3:-10}
     for i in $(seq 1 "$timeout"); do
-        if nc -z "$host" "$port" 2>/dev/null; then return 0; fi
+        if (echo >/dev/tcp/"$host"/"$port") 2>/dev/null; then return 0; fi
         sleep 1
     done
     echo "ERROR: Port $host:$port not available after ${timeout}s" >&2
     return 1
+}
+
+# Check if a port is already listening (e.g. via Kind NodePort mapping)
+port_already_available() {
+    (echo >/dev/tcp/localhost/"$1") 2>/dev/null
 }
 
 # Cleanup function for port-forwards
@@ -116,49 +132,91 @@ done
 
 echo ""
 echo "Setting up port-forwards for Helm chart services..."
+echo "(Ports already exposed via Kind NodePorts will be skipped)"
 
 # Port-forward all Helm chart services to localhost for E2E tests
-# These services use ClusterIP by default
+# When Kind NodePorts already expose a port, skip the port-forward
 
-# Dagster webserver (port 3000 -> localhost:3000)
-kubectl port-forward svc/floe-platform-dagster-webserver 3000:3000 -n "${TEST_NAMESPACE}" &
-DAGSTER_PF_PID=$!
+# Dagster webserver (port 3000 -> localhost:3100)
+# Remapped from 3000 to avoid conflict with local dev servers
+DAGSTER_HOST_PORT="${DAGSTER_HOST_PORT:-3100}"
+if port_already_available "${DAGSTER_HOST_PORT}"; then
+    echo "  Dagster (${DAGSTER_HOST_PORT}): already available (NodePort)"
+else
+    kubectl port-forward svc/floe-platform-dagster-webserver "${DAGSTER_HOST_PORT}":3000 -n "${TEST_NAMESPACE}" &
+    DAGSTER_PF_PID=$!
+fi
 
-# Polaris catalog API (8181) + management health (8182) — single process, two ports
-kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n "${TEST_NAMESPACE}" &
-POLARIS_PF_PID=$!
+# Polaris catalog API (8181) + management health (8182)
+if port_already_available 8181; then
+    echo "  Polaris (8181): already available (NodePort)"
+    # 8182 (management) may still need a port-forward even when 8181 has a NodePort
+    if ! port_already_available 8182; then
+        kubectl port-forward svc/floe-platform-polaris 8182:8182 -n "${TEST_NAMESPACE}" &
+        POLARIS_PF_PID=$!
+    else
+        echo "  Polaris mgmt (8182): already available (NodePort)"
+    fi
+else
+    kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n "${TEST_NAMESPACE}" &
+    POLARIS_PF_PID=$!
+fi
 
 # MinIO API (port 9000 -> localhost:9000)
-kubectl port-forward svc/floe-platform-minio 9000:9000 -n "${TEST_NAMESPACE}" &
-MINIO_API_PF_PID=$!
+if port_already_available 9000; then
+    echo "  MinIO API (9000): already available (NodePort)"
+else
+    kubectl port-forward svc/floe-platform-minio 9000:9000 -n "${TEST_NAMESPACE}" &
+    MINIO_API_PF_PID=$!
+fi
 
 # MinIO Console (port 9001 -> localhost:9001)
-kubectl port-forward svc/floe-platform-minio 9001:9001 -n "${TEST_NAMESPACE}" &
-MINIO_UI_PF_PID=$!
+if port_already_available 9001; then
+    echo "  MinIO Console (9001): already available (NodePort)"
+else
+    kubectl port-forward svc/floe-platform-minio 9001:9001 -n "${TEST_NAMESPACE}" &
+    MINIO_UI_PF_PID=$!
+fi
 
 # OTel collector (port 4317 -> localhost:4317)
-kubectl port-forward svc/floe-platform-otel 4317:4317 -n "${TEST_NAMESPACE}" &
-OTEL_PF_PID=$!
+if port_already_available 4317; then
+    echo "  OTel (4317): already available (NodePort)"
+else
+    kubectl port-forward svc/floe-platform-otel 4317:4317 -n "${TEST_NAMESPACE}" &
+    OTEL_PF_PID=$!
+fi
 
 # Marquez lineage service (if deployed)
 # Note: Marquez API is on port 5000, admin is on port 5001
 if kubectl get svc floe-platform-marquez -n "${TEST_NAMESPACE}" &>/dev/null; then
-    kubectl port-forward svc/floe-platform-marquez 5000:5000 -n "${TEST_NAMESPACE}" &
-    MARQUEZ_PF_PID=$!
+    if port_already_available 5000; then
+        echo "  Marquez (5000): already available (NodePort)"
+    else
+        kubectl port-forward svc/floe-platform-marquez 5000:5000 -n "${TEST_NAMESPACE}" &
+        MARQUEZ_PF_PID=$!
+    fi
 fi
 
 # Jaeger query service (if deployed)
 if kubectl get svc floe-platform-jaeger-query -n "${TEST_NAMESPACE}" &>/dev/null; then
-    kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n "${TEST_NAMESPACE}" &
-    JAEGER_PF_PID=$!
+    if port_already_available 16686; then
+        echo "  Jaeger (16686): already available (NodePort)"
+    else
+        kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n "${TEST_NAMESPACE}" &
+        JAEGER_PF_PID=$!
+    fi
 fi
 
 # PostgreSQL (for direct DB access tests if needed)
-kubectl port-forward svc/floe-platform-postgresql 5432:5432 -n "${TEST_NAMESPACE}" &
-POSTGRES_PF_PID=$!
+if port_already_available 5432; then
+    echo "  PostgreSQL (5432): already available (NodePort)"
+else
+    kubectl port-forward svc/floe-platform-postgresql 5432:5432 -n "${TEST_NAMESPACE}" &
+    POSTGRES_PF_PID=$!
+fi
 
-# Wait for port-forwards to establish
-wait_for_port localhost 3000 15
+# Wait for ports to be available (either NodePort or port-forward)
+wait_for_port localhost "${DAGSTER_HOST_PORT}" 15
 wait_for_port localhost 8181 15
 wait_for_port localhost 8182 15
 wait_for_port localhost 9000 15
@@ -174,12 +232,33 @@ MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
 echo "Verifying MinIO bucket '${MINIO_BUCKET}'..."
 BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:9000/${MINIO_BUCKET}/" 2>/dev/null) || true
 if [[ "$BUCKET_CODE" == "404" ]]; then
-    echo "ERROR: MinIO bucket '${MINIO_BUCKET}' does not exist (HTTP 404)" >&2
-    echo "MinIO provisioning may have failed. Check:" >&2
-    echo "  kubectl get jobs -n ${TEST_NAMESPACE} -l app.kubernetes.io/name=minio" >&2
-    exit 1
+    echo "MinIO bucket '${MINIO_BUCKET}' not found — creating..." >&2
+    MINIO_POD=$(kubectl get pods -n "${TEST_NAMESPACE}" -l app.kubernetes.io/name=minio \
+        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    if [[ -z "${MINIO_POD}" ]]; then
+        echo "ERROR: No MinIO pod found in namespace ${TEST_NAMESPACE}" >&2
+        exit 1
+    fi
+    kubectl exec -n "${TEST_NAMESPACE}" "${MINIO_POD}" -- \
+        mc alias set local http://localhost:9000 "${MINIO_USER}" "${MINIO_PASS}" 2>&1 || true
+    kubectl exec -n "${TEST_NAMESPACE}" "${MINIO_POD}" -- \
+        mc mb "local/${MINIO_BUCKET}" --ignore-existing 2>&1
+    # Re-verify
+    BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:9000/${MINIO_BUCKET}/" 2>/dev/null) || true
+    if [[ "$BUCKET_CODE" == "404" ]]; then
+        echo "ERROR: Failed to create MinIO bucket '${MINIO_BUCKET}'" >&2
+        exit 1
+    fi
+    echo "MinIO bucket '${MINIO_BUCKET}' created successfully"
 fi
 echo "MinIO bucket '${MINIO_BUCKET}' accessible (HTTP ${BUCKET_CODE})"
+
+# Install PyIceberg from git for Polaris 1.2.0 compatibility
+# TODO(pyiceberg-0.11.1): Remove git install once PyPI release available
+echo "Installing PyIceberg from git (Polaris 1.2.0 PUT fix)..."
+uv pip install "pyiceberg @ git+https://github.com/apache/iceberg-python.git@9687d080f28951464cf02fb2645e2a1185838b21" 2>&1 || {
+    echo "WARNING: PyIceberg git install failed -- E2E tests may fail with HttpMethod errors" >&2
+}
 
 echo ""
 echo "Running E2E tests..."
@@ -189,6 +268,7 @@ echo "Running E2E tests..."
 # UV_NO_SYNC=1: Prevent uv from reverting manually-installed packages (e.g.,
 # pyiceberg from git with Polaris 1.2.0 PUT fix).
 # Tracking: https://github.com/apache/iceberg-python/pull/3010
+DAGSTER_URL="http://localhost:${DAGSTER_HOST_PORT}" \
 UV_NO_SYNC=1 uv run pytest \
     tests/e2e/ \
     -v \

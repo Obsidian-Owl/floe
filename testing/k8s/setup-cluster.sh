@@ -276,7 +276,7 @@ print_info() {
     echo ""
     echo "Services accessible via localhost (NodePort):"
     echo "  Polaris:     http://localhost:8181"
-    echo "  Dagster:     http://localhost:3000"
+    echo "  Dagster:     http://localhost:3100"
     echo "  MinIO API:   http://localhost:9000"
     echo "  MinIO UI:    http://localhost:9001 (minioadmin/minioadmin123)"
     echo "  Jaeger:      http://localhost:16686"
