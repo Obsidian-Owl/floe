@@ -9,6 +9,9 @@
 #   TEST_NAMESPACE      K8s namespace for tests (default: floe-test)
 #   E2E_TIMEOUT         E2E test timeout in seconds (default: 600)
 #   COLLECT_LOGS        Collect logs on failure: true/false (default: true)
+#   DAGSTER_HOST_PORT   Dagster localhost port (default: 3100)
+#   MINIO_USER          MinIO admin username (default: minioadmin)
+#   MINIO_PASS          MinIO admin password (default: minioadmin123)
 
 set -euo pipefail
 
@@ -17,10 +20,18 @@ KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
 TEST_NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 E2E_TIMEOUT="${E2E_TIMEOUT:-600}"
 COLLECT_LOGS="${COLLECT_LOGS:-true}"
+MINIO_USER="${MINIO_USER:-minioadmin}"
+MINIO_PASS="${MINIO_PASS:-minioadmin123}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 cd "${PROJECT_ROOT}"
+
+# Validate namespace format (K8s DNS label: lowercase alphanumeric + hyphens)
+if [[ ! "${TEST_NAMESPACE}" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
+    echo "ERROR: Invalid namespace format: '${TEST_NAMESPACE}'" >&2
+    exit 1
+fi
 
 echo "Running E2E tests..."
 echo "Namespace: ${TEST_NAMESPACE}"
@@ -229,7 +240,7 @@ if [[ "$BUCKET_CODE" == "404" ]]; then
         exit 1
     fi
     kubectl exec -n "${TEST_NAMESPACE}" "${MINIO_POD}" -- \
-        mc alias set local http://localhost:9000 minioadmin minioadmin123 2>&1 || true
+        mc alias set local http://localhost:9000 "${MINIO_USER}" "${MINIO_PASS}" 2>&1 || true
     kubectl exec -n "${TEST_NAMESPACE}" "${MINIO_POD}" -- \
         mc mb "local/${MINIO_BUCKET}" --ignore-existing 2>&1
     # Re-verify

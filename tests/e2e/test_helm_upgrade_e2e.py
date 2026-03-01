@@ -215,9 +215,7 @@ class TestHelmUpgrade:
             status = entry.get("status", "")
             revision = entry.get("revision")
             if revision == latest_revision:
-                assert status == "deployed", (
-                    f"Latest revision {revision} not deployed: {status}"
-                )
+                assert status == "deployed", f"Latest revision {revision} not deployed: {status}"
             else:
                 assert status in ("deployed", "superseded", "failed"), (
                     f"Unexpected revision status: {status} for revision {revision}"
