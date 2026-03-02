@@ -6,7 +6,7 @@ These are unit tests that parse YAML and Python source -- no external
 services or K8s cluster required.
 
 Requirements:
-    WU4-AC1: test_observability.py pod label selector uses app.kubernetes.io/component=otel
+    WU4-AC1: test_observability.py pod label selector uses app.kubernetes.io/name=otel
     WU4-AC2: OTel Collector config includes Jaeger exporter with OTLP gRPC endpoint
     WU4-AC3: values-test.yaml enables Jaeger and OTel
     WU4-AC4: E2E test queries Jaeger for service traces and asserts non-empty
@@ -55,20 +55,21 @@ class TestOtelLabelAlignment:
 
     @pytest.mark.requirement("WU4-AC1")
     def test_observability_test_uses_correct_otel_label_selector(self) -> None:
-        """Verify test_observability.py uses app.kubernetes.io/component=otel selector.
+        """Verify test_observability.py uses app.kubernetes.io/name=otel selector.
 
-        The E2E test must use the SAME label as the chart template
-        (configmap-otel.yaml line 13) to find OTel Collector pods.
-        Using the wrong label causes kubectl to find zero pods, and the
-        test wrongly concludes OTel Collector is not deployed.
+        OTel Collector pods are labeled with app.kubernetes.io/name=otel
+        (from the subchart's _helpers.tpl via the 'otel' alias in Chart.yaml).
+        The E2E test must select pods using this label, NOT the configmap's
+        component label. Using the wrong label causes kubectl to find zero
+        pods.
         """
         content = TEST_OBSERVABILITY.read_text()
 
-        # Must contain the correct selector
-        assert f"app.kubernetes.io/component={CORRECT_OTEL_LABEL}" in content, (
+        # Must contain the correct selector — pods use name=otel, not component=otel
+        assert f"app.kubernetes.io/name={CORRECT_OTEL_LABEL}" in content, (
             f"test_observability.py must use label selector "
-            f"'app.kubernetes.io/component={CORRECT_OTEL_LABEL}' "
-            f"to match configmap-otel.yaml. "
+            f"'app.kubernetes.io/name={CORRECT_OTEL_LABEL}' "
+            f"to match OTel subchart pod labels. "
             f"Currently uses the wrong label '{WRONG_OTEL_LABEL}'."
         )
 
@@ -77,14 +78,14 @@ class TestOtelLabelAlignment:
         """Verify test_observability.py does NOT use the old opentelemetry-collector label.
 
         The old label 'opentelemetry-collector' was from a previous chart version.
-        It does not match configmap-otel.yaml which uses 'otel'. If both old
-        and new labels coexist, the old one must be removed to prevent confusion.
+        It does not match the subchart's actual pod labels which use 'otel'.
+        If both old and new labels coexist, the old one must be removed.
         """
         content = TEST_OBSERVABILITY.read_text()
-        assert f"app.kubernetes.io/component={WRONG_OTEL_LABEL}" not in content, (
+        assert f"app.kubernetes.io/name={WRONG_OTEL_LABEL}" not in content, (
             f"test_observability.py still uses OLD label selector "
-            f"'app.kubernetes.io/component={WRONG_OTEL_LABEL}'. "
-            f"Must be updated to '{CORRECT_OTEL_LABEL}' to match configmap-otel.yaml."
+            f"'app.kubernetes.io/name={WRONG_OTEL_LABEL}'. "
+            f"Must be updated to '{CORRECT_OTEL_LABEL}' to match subchart pod labels."
         )
 
     @pytest.mark.requirement("WU4-AC1")
@@ -95,10 +96,10 @@ class TestOtelLabelAlignment:
         they must use 'otel' not 'opentelemetry-collector'.
         """
         content = TEST_ROUNDTRIP.read_text()
-        # If the roundtrip test references any component label selector,
+        # If the roundtrip test references any name label selector,
         # it must not use the old one
-        if "app.kubernetes.io/component" in content:
-            assert f"app.kubernetes.io/component={WRONG_OTEL_LABEL}" not in content, (
+        if "app.kubernetes.io/name" in content:
+            assert f"app.kubernetes.io/name={WRONG_OTEL_LABEL}" not in content, (
                 f"test_observability_roundtrip_e2e.py uses old label "
                 f"'{WRONG_OTEL_LABEL}'. Must use '{CORRECT_OTEL_LABEL}'."
             )
