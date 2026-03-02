@@ -257,7 +257,8 @@ echo "MinIO bucket '${MINIO_BUCKET}' accessible (HTTP ${BUCKET_CODE})"
 # TODO(pyiceberg-0.11.1): Remove git install once PyPI release available
 echo "Installing PyIceberg from git (Polaris 1.2.0 PUT fix)..."
 uv pip install "pyiceberg @ git+https://github.com/apache/iceberg-python.git@9687d080f28951464cf02fb2645e2a1185838b21" 2>&1 || {
-    echo "WARNING: PyIceberg git install failed -- E2E tests may fail with HttpMethod errors" >&2
+    echo "ERROR: PyIceberg git install failed -- E2E tests WILL fail with HttpMethod errors" >&2
+    exit 1
 }
 
 echo ""
