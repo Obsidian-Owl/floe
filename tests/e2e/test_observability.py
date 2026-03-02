@@ -430,7 +430,7 @@ class TestObservability(IntegrationTestBase):
                 "-n",
                 "floe-test",
                 "-l",
-                "app.kubernetes.io/component=otel",
+                "app.kubernetes.io/name=otel",
                 "-o",
                 "jsonpath={.items[*].status.phase}",
             ],
@@ -456,7 +456,7 @@ class TestObservability(IntegrationTestBase):
         )
         assert pod_result.stdout.strip(), (
             "INFRASTRUCTURE GAP: No OTel Collector pods found matching label "
-            "app.kubernetes.io/component=otel.\n"
+            "app.kubernetes.io/name=otel.\n"
             "OTel Collector service exists but no pods are scheduled."
         )
         phases = pod_result.stdout.strip().split()
