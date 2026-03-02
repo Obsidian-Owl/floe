@@ -112,7 +112,9 @@ polaris:
       clientSecret: "demo-secret"  # pragma: allowlist secret
   config:
     features:
-      SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION: "true"
+      # Must be "false" for pathStyleAccess to reach S3FileIO.
+      # stsUnavailable: true in storageConfigInfo prevents STS calls.
+      SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION: "false"
       ALLOW_SETTING_S3_ENDPOINTS: "true"
       ALLOW_TABLE_LOCATION_OVERLAP: "false"
   storage:
