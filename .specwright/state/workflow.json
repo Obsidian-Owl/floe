@@ -1,15 +1,15 @@
 {
   "version": "0.2.0",
   "currentWork": {
-    "id": "e2e-infra-fixes",
-    "unitId": "wu-19-marquez-stability",
-    "status": "verifying",
+    "id": "e2e-platform-quality",
+    "status": "building",
     "intensity": "full",
-    "workDir": ".specwright/work/e2e-infra-fixes",
-    "startedAt": "2026-02-27T15:00:00Z",
+    "workDir": ".specwright/work/e2e-platform-quality/units/wu-20-pyiceberg-hardfail",
+    "unitId": "wu-20-pyiceberg-hardfail",
+    "startedAt": "2026-03-02T00:00:00Z",
     "currentTask": null,
-    "tasksCompleted": ["T39", "T40", "T41", "T42"],
-    "tasksTotal": 4,
+    "tasksCompleted": [],
+    "tasksTotal": 0,
     "gates": {}
   },
   "completedWork": [
@@ -44,6 +44,13 @@
       "startedAt": "2026-02-17T12:00:00Z",
       "completedAt": "2026-02-17T12:00:00Z",
       "pr": "https://github.com/Obsidian-Owl/floe/pull/91"
+    },
+    {
+      "id": "e2e-infra-fixes",
+      "phase": "shipped",
+      "startedAt": "2026-02-27T15:00:00Z",
+      "completedAt": "2026-03-02T00:00:00Z",
+      "pr": "https://github.com/Obsidian-Owl/floe/pull/112"
     }
   ],
   "workUnits": [
@@ -297,6 +304,48 @@
       "status": "building",
       "order": 19,
       "tasksCompleted": ["T39", "T40", "T41", "T42"]
+    },
+    {
+      "id": "wu-20-pyiceberg-hardfail",
+      "description": "PyIceberg git install hard fail (Theme 1, 21 errors)",
+      "status": "building",
+      "order": 20,
+      "workDir": ".specwright/work/e2e-platform-quality/units/wu-20-pyiceberg-hardfail"
+    },
+    {
+      "id": "wu-21-bootstrap-minio-guard",
+      "description": "Bootstrap job MinIO guard (Theme 4, 5 errors)",
+      "status": "planned",
+      "order": 21,
+      "workDir": ".specwright/work/e2e-platform-quality/units/wu-21-bootstrap-minio-guard"
+    },
+    {
+      "id": "wu-22-otel-jaeger-alignment",
+      "description": "OTel/Jaeger label & endpoint alignment (Theme 3+6B, 3 infra failures)",
+      "status": "planned",
+      "order": 22,
+      "workDir": ".specwright/work/e2e-platform-quality/units/wu-22-otel-jaeger-alignment"
+    },
+    {
+      "id": "wu-23-bootstrap-minio-listing",
+      "description": "Platform bootstrap MinIO listing fix (Theme 6A, 1 failure)",
+      "status": "planned",
+      "order": 23,
+      "workDir": ".specwright/work/e2e-platform-quality/units/wu-23-bootstrap-minio-listing"
+    },
+    {
+      "id": "wu-24-dbt-e2e-pipeline",
+      "description": "dbt E2E pipeline configuration (Theme 2, 15 failures)",
+      "status": "planned",
+      "order": 24,
+      "workDir": ".specwright/work/e2e-platform-quality/units/wu-24-dbt-e2e-pipeline"
+    },
+    {
+      "id": "wu-25-governance-enforcement",
+      "description": "Governance enforcement completion (Theme 5, 3 failures)",
+      "status": "planned",
+      "order": 25,
+      "workDir": ".specwright/work/e2e-platform-quality/units/wu-25-governance-enforcement"
     }
   ],
   "gates": {
@@ -1199,5 +1248,5 @@
       }
     }
   },
-  "lastUpdated": "2026-03-01T10:00:00Z"
+  "lastUpdated": "2026-03-02T15:00:00Z"
 }
