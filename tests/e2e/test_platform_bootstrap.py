@@ -20,6 +20,7 @@ import subprocess
 import time
 from typing import TYPE_CHECKING
 
+import boto3
 import httpx
 import pytest
 
@@ -391,20 +392,28 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 "Check MinIO pod: kubectl logs -n floe-test -l app.kubernetes.io/name=minio"
             )
 
-        # Verify expected bucket exists via S3 HTTP API (port-forwarded to localhost:9000).
-        # The minio/minio image does NOT include the `mc` CLI, so we use the
-        # S3 HeadBucket-style request directly from the test host.
+        # Verify expected bucket exists via authenticated S3 HeadBucket.
+        # The minio/minio image does NOT include the `mc` CLI, and MinIO
+        # with policy=none requires credentials for bucket operations.
         expected_bucket = os.environ.get("MINIO_BUCKET", "floe-iceberg")
-        with httpx.Client(timeout=10.0) as s3_client:
-            bucket_resp = s3_client.head(
-                f"http://localhost:9000/{expected_bucket}/"
-            )
-            assert bucket_resp.status_code == 200, (
+        s3 = boto3.client(
+            "s3",
+            endpoint_url="http://localhost:9000",
+            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin123"),
+            region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        )
+        try:
+            s3.head_bucket(Bucket=expected_bucket)
+        except s3.exceptions.ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            raise AssertionError(
                 f"Expected bucket '{expected_bucket}' not found in MinIO "
-                f"(HTTP {bucket_resp.status_code}).\n"
+                f"(S3 error: {error_code}).\n"
                 "Iceberg bucket is required for table storage.\n"
-                "Check provisioning: kubectl get jobs -n floe-test -l app.kubernetes.io/name=minio"
-            )
+                "Check provisioning: kubectl get jobs -n floe-test "
+                "-l app.kubernetes.io/name=minio"
+            ) from e
 
         # Check for MinIO bucket provisioning Job/ConfigMap as fallback
         # Bitnami MinIO chart creates buckets via provisioning job when configured
