@@ -391,53 +391,19 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 "Check MinIO pod: kubectl logs -n floe-test -l app.kubernetes.io/name=minio"
             )
 
-        # Configure mc client and list buckets to verify functionality
-        mc_result = _run_kubectl(
-            [
-                "exec",
-                "-n",
-                self.namespace,
-                minio_pod,
-                "--",
-                "mc",
-                "alias",
-                "set",
-                "local",
-                "http://localhost:9000",
-                "minioadmin",
-                "minioadmin123",
-            ],
-            timeout=30,
-        )
-
-        if mc_result.returncode == 0:
-            # List buckets to verify MinIO is functional
-            ls_result = _run_kubectl(
-                [
-                    "exec",
-                    "-n",
-                    self.namespace,
-                    minio_pod,
-                    "--",
-                    "mc",
-                    "ls",
-                    "local",
-                ],
-                timeout=30,
+        # Verify expected bucket exists via S3 HTTP API (port-forwarded to localhost:9000).
+        # The minio/minio image does NOT include the `mc` CLI, so we use the
+        # S3 HeadBucket-style request directly from the test host.
+        expected_bucket = os.environ.get("MINIO_BUCKET", "floe-iceberg")
+        with httpx.Client(timeout=10.0) as s3_client:
+            bucket_resp = s3_client.head(
+                f"http://localhost:9000/{expected_bucket}/"
             )
-            assert ls_result.returncode == 0, (
-                f"Failed to list MinIO buckets: {ls_result.stderr}\n"
-                "MinIO must be functional with accessible buckets."
-            )
-
-            # Verify expected buckets exist (floe-iceberg for Iceberg data)
-            bucket_output = ls_result.stdout
-            # Bucket name from Helm values (minio.buckets[0].name)
-            expected_bucket = os.environ.get("MINIO_BUCKET", "floe-iceberg")
-            assert expected_bucket in bucket_output, (
-                f"Expected bucket '{expected_bucket}' not found in MinIO.\n"
-                f"Available: {bucket_output}\n"
-                "Iceberg bucket is required for table storage."
+            assert bucket_resp.status_code == 200, (
+                f"Expected bucket '{expected_bucket}' not found in MinIO "
+                f"(HTTP {bucket_resp.status_code}).\n"
+                "Iceberg bucket is required for table storage.\n"
+                "Check provisioning: kubectl get jobs -n floe-test -l app.kubernetes.io/name=minio"
             )
 
         # Check for MinIO bucket provisioning Job/ConfigMap as fallback
