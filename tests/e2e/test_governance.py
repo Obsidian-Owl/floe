@@ -461,8 +461,15 @@ class TestGovernance(IntegrationTestBase):
         """
         repo_root = self._find_repo_root()
 
-        # Run uv-secure with same ignore list as CI
-        # See .pre-commit-config.yaml for justification of ignored vulns
+        # Run uv-secure with same ignore list as CI.
+        # See .pre-commit-config.yaml for justification of ignored vulns.
+        # Scan only platform lock files — devtools/ has its own dependency
+        # lifecycle and is excluded from platform security governance.
+        lock_files = [
+            str(p)
+            for p in repo_root.rglob("uv.lock")
+            if "devtools" not in str(p) and ".venv" not in str(p)
+        ]
         cmd = [
             "uv",
             "run",
@@ -472,7 +479,7 @@ class TestGovernance(IntegrationTestBase):
             "GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7,"
             "GHSA-hm8f-75xx-w2vr,GHSA-2q4j-m29v-hq73,GHSA-wp53-j4wj-2cfg,"
             "GHSA-cfh3-3jmp-rvhc,GHSA-w8v5-vhqr-4h9v",
-            ".",
+            *lock_files,
         ]
 
         try:
