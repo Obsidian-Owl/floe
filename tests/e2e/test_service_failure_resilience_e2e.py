@@ -19,6 +19,7 @@ See Also:
 from __future__ import annotations
 
 import os
+import warnings
 from pathlib import Path
 
 import httpx
@@ -183,8 +184,6 @@ class TestServiceFailureResilience:
         if not polaris_health_ready:
             # Log warning but don't fail — the pod is Ready, port-forward may
             # reconnect before the next test's fixture setup.
-            import warnings
-
             warnings.warn(
                 "Polaris port-forward (8182) did not recover within 60s after pod restart. "
                 "Subsequent tests using port 8182 may fail.",

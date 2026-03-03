@@ -259,11 +259,11 @@ POLARIS_CLIENT_ID="${POLARIS_CLIENT_ID:-demo-admin}"
 POLARIS_CLIENT_SECRET="${POLARIS_CLIENT_SECRET:-demo-secret}"
 echo "Verifying Polaris catalog '${POLARIS_CATALOG}'..."
 
-# Acquire OAuth token
+# Acquire OAuth token (use python3 for robust JSON parsing)
 POLARIS_TOKEN=$(curl -s -X POST \
     "http://localhost:8181/api/catalog/v1/oauth/tokens" \
     -d "grant_type=client_credentials&client_id=${POLARIS_CLIENT_ID}&client_secret=${POLARIS_CLIENT_SECRET}&scope=PRINCIPAL_ROLE:ALL" \
-    2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4) || true
+    2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))") || true
 
 if [[ -z "${POLARIS_TOKEN}" ]]; then
     echo "ERROR: Failed to acquire Polaris OAuth token" >&2
@@ -277,37 +277,40 @@ CATALOG_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
 
 if [[ "${CATALOG_CODE}" == "404" ]]; then
     echo "Polaris catalog '${POLARIS_CATALOG}' not found — creating..." >&2
-    CATALOG_JSON=$(cat <<EOJSON
-{
-  "catalog": {
-    "name": "${POLARIS_CATALOG}",
-    "type": "INTERNAL",
-    "properties": {
-      "default-base-location": "s3://${MINIO_BUCKET}",
-      "s3.endpoint": "http://floe-platform-minio:9000",
-      "s3.path-style-access": "true",
-      "s3.access-key-id": "${MINIO_USER}",
-      "s3.secret-access-key": "${MINIO_PASS}",
-      "s3.region": "us-east-1",
-      "table-default.s3.endpoint": "http://floe-platform-minio:9000",
-      "table-default.s3.path-style-access": "true",
-      "table-default.s3.access-key-id": "${MINIO_USER}",
-      "table-default.s3.secret-access-key": "${MINIO_PASS}",
-      "table-default.s3.region": "us-east-1"
-    },
-    "storageConfigInfo": {
-      "storageType": "S3",
-      "allowedLocations": ["s3://${MINIO_BUCKET}"],
-      "endpoint": "http://floe-platform-minio:9000",
-      "endpointInternal": "http://floe-platform-minio:9000",
-      "pathStyleAccess": true,
-      "region": "us-east-1",
-      "stsUnavailable": true
+    # Build JSON payload with python3 to safely escape special characters
+    CATALOG_JSON=$(python3 -c "
+import json, sys
+MINIO_ENDPOINT = 'http://floe-platform-minio:9000'
+payload = {
+    'catalog': {
+        'name': sys.argv[1],
+        'type': 'INTERNAL',
+        'properties': {
+            'default-base-location': f's3://{sys.argv[2]}',
+            's3.endpoint': MINIO_ENDPOINT,
+            's3.path-style-access': 'true',
+            's3.access-key-id': sys.argv[3],
+            's3.secret-access-key': sys.argv[4],
+            's3.region': 'us-east-1',
+            'table-default.s3.endpoint': MINIO_ENDPOINT,
+            'table-default.s3.path-style-access': 'true',
+            'table-default.s3.access-key-id': sys.argv[3],
+            'table-default.s3.secret-access-key': sys.argv[4],
+            'table-default.s3.region': 'us-east-1',
+        },
+        'storageConfigInfo': {
+            'storageType': 'S3',
+            'allowedLocations': [f's3://{sys.argv[2]}'],
+            'endpoint': MINIO_ENDPOINT,
+            'endpointInternal': MINIO_ENDPOINT,
+            'pathStyleAccess': True,
+            'region': 'us-east-1',
+            'stsUnavailable': True,
+        },
     }
-  }
 }
-EOJSON
-    )
+print(json.dumps(payload))
+" "${POLARIS_CATALOG}" "${MINIO_BUCKET}" "${MINIO_USER}" "${MINIO_PASS}")
 
     CREATE_CODE=$(curl -s -o /tmp/polaris-create.txt -w '%{http_code}' -X POST \
         -H "Authorization: Bearer ${POLARIS_TOKEN}" \
