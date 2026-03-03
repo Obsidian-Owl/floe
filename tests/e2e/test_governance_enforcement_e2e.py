@@ -45,7 +45,7 @@ _REQUIRED_PLUGINS: dict[str, Any] = {
         "config": {
             "uri": "http://localhost:8181/api/catalog",
             "warehouse": "floe-test",
-            "credential": "demo-admin:demo-secret",
+            "credential": "demo-admin:demo-secret",  # pragma: allowlist secret
         },
     },
     "storage": {
@@ -100,7 +100,7 @@ class TestGovernanceEnforcement:
             f"Expected enforcement_level='warn', got "
             f"'{artifacts.enforcement_result.enforcement_level}'"
         )
-        assert artifacts.enforcement_result.passed, (
+        assert artifacts.enforcement_result.passed is True, (
             f"Enforcement FAILED in warn mode (should only warn).\n"
             f"Error count: {artifacts.enforcement_result.error_count}\n"
             f"Level: {artifacts.enforcement_result.enforcement_level}"
@@ -172,6 +172,10 @@ class TestGovernanceEnforcement:
         assert artifacts.enforcement_result is not None
         assert artifacts.enforcement_result.enforcement_level == "strict"
         assert artifacts.enforcement_result.passed is True
+        assert artifacts.enforcement_result.models_validated > 0, (
+            f"Strict mode should validate models, got "
+            f"models_validated={artifacts.enforcement_result.models_validated}"
+        )
 
     @pytest.mark.requirement("AC-2.5")
     def test_strict_mode_rejects_undocumented_models(
@@ -230,13 +234,21 @@ class TestGovernanceEnforcement:
                 project_dir=tmp_path,
             )
 
-        # Verify violation details — PolicyEnforcementError stores violations
-        assert len(exc_info.value.violations) > 0, (
-            "PolicyEnforcementError raised but contains no violations"
+        # Verify violation details — PolicyEnforcementError stores violations.
+        # Input has exactly 1 undocumented model + 1 undescribed column →
+        # expect exactly 2 error-severity violations (FLOE-E220 + FLOE-E221).
+        assert len(exc_info.value.violations) == 2, (
+            f"Expected 2 violations (model + column description), "
+            f"got {len(exc_info.value.violations)}"
         )
         error_violations = [v for v in exc_info.value.violations if v.severity == "error"]
-        assert len(error_violations) > 0, (
-            "Expected error-severity violations for missing descriptions"
+        assert len(error_violations) == 2, (
+            f"Expected 2 error-severity violations, got {len(error_violations)}"
+        )
+        # Verify violation details target the right model
+        violation_messages = [v.message for v in error_violations]
+        assert any("undocumented_model" in m for m in violation_messages), (
+            f"Expected violation for 'undocumented_model', got: {violation_messages}"
         )
 
     @pytest.mark.requirement("AC-2.5")
@@ -286,7 +298,7 @@ class TestGovernanceEnforcement:
             f"Expected enforcement_level='off', got "
             f"'{artifacts.enforcement_result.enforcement_level}'"
         )
-        assert artifacts.enforcement_result.passed
+        assert artifacts.enforcement_result.passed is True
         assert artifacts.enforcement_result.models_validated == 0, (
             f"Off mode should validate 0 models, got "
             f"{artifacts.enforcement_result.models_validated}"
@@ -320,8 +332,8 @@ class TestGovernanceEnforcement:
             f"Warn mode should have 0 errors (violations downgraded to "
             f"warnings), got {result.error_count}"
         )
-        assert result.warning_count >= 0, (
-            f"warning_count should be non-negative, got {result.warning_count}"
+        assert result.warning_count == 0, (
+            f"Demo spec in warn mode should have 0 warnings, got {result.warning_count}"
         )
         assert result.models_validated > 0, (
             f"Expected models_validated > 0 (demo spec has models), got {result.models_validated}"

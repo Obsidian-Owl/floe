@@ -784,15 +784,30 @@ class TestGovernance(IntegrationTestBase):
             (r"subprocess\..*shell\s*=\s*True", "shell=True in subprocess"),
         ]
 
-        for py_file in (repo_root / "packages").rglob("*.py"):
-            if ".venv" in str(py_file) or "__pycache__" in str(py_file) or "test" in str(py_file):
+        scan_dirs = [repo_root / "packages", repo_root / "plugins"]
+        for scan_dir in scan_dirs:
+            if not scan_dir.exists():
                 continue
-            content = py_file.read_text()
+            for py_file in scan_dir.rglob("*.py"):
+                if (
+                    ".venv" in str(py_file)
+                    or "__pycache__" in str(py_file)
+                    or "test" in str(py_file)
+                ):
+                    continue
+                lines = py_file.read_text().splitlines()
 
-            for pattern, description in dangerous_patterns:
-                if re.search(pattern, content):
-                    rel_path = py_file.relative_to(repo_root)
-                    violations.append(f"{rel_path}: {description}")
+                for pattern, description in dangerous_patterns:
+                    matching_lines = [
+                        line_no for line_no, line in enumerate(lines, 1) if re.search(pattern, line)
+                    ]
+                    if matching_lines:
+                        rel_path = py_file.relative_to(repo_root)
+                        line_refs = ", ".join(f"L{n}" for n in matching_lines)
+                        violations.append(
+                            f"{rel_path}:{matching_lines[0]}: {description} "
+                            f"({len(matching_lines)} matches at {line_refs})"
+                        )
 
         if violations:
             pytest.fail(
