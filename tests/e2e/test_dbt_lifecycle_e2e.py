@@ -17,10 +17,10 @@ See Also:
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import pytest
+from conftest import run_dbt
 
 # Demo products that have dbt projects
 DBT_PRODUCTS = [
@@ -28,31 +28,6 @@ DBT_PRODUCTS = [
     "iot-telemetry",
     "financial-risk",
 ]
-
-
-def _run_dbt(
-    args: list[str],
-    project_dir: Path,
-    timeout: int = 120,
-) -> subprocess.CompletedProcess[str]:
-    """Run dbt command in the specified project directory.
-
-    Args:
-        args: dbt command arguments (e.g., ["run", "--select", "staging"]).
-        project_dir: Path to the dbt project directory.
-        timeout: Command timeout in seconds.
-
-    Returns:
-        Completed process result.
-    """
-    return subprocess.run(
-        ["dbt"] + args + ["--profiles-dir", str(project_dir)],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-        cwd=str(project_dir),
-    )
 
 
 @pytest.mark.e2e
@@ -87,7 +62,7 @@ class TestDbtLifecycle:
                 # No packages.yml means no deps needed
                 continue
 
-            result = _run_dbt(["deps"], project_dir)
+            result = run_dbt(["deps"], project_dir)
             assert result.returncode == 0, (
                 f"dbt deps failed for {product}:\n"
                 f"stdout: {result.stdout[-500:]}\n"
@@ -109,7 +84,7 @@ class TestDbtLifecycle:
                 # No seeds to load
                 continue
 
-            result = _run_dbt(["seed"], project_dir)
+            result = run_dbt(["seed"], project_dir)
             assert result.returncode == 0, (
                 f"dbt seed failed for {product}:\n"
                 f"stdout: {result.stdout[-500:]}\n"
@@ -125,7 +100,7 @@ class TestDbtLifecycle:
         """
         for product in DBT_PRODUCTS:
             project_dir = project_root / "demo" / product
-            result = _run_dbt(["run"], project_dir, timeout=180)
+            result = run_dbt(["run"], project_dir, timeout=180)
             assert result.returncode == 0, (
                 f"dbt run failed for {product}:\n"
                 f"stdout: {result.stdout[-500:]}\n"
@@ -153,7 +128,7 @@ class TestDbtLifecycle:
             if not tests_dir.exists() and not has_schema_tests:
                 continue
 
-            result = _run_dbt(["test"], project_dir)
+            result = run_dbt(["test"], project_dir)
             assert result.returncode == 0, (
                 f"dbt test failed for {product}:\n"
                 f"stdout: {result.stdout[-500:]}\n"
@@ -169,7 +144,7 @@ class TestDbtLifecycle:
         """
         for product in DBT_PRODUCTS:
             project_dir = project_root / "demo" / product
-            result = _run_dbt(["docs", "generate"], project_dir, timeout=120)
+            result = run_dbt(["docs", "generate"], project_dir, timeout=120)
             assert result.returncode == 0, (
                 f"dbt docs generate failed for {product}:\n"
                 f"stdout: {result.stdout[-500:]}\n"

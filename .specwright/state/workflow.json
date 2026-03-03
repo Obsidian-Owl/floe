@@ -2,15 +2,46 @@
   "version": "0.2.0",
   "currentWork": {
     "id": "e2e-platform-quality",
-    "status": "building",
+    "status": "verifying",
     "intensity": "full",
     "workDir": ".specwright/work/e2e-platform-quality/units/wu-24-dbt-e2e-pipeline",
     "unitId": "wu-24-dbt-e2e-pipeline",
     "startedAt": "2026-03-02T00:00:00Z",
-    "currentTask": "T2",
-    "tasksCompleted": ["T1", "T2"],
+    "currentTask": "T4",
+    "tasksCompleted": ["T1", "T2", "T3", "T4"],
     "tasksTotal": 4,
-    "gates": {}
+    "gates": {
+      "gate-build": {
+        "status": "PASS",
+        "findings": { "block": 0, "warn": 0, "info": 0 },
+        "timestamp": "2026-03-03T12:00:00Z",
+        "note": "55 fixture + 7860 unit + 843 contract tests pass. Ruff lint/format clean. Helm lint clean."
+      },
+      "gate-tests": {
+        "status": "PASS",
+        "findings": { "block": 0, "warn": 1, "info": 6 },
+        "timestamp": "2026-03-03T13:00:00Z",
+        "note": "2 BLOCKs fixed (e7fa5de). 6 of 7 WARNs fixed (8cabccb): bronze exact counts, exception-safe fixture, credential split guard, alias assertion, retry verification, module-level import. Remaining: W-tests-4 (duckdb path hard-assert, minor)."
+      },
+      "gate-security": {
+        "status": "PASS",
+        "findings": { "block": 0, "warn": 0, "info": 0 },
+        "timestamp": "2026-03-03T14:00:00Z",
+        "note": "All 3 WARNs resolved. W-sec-1: profiles now use env_var() (FR-014) — no credentials on disk. W-sec-2: use_ssl derived from URL scheme. W-sec-3: pragma comments added."
+      },
+      "gate-wiring": {
+        "status": "PASS",
+        "findings": { "block": 0, "warn": 0, "info": 4 },
+        "timestamp": "2026-03-03T14:00:00Z",
+        "note": "Both WARNs resolved. W-wiring-1: Polaris ConfigMap dual-write removed (single source via JAVA_OPTS_APPEND). W-wiring-2: Unified run_dbt() in conftest.py (check=False, no dead-code assertions)."
+      },
+      "gate-spec": {
+        "status": "PASS",
+        "findings": { "block": 0, "warn": 0, "info": 0 },
+        "timestamp": "2026-03-03T12:00:00Z",
+        "note": "7/7 acceptance criteria PASS. All evidence mapped."
+      }
+    }
   },
   "completedWork": [
     {
@@ -340,9 +371,10 @@
     {
       "id": "wu-24-dbt-e2e-pipeline",
       "description": "dbt E2E pipeline configuration (Theme 2, 15 failures)",
-      "status": "building",
+      "status": "verifying",
       "order": 24,
-      "workDir": ".specwright/work/e2e-platform-quality/units/wu-24-dbt-e2e-pipeline"
+      "workDir": ".specwright/work/e2e-platform-quality/units/wu-24-dbt-e2e-pipeline",
+      "tasksCompleted": ["T1", "T2", "T3", "T4"]
     },
     {
       "id": "wu-25-governance-enforcement",

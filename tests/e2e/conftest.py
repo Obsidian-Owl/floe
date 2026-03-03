@@ -111,6 +111,45 @@ def pytest_collection_modifyitems(
         print("=" * 70)
 
 
+def run_dbt(
+    args: list[str],
+    project_dir: Path,
+    timeout: float = 120.0,
+) -> subprocess.CompletedProcess[str]:
+    """Run a dbt command in the specified project directory.
+
+    Single E2E dbt runner.  Uses ``check=False`` so that **callers**
+    control error handling — no dead-code assertions, no hidden
+    CalledProcessError surprises.
+
+    Both ``--project-dir`` and ``--profiles-dir`` point to *project_dir*
+    because the ``dbt_e2e_profile`` fixture writes profiles.yml there.
+
+    Args:
+        args: dbt sub-command and flags (e.g. ``["seed"]``, ``["run"]``).
+        project_dir: Path to the dbt project directory.
+        timeout: Command timeout in seconds.  Defaults to 120.
+
+    Returns:
+        Completed process result.  Callers must check ``returncode``.
+    """
+    return subprocess.run(
+        [
+            "dbt",
+            *args,
+            "--project-dir",
+            str(project_dir),
+            "--profiles-dir",
+            str(project_dir),
+        ],
+        cwd=project_dir,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
 def run_kubectl(
     args: list[str],
     namespace: str | None = None,
@@ -714,16 +753,7 @@ _DBT_DEMO_PRODUCTS: dict[str, str] = {
 
 def _build_dbt_iceberg_profile(
     profile_name: str,
-    polaris_url: str,
-    client_id: str,
-    client_secret: str,
     warehouse: str,
-    s3_access_key: str,
-    s3_secret_key: str,
-    s3_endpoint: str,
-    s3_region: str,
-    *,
-    s3_use_ssl: bool = False,
 ) -> str:
     """Build a dbt profiles.yml string for DuckDB + Iceberg via Polaris.
 
@@ -731,21 +761,26 @@ def _build_dbt_iceberg_profile(
     Iceberg catalog as the ``ice`` database, routing all materializations
     to Iceberg tables stored in MinIO/S3.
 
+    Credentials and endpoints are referenced via dbt's ``env_var()`` Jinja
+    function (FR-014), so **no secrets are written to disk**.  The calling
+    fixture must ensure the referenced environment variables are set before
+    dbt is invoked.
+
+    Referenced env vars (set by ``dbt_e2e_profile`` fixture):
+        FLOE_E2E_POLARIS_ENDPOINT, FLOE_E2E_POLARIS_CLIENT_ID,
+        FLOE_E2E_POLARIS_CLIENT_SECRET, FLOE_E2E_POLARIS_OAUTH2_URI,
+        FLOE_E2E_S3_ENDPOINT, FLOE_E2E_S3_USE_SSL,
+        AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION.
+
     Args:
         profile_name: dbt profile name (must match dbt_project.yml ``profile`` key).
-        polaris_url: Polaris REST catalog base URL (e.g. ``http://localhost:8181``).
-        client_id: OAuth2 client ID for Polaris authentication.
-        client_secret: OAuth2 client secret for Polaris authentication.
         warehouse: Polaris warehouse/catalog name (e.g. ``floe-e2e``).
-        s3_access_key: S3/MinIO access key ID.
-        s3_secret_key: S3/MinIO secret access key.
-        s3_endpoint: S3/MinIO endpoint without scheme (e.g. ``localhost:9000``).
-        s3_region: S3 region (e.g. ``us-east-1``).
-        s3_use_ssl: Whether to use SSL for S3 connections (derived from URL scheme).
 
     Returns:
         YAML string suitable for writing to ``profiles.yml``.
     """
+    # Double braces in f-strings produce literal braces for dbt Jinja.
+    # Pattern: f"{{{{ expr }}}}" → "{{ expr }}" in output.
     return (
         f"{profile_name}:\n"
         f"  target: dev\n"
@@ -764,21 +799,21 @@ def _build_dbt_iceberg_profile(
         f"          alias: ice\n"
         f"          type: iceberg\n"
         f"          options:\n"
-        f"            ENDPOINT: {polaris_url}/api/catalog\n"
-        f"            CLIENT_ID: {client_id}\n"
-        f"            CLIENT_SECRET: {client_secret}\n"
-        f"            OAUTH2_SERVER_URI: {polaris_url}/api/catalog/v1/oauth/tokens\n"
+        "            ENDPOINT: \"{{ env_var('FLOE_E2E_POLARIS_ENDPOINT') }}\"\n"
+        "            CLIENT_ID: \"{{ env_var('FLOE_E2E_POLARIS_CLIENT_ID') }}\"\n"
+        "            CLIENT_SECRET: \"{{ env_var('FLOE_E2E_POLARIS_CLIENT_SECRET') }}\"\n"
+        "            OAUTH2_SERVER_URI: \"{{ env_var('FLOE_E2E_POLARIS_OAUTH2_URI') }}\"\n"
         f"            OAUTH2_SCOPE: PRINCIPAL_ROLE:ALL\n"
         f"            OAUTH2_GRANT_TYPE: client_credentials\n"
         f"            ACCESS_DELEGATION_MODE: none\n"
         f"      secrets:\n"
         f"        - type: s3\n"
-        f"          key_id: {s3_access_key}\n"
-        f"          secret: {s3_secret_key}\n"
-        f"          endpoint: {s3_endpoint}\n"
+        "          key_id: \"{{ env_var('AWS_ACCESS_KEY_ID') }}\"\n"
+        "          secret: \"{{ env_var('AWS_SECRET_ACCESS_KEY') }}\"\n"
+        "          endpoint: \"{{ env_var('FLOE_E2E_S3_ENDPOINT') }}\"\n"
         f"          url_style: path\n"
-        f"          use_ssl: {str(s3_use_ssl).lower()}\n"
-        f"          region: {s3_region}\n"
+        "          use_ssl: \"{{ env_var('FLOE_E2E_S3_USE_SSL', 'false') }}\"\n"
+        "          region: \"{{ env_var('AWS_REGION', 'us-east-1') }}\"\n"
     )
 
 
@@ -790,7 +825,7 @@ def dbt_e2e_profile(
 
     Writes E2E ``profiles.yml`` files to each demo project directory,
     backing up the originals as ``profiles.yml.bak``.  The
-    ``_run_dbt_command`` helper in ``test_data_pipeline.py`` passes
+    The ``run_dbt()`` helper in ``conftest.py`` passes
     ``--profiles-dir`` pointing to the project directory, so profiles
     must live there.
 
@@ -804,7 +839,9 @@ def dbt_e2e_profile(
     Note:
         Originals are restored on session teardown.
     """
-    # --- Resolve credentials from environment ---
+    # --- Resolve credentials from environment and publish as env vars ---
+    # dbt profiles use {{ env_var(...) }} Jinja references (FR-014),
+    # so credentials are resolved at runtime, never written to disk.
     polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
     minio_url = os.environ.get("MINIO_URL", "http://localhost:9000")
     default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
@@ -815,15 +852,28 @@ def dbt_e2e_profile(
     client_id, client_secret = parts
     warehouse = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
 
-    s3_access_key = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
-    s3_secret_key = os.environ.get(  # pragma: allowlist secret
+    # Derive computed values
+    s3_use_ssl = minio_url.startswith("https://")
+    s3_endpoint = minio_url.replace("http://", "").replace("https://", "")
+
+    # Set env vars that the profile's {{ env_var() }} references resolve against.
+    # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION are set by the test
+    # runner (test-e2e.sh); setdefault provides fallbacks for local runs.
+    _e2e_env_vars: dict[str, str] = {
+        "FLOE_E2E_POLARIS_ENDPOINT": f"{polaris_url}/api/catalog",
+        "FLOE_E2E_POLARIS_CLIENT_ID": client_id,
+        "FLOE_E2E_POLARIS_CLIENT_SECRET": client_secret,
+        "FLOE_E2E_POLARIS_OAUTH2_URI": f"{polaris_url}/api/catalog/v1/oauth/tokens",
+        "FLOE_E2E_S3_ENDPOINT": s3_endpoint,
+        "FLOE_E2E_S3_USE_SSL": str(s3_use_ssl).lower(),
+    }
+    for var_name, var_value in _e2e_env_vars.items():
+        os.environ[var_name] = var_value
+    os.environ.setdefault("AWS_ACCESS_KEY_ID", "minioadmin")
+    os.environ.setdefault(  # pragma: allowlist secret
         "AWS_SECRET_ACCESS_KEY", "minioadmin123"
     )
-    s3_region = os.environ.get("AWS_REGION", "us-east-1")
-    # Derive SSL setting from URL scheme
-    s3_use_ssl = minio_url.startswith("https://")
-    # Strip scheme — DuckDB S3 secrets expect host:port only
-    s3_endpoint = minio_url.replace("http://", "").replace("https://", "")
+    os.environ.setdefault("AWS_REGION", "us-east-1")
 
     backups: dict[str, str | None] = {}
     profile_paths: dict[str, Path] = {}
@@ -856,18 +906,10 @@ def dbt_e2e_profile(
             else:
                 backups[product_dir] = None
 
-            # Write E2E profile
+            # Write E2E profile (credentials via env_var, not plaintext)
             e2e_content = _build_dbt_iceberg_profile(
                 profile_name=profile_name,
-                polaris_url=polaris_url,
-                client_id=client_id,
-                client_secret=client_secret,
                 warehouse=warehouse,
-                s3_access_key=s3_access_key,
-                s3_secret_key=s3_secret_key,
-                s3_endpoint=s3_endpoint,
-                s3_region=s3_region,
-                s3_use_ssl=s3_use_ssl,
             )
             profile_path.write_text(e2e_content)
             profile_paths[product_dir] = profile_path
@@ -879,3 +921,6 @@ def dbt_e2e_profile(
     yield profile_paths
 
     _restore_backups()
+    # Clean up env vars set for dbt env_var() resolution
+    for var_name in _e2e_env_vars:
+        os.environ.pop(var_name, None)

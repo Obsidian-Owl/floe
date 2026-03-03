@@ -38,12 +38,12 @@ No pytest.skip() - see .claude/rules/testing-standards.md
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from typing import Any, ClassVar
 
 # PyIceberg imported in helper methods to fail properly if not installed
 import pytest
+from conftest import run_dbt
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
@@ -123,44 +123,6 @@ class TestDataPipeline(IntegrationTestBase):
                 f"Expected: demo/{product} directory with dbt project"
             )
         return project_path
-
-    def _run_dbt_command(
-        self,
-        command: list[str],
-        project_dir: Path,
-        timeout: float = 60.0,
-    ) -> subprocess.CompletedProcess[str]:
-        """Run a dbt command in the demo project.
-
-        Args:
-            command: dbt command and arguments (e.g., ["seed"], ["run"]).
-            project_dir: Path to dbt project directory.
-            timeout: Command timeout in seconds. Defaults to 60.0.
-
-        Returns:
-            CompletedProcess with stdout/stderr.
-
-        Raises:
-            subprocess.CalledProcessError: If dbt command fails.
-        """
-        full_command = [
-            "dbt",
-            *command,
-            "--project-dir",
-            str(project_dir),
-            "--profiles-dir",
-            str(project_dir),
-        ]
-
-        result = subprocess.run(
-            full_command,
-            cwd=project_dir,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=True,
-        )
-        return result
 
     def _load_iceberg_table(self, catalog: Any, namespace: str, table_name: str) -> Any:
         """Load Iceberg table from Polaris catalog.
@@ -243,7 +205,7 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # Run dbt seed
-        result = self._run_dbt_command(["seed"], project_dir)
+        result = run_dbt(["seed"], project_dir)
         assert result.returncode == 0, f"dbt seed should succeed for {product}"
 
         # Seeds use +schema: raw → namespace is {profile_name}_raw
@@ -300,11 +262,14 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # First run dbt seed to load data
-        self._run_dbt_command(["seed"], project_dir)
+        seed_result = run_dbt(["seed"], project_dir)
+        assert seed_result.returncode == 0, (
+            f"dbt seed failed for {product}:\n{seed_result.stderr[-500:]}"
+        )
 
         # Run dbt models
-        result = self._run_dbt_command(["run"], project_dir)
-        assert result.returncode == 0, f"dbt run should succeed for {product}"
+        result = run_dbt(["run"], project_dir)
+        assert result.returncode == 0, f"dbt run failed for {product}:\n{result.stderr[-500:]}"
 
         # Parse run_results.json to verify execution order
         run_results_path = project_dir / "target" / "run_results.json"
@@ -390,8 +355,8 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # Run full pipeline: seed + run
-        self._run_dbt_command(["seed"], project_dir)
-        self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
         namespace = "customer_360"
         available_tables = self._list_iceberg_tables(polaris_client, namespace)
@@ -472,8 +437,8 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # Run pipeline
-        self._run_dbt_command(["seed"], project_dir)
-        self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
         # Seeds land in {profile_name}_raw due to +schema: raw
         seed_namespace = "customer_360_raw"
@@ -558,11 +523,11 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # Run pipeline first
-        self._run_dbt_command(["seed"], project_dir)
-        self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
         # Run dbt tests
-        result = self._run_dbt_command(["test"], project_dir)
+        result = run_dbt(["test"], project_dir)
         assert result.returncode == 0, f"dbt test should pass for {product}"
 
         # Verify test output indicates success
@@ -622,8 +587,8 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # First run: create initial tables
-        self._run_dbt_command(["seed"], project_dir)
-        self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
         # Get initial row count from a staging table (incremental candidate)
         namespace = "customer_360"
@@ -632,7 +597,7 @@ class TestDataPipeline(IntegrationTestBase):
         assert initial_count > 0, "Initial load should have rows"
 
         # Second run: with same seed data (simulates incremental)
-        self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt re-run failed"
 
         # Get row count after second run
         second_count = self._get_iceberg_row_count(polaris_client, namespace, table_name)
@@ -677,9 +642,9 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # Run pipeline and tests
-        self._run_dbt_command(["seed"], project_dir)
-        self._run_dbt_command(["run"], project_dir)
-        result = self._run_dbt_command(["test"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
+        result = run_dbt(["test"], project_dir)
 
         assert result.returncode == 0, f"Quality checks should pass for {product}"
 
@@ -741,14 +706,11 @@ class TestDataPipeline(IntegrationTestBase):
 
         try:
             # Attempt to run pipeline (should fail)
-            with pytest.raises(subprocess.CalledProcessError) as exc_info:
-                self._run_dbt_command(["run", "--select", "bad_model_test"], project_dir)
-
-            # Verify dbt captured the error
-            assert exc_info.value.returncode != 0, "dbt run should fail"
+            fail_result = run_dbt(["run", "--select", "bad_model_test"], project_dir)
+            assert fail_result.returncode != 0, "dbt run should fail for bad model"
 
             # Verify dbt error output contains useful information
-            error_output = (exc_info.value.stderr or "") + (exc_info.value.stdout or "")
+            error_output = (fail_result.stderr or "") + (fail_result.stdout or "")
             # DuckDB will report that the referenced model doesn't exist
             assert (
                 "table_that_does_not_exist" in error_output.lower()
@@ -790,8 +752,8 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # First run: successful pipeline
-        self._run_dbt_command(["seed"], project_dir)
-        result = self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        result = run_dbt(["run"], project_dir)
         assert result.returncode == 0, "Initial run should succeed"
 
         # Create a bad intermediate model
@@ -800,8 +762,8 @@ class TestDataPipeline(IntegrationTestBase):
 
         try:
             # Run pipeline with bad model (should fail)
-            with pytest.raises(subprocess.CalledProcessError):
-                self._run_dbt_command(["run"], project_dir)
+            bad_run = run_dbt(["run"], project_dir)
+            assert bad_run.returncode != 0, "dbt run should fail with bad model"
 
             # Fix the bad model
             bad_model_path.write_text(
@@ -812,7 +774,7 @@ class TestDataPipeline(IntegrationTestBase):
             )
 
             # Retry - should only run failed model and downstream
-            retry_result = self._run_dbt_command(["run"], project_dir)
+            retry_result = run_dbt(["run"], project_dir)
             assert retry_result.returncode == 0, "Retry should succeed after fix"
 
             # Verify retry output shows selective execution
@@ -1042,8 +1004,8 @@ class TestDataPipeline(IntegrationTestBase):
         )
 
         # Test 3: Run pipeline and verify tables exist
-        self._run_dbt_command(["seed"], project_dir)
-        self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
         # Verify data exists (retention should preserve recent data)
         namespace = "customer_360"
