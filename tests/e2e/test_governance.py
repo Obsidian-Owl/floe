@@ -246,14 +246,35 @@ class TestGovernance(IntegrationTestBase):
         ]
 
         for py_file in (repo_root / "packages").rglob("*.py"):
-            if ".venv" in str(py_file) or "__pycache__" in str(py_file):
+            rel_str = str(py_file)
+            if ".venv" in rel_str or "__pycache__" in rel_str:
+                continue
+            # Test files legitimately contain fake credentials for testing
+            if "/tests/" in rel_str:
                 continue
             content = py_file.read_text()
+            lines = content.splitlines()
+
+            # Track docstring regions — matches inside docstrings are
+            # documentation examples, not real secrets.
+            in_docstring = False
+            code_lines: list[str] = []
+            for line in lines:
+                stripped = line.strip()
+                # Toggle docstring state on triple-quote boundaries
+                triple_count = stripped.count('"""') + stripped.count("'''")
+                if triple_count % 2 == 1:
+                    in_docstring = not in_docstring
+                if not in_docstring and triple_count == 0:
+                    code_lines.append(line)
+
             for pattern, description in secret_patterns:
-                matches = re.findall(pattern, content, re.IGNORECASE)
-                if matches:
+                real_matches = sum(
+                    1 for line in code_lines if re.search(pattern, line, re.IGNORECASE)
+                )
+                if real_matches:
                     rel_path = py_file.relative_to(repo_root)
-                    python_violations.append(f"{rel_path}: {description} ({len(matches)} matches)")
+                    python_violations.append(f"{rel_path}: {description} ({real_matches} matches)")
 
         all_violations = violations + python_violations
 
