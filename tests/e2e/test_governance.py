@@ -245,38 +245,55 @@ class TestGovernance(IntegrationTestBase):
             ),
         ]
 
-        for py_file in (repo_root / "packages").rglob("*.py"):
-            rel_str = str(py_file)
-            if ".venv" in rel_str or "__pycache__" in rel_str:
+        # Scan both packages/ and plugins/ for hardcoded secrets.
+        scan_roots = [repo_root / "packages", repo_root / "plugins"]
+        for scan_root in scan_roots:
+            if not scan_root.exists():
                 continue
-            # Test files legitimately contain fake credentials for testing
-            if "/tests/" in rel_str:
-                continue
-            content = py_file.read_text()
-            lines = content.splitlines()
+            for py_file in scan_root.rglob("*.py"):
+                rel_str = str(py_file)
+                if ".venv" in rel_str or "__pycache__" in rel_str:
+                    continue
+                # Test files legitimately contain fake credentials for testing.
+                # Defense-in-depth: detect-secrets pre-commit hook scans all
+                # files including tests, catching real secrets that this
+                # exclusion might miss.
+                if "/tests/" in rel_str:
+                    continue
+                content = py_file.read_text()
+                lines = content.splitlines()
 
-            # Track docstring regions — matches inside docstrings are
-            # documentation examples, not real secrets.
-            in_docstring = False
-            code_lines: list[str] = []
-            for line in lines:
-                stripped = line.strip()
-                # Toggle docstring state on triple-quote boundaries.
-                # Count occurrences of """ and '''; odd count means we
-                # crossed a docstring boundary.
-                triple_count = stripped.count('"""') + stripped.count("'''")
-                if triple_count % 2 == 1:
-                    in_docstring = not in_docstring
-                if not in_docstring:
-                    code_lines.append(line)
+                # Track docstring regions — matches inside docstrings are
+                # documentation examples, not real secrets.
+                # Defense-in-depth: detect-secrets pre-commit hook uses
+                # entropy analysis that catches secrets regardless of
+                # surrounding syntax (docstrings, comments, etc.).
+                in_docstring = False
+                code_lines: list[tuple[int, str]] = []
+                for line_no, line in enumerate(lines, 1):
+                    stripped = line.strip()
+                    # Toggle docstring state on triple-quote boundaries.
+                    # Count occurrences of """ and '''; odd count means we
+                    # crossed a docstring boundary.
+                    triple_count = stripped.count('"""') + stripped.count("'''")
+                    if triple_count % 2 == 1:
+                        in_docstring = not in_docstring
+                    if not in_docstring:
+                        code_lines.append((line_no, line))
 
-            for pattern, description in secret_patterns:
-                real_matches = sum(
-                    1 for line in code_lines if re.search(pattern, line, re.IGNORECASE)
-                )
-                if real_matches:
-                    rel_path = py_file.relative_to(repo_root)
-                    python_violations.append(f"{rel_path}: {description} ({real_matches} matches)")
+                for pattern, description in secret_patterns:
+                    matching_lines = [
+                        line_no
+                        for line_no, line in code_lines
+                        if re.search(pattern, line, re.IGNORECASE)
+                    ]
+                    if matching_lines:
+                        rel_path = py_file.relative_to(repo_root)
+                        line_refs = ", ".join(f"L{n}" for n in matching_lines)
+                        python_violations.append(
+                            f"{rel_path}:{matching_lines[0]}: {description} "
+                            f"({len(matching_lines)} matches at {line_refs})"
+                        )
 
         all_violations = violations + python_violations
 
