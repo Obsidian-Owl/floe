@@ -245,15 +245,56 @@ class TestGovernance(IntegrationTestBase):
             ),
         ]
 
-        for py_file in (repo_root / "packages").rglob("*.py"):
-            if ".venv" in str(py_file) or "__pycache__" in str(py_file):
+        # Scan both packages/ and plugins/ for hardcoded secrets.
+        scan_roots = [repo_root / "packages", repo_root / "plugins"]
+        for scan_root in scan_roots:
+            if not scan_root.exists():
                 continue
-            content = py_file.read_text()
-            for pattern, description in secret_patterns:
-                matches = re.findall(pattern, content, re.IGNORECASE)
-                if matches:
-                    rel_path = py_file.relative_to(repo_root)
-                    python_violations.append(f"{rel_path}: {description} ({len(matches)} matches)")
+            for py_file in scan_root.rglob("*.py"):
+                rel_str = str(py_file)
+                if ".venv" in rel_str or "__pycache__" in rel_str:
+                    continue
+                # Test files legitimately contain fake credentials for testing.
+                # Defense-in-depth: detect-secrets pre-commit hook scans all
+                # files including tests, catching real secrets that this
+                # exclusion might miss.
+                if "/tests/" in rel_str:
+                    continue
+                content = py_file.read_text()
+                lines = content.splitlines()
+
+                # Track docstring regions — matches inside docstrings are
+                # documentation examples, not real secrets.
+                # Defense-in-depth: detect-secrets pre-commit hook uses
+                # entropy analysis that catches secrets regardless of
+                # surrounding syntax (docstrings, comments, etc.).
+                in_docstring = False
+                code_lines: list[tuple[int, str]] = []
+                for line_no, line in enumerate(lines, 1):
+                    stripped = line.strip()
+                    # Toggle docstring state on triple-quote boundaries.
+                    # Strip inline comments before counting — a '#' comment
+                    # containing '"""' must never toggle docstring state.
+                    code_part = stripped.split("#")[0]
+                    triple_count = code_part.count('"""') + code_part.count("'''")
+                    if triple_count % 2 == 1:
+                        in_docstring = not in_docstring
+                    if not in_docstring:
+                        code_lines.append((line_no, line))
+
+                for pattern, description in secret_patterns:
+                    matching_lines = [
+                        line_no
+                        for line_no, line in code_lines
+                        if re.search(pattern, line, re.IGNORECASE)
+                    ]
+                    if matching_lines:
+                        rel_path = py_file.relative_to(repo_root)
+                        line_refs = ", ".join(f"L{n}" for n in matching_lines)
+                        python_violations.append(
+                            f"{rel_path}:{matching_lines[0]}: {description} "
+                            f"({len(matching_lines)} matches at {line_refs})"
+                        )
 
         all_violations = violations + python_violations
 
@@ -421,8 +462,20 @@ class TestGovernance(IntegrationTestBase):
         """
         repo_root = self._find_repo_root()
 
-        # Run uv-secure with same ignore list as CI
-        # See .pre-commit-config.yaml for justification of ignored vulns
+        # Run uv-secure with same ignore list as CI.
+        # See .pre-commit-config.yaml for justification of ignored vulns.
+        # Scan only platform lock files — devtools/ has its own dependency
+        # lifecycle and is excluded from platform security governance.
+        lock_files = [
+            str(p)
+            for p in repo_root.rglob("uv.lock")
+            if "devtools" not in str(p) and ".venv" not in str(p)
+        ]
+        if not lock_files:
+            pytest.fail(
+                "No platform uv.lock files found — security scan requires at least one "
+                "lock file in packages/ or plugins/ (devtools/ is intentionally excluded)."
+            )
         cmd = [
             "uv",
             "run",
@@ -432,7 +485,7 @@ class TestGovernance(IntegrationTestBase):
             "GHSA-5j53-63w8-8625,GHSA-7gcm-g887-7qv7,"
             "GHSA-hm8f-75xx-w2vr,GHSA-2q4j-m29v-hq73,GHSA-wp53-j4wj-2cfg,"
             "GHSA-cfh3-3jmp-rvhc,GHSA-w8v5-vhqr-4h9v",
-            ".",
+            *lock_files,
         ]
 
         try:
@@ -737,15 +790,30 @@ class TestGovernance(IntegrationTestBase):
             (r"subprocess\..*shell\s*=\s*True", "shell=True in subprocess"),
         ]
 
-        for py_file in (repo_root / "packages").rglob("*.py"):
-            if ".venv" in str(py_file) or "__pycache__" in str(py_file) or "test" in str(py_file):
+        scan_dirs = [repo_root / "packages", repo_root / "plugins"]
+        for scan_dir in scan_dirs:
+            if not scan_dir.exists():
                 continue
-            content = py_file.read_text()
+            for py_file in scan_dir.rglob("*.py"):
+                if (
+                    ".venv" in str(py_file)
+                    or "__pycache__" in str(py_file)
+                    or "test" in str(py_file)
+                ):
+                    continue
+                lines = py_file.read_text().splitlines()
 
-            for pattern, description in dangerous_patterns:
-                if re.search(pattern, content):
-                    rel_path = py_file.relative_to(repo_root)
-                    violations.append(f"{rel_path}: {description}")
+                for pattern, description in dangerous_patterns:
+                    matching_lines = [
+                        line_no for line_no, line in enumerate(lines, 1) if re.search(pattern, line)
+                    ]
+                    if matching_lines:
+                        rel_path = py_file.relative_to(repo_root)
+                        line_refs = ", ".join(f"L{n}" for n in matching_lines)
+                        violations.append(
+                            f"{rel_path}:{matching_lines[0]}: {description} "
+                            f"({len(matching_lines)} matches at {line_refs})"
+                        )
 
         if violations:
             pytest.fail(

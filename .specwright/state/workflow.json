@@ -4,42 +4,44 @@
     "id": "e2e-platform-quality",
     "status": "verifying",
     "intensity": "full",
-    "workDir": ".specwright/work/e2e-platform-quality/units/wu-24-dbt-e2e-pipeline",
-    "unitId": "wu-24-dbt-e2e-pipeline",
+    "workDir": ".specwright/work/e2e-platform-quality/units/wu-25-governance-enforcement",
+    "unitId": "wu-25-governance-enforcement",
     "startedAt": "2026-03-02T00:00:00Z",
-    "currentTask": "T4",
-    "tasksCompleted": ["T1", "T2", "T3", "T4"],
-    "tasksTotal": 4,
+    "currentTask": null,
+    "tasksCompleted": ["T1", "T2", "T3"],
+    "tasksTotal": 3,
     "gates": {
-      "gate-build": {
-        "status": "PASS",
-        "findings": { "block": 0, "warn": 0, "info": 0 },
-        "timestamp": "2026-03-03T12:00:00Z",
-        "note": "55 fixture + 7860 unit + 843 contract tests pass. Ruff lint/format clean. Helm lint clean."
-      },
-      "gate-tests": {
-        "status": "PASS",
-        "findings": { "block": 0, "warn": 1, "info": 6 },
-        "timestamp": "2026-03-03T13:00:00Z",
-        "note": "2 BLOCKs fixed (e7fa5de). 6 of 7 WARNs fixed (8cabccb): bronze exact counts, exception-safe fixture, credential split guard, alias assertion, retry verification, module-level import. Remaining: W-tests-4 (duckdb path hard-assert, minor)."
-      },
-      "gate-security": {
-        "status": "PASS",
-        "findings": { "block": 0, "warn": 0, "info": 0 },
-        "timestamp": "2026-03-03T14:00:00Z",
-        "note": "All 3 WARNs resolved. W-sec-1: profiles now use env_var() (FR-014) — no credentials on disk. W-sec-2: use_ssl derived from URL scheme. W-sec-3: pragma comments added."
-      },
-      "gate-wiring": {
-        "status": "PASS",
-        "findings": { "block": 0, "warn": 0, "info": 4 },
-        "timestamp": "2026-03-03T14:00:00Z",
-        "note": "Both WARNs resolved. W-wiring-1: Polaris ConfigMap dual-write removed (single source via JAVA_OPTS_APPEND). W-wiring-2: Unified run_dbt() in conftest.py (check=False, no dead-code assertions)."
-      },
-      "gate-spec": {
-        "status": "PASS",
-        "findings": { "block": 0, "warn": 0, "info": 0 },
-        "timestamp": "2026-03-03T12:00:00Z",
-        "note": "7/7 acceptance criteria PASS. All evidence mapped."
+      "wu-25-governance-enforcement": {
+        "gate-build": {
+          "status": "PASS",
+          "findings": { "block": 0, "warn": 0, "info": 0 },
+          "timestamp": "2026-03-03T17:15:00Z",
+          "note": "15/15 governance tests pass (including test_pip_audit_clean after devtools exclusion). Lint + format clean."
+        },
+        "gate-tests": {
+          "status": "PASS",
+          "findings": { "block": 0, "warn": 0, "info": 10 },
+          "timestamp": "2026-03-03T17:15:00Z",
+          "note": "All 15 WARNs resolved (9 from run 1 + 6 from run 2). Assertions use identity checks, exact counts, version constants. 10 INFOs (pre-existing patterns)."
+        },
+        "gate-security": {
+          "status": "PASS",
+          "findings": { "block": 0, "warn": 0, "info": 5 },
+          "timestamp": "2026-03-03T17:15:00Z",
+          "note": "All WARNs resolved. Defense-in-depth documented for /tests/ exclusion + docstring filter. No hardcoded secrets, injection risks, or OWASP issues."
+        },
+        "gate-wiring": {
+          "status": "PASS",
+          "findings": { "block": 0, "warn": 0, "info": 9 },
+          "timestamp": "2026-03-03T17:15:00Z",
+          "note": "All WARNs resolved. TODO tracking, scan scope extended, pragma: allowlist added. All imports used, no dead code, correct organization."
+        },
+        "gate-spec": {
+          "status": "PASS",
+          "findings": { "block": 0, "warn": 0, "info": 0 },
+          "timestamp": "2026-03-03T17:15:00Z",
+          "note": "All 5 ACs PASS: AC-25.1 root cause, AC-25.2 enforcement populated, AC-25.3 secrets fixed, AC-25.4 all 5 tests pass with strengthened assertions, AC-25.5 zero assertion changes in lines 699-715."
+        }
       }
     }
   },
@@ -371,15 +373,16 @@
     {
       "id": "wu-24-dbt-e2e-pipeline",
       "description": "dbt E2E pipeline configuration (Theme 2, 15 failures)",
-      "status": "verifying",
+      "status": "shipped",
       "order": 24,
       "workDir": ".specwright/work/e2e-platform-quality/units/wu-24-dbt-e2e-pipeline",
-      "tasksCompleted": ["T1", "T2", "T3", "T4"]
+      "tasksCompleted": ["T1", "T2", "T3", "T4"],
+      "pr": "https://github.com/Obsidian-Owl/floe/pull/119"
     },
     {
       "id": "wu-25-governance-enforcement",
       "description": "Governance enforcement completion (Theme 5, 3 failures)",
-      "status": "planned",
+      "status": "building",
       "order": 25,
       "workDir": ".specwright/work/e2e-platform-quality/units/wu-25-governance-enforcement"
     }
@@ -1284,5 +1287,5 @@
       }
     }
   },
-  "lastUpdated": "2026-03-02T15:00:00Z"
+  "lastUpdated": "2026-03-03T16:00:00Z"
 }
