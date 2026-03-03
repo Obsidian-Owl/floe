@@ -15,7 +15,7 @@ seeds:
 models:
   financial_risk:
     staging:
-      +materialized: view
+      +materialized: table
       +tags: ['staging']
     intermediate:
       +materialized: table

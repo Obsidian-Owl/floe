@@ -698,3 +698,168 @@ def seed_observability(
             os.environ.pop("MARQUEZ_URL", None)
         else:
             os.environ["MARQUEZ_URL"] = old_marquez
+
+
+# ---------------------------------------------------------------------------
+# dbt Iceberg profile configuration
+# ---------------------------------------------------------------------------
+
+# Demo products: directory name → dbt profile name
+_DBT_DEMO_PRODUCTS: dict[str, str] = {
+    "customer-360": "customer_360",
+    "iot-telemetry": "iot_telemetry",
+    "financial-risk": "financial_risk",
+}
+
+
+def _build_dbt_iceberg_profile(
+    profile_name: str,
+    polaris_url: str,
+    client_id: str,
+    client_secret: str,
+    warehouse: str,
+    s3_access_key: str,
+    s3_secret_key: str,
+    s3_endpoint: str,
+    s3_region: str,
+) -> str:
+    """Build a dbt profiles.yml string for DuckDB + Iceberg via Polaris.
+
+    The generated profile configures dbt-duckdb to attach a Polaris REST
+    Iceberg catalog as the ``ice`` database, routing all materializations
+    to Iceberg tables stored in MinIO/S3.
+
+    Args:
+        profile_name: dbt profile name (must match dbt_project.yml ``profile`` key).
+        polaris_url: Polaris REST catalog base URL (e.g. ``http://localhost:8181``).
+        client_id: OAuth2 client ID for Polaris authentication.
+        client_secret: OAuth2 client secret for Polaris authentication.
+        warehouse: Polaris warehouse/catalog name (e.g. ``floe-e2e``).
+        s3_access_key: S3/MinIO access key ID.
+        s3_secret_key: S3/MinIO secret access key.
+        s3_endpoint: S3/MinIO endpoint without scheme (e.g. ``localhost:9000``).
+        s3_region: S3 region (e.g. ``us-east-1``).
+
+    Returns:
+        YAML string suitable for writing to ``profiles.yml``.
+    """
+    return (
+        f"{profile_name}:\n"
+        f"  target: dev\n"
+        f"  outputs:\n"
+        f"    dev:\n"
+        f"      type: duckdb\n"
+        f'      path: ":memory:"\n'
+        f"      database: ice\n"
+        f"      schema: {profile_name}\n"
+        f"      threads: 1\n"
+        f"      extensions:\n"
+        f"        - httpfs\n"
+        f"        - iceberg\n"
+        f"      attach:\n"
+        f"        - path: {warehouse}\n"
+        f"          alias: ice\n"
+        f"          type: iceberg\n"
+        f"          options:\n"
+        f"            ENDPOINT: {polaris_url}/api/catalog\n"
+        f"            CLIENT_ID: {client_id}\n"
+        f"            CLIENT_SECRET: {client_secret}\n"
+        f"            OAUTH2_SERVER_URI: {polaris_url}/api/catalog/v1/oauth/tokens\n"
+        f"            OAUTH2_SCOPE: PRINCIPAL_ROLE:ALL\n"
+        f"            OAUTH2_GRANT_TYPE: client_credentials\n"
+        f"            ACCESS_DELEGATION_MODE: none\n"
+        f"      secrets:\n"
+        f"        - type: s3\n"
+        f"          key_id: {s3_access_key}\n"
+        f"          secret: {s3_secret_key}\n"
+        f"          endpoint: {s3_endpoint}\n"
+        f"          url_style: path\n"
+        f"          use_ssl: false\n"
+        f"          region: {s3_region}\n"
+    )
+
+
+@pytest.fixture(scope="session")
+def dbt_e2e_profile(
+    project_root: Path,
+) -> Generator[dict[str, Path], None, None]:
+    """Configure dbt to write to Iceberg tables via Polaris REST catalog.
+
+    Writes E2E ``profiles.yml`` files to each demo project directory,
+    backing up the originals as ``profiles.yml.bak``.  The
+    ``_run_dbt_command`` helper in ``test_data_pipeline.py`` passes
+    ``--profiles-dir`` pointing to the project directory, so profiles
+    must live there.
+
+    Credentials are sourced from environment variables, consistent with
+    the ``polaris_client`` fixture.
+
+    Yields:
+        Dict mapping demo product directory names to their written
+        ``profiles.yml`` paths.
+
+    Note:
+        Originals are restored on session teardown.
+    """
+    # --- Resolve credentials from environment ---
+    polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
+    minio_url = os.environ.get("MINIO_URL", "http://localhost:9000")
+    default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
+    cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
+    client_id, client_secret = cred.split(":", 1)
+    warehouse = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
+
+    s3_access_key = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
+    s3_secret_key = os.environ.get(  # pragma: allowlist secret
+        "AWS_SECRET_ACCESS_KEY", "minioadmin123"
+    )
+    s3_region = os.environ.get("AWS_REGION", "us-east-1")
+    # Strip scheme — DuckDB S3 secrets expect host:port only
+    s3_endpoint = minio_url.replace("http://", "").replace("https://", "")
+
+    backups: dict[str, str | None] = {}
+    profile_paths: dict[str, Path] = {}
+
+    for product_dir, profile_name in _DBT_DEMO_PRODUCTS.items():
+        project_dir = project_root / "demo" / product_dir
+        profile_path = project_dir / "profiles.yml"
+        backup_path = project_dir / "profiles.yml.bak"
+
+        # Back up original
+        if profile_path.exists():
+            original_content = profile_path.read_text()
+            backups[product_dir] = original_content
+            backup_path.write_text(original_content)
+        else:
+            backups[product_dir] = None
+
+        # Write E2E profile
+        e2e_content = _build_dbt_iceberg_profile(
+            profile_name=profile_name,
+            polaris_url=polaris_url,
+            client_id=client_id,
+            client_secret=client_secret,
+            warehouse=warehouse,
+            s3_access_key=s3_access_key,
+            s3_secret_key=s3_secret_key,
+            s3_endpoint=s3_endpoint,
+            s3_region=s3_region,
+        )
+        profile_path.write_text(e2e_content)
+        profile_paths[product_dir] = profile_path
+
+    yield profile_paths
+
+    # --- Restore originals and remove backups ---
+    for product_dir, original_content in backups.items():
+        project_dir = project_root / "demo" / product_dir
+        profile_path = project_dir / "profiles.yml"
+        backup_path = project_dir / "profiles.yml.bak"
+
+        if original_content is not None:
+            profile_path.write_text(original_content)
+        elif profile_path.exists():
+            profile_path.unlink()
+
+        # Clean up backup file
+        backup_path.unlink(missing_ok=True)
