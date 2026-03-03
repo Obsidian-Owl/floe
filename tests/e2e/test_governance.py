@@ -273,9 +273,10 @@ class TestGovernance(IntegrationTestBase):
                 for line_no, line in enumerate(lines, 1):
                     stripped = line.strip()
                     # Toggle docstring state on triple-quote boundaries.
-                    # Count occurrences of """ and '''; odd count means we
-                    # crossed a docstring boundary.
-                    triple_count = stripped.count('"""') + stripped.count("'''")
+                    # Strip inline comments before counting — a '#' comment
+                    # containing '"""' must never toggle docstring state.
+                    code_part = stripped.split("#")[0]
+                    triple_count = code_part.count('"""') + code_part.count("'''")
                     if triple_count % 2 == 1:
                         in_docstring = not in_docstring
                     if not in_docstring:
@@ -470,6 +471,11 @@ class TestGovernance(IntegrationTestBase):
             for p in repo_root.rglob("uv.lock")
             if "devtools" not in str(p) and ".venv" not in str(p)
         ]
+        if not lock_files:
+            pytest.fail(
+                "No platform uv.lock files found — security scan requires at least one "
+                "lock file in packages/ or plugins/ (devtools/ is intentionally excluded)."
+            )
         cmd = [
             "uv",
             "run",

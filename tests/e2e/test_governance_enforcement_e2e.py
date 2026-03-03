@@ -105,6 +105,10 @@ class TestGovernanceEnforcement:
             f"Error count: {artifacts.enforcement_result.error_count}\n"
             f"Level: {artifacts.enforcement_result.enforcement_level}"
         )
+        assert artifacts.enforcement_result.models_validated > 0, (
+            f"Warn mode should validate models, got "
+            f"models_validated={artifacts.enforcement_result.models_validated}"
+        )
 
     @pytest.mark.requirement("AC-2.5")
     def test_strict_mode_passes_valid_spec(
