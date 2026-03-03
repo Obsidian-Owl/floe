@@ -261,11 +261,13 @@ class TestGovernance(IntegrationTestBase):
             code_lines: list[str] = []
             for line in lines:
                 stripped = line.strip()
-                # Toggle docstring state on triple-quote boundaries
+                # Toggle docstring state on triple-quote boundaries.
+                # Count occurrences of """ and '''; odd count means we
+                # crossed a docstring boundary.
                 triple_count = stripped.count('"""') + stripped.count("'''")
                 if triple_count % 2 == 1:
                     in_docstring = not in_docstring
-                if not in_docstring and triple_count == 0:
+                if not in_docstring:
                     code_lines.append(line)
 
             for pattern, description in secret_patterns:
