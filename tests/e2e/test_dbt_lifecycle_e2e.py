@@ -1,19 +1,18 @@
 """E2E test: dbt Build Full Lifecycle (AC-2.10).
 
-**DuckDB-only**: These tests validate dbt commands against the local DuckDB
-compute engine. No Polaris, MinIO, Dagster, or Iceberg dependencies.
-
-Validates the complete dbt lifecycle for each demo product:
+Validates the complete dbt lifecycle for each demo product using the
+DuckDB + Iceberg profile (Polaris REST catalog, MinIO storage):
     dbt deps → dbt seed → dbt run → dbt test → dbt docs generate
 
 Prerequisites:
     - dbt installed (via uv/pip)
-    - Demo product profiles.yml with DuckDB target
+    - Polaris, MinIO accessible (Kind cluster with port-forwards)
+    - E2E profile fixture writes Iceberg profiles to demo project dirs
 
 See Also:
     - .specwright/work/test-hardening-audit/spec.md: AC-2.10
     - demo/*/dbt_project.yml: dbt project configs
-    - demo/*/profiles.yml: DuckDB profiles
+    - tests/e2e/conftest.py: dbt_e2e_profile fixture
 """
 
 from __future__ import annotations
@@ -61,17 +60,13 @@ def _run_dbt(
 class TestDbtLifecycle:
     """Full dbt lifecycle: deps → seed → run → test → docs.
 
-    **DuckDB-only**: Validates that dbt commands execute successfully against
-    local DuckDB compute (as configured in demo product profiles.yml).
-    No Polaris, MinIO, Dagster, or Iceberg dependencies.
+    Validates that dbt commands execute successfully using the DuckDB +
+    Iceberg profile (Polaris REST catalog, MinIO S3 storage).
     """
 
     @pytest.mark.requirement("AC-2.10")
     def test_dbt_projects_exist(self, project_root: Path) -> None:
-        """Verify all demo products have dbt_project.yml files.
-
-        DuckDB-only: Checks file existence on disk.
-        """
+        """Verify all demo products have dbt_project.yml files."""
         for product in DBT_PRODUCTS:
             dbt_project = project_root / "demo" / product / "dbt_project.yml"
             assert dbt_project.exists(), (
@@ -80,10 +75,10 @@ class TestDbtLifecycle:
             )
 
     @pytest.mark.requirement("AC-2.10")
-    def test_dbt_deps(self, project_root: Path) -> None:
+    def test_dbt_deps(self, project_root: Path, dbt_e2e_profile: dict[str, Path]) -> None:
         """Run dbt deps for each demo product.
 
-        DuckDB-only: Installs dbt package dependencies (e.g., dbt-utils).
+        Installs dbt package dependencies (e.g., dbt-utils).
         Must succeed before any other dbt command.
         """
         for product in DBT_PRODUCTS:
@@ -100,11 +95,11 @@ class TestDbtLifecycle:
             )
 
     @pytest.mark.requirement("AC-2.10")
-    def test_dbt_seed(self, project_root: Path) -> None:
+    def test_dbt_seed(self, project_root: Path, dbt_e2e_profile: dict[str, Path]) -> None:
         """Run dbt seed for each demo product.
 
-        DuckDB-only: Loads CSV seed data into DuckDB. Seeds provide the
-        test data for staging models.
+        Loads CSV seed data into Iceberg tables via Polaris catalog.
+        Seeds provide the test data for staging models.
         """
         for product in DBT_PRODUCTS:
             project_dir = project_root / "demo" / product
@@ -122,11 +117,11 @@ class TestDbtLifecycle:
             )
 
     @pytest.mark.requirement("AC-2.10")
-    def test_dbt_run(self, project_root: Path) -> None:
+    def test_dbt_run(self, project_root: Path, dbt_e2e_profile: dict[str, Path]) -> None:
         """Run dbt run for each demo product.
 
-        DuckDB-only: Executes all SQL models (staging -> intermediate -> marts)
-        against local DuckDB.
+        Executes all SQL models (staging -> intermediate -> marts)
+        materializing to Iceberg tables via Polaris catalog.
         """
         for product in DBT_PRODUCTS:
             project_dir = project_root / "demo" / product
@@ -138,11 +133,11 @@ class TestDbtLifecycle:
             )
 
     @pytest.mark.requirement("AC-2.10")
-    def test_dbt_test(self, project_root: Path) -> None:
+    def test_dbt_test(self, project_root: Path, dbt_e2e_profile: dict[str, Path]) -> None:
         """Run dbt test for each demo product.
 
-        DuckDB-only: Executes data quality tests defined in the dbt project
-        against local DuckDB.
+        Executes data quality tests defined in the dbt project
+        against Iceberg tables.
         """
         for product in DBT_PRODUCTS:
             project_dir = project_root / "demo" / product
@@ -166,11 +161,11 @@ class TestDbtLifecycle:
             )
 
     @pytest.mark.requirement("AC-2.10")
-    def test_dbt_docs_generate(self, project_root: Path) -> None:
+    def test_dbt_docs_generate(self, project_root: Path, dbt_e2e_profile: dict[str, Path]) -> None:
         """Run dbt docs generate for each demo product.
 
-        DuckDB-only: Generates the documentation catalog (catalog.json,
-        manifest.json) against local DuckDB.
+        Generates the documentation catalog (catalog.json,
+        manifest.json) against the Iceberg-connected profile.
         """
         for product in DBT_PRODUCTS:
             project_dir = project_root / "demo" / product
