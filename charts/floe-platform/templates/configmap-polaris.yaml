@@ -16,10 +16,9 @@ data:
     quarkus.management.enabled=true
     quarkus.management.port={{ .Values.polaris.service.managementPort | default 8182 }}
 
-    # Feature flags
-    polaris.features."SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION"={{ .Values.polaris.config.features.SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION | default "false" }}
-    polaris.features."ALLOW_SETTING_S3_ENDPOINTS"={{ .Values.polaris.config.features.ALLOW_SETTING_S3_ENDPOINTS | default "false" }}
-    polaris.features."ALLOW_TABLE_LOCATION_OVERLAP"={{ .Values.polaris.config.features.ALLOW_TABLE_LOCATION_OVERLAP | default "false" }}
+    # Feature flags are set via JAVA_OPTS_APPEND -D system properties
+    # in deployment-polaris.yaml (which take precedence over config file).
+    # Single source of truth: .Values.polaris.config.features → Deployment env.
     {{- if .Values.polaris.storage.s3.enabled }}
     # S3 storage configuration
     quarkus.s3.endpoint-override={{ .Values.polaris.storage.s3.endpoint }}

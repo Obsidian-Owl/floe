@@ -68,9 +68,11 @@ spec:
                 {{- range $key, $val := .Values.polaris.config.features }}
                 -Dpolaris.features."{{ $key }}"={{ $val }}
                 {{- end }}
-                {{- if and .Values.polaris.storage.s3.enabled .Values.polaris.storage.s3.pathStyleAccess }}
-                -Daws.s3UsePathStyle=true
-                {{- end }}
+                {{- /* NOTE: -Daws.s3UsePathStyle is NOT a valid AWS SDK v2 property.
+                     Path-style S3 access is configured via storageConfigInfo.pathStyleAccess
+                     in the catalog, which flows through AwsCredentialsStorageIntegration
+                     to S3FileIO's s3.path-style-access property.
+                     Requires SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION=false. */}}
             {{- if .Values.polaris.storage.s3.enabled }}
             - name: AWS_ACCESS_KEY_ID
               valueFrom:

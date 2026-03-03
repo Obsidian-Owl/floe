@@ -698,3 +698,202 @@ def seed_observability(
             os.environ.pop("MARQUEZ_URL", None)
         else:
             os.environ["MARQUEZ_URL"] = old_marquez
+
+
+# ---------------------------------------------------------------------------
+# dbt Iceberg profile configuration
+# ---------------------------------------------------------------------------
+
+# Demo products: directory name → dbt profile name
+_DBT_DEMO_PRODUCTS: dict[str, str] = {
+    "customer-360": "customer_360",
+    "iot-telemetry": "iot_telemetry",
+    "financial-risk": "financial_risk",
+}
+
+
+def _build_dbt_iceberg_profile(
+    profile_name: str,
+    warehouse: str,
+) -> str:
+    """Build a dbt profiles.yml string for DuckDB + Iceberg via Polaris.
+
+    The generated profile configures dbt-duckdb to attach a Polaris REST
+    Iceberg catalog as the ``ice`` database, routing all materializations
+    to Iceberg tables stored in MinIO/S3.
+
+    Credentials and endpoints are referenced via dbt's ``env_var()`` Jinja
+    function (FR-014), so **no secrets are written to disk**.  The calling
+    fixture must ensure the referenced environment variables are set before
+    dbt is invoked.
+
+    Referenced env vars (set by ``dbt_e2e_profile`` fixture):
+        FLOE_E2E_POLARIS_ENDPOINT, FLOE_E2E_POLARIS_CLIENT_ID,
+        FLOE_E2E_POLARIS_CLIENT_SECRET, FLOE_E2E_POLARIS_OAUTH2_URI,
+        FLOE_E2E_S3_ENDPOINT, FLOE_E2E_S3_USE_SSL,
+        AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION.
+
+    Args:
+        profile_name: dbt profile name (must match dbt_project.yml ``profile`` key).
+        warehouse: Polaris warehouse/catalog name (e.g. ``floe-e2e``).
+
+    Returns:
+        YAML string suitable for writing to ``profiles.yml``.
+    """
+    # Double braces in f-strings produce literal braces for dbt Jinja.
+    # Pattern: f"{{{{ expr }}}}" → "{{ expr }}" in output.
+    return (
+        f"{profile_name}:\n"
+        f"  target: dev\n"
+        f"  outputs:\n"
+        f"    dev:\n"
+        f"      type: duckdb\n"
+        f'      path: ":memory:"\n'
+        f"      database: ice\n"
+        f"      schema: {profile_name}\n"
+        f"      threads: 1\n"
+        f"      extensions:\n"
+        f"        - httpfs\n"
+        f"        - iceberg\n"
+        f"      attach:\n"
+        f"        - path: {warehouse}\n"
+        f"          alias: ice\n"
+        f"          type: iceberg\n"
+        f"          options:\n"
+        "            ENDPOINT: \"{{ env_var('FLOE_E2E_POLARIS_ENDPOINT') }}\"\n"
+        "            CLIENT_ID: \"{{ env_var('FLOE_E2E_POLARIS_CLIENT_ID') }}\"\n"
+        "            CLIENT_SECRET: \"{{ env_var('FLOE_E2E_POLARIS_CLIENT_SECRET') }}\"\n"
+        "            OAUTH2_SERVER_URI: \"{{ env_var('FLOE_E2E_POLARIS_OAUTH2_URI') }}\"\n"
+        f"            OAUTH2_SCOPE: PRINCIPAL_ROLE:ALL\n"
+        f"            OAUTH2_GRANT_TYPE: client_credentials\n"
+        f"            ACCESS_DELEGATION_MODE: none\n"
+        f"      secrets:\n"
+        f"        - type: s3\n"
+        "          key_id: \"{{ env_var('AWS_ACCESS_KEY_ID') }}\"\n"
+        "          secret: \"{{ env_var('AWS_SECRET_ACCESS_KEY') }}\"\n"
+        "          endpoint: \"{{ env_var('FLOE_E2E_S3_ENDPOINT') }}\"\n"
+        f"          url_style: path\n"
+        "          use_ssl: \"{{ env_var('FLOE_E2E_S3_USE_SSL', 'false') }}\"\n"
+        "          region: \"{{ env_var('AWS_REGION', 'us-east-1') }}\"\n"
+    )
+
+
+@pytest.fixture(scope="session")
+def dbt_e2e_profile(
+    project_root: Path,
+) -> Generator[dict[str, Path], None, None]:
+    """Configure dbt to write to Iceberg tables via Polaris REST catalog.
+
+    Writes E2E ``profiles.yml`` files to each demo project directory,
+    backing up the originals as ``profiles.yml.bak``.  The
+    The ``run_dbt()`` helper in ``dbt_utils.py`` passes
+    ``--profiles-dir`` pointing to the project directory, so profiles
+    must live there.
+
+    Credentials are sourced from environment variables, consistent with
+    the ``polaris_client`` fixture.
+
+    Yields:
+        Dict mapping demo product directory names to their written
+        ``profiles.yml`` paths.
+
+    Note:
+        Originals are restored on session teardown.
+    """
+    # --- Resolve credentials from environment and publish as env vars ---
+    # dbt profiles use {{ env_var(...) }} Jinja references (FR-014),
+    # so credentials are resolved at runtime, never written to disk.
+    polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
+    minio_url = os.environ.get("MINIO_URL", "http://localhost:9000")
+    default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
+    cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
+    parts = cred.split(":", 1)
+    if len(parts) != 2:
+        pytest.fail(f"POLARIS_CREDENTIAL must be 'client_id:client_secret', got: {cred!r}")
+    client_id, client_secret = parts
+    warehouse = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
+
+    # Derive computed values
+    s3_use_ssl = minio_url.startswith("https://")
+    s3_endpoint = minio_url.replace("http://", "").replace("https://", "")
+
+    # Set env vars that the profile's {{ env_var() }} references resolve against.
+    # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION are set by the test
+    # runner (test-e2e.sh); setdefault provides fallbacks for local runs.
+    _e2e_env_vars: dict[str, str] = {
+        "FLOE_E2E_POLARIS_ENDPOINT": f"{polaris_url}/api/catalog",
+        "FLOE_E2E_POLARIS_CLIENT_ID": client_id,
+        "FLOE_E2E_POLARIS_CLIENT_SECRET": client_secret,
+        "FLOE_E2E_POLARIS_OAUTH2_URI": f"{polaris_url}/api/catalog/v1/oauth/tokens",
+        "FLOE_E2E_S3_ENDPOINT": s3_endpoint,
+        "FLOE_E2E_S3_USE_SSL": str(s3_use_ssl).lower(),
+    }
+    for var_name, var_value in _e2e_env_vars.items():
+        os.environ[var_name] = var_value
+    # Capture prior state of AWS vars so teardown can restore or remove them.
+    _aws_vars_prior: dict[str, str | None] = {
+        "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID"),
+        "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
+        "AWS_REGION": os.environ.get("AWS_REGION"),
+    }
+    os.environ.setdefault("AWS_ACCESS_KEY_ID", "minioadmin")
+    os.environ.setdefault(  # pragma: allowlist secret
+        "AWS_SECRET_ACCESS_KEY", "minioadmin123"
+    )
+    os.environ.setdefault("AWS_REGION", "us-east-1")
+
+    backups: dict[str, str | None] = {}
+    profile_paths: dict[str, Path] = {}
+
+    def _restore_backups() -> None:
+        """Restore original profiles and remove backups."""
+        for prod_dir, orig_content in backups.items():
+            proj_dir = project_root / "demo" / prod_dir
+            prof_path = proj_dir / "profiles.yml"
+            bak_path = proj_dir / "profiles.yml.bak"
+
+            if orig_content is not None:
+                prof_path.write_text(orig_content)
+            elif prof_path.exists():
+                prof_path.unlink()
+
+            bak_path.unlink(missing_ok=True)
+
+    try:
+        for product_dir, profile_name in _DBT_DEMO_PRODUCTS.items():
+            project_dir = project_root / "demo" / product_dir
+            profile_path = project_dir / "profiles.yml"
+            backup_path = project_dir / "profiles.yml.bak"
+
+            # Back up original
+            if profile_path.exists():
+                original_content = profile_path.read_text()
+                backups[product_dir] = original_content
+                backup_path.write_text(original_content)
+            else:
+                backups[product_dir] = None
+
+            # Write E2E profile (credentials via env_var, not plaintext)
+            e2e_content = _build_dbt_iceberg_profile(
+                profile_name=profile_name,
+                warehouse=warehouse,
+            )
+            profile_path.write_text(e2e_content)
+            profile_paths[product_dir] = profile_path
+    except Exception:
+        # Setup failed mid-loop — restore any profiles already backed up
+        _restore_backups()
+        raise
+
+    yield profile_paths
+
+    _restore_backups()
+    # Clean up env vars set for dbt env_var() resolution
+    for var_name in _e2e_env_vars:
+        os.environ.pop(var_name, None)
+    # Restore AWS vars to their pre-fixture state
+    for var_name, prior_value in _aws_vars_prior.items():
+        if prior_value is None:
+            os.environ.pop(var_name, None)
+        else:
+            os.environ[var_name] = prior_value

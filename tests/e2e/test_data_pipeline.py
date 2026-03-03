@@ -38,17 +38,45 @@ No pytest.skip() - see .claude/rules/testing-standards.md
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from typing import Any, ClassVar
 
 # PyIceberg imported in helper methods to fail properly if not installed
 import pytest
+from dbt_utils import run_dbt
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 
 ALL_PRODUCTS = ["customer-360", "iot-telemetry", "financial-risk"]
 """All demo product directories to test across."""
+
+# Seed table names per demo product (from CSV filenames without extension)
+SEED_TABLES: dict[str, list[str]] = {
+    "customer-360": ["raw_customers", "raw_transactions", "raw_support_tickets"],
+    "iot-telemetry": ["raw_readings", "raw_sensors", "raw_maintenance_log"],
+    "financial-risk": ["raw_counterparties", "raw_market_data", "raw_positions"],
+}
+"""Seed table names per demo product."""
+
+# Expected seed row counts per table (from CSV line counts minus header)
+SEED_ROW_COUNTS: dict[str, dict[str, int]] = {
+    "customer-360": {
+        "raw_customers": 500,
+        "raw_transactions": 1000,
+        "raw_support_tickets": 300,
+    },
+    "iot-telemetry": {
+        "raw_readings": 1000,
+        "raw_sensors": 200,
+        "raw_maintenance_log": 100,
+    },
+    "financial-risk": {
+        "raw_counterparties": 100,
+        "raw_market_data": 1000,
+        "raw_positions": 500,
+    },
+}
+"""Expected row counts per seed table (derived from seed CSVs)."""
 
 
 class TestDataPipeline(IntegrationTestBase):
@@ -96,44 +124,6 @@ class TestDataPipeline(IntegrationTestBase):
             )
         return project_path
 
-    def _run_dbt_command(
-        self,
-        command: list[str],
-        project_dir: Path,
-        timeout: float = 60.0,
-    ) -> subprocess.CompletedProcess[str]:
-        """Run a dbt command in the demo project.
-
-        Args:
-            command: dbt command and arguments (e.g., ["seed"], ["run"]).
-            project_dir: Path to dbt project directory.
-            timeout: Command timeout in seconds. Defaults to 60.0.
-
-        Returns:
-            CompletedProcess with stdout/stderr.
-
-        Raises:
-            subprocess.CalledProcessError: If dbt command fails.
-        """
-        full_command = [
-            "dbt",
-            *command,
-            "--project-dir",
-            str(project_dir),
-            "--profiles-dir",
-            str(project_dir),
-        ]
-
-        result = subprocess.run(
-            full_command,
-            cwd=project_dir,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=True,
-        )
-        return result
-
     def _load_iceberg_table(self, catalog: Any, namespace: str, table_name: str) -> Any:
         """Load Iceberg table from Polaris catalog.
 
@@ -179,65 +169,6 @@ class TestDataPipeline(IntegrationTestBase):
         """
         return [t[1] for t in catalog.list_tables(namespace)]
 
-    def _query_duckdb(self, db_path: Path, sql: str) -> list[dict[str, Any]]:
-        """Query DuckDB database file and return list of row dicts.
-
-        Args:
-            db_path: Path to DuckDB database file.
-            sql: SQL query to execute.
-
-        Returns:
-            List of dictionaries, one per row.
-
-        Raises:
-            ImportError: If duckdb package not installed.
-            AssertionError: If query fails.
-        """
-        import duckdb
-
-        conn = duckdb.connect(str(db_path), read_only=True)
-        try:
-            result = conn.execute(sql).fetchall()
-            columns = [desc[0] for desc in conn.description]
-            return [dict(zip(columns, row, strict=True)) for row in result]
-        finally:
-            conn.close()
-
-    def _find_duckdb_path(self, project_dir: Path) -> Path:
-        """Find DuckDB database file created by dbt build.
-
-        dbt-duckdb creates the database in the project root or configured path.
-
-        Args:
-            project_dir: Path to dbt project directory.
-
-        Returns:
-            Path to DuckDB database file.
-
-        Raises:
-            AssertionError: If no DuckDB database found.
-        """
-        candidates = (
-            list(project_dir.glob("*.duckdb"))
-            + list(project_dir.glob("target/*.duckdb"))
-            + list(project_dir.glob("**/*.duckdb"))
-        )
-        # Deduplicate and sort by modification time (newest first)
-        seen: set[str] = set()
-        unique: list[Path] = []
-        for c in candidates:
-            resolved = str(c.resolve())
-            if resolved not in seen:
-                seen.add(resolved)
-                unique.append(c)
-
-        assert len(unique) > 0, (
-            f"No DuckDB database found in {project_dir}. "
-            "dbt build may have failed or uses a different storage backend."
-        )
-        # Return newest
-        return max(unique, key=lambda p: p.stat().st_mtime)
-
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-023")
     @pytest.mark.parametrize("product", ALL_PRODUCTS)
@@ -247,6 +178,7 @@ class TestDataPipeline(IntegrationTestBase):
         e2e_namespace: str,
         polaris_client: Any,
         project_root: Path,
+        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test dbt seed loads CSV data into Iceberg tables via Polaris.
 
@@ -254,14 +186,15 @@ class TestDataPipeline(IntegrationTestBase):
 
         Validates:
         - dbt seed command executes successfully
-        - Seed tables are created in Iceberg catalog
-        - Tables contain expected row counts
-        - DuckDB validation confirms data integrity
+        - Seed tables are created in Iceberg catalog (``_raw`` namespace)
+        - Tables contain exact expected row counts from seed CSVs
 
         Args:
             product: Demo product to test.
             e2e_namespace: Unique namespace for test isolation.
             polaris_client: PyIceberg REST catalog fixture.
+            project_root: Repository root path.
+            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         self.check_infrastructure("dagster", 3000)
         self.check_infrastructure("polaris", 8181)
@@ -272,41 +205,28 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # Run dbt seed
-        result = self._run_dbt_command(["seed"], project_dir)
+        result = run_dbt(["seed"], project_dir)
         assert result.returncode == 0, f"dbt seed should succeed for {product}"
 
-        # Verify seed tables exist in Iceberg via Polaris catalog
-        namespace = product.replace("-", "_")
-        seed_tables = ["raw_customers", "raw_transactions", "raw_support_tickets"]
+        # Seeds use +schema: raw → namespace is {profile_name}_raw
+        seed_namespace = product.replace("-", "_") + "_raw"
+        seed_tables = SEED_TABLES[product]
+        expected_counts = SEED_ROW_COUNTS[product]
 
-        available_tables = self._list_iceberg_tables(polaris_client, namespace)
+        available_tables = self._list_iceberg_tables(polaris_client, seed_namespace)
         for table_name in seed_tables:
             assert table_name in available_tables, (
-                f"Seed table {table_name} should exist in Polaris namespace {namespace}. "
-                f"Available tables: {available_tables}"
+                f"Seed table {table_name} should exist in Polaris namespace "
+                f"{seed_namespace}. Available tables: {available_tables}"
             )
 
-            row_count = self._get_iceberg_row_count(polaris_client, namespace, table_name)
-            assert row_count > 0, f"Table {table_name} should have rows after seed"
-
-        # Validate seed row counts via DuckDB
-        db_path = self._find_duckdb_path(project_dir)
-
-        # Verify raw_customers has meaningful row count
-        rows = self._query_duckdb(db_path, "SELECT COUNT(*) as cnt FROM raw_customers")
-        customer_count = rows[0]["cnt"]
-        assert customer_count >= 10, (
-            f"raw_customers should have at least 10 seed rows, got {customer_count}"
-        )
-
-        # Verify raw_transactions has data and amounts are positive
-        rows = self._query_duckdb(
-            db_path,
-            "SELECT COUNT(*) as cnt FROM raw_transactions WHERE amount > 0",
-        )
-        assert rows[0]["cnt"] > 0, (
-            "raw_transactions should have rows with positive amounts after seed"
-        )
+            # Verify exact row counts from seed CSVs (AC-24.3, AC-24.5)
+            row_count = self._get_iceberg_row_count(polaris_client, seed_namespace, table_name)
+            expected = expected_counts[table_name]
+            assert row_count == expected, (
+                f"Seed table {table_name} should have exactly {expected} rows "
+                f"(from CSV), got {row_count}"
+            )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-020")
@@ -316,6 +236,7 @@ class TestDataPipeline(IntegrationTestBase):
         product: str,
         e2e_namespace: str,
         project_root: Path,
+        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test pipeline executes models in correct dependency order.
 
@@ -327,6 +248,8 @@ class TestDataPipeline(IntegrationTestBase):
         Args:
             product: Demo product to test.
             e2e_namespace: Unique namespace for test isolation.
+            project_root: Repository root path.
+            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         # Check infrastructure availability
         self.check_infrastructure("dagster", 3000)
@@ -339,11 +262,14 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # First run dbt seed to load data
-        self._run_dbt_command(["seed"], project_dir)
+        seed_result = run_dbt(["seed"], project_dir)
+        assert seed_result.returncode == 0, (
+            f"dbt seed failed for {product}:\n{seed_result.stderr[-500:]}"
+        )
 
         # Run dbt models
-        result = self._run_dbt_command(["run"], project_dir)
-        assert result.returncode == 0, f"dbt run should succeed for {product}"
+        result = run_dbt(["run"], project_dir)
+        assert result.returncode == 0, f"dbt run failed for {product}:\n{result.stderr[-500:]}"
 
         # Parse run_results.json to verify execution order
         run_results_path = project_dir / "target" / "run_results.json"
@@ -405,6 +331,7 @@ class TestDataPipeline(IntegrationTestBase):
         e2e_namespace: str,
         polaris_client: Any,
         project_root: Path,
+        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test medallion architecture transforms produce correct output in Iceberg.
 
@@ -417,6 +344,8 @@ class TestDataPipeline(IntegrationTestBase):
         Args:
             e2e_namespace: Unique namespace for test isolation.
             polaris_client: PyIceberg REST catalog fixture.
+            project_root: Repository root path.
+            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
@@ -426,20 +355,28 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # Run full pipeline: seed + run
-        self._run_dbt_command(["seed"], project_dir)
-        self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
         namespace = "customer_360"
         available_tables = self._list_iceberg_tables(polaris_client, namespace)
 
-        # Verify Bronze layer (staging) tables
-        bronze_tables = ["stg_crm_customers", "stg_transactions", "stg_support_tickets"]
-        for table in bronze_tables:
+        # Verify Bronze layer (staging) tables.
+        # Bronze tables are 1:1 with seeds so row counts must match seed CSVs.
+        bronze_tables = {
+            "stg_crm_customers": SEED_ROW_COUNTS["customer-360"]["raw_customers"],
+            "stg_transactions": SEED_ROW_COUNTS["customer-360"]["raw_transactions"],
+            "stg_support_tickets": SEED_ROW_COUNTS["customer-360"]["raw_support_tickets"],
+        }
+        for table, expected_count in bronze_tables.items():
             assert table in available_tables, (
                 f"Bronze layer table {table} should exist in Polaris. Available: {available_tables}"
             )
             row_count = self._get_iceberg_row_count(polaris_client, namespace, table)
-            assert row_count > 0, f"Bronze table {table} should have data"
+            assert row_count == expected_count, (
+                f"Bronze table {table} should have {expected_count} rows "
+                f"(matching seed CSV), got {row_count}"
+            )
 
         # Verify Silver layer (intermediate) tables
         silver_tables = ["int_customer_orders", "int_customer_support"]
@@ -459,21 +396,15 @@ class TestDataPipeline(IntegrationTestBase):
             row_count = self._get_iceberg_row_count(polaris_client, namespace, table)
             assert row_count > 0, f"Gold table {table} should have aggregated data"
 
-        # Validate Bronze->Silver->Gold data flow correctness
-        # Bronze tables should have raw-ish data
-        for table in bronze_tables:
-            bronze_count = self._get_iceberg_row_count(polaris_client, namespace, table)
-            assert bronze_count > 0, f"Bronze {table} must have data"
-
-        # Silver tables should have fewer or equal rows (aggregation)
-        for table in silver_tables:
-            silver_count = self._get_iceberg_row_count(polaris_client, namespace, table)
-            assert silver_count > 0, f"Silver {table} must have data"
-
-        # Gold must have meaningful aggregated data
-        for table in gold_tables:
-            gold_count = self._get_iceberg_row_count(polaris_client, namespace, table)
-            assert gold_count > 0, f"Gold {table} must have aggregated data"
+        # Validate Bronze->Silver->Gold data flow correctness:
+        # Gold aggregates customers, so its row count must not exceed
+        # the number of distinct customers (the bronze source).
+        max_customers = bronze_tables["stg_crm_customers"]
+        gold_count = self._get_iceberg_row_count(polaris_client, namespace, "mart_customer_360")
+        assert gold_count <= max_customers, (
+            f"Gold mart_customer_360 has {gold_count} rows, exceeding "
+            f"the {max_customers} source customers — unexpected row explosion"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-022")
@@ -482,17 +413,21 @@ class TestDataPipeline(IntegrationTestBase):
         e2e_namespace: str,
         polaris_client: Any,
         project_root: Path,
+        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test Iceberg tables created with correct schemas and row counts.
 
         Validates:
-        - Tables exist in Polaris catalog
+        - Seed tables exist in ``customer_360_raw`` namespace
+        - Model tables exist in ``customer_360`` namespace
         - Row counts are greater than 0
         - All expected tables present in Iceberg format
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
             polaris_client: PyIceberg REST catalog fixture.
+            project_root: Repository root path.
+            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
@@ -502,18 +437,28 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # Run pipeline
-        self._run_dbt_command(["seed"], project_dir)
-        self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
-        # Query Polaris catalog for all tables
-        namespace = "customer_360"
-        table_names = self._list_iceberg_tables(polaris_client, namespace)
+        # Seeds land in {profile_name}_raw due to +schema: raw
+        seed_namespace = "customer_360_raw"
+        seed_tables = SEED_TABLES["customer-360"]
+        seed_table_names = self._list_iceberg_tables(polaris_client, seed_namespace)
+        for expected in seed_tables:
+            assert expected in seed_table_names, (
+                f"Seed table {expected} should exist in Polaris namespace "
+                f"{seed_namespace}. Available: {seed_table_names}"
+            )
+            row_count = self._get_iceberg_row_count(polaris_client, seed_namespace, expected)
+            expected_count = SEED_ROW_COUNTS["customer-360"][expected]
+            assert row_count == expected_count, (
+                f"Seed table {expected} should have exactly {expected_count} rows "
+                f"(from CSV), got {row_count}"
+            )
 
-        # Verify expected tables exist in Iceberg
-        expected_tables = [
-            "raw_customers",
-            "raw_transactions",
-            "raw_support_tickets",
+        # Model tables land in default schema (customer_360)
+        model_namespace = "customer_360"
+        model_tables = [
             "stg_crm_customers",
             "stg_transactions",
             "stg_support_tickets",
@@ -521,29 +466,25 @@ class TestDataPipeline(IntegrationTestBase):
             "int_customer_support",
             "mart_customer_360",
         ]
-
-        for expected in expected_tables:
-            assert expected in table_names, (
-                f"Table {expected} should exist in Polaris namespace {namespace}. "
-                f"Available: {table_names}"
+        model_table_names = self._list_iceberg_tables(polaris_client, model_namespace)
+        for expected in model_tables:
+            assert expected in model_table_names, (
+                f"Model table {expected} should exist in Polaris namespace "
+                f"{model_namespace}. Available: {model_table_names}"
             )
-
-            # Verify row count > 0 via Iceberg scan
-            row_count = self._get_iceberg_row_count(polaris_client, namespace, expected)
-            assert row_count > 0, f"Table {expected} should have rows (got {row_count})"
+            row_count = self._get_iceberg_row_count(polaris_client, model_namespace, expected)
+            assert row_count > 0, f"Model table {expected} should have rows (got {row_count})"
 
         # Validate Iceberg table schemas have expected columns
-        # Staging tables should have typed columns (not just raw strings)
-        stg_table = self._load_iceberg_table(polaris_client, namespace, "stg_crm_customers")
+        stg_table = self._load_iceberg_table(polaris_client, model_namespace, "stg_crm_customers")
         stg_columns = [field.name for field in stg_table.schema().fields]
         assert "customer_id" in stg_columns or any("id" in c for c in stg_columns), (
             f"stg_crm_customers should have an ID column. Columns: {stg_columns}"
         )
 
         # Mart table should have derived columns (business metrics)
-        mart_table = self._load_iceberg_table(polaris_client, namespace, "mart_customer_360")
+        mart_table = self._load_iceberg_table(polaris_client, model_namespace, "mart_customer_360")
         mart_columns = [field.name for field in mart_table.schema().fields]
-        # Mart should have aggregated/derived metrics not in raw data
         assert len(mart_columns) > 2, (
             f"mart_customer_360 should have multiple business metric columns, got {mart_columns}"
         )
@@ -556,6 +497,7 @@ class TestDataPipeline(IntegrationTestBase):
         product: str,
         e2e_namespace: str,
         project_root: Path,
+        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test dbt schema and data tests pass after pipeline execution.
 
@@ -568,6 +510,8 @@ class TestDataPipeline(IntegrationTestBase):
         Args:
             product: Demo product to test.
             e2e_namespace: Unique namespace for test isolation.
+            project_root: Repository root path.
+            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
@@ -579,11 +523,11 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # Run pipeline first
-        self._run_dbt_command(["seed"], project_dir)
-        self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
         # Run dbt tests
-        result = self._run_dbt_command(["test"], project_dir)
+        result = run_dbt(["test"], project_dir)
         assert result.returncode == 0, f"dbt test should pass for {product}"
 
         # Verify test output indicates success
@@ -620,6 +564,7 @@ class TestDataPipeline(IntegrationTestBase):
         e2e_namespace: str,
         polaris_client: Any,
         project_root: Path,
+        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test incremental model merge behavior with overlapping data.
 
@@ -631,6 +576,8 @@ class TestDataPipeline(IntegrationTestBase):
         Args:
             e2e_namespace: Unique namespace for test isolation.
             polaris_client: PyIceberg REST catalog fixture.
+            project_root: Repository root path.
+            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
@@ -640,8 +587,8 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # First run: create initial tables
-        self._run_dbt_command(["seed"], project_dir)
-        self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
         # Get initial row count from a staging table (incremental candidate)
         namespace = "customer_360"
@@ -650,7 +597,7 @@ class TestDataPipeline(IntegrationTestBase):
         assert initial_count > 0, "Initial load should have rows"
 
         # Second run: with same seed data (simulates incremental)
-        self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt re-run failed"
 
         # Get row count after second run
         second_count = self._get_iceberg_row_count(polaris_client, namespace, table_name)
@@ -670,6 +617,7 @@ class TestDataPipeline(IntegrationTestBase):
         product: str,
         e2e_namespace: str,
         project_root: Path,
+        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test dbt data quality checks execute correctly.
 
@@ -681,6 +629,8 @@ class TestDataPipeline(IntegrationTestBase):
         Args:
             product: Demo product to test.
             e2e_namespace: Unique namespace for test isolation.
+            project_root: Repository root path.
+            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
@@ -692,9 +642,9 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # Run pipeline and tests
-        self._run_dbt_command(["seed"], project_dir)
-        self._run_dbt_command(["run"], project_dir)
-        result = self._run_dbt_command(["test"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
+        result = run_dbt(["test"], project_dir)
 
         assert result.returncode == 0, f"Quality checks should pass for {product}"
 
@@ -724,6 +674,7 @@ class TestDataPipeline(IntegrationTestBase):
         self,
         e2e_namespace: str,
         project_root: Path,
+        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test pipeline failure is properly recorded.
 
@@ -734,6 +685,8 @@ class TestDataPipeline(IntegrationTestBase):
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
+            project_root: Repository root path.
+            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         # Check infrastructure availability
         self.check_infrastructure("dagster", 3000)
@@ -753,14 +706,11 @@ class TestDataPipeline(IntegrationTestBase):
 
         try:
             # Attempt to run pipeline (should fail)
-            with pytest.raises(subprocess.CalledProcessError) as exc_info:
-                self._run_dbt_command(["run", "--select", "bad_model_test"], project_dir)
-
-            # Verify dbt captured the error
-            assert exc_info.value.returncode != 0, "dbt run should fail"
+            fail_result = run_dbt(["run", "--select", "bad_model_test"], project_dir)
+            assert fail_result.returncode != 0, "dbt run should fail for bad model"
 
             # Verify dbt error output contains useful information
-            error_output = (exc_info.value.stderr or "") + (exc_info.value.stdout or "")
+            error_output = (fail_result.stderr or "") + (fail_result.stdout or "")
             # DuckDB will report that the referenced model doesn't exist
             assert (
                 "table_that_does_not_exist" in error_output.lower()
@@ -778,6 +728,7 @@ class TestDataPipeline(IntegrationTestBase):
         self,
         e2e_namespace: str,
         project_root: Path,
+        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test pipeline retry after failure starts from failure point.
 
@@ -788,6 +739,8 @@ class TestDataPipeline(IntegrationTestBase):
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
+            project_root: Repository root path.
+            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         # Check infrastructure availability
         self.check_infrastructure("polaris", 8181)
@@ -799,8 +752,8 @@ class TestDataPipeline(IntegrationTestBase):
         target_dir.mkdir(exist_ok=True)
 
         # First run: successful pipeline
-        self._run_dbt_command(["seed"], project_dir)
-        result = self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        result = run_dbt(["run"], project_dir)
         assert result.returncode == 0, "Initial run should succeed"
 
         # Create a bad intermediate model
@@ -809,8 +762,8 @@ class TestDataPipeline(IntegrationTestBase):
 
         try:
             # Run pipeline with bad model (should fail)
-            with pytest.raises(subprocess.CalledProcessError):
-                self._run_dbt_command(["run"], project_dir)
+            bad_run = run_dbt(["run"], project_dir)
+            assert bad_run.returncode != 0, "dbt run should fail with bad model"
 
             # Fix the bad model
             bad_model_path.write_text(
@@ -821,13 +774,19 @@ class TestDataPipeline(IntegrationTestBase):
             )
 
             # Retry - should only run failed model and downstream
-            retry_result = self._run_dbt_command(["run"], project_dir)
+            retry_result = run_dbt(["run"], project_dir)
             assert retry_result.returncode == 0, "Retry should succeed after fix"
 
             # Verify retry output shows selective execution
             output = retry_result.stdout + retry_result.stderr
             # Should mention the previously failed model
             assert "int_bad_test" in output, "Retry should execute fixed model"
+
+            # Note: `dbt run` without `--state` re-runs all models (not
+            # selective retry).  Selective re-execution requires `dbt retry`
+            # with artifacts from the failed run.  We verify the fixed model
+            # was included and the overall run succeeded — that's the E2E
+            # contract for "fix and re-run".
 
         finally:
             # Clean up bad model
@@ -986,6 +945,7 @@ class TestDataPipeline(IntegrationTestBase):
         e2e_namespace: str,
         polaris_client: Any,
         project_root: Path,
+        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test data retention cleanup configuration and enforcement.
 
@@ -997,6 +957,8 @@ class TestDataPipeline(IntegrationTestBase):
         Args:
             e2e_namespace: Unique namespace for test isolation.
             polaris_client: PyIceberg REST catalog fixture.
+            project_root: Repository root path.
+            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
@@ -1039,8 +1001,8 @@ class TestDataPipeline(IntegrationTestBase):
         )
 
         # Test 3: Run pipeline and verify tables exist
-        self._run_dbt_command(["seed"], project_dir)
-        self._run_dbt_command(["run"], project_dir)
+        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
+        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
         # Verify data exists (retention should preserve recent data)
         namespace = "customer_360"
