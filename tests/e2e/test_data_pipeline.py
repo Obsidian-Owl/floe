@@ -396,14 +396,22 @@ class TestDataPipeline(IntegrationTestBase):
         namespace = "customer_360"
         available_tables = self._list_iceberg_tables(polaris_client, namespace)
 
-        # Verify Bronze layer (staging) tables
-        bronze_tables = ["stg_crm_customers", "stg_transactions", "stg_support_tickets"]
-        for table in bronze_tables:
+        # Verify Bronze layer (staging) tables.
+        # Bronze tables are 1:1 with seeds so row counts must match seed CSVs.
+        bronze_tables = {
+            "stg_crm_customers": SEED_ROW_COUNTS["customer-360"]["raw_customers"],
+            "stg_transactions": SEED_ROW_COUNTS["customer-360"]["raw_transactions"],
+            "stg_support_tickets": SEED_ROW_COUNTS["customer-360"]["raw_support_tickets"],
+        }
+        for table, expected_count in bronze_tables.items():
             assert table in available_tables, (
                 f"Bronze layer table {table} should exist in Polaris. Available: {available_tables}"
             )
             row_count = self._get_iceberg_row_count(polaris_client, namespace, table)
-            assert row_count > 0, f"Bronze table {table} should have data"
+            assert row_count == expected_count, (
+                f"Bronze table {table} should have {expected_count} rows "
+                f"(matching seed CSV), got {row_count}"
+            )
 
         # Verify Silver layer (intermediate) tables
         silver_tables = ["int_customer_orders", "int_customer_support"]
@@ -423,21 +431,15 @@ class TestDataPipeline(IntegrationTestBase):
             row_count = self._get_iceberg_row_count(polaris_client, namespace, table)
             assert row_count > 0, f"Gold table {table} should have aggregated data"
 
-        # Validate Bronze->Silver->Gold data flow correctness
-        # Bronze tables should have raw-ish data
-        for table in bronze_tables:
-            bronze_count = self._get_iceberg_row_count(polaris_client, namespace, table)
-            assert bronze_count > 0, f"Bronze {table} must have data"
-
-        # Silver tables should have fewer or equal rows (aggregation)
-        for table in silver_tables:
-            silver_count = self._get_iceberg_row_count(polaris_client, namespace, table)
-            assert silver_count > 0, f"Silver {table} must have data"
-
-        # Gold must have meaningful aggregated data
-        for table in gold_tables:
-            gold_count = self._get_iceberg_row_count(polaris_client, namespace, table)
-            assert gold_count > 0, f"Gold {table} must have aggregated data"
+        # Validate Bronze->Silver->Gold data flow correctness:
+        # Gold aggregates customers, so its row count must not exceed
+        # the number of distinct customers (the bronze source).
+        max_customers = bronze_tables["stg_crm_customers"]
+        gold_count = self._get_iceberg_row_count(polaris_client, namespace, "mart_customer_360")
+        assert gold_count <= max_customers, (
+            f"Gold mart_customer_360 has {gold_count} rows, exceeding "
+            f"the {max_customers} source customers — unexpected row explosion"
+        )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-022")
@@ -817,6 +819,15 @@ class TestDataPipeline(IntegrationTestBase):
             output = retry_result.stdout + retry_result.stderr
             # Should mention the previously failed model
             assert "int_bad_test" in output, "Retry should execute fixed model"
+
+            # Verify successful staging models were NOT re-run (retry from
+            # failure point, not full refresh).  dbt logs "RUN" or "OK" for
+            # models it actually executes.
+            for stg_model in ("stg_crm_customers", "stg_transactions"):
+                assert stg_model not in output or "SKIP" in output, (
+                    f"Retry re-ran already-successful model {stg_model}. "
+                    "Expected retry from failure point only."
+                )
 
         finally:
             # Clean up bad model

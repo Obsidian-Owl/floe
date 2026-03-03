@@ -7,8 +7,7 @@ Iceberg-aware DuckDB profiles for all demo products. The fixture must:
 - Source credentials from environment variables (never hardcode)
 - Restore original profiles on session teardown
 
-These tests run in the RED phase -- the fixture does not exist yet.
-All tests should FAIL with a fixture-not-found error until implemented.
+The fixture is implemented in tests/e2e/conftest.py (dbt_e2e_profile).
 
 Prerequisites:
     - No K8s cluster required (fixture generates local config files)
@@ -21,6 +20,7 @@ See Also:
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -484,8 +484,6 @@ class TestNoHardcodedCredentials:
 
         # Look for quoted strings that look like credentials
         # This catches hardcoded values that aren't from env vars
-        import re
-
         # Match quoted strings in YAML that could be credential values
         # (strings assigned to key/secret/password/credential fields)
         credential_field_pattern = re.compile(
@@ -658,14 +656,17 @@ class TestAttachConfigDetails:
         does not exist.
         """
         entry = self._get_iceberg_attach_entry(dbt_e2e_profile, product)
-        # DuckDB attach uses 'alias' to name the attached database
-        # It could also be just the key name in the config
-        alias = entry.get("alias")
-        if alias is not None:
-            assert alias == "ice", (
-                f"Iceberg attach alias for '{product}' must be 'ice', "
-                f"got: {alias!r}. Must match database='ice' in profile."
-            )
+        # DuckDB attach uses 'alias' to name the attached database.
+        # The profile sets database='ice', so alias must be present and match.
+        assert "alias" in entry, (
+            f"Iceberg attach entry for '{product}' missing 'alias' key.\n"
+            f"Available keys: {list(entry.keys())}\n"
+            f"The alias must be 'ice' to match database='ice' in the profile."
+        )
+        assert entry["alias"] == "ice", (
+            f"Iceberg attach alias for '{product}' must be 'ice', "
+            f"got: {entry['alias']!r}. Must match database='ice' in profile."
+        )
 
 
 @pytest.mark.e2e

@@ -722,6 +722,8 @@ def _build_dbt_iceberg_profile(
     s3_secret_key: str,
     s3_endpoint: str,
     s3_region: str,
+    *,
+    s3_use_ssl: bool = False,
 ) -> str:
     """Build a dbt profiles.yml string for DuckDB + Iceberg via Polaris.
 
@@ -739,6 +741,7 @@ def _build_dbt_iceberg_profile(
         s3_secret_key: S3/MinIO secret access key.
         s3_endpoint: S3/MinIO endpoint without scheme (e.g. ``localhost:9000``).
         s3_region: S3 region (e.g. ``us-east-1``).
+        s3_use_ssl: Whether to use SSL for S3 connections (derived from URL scheme).
 
     Returns:
         YAML string suitable for writing to ``profiles.yml``.
@@ -774,7 +777,7 @@ def _build_dbt_iceberg_profile(
         f"          secret: {s3_secret_key}\n"
         f"          endpoint: {s3_endpoint}\n"
         f"          url_style: path\n"
-        f"          use_ssl: false\n"
+        f"          use_ssl: {str(s3_use_ssl).lower()}\n"
         f"          region: {s3_region}\n"
     )
 
@@ -806,7 +809,10 @@ def dbt_e2e_profile(
     minio_url = os.environ.get("MINIO_URL", "http://localhost:9000")
     default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
     cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
-    client_id, client_secret = cred.split(":", 1)
+    parts = cred.split(":", 1)
+    if len(parts) != 2:
+        pytest.fail(f"POLARIS_CREDENTIAL must be 'client_id:client_secret', got: {cred!r}")
+    client_id, client_secret = parts
     warehouse = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
 
     s3_access_key = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
@@ -814,52 +820,62 @@ def dbt_e2e_profile(
         "AWS_SECRET_ACCESS_KEY", "minioadmin123"
     )
     s3_region = os.environ.get("AWS_REGION", "us-east-1")
+    # Derive SSL setting from URL scheme
+    s3_use_ssl = minio_url.startswith("https://")
     # Strip scheme — DuckDB S3 secrets expect host:port only
     s3_endpoint = minio_url.replace("http://", "").replace("https://", "")
 
     backups: dict[str, str | None] = {}
     profile_paths: dict[str, Path] = {}
 
-    for product_dir, profile_name in _DBT_DEMO_PRODUCTS.items():
-        project_dir = project_root / "demo" / product_dir
-        profile_path = project_dir / "profiles.yml"
-        backup_path = project_dir / "profiles.yml.bak"
+    def _restore_backups() -> None:
+        """Restore original profiles and remove backups."""
+        for prod_dir, orig_content in backups.items():
+            proj_dir = project_root / "demo" / prod_dir
+            prof_path = proj_dir / "profiles.yml"
+            bak_path = proj_dir / "profiles.yml.bak"
 
-        # Back up original
-        if profile_path.exists():
-            original_content = profile_path.read_text()
-            backups[product_dir] = original_content
-            backup_path.write_text(original_content)
-        else:
-            backups[product_dir] = None
+            if orig_content is not None:
+                prof_path.write_text(orig_content)
+            elif prof_path.exists():
+                prof_path.unlink()
 
-        # Write E2E profile
-        e2e_content = _build_dbt_iceberg_profile(
-            profile_name=profile_name,
-            polaris_url=polaris_url,
-            client_id=client_id,
-            client_secret=client_secret,
-            warehouse=warehouse,
-            s3_access_key=s3_access_key,
-            s3_secret_key=s3_secret_key,
-            s3_endpoint=s3_endpoint,
-            s3_region=s3_region,
-        )
-        profile_path.write_text(e2e_content)
-        profile_paths[product_dir] = profile_path
+            bak_path.unlink(missing_ok=True)
+
+    try:
+        for product_dir, profile_name in _DBT_DEMO_PRODUCTS.items():
+            project_dir = project_root / "demo" / product_dir
+            profile_path = project_dir / "profiles.yml"
+            backup_path = project_dir / "profiles.yml.bak"
+
+            # Back up original
+            if profile_path.exists():
+                original_content = profile_path.read_text()
+                backups[product_dir] = original_content
+                backup_path.write_text(original_content)
+            else:
+                backups[product_dir] = None
+
+            # Write E2E profile
+            e2e_content = _build_dbt_iceberg_profile(
+                profile_name=profile_name,
+                polaris_url=polaris_url,
+                client_id=client_id,
+                client_secret=client_secret,
+                warehouse=warehouse,
+                s3_access_key=s3_access_key,
+                s3_secret_key=s3_secret_key,
+                s3_endpoint=s3_endpoint,
+                s3_region=s3_region,
+                s3_use_ssl=s3_use_ssl,
+            )
+            profile_path.write_text(e2e_content)
+            profile_paths[product_dir] = profile_path
+    except Exception:
+        # Setup failed mid-loop — restore any profiles already backed up
+        _restore_backups()
+        raise
 
     yield profile_paths
 
-    # --- Restore originals and remove backups ---
-    for product_dir, original_content in backups.items():
-        project_dir = project_root / "demo" / product_dir
-        profile_path = project_dir / "profiles.yml"
-        backup_path = project_dir / "profiles.yml.bak"
-
-        if original_content is not None:
-            profile_path.write_text(original_content)
-        elif profile_path.exists():
-            profile_path.unlink()
-
-        # Clean up backup file
-        backup_path.unlink(missing_ok=True)
+    _restore_backups()

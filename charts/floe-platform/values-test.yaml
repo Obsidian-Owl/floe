@@ -45,7 +45,7 @@ dagster:
     enabled: false
     postgresqlHost: floe-platform-postgresql
     postgresqlUsername: floe
-    postgresqlPassword: "floe-test-password-1234"
+    postgresqlPassword: "floe-test-password-1234"  # pragma: allowlist secret
     postgresqlDatabase: dagster
   # Demo code locations for E2E tests
   # These use Python module loading pattern - no separate container images needed
@@ -149,8 +149,8 @@ polaris:
       endpoint: "http://floe-platform-minio:9000"
       region: "us-east-1"
       pathStyleAccess: true
-      accessKey: "minioadmin"
-      secretKey: "minioadmin123"
+      accessKey: "minioadmin"  # pragma: allowlist secret
+      secretKey: "minioadmin123"  # pragma: allowlist secret
   bootstrap:
     enabled: true
     catalogName: "floe-e2e"
@@ -216,7 +216,7 @@ minio:
       memory: 512Mi
   auth:
     rootUser: minioadmin
-    rootPassword: minioadmin123
+    rootPassword: minioadmin123  # pragma: allowlist secret
   buckets:
     - name: floe-iceberg
       policy: none
