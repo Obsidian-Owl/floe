@@ -253,6 +253,84 @@ if [[ "$BUCKET_CODE" == "404" ]]; then
 fi
 echo "MinIO bucket '${MINIO_BUCKET}' accessible (HTTP ${BUCKET_CODE})"
 
+# Verify Polaris catalog exists (defense-in-depth for bootstrap job failures)
+POLARIS_CATALOG="${POLARIS_CATALOG:-floe-e2e}"
+POLARIS_CLIENT_ID="${POLARIS_CLIENT_ID:-demo-admin}"
+POLARIS_CLIENT_SECRET="${POLARIS_CLIENT_SECRET:-demo-secret}"
+echo "Verifying Polaris catalog '${POLARIS_CATALOG}'..."
+
+# Acquire OAuth token
+POLARIS_TOKEN=$(curl -s -X POST \
+    "http://localhost:8181/api/catalog/v1/oauth/tokens" \
+    -d "grant_type=client_credentials&client_id=${POLARIS_CLIENT_ID}&client_secret=${POLARIS_CLIENT_SECRET}&scope=PRINCIPAL_ROLE:ALL" \
+    2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4) || true
+
+if [[ -z "${POLARIS_TOKEN}" ]]; then
+    echo "ERROR: Failed to acquire Polaris OAuth token" >&2
+    exit 1
+fi
+
+# Check if catalog exists
+CATALOG_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+    -H "Authorization: Bearer ${POLARIS_TOKEN}" \
+    "http://localhost:8181/api/management/v1/catalogs/${POLARIS_CATALOG}" 2>/dev/null) || true
+
+if [[ "${CATALOG_CODE}" == "404" ]]; then
+    echo "Polaris catalog '${POLARIS_CATALOG}' not found — creating..." >&2
+    CATALOG_JSON=$(cat <<EOJSON
+{
+  "catalog": {
+    "name": "${POLARIS_CATALOG}",
+    "type": "INTERNAL",
+    "properties": {
+      "default-base-location": "s3://${MINIO_BUCKET}",
+      "s3.endpoint": "http://floe-platform-minio:9000",
+      "s3.path-style-access": "true",
+      "s3.access-key-id": "${MINIO_USER}",
+      "s3.secret-access-key": "${MINIO_PASS}",
+      "s3.region": "us-east-1",
+      "table-default.s3.endpoint": "http://floe-platform-minio:9000",
+      "table-default.s3.path-style-access": "true",
+      "table-default.s3.access-key-id": "${MINIO_USER}",
+      "table-default.s3.secret-access-key": "${MINIO_PASS}",
+      "table-default.s3.region": "us-east-1"
+    },
+    "storageConfigInfo": {
+      "storageType": "S3",
+      "allowedLocations": ["s3://${MINIO_BUCKET}"],
+      "endpoint": "http://floe-platform-minio:9000",
+      "endpointInternal": "http://floe-platform-minio:9000",
+      "pathStyleAccess": true,
+      "region": "us-east-1",
+      "stsUnavailable": true
+    }
+  }
+}
+EOJSON
+    )
+
+    CREATE_CODE=$(curl -s -o /tmp/polaris-create.txt -w '%{http_code}' -X POST \
+        -H "Authorization: Bearer ${POLARIS_TOKEN}" \
+        -H "Content-Type: application/json" \
+        "http://localhost:8181/api/management/v1/catalogs" \
+        -d "${CATALOG_JSON}" 2>/dev/null) || true
+
+    if [[ "${CREATE_CODE}" == "200" ]] || [[ "${CREATE_CODE}" == "201" ]]; then
+        echo "Polaris catalog '${POLARIS_CATALOG}' created successfully"
+    elif [[ "${CREATE_CODE}" == "409" ]]; then
+        echo "Polaris catalog '${POLARIS_CATALOG}' already exists (race condition) — OK"
+    else
+        echo "ERROR: Failed to create Polaris catalog (HTTP ${CREATE_CODE})" >&2
+        cat /tmp/polaris-create.txt >&2 2>/dev/null || true
+        exit 1
+    fi
+elif [[ "${CATALOG_CODE}" == "200" ]]; then
+    echo "Polaris catalog '${POLARIS_CATALOG}' exists (HTTP 200)"
+else
+    echo "ERROR: Unexpected response checking Polaris catalog (HTTP ${CATALOG_CODE})" >&2
+    exit 1
+fi
+
 # Install PyIceberg from git for Polaris 1.2.0 compatibility
 # TODO(pyiceberg-0.11.1): Remove git install once PyPI release available
 echo "Installing PyIceberg from git (Polaris 1.2.0 PUT fix)..."

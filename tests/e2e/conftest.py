@@ -34,10 +34,11 @@ def pytest_collection_modifyitems(
     config: pytest.Config,
     items: list[pytest.Item],
 ) -> None:
-    """Check for common test quality anti-patterns during collection.
+    """Reorder destructive tests to run last and check for TQR anti-patterns.
 
-    Scans test source code for TQR violations and issues warnings.
-    This is ADVISORY ONLY - does not fail tests.
+    Moves tests from test_service_failure_resilience_e2e.py to the end of the
+    collection so pod-killing tests don't cascade failures to subsequent modules.
+    Also scans test source code for TQR violations and issues warnings.
 
     Args:
         config: pytest configuration object.
@@ -46,6 +47,17 @@ def pytest_collection_modifyitems(
     import inspect
     import re
     import warnings
+
+    # Reorder: move destructive (pod-killing) tests to the end
+    destructive_module = "test_service_failure_resilience_e2e"
+    non_destructive: list[pytest.Item] = []
+    destructive: list[pytest.Item] = []
+    for item in items:
+        if destructive_module in item.nodeid:
+            destructive.append(item)
+        else:
+            non_destructive.append(item)
+    items[:] = non_destructive + destructive
 
     violations: list[str] = []
 

@@ -143,6 +143,7 @@ pythonpath = [
     "plugins/floe-alert-email/src",
     "plugins/floe-alert-alertmanager/src",
     "plugins/floe-alert-webhook/src",
+    "tests/e2e",
     ".",
 ]
 python_files = ["test_*.py"]
