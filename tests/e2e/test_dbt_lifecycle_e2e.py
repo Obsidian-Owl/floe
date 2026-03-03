@@ -20,7 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from conftest import run_dbt
+from dbt_utils import run_dbt
 
 # Demo products that have dbt projects
 DBT_PRODUCTS = [

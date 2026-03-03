@@ -111,45 +111,6 @@ def pytest_collection_modifyitems(
         print("=" * 70)
 
 
-def run_dbt(
-    args: list[str],
-    project_dir: Path,
-    timeout: float = 120.0,
-) -> subprocess.CompletedProcess[str]:
-    """Run a dbt command in the specified project directory.
-
-    Single E2E dbt runner.  Uses ``check=False`` so that **callers**
-    control error handling — no dead-code assertions, no hidden
-    CalledProcessError surprises.
-
-    Both ``--project-dir`` and ``--profiles-dir`` point to *project_dir*
-    because the ``dbt_e2e_profile`` fixture writes profiles.yml there.
-
-    Args:
-        args: dbt sub-command and flags (e.g. ``["seed"]``, ``["run"]``).
-        project_dir: Path to the dbt project directory.
-        timeout: Command timeout in seconds.  Defaults to 120.
-
-    Returns:
-        Completed process result.  Callers must check ``returncode``.
-    """
-    return subprocess.run(
-        [
-            "dbt",
-            *args,
-            "--project-dir",
-            str(project_dir),
-            "--profiles-dir",
-            str(project_dir),
-        ],
-        cwd=project_dir,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
-
-
 def run_kubectl(
     args: list[str],
     namespace: str | None = None,
@@ -825,7 +786,7 @@ def dbt_e2e_profile(
 
     Writes E2E ``profiles.yml`` files to each demo project directory,
     backing up the originals as ``profiles.yml.bak``.  The
-    The ``run_dbt()`` helper in ``conftest.py`` passes
+    The ``run_dbt()`` helper in ``dbt_utils.py`` passes
     ``--profiles-dir`` pointing to the project directory, so profiles
     must live there.
 
@@ -869,6 +830,12 @@ def dbt_e2e_profile(
     }
     for var_name, var_value in _e2e_env_vars.items():
         os.environ[var_name] = var_value
+    # Capture prior state of AWS vars so teardown can restore or remove them.
+    _aws_vars_prior: dict[str, str | None] = {
+        "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID"),
+        "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
+        "AWS_REGION": os.environ.get("AWS_REGION"),
+    }
     os.environ.setdefault("AWS_ACCESS_KEY_ID", "minioadmin")
     os.environ.setdefault(  # pragma: allowlist secret
         "AWS_SECRET_ACCESS_KEY", "minioadmin123"
@@ -924,3 +891,9 @@ def dbt_e2e_profile(
     # Clean up env vars set for dbt env_var() resolution
     for var_name in _e2e_env_vars:
         os.environ.pop(var_name, None)
+    # Restore AWS vars to their pre-fixture state
+    for var_name, prior_value in _aws_vars_prior.items():
+        if prior_value is None:
+            os.environ.pop(var_name, None)
+        else:
+            os.environ[var_name] = prior_value
