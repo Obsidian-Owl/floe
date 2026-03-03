@@ -169,6 +169,8 @@ def deployed_platform(
             "otel.enabled=false",
             "--set",
             "minio.enabled=false",
+            "--set",
+            "polaris.bootstrap.enabled=false",  # Bootstrap requires MinIO
             "--wait",
             "--timeout",
             "10m",

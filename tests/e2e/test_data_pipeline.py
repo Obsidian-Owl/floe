@@ -854,15 +854,22 @@ class TestDataPipeline(IntegrationTestBase):
         assert len(sig.parameters) > 0, "Sensor function should accept context parameter"
 
         # Test 4: Query Dagster GraphQL for sensor registration status
-        query = """
-        query GetSensors {
-            sensorsOrError {
+        # sensorsOrError requires repositorySelector — discover it first
+        workspace_query = """
+        query WorkspaceLocationEntries {
+            workspaceOrError {
                 __typename
-                ... on Sensors {
-                    results {
+                ... on Workspace {
+                    locationEntries {
                         name
-                        sensorState {
-                            status
+                        locationOrLoadError {
+                            __typename
+                            ... on RepositoryLocation {
+                                name
+                                repositories {
+                                    name
+                                }
+                            }
                         }
                     }
                 }
@@ -871,7 +878,51 @@ class TestDataPipeline(IntegrationTestBase):
         """
 
         try:
-            result = dagster_client._execute(query)
+            ws_result = dagster_client._execute(workspace_query)
+            workspace = ws_result.get("workspaceOrError", {})
+            assert workspace.get("__typename") == "Workspace", (
+                f"Expected Workspace, got {workspace.get('__typename')}"
+            )
+
+            # Find the first loaded repository location
+            repo_location_name: str | None = None
+            repo_name: str | None = None
+            for entry in workspace.get("locationEntries", []):
+                loc = entry.get("locationOrLoadError", {})
+                if loc.get("__typename") == "RepositoryLocation":
+                    repos = loc.get("repositories", [])
+                    if repos:
+                        repo_location_name = loc["name"]
+                        repo_name = repos[0]["name"]
+                        break
+
+            assert repo_location_name and repo_name, (
+                "No loaded repository location found in Dagster workspace"
+            )
+
+            # Now query sensors with the required repositorySelector
+            sensor_query = """
+            query GetSensors($repoSelector: RepositorySelector!) {
+                sensorsOrError(repositorySelector: $repoSelector) {
+                    __typename
+                    ... on Sensors {
+                        results {
+                            name
+                            sensorState {
+                                status
+                            }
+                        }
+                    }
+                }
+            }
+            """
+            variables = {
+                "repoSelector": {
+                    "repositoryName": repo_name,
+                    "repositoryLocationName": repo_location_name,
+                },
+            }
+            result = dagster_client._execute(sensor_query, variables)
             assert "sensorsOrError" in result, (
                 f"Dagster sensor query response missing 'sensorsOrError'. Got: {result}"
             )

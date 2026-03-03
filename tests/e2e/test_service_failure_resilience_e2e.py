@@ -19,6 +19,7 @@ See Also:
 from __future__ import annotations
 
 import os
+import warnings
 from pathlib import Path
 
 import httpx
@@ -171,6 +172,25 @@ class TestServiceFailureResilience:
             f"Check: kubectl get pods -n {NAMESPACE} -l app.kubernetes.io/component=polaris"
         )
 
+        # Wait for port-forward to reconnect (port 8182 management health)
+        # After pod restart, kubectl port-forward may need time to re-establish.
+        polaris_health_ready = wait_for_condition(
+            lambda: _check_port_forward_health(f"{polaris_health_url}/q/health/ready"),
+            timeout=60.0,
+            interval=3.0,
+            description="Polaris port-forward health (8182) to recover",
+            raise_on_timeout=False,
+        )
+        if not polaris_health_ready:
+            # Log warning but don't fail — the pod is Ready, port-forward may
+            # reconnect before the next test's fixture setup.
+            warnings.warn(
+                "Polaris port-forward (8182) did not recover within 60s after pod restart. "
+                "Subsequent tests using port 8182 may fail.",
+                UserWarning,
+                stacklevel=2,
+            )
+
     @pytest.mark.requirement("AC-2.7")
     def test_compilation_during_service_outage(
         self,
@@ -262,3 +282,19 @@ def _check_pod_ready(label_selector: str) -> bool:
         return False
     statuses = result.stdout.strip().split()
     return bool(statuses and all(s == "True" for s in statuses))
+
+
+def _check_port_forward_health(url: str) -> bool:
+    """Check if a port-forwarded health endpoint is reachable.
+
+    Args:
+        url: Full URL to health endpoint (e.g. http://localhost:8182/q/health/ready).
+
+    Returns:
+        True if endpoint returns HTTP 200.
+    """
+    try:
+        response = httpx.get(url, timeout=3.0)
+        return response.status_code == 200
+    except (httpx.HTTPError, OSError):
+        return False
