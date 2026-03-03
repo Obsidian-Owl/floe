@@ -483,7 +483,11 @@ class TestDataPipeline(IntegrationTestBase):
                 f"{seed_namespace}. Available: {seed_table_names}"
             )
             row_count = self._get_iceberg_row_count(polaris_client, seed_namespace, expected)
-            assert row_count > 0, f"Seed table {expected} should have rows (got {row_count})"
+            expected_count = SEED_ROW_COUNTS["customer-360"][expected]
+            assert row_count == expected_count, (
+                f"Seed table {expected} should have exactly {expected_count} rows "
+                f"(from CSV), got {row_count}"
+            )
 
         # Model tables land in default schema (customer_360)
         model_namespace = "customer_360"

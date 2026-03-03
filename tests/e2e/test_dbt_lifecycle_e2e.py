@@ -46,7 +46,7 @@ def _run_dbt(
         Completed process result.
     """
     return subprocess.run(
-        ["dbt"] + args,
+        ["dbt"] + args + ["--profiles-dir", str(project_dir)],
         capture_output=True,
         text=True,
         timeout=timeout,
