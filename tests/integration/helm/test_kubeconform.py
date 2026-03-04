@@ -10,6 +10,7 @@ target end-to-end if kubeconform is installed.
 Requirements:
     AC-26.1: make helm-validate renders templates and validates with kubeconform
     AC-26.2: Validation runs against both values.yaml and values-test.yaml
+    AC-26.3: CI workflow includes kubeconform stage
     AC-26.4: kubeconform validates against K8s 1.28.0
     AC-26.5: Subchart CRDs don't cause false failures
 """
@@ -19,7 +20,6 @@ from __future__ import annotations
 import re
 import subprocess
 from pathlib import Path
-from typing import NoReturn
 
 import pytest
 
@@ -31,24 +31,12 @@ HELM_VALIDATE_TARGET = "helm-validate"
 EXPECTED_K8S_VERSION = "1.28.0"
 VALUES_FILE = "values.yaml"
 VALUES_TEST_FILE = "values-test.yaml"
+CHART_PATH = "charts/floe-platform"
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _fail(message: str) -> NoReturn:
-    """Wrapper for pytest.fail with proper type annotation.
-
-    Args:
-        message: Failure message.
-
-    Raises:
-        pytest.fail: Always.
-    """
-    pytest.fail(message)
-    raise AssertionError("Unreachable")  # For type checker
 
 
 def _find_project_root() -> Path:
@@ -64,7 +52,7 @@ def _find_project_root() -> Path:
     for parent in [current] + list(current.parents):
         if (parent / "Makefile").exists():
             return parent
-    _fail("Could not find project root (directory containing Makefile).")
+    pytest.fail("Could not find project root (directory containing Makefile).")
 
 
 def _read_makefile() -> str:
@@ -81,7 +69,7 @@ def _read_makefile() -> str:
     try:
         return makefile_path.read_text()
     except OSError as exc:
-        _fail(f"Could not read Makefile at {makefile_path}: {exc}")
+        pytest.fail(f"Could not read Makefile at {makefile_path}: {exc}")
 
 
 def _extract_target_recipe(makefile_text: str, target_name: str) -> str:
@@ -112,7 +100,7 @@ def _extract_target_recipe(makefile_text: str, target_name: str) -> str:
             break
 
     if target_line_idx is None:
-        _fail(
+        pytest.fail(
             f"Makefile target '{target_name}' not found.\n"
             "The helm-validate target must be added to the Makefile."
         )
@@ -132,7 +120,7 @@ def _extract_target_recipe(makefile_text: str, target_name: str) -> str:
             break
 
     if not recipe_lines:
-        _fail(
+        pytest.fail(
             f"Makefile target '{target_name}' has no recipe lines.\n"
             "Expected recipe lines with kubeconform invocation."
         )
@@ -333,7 +321,7 @@ class TestHelmValidateMakefileTarget:
         try:
             chart_data = yaml.safe_load(chart_yaml_path.read_text())
         except (OSError, yaml.YAMLError) as exc:
-            _fail(f"Could not read Chart.yaml: {exc}")
+            pytest.fail(f"Could not read Chart.yaml: {exc}")
 
         kube_version_constraint = chart_data.get("kubeVersion", "")
         assert kube_version_constraint, "Chart.yaml is missing kubeVersion field."
@@ -451,6 +439,39 @@ class TestHelmValidateMakefileTarget:
             "This is required so the target appears in `make help` output."
         )
 
+    @pytest.mark.requirement("AC-26.1")
+    def test_helm_validate_uses_summary_flag(self) -> None:
+        """Verify kubeconform uses -summary for aggregate output.
+
+        The -summary flag provides a summary of validation results,
+        making it easier to see pass/fail counts in CI output.
+        """
+        makefile_text = _read_makefile()
+        recipe = _extract_target_recipe(makefile_text, HELM_VALIDATE_TARGET)
+
+        assert "-summary" in recipe, (
+            f"The '{HELM_VALIDATE_TARGET}' recipe does not include '-summary'.\n"
+            f"Recipe:\n{recipe}\n"
+            "kubeconform -summary provides aggregate validation results."
+        )
+
+    @pytest.mark.requirement("AC-26.1")
+    def test_helm_validate_targets_correct_chart(self) -> None:
+        """Verify helm template targets the floe-platform chart directory.
+
+        The recipe must reference charts/floe-platform to render the
+        correct chart's templates for validation.
+        """
+        makefile_text = _read_makefile()
+        recipe = _extract_target_recipe(makefile_text, HELM_VALIDATE_TARGET)
+
+        assert CHART_PATH in recipe, (
+            f"The '{HELM_VALIDATE_TARGET}' recipe does not reference "
+            f"'{CHART_PATH}'.\n"
+            f"Recipe:\n{recipe}\n"
+            "Expected helm template to target the floe-platform chart."
+        )
+
 
 # ---------------------------------------------------------------------------
 # Test class: Values file prerequisites
@@ -511,7 +532,7 @@ class TestHelmValidateFunctional:
         the clean pass case on valid templates.
         """
         if not _check_kubeconform_available():
-            _fail(
+            pytest.fail(
                 "kubeconform is not installed.\n"
                 "Install it: https://github.com/yannh/kubeconform#installation\n"
                 "Or: go install github.com/yannh/kubeconform/cmd/kubeconform@latest"
@@ -545,7 +566,7 @@ class TestHelmValidateFunctional:
         The target must produce output indicating validation was performed.
         """
         if not _check_kubeconform_available():
-            _fail(
+            pytest.fail(
                 "kubeconform is not installed.\n"
                 "Install it: https://github.com/yannh/kubeconform#installation"
             )
@@ -578,7 +599,7 @@ class TestHelmValidateFunctional:
         The output should indicate that both were processed.
         """
         if not _check_kubeconform_available():
-            _fail(
+            pytest.fail(
                 "kubeconform is not installed.\n"
                 "Install it: https://github.com/yannh/kubeconform#installation"
             )
@@ -596,15 +617,59 @@ class TestHelmValidateFunctional:
             result.stderr.decode() if result.stderr else ""
         )
 
-        # The output should reference both values files or "values" and "test"
-        mentions_default = "values.yaml" in combined_output or "default" in combined_output.lower()
-        mentions_test = "values-test" in combined_output or "test" in combined_output.lower()
+        # Match the exact Makefile echo messages for each values file pass
+        mentions_default = "production defaults" in combined_output.lower()
+        mentions_test = "test overrides" in combined_output.lower()
 
         assert mentions_default and mentions_test, (
             f"`make {HELM_VALIDATE_TARGET}` output does not indicate both "
             "values files were validated.\n"
             f"Output:\n{combined_output}\n"
             "Expected references to both values.yaml and values-test.yaml."
+        )
+
+    @pytest.mark.requirement("AC-26.1")
+    @pytest.mark.usefixtures("helm_available")
+    def test_kubeconform_rejects_invalid_manifest(self) -> None:
+        """Verify kubeconform catches invalid K8s manifests.
+
+        Feeds a deliberately invalid Deployment (wrong apiVersion) through
+        kubeconform with the same flags used in the Makefile to confirm
+        the tool actually catches schema violations.
+        """
+        if not _check_kubeconform_available():
+            pytest.fail(
+                "kubeconform is not installed.\n"
+                "Install it: https://github.com/yannh/kubeconform#installation"
+            )
+
+        invalid_manifest = (
+            "apiVersion: apps/v999\n"
+            "kind: Deployment\n"
+            "metadata:\n"
+            "  name: invalid-test\n"
+            "spec:\n"
+            "  replicas: 1\n"
+        )
+
+        result = subprocess.run(
+            [
+                "kubeconform",
+                "--strict",
+                "--kubernetes-version",
+                EXPECTED_K8S_VERSION,
+            ],
+            input=invalid_manifest.encode(),
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode != 0, (
+            "kubeconform accepted an invalid manifest (apiVersion: apps/v999).\n"
+            "Expected non-zero exit code for schema violation.\n"
+            f"STDOUT: {result.stdout.decode()}\n"
+            f"STDERR: {result.stderr.decode()}"
         )
 
 
@@ -633,7 +698,7 @@ def _load_helm_ci_workflow() -> dict[str, object]:
     workflow_path = root / HELM_CI_WORKFLOW
 
     if not workflow_path.exists():
-        _fail(
+        pytest.fail(
             f"Helm CI workflow not found at {workflow_path}.\n"
             "Expected .github/workflows/helm-ci.yaml to exist."
         )
@@ -642,10 +707,10 @@ def _load_helm_ci_workflow() -> dict[str, object]:
         content = workflow_path.read_text()
         parsed = yaml.safe_load(content)
     except (OSError, yaml.YAMLError) as exc:
-        _fail(f"Could not parse {HELM_CI_WORKFLOW}: {exc}")
+        pytest.fail(f"Could not parse {HELM_CI_WORKFLOW}: {exc}")
 
     if not isinstance(parsed, dict):
-        _fail(f"{HELM_CI_WORKFLOW} did not parse as a YAML dictionary.")
+        pytest.fail(f"{HELM_CI_WORKFLOW} did not parse as a YAML dictionary.")
 
     return parsed  # type: ignore[return-value]
 
@@ -1080,4 +1145,28 @@ class TestHelmCIKubeconform:
             f"Integration job 'if' condition changed: '{integration_if}'.\n"
             "The integration job must remain conditional on main branch "
             "(if: github.ref == 'refs/heads/main')."
+        )
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_kubeconform_install_verifies_checksum(self) -> None:
+        """Verify kubeconform install step includes SHA-256 verification.
+
+        CWE-494: Binary installs without integrity checks risk
+        supply-chain compromise. The install step must verify the
+        download checksum before extracting.
+        """
+        workflow = _load_helm_ci_workflow()
+        result = _find_kubeconform_job(workflow)
+
+        assert result is not None, f"No kubeconform job found in {HELM_CI_WORKFLOW}."
+
+        _, job_config = result
+        all_runs = _get_all_step_runs(job_config)
+
+        has_checksum = any("sha256sum" in run or "shasum" in run for run in all_runs)
+
+        assert has_checksum, (
+            "Kubeconform install step does not verify SHA-256 checksum.\n"
+            "Binary installs must include integrity verification (CWE-494).\n"
+            "Pattern: echo '<hash>  file' | sha256sum -c -"
         )

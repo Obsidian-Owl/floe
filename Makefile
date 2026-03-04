@@ -33,6 +33,7 @@ help: ## Show this help message
 	@echo "  make helm-deps       Update Helm chart dependencies"
 	@echo "  make helm-lint       Lint Helm charts"
 	@echo "  make helm-template   Render templates (ENV=dev|staging|prod)"
+	@echo "  make helm-validate   Validate manifests with kubeconform"
 	@echo "  make helm-test       Run Helm tests (RELEASE=..., NAMESPACE=...)"
 	@echo "  make helm-install-dev Install floe-platform for development"
 	@echo "  make helm-install-test Install floe with test values (CI/CD)"
