@@ -73,7 +73,7 @@ dagster:
       tag: latest
       pullPolicy: Never
     service:
-      type: NodePort
+      type: ClusterIP
       port: 3000
     readinessProbe:
       httpGet:

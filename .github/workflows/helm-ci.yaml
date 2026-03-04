@@ -110,7 +110,6 @@ jobs:
           helm dependency update charts/floe-platform
           helm dependency update charts/floe-jobs
 
-
       - name: Render floe-platform templates
         env:
           ENVIRONMENT: ${{ matrix.environment }}
@@ -299,7 +298,6 @@ jobs:
           helm dependency update charts/floe-platform
           helm dependency update charts/floe-jobs
 
-
       - name: Install kubesec
         run: |
           curl -sSL --proto =https -o kubesec.tar.gz \
@@ -385,7 +383,6 @@ jobs:
       - name: Update chart dependencies
         run: |
           helm dependency update charts/floe-platform
-
 
       - name: Install floe-platform chart with test values
         run: |
