@@ -183,7 +183,7 @@ postgresql:
   enabled: true
   auth:
     username: floe
-    password: "floe-test-password-1234"
+    password: "floe-test-password-1234"  # pragma: allowlist secret
     database: floe
   primary:
     persistence:

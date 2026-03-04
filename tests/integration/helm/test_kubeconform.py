@@ -13,6 +13,7 @@ Requirements:
     AC-26.3: CI workflow includes kubeconform stage
     AC-26.4: kubeconform validates against K8s 1.28.0
     AC-26.5: Subchart CRDs don't cause false failures
+    AC-27.2: Schema validation enforced (no --skip-schema-validation)
 """
 
 from __future__ import annotations
