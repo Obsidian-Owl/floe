@@ -8,6 +8,7 @@ Requirements tested:
     AC-28.1: Bootstrap credentials required when enabled
     AC-28.2: S3 endpoint required when S3 enabled
     AC-28.4: Custom overlays not blocked (additionalProperties: true)
+    AC-28.5: Environment enum enforced (dev, qa, staging, prod, test only)
 """
 
 from __future__ import annotations
@@ -31,6 +32,11 @@ SCHEMA_VALIDATION_FAILED = "validation failed"
 # the RIGHT field triggered the failure, not some unrelated field.
 BOOTSTRAP_CLIENT_SECRET_FIELD = "clientSecret"
 S3_ENDPOINT_FIELD = "endpoint"
+ENVIRONMENT_FIELD = "environment"
+
+# The exact set of valid environment values per the schema enum.
+# Tests MUST verify ALL of these are accepted; a partial enum is a bug.
+VALID_ENVIRONMENTS = ("dev", "qa", "staging", "prod", "test")
 
 
 # ---------------------------------------------------------------------------
@@ -564,5 +570,260 @@ class TestCustomOverlaysAllowed:
         assert result.returncode == 0, (
             "helm template FAILED with custom keys at multiple levels. "
             "All schema objects must allow additional properties.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# AC-28.5: Environment enum enforced
+# ---------------------------------------------------------------------------
+
+
+class TestEnvironmentEnumEnforced:
+    """Tests that global.environment only accepts the defined enum values.
+
+    AC-28.5: global.environment MUST only accept ["dev", "qa", "staging",
+    "prod", "test"]. Any other value (typos like "production", random strings
+    like "invalid", numeric strings, empty strings) MUST be rejected at
+    install time via schema validation. This prevents silent misconfiguration
+    where an operator deploys to a non-existent environment tier.
+    """
+
+    # -- Positive controls: each valid enum value MUST be accepted ----------
+
+    @pytest.mark.requirement("AC-28.5")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_valid_environment_dev_accepted(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST succeed with global.environment=dev.
+
+        'dev' is the default development environment and the schema default
+        value. This is the baseline positive control confirming the enum
+        includes 'dev'.
+        """
+        result = _helm_template(
+            platform_chart_path,
+            set_values=["global.environment=dev"],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode == 0, (
+            "helm template FAILED with global.environment=dev. "
+            "'dev' is a valid enum value and MUST be accepted.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
+        stdout = _stdout_text(result)
+        assert len(stdout) > 0, (
+            "helm template succeeded but produced no output. "
+            "Expected rendered Kubernetes manifests."
+        )
+
+    @pytest.mark.requirement("AC-28.5")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_valid_environment_prod_accepted(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST succeed with global.environment=prod.
+
+        'prod' is the production environment value. This positive control
+        confirms operators can deploy to production with the correct
+        enum spelling (not 'production').
+        """
+        result = _helm_template(
+            platform_chart_path,
+            set_values=["global.environment=prod"],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode == 0, (
+            "helm template FAILED with global.environment=prod. "
+            "'prod' is a valid enum value and MUST be accepted.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
+        stdout = _stdout_text(result)
+        assert len(stdout) > 0, (
+            "helm template succeeded but produced no output. "
+            "Expected rendered Kubernetes manifests."
+        )
+
+    @pytest.mark.requirement("AC-28.5")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_valid_environment_test_accepted(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST succeed with global.environment=test.
+
+        'test' is the CI/test environment value. This positive control
+        ensures the enum includes the value used in automated testing
+        pipelines.
+        """
+        result = _helm_template(
+            platform_chart_path,
+            set_values=["global.environment=test"],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode == 0, (
+            "helm template FAILED with global.environment=test. "
+            "'test' is a valid enum value and MUST be accepted.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
+        stdout = _stdout_text(result)
+        assert len(stdout) > 0, (
+            "helm template succeeded but produced no output. "
+            "Expected rendered Kubernetes manifests."
+        )
+
+    @pytest.mark.requirement("AC-28.5")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_valid_environment_qa_accepted(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST succeed with global.environment=qa.
+
+        'qa' is the quality assurance environment. Without this test,
+        a partial enum missing 'qa' would go undetected.
+        """
+        result = _helm_template(
+            platform_chart_path,
+            set_values=["global.environment=qa"],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode == 0, (
+            "helm template FAILED with global.environment=qa. "
+            "'qa' is a valid enum value and MUST be accepted.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
+        stdout = _stdout_text(result)
+        assert len(stdout) > 0, (
+            "helm template succeeded but produced no output. "
+            "Expected rendered Kubernetes manifests."
+        )
+
+    @pytest.mark.requirement("AC-28.5")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_valid_environment_staging_accepted(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST succeed with global.environment=staging.
+
+        'staging' is the pre-production environment. Without this test,
+        a partial enum missing 'staging' would go undetected.
+        """
+        result = _helm_template(
+            platform_chart_path,
+            set_values=["global.environment=staging"],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode == 0, (
+            "helm template FAILED with global.environment=staging. "
+            "'staging' is a valid enum value and MUST be accepted.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
+        stdout = _stdout_text(result)
+        assert len(stdout) > 0, (
+            "helm template succeeded but produced no output. "
+            "Expected rendered Kubernetes manifests."
+        )
+
+    # -- Negative controls: invalid values MUST be rejected -----------------
+
+    @pytest.mark.requirement("AC-28.5")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_invalid_environment_rejected(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST fail with global.environment=invalid.
+
+        An arbitrary string that is not in the enum MUST be rejected at
+        install time. This is the primary negative test confirming the
+        enum constraint is enforced, not just advisory.
+        """
+        result = _helm_template(
+            platform_chart_path,
+            set_values=["global.environment=invalid"],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode != 0, (
+            "helm template should have FAILED with global.environment=invalid, "
+            "but it succeeded. This means the schema does not enforce AC-28.5 "
+            "(environment enum constraint). The enum MUST reject values outside "
+            "['dev', 'qa', 'staging', 'prod', 'test'].\n"
+            f"STDOUT (first 500 chars): {_stdout_text(result)[:500]}"
+        )
+
+        # Verify the failure is specifically a schema validation error,
+        # not an unrelated template rendering issue.
+        stderr_lower = stderr.lower()
+        assert SCHEMA_ERROR_INDICATOR in stderr_lower or SCHEMA_VALIDATION_FAILED in stderr_lower, (
+            "helm template failed, but stderr does not indicate a schema "
+            "validation error. The failure may be an unrelated template issue.\n"
+            f"Expected one of: '{SCHEMA_ERROR_INDICATOR}', '{SCHEMA_VALIDATION_FAILED}'\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
+        # Verify the error references the environment field specifically,
+        # not some other unrelated schema constraint.
+        assert ENVIRONMENT_FIELD in stderr_lower or "enum" in stderr_lower, (
+            "Schema validation failed, but the error does not reference "
+            f"'{ENVIRONMENT_FIELD}' or 'enum'. The failure may be caused by a "
+            "different schema constraint, not the environment enum.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
+    @pytest.mark.requirement("AC-28.5")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_typo_environment_rejected(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST fail with global.environment=production (common typo).
+
+        'production' is the most common typo for 'prod'. The schema must
+        reject it rather than silently deploying with a misconfigured
+        environment label. This test specifically guards against operators
+        who use the full word instead of the abbreviated enum value.
+        """
+        result = _helm_template(
+            platform_chart_path,
+            set_values=["global.environment=production"],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode != 0, (
+            "helm template should have FAILED with global.environment=production "
+            "(a common typo for 'prod'), but it succeeded. The enum MUST only "
+            "accept ['dev', 'qa', 'staging', 'prod', 'test']. "
+            "'production' is NOT a valid value.\n"
+            f"STDOUT (first 500 chars): {_stdout_text(result)[:500]}"
+        )
+
+        stderr_lower = stderr.lower()
+        assert SCHEMA_ERROR_INDICATOR in stderr_lower or SCHEMA_VALIDATION_FAILED in stderr_lower, (
+            "helm template failed with global.environment=production, but "
+            "stderr does not indicate a schema validation error.\n"
+            f"Expected one of: '{SCHEMA_ERROR_INDICATOR}', '{SCHEMA_VALIDATION_FAILED}'\n"
             f"STDERR: {stderr[:1000]}"
         )
