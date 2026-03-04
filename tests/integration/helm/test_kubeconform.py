@@ -23,7 +23,6 @@ from typing import NoReturn
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -182,9 +181,7 @@ class TestHelmValidateMakefileTarget:
         makefile_text = _read_makefile()
 
         # Look for the target definition line (not just a .PHONY reference)
-        has_target = bool(
-            re.search(rf"^{HELM_VALIDATE_TARGET}\s*:", makefile_text, re.MULTILINE)
-        )
+        has_target = bool(re.search(rf"^{HELM_VALIDATE_TARGET}\s*:", makefile_text, re.MULTILINE))
         assert has_target, (
             f"Makefile does not contain a '{HELM_VALIDATE_TARGET}' target.\n"
             "Add a helm-validate target that runs kubeconform validation."
@@ -562,9 +559,8 @@ class TestHelmValidateFunctional:
             cwd=str(root),
         )
 
-        combined_output = (
-            (result.stdout.decode() if result.stdout else "")
-            + (result.stderr.decode() if result.stderr else "")
+        combined_output = (result.stdout.decode() if result.stdout else "") + (
+            result.stderr.decode() if result.stderr else ""
         )
 
         # The output should mention validation or kubeconform activity
@@ -596,9 +592,8 @@ class TestHelmValidateFunctional:
             cwd=str(root),
         )
 
-        combined_output = (
-            (result.stdout.decode() if result.stdout else "")
-            + (result.stderr.decode() if result.stderr else "")
+        combined_output = (result.stdout.decode() if result.stdout else "") + (
+            result.stderr.decode() if result.stderr else ""
         )
 
         # The output should reference both values files or "values" and "test"
@@ -620,7 +615,7 @@ class TestHelmValidateFunctional:
 
 # Constants for CI workflow tests
 HELM_CI_WORKFLOW = ".github/workflows/helm-ci.yaml"
-MAIN_BRANCH_CONDITION = 'github.ref == \'refs/heads/main\''
+MAIN_BRANCH_CONDITION = "github.ref == 'refs/heads/main'"
 
 
 def _load_helm_ci_workflow() -> dict[str, object]:
@@ -807,9 +802,7 @@ class TestHelmCIKubeconform:
         workflow = _load_helm_ci_workflow()
         result = _find_kubeconform_job(workflow)
 
-        assert result is not None, (
-            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
-        )
+        assert result is not None, f"No kubeconform job found in {HELM_CI_WORKFLOW}."
 
         job_key, job_config = result
         job_if = job_config.get("if", "")
@@ -832,24 +825,22 @@ class TestHelmCIKubeconform:
         workflow = _load_helm_ci_workflow()
         result = _find_kubeconform_job(workflow)
 
-        assert result is not None, (
-            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
-        )
+        assert result is not None, f"No kubeconform job found in {HELM_CI_WORKFLOW}."
 
         _, job_config = result
         all_runs = _get_all_step_runs(job_config)
         all_names = _get_all_step_names(job_config)
 
         # Check for kubeconform installation in run commands
+        install_keywords = ("install", "curl", "wget", "go install", "tar")
         has_install_in_run = any(
-            "kubeconform" in run and ("install" in run.lower() or "curl" in run or "wget" in run or "go install" in run or "tar" in run)
+            "kubeconform" in run and any(kw in run.lower() for kw in install_keywords)
             for run in all_runs
         )
 
         # Also check step names for installation indication
         has_install_in_name = any(
-            "kubeconform" in name.lower() and "install" in name.lower()
-            for name in all_names
+            "kubeconform" in name.lower() and "install" in name.lower() for name in all_names
         )
 
         assert has_install_in_run or has_install_in_name, (
@@ -872,9 +863,7 @@ class TestHelmCIKubeconform:
         workflow = _load_helm_ci_workflow()
         result = _find_kubeconform_job(workflow)
 
-        assert result is not None, (
-            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
-        )
+        assert result is not None, f"No kubeconform job found in {HELM_CI_WORKFLOW}."
 
         _, job_config = result
         all_runs = _get_all_step_runs(job_config)
@@ -885,8 +874,7 @@ class TestHelmCIKubeconform:
         )
 
         has_direct_kubeconform = any(
-            "kubeconform" in run
-            and ("helm template" in run or "validate" in run.lower())
+            "kubeconform" in run and ("helm template" in run or "validate" in run.lower())
             for run in all_runs
         )
 
@@ -909,9 +897,7 @@ class TestHelmCIKubeconform:
         workflow = _load_helm_ci_workflow()
         result = _find_kubeconform_job(workflow)
 
-        assert result is not None, (
-            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
-        )
+        assert result is not None, f"No kubeconform job found in {HELM_CI_WORKFLOW}."
 
         job_key, job_config = result
         needs = job_config.get("needs", [])
@@ -942,9 +928,7 @@ class TestHelmCIKubeconform:
         workflow = _load_helm_ci_workflow()
         result = _find_kubeconform_job(workflow)
 
-        assert result is not None, (
-            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
-        )
+        assert result is not None, f"No kubeconform job found in {HELM_CI_WORKFLOW}."
 
         job_key, job_config = result
         runs_on = job_config.get("runs-on", "")
@@ -965,9 +949,7 @@ class TestHelmCIKubeconform:
         workflow = _load_helm_ci_workflow()
         result = _find_kubeconform_job(workflow)
 
-        assert result is not None, (
-            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
-        )
+        assert result is not None, f"No kubeconform job found in {HELM_CI_WORKFLOW}."
 
         _, job_config = result
         steps = job_config.get("steps", [])
@@ -1002,9 +984,7 @@ class TestHelmCIKubeconform:
         assert isinstance(jobs, dict), "Workflow 'jobs' is not a dictionary."
 
         result = _find_kubeconform_job(workflow)
-        assert result is not None, (
-            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
-        )
+        assert result is not None, f"No kubeconform job found in {HELM_CI_WORKFLOW}."
 
         job_key, job_config = result
 
@@ -1038,9 +1018,7 @@ class TestHelmCIKubeconform:
         workflow = _load_helm_ci_workflow()
         result = _find_kubeconform_job(workflow)
 
-        assert result is not None, (
-            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
-        )
+        assert result is not None, f"No kubeconform job found in {HELM_CI_WORKFLOW}."
 
         _, job_config = result
         steps = job_config.get("steps", [])
@@ -1095,9 +1073,7 @@ class TestHelmCIKubeconform:
         assert isinstance(jobs, dict), "Workflow 'jobs' is not a dictionary."
 
         integration_job = jobs.get("integration", {})
-        assert isinstance(integration_job, dict), (
-            "Integration job not found or not a dictionary."
-        )
+        assert isinstance(integration_job, dict), "Integration job not found or not a dictionary."
 
         integration_if = integration_job.get("if", "")
         assert isinstance(integration_if, str) and "refs/heads/main" in integration_if, (
