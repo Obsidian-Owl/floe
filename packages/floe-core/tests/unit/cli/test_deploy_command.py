@@ -144,7 +144,7 @@ class TestDeployCommand:
 
     @pytest.mark.requirement("FR-018")
     def test_skip_schema_validation_default(self, runner: CliRunner, chart_dir: Path) -> None:
-        """Test --skip-schema-validation is on by default."""
+        """Test --skip-schema-validation is off by default."""
         result = runner.invoke(
             deploy_command,
             [
@@ -156,7 +156,7 @@ class TestDeployCommand:
             ],
         )
         assert result.exit_code == 0
-        assert "--skip-schema-validation" in result.output
+        assert "--skip-schema-validation" not in result.output
 
     @pytest.mark.requirement("FR-018")
     @patch("floe_core.cli.platform.deploy.subprocess")

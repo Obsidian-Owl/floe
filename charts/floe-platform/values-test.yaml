@@ -73,9 +73,8 @@ dagster:
       tag: latest
       pullPolicy: Never
     service:
-      type: NodePort
+      type: ClusterIP
       port: 3000
-      nodePort: 30300
     readinessProbe:
       httpGet:
         path: /server_info
@@ -95,7 +94,6 @@ dagster:
         cpu: "1"
         memory: 1536Mi
   dagsterDaemon:
-    replicaCount: 1
     image:
       repository: floe-dagster-demo
       tag: latest
@@ -185,7 +183,7 @@ postgresql:
   enabled: true
   auth:
     username: floe
-    password: "floe-test-password-1234"
+    password: "floe-test-password-1234"  # pragma: allowlist secret
     database: floe
   primary:
     persistence:

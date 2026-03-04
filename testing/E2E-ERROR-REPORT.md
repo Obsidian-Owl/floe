@@ -344,15 +344,14 @@ the schema(s) in the following chart(s)
 
 ### Root Cause
 The Helm upgrade test modifies values and attempts an upgrade, but the modified
-values fail the Dagster subchart's JSON schema validation. The main Helm install
-uses `--skip-schema-validation` but the test may not pass this flag.
+values fail the Dagster subchart's JSON schema validation.
 
 ### Affected Tests (1)
 - `test_helm_upgrade_e2e.py::test_helm_upgrade_succeeds`
 
 ### Fix
-Pass `--skip-schema-validation` in the test's helm upgrade command, or fix the
-values to pass the Dagster subchart schema.
+Fixed in WU-27: Dagster chart upgraded to 1.12.17 which has valid JSON schemas.
+Schema validation is now enforced (no `--skip-schema-validation`).
 
 ---
 

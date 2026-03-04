@@ -1,7 +1,7 @@
 dependencies:
 - name: dagster
   repository: https://dagster-io.github.io/helm
-  version: 1.9.6
+  version: 1.12.17
 - name: opentelemetry-collector
   repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   version: 0.108.0
@@ -14,5 +14,5 @@ dependencies:
 - name: cube
   repository: ""
   version: 0.1.0
-digest: sha256:f2ce6b48e3a4043aa3c8d4d8e3849a2428d03e4c81bb0bb79ac3244c36be664a
-generated: "2026-02-07T11:19:06.196875+11:00"
+digest: sha256:6ae6fbccde3a51fdce2f19d24597532b4e48080e65e23ef8f2b49142dc0ce48a
+generated: "2026-03-04T16:55:19.708224709+11:00"

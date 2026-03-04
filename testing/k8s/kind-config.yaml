@@ -57,11 +57,9 @@ nodes:
       - containerPort: 30181
         hostPort: 8181
         protocol: TCP
-      # Dagster Webserver (NodePort 30300 -> localhost 3100)
-      # Remapped from 3000 to avoid conflict with local dev servers
-      - containerPort: 30300
-        hostPort: 3100
-        protocol: TCP
+      # Dagster Webserver: use kubectl port-forward (Dagster 1.12+ schema
+      # disallows fixed nodePort). E2E tests handle this via make test-e2e.
+      # Manual: kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-test
       # MinIO API (NodePort 30900 -> localhost 9000)
       - containerPort: 30900
         hostPort: 9000

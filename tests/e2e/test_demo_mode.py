@@ -185,7 +185,6 @@ class TestDemoMode(IntegrationTestBase):
                 str(chart_path),
                 "-f",
                 str(chart_path / "values-test.yaml"),
-                "--skip-schema-validation",
             ],
             cwd=project_root,
             capture_output=True,
@@ -378,14 +377,13 @@ class TestDemoMode(IntegrationTestBase):
         project_root = Path(__file__).parent.parent.parent
         chart_path = project_root / "charts" / "floe-platform"
 
-        # Render Helm templates with --skip-schema-validation to avoid external URL fetch
+        # Render Helm templates
         result = subprocess.run(
             [
                 "helm",
                 "template",
                 "test-release",
                 str(chart_path),
-                "--skip-schema-validation",
             ],
             cwd=project_root,
             capture_output=True,

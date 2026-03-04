@@ -37,13 +37,10 @@ class TestPlatformChartTemplate:
         Args:
             platform_chart_path: Path to platform chart.
         """
-        # NOTE: --skip-schema-validation required because Dagster subchart
-        # references external JSON schema URL that returns 404
         result = subprocess.run(
             [
                 "helm",
                 "template",
-                "--skip-schema-validation",
                 "test-release",
                 str(platform_chart_path),
             ],
@@ -70,13 +67,10 @@ class TestPlatformChartTemplate:
         Args:
             platform_chart_path: Path to platform chart.
         """
-        # NOTE: --skip-schema-validation required because Dagster subchart
-        # references external JSON schema URL that returns 404
         result = subprocess.run(
             [
                 "helm",
                 "template",
-                "--skip-schema-validation",
                 "test-release",
                 str(platform_chart_path),
             ],
@@ -107,13 +101,10 @@ class TestPlatformChartTemplate:
         Args:
             platform_chart_path: Path to platform chart.
         """
-        # NOTE: --skip-schema-validation required because Dagster subchart
-        # references external JSON schema URL that returns 404
         result = subprocess.run(
             [
                 "helm",
                 "template",
-                "--skip-schema-validation",
                 "test-release",
                 str(platform_chart_path),
                 "--set",
@@ -150,13 +141,10 @@ class TestPlatformChartTemplate:
         Args:
             platform_chart_path: Path to platform chart.
         """
-        # NOTE: --skip-schema-validation required because Dagster subchart
-        # references external JSON schema URL that returns 404
         result = subprocess.run(
             [
                 "helm",
                 "template",
-                "--skip-schema-validation",
                 "test-release",
                 str(platform_chart_path),
                 "--set",
@@ -191,13 +179,10 @@ class TestPlatformChartTemplate:
         Args:
             platform_chart_path: Path to platform chart.
         """
-        # NOTE: --skip-schema-validation required because Dagster subchart
-        # references external JSON schema URL that returns 404
         result = subprocess.run(
             [
                 "helm",
                 "template",
-                "--skip-schema-validation",
                 "my-release",
                 str(platform_chart_path),
             ],
@@ -235,13 +220,10 @@ class TestPlatformChartTemplate:
             platform_chart_path: Path to platform chart.
         """
         release_name = "custom-release"
-        # NOTE: --skip-schema-validation required because Dagster subchart
-        # references external JSON schema URL that returns 404
         result = subprocess.run(
             [
                 "helm",
                 "template",
-                "--skip-schema-validation",
                 release_name,
                 str(platform_chart_path),
             ],
@@ -269,13 +251,10 @@ class TestPlatformChartTemplate:
             platform_chart_path: Path to platform chart.
         """
         namespace = "custom-ns"
-        # NOTE: --skip-schema-validation required because Dagster subchart
-        # references external JSON schema URL that returns 404
         result = subprocess.run(
             [
                 "helm",
                 "template",
-                "--skip-schema-validation",
                 "test-release",
                 str(platform_chart_path),
                 "--namespace",
@@ -315,7 +294,6 @@ def _render_template(chart_path: Path) -> list[dict[str, Any]]:
         [
             "helm",
             "template",
-            "--skip-schema-validation",
             "floe-platform",
             str(chart_path),
         ],

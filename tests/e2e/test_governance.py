@@ -861,7 +861,6 @@ class TestGovernance(IntegrationTestBase):
         cmd = [
             "helm",
             "template",
-            "--skip-schema-validation",
             "test-release",
             str(chart_path),
         ]

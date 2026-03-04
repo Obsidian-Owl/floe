@@ -192,11 +192,9 @@ deploy_services_helm() {
 
     # Install floe-platform with test values
     log_info "Installing floe-platform chart..."
-    # --skip-schema-validation: Dagster subchart references dead kubernetesjsonschema.dev URLs
     helm upgrade --install floe-platform "${PROJECT_ROOT}/charts/floe-platform" \
         --namespace "${NAMESPACE}" --create-namespace \
         --values "${PROJECT_ROOT}/charts/floe-platform/values-test.yaml" \
-        --skip-schema-validation \
         --wait \
         --timeout 10m
 
@@ -276,7 +274,7 @@ print_info() {
     echo ""
     echo "Services accessible via localhost (NodePort):"
     echo "  Polaris:     http://localhost:8181"
-    echo "  Dagster:     http://localhost:3100"
+    echo "  Dagster:     http://localhost:3100 (requires: kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-test)"
     echo "  MinIO API:   http://localhost:9000"
     echo "  MinIO UI:    http://localhost:9001 (minioadmin/minioadmin123)"
     echo "  Jaeger:      http://localhost:16686"

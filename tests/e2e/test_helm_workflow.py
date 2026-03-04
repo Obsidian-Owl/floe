@@ -174,7 +174,6 @@ def deployed_platform(
             "--wait",
             "--timeout",
             "10m",
-            "--skip-schema-validation",  # Avoid external schema fetch issues
         ]
     )
 

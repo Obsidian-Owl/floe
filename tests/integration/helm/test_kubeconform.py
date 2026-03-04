@@ -13,6 +13,7 @@ Requirements:
     AC-26.3: CI workflow includes kubeconform stage
     AC-26.4: kubeconform validates against K8s 1.28.0
     AC-26.5: Subchart CRDs don't cause false failures
+    AC-27.2: Schema validation enforced (no --skip-schema-validation)
 """
 
 from __future__ import annotations
@@ -390,24 +391,23 @@ class TestHelmValidateMakefileTarget:
             "Expected pattern: helm template ... | kubeconform ..."
         )
 
-    @pytest.mark.requirement("AC-26.1")
-    def test_helm_validate_uses_skip_schema_validation(self) -> None:
-        """Verify helm template uses --skip-schema-validation.
+    @pytest.mark.requirement("AC-27.2")
+    def test_helm_validate_enforces_schema_validation(self) -> None:
+        """Verify helm template does NOT use --skip-schema-validation.
 
-        The Dagster subchart references an external JSON schema URL that
-        returns 404. All existing helm template invocations in this project
-        use --skip-schema-validation to work around this. The helm-validate
-        target must do the same.
+        Dagster chart 1.12+ fixed dead kubernetesjsonschema.dev $ref URLs,
+        so schema validation is now enforced. The helm-validate target must
+        not bypass it.
         """
         makefile_text = _read_makefile()
         recipe = _extract_target_recipe(makefile_text, HELM_VALIDATE_TARGET)
 
-        assert "--skip-schema-validation" in recipe, (
-            f"The '{HELM_VALIDATE_TARGET}' recipe does not include "
-            "'--skip-schema-validation' for helm template.\n"
+        assert "--skip-schema-validation" not in recipe, (
+            f"The '{HELM_VALIDATE_TARGET}' recipe still includes "
+            "'--skip-schema-validation'.\n"
             f"Recipe:\n{recipe}\n"
-            "The Dagster subchart references an external JSON schema URL that "
-            "returns 404. Without --skip-schema-validation, helm template fails."
+            "Dagster 1.12+ fixed dead schema URLs. Schema validation "
+            "should now be enforced."
         )
 
     @pytest.mark.requirement("AC-26.1")
