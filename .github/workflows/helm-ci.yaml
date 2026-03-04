@@ -342,8 +342,12 @@ jobs:
 
       - name: Install kubesec
         run: |
-          curl -sSL --proto =https https://github.com/controlplaneio/kubesec/releases/download/v2.14.0/kubesec_linux_amd64.tar.gz | tar xz
+          curl -sSL --proto =https -o kubesec.tar.gz \
+            https://github.com/controlplaneio/kubesec/releases/download/v2.14.0/kubesec_linux_amd64.tar.gz
+          echo "961f9f2c1fa0279cd27ac94c4cb2bba9d25a9e312f2e2403ed016dfc172a3d12  kubesec.tar.gz" | sha256sum -c -
+          tar xzf kubesec.tar.gz
           sudo mv kubesec /usr/local/bin/
+          rm kubesec.tar.gz
 
       - name: Render templates for security scan
         run: |
