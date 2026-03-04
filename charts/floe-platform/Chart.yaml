@@ -52,7 +52,7 @@ dependencies:
   # Dagster - Orchestration platform
   # https://dagster-io.github.io/helm/
   - name: dagster
-    version: "1.9.6"
+    version: "1.12.17"
     repository: "https://dagster-io.github.io/helm"
     condition: dagster.enabled
     alias: dagster
