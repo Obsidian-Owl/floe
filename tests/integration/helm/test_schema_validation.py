@@ -7,6 +7,7 @@ ensure that operators cannot deploy invalid configurations silently.
 Requirements tested:
     AC-28.1: Bootstrap credentials required when enabled
     AC-28.2: S3 endpoint required when S3 enabled
+    AC-28.3: Both values files pass enhanced schema (no regressions)
     AC-28.4: Custom overlays not blocked (additionalProperties: true)
     AC-28.5: Environment enum enforced (dev, qa, staging, prod, test only)
 """
@@ -826,4 +827,301 @@ class TestEnvironmentEnumEnforced:
             "stderr does not indicate a schema validation error.\n"
             f"Expected one of: '{SCHEMA_ERROR_INDICATOR}', '{SCHEMA_VALIDATION_FAILED}'\n"
             f"STDERR: {stderr[:1000]}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Helper: helm lint
+# ---------------------------------------------------------------------------
+
+
+def _helm_lint(
+    chart_path: Path,
+    values_files: list[Path],
+) -> subprocess.CompletedProcess[bytes]:
+    """Run helm lint with the given values files.
+
+    Args:
+        chart_path: Absolute path to the Helm chart.
+        values_files: List of values file paths to pass via --values flags.
+
+    Returns:
+        CompletedProcess with stdout, stderr, and returncode.
+    """
+    cmd: list[str] = [
+        "helm",
+        "lint",
+        str(chart_path),
+    ]
+    for vf in values_files:
+        cmd.extend(["--values", str(vf)])
+
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+
+
+# ---------------------------------------------------------------------------
+# AC-28.3: Both values files pass enhanced schema (regression prevention)
+# ---------------------------------------------------------------------------
+
+
+class TestValuesFilesPassSchema:
+    """Tests that both values.yaml and values-test.yaml pass the enhanced schema.
+
+    AC-28.3: ``helm lint`` passes with both ``values.yaml`` and
+    ``values-test.yaml`` against the enhanced ``values.schema.json``.
+    No regressions.  These tests are regression-prevention guards that
+    ensure future schema changes do not accidentally invalidate the
+    shipped values files.
+
+    Each test verifies three things:
+        1. Exit code is exactly 0 (lint succeeded).
+        2. Stderr does NOT contain schema validation error indicators
+           (catches cases where Helm logs a warning but still exits 0).
+        3. Stdout contains meaningful output confirming the chart was
+           actually processed (not a no-op due to a bad chart path).
+    """
+
+    @pytest.mark.requirement("AC-28.3")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_lint_passes_with_default_values(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """helm lint MUST exit 0 with the default values.yaml.
+
+        values.yaml is the primary values file shipped with the chart.
+        It defines defaults for all schema-constrained fields.  A schema
+        that rejects the default values file is a broken schema.
+        """
+        values_file = platform_chart_path / "values.yaml"
+        assert values_file.exists(), (
+            f"values.yaml not found at {values_file}. Chart must ship a default values file."
+        )
+
+        result = _helm_lint(platform_chart_path, [values_file])
+        stderr = _stderr_text(result)
+        stdout = _stdout_text(result)
+
+        assert result.returncode == 0, (
+            "helm lint FAILED with the default values.yaml. "
+            "The enhanced schema must accept the shipped default values.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+
+        # Ensure no schema validation errors lurk in stderr despite exit 0
+        stderr_lower = stderr.lower()
+        assert SCHEMA_ERROR_INDICATOR not in stderr_lower, (
+            "helm lint exited 0 but stderr contains schema validation "
+            f"error text ('{SCHEMA_ERROR_INDICATOR}'). This indicates a "
+            "partial failure that Helm did not surface via exit code.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+        assert SCHEMA_VALIDATION_FAILED not in stderr_lower, (
+            "helm lint exited 0 but stderr contains schema validation "
+            f"failure text ('{SCHEMA_VALIDATION_FAILED}'). This indicates "
+            "a partial failure that Helm did not surface via exit code.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+
+        # Confirm the chart was actually processed (not a silent no-op)
+        assert len(stdout) > 0, (
+            "helm lint exited 0 but produced no stdout output. "
+            "Expected at least a lint summary line."
+        )
+
+    @pytest.mark.requirement("AC-28.3")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_lint_passes_with_test_values(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """helm lint MUST exit 0 with values-test.yaml.
+
+        values-test.yaml provides overrides for CI and testing
+        environments.  If the schema rejects it, the CI pipeline
+        cannot deploy test environments.
+        """
+        values_file = platform_chart_path / "values-test.yaml"
+        assert values_file.exists(), (
+            f"values-test.yaml not found at {values_file}. "
+            "Chart must include a test values override file."
+        )
+
+        result = _helm_lint(platform_chart_path, [values_file])
+        stderr = _stderr_text(result)
+        stdout = _stdout_text(result)
+
+        assert result.returncode == 0, (
+            "helm lint FAILED with values-test.yaml. "
+            "The enhanced schema must accept the test values file.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+
+        stderr_lower = stderr.lower()
+        assert SCHEMA_ERROR_INDICATOR not in stderr_lower, (
+            "helm lint exited 0 but stderr contains schema validation "
+            f"error text ('{SCHEMA_ERROR_INDICATOR}') when using "
+            "values-test.yaml. Possible partial schema failure.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+        assert SCHEMA_VALIDATION_FAILED not in stderr_lower, (
+            "helm lint exited 0 but stderr contains schema validation "
+            f"failure text ('{SCHEMA_VALIDATION_FAILED}') when using "
+            "values-test.yaml.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+
+        assert len(stdout) > 0, (
+            "helm lint exited 0 but produced no stdout output for "
+            "values-test.yaml. Expected at least a lint summary line."
+        )
+
+    @pytest.mark.requirement("AC-28.3")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_lint_passes_with_both_values_overlaid(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """helm lint MUST exit 0 with values-test.yaml overlaid on values.yaml.
+
+        In real CI usage, operators apply ``--values values.yaml --values
+        values-test.yaml`` so that test overrides merge on top of defaults.
+        The merged result must also pass schema validation.  A schema that
+        accepts each file individually but rejects the overlay has a
+        constraint conflict (e.g., an if/then that the overlay violates).
+        """
+        base_values = platform_chart_path / "values.yaml"
+        test_values = platform_chart_path / "values-test.yaml"
+        assert base_values.exists(), f"values.yaml not found at {base_values}."
+        assert test_values.exists(), f"values-test.yaml not found at {test_values}."
+
+        result = _helm_lint(
+            platform_chart_path,
+            [base_values, test_values],
+        )
+        stderr = _stderr_text(result)
+        stdout = _stdout_text(result)
+
+        assert result.returncode == 0, (
+            "helm lint FAILED with values-test.yaml overlaid on values.yaml. "
+            "The merged configuration must satisfy the enhanced schema. "
+            "This may indicate an if/then constraint conflict between the "
+            "two files.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+
+        stderr_lower = stderr.lower()
+        assert SCHEMA_ERROR_INDICATOR not in stderr_lower, (
+            "helm lint exited 0 but stderr contains schema validation "
+            f"error text ('{SCHEMA_ERROR_INDICATOR}') when overlaying "
+            "values-test.yaml on values.yaml.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+        assert SCHEMA_VALIDATION_FAILED not in stderr_lower, (
+            "helm lint exited 0 but stderr contains schema validation "
+            f"failure text ('{SCHEMA_VALIDATION_FAILED}') when overlaying "
+            "values-test.yaml on values.yaml.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+
+        assert len(stdout) > 0, (
+            "helm lint exited 0 but produced no stdout output for the "
+            "overlaid values. Expected at least a lint summary line."
+        )
+
+    @pytest.mark.requirement("AC-28.3")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_lint_passes_with_reverse_overlay_order(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """helm lint MUST exit 0 with values.yaml overlaid on values-test.yaml.
+
+        Helm applies values files left-to-right, with later files winning.
+        Reversing the order (values-test.yaml first, then values.yaml)
+        exercises a different merge result.  If the schema has conditional
+        constraints (if/then), the winning values must satisfy them
+        regardless of application order.
+        """
+        base_values = platform_chart_path / "values.yaml"
+        test_values = platform_chart_path / "values-test.yaml"
+
+        result = _helm_lint(
+            platform_chart_path,
+            [test_values, base_values],
+        )
+        stderr = _stderr_text(result)
+        stdout = _stdout_text(result)
+
+        assert result.returncode == 0, (
+            "helm lint FAILED with values.yaml overlaid on values-test.yaml "
+            "(reverse order). The schema must accept the merged result "
+            "regardless of overlay application order.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+
+        stderr_lower = stderr.lower()
+        assert SCHEMA_ERROR_INDICATOR not in stderr_lower, (
+            "helm lint exited 0 but stderr contains schema validation "
+            f"error text ('{SCHEMA_ERROR_INDICATOR}') with reverse "
+            "overlay order.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+        assert SCHEMA_VALIDATION_FAILED not in stderr_lower, (
+            "helm lint exited 0 but stderr contains schema validation "
+            f"failure text ('{SCHEMA_VALIDATION_FAILED}') with reverse "
+            "overlay order.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+
+        assert len(stdout) > 0, (
+            "helm lint exited 0 but produced no stdout for reverse overlay order."
+        )
+
+    @pytest.mark.requirement("AC-28.3")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_lint_with_default_values_no_explicit_file(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """helm lint MUST exit 0 with no explicit --values flag (uses chart defaults).
+
+        When no --values flag is passed, Helm uses the chart's built-in
+        values.yaml.  This is the simplest deployment path and must not
+        be broken by schema enhancements.  This test catches the case
+        where the _helm_lint helper or the chart path is misconfigured.
+        """
+        result = _helm_lint(platform_chart_path, [])
+        stderr = _stderr_text(result)
+        stdout = _stdout_text(result)
+
+        assert result.returncode == 0, (
+            "helm lint FAILED with no explicit values file (using chart "
+            "defaults). The chart's built-in values.yaml must satisfy "
+            "its own schema.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+
+        stderr_lower = stderr.lower()
+        assert SCHEMA_ERROR_INDICATOR not in stderr_lower, (
+            "helm lint exited 0 but stderr contains schema validation "
+            f"error text ('{SCHEMA_ERROR_INDICATOR}') when using chart "
+            "defaults (no --values flag).\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+        assert SCHEMA_VALIDATION_FAILED not in stderr_lower, (
+            "helm lint exited 0 but stderr contains schema validation "
+            f"failure text ('{SCHEMA_VALIDATION_FAILED}') when using "
+            "chart defaults.\n"
+            f"STDERR: {stderr[:2000]}"
+        )
+
+        assert len(stdout) > 0, (
+            "helm lint exited 0 but produced no stdout with chart "
+            "defaults. Expected at least a lint summary line."
         )
