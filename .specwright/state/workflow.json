@@ -2,15 +2,46 @@
   "version": "0.2.0",
   "currentWork": {
     "id": "helm-robustness",
-    "status": "building",
+    "status": "verifying",
     "intensity": "full",
     "workDir": ".specwright/work/helm-robustness/units/wu-26-kubeconform",
     "unitId": "wu-26-kubeconform",
     "startedAt": "2026-03-04T00:00:00Z",
     "currentTask": null,
-    "tasksCompleted": ["T1"],
+    "tasksCompleted": ["T1", "T2"],
     "tasksTotal": 2,
-    "gates": {}
+    "gates": {
+      "gate-build": {
+        "status": "PASS",
+        "findings": { "block": 0, "warn": 0, "info": 0 },
+        "timestamp": "2026-03-04T14:00:00Z",
+        "note": "31/31 static tests pass. Ruff lint + format clean. 4 functional deselected (no kubeconform binary)."
+      },
+      "gate-tests": {
+        "status": "PASS",
+        "findings": { "block": 0, "warn": 0, "info": 2 },
+        "timestamp": "2026-03-04T14:00:00Z",
+        "note": "All 12 prior WARNs resolved. Duplicate _fail removed, assertions strengthened, 4 tests added, docstrings complete."
+      },
+      "gate-security": {
+        "status": "PASS",
+        "findings": { "block": 0, "warn": 0, "info": 3 },
+        "timestamp": "2026-03-04T14:00:00Z",
+        "note": "CWE-494 resolved: SHA-256 checksums on both kubeconform and kubesec. All 6 actions/checkout SHA-pinned."
+      },
+      "gate-wiring": {
+        "status": "PASS",
+        "findings": { "block": 0, "warn": 0, "info": 2 },
+        "timestamp": "2026-03-04T14:00:00Z",
+        "note": "helm-validate in help (between template and test). All checkout refs pinned. No orphaned code."
+      },
+      "gate-spec": {
+        "status": "PASS",
+        "findings": { "block": 0, "warn": 0, "info": 1 },
+        "timestamp": "2026-03-04T14:00:00Z",
+        "note": "5/5 ACs PASS. 35 tests total (31 static + 4 functional). All boundary conditions covered."
+      }
+    }
   },
   "completedWork": [
     {

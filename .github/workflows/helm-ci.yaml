@@ -208,7 +208,6 @@ jobs:
       - name: Update chart dependencies
         run: |
           helm dependency update charts/floe-platform
-          helm dependency update charts/floe-jobs
 
       - name: Install kubeconform
         run: |
@@ -398,7 +397,7 @@ jobs:
   integration:
     name: Integration Test
     runs-on: ubuntu-latest
-    needs: [lint, template, schema, security]
+    needs: [lint, template, schema, security, kubeconform]
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code

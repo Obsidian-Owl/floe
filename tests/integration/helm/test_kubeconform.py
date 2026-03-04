@@ -934,7 +934,7 @@ class TestHelmCIKubeconform:
         all_runs = _get_all_step_runs(job_config)
 
         has_make_target = any(
-            "make helm-validate" in run or "make" in run and "helm-validate" in run
+            "make helm-validate" in run
             for run in all_runs
         )
 
