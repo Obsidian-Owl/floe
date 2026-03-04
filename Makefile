@@ -33,6 +33,7 @@ help: ## Show this help message
 	@echo "  make helm-deps       Update Helm chart dependencies"
 	@echo "  make helm-lint       Lint Helm charts"
 	@echo "  make helm-template   Render templates (ENV=dev|staging|prod)"
+	@echo "  make helm-validate   Validate manifests with kubeconform"
 	@echo "  make helm-test       Run Helm tests (RELEASE=..., NAMESPACE=...)"
 	@echo "  make helm-install-dev Install floe-platform for development"
 	@echo "  make helm-install-test Install floe with test values (CI/CD)"
@@ -167,6 +168,15 @@ helm-template: ## Render Helm templates (ENV=dev|staging|prod)
 			--output-dir .helm-output/default; \
 	fi
 	@echo "Templates rendered to .helm-output/"
+
+.PHONY: helm-validate
+helm-validate: ## Validate rendered manifests against K8s 1.28 schema
+	@echo "Validating Helm templates with kubeconform..."
+	@echo "  Validating with values.yaml (production defaults)..."
+	@helm template --skip-schema-validation floe-platform charts/floe-platform --values charts/floe-platform/values.yaml | kubeconform --strict --kubernetes-version 1.28.0 --ignore-missing-schemas -summary
+	@echo "  Validating with values-test.yaml (test overrides)..."
+	@helm template --skip-schema-validation floe-platform charts/floe-platform --values charts/floe-platform/values-test.yaml | kubeconform --strict --kubernetes-version 1.28.0 --ignore-missing-schemas -summary
+	@echo "Helm template validation passed!"
 
 .PHONY: helm-test
 helm-test: ## Run Helm tests (requires deployed release, RELEASE=name, NAMESPACE=ns)
