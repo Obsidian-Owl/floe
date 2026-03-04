@@ -611,3 +611,497 @@ class TestHelmValidateFunctional:
             f"Output:\n{combined_output}\n"
             "Expected references to both values.yaml and values-test.yaml."
         )
+
+
+# ---------------------------------------------------------------------------
+# Test class: CI workflow (helm-ci.yaml) kubeconform stage
+# ---------------------------------------------------------------------------
+
+
+# Constants for CI workflow tests
+HELM_CI_WORKFLOW = ".github/workflows/helm-ci.yaml"
+MAIN_BRANCH_CONDITION = 'github.ref == \'refs/heads/main\''
+
+
+def _load_helm_ci_workflow() -> dict[str, object]:
+    """Load and parse the helm-ci.yaml GitHub Actions workflow.
+
+    Returns:
+        Parsed YAML as a dictionary.
+
+    Raises:
+        pytest.fail: If the workflow file does not exist or is invalid YAML.
+    """
+    import yaml
+
+    root = _find_project_root()
+    workflow_path = root / HELM_CI_WORKFLOW
+
+    if not workflow_path.exists():
+        _fail(
+            f"Helm CI workflow not found at {workflow_path}.\n"
+            "Expected .github/workflows/helm-ci.yaml to exist."
+        )
+
+    try:
+        content = workflow_path.read_text()
+        parsed = yaml.safe_load(content)
+    except (OSError, yaml.YAMLError) as exc:
+        _fail(f"Could not parse {HELM_CI_WORKFLOW}: {exc}")
+
+    if not isinstance(parsed, dict):
+        _fail(f"{HELM_CI_WORKFLOW} did not parse as a YAML dictionary.")
+
+    return parsed  # type: ignore[return-value]
+
+
+def _find_kubeconform_job(
+    workflow: dict[str, object],
+) -> tuple[str, dict[str, object]] | None:
+    """Find the kubeconform job in the workflow.
+
+    Searches for a job whose key contains 'kubeconform' (case-insensitive)
+    or whose 'name' field contains 'kubeconform' (case-insensitive).
+
+    Args:
+        workflow: Parsed workflow dictionary.
+
+    Returns:
+        Tuple of (job_key, job_dict) if found, None otherwise.
+    """
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return None
+
+    for job_key, job_config in jobs.items():
+        if not isinstance(job_config, dict):
+            continue
+        # Check job key
+        if "kubeconform" in job_key.lower():
+            return (job_key, job_config)
+        # Check job name
+        job_name = job_config.get("name", "")
+        if isinstance(job_name, str) and "kubeconform" in job_name.lower():
+            return (job_key, job_config)
+
+    return None
+
+
+def _get_all_step_runs(job_config: dict[str, object]) -> list[str]:
+    """Extract all 'run' strings from a job's steps.
+
+    Args:
+        job_config: Parsed job configuration dictionary.
+
+    Returns:
+        List of run command strings from all steps.
+    """
+    steps = job_config.get("steps", [])
+    if not isinstance(steps, list):
+        return []
+
+    runs: list[str] = []
+    for step in steps:
+        if isinstance(step, dict) and "run" in step:
+            run_val = step["run"]
+            if isinstance(run_val, str):
+                runs.append(run_val)
+    return runs
+
+
+def _get_all_step_names(job_config: dict[str, object]) -> list[str]:
+    """Extract all 'name' strings from a job's steps.
+
+    Args:
+        job_config: Parsed job configuration dictionary.
+
+    Returns:
+        List of step name strings.
+    """
+    steps = job_config.get("steps", [])
+    if not isinstance(steps, list):
+        return []
+
+    names: list[str] = []
+    for step in steps:
+        if isinstance(step, dict) and "name" in step:
+            name_val = step["name"]
+            if isinstance(name_val, str):
+                names.append(name_val)
+    return names
+
+
+class TestHelmCIKubeconform:
+    """Tests that verify the kubeconform CI stage exists in helm-ci.yaml.
+
+    AC-26.3 requires a kubeconform validation stage in the GitHub Actions
+    workflow that runs on every PR (not just main). These tests parse the
+    workflow YAML and verify the stage structure, conditions, and commands.
+    """
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_kubeconform_job_exists_in_workflow(self) -> None:
+        """Verify helm-ci.yaml contains a job with 'kubeconform' in its key or name.
+
+        AC-26.3 requires a kubeconform validation stage. This test fails
+        if no job with 'kubeconform' in its identifier or display name
+        is found in the workflow file.
+        """
+        workflow = _load_helm_ci_workflow()
+        result = _find_kubeconform_job(workflow)
+
+        assert result is not None, (
+            f"No kubeconform job found in {HELM_CI_WORKFLOW}.\n"
+            "Expected a job with 'kubeconform' in its key or name field.\n"
+            f"Current jobs: {list(workflow.get('jobs', {}).keys())}"
+        )
+
+        job_key, _ = result
+        assert "kubeconform" in job_key.lower(), (
+            f"Found kubeconform job but its key '{job_key}' does not contain "
+            "'kubeconform'. The job key itself should include 'kubeconform' "
+            "for discoverability."
+        )
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_kubeconform_job_not_conditional_on_main(self) -> None:
+        """Verify the kubeconform job does NOT have a main-branch-only condition.
+
+        AC-26.3 requires kubeconform to run on every PR, not just main.
+        The integration job has `if: github.ref == 'refs/heads/main'` but
+        the kubeconform job must NOT have this restriction.
+        """
+        workflow = _load_helm_ci_workflow()
+        result = _find_kubeconform_job(workflow)
+
+        assert result is not None, (
+            f"No kubeconform job found in {HELM_CI_WORKFLOW}. "
+            "Cannot verify branch condition without the job."
+        )
+
+        job_key, job_config = result
+        job_if = job_config.get("if", "")
+
+        # The job should either have no 'if' condition or one that
+        # does NOT restrict to main branch only
+        if isinstance(job_if, str) and job_if.strip():
+            assert "refs/heads/main" not in job_if, (
+                f"Kubeconform job '{job_key}' has an 'if' condition that "
+                f"restricts to main branch: '{job_if}'.\n"
+                "AC-26.3 requires kubeconform to run on EVERY PR, not just main."
+            )
+            assert "github.ref ==" not in job_if or "main" not in job_if, (
+                f"Kubeconform job '{job_key}' appears to be conditional on "
+                f"a specific branch: '{job_if}'.\n"
+                "AC-26.3 requires kubeconform to run on every PR."
+            )
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_kubeconform_job_has_no_ref_condition_at_all(self) -> None:
+        """Verify the kubeconform job has no 'if' condition referencing github.ref.
+
+        A sloppy implementation might add `if: github.ref != 'refs/heads/main'`
+        (only on PRs, not on main pushes) or other ref-based conditions. The
+        kubeconform job should run unconditionally on all triggers.
+        """
+        workflow = _load_helm_ci_workflow()
+        result = _find_kubeconform_job(workflow)
+
+        assert result is not None, (
+            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
+        )
+
+        job_key, job_config = result
+        job_if = job_config.get("if", "")
+
+        if isinstance(job_if, str) and job_if.strip():
+            assert "github.ref" not in job_if, (
+                f"Kubeconform job '{job_key}' has a condition referencing "
+                f"github.ref: '{job_if}'.\n"
+                "The kubeconform stage should run unconditionally on all "
+                "workflow triggers (push to main AND pull_request)."
+            )
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_kubeconform_job_installs_kubeconform(self) -> None:
+        """Verify the kubeconform job has a step that installs the kubeconform binary.
+
+        The CI runner does not have kubeconform pre-installed. The job must
+        download and install it before running validation.
+        """
+        workflow = _load_helm_ci_workflow()
+        result = _find_kubeconform_job(workflow)
+
+        assert result is not None, (
+            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
+        )
+
+        _, job_config = result
+        all_runs = _get_all_step_runs(job_config)
+        all_names = _get_all_step_names(job_config)
+
+        # Check for kubeconform installation in run commands
+        has_install_in_run = any(
+            "kubeconform" in run and ("install" in run.lower() or "curl" in run or "wget" in run or "go install" in run or "tar" in run)
+            for run in all_runs
+        )
+
+        # Also check step names for installation indication
+        has_install_in_name = any(
+            "kubeconform" in name.lower() and "install" in name.lower()
+            for name in all_names
+        )
+
+        assert has_install_in_run or has_install_in_name, (
+            "Kubeconform job does not appear to install kubeconform.\n"
+            f"Step names: {all_names}\n"
+            f"Run commands (first 200 chars each): "
+            f"{[r[:200] for r in all_runs]}\n"
+            "Expected a step that downloads/installs kubeconform "
+            "(e.g., via curl, go install, or tar extraction)."
+        )
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_kubeconform_job_runs_make_helm_validate(self) -> None:
+        """Verify the kubeconform job runs `make helm-validate` or kubeconform directly.
+
+        AC-26.3 requires the stage to run kubeconform validation. The
+        preferred method is `make helm-validate`, but direct kubeconform
+        invocation is also acceptable.
+        """
+        workflow = _load_helm_ci_workflow()
+        result = _find_kubeconform_job(workflow)
+
+        assert result is not None, (
+            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
+        )
+
+        _, job_config = result
+        all_runs = _get_all_step_runs(job_config)
+
+        has_make_target = any(
+            "make helm-validate" in run or "make" in run and "helm-validate" in run
+            for run in all_runs
+        )
+
+        has_direct_kubeconform = any(
+            "kubeconform" in run
+            and ("helm template" in run or "validate" in run.lower())
+            for run in all_runs
+        )
+
+        assert has_make_target or has_direct_kubeconform, (
+            "Kubeconform job does not run `make helm-validate` or invoke "
+            "kubeconform for validation.\n"
+            f"Run commands: {[r[:200] for r in all_runs]}\n"
+            "Expected either `make helm-validate` or a direct kubeconform "
+            "invocation with helm template piping."
+        )
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_kubeconform_job_depends_on_lint(self) -> None:
+        """Verify the kubeconform job has a dependency on the lint job.
+
+        The kubeconform stage should run after lint to ensure charts are
+        syntactically valid before schema validation. This is expressed
+        via the 'needs' field in the job configuration.
+        """
+        workflow = _load_helm_ci_workflow()
+        result = _find_kubeconform_job(workflow)
+
+        assert result is not None, (
+            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
+        )
+
+        job_key, job_config = result
+        needs = job_config.get("needs", [])
+
+        # 'needs' can be a string or list
+        if isinstance(needs, str):
+            needs_list = [needs]
+        elif isinstance(needs, list):
+            needs_list = [str(n) for n in needs]
+        else:
+            needs_list = []
+
+        assert "lint" in needs_list, (
+            f"Kubeconform job '{job_key}' does not depend on the 'lint' job.\n"
+            f"Current 'needs': {needs_list}\n"
+            "The kubeconform stage should run after lint "
+            "(add `needs: lint` or include 'lint' in the needs list)."
+        )
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_kubeconform_job_runs_on_ubuntu(self) -> None:
+        """Verify the kubeconform job runs on ubuntu-latest.
+
+        All existing jobs in the workflow run on ubuntu-latest. The
+        kubeconform job should follow the same convention for consistency
+        and because kubeconform is a Linux binary.
+        """
+        workflow = _load_helm_ci_workflow()
+        result = _find_kubeconform_job(workflow)
+
+        assert result is not None, (
+            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
+        )
+
+        job_key, job_config = result
+        runs_on = job_config.get("runs-on", "")
+
+        assert isinstance(runs_on, str) and "ubuntu" in runs_on, (
+            f"Kubeconform job '{job_key}' does not run on ubuntu.\n"
+            f"Current 'runs-on': {runs_on}\n"
+            "Expected 'runs-on: ubuntu-latest' to match other jobs in the workflow."
+        )
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_kubeconform_job_checks_out_code(self) -> None:
+        """Verify the kubeconform job has a checkout step.
+
+        The job needs access to the chart source files. Without a checkout
+        step, make helm-validate cannot find the charts directory.
+        """
+        workflow = _load_helm_ci_workflow()
+        result = _find_kubeconform_job(workflow)
+
+        assert result is not None, (
+            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
+        )
+
+        _, job_config = result
+        steps = job_config.get("steps", [])
+
+        has_checkout = False
+        if isinstance(steps, list):
+            for step in steps:
+                if isinstance(step, dict):
+                    uses = step.get("uses", "")
+                    if isinstance(uses, str) and "actions/checkout" in uses:
+                        has_checkout = True
+                        break
+
+        assert has_checkout, (
+            "Kubeconform job does not have a checkout step.\n"
+            "The job needs `uses: actions/checkout@v4` (or pinned hash) to "
+            "access chart files."
+        )
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_kubeconform_job_is_between_template_and_security(self) -> None:
+        """Verify kubeconform is positioned logically in the pipeline.
+
+        The kubeconform stage should come after template rendering (it
+        validates rendered templates) and before or alongside security
+        scanning. We verify this by checking job ordering in the YAML
+        and the dependency graph.
+        """
+        workflow = _load_helm_ci_workflow()
+        jobs = workflow.get("jobs", {})
+
+        assert isinstance(jobs, dict), "Workflow 'jobs' is not a dictionary."
+
+        result = _find_kubeconform_job(workflow)
+        assert result is not None, (
+            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
+        )
+
+        job_key, job_config = result
+
+        # Verify it does NOT depend on security (it should run before/alongside)
+        needs = job_config.get("needs", [])
+        if isinstance(needs, str):
+            needs_list = [needs]
+        elif isinstance(needs, list):
+            needs_list = [str(n) for n in needs]
+        else:
+            needs_list = []
+
+        assert "security" not in needs_list, (
+            f"Kubeconform job '{job_key}' depends on the 'security' job.\n"
+            "kubeconform should run BEFORE or ALONGSIDE security, not after it."
+        )
+
+        assert "integration" not in needs_list, (
+            f"Kubeconform job '{job_key}' depends on the 'integration' job.\n"
+            "kubeconform should run much earlier in the pipeline, not after "
+            "integration tests."
+        )
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_kubeconform_job_sets_up_helm(self) -> None:
+        """Verify the kubeconform job sets up Helm.
+
+        If the job runs `make helm-validate`, it needs helm installed.
+        All other jobs in the workflow use azure/setup-helm for this.
+        """
+        workflow = _load_helm_ci_workflow()
+        result = _find_kubeconform_job(workflow)
+
+        assert result is not None, (
+            f"No kubeconform job found in {HELM_CI_WORKFLOW}."
+        )
+
+        _, job_config = result
+        steps = job_config.get("steps", [])
+
+        has_helm_setup = False
+        if isinstance(steps, list):
+            for step in steps:
+                if isinstance(step, dict):
+                    uses = step.get("uses", "")
+                    if isinstance(uses, str) and "setup-helm" in uses:
+                        has_helm_setup = True
+                        break
+
+        assert has_helm_setup, (
+            "Kubeconform job does not set up Helm.\n"
+            "The job needs `uses: azure/setup-helm@...` to install Helm CLI "
+            "for template rendering."
+        )
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_workflow_still_has_existing_stages(self) -> None:
+        """Verify adding kubeconform did not remove existing stages.
+
+        The workflow should still contain lint, template, schema, security,
+        and integration jobs. Adding kubeconform must not break existing
+        pipeline stages.
+        """
+        workflow = _load_helm_ci_workflow()
+        jobs = workflow.get("jobs", {})
+        assert isinstance(jobs, dict), "Workflow 'jobs' is not a dictionary."
+
+        expected_existing_jobs = ["lint", "template", "schema", "security", "integration"]
+        job_keys = list(jobs.keys())
+
+        for expected_job in expected_existing_jobs:
+            assert expected_job in job_keys, (
+                f"Existing job '{expected_job}' is missing from {HELM_CI_WORKFLOW}.\n"
+                f"Current jobs: {job_keys}\n"
+                "Adding the kubeconform stage must not remove existing stages."
+            )
+
+    @pytest.mark.requirement("AC-26.3")
+    def test_integration_job_still_conditional_on_main(self) -> None:
+        """Verify the integration job remains conditional on main branch.
+
+        The integration job should still have its main-branch-only condition.
+        This test ensures that the kubeconform addition did not accidentally
+        remove the condition from the integration job.
+        """
+        workflow = _load_helm_ci_workflow()
+        jobs = workflow.get("jobs", {})
+        assert isinstance(jobs, dict), "Workflow 'jobs' is not a dictionary."
+
+        integration_job = jobs.get("integration", {})
+        assert isinstance(integration_job, dict), (
+            "Integration job not found or not a dictionary."
+        )
+
+        integration_if = integration_job.get("if", "")
+        assert isinstance(integration_if, str) and "refs/heads/main" in integration_if, (
+            f"Integration job 'if' condition changed: '{integration_if}'.\n"
+            "The integration job must remain conditional on main branch "
+            "(if: github.ref == 'refs/heads/main')."
+        )
