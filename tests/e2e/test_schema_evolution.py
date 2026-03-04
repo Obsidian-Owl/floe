@@ -113,7 +113,6 @@ class TestSchemaEvolution(IntegrationTestBase):
                 str(chart_path),
                 "-f",
                 str(chart_path / "values-test.yaml"),
-                "--skip-schema-validation",
             ],
             cwd=project_root,
             capture_output=True,

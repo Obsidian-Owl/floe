@@ -91,8 +91,8 @@ _TIMEOUT_RE = re.compile(r"^\d+[smh]?$")
 @click.option(
     "--skip-schema-validation",
     is_flag=True,
-    default=True,
-    help="Skip Helm schema validation (default: True due to Dagster subchart issues).",
+    default=False,
+    help="Skip Helm schema validation.",
 )
 def deploy_command(
     env: str,
