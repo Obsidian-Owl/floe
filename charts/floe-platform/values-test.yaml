@@ -75,7 +75,6 @@ dagster:
     service:
       type: NodePort
       port: 3000
-      nodePort: 30300
     readinessProbe:
       httpGet:
         path: /server_info
@@ -95,7 +94,6 @@ dagster:
         cpu: "1"
         memory: 1536Mi
   dagsterDaemon:
-    replicaCount: 1
     image:
       repository: floe-dagster-demo
       tag: latest
