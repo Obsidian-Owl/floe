@@ -933,10 +933,7 @@ class TestHelmCIKubeconform:
         _, job_config = result
         all_runs = _get_all_step_runs(job_config)
 
-        has_make_target = any(
-            "make helm-validate" in run
-            for run in all_runs
-        )
+        has_make_target = any("make helm-validate" in run for run in all_runs)
 
         has_direct_kubeconform = any(
             "kubeconform" in run and ("helm template" in run or "validate" in run.lower())
