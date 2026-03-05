@@ -160,6 +160,7 @@ polaris:
     port: 8181
     nodePort: 30181
     managementPort: 8182
+    managementNodePort: 30182
   # Adjusted probes for test environment (slower startup)
   livenessProbe:
     httpGet:
@@ -227,6 +228,21 @@ minio:
 # =============================================================================
 otel:
   enabled: true
+  service:
+    type: NodePort
+  ports:
+    otlp:
+      enabled: true
+      containerPort: 4317
+      servicePort: 4317
+      # OTel gRPC NodePort omitted — Jaeger all-in-one already serves
+      # OTLP gRPC on NodePort 30417 (localhost:4317). Tests send traces
+      # to Jaeger directly; OTel gRPC falls back to port-forward.
+    otlp-http:
+      enabled: true
+      containerPort: 4318
+      servicePort: 4318
+      nodePort: 30418
   resources:
     requests:
       cpu: 50m
@@ -241,6 +257,10 @@ otel:
 marquez:
   enabled: true
   replicaCount: 1
+  service:
+    type: NodePort
+    nodePort: 30050
+    adminNodePort: 30051
   resources:
     requests:
       cpu: 100m
