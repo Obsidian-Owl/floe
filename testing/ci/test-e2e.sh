@@ -299,6 +299,9 @@ CATALOG_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
     "http://localhost:8181/api/management/v1/catalogs/${POLARIS_CATALOG}" 2>/dev/null) || true
 
 if [[ "${CATALOG_CODE}" == "404" ]]; then
+    echo "WARNING: Polaris catalog fallback triggered — catalog '${POLARIS_CATALOG}' not found" >&2
+    echo "WARNING: Bootstrap hook may have failed. Check bootstrap job logs:" >&2
+    echo "WARNING:   kubectl logs -n ${TEST_NAMESPACE} -l job-name=floe-platform-bootstrap --tail=50" >&2
     echo "Polaris catalog '${POLARIS_CATALOG}' not found — creating..." >&2
     # Build JSON payload with python3 to safely escape special characters
     CATALOG_JSON=$(python3 -c "
