@@ -24,6 +24,9 @@ spec:
       port: {{ .Values.polaris.service.managementPort | default 8182 }}
       targetPort: management
       protocol: TCP
+      {{- if and (eq .Values.polaris.service.type "NodePort") .Values.polaris.service.managementNodePort }}
+      nodePort: {{ .Values.polaris.service.managementNodePort }}
+      {{- end }}
   selector:
     {{- include "floe-platform.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: polaris
