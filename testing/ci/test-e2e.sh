@@ -91,6 +91,25 @@ port_already_available() {
     (echo >/dev/tcp/localhost/"$1") 2>/dev/null
 }
 
+# Wait for a pod to be Running with exponential backoff. Exits non-zero on timeout.
+wait_for_pod() {
+    local labels=$1 description=$2 timeout=${3:-120}
+    local delay=2 elapsed=0
+    echo "  Waiting for ${description}..."
+    while (( elapsed < timeout )); do
+        if kubectl get pods -n "${TEST_NAMESPACE}" -l "${labels}" --no-headers 2>/dev/null | grep -q "Running"; then
+            echo "  ${description}: Ready (${elapsed}s)"
+            return 0
+        fi
+        sleep "${delay}"
+        elapsed=$(( elapsed + delay ))
+        # Exponential backoff capped at 30s
+        delay=$(( delay * 2 > 30 ? 30 : delay * 2 ))
+    done
+    echo "ERROR: ${description} not ready after ${timeout}s" >&2
+    return 1
+}
+
 # Cleanup function for port-forwards
 cleanup_port_forwards() {
     [[ -n "${DAGSTER_PF_PID:-}" ]] && kill "${DAGSTER_PF_PID}" 2>/dev/null || true
@@ -116,17 +135,21 @@ trap 'cleanup_all' ERR
 # Verify all required Helm chart pods are running
 echo "Verifying service readiness..."
 
-# Use Helm chart labels for pod verification
-HELM_SERVICES=(
-    "app.kubernetes.io/name=floe-platform,app.kubernetes.io/component=postgresql"
-    "app.kubernetes.io/name=minio"
-    "app.kubernetes.io/component=polaris"
-    "app.kubernetes.io/name=dagster,component=dagster-webserver"
-    "app.kubernetes.io/name=otel"
+# Critical services — MUST be running or tests will fail
+wait_for_pod "app.kubernetes.io/name=floe-platform,app.kubernetes.io/component=postgresql" "PostgreSQL" 120
+wait_for_pod "app.kubernetes.io/component=polaris" "Polaris" 120
+wait_for_pod "app.kubernetes.io/name=dagster,component=dagster-webserver" "Dagster Webserver" 180
+
+# Non-critical services — warn but continue
+NON_CRITICAL_SERVICES=(
+    "app.kubernetes.io/name=minio:MinIO"
+    "app.kubernetes.io/name=otel:OTel Collector"
 )
-for labels in "${HELM_SERVICES[@]}"; do
+for entry in "${NON_CRITICAL_SERVICES[@]}"; do
+    labels="${entry%%:*}"
+    desc="${entry#*:}"
     if ! kubectl get pods -n "${TEST_NAMESPACE}" -l "${labels}" --no-headers 2>/dev/null | grep -q "Running"; then
-        echo "WARNING: Pods with labels '${labels}' may not be running" >&2
+        echo "WARNING: ${desc} may not be running (labels: ${labels})" >&2
     fi
 done
 
