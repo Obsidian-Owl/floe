@@ -4,6 +4,9 @@ Tests that validate conditional JSON Schema constraints in values.schema.json
 are correctly enforced by Helm during template rendering. These constraints
 ensure that operators cannot deploy invalid configurations silently.
 
+Note: test_values_schema.py in this directory tests the same schema via Python
+jsonschema (static analysis layer). This file tests via Helm CLI (runtime layer).
+
 Requirements tested:
     AC-28.1: Bootstrap credentials required when enabled
     AC-28.2: S3 endpoint required when S3 enabled
@@ -43,23 +46,6 @@ VALID_ENVIRONMENTS = ("dev", "qa", "staging", "prod", "test")
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _find_project_root() -> Path:
-    """Walk up from this file to find the project root (directory with charts/).
-
-    Returns:
-        Path to the project root.
-
-    Raises:
-        pytest.fail: If charts/ directory cannot be found.
-    """
-    current = Path(__file__).resolve()
-    for parent in [current] + list(current.parents):
-        if (parent / "charts").is_dir():
-            return parent
-    pytest.fail("Could not find project root containing charts/ directory.")
-    raise AssertionError("Unreachable")
 
 
 def _helm_template(
@@ -169,6 +155,15 @@ class TestBootstrapCredentialsRequired:
             f"STDERR: {stderr[:1000]}"
         )
 
+        # Verify the error references the clientSecret field specifically,
+        # not some other unrelated schema constraint.
+        assert BOOTSTRAP_CLIENT_SECRET_FIELD in stderr_lower or "minlength" in stderr_lower, (
+            "Schema validation failed, but the error does not reference "
+            f"'{BOOTSTRAP_CLIENT_SECRET_FIELD}'. The failure may be caused by a "
+            "different schema constraint, not the bootstrap credentials requirement.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
     @pytest.mark.requirement("AC-28.1")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
     def test_bootstrap_enabled_missing_client_secret_rejected(
@@ -204,6 +199,14 @@ class TestBootstrapCredentialsRequired:
             f"helm template failed, but not due to schema validation.\nSTDERR: {stderr[:1000]}"
         )
 
+        # Verify the error references the clientSecret field specifically.
+        assert BOOTSTRAP_CLIENT_SECRET_FIELD in stderr_lower or "minlength" in stderr_lower, (
+            "Schema validation failed, but the error does not reference "
+            f"'{BOOTSTRAP_CLIENT_SECRET_FIELD}'. The failure may be caused by a "
+            "different schema constraint, not the bootstrap credentials requirement.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
     @pytest.mark.requirement("AC-28.1")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
     def test_bootstrap_enabled_with_valid_client_secret_succeeds(
@@ -220,7 +223,7 @@ class TestBootstrapCredentialsRequired:
             platform_chart_path,
             set_values=[
                 "polaris.bootstrap.enabled=true",
-                "polaris.auth.bootstrapCredentials.clientSecret=my-secret-value",
+                "polaris.auth.bootstrapCredentials.clientSecret=SCHEMA-TEST-SENTINEL",
             ],
         )
 
@@ -232,11 +235,10 @@ class TestBootstrapCredentialsRequired:
             f"STDERR: {stderr[:1000]}"
         )
 
-        # Verify actual output was produced (not an empty render)
+        # Verify actual K8s manifest output was produced
         stdout = _stdout_text(result)
-        assert len(stdout) > 0, (
-            "helm template succeeded but produced no output. "
-            "Expected rendered Kubernetes manifests."
+        assert "apiVersion:" in stdout or "kind:" in stdout, (
+            "helm template produced output but it does not contain K8s manifests."
         )
 
     @pytest.mark.requirement("AC-28.1")
@@ -265,6 +267,38 @@ class TestBootstrapCredentialsRequired:
             "helm template FAILED when bootstrap is disabled with empty "
             "clientSecret. The constraint should only apply when bootstrap "
             "is enabled.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
+    @pytest.mark.requirement("AC-28.1")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_bootstrap_enabled_whitespace_client_secret_accepted(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Whitespace-only clientSecret passes minLength: 1.
+
+        The schema validates presence, not strength.
+
+        The schema uses minLength: 1 which counts whitespace characters.
+        This is intentional: the schema validates that SOME value was
+        provided, not that it is cryptographically strong. Strength
+        validation belongs in the application layer, not the schema.
+        """
+        result = _helm_template(
+            platform_chart_path,
+            set_values=[
+                "polaris.bootstrap.enabled=true",
+                "polaris.auth.bootstrapCredentials.clientSecret= ",
+            ],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode == 0, (
+            "helm template FAILED with a whitespace-only clientSecret. "
+            "The schema uses minLength: 1 which should accept whitespace. "
+            "Strength validation is the application's responsibility.\n"
             f"STDERR: {stderr[:1000]}"
         )
 
@@ -320,6 +354,17 @@ class TestS3EndpointRequired:
             f"STDERR: {stderr[:1000]}"
         )
 
+        # Verify the error references the S3 endpoint or MinIO constraint.
+        s3_field_referenced = (
+            S3_ENDPOINT_FIELD in stderr_lower or "minio" in stderr_lower or "anyof" in stderr_lower
+        )
+        assert s3_field_referenced, (
+            "Schema validation failed, but the error does not reference "
+            f"'{S3_ENDPOINT_FIELD}' or 'minio'. The failure may be caused by a "
+            "different schema constraint, not the S3 endpoint requirement.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
     @pytest.mark.requirement("AC-28.2")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
     def test_s3_enabled_no_minio_missing_endpoint_rejected(
@@ -355,6 +400,17 @@ class TestS3EndpointRequired:
             f"helm template failed, but not due to schema validation.\nSTDERR: {stderr[:1000]}"
         )
 
+        # Verify the error references the S3 endpoint or MinIO constraint.
+        s3_field_referenced = (
+            S3_ENDPOINT_FIELD in stderr_lower or "minio" in stderr_lower or "anyof" in stderr_lower
+        )
+        assert s3_field_referenced, (
+            "Schema validation failed, but the error does not reference "
+            f"'{S3_ENDPOINT_FIELD}' or 'minio'. The failure may be caused by a "
+            "different schema constraint, not the S3 endpoint requirement.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
     @pytest.mark.requirement("AC-28.2")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
     def test_s3_enabled_with_minio_enabled_succeeds(
@@ -386,7 +442,9 @@ class TestS3EndpointRequired:
         )
 
         stdout = _stdout_text(result)
-        assert len(stdout) > 0, "helm template succeeded but produced no output."
+        assert "apiVersion:" in stdout or "kind:" in stdout, (
+            "helm template produced output but it does not contain K8s manifests."
+        )
 
     @pytest.mark.requirement("AC-28.2")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
@@ -417,7 +475,43 @@ class TestS3EndpointRequired:
         )
 
         stdout = _stdout_text(result)
-        assert len(stdout) > 0, "helm template succeeded but produced no output."
+        assert "apiVersion:" in stdout or "kind:" in stdout, (
+            "helm template produced output but it does not contain K8s manifests."
+        )
+
+    @pytest.mark.requirement("AC-28.2")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_s3_enabled_with_both_minio_and_endpoint_succeeds(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST succeed when both MinIO and explicit endpoint are set.
+
+        The schema uses anyOf (not oneOf), so providing both an enabled MinIO
+        AND an explicit S3 endpoint should be accepted. This test guards
+        against accidentally using oneOf which would reject this valid case.
+        """
+        result = _helm_template(
+            platform_chart_path,
+            set_values=[
+                "polaris.storage.s3.enabled=true",
+                "minio.enabled=true",
+                "polaris.storage.s3.endpoint=https://s3.example.com",
+            ],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode == 0, (
+            "helm template FAILED when both MinIO and S3 endpoint are set. "
+            "The schema should use anyOf, not oneOf.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
+        stdout = _stdout_text(result)
+        assert "apiVersion:" in stdout or "kind:" in stdout, (
+            "helm template produced output but it does not contain K8s manifests."
+        )
 
     @pytest.mark.requirement("AC-28.2")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
@@ -594,155 +688,35 @@ class TestEnvironmentEnumEnforced:
 
     @pytest.mark.requirement("AC-28.5")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
-    def test_valid_environment_dev_accepted(
+    @pytest.mark.parametrize("env", VALID_ENVIRONMENTS)
+    def test_valid_environment_accepted(
         self,
         platform_chart_path: Path,
+        env: str,
     ) -> None:
-        """Helm template MUST succeed with global.environment=dev.
+        """Helm template MUST succeed with each valid environment enum value.
 
-        'dev' is the default development environment and the schema default
-        value. This is the baseline positive control confirming the enum
-        includes 'dev'.
+        The schema defines an enum of exactly 5 valid values. This parametrized
+        test confirms every value in VALID_ENVIRONMENTS is accepted, catching
+        partial enum definitions where a value is accidentally omitted.
         """
         result = _helm_template(
             platform_chart_path,
-            set_values=["global.environment=dev"],
+            set_values=[f"global.environment={env}"],
         )
 
         stderr = _stderr_text(result)
 
         assert result.returncode == 0, (
-            "helm template FAILED with global.environment=dev. "
-            "'dev' is a valid enum value and MUST be accepted.\n"
+            f"helm template FAILED with global.environment={env}. "
+            f"'{env}' is a valid enum value and MUST be accepted.\n"
             f"STDERR: {stderr[:1000]}"
         )
 
         stdout = _stdout_text(result)
-        assert len(stdout) > 0, (
-            "helm template succeeded but produced no output. "
-            "Expected rendered Kubernetes manifests."
-        )
-
-    @pytest.mark.requirement("AC-28.5")
-    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
-    def test_valid_environment_prod_accepted(
-        self,
-        platform_chart_path: Path,
-    ) -> None:
-        """Helm template MUST succeed with global.environment=prod.
-
-        'prod' is the production environment value. This positive control
-        confirms operators can deploy to production with the correct
-        enum spelling (not 'production').
-        """
-        result = _helm_template(
-            platform_chart_path,
-            set_values=["global.environment=prod"],
-        )
-
-        stderr = _stderr_text(result)
-
-        assert result.returncode == 0, (
-            "helm template FAILED with global.environment=prod. "
-            "'prod' is a valid enum value and MUST be accepted.\n"
-            f"STDERR: {stderr[:1000]}"
-        )
-
-        stdout = _stdout_text(result)
-        assert len(stdout) > 0, (
-            "helm template succeeded but produced no output. "
-            "Expected rendered Kubernetes manifests."
-        )
-
-    @pytest.mark.requirement("AC-28.5")
-    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
-    def test_valid_environment_test_accepted(
-        self,
-        platform_chart_path: Path,
-    ) -> None:
-        """Helm template MUST succeed with global.environment=test.
-
-        'test' is the CI/test environment value. This positive control
-        ensures the enum includes the value used in automated testing
-        pipelines.
-        """
-        result = _helm_template(
-            platform_chart_path,
-            set_values=["global.environment=test"],
-        )
-
-        stderr = _stderr_text(result)
-
-        assert result.returncode == 0, (
-            "helm template FAILED with global.environment=test. "
-            "'test' is a valid enum value and MUST be accepted.\n"
-            f"STDERR: {stderr[:1000]}"
-        )
-
-        stdout = _stdout_text(result)
-        assert len(stdout) > 0, (
-            "helm template succeeded but produced no output. "
-            "Expected rendered Kubernetes manifests."
-        )
-
-    @pytest.mark.requirement("AC-28.5")
-    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
-    def test_valid_environment_qa_accepted(
-        self,
-        platform_chart_path: Path,
-    ) -> None:
-        """Helm template MUST succeed with global.environment=qa.
-
-        'qa' is the quality assurance environment. Without this test,
-        a partial enum missing 'qa' would go undetected.
-        """
-        result = _helm_template(
-            platform_chart_path,
-            set_values=["global.environment=qa"],
-        )
-
-        stderr = _stderr_text(result)
-
-        assert result.returncode == 0, (
-            "helm template FAILED with global.environment=qa. "
-            "'qa' is a valid enum value and MUST be accepted.\n"
-            f"STDERR: {stderr[:1000]}"
-        )
-
-        stdout = _stdout_text(result)
-        assert len(stdout) > 0, (
-            "helm template succeeded but produced no output. "
-            "Expected rendered Kubernetes manifests."
-        )
-
-    @pytest.mark.requirement("AC-28.5")
-    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
-    def test_valid_environment_staging_accepted(
-        self,
-        platform_chart_path: Path,
-    ) -> None:
-        """Helm template MUST succeed with global.environment=staging.
-
-        'staging' is the pre-production environment. Without this test,
-        a partial enum missing 'staging' would go undetected.
-        """
-        result = _helm_template(
-            platform_chart_path,
-            set_values=["global.environment=staging"],
-        )
-
-        stderr = _stderr_text(result)
-
-        assert result.returncode == 0, (
-            "helm template FAILED with global.environment=staging. "
-            "'staging' is a valid enum value and MUST be accepted.\n"
-            f"STDERR: {stderr[:1000]}"
-        )
-
-        stdout = _stdout_text(result)
-        assert len(stdout) > 0, (
-            "helm template succeeded but produced no output. "
-            "Expected rendered Kubernetes manifests."
+        assert "apiVersion:" in stdout or "kind:" in stdout, (
+            f"helm template succeeded with global.environment={env} but "
+            "output does not contain K8s manifests."
         )
 
     # -- Negative controls: invalid values MUST be rejected -----------------
@@ -827,6 +801,71 @@ class TestEnvironmentEnumEnforced:
             "stderr does not indicate a schema validation error.\n"
             f"Expected one of: '{SCHEMA_ERROR_INDICATOR}', '{SCHEMA_VALIDATION_FAILED}'\n"
             f"STDERR: {stderr[:1000]}"
+        )
+
+    @pytest.mark.requirement("AC-28.5")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_uppercase_environment_rejected(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST fail with global.environment=DEV (case-sensitive enum).
+
+        JSON Schema enum matching is case-sensitive. 'DEV' is not the same
+        as 'dev'. This boundary test confirms that the schema does not
+        silently accept case variations, which would defeat the purpose
+        of the enum constraint.
+        """
+        result = _helm_template(
+            platform_chart_path,
+            set_values=["global.environment=DEV"],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode != 0, (
+            "helm template should have FAILED with global.environment=DEV "
+            "(uppercase), but it succeeded. The enum is case-sensitive and "
+            "MUST only accept lowercase values.\n"
+            f"STDOUT (first 500 chars): {_stdout_text(result)[:500]}"
+        )
+
+        stderr_lower = stderr.lower()
+        assert SCHEMA_ERROR_INDICATOR in stderr_lower or SCHEMA_VALIDATION_FAILED in stderr_lower, (
+            "helm template failed with global.environment=DEV, but "
+            "stderr does not indicate a schema validation error.\n"
+            f"Expected one of: '{SCHEMA_ERROR_INDICATOR}', '{SCHEMA_VALIDATION_FAILED}'\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
+    @pytest.mark.requirement("AC-28.5")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_empty_environment_rejected(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST fail with global.environment= (empty string).
+
+        An empty string is not in the enum and must be rejected. This
+        boundary test guards against a schema that accidentally includes
+        an empty string in the enum list.
+        """
+        result = _helm_template(
+            platform_chart_path,
+            set_values=["global.environment="],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode != 0, (
+            "helm template should have FAILED with empty global.environment, "
+            "but it succeeded. The enum must reject empty strings.\n"
+            f"STDOUT (first 500 chars): {_stdout_text(result)[:500]}"
+        )
+
+        stderr_lower = stderr.lower()
+        assert SCHEMA_ERROR_INDICATOR in stderr_lower or SCHEMA_VALIDATION_FAILED in stderr_lower, (
+            f"helm template failed, but not due to schema validation.\nSTDERR: {stderr[:1000]}"
         )
 
 
@@ -929,9 +968,9 @@ class TestValuesFilesPassSchema:
         )
 
         # Confirm the chart was actually processed (not a silent no-op)
-        assert len(stdout) > 0, (
-            "helm lint exited 0 but produced no stdout output. "
-            "Expected at least a lint summary line."
+        assert "linted" in stdout.lower(), (
+            "helm lint exited 0 but stdout does not contain 'linted'. "
+            "Expected a lint summary line confirming the chart was processed."
         )
 
     @pytest.mark.requirement("AC-28.3")
@@ -976,9 +1015,9 @@ class TestValuesFilesPassSchema:
             f"STDERR: {stderr[:2000]}"
         )
 
-        assert len(stdout) > 0, (
-            "helm lint exited 0 but produced no stdout output for "
-            "values-test.yaml. Expected at least a lint summary line."
+        assert "linted" in stdout.lower(), (
+            "helm lint exited 0 but stdout does not contain 'linted' for "
+            "values-test.yaml. Expected a lint summary line."
         )
 
     @pytest.mark.requirement("AC-28.3")
@@ -1029,9 +1068,9 @@ class TestValuesFilesPassSchema:
             f"STDERR: {stderr[:2000]}"
         )
 
-        assert len(stdout) > 0, (
-            "helm lint exited 0 but produced no stdout output for the "
-            "overlaid values. Expected at least a lint summary line."
+        assert "linted" in stdout.lower(), (
+            "helm lint exited 0 but stdout does not contain 'linted' for "
+            "overlaid values. Expected a lint summary line."
         )
 
     @pytest.mark.requirement("AC-28.3")
@@ -1079,8 +1118,9 @@ class TestValuesFilesPassSchema:
             f"STDERR: {stderr[:2000]}"
         )
 
-        assert len(stdout) > 0, (
-            "helm lint exited 0 but produced no stdout for reverse overlay order."
+        assert "linted" in stdout.lower(), (
+            "helm lint exited 0 but stdout does not contain 'linted' for "
+            "reverse overlay order. Expected a lint summary line."
         )
 
     @pytest.mark.requirement("AC-28.3")
@@ -1121,7 +1161,7 @@ class TestValuesFilesPassSchema:
             f"STDERR: {stderr[:2000]}"
         )
 
-        assert len(stdout) > 0, (
-            "helm lint exited 0 but produced no stdout with chart "
-            "defaults. Expected at least a lint summary line."
+        assert "linted" in stdout.lower(), (
+            "helm lint exited 0 but stdout does not contain 'linted' with "
+            "chart defaults. Expected a lint summary line."
         )
