@@ -91,21 +91,15 @@ port_already_available() {
     (echo >/dev/tcp/localhost/"$1") 2>/dev/null
 }
 
-# Wait for a pod to be Running with exponential backoff. Exits non-zero on timeout.
+# Wait for a pod to be Ready with kubectl wait. Exits non-zero on timeout.
 wait_for_pod() {
     local labels=$1 description=$2 timeout=${3:-120}
-    local delay=2 elapsed=0
     echo "  Waiting for ${description}..."
-    while (( elapsed < timeout )); do
-        if kubectl get pods -n "${TEST_NAMESPACE}" -l "${labels}" --no-headers 2>/dev/null | grep -q "Running"; then
-            echo "  ${description}: Ready (${elapsed}s)"
-            return 0
-        fi
-        sleep "${delay}"
-        elapsed=$(( elapsed + delay ))
-        # Exponential backoff capped at 30s
-        delay=$(( delay * 2 > 30 ? 30 : delay * 2 ))
-    done
+    if kubectl wait pods -n "${TEST_NAMESPACE}" -l "${labels}" \
+        --for=condition=Ready --timeout="${timeout}s" 2>/dev/null; then
+        echo "  ${description}: Ready"
+        return 0
+    fi
     echo "ERROR: ${description} not ready after ${timeout}s" >&2
     return 1
 }

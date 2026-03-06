@@ -995,7 +995,7 @@ def _render_template_with_sets(
     Returns:
         List of parsed Kubernetes resource documents.
     """
-    cmd = ["helm", "template", "test-release", str(chart_path)]
+    cmd = ["helm", "template", "floe-platform", str(chart_path)]
     for arg in set_args:
         cmd.extend(["--set", arg])
     result = subprocess.run(cmd, capture_output=True, timeout=60, check=True)
@@ -1018,7 +1018,7 @@ def _render_template_with_values_file(
     """
     values_path = chart_path / values_file
     result = subprocess.run(
-        ["helm", "template", "test-release", str(chart_path), "-f", str(values_path)],
+        ["helm", "template", "floe-platform", str(chart_path), "-f", str(values_path)],
         capture_output=True,
         timeout=60,
         check=True,
@@ -1265,21 +1265,10 @@ class TestNodePortConditionals:
             f"Marquez admin nodePort: expected 30051, got {marquez_admin.get('nodePort')}"
         )
 
-        # OTel HTTP 30418 — rendered by subchart, verify via raw output string search
-        result = subprocess.run(
-            [
-                "helm",
-                "template",
-                "test-release",
-                str(platform_chart_path),
-                "-f",
-                str(platform_chart_path / "values-test.yaml"),
-            ],
-            capture_output=True,
-            timeout=60,
-            check=True,
-        )
-        raw_output = result.stdout.decode()
-        assert "30418" in raw_output, (
-            "OTel HTTP nodePort 30418 not found in rendered template output"
-        )
+        # OTel HTTP 30418 — rendered by subchart, search parsed documents
+        assert any(
+            port.get("nodePort") == 30418
+            for doc in documents
+            if doc.get("kind") == "Service"
+            for port in doc.get("spec", {}).get("ports", [])
+        ), "OTel HTTP nodePort 30418 not found in any rendered Service"
