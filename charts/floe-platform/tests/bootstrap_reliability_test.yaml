@@ -1,0 +1,114 @@
+# WU-31: Bootstrap reliability tests
+# Verifies TTL, preflight checks, structured logging, and exponential backoff.
+suite: bootstrap reliability
+templates:
+  - templates/job-polaris-bootstrap.yaml
+  - templates/secret-postgresql.yaml
+tests:
+  # --- T1: TTL cleanup ---
+  - it: should have ttlSecondsAfterFinished set to 3600
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 3600
+
+  # --- T2: Preflight env var checks ---
+  - it: bootstrap command should check POLARIS_CLIENT_ID before API calls
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "(?s)POLARIS_CLIENT_ID.*exit 42"
+
+  - it: bootstrap command should check POLARIS_CLIENT_SECRET before API calls
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "(?s)POLARIS_CLIENT_SECRET.*exit 42"
+
+  - it: preflight checks should precede OAuth token acquisition
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "(?s)exit 42.*Acquiring OAuth"
+
+  # --- T3: Structured logging ---
+  - it: bootstrap command should define log function
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "log\\(\\)"
+
+  - it: bootstrap command should use log function for status messages
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'log "Step'
+
+  # --- T4: Exponential backoff in init containers ---
+  - it: wait-for-minio should use exponential backoff
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "(?s)DELAY=2.*DELAY=.*\\*.*2"
+
+  - it: wait-for-polaris should use exponential backoff
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: false
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "(?s)DELAY=2.*DELAY=.*\\*.*2"
+
+  - it: wait-for-minio backoff should be capped at 30s
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "DELAY.*-gt 30"
+
+  - it: wait-for-polaris backoff should be capped at 30s
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: false
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "DELAY.*-gt 30"
