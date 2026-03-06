@@ -1,0 +1,45 @@
+# WU-31 T5: test-connection.yaml tests
+# Verifies Helm test pod configuration: postgres version, health endpoints, fallback.
+suite: test connection
+templates:
+  - templates/tests/test-connection.yaml
+tests:
+  # --- Postgres version ---
+  - it: PostgreSQL test container should use postgres:16-alpine
+    set:
+      postgresql.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.containers[?(@.name=="test-postgresql")].image
+          pattern: "postgres:16-alpine"
+
+  # --- Health endpoint checks ---
+  - it: Polaris test should check /q/health/ready endpoint
+    set:
+      polaris.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.containers[?(@.name=="test-polaris")].command[2]
+          pattern: /q/health/ready
+
+  - it: Dagster test should check /server_info endpoint
+    set:
+      dagster.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.containers[?(@.name=="test-dagster")].command[2]
+          pattern: /server_info
+
+  # --- Fallback container when all services disabled ---
+  - it: should have fallback container when all services disabled
+    set:
+      dagster.enabled: false
+      polaris.enabled: false
+      postgresql.enabled: false
+      minio.enabled: false
+    asserts:
+      - contains:
+          path: spec.containers
+          content:
+            name: no-op
+          any: true

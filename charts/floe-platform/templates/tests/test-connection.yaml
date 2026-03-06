@@ -87,7 +87,7 @@ spec:
     # Test PostgreSQL
     {{- if .Values.postgresql.enabled }}
     - name: test-postgresql
-      image: postgres:15-alpine
+      image: postgres:16-alpine
       command:
         - /bin/sh
         - -c
@@ -141,4 +141,18 @@ spec:
         requests:
           cpu: 50m
           memory: 32Mi
+    {{- end }}
+
+    {{- if not (or .Values.dagster.enabled .Values.polaris.enabled .Values.postgresql.enabled .Values.minio.enabled) }}
+    # Fallback: at least one container required for a valid Pod spec
+    - name: no-op
+      image: busybox:1.36
+      command: ["sh", "-c", "echo 'No services enabled — nothing to test'; exit 0"]
+      resources:
+        limits:
+          cpu: 50m
+          memory: 32Mi
+        requests:
+          cpu: 25m
+          memory: 16Mi
     {{- end }}
