@@ -1,0 +1,105 @@
+# T4: Bootstrap job tests
+# Verifies job-polaris-bootstrap.yaml hook annotations, weight,
+# delete policy, and init container configuration.
+suite: bootstrap job
+templates:
+  - templates/job-polaris-bootstrap.yaml
+tests:
+  # --- Hook annotations ---
+  - it: should have post-install and post-upgrade hook annotations
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+
+  - it: should have hook weight of 10
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "10"
+
+  - it: should have correct hook delete policy
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded
+
+  # --- Init containers ---
+  - it: should always have wait-for-polaris init container
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-polaris
+          any: true
+
+  - it: should have wait-for-minio when minio.enabled=true
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-minio
+          any: true
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-polaris
+          any: true
+
+  - it: should not have wait-for-minio when minio.enabled=false
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-minio
+          any: true
+
+  # --- Job spec ---
+  - it: should have restartPolicy Never
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: Never
+
+  - it: should use default backoffLimit of 5
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    asserts:
+      - equal:
+          path: spec.backoffLimit
+          value: 5
+
+  - it: should respect custom backoffLimit
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.backoffLimit: 3
+    asserts:
+      - equal:
+          path: spec.backoffLimit
+          value: 3
