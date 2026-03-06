@@ -1,0 +1,119 @@
+# T5: Init container guard tests
+# Verifies init containers are present when their parent service is
+# enabled and absent when disabled. Also validates init container
+# images and commands.
+suite: init container guards
+templates:
+  - templates/deployment-marquez.yaml
+  - templates/deployment-contract-monitor.yaml
+  - templates/job-polaris-bootstrap.yaml
+tests:
+  # --- Marquez wait-for-postgresql ---
+  - it: Marquez should have wait-for-postgresql init container
+    template: templates/deployment-marquez.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-postgresql
+          any: true
+
+  - it: Marquez wait-for-postgresql should use postgres image
+    template: templates/deployment-marquez.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "postgres:16-alpine"
+
+  - it: should not render Marquez init containers when marquez.enabled=false
+    set:
+      marquez.enabled: false
+    template: templates/deployment-marquez.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # --- Contract Monitor wait-for-postgresql ---
+  - it: Contract Monitor should have wait-for-postgresql init container
+    set:
+      contractMonitor.enabled: true
+    template: templates/deployment-contract-monitor.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-postgresql
+          any: true
+
+  - it: Contract Monitor wait-for-postgresql should use busybox image
+    set:
+      contractMonitor.enabled: true
+    template: templates/deployment-contract-monitor.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "busybox:1.36"
+
+  - it: should not render Contract Monitor init containers when contractMonitor.enabled=false
+    set:
+      contractMonitor.enabled: false
+    template: templates/deployment-contract-monitor.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # --- Bootstrap wait-for-polaris always present ---
+  - it: Bootstrap should always have wait-for-polaris when bootstrap enabled
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: false
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-polaris
+          any: true
+
+  - it: Bootstrap wait-for-polaris should use curl image
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: false
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-polaris
+            image: "curlimages/curl:8.5.0"
+          any: true
+
+  # --- Init container command content ---
+  - it: Marquez wait-for-postgresql command should use pg_isready
+    template: templates/deployment-marquez.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: pg_isready
+
+  - it: Contract Monitor wait-for-postgresql command should use nc -z
+    set:
+      contractMonitor.enabled: true
+    template: templates/deployment-contract-monitor.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "nc -z"
+
+  - it: Bootstrap wait-for-polaris command should check health endpoint
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: false
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: q/health/ready

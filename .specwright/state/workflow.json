@@ -2,43 +2,43 @@
   "version": "0.2.0",
   "currentWork": {
     "id": "helm-robustness",
-    "status": "verifying",
+    "status": "shipped",
     "intensity": "full",
-    "workDir": ".specwright/work/helm-robustness/units/wu-29-nodeport-coverage",
-    "unitId": "wu-29-nodeport-coverage",
-    "startedAt": "2026-03-06T00:00:00Z",
+    "workDir": ".specwright/work/helm-robustness/units/wu-30-helm-unittest",
+    "unitId": "wu-30-helm-unittest",
+    "startedAt": "2026-03-06T02:00:00Z",
     "currentTask": null,
     "tasksCompleted": ["T1", "T2", "T3", "T4", "T5", "T6"],
     "tasksTotal": 6,
     "gates": {
       "gate-build": {
         "status": "PASS",
-        "findings": { "block": 0, "warn": 1, "info": 0 },
-        "timestamp": "2026-03-06T14:00:00Z",
-        "note": "Ruff lint/format clean. Bash syntax valid. 45/45 WU-29 tests pass. 1 pre-existing WARN: kubeconform not installed."
+        "findings": { "block": 0, "warn": 0, "info": 0 },
+        "timestamp": "2026-03-06T04:00:00Z",
+        "note": "Ruff lint/format clean. 62/62 helm-unittest pass. 12/12 pytest schema tests pass. Bash syntax valid. YAML valid."
       },
       "gate-tests": {
         "status": "PASS",
-        "findings": { "block": 0, "warn": 4, "info": 3 },
-        "timestamp": "2026-03-06T14:00:00Z",
-        "note": "All 3 previous BLOCKs resolved. 4 WARNs: 2 pre-existing (pytest.skip in fixtures, skipif on class), 2 new low-risk (OTel string match, missing type assertion)."
+        "findings": { "block": 0, "warn": 1, "info": 1 },
+        "timestamp": "2026-03-06T04:00:00Z",
+        "note": "3 BLOCKs + 5 WARNs fixed. 1 remaining WARN: pre-existing jsonschema skipif (out of WU-30 scope). 1 INFO: smoke test minimal by design."
       },
       "gate-security": {
         "status": "PASS",
-        "findings": { "block": 0, "warn": 6, "info": 0 },
-        "timestamp": "2026-03-06T14:00:00Z",
-        "note": "0 new issues. All NodePorts valid (30000-32767). No conflicts. 6 pre-existing WARNs (orphaned mappings, credential patterns)."
+        "findings": { "block": 0, "warn": 0, "info": 0 },
+        "timestamp": "2026-03-06T03:30:00Z",
+        "note": "No secrets, no user input, no injection risks. YAML test files only. CI actions use pinned SHAs."
       },
       "gate-wiring": {
         "status": "PASS",
-        "findings": { "block": 0, "warn": 1, "info": 2 },
-        "timestamp": "2026-03-06T14:00:00Z",
-        "note": "OTel 4318 WARN resolved. 1 carried-forward WARN: MinIO Console 30901 orphaned Kind mapping. All new wiring consistent."
+        "findings": { "block": 0, "warn": 0, "info": 0 },
+        "timestamp": "2026-03-06T03:30:00Z",
+        "note": "CI Stage 5 → Makefile target → helm unittest correctly wired. Integration stage depends on unittest. No orphaned references."
       },
       "gate-spec": {
         "status": "PASS",
         "findings": { "block": 0, "warn": 0, "info": 0 },
-        "timestamp": "2026-03-06T14:00:00Z",
+        "timestamp": "2026-03-06T03:30:00Z",
         "note": "6/6 ACs PASS. All verified with implementation + test evidence."
       }
     }

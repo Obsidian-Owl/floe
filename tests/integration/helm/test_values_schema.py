@@ -32,7 +32,7 @@ def floe_platform_schema() -> dict[str, Any]:
     """Load floe-platform values schema."""
     schema_path = CHARTS_DIR / "floe-platform" / "values.schema.json"
     if not schema_path.exists():
-        pytest.skip(f"Schema not found: {schema_path}")
+        pytest.fail(f"Schema not found: {schema_path}")
     with schema_path.open() as f:
         return json.load(f)
 
@@ -42,7 +42,7 @@ def floe_jobs_schema() -> dict[str, Any]:
     """Load floe-jobs values schema."""
     schema_path = CHARTS_DIR / "floe-jobs" / "values.schema.json"
     if not schema_path.exists():
-        pytest.skip(f"Schema not found: {schema_path}")
+        pytest.fail(f"Schema not found: {schema_path}")
     with schema_path.open() as f:
         return json.load(f)
 
@@ -51,7 +51,7 @@ def load_values_file(chart: str, filename: str = "values.yaml") -> dict[str, Any
     """Load a values file from a chart directory."""
     values_path = CHARTS_DIR / chart / filename
     if not values_path.exists():
-        pytest.skip(f"Values file not found: {values_path}")
+        pytest.fail(f"Values file not found: {values_path}")
     with values_path.open() as f:
         return yaml.safe_load(f) or {}
 

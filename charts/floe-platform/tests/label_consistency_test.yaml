@@ -1,0 +1,281 @@
+# T3: Label consistency tests
+# Verifies all resources use standard K8s labels from _helpers.tpl.
+suite: label consistency
+templates:
+  - templates/deployment-polaris.yaml
+  - templates/deployment-marquez.yaml
+  - templates/deployment-contract-monitor.yaml
+  - templates/service-polaris.yaml
+  - templates/service-marquez.yaml
+  - templates/service-contract-monitor.yaml
+  - templates/service-postgresql.yaml
+  - templates/configmap-polaris.yaml
+  - templates/configmap-marquez.yaml
+  - templates/configmap-otel.yaml
+  - templates/configmap-contract-monitor.yaml
+  - templates/configmap-dagster-workspace.yaml
+  - templates/configmap-postgresql-init.yaml
+  - templates/job-polaris-bootstrap.yaml
+  - templates/statefulset-postgresql.yaml
+  - templates/secret-postgresql.yaml
+  - templates/serviceaccount.yaml
+tests:
+  # --- Polaris Deployment labels ---
+  - it: Polaris Deployment should have standard labels
+    template: templates/deployment-polaris.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: polaris
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+
+  # --- Marquez Deployment labels ---
+  - it: Marquez Deployment should have standard labels
+    template: templates/deployment-marquez.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: marquez
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+
+  # --- Contract Monitor Deployment labels ---
+  - it: Contract Monitor Deployment should have standard labels
+    set:
+      contractMonitor.enabled: true
+    template: templates/deployment-contract-monitor.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: contract-monitor
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
+
+  # --- Deployment selector/template label consistency ---
+  - it: Polaris Deployment selector should match template labels
+    template: templates/deployment-polaris.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: polaris
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: polaris
+
+  - it: Marquez Deployment selector should match template labels
+    template: templates/deployment-marquez.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: marquez
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: marquez
+
+  - it: Contract Monitor Deployment selector should match template labels
+    set:
+      contractMonitor.enabled: true
+    template: templates/deployment-contract-monitor.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: contract-monitor
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: contract-monitor
+
+  - it: PostgreSQL StatefulSet selector should match template labels
+    template: templates/statefulset-postgresql.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: postgresql
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: postgresql
+
+  # --- Contract Monitor ConfigMap labels ---
+  - it: Contract Monitor ConfigMap should have standard labels
+    set:
+      contractMonitor.enabled: true
+    template: templates/configmap-contract-monitor.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: contract-monitor
+
+  # --- Polaris Service labels ---
+  - it: Polaris Service should have standard labels
+    template: templates/service-polaris.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: polaris
+
+  # --- Marquez Service labels ---
+  - it: Marquez Service should have standard labels
+    template: templates/service-marquez.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: marquez
+
+  # --- Contract Monitor Service labels ---
+  - it: Contract Monitor Service should have standard labels
+    set:
+      contractMonitor.enabled: true
+    template: templates/service-contract-monitor.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: contract-monitor
+
+  # --- PostgreSQL Service labels ---
+  - it: PostgreSQL Service should have standard labels
+    template: templates/service-postgresql.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: postgresql
+
+  # --- PostgreSQL StatefulSet labels ---
+  - it: PostgreSQL StatefulSet should have standard labels
+    template: templates/statefulset-postgresql.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: postgresql
+
+  # --- ConfigMap labels ---
+  - it: Polaris ConfigMap should have standard labels
+    template: templates/configmap-polaris.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: polaris
+
+  - it: Marquez ConfigMap should have standard labels
+    template: templates/configmap-marquez.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: marquez
+
+  - it: OTel ConfigMap should have standard labels
+    template: templates/configmap-otel.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: otel
+
+  - it: Dagster Workspace ConfigMap should have standard labels
+    template: templates/configmap-dagster-workspace.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: dagster
+
+  - it: PostgreSQL Init ConfigMap should have standard labels
+    set:
+      postgresql.enabled: true
+      postgresql.primary.initdb.scripts:
+        init.sql: "SELECT 1;"
+    template: templates/configmap-postgresql-init.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: postgresql
+
+  - it: PostgreSQL Secret should have standard labels
+    template: templates/secret-postgresql.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: postgresql
+
+  # --- Bootstrap Job labels ---
+  - it: Bootstrap Job should have standard labels
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: polaris-bootstrap
+
+  # --- ServiceAccount labels ---
+  - it: ServiceAccount should have standard labels
+    template: templates/serviceaccount.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/managed-by"]
