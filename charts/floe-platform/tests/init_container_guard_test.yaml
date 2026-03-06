@@ -83,9 +83,12 @@ tests:
       minio.enabled: false
     template: templates/job-polaris-bootstrap.yaml
     asserts:
-      - equal:
-          path: spec.template.spec.initContainers[0].image
-          value: "curlimages/curl:8.5.0"
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-polaris
+            image: "curlimages/curl:8.5.0"
+          any: true
 
   # --- Init container command content ---
   - it: Marquez wait-for-postgresql command should use pg_isready

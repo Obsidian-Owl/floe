@@ -379,7 +379,7 @@ jobs:
 
       - name: Install helm-unittest plugin
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest
+          helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.8.2
 
       - name: Run chart unit tests
         run: make helm-test-unit

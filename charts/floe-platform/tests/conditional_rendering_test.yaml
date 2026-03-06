@@ -14,7 +14,6 @@ templates:
   - templates/service-contract-monitor.yaml
   - templates/job-polaris-bootstrap.yaml
   - templates/configmap-dagster-workspace.yaml
-  - templates/hpa.yaml
 tests:
   # --- Dagster disabled ---
   - it: should not render Dagster Workspace ConfigMap when dagster.enabled=false

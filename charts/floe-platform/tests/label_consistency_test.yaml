@@ -107,6 +107,20 @@ tests:
           path: spec.template.metadata.labels["app.kubernetes.io/component"]
           value: postgresql
 
+  # --- Contract Monitor ConfigMap labels ---
+  - it: Contract Monitor ConfigMap should have standard labels
+    set:
+      contractMonitor.enabled: true
+    template: templates/configmap-contract-monitor.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: contract-monitor
+
   # --- Polaris Service labels ---
   - it: Polaris Service should have standard labels
     template: templates/service-polaris.yaml
