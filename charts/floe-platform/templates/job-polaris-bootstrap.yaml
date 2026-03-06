@@ -20,6 +20,7 @@ spec:
         app.kubernetes.io/component: polaris-bootstrap
     spec:
       restartPolicy: Never
+      automountServiceAccountToken: false
       initContainers:
 {{- if .Values.minio.enabled }}
         - name: wait-for-minio

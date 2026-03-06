@@ -31,15 +31,19 @@ tests:
           pattern: /server_info
 
   # --- Fallback container when all services disabled ---
-  - it: should have fallback container when all services disabled
+  - it: should have exactly one no-op container when all services disabled
     set:
       dagster.enabled: false
       polaris.enabled: false
       postgresql.enabled: false
       minio.enabled: false
     asserts:
-      - contains:
+      - lengthEqual:
           path: spec.containers
-          content:
-            name: no-op
-          any: true
+          count: 1
+      - equal:
+          path: spec.containers[0].name
+          value: no-op
+      - equal:
+          path: spec.containers[0].image
+          value: "busybox:1.36"

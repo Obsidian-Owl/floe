@@ -17,7 +17,7 @@ tests:
           value: 3600
 
   # --- T2: Preflight env var checks ---
-  - it: bootstrap command should check POLARIS_CLIENT_ID before API calls
+  - it: bootstrap should have separate -z checks for both CLIENT_ID and CLIENT_SECRET
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
@@ -25,17 +25,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: "(?s)POLARIS_CLIENT_ID.*exit 42"
-
-  - it: bootstrap command should check POLARIS_CLIENT_SECRET before API calls
-    set:
-      polaris.enabled: true
-      polaris.bootstrap.enabled: true
-    template: templates/job-polaris-bootstrap.yaml
-    asserts:
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: "(?s)POLARIS_CLIENT_SECRET.*exit 42"
+          pattern: '(?s)-z "\$POLARIS_CLIENT_ID".*exit 42.*-z "\$POLARIS_CLIENT_SECRET".*exit 42'
 
   - it: preflight checks should precede OAuth token acquisition
     set:
@@ -48,7 +38,7 @@ tests:
           pattern: "(?s)exit 42.*Acquiring OAuth"
 
   # --- T3: Structured logging ---
-  - it: bootstrap command should define log function
+  - it: log function should include ISO 8601 timestamp and BOOTSTRAP prefix
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
@@ -56,7 +46,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: "log\\(\\)"
+          pattern: 'log\(\).*%Y-%m-%dT%H:%M:%SZ.*BOOTSTRAP'
 
   - it: bootstrap command should use log function for status messages
     set:
@@ -69,7 +59,7 @@ tests:
           pattern: 'log "Step'
 
   # --- T4: Exponential backoff in init containers ---
-  - it: wait-for-minio should use exponential backoff
+  - it: wait-for-minio should use exponential backoff with DELAY doubling
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
@@ -78,9 +68,9 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "(?s)DELAY=2.*DELAY=.*\\*.*2"
+          pattern: "(?s)DELAY=2.*DELAY=\\$\\(\\(DELAY \\* 2\\)\\)"
 
-  - it: wait-for-polaris should use exponential backoff
+  - it: wait-for-polaris should use exponential backoff with DELAY doubling
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
@@ -89,9 +79,9 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "(?s)DELAY=2.*DELAY=.*\\*.*2"
+          pattern: "(?s)DELAY=2.*DELAY=\\$\\(\\(DELAY \\* 2\\)\\)"
 
-  - it: wait-for-minio backoff should be capped at 30s
+  - it: wait-for-minio backoff should cap DELAY at 30s
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
@@ -100,9 +90,9 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "DELAY.*-gt 30"
+          pattern: "(?s)-gt 30.*DELAY=30"
 
-  - it: wait-for-polaris backoff should be capped at 30s
+  - it: wait-for-polaris backoff should cap DELAY at 30s
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
@@ -111,4 +101,27 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "DELAY.*-gt 30"
+          pattern: "(?s)-gt 30.*DELAY=30"
+
+  # --- Boundary: init container max attempts exhaustion ---
+  - it: wait-for-minio should exit 1 after MAX_ATTEMPTS exhausted
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "(?s)MAX_ATTEMPTS=\\d+.*-ge.*MAX_ATTEMPTS.*exit 1"
+
+  - it: wait-for-polaris should exit 1 after MAX_ATTEMPTS exhausted
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: false
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "(?s)MAX_ATTEMPTS=\\d+.*-ge.*MAX_ATTEMPTS.*exit 1"
