@@ -86,3 +86,31 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[0].image
           value: "curlimages/curl:8.5.0"
+
+  # --- Init container command content ---
+  - it: Marquez wait-for-postgresql command should use pg_isready
+    template: templates/deployment-marquez.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: pg_isready
+
+  - it: Contract Monitor wait-for-postgresql command should use nc -z
+    set:
+      contractMonitor.enabled: true
+    template: templates/deployment-contract-monitor.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "nc -z"
+
+  - it: Bootstrap wait-for-polaris command should check health endpoint
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: false
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: q/health/ready

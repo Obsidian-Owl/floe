@@ -64,6 +64,49 @@ tests:
       - isNotNull:
           path: metadata.labels["app.kubernetes.io/managed-by"]
 
+  # --- Deployment selector/template label consistency ---
+  - it: Polaris Deployment selector should match template labels
+    template: templates/deployment-polaris.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: polaris
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: polaris
+
+  - it: Marquez Deployment selector should match template labels
+    template: templates/deployment-marquez.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: marquez
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: marquez
+
+  - it: Contract Monitor Deployment selector should match template labels
+    set:
+      contractMonitor.enabled: true
+    template: templates/deployment-contract-monitor.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: contract-monitor
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: contract-monitor
+
+  - it: PostgreSQL StatefulSet selector should match template labels
+    template: templates/statefulset-postgresql.yaml
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/component"]
+          value: postgresql
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/component"]
+          value: postgresql
+
   # --- Polaris Service labels ---
   - it: Polaris Service should have standard labels
     template: templates/service-polaris.yaml

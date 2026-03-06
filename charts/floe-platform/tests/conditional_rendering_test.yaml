@@ -167,3 +167,22 @@ tests:
           content:
             name: wait-for-minio
           any: true
+
+  # --- Polaris Service NodePort conditional ---
+  - it: should include nodePort when service.type=NodePort and nodePort is set
+    set:
+      polaris.service.type: NodePort
+      polaris.service.nodePort: 30181
+    template: templates/service-polaris.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30181
+
+  - it: should not include nodePort when service.type=ClusterIP
+    set:
+      polaris.service.type: ClusterIP
+    template: templates/service-polaris.yaml
+    asserts:
+      - isNull:
+          path: spec.ports[0].nodePort
