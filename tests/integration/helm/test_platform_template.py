@@ -1094,6 +1094,9 @@ class TestNodePortConditionals:
         )
         service = _find_service_by_component(documents, "polaris")
         assert service is not None, "Polaris Service not found in rendered templates"
+        assert service["spec"]["type"] == "NodePort", (
+            f"Expected service type NodePort, got {service['spec'].get('type')}"
+        )
 
         http_port = _get_service_port(service, "http")
         assert http_port is not None, "Polaris 'http' port not found"
@@ -1125,6 +1128,9 @@ class TestNodePortConditionals:
         )
         service = _find_service_by_component(documents, "marquez")
         assert service is not None, "Marquez Service not found in rendered templates"
+        assert service["spec"]["type"] == "NodePort", (
+            f"Expected service type NodePort, got {service['spec'].get('type')}"
+        )
 
         http_port = _get_service_port(service, "http")
         assert http_port is not None, "Marquez 'http' port not found"
@@ -1155,6 +1161,9 @@ class TestNodePortConditionals:
         )
         service = _find_service_by_component(documents, "contract-monitor")
         assert service is not None, "Contract-monitor Service not found"
+        assert service["spec"]["type"] == "NodePort", (
+            f"Expected service type NodePort, got {service['spec'].get('type')}"
+        )
 
         http_port = _get_service_port(service, "http")
         assert http_port is not None, "Contract-monitor 'http' port not found"
