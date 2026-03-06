@@ -116,6 +116,29 @@ POSTGRESQL:
 {{- end }}
 
 ================================================================================
+                              TROUBLESHOOTING
+================================================================================
+
+If something isn't working, check these common issues:
+
+1. Bootstrap job failed:
+   kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=polaris-bootstrap --tail=50
+   - Exit code 42: Missing POLARIS_CLIENT_ID or POLARIS_CLIENT_SECRET
+   - Exit code 1: Polaris API unreachable or MinIO bucket missing
+   - Check secret: kubectl get secret -n {{ .Release.Namespace }} {{ $fullname }}-polaris-credentials -o yaml
+
+2. Init container timeout (pod stuck in Init):
+   kubectl describe pod -n {{ .Release.Namespace }} <pod-name> | grep -A5 "Init Containers"
+   - wait-for-minio: Verify MinIO is running (kubectl get pods -l app.kubernetes.io/component=minio)
+   - wait-for-polaris: Verify Polaris is running (kubectl get pods -l app.kubernetes.io/component=polaris)
+   - Check service endpoints: kubectl get endpoints -n {{ .Release.Namespace }}
+
+3. Schema validation error on helm install/upgrade:
+   - Check values override chain: values.yaml < values-<env>.yaml < --set flags
+   - Run: helm template test {{ .Chart.Name }} -f your-values.yaml --debug 2>&1 | head -50
+   - Subchart schema changes after upgrade may reject previously-valid keys
+
+================================================================================
                               DOCUMENTATION
 ================================================================================
 
