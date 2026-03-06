@@ -121,6 +121,8 @@ POSTGRESQL:
 
 If something isn't working, check these common issues:
 
+{{- if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}
+
 1. Bootstrap job failed:
    kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=polaris-bootstrap --tail=50
    - Exit code 42: Missing POLARIS_CLIENT_ID or POLARIS_CLIENT_SECRET
@@ -132,6 +134,7 @@ If something isn't working, check these common issues:
    - wait-for-minio: Verify MinIO is running (kubectl get pods -l app.kubernetes.io/component=minio)
    - wait-for-polaris: Verify Polaris is running (kubectl get pods -l app.kubernetes.io/component=polaris)
    - Check service endpoints: kubectl get endpoints -n {{ .Release.Namespace }}
+{{- end }}
 
 3. Schema validation error on helm install/upgrade:
    - Check values override chain: values.yaml < values-<env>.yaml < --set flags

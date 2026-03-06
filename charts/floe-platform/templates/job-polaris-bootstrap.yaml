@@ -23,12 +23,17 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 100
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
 {{- if .Values.minio.enabled }}
         - name: wait-for-minio
           image: curlimages/curl:8.5.0
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -65,6 +70,7 @@ spec:
           image: curlimages/curl:8.5.0
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -100,6 +106,7 @@ spec:
           image: curlimages/curl:8.5.0
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -131,6 +138,7 @@ spec:
             - -c
             - |
               set -e
+              trap 'rm -f /tmp/response.txt /tmp/verify.txt' EXIT
               log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] BOOTSTRAP: $*"; }
 
               # Preflight: check required environment variables
@@ -146,10 +154,11 @@ spec:
               POLARIS_URL="http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.port | default 8181 }}"
 
               log "Step 1/4: Acquiring OAuth token..."
-              TOKEN=$(curl -s --fail-with-body -X POST \
+              TOKEN=$(printf 'grant_type=client_credentials&client_id=%s&client_secret=%s&scope=PRINCIPAL_ROLE:ALL' \
+                "$POLARIS_CLIENT_ID" "$POLARIS_CLIENT_SECRET" | \
+                curl -s --fail-with-body -X POST \
                 "$POLARIS_URL/api/catalog/v1/oauth/tokens" \
-                -d "grant_type=client_credentials&client_id=$POLARIS_CLIENT_ID&client_secret=$POLARIS_CLIENT_SECRET&scope=PRINCIPAL_ROLE:ALL" \
-                | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+                -d @- | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
 
               if [ -z "$TOKEN" ]; then
                 log "ERROR: Failed to acquire OAuth token" >&2
@@ -222,11 +231,11 @@ spec:
               }'
               {{- end }}
 
-              HTTP_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
+              HTTP_CODE=$(printf '%s' "$CATALOG_JSON" | curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/catalogs" \
-                -d "$CATALOG_JSON")
+                -d @-)
 
               if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
                 log "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' created successfully"
@@ -259,6 +268,9 @@ spec:
               log "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' verified successfully"
 
               log "Bootstrap complete!"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             limits:
               cpu: 100m
@@ -266,4 +278,7 @@ spec:
             requests:
               cpu: 50m
               memory: 32Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
 {{- end }}

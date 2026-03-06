@@ -12,32 +12,41 @@ tests:
       postgresql.enabled: true
       minio.enabled: false
     asserts:
-      - matchRegex:
+      - equal:
+          path: spec.containers[0].name
+          value: test-postgresql
+      - equal:
           path: spec.containers[0].image
-          pattern: "postgres:16-alpine"
+          value: "postgres:16-alpine"
 
   # --- Health endpoint checks ---
-  - it: Polaris test should check /q/health/ready endpoint
+  - it: Polaris test should curl /q/health/ready endpoint
     set:
       dagster.enabled: false
       polaris.enabled: true
       postgresql.enabled: false
       minio.enabled: false
     asserts:
+      - equal:
+          path: spec.containers[0].name
+          value: test-polaris
       - matchRegex:
           path: spec.containers[0].command[2]
-          pattern: /q/health/ready
+          pattern: "curl.*q/health/ready"
 
-  - it: Dagster test should check /server_info endpoint
+  - it: Dagster test should curl /server_info endpoint
     set:
       dagster.enabled: true
       polaris.enabled: false
       postgresql.enabled: false
       minio.enabled: false
     asserts:
+      - equal:
+          path: spec.containers[0].name
+          value: test-dagster
       - matchRegex:
           path: spec.containers[0].command[2]
-          pattern: /server_info
+          pattern: "curl.*server_info"
 
   # --- Fallback container when all services disabled ---
   - it: should have exactly one no-op container when all services disabled
