@@ -3,7 +3,6 @@
 suite: bootstrap reliability
 templates:
   - templates/job-polaris-bootstrap.yaml
-  - templates/secret-postgresql.yaml
 tests:
   # --- T1: TTL cleanup ---
   - it: should have ttlSecondsAfterFinished set to 3600
