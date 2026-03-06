@@ -1,0 +1,151 @@
+# T2: Conditional rendering tests
+# Verifies that disabling a feature removes ALL its resources.
+suite: conditional rendering
+templates:
+  - templates/configmap-otel.yaml
+  - templates/configmap-polaris.yaml
+  - templates/configmap-marquez.yaml
+  - templates/configmap-contract-monitor.yaml
+  - templates/deployment-polaris.yaml
+  - templates/deployment-marquez.yaml
+  - templates/deployment-contract-monitor.yaml
+  - templates/service-polaris.yaml
+  - templates/service-marquez.yaml
+  - templates/service-contract-monitor.yaml
+  - templates/job-polaris-bootstrap.yaml
+  - templates/hpa.yaml
+tests:
+  # --- OTel disabled ---
+  - it: should not render OTel ConfigMap when otel.enabled=false
+    set:
+      otel.enabled: false
+    template: templates/configmap-otel.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # --- Polaris disabled ---
+  - it: should not render Polaris Deployment when polaris.enabled=false
+    set:
+      polaris.enabled: false
+    template: templates/deployment-polaris.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render Polaris Service when polaris.enabled=false
+    set:
+      polaris.enabled: false
+    template: templates/service-polaris.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render Polaris ConfigMap when polaris.enabled=false
+    set:
+      polaris.enabled: false
+    template: templates/configmap-polaris.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # --- Bootstrap disabled ---
+  - it: should not render bootstrap Job when polaris.bootstrap.enabled=false
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: false
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render bootstrap Job when polaris.enabled=false
+    set:
+      polaris.enabled: false
+      polaris.bootstrap.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # --- Marquez disabled ---
+  - it: should not render Marquez Deployment when marquez.enabled=false
+    set:
+      marquez.enabled: false
+    template: templates/deployment-marquez.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render Marquez Service when marquez.enabled=false
+    set:
+      marquez.enabled: false
+    template: templates/service-marquez.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render Marquez ConfigMap when marquez.enabled=false
+    set:
+      marquez.enabled: false
+    template: templates/configmap-marquez.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # --- Contract Monitor disabled (default) ---
+  - it: should not render Contract Monitor Deployment when contractMonitor.enabled=false
+    set:
+      contractMonitor.enabled: false
+    template: templates/deployment-contract-monitor.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render Contract Monitor Service when contractMonitor.enabled=false
+    set:
+      contractMonitor.enabled: false
+    template: templates/service-contract-monitor.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render Contract Monitor ConfigMap when contractMonitor.enabled=false
+    set:
+      contractMonitor.enabled: false
+    template: templates/configmap-contract-monitor.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # --- Bootstrap with minio.enabled=false should omit wait-for-minio ---
+  - it: should not include wait-for-minio init container when minio.enabled=false
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: false
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - isKind:
+          of: Job
+      - notContains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-minio
+          any: true
+
+  # --- Positive: bootstrap with minio.enabled=true includes wait-for-minio ---
+  - it: should include wait-for-minio init container when minio.enabled=true
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - isKind:
+          of: Job
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: wait-for-minio
+          any: true
