@@ -8,7 +8,7 @@
     "unitId": "wu-30-helm-unittest",
     "startedAt": "2026-03-06T02:00:00Z",
     "currentTask": null,
-    "tasksCompleted": ["T1", "T2"],
+    "tasksCompleted": ["T1", "T2", "T3"],
     "tasksTotal": 6,
     "gates": {
       "gate-build": {
