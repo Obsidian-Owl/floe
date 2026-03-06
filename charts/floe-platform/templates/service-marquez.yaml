@@ -13,10 +13,16 @@ spec:
       port: {{ .Values.marquez.service.port | default 5000 }}
       targetPort: http
       protocol: TCP
+      {{- if and (eq .Values.marquez.service.type "NodePort") .Values.marquez.service.nodePort }}
+      nodePort: {{ .Values.marquez.service.nodePort }}
+      {{- end }}
     - name: admin
       port: {{ .Values.marquez.service.adminPort | default 5001 }}
       targetPort: admin
       protocol: TCP
+      {{- if and (eq .Values.marquez.service.type "NodePort") .Values.marquez.service.adminNodePort }}
+      nodePort: {{ .Values.marquez.service.adminNodePort }}
+      {{- end }}
   selector:
     {{- include "floe-platform.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: marquez

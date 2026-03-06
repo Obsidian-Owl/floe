@@ -91,6 +91,19 @@ port_already_available() {
     (echo >/dev/tcp/localhost/"$1") 2>/dev/null
 }
 
+# Wait for a pod to be Ready with kubectl wait. Exits non-zero on timeout.
+wait_for_pod() {
+    local labels=$1 description=$2 timeout=${3:-120}
+    echo "  Waiting for ${description}..."
+    if kubectl wait pods -n "${TEST_NAMESPACE}" -l "${labels}" \
+        --for=condition=Ready --timeout="${timeout}s" 2>/dev/null; then
+        echo "  ${description}: Ready"
+        return 0
+    fi
+    echo "ERROR: ${description} not ready after ${timeout}s" >&2
+    return 1
+}
+
 # Cleanup function for port-forwards
 cleanup_port_forwards() {
     [[ -n "${DAGSTER_PF_PID:-}" ]] && kill "${DAGSTER_PF_PID}" 2>/dev/null || true
@@ -116,17 +129,21 @@ trap 'cleanup_all' ERR
 # Verify all required Helm chart pods are running
 echo "Verifying service readiness..."
 
-# Use Helm chart labels for pod verification
-HELM_SERVICES=(
-    "app.kubernetes.io/name=floe-platform,app.kubernetes.io/component=postgresql"
-    "app.kubernetes.io/name=minio"
-    "app.kubernetes.io/component=polaris"
-    "app.kubernetes.io/name=dagster,component=dagster-webserver"
-    "app.kubernetes.io/name=otel"
+# Critical services — MUST be running or tests will fail
+wait_for_pod "app.kubernetes.io/name=floe-platform,app.kubernetes.io/component=postgresql" "PostgreSQL" 120
+wait_for_pod "app.kubernetes.io/component=polaris" "Polaris" 120
+wait_for_pod "app.kubernetes.io/name=dagster,component=dagster-webserver" "Dagster Webserver" 180
+
+# Non-critical services — warn but continue
+NON_CRITICAL_SERVICES=(
+    "app.kubernetes.io/name=minio:MinIO"
+    "app.kubernetes.io/name=otel:OTel Collector"
 )
-for labels in "${HELM_SERVICES[@]}"; do
+for entry in "${NON_CRITICAL_SERVICES[@]}"; do
+    labels="${entry%%:*}"
+    desc="${entry#*:}"
     if ! kubectl get pods -n "${TEST_NAMESPACE}" -l "${labels}" --no-headers 2>/dev/null | grep -q "Running"; then
-        echo "WARNING: Pods with labels '${labels}' may not be running" >&2
+        echo "WARNING: ${desc} may not be running (labels: ${labels})" >&2
     fi
 done
 
@@ -221,6 +238,12 @@ wait_for_port localhost 8181 15
 wait_for_port localhost 8182 15
 wait_for_port localhost 9000 15
 wait_for_port localhost 4317 15
+# OTel Collector HTTP (non-critical — warn but continue)
+if port_already_available 4318; then
+    echo "  OTel HTTP (4318): Already available"
+else
+    echo "  WARNING: OTel HTTP (4318) not yet available — port-forward may be needed" >&2
+fi
 wait_for_port localhost 5432 15
 wait_for_port localhost 5000 15 || true  # Marquez API port (optional)
 wait_for_port localhost 16686 15 || true  # Jaeger optional
@@ -276,6 +299,9 @@ CATALOG_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
     "http://localhost:8181/api/management/v1/catalogs/${POLARIS_CATALOG}" 2>/dev/null) || true
 
 if [[ "${CATALOG_CODE}" == "404" ]]; then
+    echo "WARNING: Polaris catalog fallback triggered — catalog '${POLARIS_CATALOG}' not found" >&2
+    echo "WARNING: Bootstrap hook may have failed. Check bootstrap job logs:" >&2
+    echo "WARNING:   kubectl logs -n ${TEST_NAMESPACE} -l job-name=floe-platform-bootstrap --tail=50" >&2
     echo "Polaris catalog '${POLARIS_CATALOG}' not found — creating..." >&2
     # Build JSON payload with python3 to safely escape special characters
     CATALOG_JSON=$(python3 -c "

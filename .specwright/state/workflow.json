@@ -4,42 +4,42 @@
     "id": "helm-robustness",
     "status": "verifying",
     "intensity": "full",
-    "workDir": ".specwright/work/helm-robustness/units/wu-26-kubeconform",
-    "unitId": "wu-26-kubeconform",
-    "startedAt": "2026-03-04T00:00:00Z",
+    "workDir": ".specwright/work/helm-robustness/units/wu-29-nodeport-coverage",
+    "unitId": "wu-29-nodeport-coverage",
+    "startedAt": "2026-03-06T00:00:00Z",
     "currentTask": null,
-    "tasksCompleted": ["T1", "T2"],
-    "tasksTotal": 2,
+    "tasksCompleted": ["T1", "T2", "T3", "T4", "T5", "T6"],
+    "tasksTotal": 6,
     "gates": {
       "gate-build": {
         "status": "PASS",
-        "findings": { "block": 0, "warn": 0, "info": 0 },
-        "timestamp": "2026-03-04T14:00:00Z",
-        "note": "31/31 static tests pass. Ruff lint + format clean. 4 functional deselected (no kubeconform binary)."
+        "findings": { "block": 0, "warn": 1, "info": 0 },
+        "timestamp": "2026-03-06T14:00:00Z",
+        "note": "Ruff lint/format clean. Bash syntax valid. 45/45 WU-29 tests pass. 1 pre-existing WARN: kubeconform not installed."
       },
       "gate-tests": {
         "status": "PASS",
-        "findings": { "block": 0, "warn": 0, "info": 2 },
-        "timestamp": "2026-03-04T14:00:00Z",
-        "note": "All 12 prior WARNs resolved. Duplicate _fail removed, assertions strengthened, 4 tests added, docstrings complete."
+        "findings": { "block": 0, "warn": 4, "info": 3 },
+        "timestamp": "2026-03-06T14:00:00Z",
+        "note": "All 3 previous BLOCKs resolved. 4 WARNs: 2 pre-existing (pytest.skip in fixtures, skipif on class), 2 new low-risk (OTel string match, missing type assertion)."
       },
       "gate-security": {
         "status": "PASS",
-        "findings": { "block": 0, "warn": 0, "info": 3 },
-        "timestamp": "2026-03-04T14:00:00Z",
-        "note": "CWE-494 resolved: SHA-256 checksums on both kubeconform and kubesec. All 6 actions/checkout SHA-pinned."
+        "findings": { "block": 0, "warn": 6, "info": 0 },
+        "timestamp": "2026-03-06T14:00:00Z",
+        "note": "0 new issues. All NodePorts valid (30000-32767). No conflicts. 6 pre-existing WARNs (orphaned mappings, credential patterns)."
       },
       "gate-wiring": {
         "status": "PASS",
-        "findings": { "block": 0, "warn": 0, "info": 2 },
-        "timestamp": "2026-03-04T14:00:00Z",
-        "note": "helm-validate in help (between template and test). All checkout refs pinned. No orphaned code."
+        "findings": { "block": 0, "warn": 1, "info": 2 },
+        "timestamp": "2026-03-06T14:00:00Z",
+        "note": "OTel 4318 WARN resolved. 1 carried-forward WARN: MinIO Console 30901 orphaned Kind mapping. All new wiring consistent."
       },
       "gate-spec": {
         "status": "PASS",
-        "findings": { "block": 0, "warn": 0, "info": 1 },
-        "timestamp": "2026-03-04T14:00:00Z",
-        "note": "5/5 ACs PASS. 35 tests total (31 static + 4 functional). All boundary conditions covered."
+        "findings": { "block": 0, "warn": 0, "info": 0 },
+        "timestamp": "2026-03-06T14:00:00Z",
+        "note": "6/6 ACs PASS. All verified with implementation + test evidence."
       }
     }
   },
@@ -409,7 +409,7 @@
     {
       "id": "wu-29-nodeport-coverage",
       "description": "Complete NodePort coverage + test-e2e.sh improvements (Layer 5)",
-      "status": "planned",
+      "status": "building",
       "order": 29,
       "workDir": ".specwright/work/helm-robustness/units/wu-29-nodeport-coverage"
     },

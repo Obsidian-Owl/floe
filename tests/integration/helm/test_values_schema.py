@@ -91,6 +91,12 @@ class TestFloePlatformSchema:
         jsonschema.validate(values, floe_platform_schema)
 
     @pytest.mark.requirement("9b-FR-004")
+    def test_test_values_conform_to_schema(self, floe_platform_schema: dict[str, Any]) -> None:
+        """Test that values-test.yaml conforms to schema."""
+        values = load_values_file("floe-platform", "values-test.yaml")
+        jsonschema.validate(values, floe_platform_schema)
+
+    @pytest.mark.requirement("9b-FR-004")
     def test_invalid_environment_rejected(self, floe_platform_schema: dict[str, Any]) -> None:
         """Test that invalid environment value is rejected."""
         invalid_values = {"global": {"environment": "invalid"}}

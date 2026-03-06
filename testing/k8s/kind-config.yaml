@@ -57,6 +57,10 @@ nodes:
       - containerPort: 30181
         hostPort: 8181
         protocol: TCP
+      # Polaris Management (NodePort 30182 -> localhost 8182)
+      - containerPort: 30182
+        hostPort: 8182
+        protocol: TCP
       # Dagster Webserver: use kubectl port-forward (Dagster 1.12+ schema
       # disallows fixed nodePort). E2E tests handle this via make test-e2e.
       # Manual: kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-test
@@ -75,6 +79,18 @@ nodes:
       # Prometheus (NodePort 30090 -> localhost 9090)
       - containerPort: 30090
         hostPort: 9090
+        protocol: TCP
+      # Marquez API (NodePort 30050 -> localhost 5000)
+      - containerPort: 30050
+        hostPort: 5000
+        protocol: TCP
+      # Marquez Admin (NodePort 30051 -> localhost 5001)
+      - containerPort: 30051
+        hostPort: 5001
+        protocol: TCP
+      # OTel Collector HTTP (NodePort 30418 -> localhost 4318)
+      - containerPort: 30418
+        hostPort: 4318
         protocol: TCP
       # Jaeger OTLP gRPC (NodePort 30417 -> localhost 4317)
       - containerPort: 30417
