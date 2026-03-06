@@ -178,6 +178,17 @@ helm-validate: ## Validate rendered manifests against K8s 1.28 schema
 	@helm template floe-platform charts/floe-platform --values charts/floe-platform/values-test.yaml | kubeconform --strict --kubernetes-version 1.28.0 --ignore-missing-schemas -summary
 	@echo "Helm template validation passed!"
 
+.PHONY: helm-test-unit
+helm-test-unit: helm-deps ## Run helm-unittest chart template tests
+	@if ! helm plugin list | grep -q unittest; then \
+		echo "ERROR: helm-unittest plugin not installed."; \
+		echo "Install: helm plugin install https://github.com/helm-unittest/helm-unittest"; \
+		exit 1; \
+	fi
+	@echo "Running helm-unittest for floe-platform..."
+	@helm unittest charts/floe-platform
+	@echo "Helm unit tests passed!"
+
 .PHONY: helm-test
 helm-test: ## Run Helm tests (requires deployed release, RELEASE=name, NAMESPACE=ns)
 	@if [ -z "$(RELEASE)" ]; then \

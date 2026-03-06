@@ -1,0 +1,10 @@
+# Smoke test — validates helm-unittest plugin is wired correctly.
+# Real test suites added in T2-T5.
+suite: smoke test
+templates:
+  - templates/configmap-polaris.yaml
+tests:
+  - it: should render a ConfigMap
+    asserts:
+      - isKind:
+          of: ConfigMap
