@@ -15,6 +15,26 @@ tests:
           path: spec.ttlSecondsAfterFinished
           value: 3600
 
+  - it: should have backoffLimit set to 5 by default
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - equal:
+          path: spec.backoffLimit
+          value: 5
+
+  - it: should have restartPolicy set to Never
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: Never
+
   # --- T2: Preflight env var checks ---
   - it: bootstrap should have separate -z checks for both CLIENT_ID and CLIENT_SECRET
     set:

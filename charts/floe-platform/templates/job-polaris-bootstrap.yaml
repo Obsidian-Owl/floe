@@ -21,10 +21,17 @@ spec:
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
       initContainers:
 {{- if .Values.minio.enabled }}
         - name: wait-for-minio
           image: curlimages/curl:8.5.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           command:
             - sh
             - -c
@@ -56,6 +63,11 @@ spec:
 {{- end }}
         - name: wait-for-polaris
           image: curlimages/curl:8.5.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           command:
             - sh
             - -c
@@ -86,6 +98,11 @@ spec:
       containers:
         - name: bootstrap
           image: curlimages/curl:8.5.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: POLARIS_CLIENT_ID
               valueFrom:
@@ -217,7 +234,7 @@ spec:
                 log "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' already exists (HTTP 409) - OK"
               else
                 log "ERROR: Failed to create catalog (HTTP $HTTP_CODE)" >&2
-                cat /tmp/response.txt >&2
+                head -5 /tmp/response.txt >&2
                 exit 1
               fi
 
@@ -229,14 +246,14 @@ spec:
 
               if [ "$VERIFY_CODE" != "200" ]; then
                 log "ERROR: Catalog verification failed (HTTP $VERIFY_CODE)" >&2
-                cat /tmp/verify.txt >&2
+                head -5 /tmp/verify.txt >&2
                 exit 1
               fi
 
               # Verify response contains expected catalog name
               if ! grep -q '"name"' /tmp/verify.txt; then
                 log "ERROR: Catalog verification response missing 'name' field" >&2
-                cat /tmp/verify.txt >&2
+                head -5 /tmp/verify.txt >&2
                 exit 1
               fi
               log "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' verified successfully"

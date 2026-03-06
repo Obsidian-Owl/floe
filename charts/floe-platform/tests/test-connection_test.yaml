@@ -7,27 +7,36 @@ tests:
   # --- Postgres version ---
   - it: PostgreSQL test container should use postgres:16-alpine
     set:
+      dagster.enabled: false
+      polaris.enabled: false
       postgresql.enabled: true
+      minio.enabled: false
     asserts:
       - matchRegex:
-          path: spec.containers[?(@.name=="test-postgresql")].image
+          path: spec.containers[0].image
           pattern: "postgres:16-alpine"
 
   # --- Health endpoint checks ---
   - it: Polaris test should check /q/health/ready endpoint
     set:
+      dagster.enabled: false
       polaris.enabled: true
+      postgresql.enabled: false
+      minio.enabled: false
     asserts:
       - matchRegex:
-          path: spec.containers[?(@.name=="test-polaris")].command[2]
+          path: spec.containers[0].command[2]
           pattern: /q/health/ready
 
   - it: Dagster test should check /server_info endpoint
     set:
       dagster.enabled: true
+      polaris.enabled: false
+      postgresql.enabled: false
+      minio.enabled: false
     asserts:
       - matchRegex:
-          path: spec.containers[?(@.name=="test-dagster")].command[2]
+          path: spec.containers[0].command[2]
           pattern: /server_info
 
   # --- Fallback container when all services disabled ---

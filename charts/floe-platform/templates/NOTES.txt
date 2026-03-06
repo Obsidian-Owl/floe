@@ -125,7 +125,7 @@ If something isn't working, check these common issues:
    kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=polaris-bootstrap --tail=50
    - Exit code 42: Missing POLARIS_CLIENT_ID or POLARIS_CLIENT_SECRET
    - Exit code 1: Polaris API unreachable or MinIO bucket missing
-   - Check secret keys: kubectl get secret -n {{ .Release.Namespace }} {{ $fullname }}-polaris-credentials -o go-template='{{ "{{" }}range $k,$v := .data{{ "}}" }}{{ "{{" }}$k{{ "}}" }}{{ "{{" }}"\n"{{ "}}" }}{{ "{{" }}end{{ "}}" }}'
+   - Check secret keys: kubectl get secret -n {{ .Release.Namespace }} {{ .Values.polaris.auth.existingSecret | default (printf "%s-polaris-credentials" $fullname) }} -o go-template='{{ "{{" }}range $k,$v := .data{{ "}}" }}{{ "{{" }}$k{{ "}}" }}{{ "{{" }}"\n"{{ "}}" }}{{ "{{" }}end{{ "}}" }}'
 
 2. Init container timeout (pod stuck in Init):
    kubectl describe pod -n {{ .Release.Namespace }} <pod-name> | grep -A5 "Init Containers"
