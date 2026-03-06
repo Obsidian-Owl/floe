@@ -13,8 +13,26 @@ templates:
   - templates/service-marquez.yaml
   - templates/service-contract-monitor.yaml
   - templates/job-polaris-bootstrap.yaml
+  - templates/configmap-dagster-workspace.yaml
   - templates/hpa.yaml
 tests:
+  # --- Dagster disabled ---
+  - it: should not render Dagster Workspace ConfigMap when dagster.enabled=false
+    set:
+      dagster.enabled: false
+    template: templates/configmap-dagster-workspace.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render Dagster Workspace ConfigMap when dagster.enabled=true
+    set:
+      dagster.enabled: true
+    template: templates/configmap-dagster-workspace.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+
   # --- OTel disabled ---
   - it: should not render OTel ConfigMap when otel.enabled=false
     set:

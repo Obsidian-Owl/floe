@@ -134,6 +134,9 @@ tests:
           path: metadata.labels["app.kubernetes.io/name"]
       - isNotNull:
           path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: polaris
 
   - it: Marquez ConfigMap should have standard labels
     template: templates/configmap-marquez.yaml
@@ -142,6 +145,9 @@ tests:
           path: metadata.labels["app.kubernetes.io/name"]
       - isNotNull:
           path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: marquez
 
   - it: OTel ConfigMap should have standard labels
     template: templates/configmap-otel.yaml
@@ -150,6 +156,46 @@ tests:
           path: metadata.labels["app.kubernetes.io/name"]
       - isNotNull:
           path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: otel
+
+  - it: Dagster Workspace ConfigMap should have standard labels
+    template: templates/configmap-dagster-workspace.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: dagster
+
+  - it: PostgreSQL Init ConfigMap should have standard labels
+    set:
+      postgresql.enabled: true
+      postgresql.primary.initdb.scripts:
+        init.sql: "SELECT 1;"
+    template: templates/configmap-postgresql-init.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: postgresql
+
+  - it: PostgreSQL Secret should have standard labels
+    template: templates/secret-postgresql.yaml
+    asserts:
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - isNotNull:
+          path: metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: postgresql
 
   # --- Bootstrap Job labels ---
   - it: Bootstrap Job should have standard labels
