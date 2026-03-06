@@ -244,6 +244,12 @@ wait_for_port localhost 8181 15
 wait_for_port localhost 8182 15
 wait_for_port localhost 9000 15
 wait_for_port localhost 4317 15
+# OTel Collector HTTP (non-critical — warn but continue)
+if port_already_available 4318; then
+    echo "  OTel HTTP (4318): Already available"
+else
+    echo "  WARNING: OTel HTTP (4318) not yet available — port-forward may be needed" >&2
+fi
 wait_for_port localhost 5432 15
 wait_for_port localhost 5000 15 || true  # Marquez API port (optional)
 wait_for_port localhost 16686 15 || true  # Jaeger optional
