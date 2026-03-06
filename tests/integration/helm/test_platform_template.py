@@ -980,3 +980,297 @@ class TestMarquezStability:
         assert http_get is not None, (
             f"Marquez readinessProbe must use httpGet. Probe config: {readiness_probe}"
         )
+
+
+def _render_template_with_sets(
+    chart_path: Path,
+    set_args: list[str],
+) -> list[dict[str, Any]]:
+    """Render Helm template with --set overrides.
+
+    Args:
+        chart_path: Path to the Helm chart.
+        set_args: List of --set values (e.g., ["polaris.service.type=NodePort"]).
+
+    Returns:
+        List of parsed Kubernetes resource documents.
+    """
+    cmd = ["helm", "template", "test-release", str(chart_path)]
+    for arg in set_args:
+        cmd.extend(["--set", arg])
+    result = subprocess.run(cmd, capture_output=True, timeout=60, check=True)
+    docs = list(yaml.safe_load_all(result.stdout.decode()))
+    return [d for d in docs if d is not None]
+
+
+def _render_template_with_values_file(
+    chart_path: Path,
+    values_file: str,
+) -> list[dict[str, Any]]:
+    """Render Helm template with a values file.
+
+    Args:
+        chart_path: Path to the Helm chart.
+        values_file: Filename of the values file within the chart directory.
+
+    Returns:
+        List of parsed Kubernetes resource documents.
+    """
+    values_path = chart_path / values_file
+    result = subprocess.run(
+        ["helm", "template", "test-release", str(chart_path), "-f", str(values_path)],
+        capture_output=True,
+        timeout=60,
+        check=True,
+    )
+    docs = list(yaml.safe_load_all(result.stdout.decode()))
+    return [d for d in docs if d is not None]
+
+
+def _find_service_by_component(
+    documents: list[dict[str, Any]],
+    component: str,
+) -> dict[str, Any] | None:
+    """Find a Service resource by app.kubernetes.io/component label.
+
+    Args:
+        documents: Parsed K8s resource documents.
+        component: Value of the app.kubernetes.io/component label.
+
+    Returns:
+        The matching Service resource, or None if not found.
+    """
+    for doc in documents:
+        if doc.get("kind") != "Service":
+            continue
+        labels = doc.get("metadata", {}).get("labels", {})
+        if labels.get("app.kubernetes.io/component") == component:
+            return doc
+    return None
+
+
+def _get_service_port(
+    service: dict[str, Any],
+    port_name: str,
+) -> dict[str, Any] | None:
+    """Get a named port from a Service spec.
+
+    Args:
+        service: Parsed Service resource.
+        port_name: Name of the port to find.
+
+    Returns:
+        The matching port dict, or None if not found.
+    """
+    for port in service.get("spec", {}).get("ports", []):
+        if port.get("name") == port_name:
+            return port
+    return None
+
+
+class TestNodePortConditionals:
+    """Tests verifying NodePort conditional rendering in service templates.
+
+    Validates that:
+    - NodePort values appear when service.type=NodePort and nodePort is set
+    - NodePort values are omitted when service.type=ClusterIP (default)
+    """
+
+    @pytest.mark.requirement("AC-29.1")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_polaris_service_nodeport_rendered(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Polaris Service renders nodePort values when type=NodePort."""
+        documents = _render_template_with_sets(
+            platform_chart_path,
+            [
+                "polaris.enabled=true",
+                "polaris.service.type=NodePort",
+                "polaris.service.nodePort=30181",
+                "polaris.service.managementNodePort=30182",
+            ],
+        )
+        service = _find_service_by_component(documents, "polaris")
+        assert service is not None, "Polaris Service not found in rendered templates"
+
+        http_port = _get_service_port(service, "http")
+        assert http_port is not None, "Polaris 'http' port not found"
+        assert http_port.get("nodePort") == 30181, (
+            f"Expected nodePort 30181, got {http_port.get('nodePort')}"
+        )
+
+        mgmt_port = _get_service_port(service, "management")
+        assert mgmt_port is not None, "Polaris 'management' port not found"
+        assert mgmt_port.get("nodePort") == 30182, (
+            f"Expected nodePort 30182, got {mgmt_port.get('nodePort')}"
+        )
+
+    @pytest.mark.requirement("AC-29.1")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_marquez_service_nodeport_rendered(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Marquez Service renders nodePort values when type=NodePort."""
+        documents = _render_template_with_sets(
+            platform_chart_path,
+            [
+                "marquez.enabled=true",
+                "marquez.service.type=NodePort",
+                "marquez.service.nodePort=30050",
+                "marquez.service.adminNodePort=30051",
+            ],
+        )
+        service = _find_service_by_component(documents, "marquez")
+        assert service is not None, "Marquez Service not found in rendered templates"
+
+        http_port = _get_service_port(service, "http")
+        assert http_port is not None, "Marquez 'http' port not found"
+        assert http_port.get("nodePort") == 30050, (
+            f"Expected nodePort 30050, got {http_port.get('nodePort')}"
+        )
+
+        admin_port = _get_service_port(service, "admin")
+        assert admin_port is not None, "Marquez 'admin' port not found"
+        assert admin_port.get("nodePort") == 30051, (
+            f"Expected nodePort 30051, got {admin_port.get('nodePort')}"
+        )
+
+    @pytest.mark.requirement("AC-29.1")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_contract_monitor_service_nodeport_rendered(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Contract-monitor Service renders nodePort when type=NodePort."""
+        documents = _render_template_with_sets(
+            platform_chart_path,
+            [
+                "contractMonitor.enabled=true",
+                "contractMonitor.service.type=NodePort",
+                "contractMonitor.service.nodePort=30808",
+            ],
+        )
+        service = _find_service_by_component(documents, "contract-monitor")
+        assert service is not None, "Contract-monitor Service not found"
+
+        http_port = _get_service_port(service, "http")
+        assert http_port is not None, "Contract-monitor 'http' port not found"
+        assert http_port.get("nodePort") == 30808, (
+            f"Expected nodePort 30808, got {http_port.get('nodePort')}"
+        )
+
+    @pytest.mark.requirement("AC-29.1")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_polaris_clusterip_omits_nodeport(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Polaris Service omits nodePort when type=ClusterIP (default)."""
+        documents = _render_template(platform_chart_path)
+        service = _find_service_by_component(documents, "polaris")
+        assert service is not None, "Polaris Service not found"
+
+        for port in service.get("spec", {}).get("ports", []):
+            assert "nodePort" not in port, (
+                f"Polaris port '{port.get('name')}' should not have nodePort "
+                f"in ClusterIP mode, but got nodePort={port.get('nodePort')}"
+            )
+
+    @pytest.mark.requirement("AC-29.1")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_marquez_clusterip_omits_nodeport(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Marquez Service omits nodePort when type=ClusterIP (default)."""
+        documents = _render_template(platform_chart_path)
+        service = _find_service_by_component(documents, "marquez")
+        assert service is not None, "Marquez Service not found"
+
+        for port in service.get("spec", {}).get("ports", []):
+            assert "nodePort" not in port, (
+                f"Marquez port '{port.get('name')}' should not have nodePort "
+                f"in ClusterIP mode, but got nodePort={port.get('nodePort')}"
+            )
+
+    @pytest.mark.requirement("AC-29.1")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_contract_monitor_clusterip_omits_nodeport(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Contract-monitor Service omits nodePort when type=ClusterIP (default)."""
+        documents = _render_template_with_sets(
+            platform_chart_path,
+            ["contractMonitor.enabled=true"],
+        )
+        service = _find_service_by_component(documents, "contract-monitor")
+        assert service is not None, "Contract-monitor Service not found"
+
+        for port in service.get("spec", {}).get("ports", []):
+            assert "nodePort" not in port, (
+                f"Contract-monitor port '{port.get('name')}' should not have "
+                f"nodePort in ClusterIP mode, but got nodePort={port.get('nodePort')}"
+            )
+
+    @pytest.mark.requirement("AC-29.2")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_values_test_nodeport_rendering(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template with values-test.yaml renders all expected NodePort values."""
+        documents = _render_template_with_values_file(
+            platform_chart_path,
+            "values-test.yaml",
+        )
+
+        # Polaris http: 30181
+        polaris_svc = _find_service_by_component(documents, "polaris")
+        assert polaris_svc is not None, "Polaris Service not found with values-test.yaml"
+        polaris_http = _get_service_port(polaris_svc, "http")
+        assert polaris_http is not None, "Polaris 'http' port not found"
+        assert polaris_http.get("nodePort") == 30181, (
+            f"Polaris http nodePort: expected 30181, got {polaris_http.get('nodePort')}"
+        )
+        polaris_mgmt = _get_service_port(polaris_svc, "management")
+        assert polaris_mgmt is not None, "Polaris 'management' port not found"
+        assert polaris_mgmt.get("nodePort") == 30182, (
+            f"Polaris management nodePort: expected 30182, got {polaris_mgmt.get('nodePort')}"
+        )
+
+        # Marquez http: 30050, admin: 30051
+        marquez_svc = _find_service_by_component(documents, "marquez")
+        assert marquez_svc is not None, "Marquez Service not found with values-test.yaml"
+        marquez_http = _get_service_port(marquez_svc, "http")
+        assert marquez_http is not None, "Marquez 'http' port not found"
+        assert marquez_http.get("nodePort") == 30050, (
+            f"Marquez http nodePort: expected 30050, got {marquez_http.get('nodePort')}"
+        )
+        marquez_admin = _get_service_port(marquez_svc, "admin")
+        assert marquez_admin is not None, "Marquez 'admin' port not found"
+        assert marquez_admin.get("nodePort") == 30051, (
+            f"Marquez admin nodePort: expected 30051, got {marquez_admin.get('nodePort')}"
+        )
+
+        # OTel HTTP 30418 — rendered by subchart, verify via raw output string search
+        result = subprocess.run(
+            [
+                "helm",
+                "template",
+                "test-release",
+                str(platform_chart_path),
+                "-f",
+                str(platform_chart_path / "values-test.yaml"),
+            ],
+            capture_output=True,
+            timeout=60,
+            check=True,
+        )
+        raw_output = result.stdout.decode()
+        assert "30418" in raw_output, (
+            "OTel HTTP nodePort 30418 not found in rendered template output"
+        )
