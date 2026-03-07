@@ -389,6 +389,12 @@ def test_minio_persistence_enabled_in_test_values() -> None:
         f"minio config should be a dict, got {type(minio_config).__name__}"
     )
 
+    # Verify minio.enabled is true (persistence is meaningless if MinIO is disabled)
+    assert minio_config.get("enabled") is True, (
+        f"minio.enabled must be true for persistence to take effect, "
+        f"got {minio_config.get('enabled')!r}"
+    )
+
     # Verify persistence sub-section exists
     assert "persistence" in minio_config, (
         "minio.persistence key is missing from values-test.yaml. "
@@ -415,6 +421,15 @@ def test_minio_persistence_enabled_in_test_values() -> None:
     )
 
 
+def _read_e2e_script() -> str:
+    """Read and return the content of testing/ci/test-e2e.sh."""
+    script_path = Path(__file__).parent.parent.parent / "testing" / "ci" / "test-e2e.sh"
+    assert script_path.exists(), (
+        f"test-e2e.sh not found at {script_path}. Expected at testing/ci/test-e2e.sh"
+    )
+    return script_path.read_text()
+
+
 @pytest.mark.requirement("AC-32.2")
 def test_bucket_detection_uses_authenticated_s3_api() -> None:
     """Test that test-e2e.sh uses boto3 HeadBucket for bucket detection, not anonymous curl.
@@ -431,24 +446,18 @@ def test_bucket_detection_uses_authenticated_s3_api() -> None:
     """
     import re
 
-    script_path = Path(__file__).parent.parent.parent / "testing" / "ci" / "test-e2e.sh"
-    assert script_path.exists(), (
-        f"test-e2e.sh not found at {script_path}. Expected at testing/ci/test-e2e.sh"
-    )
-
-    full_content = script_path.read_text()
+    full_content = _read_e2e_script()
 
     # Extract the MinIO bucket verification section.
-    # It starts at "Verify MinIO bucket" and ends at the next major section
-    # (e.g., "Verify Polaris catalog" or end of file).
+    # Flexible regex: matches "Verify MinIO bucket", "MinIO bucket verification", etc.
     bucket_section_match = re.search(
-        r"# Verify MinIO bucket.*?(?=# Verify Polaris|$)",
+        r"#.*(?:Verify|Check|Ensure).*MinIO.*bucket.*?(?=#.*(?:Verify|Check|Ensure).*Polaris|$)",
         full_content,
-        re.DOTALL,
+        re.DOTALL | re.IGNORECASE,
     )
     assert bucket_section_match is not None, (
         "Could not find MinIO bucket verification section in test-e2e.sh. "
-        "Expected a comment containing '# Verify MinIO bucket'."
+        "Expected a comment mentioning MinIO bucket verification/check."
     )
     bucket_section = bucket_section_match.group(0)
 
@@ -518,35 +527,37 @@ def test_no_mc_cli_for_bucket_management() -> None:
     """
     import re
 
-    script_path = Path(__file__).parent.parent.parent / "testing" / "ci" / "test-e2e.sh"
-    assert script_path.exists(), (
-        f"test-e2e.sh not found at {script_path}. Expected at testing/ci/test-e2e.sh"
-    )
+    full_content = _read_e2e_script()
 
-    full_content = script_path.read_text()
+    # Filter to non-comment lines for pattern matching
+    code_lines = [
+        line
+        for line in full_content.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    code_content = "\n".join(code_lines)
 
-    # AC-32.3: No 'mc mb' anywhere in the file
-    mc_mb_matches = re.findall(r"^\s*.*\bmc\s+mb\b.*$", full_content, re.MULTILINE)
+    # AC-32.3: No 'mc mb' in executable lines
+    mc_mb_matches = re.findall(r"^.*\bmc\s+mb\b.*$", code_content, re.MULTILINE)
     assert len(mc_mb_matches) == 0, (
         f"Found {len(mc_mb_matches)} 'mc mb' call(s) in test-e2e.sh. "
         f"AC-32.3 prohibits mc CLI for bucket management. "
         f"Lines: {mc_mb_matches}"
     )
 
-    # AC-32.3: No 'mc alias' anywhere in the file
-    mc_alias_matches = re.findall(r"^\s*.*\bmc\s+alias\b.*$", full_content, re.MULTILINE)
+    # AC-32.3: No 'mc alias' in executable lines
+    mc_alias_matches = re.findall(r"^.*\bmc\s+alias\b.*$", code_content, re.MULTILINE)
     assert len(mc_alias_matches) == 0, (
         f"Found {len(mc_alias_matches)} 'mc alias' call(s) in test-e2e.sh. "
         f"AC-32.3 prohibits mc CLI for bucket management. "
         f"Lines: {mc_alias_matches}"
     )
 
-    # AC-32.3: No kubectl exec commands related to MinIO bucket creation.
-    # Match patterns like: kubectl exec ... minio ... mc
-    # or: kubectl exec -n ... "${MINIO_POD}" -- mc ...
+    # AC-32.3: No kubectl exec for bucket management.
+    # Catch both direct minio references and indirect via mc commands.
     kubectl_exec_minio_matches = re.findall(
-        r"^\s*kubectl\s+exec\b.*(?:minio|MINIO).*$",
-        full_content,
+        r"^.*kubectl\s+exec\b.*(?:minio|MINIO|mc\s+mb|mc\s+alias).*$",
+        code_content,
         re.MULTILINE,
     )
     assert len(kubectl_exec_minio_matches) == 0, (

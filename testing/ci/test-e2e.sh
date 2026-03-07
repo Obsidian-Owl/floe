@@ -254,8 +254,6 @@ echo "Port-forwards established."
 # Uses boto3 HeadBucket with credentials — anonymous curl returns 403 for both
 # existing and non-existing buckets, making it useless for detection.
 MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
-MINIO_USER="${MINIO_USER:-minioadmin}"
-MINIO_PASS="${MINIO_PASS:-minioadmin123}"
 echo "Verifying MinIO bucket '${MINIO_BUCKET}' via S3 API..."
 python3 - "${MINIO_USER}" "${MINIO_PASS}" "${MINIO_BUCKET}" <<'PYEOF'
 import sys
@@ -277,10 +275,6 @@ except ClientError as e:
     else:
         raise
 PYEOF
-if [[ $? -ne 0 ]]; then
-    echo "ERROR: MinIO bucket verification failed for '${MINIO_BUCKET}'" >&2
-    exit 1
-fi
 echo "MinIO bucket '${MINIO_BUCKET}' ready"
 
 # Verify Polaris catalog exists (defense-in-depth for bootstrap job failures)

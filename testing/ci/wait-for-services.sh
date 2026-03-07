@@ -14,6 +14,8 @@
 #   MINIO_BUCKET          Expected bucket name (default: floe-iceberg)
 #   POLARIS_CLIENT_ID     OAuth client ID (default: demo-admin)
 #   POLARIS_CLIENT_SECRET OAuth client secret (default: demo-secret)
+#   MINIO_USER            MinIO admin username (default: minioadmin)
+#   MINIO_PASS            MinIO admin password (default: minioadmin123)
 
 set -euo pipefail
 
@@ -23,6 +25,8 @@ POD_TIMEOUT="${POD_TIMEOUT:-300}"
 JOB_TIMEOUT="${JOB_TIMEOUT:-180}"
 POLARIS_URL="${POLARIS_URL:-http://localhost:8181}"
 POLARIS_CATALOG_NAME="${POLARIS_CATALOG_NAME:-floe-e2e}"
+MINIO_USER="${MINIO_USER:-minioadmin}"
+MINIO_PASS="${MINIO_PASS:-minioadmin123}"
 
 # Source Polaris auth helper
 # shellcheck source=testing/ci/polaris-auth.sh
@@ -67,6 +71,8 @@ done
 
 # Verify MinIO bucket exists (defense-in-depth: Helm hooks should have
 # created the bucket, but we confirm the OUTCOME, not the mechanism).
+# Uses boto3 HeadBucket with credentials — anonymous curl returns 403 for both
+# existing and non-existing buckets, making it useless for detection.
 MINIO_URL="${MINIO_URL:-http://localhost:9000}"
 MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
 echo "Verifying MinIO bucket '${MINIO_BUCKET}' exists..."
@@ -74,18 +80,36 @@ MINIO_ATTEMPT=0
 MINIO_MAX_ATTEMPTS=30
 while true; do
     MINIO_ATTEMPT=$((MINIO_ATTEMPT + 1))
-    BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "${MINIO_URL}/${MINIO_BUCKET}/" 2>/dev/null) || true
-    # MinIO returns 200 for existing buckets, 403 when auth required (bucket exists)
-    if [[ "$BUCKET_CODE" == "200" ]] || [[ "$BUCKET_CODE" == "403" ]]; then
-        echo "MinIO bucket '${MINIO_BUCKET}' verified (HTTP ${BUCKET_CODE})"
+    if python3 - "${MINIO_USER}" "${MINIO_PASS}" "${MINIO_URL}" "${MINIO_BUCKET}" <<'PYEOF' 2>/dev/null
+import sys
+import boto3
+from botocore.exceptions import ClientError
+user, password, endpoint, bucket = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+s3 = boto3.client('s3',
+    endpoint_url=endpoint,
+    aws_access_key_id=user,
+    aws_secret_access_key=password)
+try:
+    s3.head_bucket(Bucket=bucket)
+    print(f'Bucket {bucket} exists')
+except ClientError as e:
+    code = e.response['Error']['Code']
+    if code == '404' or code == 'NoSuchBucket':
+        s3.create_bucket(Bucket=bucket)
+        print(f'Bucket {bucket} created')
+    else:
+        raise
+PYEOF
+    then
+        echo "MinIO bucket '${MINIO_BUCKET}' verified"
         break
     fi
     if [[ $MINIO_ATTEMPT -ge $MINIO_MAX_ATTEMPTS ]]; then
-        echo "ERROR: MinIO bucket '${MINIO_BUCKET}' not available after ${MINIO_MAX_ATTEMPTS} attempts (last HTTP ${BUCKET_CODE})" >&2
+        echo "ERROR: MinIO bucket '${MINIO_BUCKET}' not available after ${MINIO_MAX_ATTEMPTS} attempts" >&2
         echo "Check MinIO provisioning job: kubectl get jobs -n ${NAMESPACE} -l app.kubernetes.io/name=minio" >&2
         exit 1
     fi
-    echo "  Attempt ${MINIO_ATTEMPT}/${MINIO_MAX_ATTEMPTS} - bucket not ready (HTTP ${BUCKET_CODE}), waiting 3s..."
+    echo "  Attempt ${MINIO_ATTEMPT}/${MINIO_MAX_ATTEMPTS} - bucket not ready, waiting 3s..."
     sleep 3
 done
 
