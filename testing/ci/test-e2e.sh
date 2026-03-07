@@ -251,30 +251,35 @@ wait_for_port localhost 16686 15 || true  # Jaeger optional
 echo "Port-forwards established."
 
 # Verify MinIO bucket exists before running tests (defense-in-depth)
+# Uses boto3 HeadBucket with credentials — anonymous curl returns 403 for both
+# existing and non-existing buckets, making it useless for detection.
 MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
-echo "Verifying MinIO bucket '${MINIO_BUCKET}'..."
-BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:9000/${MINIO_BUCKET}/" 2>/dev/null) || true
-if [[ "$BUCKET_CODE" == "404" ]]; then
-    echo "MinIO bucket '${MINIO_BUCKET}' not found — creating..." >&2
-    MINIO_POD=$(kubectl get pods -n "${TEST_NAMESPACE}" -l app.kubernetes.io/name=minio \
-        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-    if [[ -z "${MINIO_POD}" ]]; then
-        echo "ERROR: No MinIO pod found in namespace ${TEST_NAMESPACE}" >&2
-        exit 1
-    fi
-    kubectl exec -n "${TEST_NAMESPACE}" "${MINIO_POD}" -- \
-        mc alias set local http://localhost:9000 "${MINIO_USER}" "${MINIO_PASS}" 2>&1 || true
-    kubectl exec -n "${TEST_NAMESPACE}" "${MINIO_POD}" -- \
-        mc mb "local/${MINIO_BUCKET}" --ignore-existing 2>&1
-    # Re-verify
-    BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:9000/${MINIO_BUCKET}/" 2>/dev/null) || true
-    if [[ "$BUCKET_CODE" == "404" ]]; then
-        echo "ERROR: Failed to create MinIO bucket '${MINIO_BUCKET}'" >&2
-        exit 1
-    fi
-    echo "MinIO bucket '${MINIO_BUCKET}' created successfully"
+MINIO_USER="${MINIO_USER:-minioadmin}"
+MINIO_PASS="${MINIO_PASS:-minioadmin123}"
+echo "Verifying MinIO bucket '${MINIO_BUCKET}' via S3 API..."
+python3 -c "
+import boto3
+from botocore.exceptions import ClientError
+s3 = boto3.client('s3',
+    endpoint_url='http://localhost:9000',
+    aws_access_key_id='${MINIO_USER}',
+    aws_secret_access_key='${MINIO_PASS}')
+try:
+    s3.head_bucket(Bucket='${MINIO_BUCKET}')
+    print('Bucket ${MINIO_BUCKET} exists')
+except ClientError as e:
+    code = e.response['Error']['Code']
+    if code == '404' or code == 'NoSuchBucket':
+        s3.create_bucket(Bucket='${MINIO_BUCKET}')
+        print('Bucket ${MINIO_BUCKET} created')
+    else:
+        raise
+"
+if [[ $? -ne 0 ]]; then
+    echo "ERROR: MinIO bucket verification failed for '${MINIO_BUCKET}'" >&2
+    exit 1
 fi
-echo "MinIO bucket '${MINIO_BUCKET}' accessible (HTTP ${BUCKET_CODE})"
+echo "MinIO bucket '${MINIO_BUCKET}' ready"
 
 # Verify Polaris catalog exists (defense-in-depth for bootstrap job failures)
 POLARIS_CATALOG="${POLARIS_CATALOG:-floe-e2e}"

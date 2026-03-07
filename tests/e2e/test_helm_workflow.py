@@ -417,3 +417,141 @@ def test_minio_persistence_enabled_in_test_values() -> None:
     assert persistence_config["size"] == "1Gi", (
         f"minio.persistence.size must be '1Gi', got {persistence_config['size']!r}"
     )
+
+
+@pytest.mark.requirement("AC-32.2")
+def test_bucket_detection_uses_authenticated_s3_api() -> None:
+    """Test that test-e2e.sh uses boto3 HeadBucket for bucket detection, not anonymous curl.
+
+    AC-32.2 requires that the MinIO bucket check in test-e2e.sh uses
+    boto3 HeadBucket with MinIO credentials for bucket detection. Anonymous
+    curl requests to port 9000 are unreliable (MinIO returns 200 for
+    non-existent buckets in some configurations) and bypass authentication.
+
+    Validates:
+        - The bucket verification section contains boto3 or python3-with-boto3 usage
+        - No anonymous curl to port 9000 appears in the bucket verification section
+        - The bucket detection approach is authenticated (uses credentials)
+    """
+    import re
+
+    script_path = (
+        Path(__file__).parent.parent.parent / "testing" / "ci" / "test-e2e.sh"
+    )
+    assert script_path.exists(), (
+        f"test-e2e.sh not found at {script_path}. "
+        "Expected at testing/ci/test-e2e.sh"
+    )
+
+    full_content = script_path.read_text()
+
+    # Extract the MinIO bucket verification section.
+    # It starts at "Verify MinIO bucket" and ends at the next major section
+    # (e.g., "Verify Polaris catalog" or end of file).
+    bucket_section_match = re.search(
+        r"# Verify MinIO bucket.*?(?=# Verify Polaris|$)",
+        full_content,
+        re.DOTALL,
+    )
+    assert bucket_section_match is not None, (
+        "Could not find MinIO bucket verification section in test-e2e.sh. "
+        "Expected a comment containing '# Verify MinIO bucket'."
+    )
+    bucket_section = bucket_section_match.group(0)
+
+    # AC-32.2 NEGATIVE: No anonymous curl for bucket detection.
+    # Match curl calls targeting port 9000 (MinIO) within the bucket section.
+    curl_minio_pattern = re.compile(
+        r"curl\s+.*(?:localhost|127\.0\.0\.1)[:\s]*9000",
+        re.IGNORECASE,
+    )
+    curl_matches = curl_minio_pattern.findall(bucket_section)
+    assert len(curl_matches) == 0, (
+        f"Found {len(curl_matches)} anonymous curl call(s) to MinIO (port 9000) "
+        f"in the bucket verification section. AC-32.2 requires boto3 HeadBucket "
+        f"with MinIO credentials instead. Matches: {curl_matches}"
+    )
+
+    # AC-32.2 POSITIVE: Must use boto3 / python3 with boto3 for bucket detection.
+    # Accept either inline python3 -c with boto3, or a call to a python script
+    # that uses boto3, or direct boto3 references.
+    uses_boto3 = (
+        "boto3" in bucket_section
+        or "head_bucket" in bucket_section.lower()
+        or "HeadBucket" in bucket_section
+    )
+    # Also accept python3 invocation that would use boto3
+    uses_python3_for_s3 = re.search(
+        r"python3?\s+.*(?:boto3|s3_bucket|head_bucket|HeadBucket)",
+        bucket_section,
+        re.IGNORECASE,
+    )
+    assert uses_boto3 or uses_python3_for_s3, (
+        "Bucket verification section does not use boto3 or HeadBucket for "
+        "bucket detection. AC-32.2 requires authenticated S3 API calls via "
+        "boto3 HeadBucket with MinIO credentials. Found section:\n"
+        f"{bucket_section[:500]}"
+    )
+
+
+@pytest.mark.requirement("AC-32.3")
+def test_no_mc_cli_for_bucket_management() -> None:
+    """Test that test-e2e.sh does not use mc CLI or kubectl exec for bucket ops.
+
+    AC-32.3 requires that bucket management in test-e2e.sh does NOT use:
+    - mc mb (MinIO client bucket creation)
+    - mc alias (MinIO client alias configuration)
+    - kubectl exec to run mc commands inside MinIO pods
+
+    These approaches are fragile (depend on mc being installed in the MinIO
+    container image) and create a dependency on the MinIO pod's internal
+    tooling rather than using the standard S3 API.
+
+    Validates:
+        - 'mc mb' does not appear anywhere in the script
+        - 'mc alias' does not appear anywhere in the script
+        - No kubectl exec commands target MinIO for bucket creation
+    """
+    import re
+
+    script_path = (
+        Path(__file__).parent.parent.parent / "testing" / "ci" / "test-e2e.sh"
+    )
+    assert script_path.exists(), (
+        f"test-e2e.sh not found at {script_path}. "
+        "Expected at testing/ci/test-e2e.sh"
+    )
+
+    full_content = script_path.read_text()
+
+    # AC-32.3: No 'mc mb' anywhere in the file
+    mc_mb_matches = re.findall(r"^\s*.*\bmc\s+mb\b.*$", full_content, re.MULTILINE)
+    assert len(mc_mb_matches) == 0, (
+        f"Found {len(mc_mb_matches)} 'mc mb' call(s) in test-e2e.sh. "
+        f"AC-32.3 prohibits mc CLI for bucket management. "
+        f"Lines: {mc_mb_matches}"
+    )
+
+    # AC-32.3: No 'mc alias' anywhere in the file
+    mc_alias_matches = re.findall(
+        r"^\s*.*\bmc\s+alias\b.*$", full_content, re.MULTILINE
+    )
+    assert len(mc_alias_matches) == 0, (
+        f"Found {len(mc_alias_matches)} 'mc alias' call(s) in test-e2e.sh. "
+        f"AC-32.3 prohibits mc CLI for bucket management. "
+        f"Lines: {mc_alias_matches}"
+    )
+
+    # AC-32.3: No kubectl exec commands related to MinIO bucket creation.
+    # Match patterns like: kubectl exec ... minio ... mc
+    # or: kubectl exec -n ... "${MINIO_POD}" -- mc ...
+    kubectl_exec_minio_matches = re.findall(
+        r"^\s*kubectl\s+exec\b.*(?:minio|MINIO).*$",
+        full_content,
+        re.MULTILINE,
+    )
+    assert len(kubectl_exec_minio_matches) == 0, (
+        f"Found {len(kubectl_exec_minio_matches)} 'kubectl exec' call(s) "
+        f"targeting MinIO in test-e2e.sh. AC-32.3 prohibits kubectl exec "
+        f"for bucket management. Lines: {kubectl_exec_minio_matches}"
+    )
