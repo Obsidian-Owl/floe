@@ -1,10 +1,27 @@
 # WU-31: Bootstrap reliability tests
 # Verifies TTL, preflight checks, structured logging, exponential backoff,
-# security context, init container ordering, and secret overrides.
+# security context, init container ordering, secret overrides, and conditional rendering.
 suite: bootstrap reliability
 templates:
   - templates/job-polaris-bootstrap.yaml
 tests:
+  # --- Conditional rendering (negative tests) ---
+  - it: should not render when polaris.enabled is false
+    set:
+      polaris.enabled: false
+      polaris.bootstrap.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render when polaris.bootstrap.enabled is false
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
   # --- T1: TTL cleanup ---
   - it: should have ttlSecondsAfterFinished set to 3600
     set:
@@ -34,7 +51,7 @@ tests:
           value: Never
 
   # --- Pod-level security context (PSS restricted) ---
-  - it: pod securityContext should enforce runAsNonRoot
+  - it: pod securityContext should enforce runAsNonRoot with UID 100
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
@@ -57,6 +74,15 @@ tests:
       - equal:
           path: spec.template.spec.securityContext.seccompProfile.type
           value: RuntimeDefault
+
+  - it: should disable automountServiceAccountToken
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.automountServiceAccountToken
+          value: false
 
   # --- Bootstrap container security context ---
   - it: bootstrap container should deny privilege escalation
@@ -94,6 +120,38 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].securityContext.capabilities.drop
           content: ALL
+
+  # --- Container image pinning ---
+  - it: bootstrap container should use digest-pinned curl image
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: bootstrap
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: "curlimages/curl:8\\.5\\.0@sha256:"
+
+  - it: init containers should use digest-pinned curl image
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-minio
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].image
+          pattern: "curlimages/curl:8\\.5\\.0@sha256:"
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: wait-for-polaris
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].image
+          pattern: "curlimages/curl:8\\.5\\.0@sha256:"
 
   # --- Writable /tmp volume for readOnlyRootFilesystem ---
   - it: should mount emptyDir volume at /tmp for bootstrap container
@@ -184,15 +242,51 @@ tests:
           path: spec.template.spec.initContainers[0].securityContext.capabilities.drop
           content: ALL
 
+  # --- Init container health endpoints (AC-31.6 for bootstrap job) ---
+  - it: wait-for-minio should use /minio/health/ready endpoint
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-minio
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "curl.*minio/health/ready"
+
+  - it: wait-for-polaris should use /q/health/ready endpoint
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: false
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-polaris
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "curl.*q/health/ready"
+
   # --- T2: Preflight env var checks ---
-  - it: bootstrap should have separate -z checks for both CLIENT_ID and CLIENT_SECRET
+  - it: CLIENT_ID preflight should exit 42 when empty
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '(?s)-z "\$POLARIS_CLIENT_ID".*exit 42.*-z "\$POLARIS_CLIENT_SECRET".*exit 42'
+          pattern: '(?s)-z "\$POLARIS_CLIENT_ID".*exit 42'
+
+  - it: CLIENT_SECRET preflight should exit 42 when empty
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '(?s)-z "\$POLARIS_CLIENT_SECRET".*exit 42'
 
   - it: preflight checks should precede OAuth token acquisition
     set:
@@ -221,6 +315,28 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: 'log "Step [1-4]/4:'
+
+  - it: error messages should use log function not bare echo
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'log "ERROR:'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'echo "ERROR:'
+
+  # --- Script safety ---
+  - it: bootstrap script should set -e for fail-fast behavior
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "set -e"
 
   # --- Credential protection (stdin piping) ---
   - it: OAuth token request should pipe credentials via stdin
@@ -295,6 +411,33 @@ tests:
           path: spec.template.spec.initContainers[0].command[2]
           pattern: "(?s)-gt 30.*DELAY=30"
 
+  # --- MAX_ATTEMPTS exact values ---
+  - it: wait-for-minio should have MAX_ATTEMPTS=60
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-minio
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "MAX_ATTEMPTS=60"
+
+  - it: wait-for-polaris should have MAX_ATTEMPTS=90
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      minio.enabled: false
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-polaris
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "MAX_ATTEMPTS=90"
+
   # --- Boundary: init container max attempts exhaustion ---
   - it: wait-for-minio should exit 1 after MAX_ATTEMPTS exhausted
     set:
@@ -307,7 +450,7 @@ tests:
           value: wait-for-minio
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "(?s)MAX_ATTEMPTS=\\d+.*-ge.*MAX_ATTEMPTS.*exit 1"
+          pattern: "(?s)MAX_ATTEMPTS=60.*-ge.*MAX_ATTEMPTS.*exit 1"
 
   - it: wait-for-polaris should exit 1 after MAX_ATTEMPTS exhausted
     set:
@@ -320,7 +463,7 @@ tests:
           value: wait-for-polaris
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "(?s)MAX_ATTEMPTS=\\d+.*-ge.*MAX_ATTEMPTS.*exit 1"
+          pattern: "(?s)MAX_ATTEMPTS=90.*-ge.*MAX_ATTEMPTS.*exit 1"
 
   # --- Secret override (existingSecret) ---
   - it: should use existingSecret when configured
@@ -330,11 +473,32 @@ tests:
       polaris.auth.existingSecret: my-custom-secret
     asserts:
       - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: POLARIS_CLIENT_ID
+      - equal:
           path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
           value: my-custom-secret
       - equal:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.key
+          value: client-id
+      - equal:
+          path: spec.template.spec.containers[0].env[1].name
+          value: POLARIS_CLIENT_SECRET
+      - equal:
           path: spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.name
           value: my-custom-secret
+      - equal:
+          path: spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.key
+          value: client-secret
+
+  - it: should use generated secret name when existingSecret is not set
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name
+          pattern: ".*-polaris-credentials$"
 
   # --- S3 env var count ---
   - it: should have 4 env vars when S3 storage is enabled

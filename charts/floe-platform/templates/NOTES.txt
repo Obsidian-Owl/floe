@@ -86,6 +86,15 @@ POSTGRESQL:
 {{- end }}
 {{- end }}
 
+{{- if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}
+
+⚠️  BOOTSTRAP SECURITY NOTE:
+    The bootstrap job communicates with Polaris over plaintext HTTP
+    within the cluster network. For production deployments:
+    1. Deploy a service mesh (Istio/Linkerd) for automatic mTLS
+    2. Or configure Polaris TLS and update polaris.service endpoints
+{{- end }}
+
 {{- if eq .Values.global.environment "dev" }}
 
 ℹ️  DEVELOPMENT MODE:
@@ -131,7 +140,9 @@ If something isn't working, check these common issues:
 
 2. Init container timeout (pod stuck in Init):
    kubectl describe pod -n {{ .Release.Namespace }} <pod-name> | grep -A5 "Init Containers"
+{{- if .Values.minio.enabled }}
    - wait-for-minio: Verify MinIO is running (kubectl get pods -l app.kubernetes.io/component=minio)
+{{- end }}
    - wait-for-polaris: Verify Polaris is running (kubectl get pods -l app.kubernetes.io/component=polaris)
    - Check service endpoints: kubectl get endpoints -n {{ .Release.Namespace }}
 {{- end }}

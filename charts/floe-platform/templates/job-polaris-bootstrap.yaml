@@ -30,7 +30,7 @@ spec:
       initContainers:
 {{- if .Values.minio.enabled }}
         - name: wait-for-minio
-          image: curlimages/curl:8.5.0
+          image: curlimages/curl:8.5.0@sha256:08e466006f0860e54fc299378de998935333e0e130a15f6f98482e9f8dab3058
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -67,7 +67,7 @@ spec:
               memory: 32Mi
 {{- end }}
         - name: wait-for-polaris
-          image: curlimages/curl:8.5.0
+          image: curlimages/curl:8.5.0@sha256:08e466006f0860e54fc299378de998935333e0e130a15f6f98482e9f8dab3058
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -103,7 +103,7 @@ spec:
               memory: 32Mi
       containers:
         - name: bootstrap
-          image: curlimages/curl:8.5.0
+          image: curlimages/curl:8.5.0@sha256:08e466006f0860e54fc299378de998935333e0e130a15f6f98482e9f8dab3058
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -137,8 +137,8 @@ spec:
             - sh
             - -c
             - |
-              set -e
               trap 'rm -f /tmp/response.txt /tmp/verify.txt' EXIT
+              set -e
               log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] BOOTSTRAP: $*"; }
 
               # Preflight: check required environment variables
