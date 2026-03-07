@@ -11,6 +11,7 @@ metadata:
     "helm.sh/hook-weight": "10"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
+  ttlSecondsAfterFinished: 3600
   backoffLimit: {{ .Values.polaris.bootstrap.backoffLimit | default 5 }}
   template:
     metadata:
@@ -19,17 +20,31 @@ spec:
         app.kubernetes.io/component: polaris-bootstrap
     spec:
       restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 100
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
 {{- if .Values.minio.enabled }}
         - name: wait-for-minio
-          image: curlimages/curl:8.5.0
+          image: curlimages/curl:8.5.0@sha256:08e466006f0860e54fc299378de998935333e0e130a15f6f98482e9f8dab3058
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           command:
             - sh
             - -c
             - |
               echo "Waiting for MinIO to be ready..."
               ATTEMPT=0
-              MAX_ATTEMPTS=60
+              MAX_ATTEMPTS=20
+              DELAY=2
               {{- $minioSvc := printf "%s-minio" (include "floe-platform.fullname" .) }}
               until curl -sf http://{{ $minioSvc }}:9000/minio/health/ready > /dev/null 2>&1; do
                 ATTEMPT=$((ATTEMPT + 1))
@@ -37,8 +52,10 @@ spec:
                   echo "ERROR: MinIO not ready after $MAX_ATTEMPTS attempts" >&2
                   exit 1
                 fi
-                echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - MinIO not ready, waiting 2s..."
-                sleep 2
+                echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - MinIO not ready, waiting ${DELAY}s..."
+                sleep $DELAY
+                DELAY=$((DELAY * 2))
+                [ "$DELAY" -gt 30 ] && DELAY=30
               done
               echo "MinIO is ready!"
           resources:
@@ -50,22 +67,31 @@ spec:
               memory: 32Mi
 {{- end }}
         - name: wait-for-polaris
-          image: curlimages/curl:8.5.0
+          image: curlimages/curl:8.5.0@sha256:08e466006f0860e54fc299378de998935333e0e130a15f6f98482e9f8dab3058
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           command:
             - sh
             - -c
             - |
               echo "Waiting for Polaris to be ready..."
               ATTEMPT=0
-              MAX_ATTEMPTS=90
+              MAX_ATTEMPTS=30
+              DELAY=2
               until curl -sf http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.managementPort | default 8182 }}/q/health/ready > /dev/null 2>&1; do
                 ATTEMPT=$((ATTEMPT + 1))
                 if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
                   echo "ERROR: Polaris not ready after $MAX_ATTEMPTS attempts" >&2
                   exit 1
                 fi
-                echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - Polaris not ready, waiting 5s..."
-                sleep 5
+                echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - Polaris not ready, waiting ${DELAY}s..."
+                sleep $DELAY
+                DELAY=$((DELAY * 2))
+                [ "$DELAY" -gt 30 ] && DELAY=30
               done
               echo "Polaris is ready!"
           resources:
@@ -77,7 +103,13 @@ spec:
               memory: 32Mi
       containers:
         - name: bootstrap
-          image: curlimages/curl:8.5.0
+          image: curlimages/curl:8.5.0@sha256:08e466006f0860e54fc299378de998935333e0e130a15f6f98482e9f8dab3058
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: POLARIS_CLIENT_ID
               valueFrom:
@@ -105,37 +137,53 @@ spec:
             - sh
             - -c
             - |
+              trap 'rm -f /tmp/response.txt /tmp/verify.txt' EXIT
               set -e
+              log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] BOOTSTRAP: $*"; }
+
+              # Preflight: check required environment variables
+              if [ -z "$POLARIS_CLIENT_ID" ]; then
+                log "ERROR: POLARIS_CLIENT_ID is not set or empty" >&2
+                exit 42
+              fi
+              if [ -z "$POLARIS_CLIENT_SECRET" ]; then
+                log "ERROR: POLARIS_CLIENT_SECRET is not set or empty" >&2
+                exit 42
+              fi
+
               POLARIS_URL="http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.port | default 8181 }}"
 
-              echo "Acquiring OAuth token..."
-              TOKEN=$(curl -s --fail-with-body -X POST \
+              log "Step 1/4: Acquiring OAuth token..."
+              # NOTE: grep/cut token extraction assumes compact JSON (no whitespace around colons).
+              # Polaris returns compact JSON by default. jq unavailable in curl image.
+              TOKEN=$(printf 'grant_type=client_credentials&client_id=%s&client_secret=%s&scope=PRINCIPAL_ROLE:ALL' \
+                "$POLARIS_CLIENT_ID" "$POLARIS_CLIENT_SECRET" | \
+                curl -s --fail-with-body -X POST \
                 "$POLARIS_URL/api/catalog/v1/oauth/tokens" \
-                -d "grant_type=client_credentials&client_id=$POLARIS_CLIENT_ID&client_secret=$POLARIS_CLIENT_SECRET&scope=PRINCIPAL_ROLE:ALL" \
-                | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+                -d @- | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
 
               if [ -z "$TOKEN" ]; then
-                echo "ERROR: Failed to acquire OAuth token" >&2
+                log "ERROR: Failed to acquire OAuth token" >&2
                 exit 1
               fi
-              echo "Token acquired successfully"
+              log "Token acquired successfully"
 
               {{- if .Values.polaris.storage.s3.enabled }}
               {{- $bucketName := trimPrefix "s3://" .Values.polaris.bootstrap.defaultBaseLocation | splitList "/" | first }}
               # Verify MinIO bucket exists before creating catalog
-              echo "Verifying MinIO bucket '{{ $bucketName }}' exists..."
+              log "Step 2/4: Verifying MinIO bucket '{{ $bucketName }}' exists..."
               MINIO_URL="{{ .Values.polaris.storage.s3.endpoint }}"
               BUCKET_NAME="{{ $bucketName }}"
               BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "$MINIO_URL/$BUCKET_NAME/" 2>/dev/null)
               if [ "$BUCKET_CODE" = "404" ]; then
-                echo "ERROR: MinIO bucket '$BUCKET_NAME' does not exist (HTTP 404)" >&2
-                echo "Ensure MinIO provisioning job completed successfully." >&2
+                log "ERROR: MinIO bucket '$BUCKET_NAME' does not exist (HTTP 404)" >&2
+                log "Ensure MinIO provisioning job completed successfully." >&2
                 exit 1
               fi
-              echo "MinIO bucket '$BUCKET_NAME' accessible (HTTP $BUCKET_CODE)"
+              log "MinIO bucket '$BUCKET_NAME' accessible (HTTP $BUCKET_CODE)"
               {{- end }}
 
-              echo "Creating catalog '{{ .Values.polaris.bootstrap.catalogName }}'..."
+              log "Step 3/4: Creating catalog '{{ .Values.polaris.bootstrap.catalogName }}'..."
               {{- if .Values.polaris.storage.s3.enabled }}
               # Build catalog JSON with S3 credentials from environment
               CATALOG_JSON=$(cat <<EOJSON
@@ -185,43 +233,46 @@ spec:
               }'
               {{- end }}
 
-              HTTP_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
+              HTTP_CODE=$(printf '%s' "$CATALOG_JSON" | curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/catalogs" \
-                -d "$CATALOG_JSON")
+                -d @-)
 
               if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-                echo "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' created successfully"
+                log "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' created successfully"
               elif [ "$HTTP_CODE" = "409" ]; then
-                echo "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' already exists (HTTP 409) - OK"
+                log "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' already exists (HTTP 409) - OK"
               else
-                echo "ERROR: Failed to create catalog (HTTP $HTTP_CODE)" >&2
-                cat /tmp/response.txt >&2
+                log "ERROR: Failed to create catalog (HTTP $HTTP_CODE)" >&2
+                head -5 /tmp/response.txt >&2
                 exit 1
               fi
 
               # Verify catalog exists via management API
-              echo "Verifying catalog '{{ .Values.polaris.bootstrap.catalogName }}' via management API..."
+              log "Step 4/4: Verifying catalog '{{ .Values.polaris.bootstrap.catalogName }}' via management API..."
               VERIFY_CODE=$(curl -s -o /tmp/verify.txt -w '%{http_code}' \
                 -H "Authorization: Bearer $TOKEN" \
                 "$POLARIS_URL/api/management/v1/catalogs/{{ .Values.polaris.bootstrap.catalogName }}")
 
               if [ "$VERIFY_CODE" != "200" ]; then
-                echo "ERROR: Catalog verification failed (HTTP $VERIFY_CODE)" >&2
-                cat /tmp/verify.txt >&2
+                log "ERROR: Catalog verification failed (HTTP $VERIFY_CODE)" >&2
+                head -5 /tmp/verify.txt >&2
                 exit 1
               fi
 
               # Verify response contains expected catalog name
               if ! grep -q '"name"' /tmp/verify.txt; then
-                echo "ERROR: Catalog verification response missing 'name' field" >&2
-                cat /tmp/verify.txt >&2
+                log "ERROR: Catalog verification response missing 'name' field" >&2
+                head -5 /tmp/verify.txt >&2
                 exit 1
               fi
-              echo "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' verified successfully"
+              log "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' verified successfully"
 
-              echo "Bootstrap complete!"
+              log "Bootstrap complete!"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             limits:
               cpu: 100m
@@ -229,4 +280,7 @@ spec:
             requests:
               cpu: 50m
               memory: 32Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
 {{- end }}

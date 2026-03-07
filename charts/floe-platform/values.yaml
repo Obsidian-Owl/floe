@@ -258,6 +258,8 @@ polaris:
 
   # Authentication - bootstrap credentials for root principal
   auth:
+    # Existing secret containing Polaris credentials (overrides bootstrapCredentials)
+    existingSecret: ""
     bootstrapCredentials:
       clientId: "polaris-admin"
       clientSecret: ""  # Must be set in environment-specific values

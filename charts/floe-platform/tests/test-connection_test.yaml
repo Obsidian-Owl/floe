@@ -1,0 +1,84 @@
+# WU-31 T5: test-connection.yaml tests
+# Verifies Helm test pod configuration: postgres version, health endpoints, fallback.
+suite: test connection
+templates:
+  - templates/tests/test-connection.yaml
+tests:
+  # --- Postgres version ---
+  - it: PostgreSQL test container should use postgres:16-alpine
+    set:
+      dagster.enabled: false
+      polaris.enabled: false
+      postgresql.enabled: true
+      minio.enabled: false
+    asserts:
+      - equal:
+          path: spec.containers[0].name
+          value: test-postgresql
+      - equal:
+          path: spec.containers[0].image
+          value: "postgres:16-alpine"
+
+  # --- Health endpoint checks ---
+  - it: Polaris test should curl /q/health/ready endpoint
+    set:
+      dagster.enabled: false
+      polaris.enabled: true
+      postgresql.enabled: false
+      minio.enabled: false
+    asserts:
+      - equal:
+          path: spec.containers[0].name
+          value: test-polaris
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: "curl.*q/health/ready"
+
+  - it: Dagster test should curl /server_info endpoint
+    set:
+      dagster.enabled: true
+      polaris.enabled: false
+      postgresql.enabled: false
+      minio.enabled: false
+    asserts:
+      - equal:
+          path: spec.containers[0].name
+          value: test-dagster
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: "curl.*server_info"
+
+  - it: MinIO test should curl /minio/health/live endpoint
+    set:
+      dagster.enabled: false
+      polaris.enabled: false
+      postgresql.enabled: false
+      minio.enabled: true
+    asserts:
+      - equal:
+          path: spec.containers[0].name
+          value: test-minio
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: "curl.*minio/health/live"
+
+  # --- Fallback container when all services disabled ---
+  - it: should have exactly one no-op container when all services disabled
+    set:
+      dagster.enabled: false
+      polaris.enabled: false
+      postgresql.enabled: false
+      minio.enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.containers
+          count: 1
+      - equal:
+          path: spec.containers[0].name
+          value: no-op
+      - equal:
+          path: spec.containers[0].image
+          value: "busybox:1.36@sha256:b9598f8c98e24d0ad42c1742c32516772c3aa2151011ebaf639089bd18c605b8"
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: "exit 0"
