@@ -257,24 +257,26 @@ MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
 MINIO_USER="${MINIO_USER:-minioadmin}"
 MINIO_PASS="${MINIO_PASS:-minioadmin123}"
 echo "Verifying MinIO bucket '${MINIO_BUCKET}' via S3 API..."
-python3 -c "
+python3 - "${MINIO_USER}" "${MINIO_PASS}" "${MINIO_BUCKET}" <<'PYEOF'
+import sys
 import boto3
 from botocore.exceptions import ClientError
+user, password, bucket = sys.argv[1], sys.argv[2], sys.argv[3]
 s3 = boto3.client('s3',
     endpoint_url='http://localhost:9000',
-    aws_access_key_id='${MINIO_USER}',
-    aws_secret_access_key='${MINIO_PASS}')
+    aws_access_key_id=user,
+    aws_secret_access_key=password)
 try:
-    s3.head_bucket(Bucket='${MINIO_BUCKET}')
-    print('Bucket ${MINIO_BUCKET} exists')
+    s3.head_bucket(Bucket=bucket)
+    print(f'Bucket {bucket} exists')
 except ClientError as e:
     code = e.response['Error']['Code']
     if code == '404' or code == 'NoSuchBucket':
-        s3.create_bucket(Bucket='${MINIO_BUCKET}')
-        print('Bucket ${MINIO_BUCKET} created')
+        s3.create_bucket(Bucket=bucket)
+        print(f'Bucket {bucket} created')
     else:
         raise
-"
+PYEOF
 if [[ $? -ne 0 ]]; then
     echo "ERROR: MinIO bucket verification failed for '${MINIO_BUCKET}'" >&2
     exit 1

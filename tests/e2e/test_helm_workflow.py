@@ -486,6 +486,17 @@ def test_bucket_detection_uses_authenticated_s3_api() -> None:
         f"{bucket_section[:500]}"
     )
 
+    # AC-32.2: Verify credentials are passed (not anonymous boto3)
+    uses_credentials = (
+        "aws_access_key_id" in bucket_section
+        or "MINIO_USER" in bucket_section
+        or "access_key" in bucket_section.lower()
+    )
+    assert uses_credentials, (
+        "Bucket verification uses boto3 but does not pass credentials. "
+        "AC-32.2 requires authenticated S3 API calls with MinIO credentials."
+    )
+
 
 @pytest.mark.requirement("AC-32.3")
 def test_no_mc_cli_for_bucket_management() -> None:
