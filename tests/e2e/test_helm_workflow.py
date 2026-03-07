@@ -368,10 +368,11 @@ def test_minio_persistence_enabled_in_test_values() -> None:
     """
     import yaml
 
-    values_path = Path(__file__).parent.parent.parent / "charts" / "floe-platform" / "values-test.yaml"
+    values_path = (
+        Path(__file__).parent.parent.parent / "charts" / "floe-platform" / "values-test.yaml"
+    )
     assert values_path.exists(), (
-        f"values-test.yaml not found at {values_path}. "
-        "Chart directory structure may have changed."
+        f"values-test.yaml not found at {values_path}. Chart directory structure may have changed."
     )
 
     raw_content = values_path.read_text()
@@ -382,9 +383,7 @@ def test_minio_persistence_enabled_in_test_values() -> None:
     )
 
     # Verify minio section exists and is a dict
-    assert "minio" in values, (
-        "values-test.yaml is missing the 'minio' top-level key entirely"
-    )
+    assert "minio" in values, "values-test.yaml is missing the 'minio' top-level key entirely"
     minio_config = values["minio"]
     assert isinstance(minio_config, dict), (
         f"minio config should be a dict, got {type(minio_config).__name__}"
@@ -401,9 +400,7 @@ def test_minio_persistence_enabled_in_test_values() -> None:
     )
 
     # Verify persistence.enabled is exactly True (boolean)
-    assert "enabled" in persistence_config, (
-        "minio.persistence.enabled key is missing"
-    )
+    assert "enabled" in persistence_config, "minio.persistence.enabled key is missing"
     assert persistence_config["enabled"] is True, (
         f"minio.persistence.enabled must be true, got {persistence_config['enabled']!r}. "
         "Without persistence, MinIO data is lost on pod restart."
@@ -411,8 +408,7 @@ def test_minio_persistence_enabled_in_test_values() -> None:
 
     # Verify persistence.size is exactly "1Gi"
     assert "size" in persistence_config, (
-        "minio.persistence.size key is missing. "
-        "Expected size: '1Gi' for test environment."
+        "minio.persistence.size key is missing. Expected size: '1Gi' for test environment."
     )
     assert persistence_config["size"] == "1Gi", (
         f"minio.persistence.size must be '1Gi', got {persistence_config['size']!r}"
@@ -435,12 +431,9 @@ def test_bucket_detection_uses_authenticated_s3_api() -> None:
     """
     import re
 
-    script_path = (
-        Path(__file__).parent.parent.parent / "testing" / "ci" / "test-e2e.sh"
-    )
+    script_path = Path(__file__).parent.parent.parent / "testing" / "ci" / "test-e2e.sh"
     assert script_path.exists(), (
-        f"test-e2e.sh not found at {script_path}. "
-        "Expected at testing/ci/test-e2e.sh"
+        f"test-e2e.sh not found at {script_path}. Expected at testing/ci/test-e2e.sh"
     )
 
     full_content = script_path.read_text()
@@ -514,12 +507,9 @@ def test_no_mc_cli_for_bucket_management() -> None:
     """
     import re
 
-    script_path = (
-        Path(__file__).parent.parent.parent / "testing" / "ci" / "test-e2e.sh"
-    )
+    script_path = Path(__file__).parent.parent.parent / "testing" / "ci" / "test-e2e.sh"
     assert script_path.exists(), (
-        f"test-e2e.sh not found at {script_path}. "
-        "Expected at testing/ci/test-e2e.sh"
+        f"test-e2e.sh not found at {script_path}. Expected at testing/ci/test-e2e.sh"
     )
 
     full_content = script_path.read_text()
@@ -533,9 +523,7 @@ def test_no_mc_cli_for_bucket_management() -> None:
     )
 
     # AC-32.3: No 'mc alias' anywhere in the file
-    mc_alias_matches = re.findall(
-        r"^\s*.*\bmc\s+alias\b.*$", full_content, re.MULTILINE
-    )
+    mc_alias_matches = re.findall(r"^\s*.*\bmc\s+alias\b.*$", full_content, re.MULTILINE)
     assert len(mc_alias_matches) == 0, (
         f"Found {len(mc_alias_matches)} 'mc alias' call(s) in test-e2e.sh. "
         f"AC-32.3 prohibits mc CLI for bucket management. "
