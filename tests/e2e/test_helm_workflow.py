@@ -349,3 +349,71 @@ class TestJobExecution:
         assert "kind: Job" in result.stdout or "kind: CronJob" in result.stdout, (
             "No Job or CronJob in rendered output"
         )
+
+
+@pytest.mark.requirement("AC-32.1")
+def test_minio_persistence_enabled_in_test_values() -> None:
+    """Test that values-test.yaml configures MinIO with persistent storage.
+
+    AC-32.1 requires minio.persistence.enabled=true with size=1Gi in
+    the test values file. Without persistence, MinIO data is lost on
+    pod restart, causing flaky E2E tests when Iceberg metadata or
+    warehouse data disappears mid-suite.
+
+    Validates:
+        - minio.persistence.enabled is exactly True (boolean, not string)
+        - minio.persistence.size is exactly "1Gi"
+        - minio section exists and is a dict (not accidentally deleted)
+        - persistence sub-key exists (not missing entirely)
+    """
+    import yaml
+
+    values_path = Path(__file__).parent.parent.parent / "charts" / "floe-platform" / "values-test.yaml"
+    assert values_path.exists(), (
+        f"values-test.yaml not found at {values_path}. "
+        "Chart directory structure may have changed."
+    )
+
+    raw_content = values_path.read_text()
+    values = yaml.safe_load(raw_content)
+
+    assert isinstance(values, dict), (
+        f"values-test.yaml did not parse as a dict, got {type(values).__name__}"
+    )
+
+    # Verify minio section exists and is a dict
+    assert "minio" in values, (
+        "values-test.yaml is missing the 'minio' top-level key entirely"
+    )
+    minio_config = values["minio"]
+    assert isinstance(minio_config, dict), (
+        f"minio config should be a dict, got {type(minio_config).__name__}"
+    )
+
+    # Verify persistence sub-section exists
+    assert "persistence" in minio_config, (
+        "minio.persistence key is missing from values-test.yaml. "
+        "Expected persistence configuration with enabled=true and size=1Gi."
+    )
+    persistence_config = minio_config["persistence"]
+    assert isinstance(persistence_config, dict), (
+        f"minio.persistence should be a dict, got {type(persistence_config).__name__}"
+    )
+
+    # Verify persistence.enabled is exactly True (boolean)
+    assert "enabled" in persistence_config, (
+        "minio.persistence.enabled key is missing"
+    )
+    assert persistence_config["enabled"] is True, (
+        f"minio.persistence.enabled must be true, got {persistence_config['enabled']!r}. "
+        "Without persistence, MinIO data is lost on pod restart."
+    )
+
+    # Verify persistence.size is exactly "1Gi"
+    assert "size" in persistence_config, (
+        "minio.persistence.size key is missing. "
+        "Expected size: '1Gi' for test environment."
+    )
+    assert persistence_config["size"] == "1Gi", (
+        f"minio.persistence.size must be '1Gi', got {persistence_config['size']!r}"
+    )

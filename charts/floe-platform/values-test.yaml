@@ -205,7 +205,8 @@ minio:
   mode: standalone
   replicas: 1
   persistence:
-    enabled: false
+    enabled: true
+    size: 1Gi
   resources:
     requests:
       cpu: 100m
