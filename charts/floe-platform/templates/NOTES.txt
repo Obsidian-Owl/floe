@@ -145,9 +145,9 @@ If something isn't working, check these common issues:
 {{- end }}
    - wait-for-polaris: Verify Polaris is running (kubectl get pods -l app.kubernetes.io/component=polaris)
    - Check service endpoints: kubectl get endpoints -n {{ .Release.Namespace }}
-{{- end }}
 
-3. Schema validation error on helm install/upgrade:
+{{ end -}}
+{{ if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}3{{ else }}1{{ end }}. Schema validation error on helm install/upgrade:
    - Check values override chain: values.yaml < values-<env>.yaml < --set flags
    - Run: helm template test {{ .Chart.Name }} -f your-values.yaml --debug 2>&1 | head -50
    - Subchart schema changes after upgrade may reject previously-valid keys

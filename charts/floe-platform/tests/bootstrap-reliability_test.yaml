@@ -412,7 +412,7 @@ tests:
           pattern: "(?s)-gt 30.*DELAY=30"
 
   # --- MAX_ATTEMPTS exact values ---
-  - it: wait-for-minio should have MAX_ATTEMPTS=60
+  - it: wait-for-minio should have MAX_ATTEMPTS=20
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
@@ -423,9 +423,9 @@ tests:
           value: wait-for-minio
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "MAX_ATTEMPTS=60"
+          pattern: "MAX_ATTEMPTS=20"
 
-  - it: wait-for-polaris should have MAX_ATTEMPTS=90
+  - it: wait-for-polaris should have MAX_ATTEMPTS=30
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
@@ -436,7 +436,7 @@ tests:
           value: wait-for-polaris
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "MAX_ATTEMPTS=90"
+          pattern: "MAX_ATTEMPTS=30"
 
   # --- Boundary: init container max attempts exhaustion ---
   - it: wait-for-minio should exit 1 after MAX_ATTEMPTS exhausted
@@ -450,7 +450,7 @@ tests:
           value: wait-for-minio
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "(?s)MAX_ATTEMPTS=60.*-ge.*MAX_ATTEMPTS.*exit 1"
+          pattern: "(?s)MAX_ATTEMPTS=20.*-ge.*MAX_ATTEMPTS.*exit 1"
 
   - it: wait-for-polaris should exit 1 after MAX_ATTEMPTS exhausted
     set:
@@ -463,7 +463,7 @@ tests:
           value: wait-for-polaris
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
-          pattern: "(?s)MAX_ATTEMPTS=90.*-ge.*MAX_ATTEMPTS.*exit 1"
+          pattern: "(?s)MAX_ATTEMPTS=30.*-ge.*MAX_ATTEMPTS.*exit 1"
 
   # --- Secret override (existingSecret) ---
   - it: should use existingSecret when configured

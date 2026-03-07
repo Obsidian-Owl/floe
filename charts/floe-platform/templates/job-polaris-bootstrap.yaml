@@ -43,19 +43,19 @@ spec:
             - |
               echo "Waiting for MinIO to be ready..."
               ATTEMPT=0
-              MAX_ATTEMPTS=60
+              MAX_ATTEMPTS=20
               DELAY=2
               {{- $minioSvc := printf "%s-minio" (include "floe-platform.fullname" .) }}
               until curl -sf http://{{ $minioSvc }}:9000/minio/health/ready > /dev/null 2>&1; do
                 ATTEMPT=$((ATTEMPT + 1))
-                if [[ $ATTEMPT -ge $MAX_ATTEMPTS ]]; then
+                if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
                   echo "ERROR: MinIO not ready after $MAX_ATTEMPTS attempts" >&2
                   exit 1
                 fi
                 echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - MinIO not ready, waiting ${DELAY}s..."
                 sleep $DELAY
                 DELAY=$((DELAY * 2))
-                [[ $DELAY -gt 30 ]] && DELAY=30
+                [ "$DELAY" -gt 30 ] && DELAY=30
               done
               echo "MinIO is ready!"
           resources:
@@ -80,18 +80,18 @@ spec:
             - |
               echo "Waiting for Polaris to be ready..."
               ATTEMPT=0
-              MAX_ATTEMPTS=90
+              MAX_ATTEMPTS=30
               DELAY=2
               until curl -sf http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.managementPort | default 8182 }}/q/health/ready > /dev/null 2>&1; do
                 ATTEMPT=$((ATTEMPT + 1))
-                if [[ $ATTEMPT -ge $MAX_ATTEMPTS ]]; then
+                if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
                   echo "ERROR: Polaris not ready after $MAX_ATTEMPTS attempts" >&2
                   exit 1
                 fi
                 echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - Polaris not ready, waiting ${DELAY}s..."
                 sleep $DELAY
                 DELAY=$((DELAY * 2))
-                [[ $DELAY -gt 30 ]] && DELAY=30
+                [ "$DELAY" -gt 30 ] && DELAY=30
               done
               echo "Polaris is ready!"
           resources:
@@ -154,6 +154,8 @@ spec:
               POLARIS_URL="http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.port | default 8181 }}"
 
               log "Step 1/4: Acquiring OAuth token..."
+              # NOTE: grep/cut token extraction assumes compact JSON (no whitespace around colons).
+              # Polaris returns compact JSON by default. jq unavailable in curl image.
               TOKEN=$(printf 'grant_type=client_credentials&client_id=%s&client_secret=%s&scope=PRINCIPAL_ROLE:ALL' \
                 "$POLARIS_CLIENT_ID" "$POLARIS_CLIENT_SECRET" | \
                 curl -s --fail-with-body -X POST \
