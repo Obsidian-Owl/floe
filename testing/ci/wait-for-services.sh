@@ -80,27 +80,7 @@ MINIO_ATTEMPT=0
 MINIO_MAX_ATTEMPTS=30
 while true; do
     MINIO_ATTEMPT=$((MINIO_ATTEMPT + 1))
-    if python3 - "${MINIO_USER}" "${MINIO_PASS}" "${MINIO_URL}" "${MINIO_BUCKET}" <<'PYEOF' 2>/dev/null
-import sys
-import boto3
-from botocore.exceptions import ClientError
-user, password, endpoint, bucket = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-s3 = boto3.client('s3',
-    endpoint_url=endpoint,
-    aws_access_key_id=user,
-    aws_secret_access_key=password)
-try:
-    s3.head_bucket(Bucket=bucket)
-    print(f'Bucket {bucket} exists')
-except ClientError as e:
-    code = e.response['Error']['Code']
-    if code == '404' or code == 'NoSuchBucket':
-        s3.create_bucket(Bucket=bucket)
-        print(f'Bucket {bucket} created')
-    else:
-        raise
-PYEOF
-    then
+    if python3 "$SCRIPT_DIR/ensure-bucket.py" "${MINIO_USER}" "${MINIO_PASS}" "${MINIO_URL}" "${MINIO_BUCKET}"; then
         echo "MinIO bucket '${MINIO_BUCKET}' verified"
         break
     fi

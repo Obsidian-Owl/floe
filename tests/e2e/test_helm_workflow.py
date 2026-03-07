@@ -14,11 +14,13 @@ Requirements:
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+import yaml
 
 from testing.fixtures.polling import wait_for_condition
 
@@ -351,6 +353,7 @@ class TestJobExecution:
         )
 
 
+@pytest.mark.e2e
 @pytest.mark.requirement("AC-32.1")
 def test_minio_persistence_enabled_in_test_values() -> None:
     """Test that values-test.yaml configures MinIO with persistent storage.
@@ -366,8 +369,6 @@ def test_minio_persistence_enabled_in_test_values() -> None:
         - minio section exists and is a dict (not accidentally deleted)
         - persistence sub-key exists (not missing entirely)
     """
-    import yaml
-
     values_path = (
         Path(__file__).parent.parent.parent / "charts" / "floe-platform" / "values-test.yaml"
     )
@@ -430,6 +431,7 @@ def _read_e2e_script() -> str:
     return script_path.read_text()
 
 
+@pytest.mark.e2e
 @pytest.mark.requirement("AC-32.2")
 def test_bucket_detection_uses_authenticated_s3_api() -> None:
     """Test that test-e2e.sh uses boto3 HeadBucket for bucket detection, not anonymous curl.
@@ -444,8 +446,6 @@ def test_bucket_detection_uses_authenticated_s3_api() -> None:
         - No anonymous curl to port 9000 appears in the bucket verification section
         - The bucket detection approach is authenticated (uses credentials)
     """
-    import re
-
     full_content = _read_e2e_script()
 
     # Extract the MinIO bucket verification section.
@@ -507,6 +507,7 @@ def test_bucket_detection_uses_authenticated_s3_api() -> None:
     )
 
 
+@pytest.mark.e2e
 @pytest.mark.requirement("AC-32.3")
 def test_no_mc_cli_for_bucket_management() -> None:
     """Test that test-e2e.sh does not use mc CLI or kubectl exec for bucket ops.
@@ -525,8 +526,6 @@ def test_no_mc_cli_for_bucket_management() -> None:
         - 'mc alias' does not appear anywhere in the script
         - No kubectl exec commands target MinIO for bucket creation
     """
-    import re
-
     full_content = _read_e2e_script()
 
     # Filter to non-comment lines for pattern matching
