@@ -80,6 +80,7 @@ tests:
     set:
       polaris.enabled: false
       polaris.bootstrap.enabled: true
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
     template: templates/job-polaris-bootstrap.yaml
     asserts:
       - hasDocuments:
@@ -140,6 +141,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
       minio.enabled: false
     template: templates/job-polaris-bootstrap.yaml
     asserts:
@@ -156,6 +158,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
       minio.enabled: true
     template: templates/job-polaris-bootstrap.yaml
     asserts:

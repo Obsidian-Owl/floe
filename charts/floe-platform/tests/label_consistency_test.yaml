@@ -259,6 +259,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
     template: templates/job-polaris-bootstrap.yaml
     asserts:
       - isNotNull:
