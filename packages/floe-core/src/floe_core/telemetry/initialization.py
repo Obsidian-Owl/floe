@@ -157,6 +157,15 @@ def reset_telemetry() -> None:
     if isinstance(provider, TracerProvider):
         provider.shutdown()
 
+    # Reset the OTel API's "set once" guard so that a subsequent call to
+    # trace.set_tracer_provider() in ensure_telemetry_initialized() is
+    # accepted rather than silently ignored.
+    # Source: opentelemetry.trace._TRACER_PROVIDER_SET_ONCE (private API).
+    # This pattern is used in 22+ test fixtures in this codebase.
+    # TODO(wu-35): Remove if OTel adds a public reset API.
+    if hasattr(trace, "_TRACER_PROVIDER_SET_ONCE"):
+        trace._TRACER_PROVIDER_SET_ONCE._done = False
+
     _initialized = False
     reset_tracer()
 
