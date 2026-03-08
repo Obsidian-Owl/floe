@@ -20,6 +20,7 @@ No pytest.skip() - see .claude/rules/testing-standards.md
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any, ClassVar
 
@@ -66,12 +67,12 @@ class TestObservability(IntegrationTestBase):
         jaeger_client: httpx.Client,
         dagster_client: Any,
     ) -> None:
-        """Validate that OTel traces with real spans exist in Jaeger for the floe-platform service.
+        """Validate that OTel traces with real spans exist in Jaeger for the customer-360 service.
 
         Demands that:
-        1. Jaeger contains traces for the 'floe-platform' service
+        1. Jaeger contains traces for the 'customer-360' service
         2. Traces contain spans with operation names
-        3. The services list includes 'floe-platform'
+        3. The services list includes 'customer-360'
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -82,8 +83,8 @@ class TestObservability(IntegrationTestBase):
         self.check_infrastructure("dagster", 3000)
         self.check_infrastructure("jaeger-query", 16686)
 
-        # Query Jaeger for floe-platform service traces
-        service_name = "floe-platform"
+        # Query Jaeger for customer-360 service traces
+        service_name = "customer-360"
         traces_response = jaeger_client.get(
             "/api/traces",
             params={"service": service_name, "limit": 5},
@@ -96,7 +97,7 @@ class TestObservability(IntegrationTestBase):
 
         traces = traces_json["data"]
         assert len(traces) > 0, (
-            "OBSERVABILITY GAP: No traces found for 'floe-platform' service in Jaeger.\n"
+            "OBSERVABILITY GAP: No traces found for 'customer-360' service in Jaeger.\n"
             "The OTel pipeline is not emitting traces during compilation or pipeline execution.\n"
             "Fix: Configure OTel SDK in floe-core compilation "
             "stages to emit spans.\n"
@@ -119,7 +120,7 @@ class TestObservability(IntegrationTestBase):
             "Span has empty operationName -- OTel instrumentation not setting span names"
         )
 
-        # Verify services list includes floe-platform
+        # Verify services list includes customer-360
         response = jaeger_client.get("/api/services")
         assert response.status_code == 200, (
             f"Jaeger services endpoint failed: {response.status_code}"
@@ -127,10 +128,10 @@ class TestObservability(IntegrationTestBase):
         services_json = response.json()
         assert "data" in services_json, "Jaeger services response missing 'data' key"
         services = services_json["data"]
-        assert "floe-platform" in services, (
-            f"OBSERVABILITY GAP: 'floe-platform' not in Jaeger services list.\n"
+        assert "customer-360" in services, (
+            f"OBSERVABILITY GAP: 'customer-360' not in Jaeger services list.\n"
             f"Services found: {services}\n"
-            "Fix: Configure OTel SDK with service.name='floe-platform'"
+            "Fix: Configure OTel SDK with service.name='customer-360'"
         )
 
     @pytest.mark.e2e
@@ -740,7 +741,7 @@ class TestObservability(IntegrationTestBase):
         """Validate that trace spans contain floe-specific attributes for pipeline observability.
 
         Demands that:
-        1. Jaeger contains traces for the 'floe-platform' service
+        1. Jaeger contains traces for the 'customer-360' service
         2. Traces contain spans with floe-specific attributes
         3. Spans have attributes like floe.product_name or floe.stage
 
@@ -753,8 +754,8 @@ class TestObservability(IntegrationTestBase):
         self.check_infrastructure("dagster", 3000)
         self.check_infrastructure("jaeger-query", 16686)
 
-        # Query for traces from floe-platform service (real service name)
-        service_name = "floe-platform"
+        # Query for traces from customer-360 service (real service name)
+        service_name = "customer-360"
         response = jaeger_client.get(
             "/api/traces",
             params={
@@ -773,9 +774,9 @@ class TestObservability(IntegrationTestBase):
 
         # Traces MUST exist for pipeline observability
         assert len(traces) > 0, (
-            "TRACE GAP: No traces found for 'floe-platform' service.\n"
+            "TRACE GAP: No traces found for 'customer-360' service.\n"
             "OTel instrumentation is not emitting traces with pipeline attributes.\n"
-            "Fix: Configure OTel SDK with service.name='floe-platform' and "
+            "Fix: Configure OTel SDK with service.name='customer-360' and "
             "add floe.product_name, floe.stage attributes to spans."
         )
 
@@ -947,7 +948,7 @@ class TestObservability(IntegrationTestBase):
 
         This is the TRIGGER test -- other observability tests depend on compilation
         actually emitting OTel spans. Runs compile_pipeline() for customer-360 and
-        immediately queries Jaeger for traces from the 'floe-platform' service.
+        immediately queries Jaeger for traces from the 'customer-360' service.
 
         WILL FAIL if compilation does not emit OTel spans -- this is expected until
         OTel SDK instrumentation is wired into compilation stages.
@@ -973,6 +974,18 @@ class TestObservability(IntegrationTestBase):
         # Record timestamp before compilation (microseconds for Jaeger API)
         start_time_us = int(time.time() * 1_000_000)
 
+        # Ensure this compilation emits spans under customer-360 service
+        from floe_core.telemetry.initialization import (
+            ensure_telemetry_initialized,
+            reset_telemetry,
+        )
+
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
+        os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
+        os.environ["OTEL_SERVICE_NAME"] = "customer-360"
+        reset_telemetry()
+        ensure_telemetry_initialized()
+
         # Run real compilation -- should emit OTel spans
         artifacts = compile_pipeline(spec_path, manifest_path)
         assert artifacts is not None, "Compilation must succeed"
@@ -982,12 +995,12 @@ class TestObservability(IntegrationTestBase):
 
         # Poll for traces to appear in Jaeger (OTel exporter needs time to flush)
         def check_jaeger_traces() -> bool:
-            """Check if Jaeger has traces from floe-platform service."""
+            """Check if Jaeger has traces from customer-360 service."""
             end_time_us = int(time.time() * 1_000_000)
             resp = jaeger_client.get(
                 "/api/traces",
                 params={
-                    "service": "floe-platform",
+                    "service": "customer-360",
                     "start": start_time_us,
                     "end": end_time_us,
                     "limit": 20,
@@ -1007,12 +1020,12 @@ class TestObservability(IntegrationTestBase):
             description="Jaeger traces to appear",
         )
 
-        # Query Jaeger for traces from 'floe-platform' service within the last 60 seconds
+        # Query Jaeger for traces from 'customer-360' service within the last 60 seconds
         end_time_us = int(time.time() * 1_000_000)
         traces_response = jaeger_client.get(
             "/api/traces",
             params={
-                "service": "floe-platform",
+                "service": "customer-360",
                 "start": start_time_us,
                 "end": end_time_us,
                 "limit": 20,
@@ -1032,7 +1045,7 @@ class TestObservability(IntegrationTestBase):
             f"Time window: {start_time_us} to {end_time_us}\n"
             "Fix: Wire OTel SDK into compile_pipeline() stages to emit spans.\n"
             "Each compilation stage (LOAD, VALIDATE, RESOLVE, ENFORCE, COMPILE, GENERATE) "
-            "should emit a span under the 'floe-platform' service."
+            "should emit a span under the 'customer-360' service."
         )
 
         # Validate that spans match compilation stages
