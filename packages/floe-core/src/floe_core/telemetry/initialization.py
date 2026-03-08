@@ -126,4 +126,56 @@ def ensure_telemetry_initialized() -> None:
     _initialized = True
 
 
-__all__ = ["ensure_telemetry_initialized"]
+def reset_telemetry() -> None:
+    """Shut down the current TracerProvider and reset initialization state.
+
+    Allows telemetry to be re-initialized (e.g. in tests or after a
+    configuration change).  The sequence is:
+
+    1. Retrieve the current global TracerProvider.
+    2. If it is a real SDK TracerProvider, call ``provider.shutdown()`` to
+       flush all pending spans.
+    3. Set ``_initialized = False`` so that a subsequent call to
+       ``ensure_telemetry_initialized()`` will create a fresh provider.
+    4. Call ``reset_tracer()`` to invalidate any cached tracer instances.
+
+    The function is safe to call when telemetry has not been initialized
+    (no-op) and is idempotent (calling it twice does not raise).
+
+    Returns:
+        None
+
+    Examples:
+        >>> reset_telemetry()                      # safe even if never initialized
+        >>> ensure_telemetry_initialized()          # first init
+        >>> reset_telemetry()                      # flush and clear
+        >>> ensure_telemetry_initialized()          # fresh re-init
+    """
+    global _initialized
+
+    provider = trace.get_tracer_provider()
+    if isinstance(provider, TracerProvider):
+        provider.shutdown()
+
+    # Reset the OTel API's "set once" guard so that a subsequent call to
+    # trace.set_tracer_provider() in ensure_telemetry_initialized() is
+    # accepted rather than silently ignored.
+    # Source: opentelemetry.trace._TRACER_PROVIDER_SET_ONCE (private API).
+    # This pattern is used in 22+ test fixtures in this codebase.
+    # TODO(wu-35): Remove if OTel adds a public reset API.
+    if hasattr(trace, "_TRACER_PROVIDER_SET_ONCE"):
+        trace._TRACER_PROVIDER_SET_ONCE._done = False
+
+    # Restore the default ProxyTracerProvider so that any spans emitted
+    # between reset and re-init are handled gracefully (no-op) rather than
+    # routed to the shut-down provider which silently drops them.
+    if hasattr(trace, "_TRACER_PROVIDER"):
+        from opentelemetry.trace import ProxyTracerProvider
+
+        trace._TRACER_PROVIDER = ProxyTracerProvider()
+
+    _initialized = False
+    reset_tracer()
+
+
+__all__ = ["ensure_telemetry_initialized", "reset_telemetry"]

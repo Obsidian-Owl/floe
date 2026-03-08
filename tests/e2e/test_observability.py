@@ -20,6 +20,7 @@ No pytest.skip() - see .claude/rules/testing-standards.md
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any, ClassVar
 
@@ -66,12 +67,12 @@ class TestObservability(IntegrationTestBase):
         jaeger_client: httpx.Client,
         dagster_client: Any,
     ) -> None:
-        """Validate that OTel traces with real spans exist in Jaeger for the floe-platform service.
+        """Validate that OTel traces with real spans exist in Jaeger for the customer-360 service.
 
         Demands that:
-        1. Jaeger contains traces for the 'floe-platform' service
+        1. Jaeger contains traces for the 'customer-360' service
         2. Traces contain spans with operation names
-        3. The services list includes 'floe-platform'
+        3. The services list includes 'customer-360'
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
@@ -82,8 +83,8 @@ class TestObservability(IntegrationTestBase):
         self.check_infrastructure("dagster", 3000)
         self.check_infrastructure("jaeger-query", 16686)
 
-        # Query Jaeger for floe-platform service traces
-        service_name = "floe-platform"
+        # Query Jaeger for customer-360 service traces
+        service_name = "customer-360"
         traces_response = jaeger_client.get(
             "/api/traces",
             params={"service": service_name, "limit": 5},
@@ -96,7 +97,7 @@ class TestObservability(IntegrationTestBase):
 
         traces = traces_json["data"]
         assert len(traces) > 0, (
-            "OBSERVABILITY GAP: No traces found for 'floe-platform' service in Jaeger.\n"
+            "OBSERVABILITY GAP: No traces found for 'customer-360' service in Jaeger.\n"
             "The OTel pipeline is not emitting traces during compilation or pipeline execution.\n"
             "Fix: Configure OTel SDK in floe-core compilation "
             "stages to emit spans.\n"
@@ -119,7 +120,7 @@ class TestObservability(IntegrationTestBase):
             "Span has empty operationName -- OTel instrumentation not setting span names"
         )
 
-        # Verify services list includes floe-platform
+        # Verify services list includes customer-360
         response = jaeger_client.get("/api/services")
         assert response.status_code == 200, (
             f"Jaeger services endpoint failed: {response.status_code}"
@@ -127,10 +128,10 @@ class TestObservability(IntegrationTestBase):
         services_json = response.json()
         assert "data" in services_json, "Jaeger services response missing 'data' key"
         services = services_json["data"]
-        assert "floe-platform" in services, (
-            f"OBSERVABILITY GAP: 'floe-platform' not in Jaeger services list.\n"
+        assert "customer-360" in services, (
+            f"OBSERVABILITY GAP: 'customer-360' not in Jaeger services list.\n"
             f"Services found: {services}\n"
-            "Fix: Configure OTel SDK with service.name='floe-platform'"
+            "Fix: Configure OTel SDK with service.name='customer-360'"
         )
 
     @pytest.mark.e2e
@@ -740,7 +741,7 @@ class TestObservability(IntegrationTestBase):
         """Validate that trace spans contain floe-specific attributes for pipeline observability.
 
         Demands that:
-        1. Jaeger contains traces for the 'floe-platform' service
+        1. Jaeger contains traces for the 'customer-360' service
         2. Traces contain spans with floe-specific attributes
         3. Spans have attributes like floe.product_name or floe.stage
 
@@ -753,8 +754,8 @@ class TestObservability(IntegrationTestBase):
         self.check_infrastructure("dagster", 3000)
         self.check_infrastructure("jaeger-query", 16686)
 
-        # Query for traces from floe-platform service (real service name)
-        service_name = "floe-platform"
+        # Query for traces from customer-360 service (real service name)
+        service_name = "customer-360"
         response = jaeger_client.get(
             "/api/traces",
             params={
@@ -773,9 +774,9 @@ class TestObservability(IntegrationTestBase):
 
         # Traces MUST exist for pipeline observability
         assert len(traces) > 0, (
-            "TRACE GAP: No traces found for 'floe-platform' service.\n"
+            "TRACE GAP: No traces found for 'customer-360' service.\n"
             "OTel instrumentation is not emitting traces with pipeline attributes.\n"
-            "Fix: Configure OTel SDK with service.name='floe-platform' and "
+            "Fix: Configure OTel SDK with service.name='customer-360' and "
             "add floe.product_name, floe.stage attributes to spans."
         )
 
@@ -947,7 +948,7 @@ class TestObservability(IntegrationTestBase):
 
         This is the TRIGGER test -- other observability tests depend on compilation
         actually emitting OTel spans. Runs compile_pipeline() for customer-360 and
-        immediately queries Jaeger for traces from the 'floe-platform' service.
+        immediately queries Jaeger for traces from the 'customer-360' service.
 
         WILL FAIL if compilation does not emit OTel spans -- this is expected until
         OTel SDK instrumentation is wired into compilation stages.
@@ -973,97 +974,129 @@ class TestObservability(IntegrationTestBase):
         # Record timestamp before compilation (microseconds for Jaeger API)
         start_time_us = int(time.time() * 1_000_000)
 
-        # Run real compilation -- should emit OTel spans
-        artifacts = compile_pipeline(spec_path, manifest_path)
-        assert artifacts is not None, "Compilation must succeed"
-        assert artifacts.metadata.product_name == "customer-360", (
-            "Compiled wrong product -- expected customer-360"
+        # Ensure this compilation emits spans under customer-360 service
+        from floe_core.telemetry.initialization import (
+            ensure_telemetry_initialized,
+            reset_telemetry,
         )
 
-        # Poll for traces to appear in Jaeger (OTel exporter needs time to flush)
-        def check_jaeger_traces() -> bool:
-            """Check if Jaeger has traces from floe-platform service."""
+        # Save OTel env vars before mutation for cleanup
+        old_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        old_insecure = os.environ.get("OTEL_EXPORTER_OTLP_INSECURE")
+        old_service = os.environ.get("OTEL_SERVICE_NAME")
+
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
+        os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
+        os.environ["OTEL_SERVICE_NAME"] = "customer-360"
+        try:
+            reset_telemetry()
+            ensure_telemetry_initialized()
+
+            # Run real compilation -- should emit OTel spans
+            artifacts = compile_pipeline(spec_path, manifest_path)
+            assert artifacts is not None, "Compilation must succeed"
+            assert artifacts.metadata.product_name == "customer-360", (
+                "Compiled wrong product -- expected customer-360"
+            )
+
+            # Poll for traces to appear in Jaeger (OTel exporter needs time to flush)
+            def check_jaeger_traces() -> bool:
+                """Check if Jaeger has traces from customer-360 service."""
+                end_time_us = int(time.time() * 1_000_000)
+                resp = jaeger_client.get(
+                    "/api/traces",
+                    params={
+                        "service": "customer-360",
+                        "start": start_time_us,
+                        "end": end_time_us,
+                        "limit": 20,
+                    },
+                )
+                if resp.status_code != 200:
+                    return False
+                traces = resp.json().get("data", [])
+                return len(traces) > 0
+
+            from testing.fixtures.polling import wait_for_condition
+
+            traces_available = wait_for_condition(
+                check_jaeger_traces,
+                timeout=10.0,
+                interval=1.0,
+                description="Jaeger traces to appear",
+            )
+
+            # Query Jaeger for traces from 'customer-360' service within the last 60 seconds
             end_time_us = int(time.time() * 1_000_000)
-            resp = jaeger_client.get(
+            traces_response = jaeger_client.get(
                 "/api/traces",
                 params={
-                    "service": "floe-platform",
+                    "service": "customer-360",
                     "start": start_time_us,
                     "end": end_time_us,
                     "limit": 20,
                 },
             )
-            if resp.status_code != 200:
-                return False
-            traces = resp.json().get("data", [])
-            return len(traces) > 0
+            assert traces_response.status_code == 200 and traces_available, (
+                f"Jaeger traces query failed: {traces_response.status_code}"
+            )
 
-        from testing.fixtures.polling import wait_for_condition
+            traces_json = traces_response.json()
+            assert "data" in traces_json, "Jaeger response missing 'data' key"
+            traces = traces_json["data"]
 
-        traces_available = wait_for_condition(
-            check_jaeger_traces,
-            timeout=10.0,
-            interval=1.0,
-            description="Jaeger traces to appear",
-        )
+            assert len(traces) > 0, (
+                "COMPILATION OTEL GAP: No traces emitted by compile_pipeline().\n"
+                "Compilation completed successfully but no OTel spans were recorded "
+                "in Jaeger.\n"
+                f"Time window: {start_time_us} to {end_time_us}\n"
+                "Fix: Wire OTel SDK into compile_pipeline() stages to emit spans.\n"
+                "Each compilation stage (LOAD, VALIDATE, RESOLVE, ENFORCE, COMPILE, "
+                "GENERATE) should emit a span under the 'customer-360' service."
+            )
 
-        # Query Jaeger for traces from 'floe-platform' service within the last 60 seconds
-        end_time_us = int(time.time() * 1_000_000)
-        traces_response = jaeger_client.get(
-            "/api/traces",
-            params={
-                "service": "floe-platform",
-                "start": start_time_us,
-                "end": end_time_us,
-                "limit": 20,
-            },
-        )
-        assert traces_response.status_code == 200 and traces_available, (
-            f"Jaeger traces query failed: {traces_response.status_code}"
-        )
+            # Validate that spans match compilation stages
+            all_operation_names: list[str] = []
+            for trace in traces:
+                for span in trace.get("spans", []):
+                    op_name = span.get("operationName", "")
+                    if op_name:
+                        all_operation_names.append(op_name)
 
-        traces_json = traces_response.json()
-        assert "data" in traces_json, "Jaeger response missing 'data' key"
-        traces = traces_json["data"]
+            assert len(all_operation_names) > 0, (
+                "Traces found but all spans have empty operation names."
+            )
 
-        assert len(traces) > 0, (
-            "COMPILATION OTEL GAP: No traces emitted by compile_pipeline().\n"
-            "Compilation completed successfully but no OTel spans were recorded in Jaeger.\n"
-            f"Time window: {start_time_us} to {end_time_us}\n"
-            "Fix: Wire OTel SDK into compile_pipeline() stages to emit spans.\n"
-            "Each compilation stage (LOAD, VALIDATE, RESOLVE, ENFORCE, COMPILE, GENERATE) "
-            "should emit a span under the 'floe-platform' service."
-        )
+            # Check for compilation stage spans
+            compilation_keywords = [
+                "compile",
+                "load",
+                "validate",
+                "resolve",
+                "enforce",
+                "generate",
+            ]
+            has_compilation_span = any(
+                any(kw in op.lower() for kw in compilation_keywords) for op in all_operation_names
+            )
 
-        # Validate that spans match compilation stages
-        all_operation_names: list[str] = []
-        for trace in traces:
-            for span in trace.get("spans", []):
-                op_name = span.get("operationName", "")
-                if op_name:
-                    all_operation_names.append(op_name)
-
-        assert len(all_operation_names) > 0, (
-            "Traces found but all spans have empty operation names."
-        )
-
-        # Check for compilation stage spans
-        compilation_keywords = [
-            "compile",
-            "load",
-            "validate",
-            "resolve",
-            "enforce",
-            "generate",
-        ]
-        has_compilation_span = any(
-            any(kw in op.lower() for kw in compilation_keywords) for op in all_operation_names
-        )
-
-        assert has_compilation_span, (
-            "COMPILATION OTEL GAP: Traces exist but no compilation stage spans found.\n"
-            f"Operation names found: {all_operation_names}\n"
-            "Expected spans matching compilation stages: "
-            "LOAD, VALIDATE, RESOLVE, ENFORCE, COMPILE, GENERATE.\n"
-            "Fix: Name OTel spans after compilation stages in compile_pipeline()."
-        )
+            assert has_compilation_span, (
+                "COMPILATION OTEL GAP: Traces exist but no compilation stage spans "
+                "found.\n"
+                f"Operation names found: {all_operation_names}\n"
+                "Expected spans matching compilation stages: "
+                "LOAD, VALIDATE, RESOLVE, ENFORCE, COMPILE, GENERATE.\n"
+                "Fix: Name OTel spans after compilation stages in compile_pipeline()."
+            )
+        finally:
+            # Restore OTel env vars to avoid leaking to other tests
+            reset_telemetry()
+            for key, old_val in (
+                ("OTEL_EXPORTER_OTLP_ENDPOINT", old_endpoint),
+                ("OTEL_EXPORTER_OTLP_INSECURE", old_insecure),
+                ("OTEL_SERVICE_NAME", old_service),
+            ):
+                if old_val is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = old_val

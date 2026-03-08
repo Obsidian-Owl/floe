@@ -17,7 +17,6 @@ from typing import Any
 
 import httpx
 import pytest
-from opentelemetry import trace
 
 from testing.fixtures.polling import wait_for_condition
 
@@ -625,91 +624,78 @@ def jaeger_client(wait_for_service: Callable[..., None]) -> httpx.Client:
 
 
 @pytest.fixture(scope="session")
-def otel_tracer_provider() -> Generator[Any, None, None]:
-    """Initialize OTel TracerProvider for E2E test session.
-
-    Sets up a TracerProvider with OTLP gRPC exporter pointing to the
-    OTel Collector. Uses BatchSpanProcessor for non-blocking export.
-    Service name is set to 'floe-platform' to match Jaeger queries.
-
-    Yields:
-        TracerProvider configured for the E2E test environment.
-
-    Note:
-        This fixture ensures traces generated during E2E tests
-        (compilation, pipeline execution) flow through the OTel
-        Collector to Jaeger.
-    """
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-        OTLPSpanExporter,
-    )
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-    otel_endpoint = os.environ.get("OTEL_ENDPOINT", "http://localhost:4317")
-
-    resource = Resource.create({"service.name": "floe-platform"})
-    provider = TracerProvider(resource=resource)
-    # insecure=True: local Kind cluster does not expose TLS on gRPC port
-    exporter = OTLPSpanExporter(endpoint=otel_endpoint, insecure=True)
-    processor = BatchSpanProcessor(exporter)
-    provider.add_span_processor(processor)
-
-    trace.set_tracer_provider(provider)
-
-    yield provider
-
-    provider.shutdown()
-
-
-@pytest.fixture(scope="session")
 def seed_observability(
-    otel_tracer_provider: Any,
     marquez_client: httpx.Client,
 ) -> None:
     """Seed Marquez and Jaeger with real pipeline data via compile_pipeline().
 
-    Runs compile_pipeline() with MARQUEZ_URL set so OpenLineage events flow
-    to Marquez, and with OTel tracing active so spans flow to Jaeger via
-    the OTel Collector.
+    Compiles all 3 demo products (customer-360, iot-telemetry, financial-risk)
+    with per-product OTEL_SERVICE_NAME so Jaeger registers each as a distinct
+    service.  Uses standard OTel env vars (OTEL_EXPORTER_OTLP_ENDPOINT,
+    OTEL_EXPORTER_OTLP_INSECURE) — no custom env var names.
 
-    The fixture temporarily sets MARQUEZ_URL for the compilation, then
-    restores the original value to avoid colliding with the marquez_client
-    fixture (which uses MARQUEZ_URL as the base URL for reads).
+    Between products, reset_telemetry() shuts down the current TracerProvider
+    (flushing pending spans) and clears the initialized flag so that the next
+    ensure_telemetry_initialized() creates a fresh provider with the new
+    service name.
 
     Args:
-        otel_tracer_provider: OTel TracerProvider fixture (ensures tracing active).
         marquez_client: Marquez HTTP client (ensures Marquez is ready).
 
     Raises:
         pytest.Failed: If seeding fails (compilation error).
     """
+    from floe_core.compilation.stages import compile_pipeline
+    from floe_core.telemetry.initialization import (
+        ensure_telemetry_initialized,
+        reset_telemetry,
+    )
+
+    # Save env vars before mutation so we can restore them in finally.
+    old_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    old_insecure = os.environ.get("OTEL_EXPORTER_OTLP_INSECURE")
+    old_service = os.environ.get("OTEL_SERVICE_NAME")
     old_marquez = os.environ.get("MARQUEZ_URL")
+
+    # Standard OTel env vars for Kind cluster (no TLS)
+    os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
+    os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
+
     # compile_pipeline posts events directly to this URL
     os.environ["MARQUEZ_URL"] = "http://localhost:5000/api/v1/lineage"
 
+    root = Path(__file__).parent.parent.parent
+    manifest_path = root / "demo" / "manifest.yaml"
+
+    demo_products = ["customer-360", "iot-telemetry", "financial-risk"]
+
     try:
-        from floe_core.compilation.stages import compile_pipeline
-        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+        for product in demo_products:
+            reset_telemetry()
+            os.environ["OTEL_SERVICE_NAME"] = product
 
-        ensure_telemetry_initialized()
+            ensure_telemetry_initialized()
 
-        root = Path(__file__).parent.parent.parent
-        spec_path = root / "demo" / "customer-360" / "floe.yaml"
-        manifest_path = root / "demo" / "manifest.yaml"
+            spec_path = root / "demo" / product / "floe.yaml"
+            compile_pipeline(spec_path, manifest_path)
 
-        compile_pipeline(spec_path, manifest_path)
-
-        # Flush OTel spans to ensure they reach Jaeger
-        otel_tracer_provider.force_flush(timeout_millis=5000)
+        # Flush and shut down the final provider to avoid leaking the
+        # BatchSpanProcessor background thread and gRPC connection.
+        reset_telemetry()
     except Exception as exc:
         pytest.fail(f"Observability seeding failed (compile_pipeline): {exc}")
     finally:
-        if old_marquez is None:
-            os.environ.pop("MARQUEZ_URL", None)
-        else:
-            os.environ["MARQUEZ_URL"] = old_marquez
+        # Restore all mutated env vars to avoid leaking to other fixtures.
+        for key, old_val in (
+            ("OTEL_EXPORTER_OTLP_ENDPOINT", old_endpoint),
+            ("OTEL_EXPORTER_OTLP_INSECURE", old_insecure),
+            ("OTEL_SERVICE_NAME", old_service),
+            ("MARQUEZ_URL", old_marquez),
+        ):
+            if old_val is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = old_val
 
 
 # ---------------------------------------------------------------------------

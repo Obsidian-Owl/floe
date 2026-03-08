@@ -72,7 +72,7 @@ class TestObservabilityRoundTrip:
                 response = jaeger_client.get(
                     "/api/traces",
                     params={
-                        "service": "floe-platform",
+                        "service": "customer-360",
                         "start": start_time,
                         "end": end_time + 60_000_000,  # +60s buffer
                         "limit": 20,
@@ -93,7 +93,7 @@ class TestObservabilityRoundTrip:
             raise_on_timeout=False,
         )
 
-        # If no traces found with "floe-platform" service, check what services exist
+        # If no traces found with "customer-360" service, check what services exist
         if not traces_found:
             services_response = jaeger_client.get("/api/services")
             services: list[str] = []
@@ -112,7 +112,7 @@ class TestObservabilityRoundTrip:
         traces_response = jaeger_client.get(
             "/api/traces",
             params={
-                "service": "floe-platform",
+                "service": "customer-360",
                 "start": start_time,
                 "end": end_time + 60_000_000,
                 "limit": 5,
@@ -161,26 +161,27 @@ class TestObservabilityRoundTrip:
     @pytest.mark.requirement("AC-2.3")
     def test_otel_collector_accepts_spans(
         self,
-        otel_tracer_provider: Any,
+        seed_observability: None,
     ) -> None:
         """Verify OTel Collector accepts OTLP spans.
 
-        Uses the shared otel_tracer_provider fixture (conftest.py) to send a
-        test span to the OTel Collector and verifies it's accepted without
-        error. This validates the Collector is running and configured to
-        receive OTLP gRPC spans.
+        Uses the global TracerProvider (configured by seed_observability via
+        ensure_telemetry_initialized) to send a test span to the OTel
+        Collector and verifies it's accepted without error.
 
         Args:
-            otel_tracer_provider: Session-scoped TracerProvider from conftest.
+            seed_observability: Ensures OTel tracing is initialized.
         """
-        # Use the shared TracerProvider fixture
-        tracer = otel_tracer_provider.get_tracer("e2e-test")
+        from opentelemetry import trace as otel_trace
+
+        provider = otel_trace.get_tracer_provider()
+        tracer = provider.get_tracer("e2e-test")
         with tracer.start_as_current_span("e2e_observability_test") as span:
             span.set_attribute("test.type", "observability_roundtrip")
 
         # Force flush — this will raise if collector rejects
-        otel_endpoint = os.environ.get("OTEL_ENDPOINT", "http://localhost:4317")
-        flush_ok = otel_tracer_provider.force_flush(timeout_millis=10_000)
+        otel_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+        flush_ok = provider.force_flush(timeout_millis=10_000)
         assert flush_ok, (
             f"OTel Collector did not accept span within 10s.\n"
             f"Endpoint: {otel_endpoint}\n"
