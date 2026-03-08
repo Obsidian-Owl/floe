@@ -55,13 +55,9 @@ def _reset_otel_state() -> Generator[None, None, None]:
     reset_tracer()
 
     # Reset the initialization module's internal state
-    try:
-        import floe_core.telemetry.initialization as init_mod
+    import floe_core.telemetry.initialization as init_mod
 
-        if hasattr(init_mod, "_initialized"):
-            init_mod._initialized = False
-    except (ImportError, AttributeError):
-        pass
+    init_mod._initialized = False
 
     structlog.reset_defaults()
 
@@ -236,12 +232,9 @@ class TestResetTelemetryCallsShutdown:
         # Patch shutdown on the actual provider instance to track the call
         with patch.object(provider, "shutdown", wraps=provider.shutdown) as mock_shutdown:
             init_mod.reset_telemetry()
-            (
-                mock_shutdown.assert_called_once(),
-                (
-                    "reset_telemetry() must call provider.shutdown() to flush "
-                    "pending spans before clearing the _initialized flag."
-                ),
+            assert mock_shutdown.call_count == 1, (
+                "reset_telemetry() must call provider.shutdown() to flush "
+                "pending spans before clearing the _initialized flag."
             )
 
     @pytest.mark.requirement("AC-35.6")
