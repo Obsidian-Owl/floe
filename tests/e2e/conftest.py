@@ -17,7 +17,6 @@ from typing import Any
 
 import httpx
 import pytest
-from opentelemetry import trace
 
 from testing.fixtures.polling import wait_for_condition
 
@@ -652,11 +651,16 @@ def seed_observability(
         reset_telemetry,
     )
 
+    # Save env vars before mutation so we can restore them in finally.
+    old_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    old_insecure = os.environ.get("OTEL_EXPORTER_OTLP_INSECURE")
+    old_service = os.environ.get("OTEL_SERVICE_NAME")
+    old_marquez = os.environ.get("MARQUEZ_URL")
+
     # Standard OTel env vars for Kind cluster (no TLS)
     os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
     os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
 
-    old_marquez = os.environ.get("MARQUEZ_URL")
     # compile_pipeline posts events directly to this URL
     os.environ["MARQUEZ_URL"] = "http://localhost:5000/api/v1/lineage"
 
@@ -675,17 +679,23 @@ def seed_observability(
             spec_path = root / "demo" / product / "floe.yaml"
             compile_pipeline(spec_path, manifest_path)
 
-        # Flush final provider's spans to ensure they reach Jaeger
-        provider = trace.get_tracer_provider()
-        if hasattr(provider, "force_flush"):
-            provider.force_flush(timeout_millis=5000)
+        # Flush and shut down the final provider to avoid leaking the
+        # BatchSpanProcessor background thread and gRPC connection.
+        reset_telemetry()
     except Exception as exc:
         pytest.fail(f"Observability seeding failed (compile_pipeline): {exc}")
     finally:
-        if old_marquez is None:
-            os.environ.pop("MARQUEZ_URL", None)
-        else:
-            os.environ["MARQUEZ_URL"] = old_marquez
+        # Restore all mutated env vars to avoid leaking to other fixtures.
+        for key, old_val in (
+            ("OTEL_EXPORTER_OTLP_ENDPOINT", old_endpoint),
+            ("OTEL_EXPORTER_OTLP_INSECURE", old_insecure),
+            ("OTEL_SERVICE_NAME", old_service),
+            ("MARQUEZ_URL", old_marquez),
+        ):
+            if old_val is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = old_val
 
 
 # ---------------------------------------------------------------------------

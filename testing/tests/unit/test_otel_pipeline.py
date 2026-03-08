@@ -482,32 +482,66 @@ class TestE2EConftestTracerProvider:
 
     @pytest.mark.requirement("WU4-AC5")
     def test_conftest_tracer_uses_batch_processor(self) -> None:
-        """Verify TracerProvider fixture uses BatchSpanProcessor for efficient export.
+        """Verify OTel pipeline uses BatchSpanProcessor for efficient export.
 
         SimpleSpanProcessor exports spans synchronously (blocks tests).
         BatchSpanProcessor batches and exports asynchronously, which is
         the correct choice for E2E tests that need non-blocking tracing.
-        """
-        content = E2E_CONFTEST.read_text()
 
-        assert "BatchSpanProcessor" in content, (
-            "tests/e2e/conftest.py must use BatchSpanProcessor with TracerProvider. "
-            "SimpleSpanProcessor blocks on export; BatchSpanProcessor is non-blocking. "
-            "Currently missing."
+        The conftest delegates to ensure_telemetry_initialized() in
+        floe_core.telemetry.initialization which creates the TracerProvider
+        with BatchSpanProcessor. We verify the production code path.
+        """
+        init_path = (
+            REPO_ROOT
+            / "packages"
+            / "floe-core"
+            / "src"
+            / "floe_core"
+            / "telemetry"
+            / "initialization.py"
+        )
+        init_content = init_path.read_text()
+
+        assert "BatchSpanProcessor" in init_content, (
+            "floe_core.telemetry.initialization must use BatchSpanProcessor with "
+            "TracerProvider. SimpleSpanProcessor blocks on export; "
+            "BatchSpanProcessor is non-blocking. Currently missing."
         )
 
     @pytest.mark.requirement("WU4-AC5")
     def test_conftest_tracer_sets_service_name(self) -> None:
-        """Verify TracerProvider fixture sets a service.name resource attribute.
+        """Verify OTel pipeline configures service.name for traces.
 
         Without service.name, traces appear in Jaeger under 'unknown_service'
         and cannot be found by the E2E tests that query by service name.
-        """
-        content = E2E_CONFTEST.read_text()
 
-        has_service_name_config = "service.name" in content or "service_name" in content
-        assert has_service_name_config, (
-            "tests/e2e/conftest.py must configure service.name in TracerProvider "
-            "Resource. Without it, traces appear as 'unknown_service' in Jaeger "
-            "and E2E tests cannot find them. Currently missing."
+        The conftest sets OTEL_SERVICE_NAME env var per product, then
+        ensure_telemetry_initialized() reads it and configures the
+        TracerProvider Resource with service.name.  We verify both sides.
+        """
+        conftest_content = E2E_CONFTEST.read_text()
+
+        # Conftest must set OTEL_SERVICE_NAME for per-product service names
+        assert "OTEL_SERVICE_NAME" in conftest_content, (
+            "tests/e2e/conftest.py must set OTEL_SERVICE_NAME env var so that "
+            "ensure_telemetry_initialized() configures service.name in the "
+            "TracerProvider Resource. Without it, traces appear as "
+            "'unknown_service' in Jaeger. Currently missing."
+        )
+
+        # Production code must read OTEL_SERVICE_NAME and configure service.name
+        init_path = (
+            REPO_ROOT
+            / "packages"
+            / "floe-core"
+            / "src"
+            / "floe_core"
+            / "telemetry"
+            / "initialization.py"
+        )
+        init_content = init_path.read_text()
+        assert "service.name" in init_content, (
+            "floe_core.telemetry.initialization must configure 'service.name' "
+            "in the TracerProvider Resource. Currently missing."
         )

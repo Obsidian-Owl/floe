@@ -72,7 +72,7 @@ class TestObservabilityRoundTrip:
                 response = jaeger_client.get(
                     "/api/traces",
                     params={
-                        "service": "floe-platform",
+                        "service": "customer-360",
                         "start": start_time,
                         "end": end_time + 60_000_000,  # +60s buffer
                         "limit": 20,
@@ -93,7 +93,7 @@ class TestObservabilityRoundTrip:
             raise_on_timeout=False,
         )
 
-        # If no traces found with "floe-platform" service, check what services exist
+        # If no traces found with "customer-360" service, check what services exist
         if not traces_found:
             services_response = jaeger_client.get("/api/services")
             services: list[str] = []
@@ -112,7 +112,7 @@ class TestObservabilityRoundTrip:
         traces_response = jaeger_client.get(
             "/api/traces",
             params={
-                "service": "floe-platform",
+                "service": "customer-360",
                 "start": start_time,
                 "end": end_time + 60_000_000,
                 "limit": 5,
