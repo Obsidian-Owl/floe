@@ -1108,7 +1108,7 @@ class TestDataPipeline(IntegrationTestBase):
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
 
-        project_dir = self._get_demo_project_path(project_root)
+        _project_dir = self._get_demo_project_path(project_root)
 
         # Test 1: Verify demo values have snapshot retention configuration
         values_demo_path = project_root / "charts" / "floe-platform" / "values-demo.yaml"
@@ -1128,14 +1128,15 @@ class TestDataPipeline(IntegrationTestBase):
             "(snapshotKeepLast or similar snapshot policy)"
         )
 
-        # Test 2: Verify floe.yaml has retention configuration
-        floe_yaml_path = project_dir / "floe.yaml"
-        assert floe_yaml_path.exists(), "floe.yaml should exist"
+        # Test 2: Verify manifest.yaml has data_retention_days configuration
+        manifest_yaml_path = project_root / "demo" / "manifest.yaml"
+        assert manifest_yaml_path.exists(), "manifest.yaml should exist in demo/"
 
-        floe_config = yaml.safe_load(floe_yaml_path.read_text())
-        has_retention = (
-            "retention" in str(floe_config).lower()
-            or "snapshot" in str(floe_config).lower()
-            or "expiry" in str(floe_config).lower()
+        manifest_config = yaml.safe_load(manifest_yaml_path.read_text())
+        data_retention_days = manifest_config.get("governance", {}).get("data_retention_days")
+        assert data_retention_days is not None, (
+            "manifest.yaml governance section must contain data_retention_days"
         )
-        assert has_retention, "floe.yaml should contain retention or snapshot configuration"
+        assert data_retention_days > 0, (
+            f"manifest.yaml data_retention_days must be positive, got {data_retention_days}"
+        )
