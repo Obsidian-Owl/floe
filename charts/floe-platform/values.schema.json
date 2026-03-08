@@ -11,7 +11,7 @@
       "properties": {
         "environment": {
           "type": "string",
-          "description": "Target environment (dev, staging, prod, test)",
+          "description": "Target environment (dev, qa, staging, prod, test)",
           "enum": ["dev", "qa", "staging", "prod", "test"],
           "default": "dev"
         },
@@ -287,6 +287,82 @@
         "replicaCount": {
           "type": "integer",
           "minimum": 1
+        },
+        "auth": {
+          "type": "object",
+          "description": "Authentication configuration",
+          "properties": {
+            "bootstrapCredentials": {
+              "type": "object",
+              "description": "Bootstrap credentials for root principal",
+              "properties": {
+                "clientId": {
+                  "type": "string",
+                  "description": "OAuth2 client ID for bootstrap principal"
+                },
+                "clientSecret": {
+                  "type": "string",
+                  "description": "OAuth2 client secret for bootstrap principal"
+                }
+              }
+            }
+          }
+        },
+        "storage": {
+          "type": "object",
+          "description": "Storage configuration",
+          "properties": {
+            "s3": {
+              "type": "object",
+              "description": "S3 storage backend",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "endpoint": {
+                  "type": "string",
+                  "description": "S3 endpoint URL"
+                },
+                "region": {
+                  "type": "string"
+                },
+                "pathStyleAccess": {
+                  "type": "boolean"
+                },
+                "accessKey": {
+                  "type": "string"
+                },
+                "secretKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "bootstrap": {
+          "type": "object",
+          "description": "Catalog bootstrap configuration",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "backoffLimit": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "catalogName": {
+              "type": "string"
+            },
+            "defaultBaseLocation": {
+              "type": "string"
+            },
+            "allowedLocations": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
         }
       }
     },
@@ -372,5 +448,111 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "polaris": {
+            "properties": {
+              "bootstrap": {
+                "properties": {
+                  "enabled": { "const": true }
+                },
+                "required": ["enabled"]
+              }
+            },
+            "required": ["bootstrap"]
+          }
+        },
+        "required": ["polaris"]
+      },
+      "then": {
+        "properties": {
+          "polaris": {
+            "properties": {
+              "auth": {
+                "properties": {
+                  "bootstrapCredentials": {
+                    "properties": {
+                      "clientSecret": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": ["clientSecret"]
+                  }
+                },
+                "required": ["bootstrapCredentials"]
+              }
+            },
+            "required": ["auth"]
+          }
+        },
+        "required": ["polaris"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "polaris": {
+            "properties": {
+              "storage": {
+                "properties": {
+                  "s3": {
+                    "properties": {
+                      "enabled": { "const": true }
+                    },
+                    "required": ["enabled"]
+                  }
+                },
+                "required": ["s3"]
+              }
+            },
+            "required": ["storage"]
+          }
+        },
+        "required": ["polaris"]
+      },
+      "then": {
+        "anyOf": [
+          {
+            "properties": {
+              "minio": {
+                "properties": {
+                  "enabled": { "const": true }
+                },
+                "required": ["enabled"]
+              }
+            },
+            "required": ["minio"]
+          },
+          {
+            "properties": {
+              "polaris": {
+                "properties": {
+                  "storage": {
+                    "properties": {
+                      "s3": {
+                        "properties": {
+                          "endpoint": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": ["endpoint"]
+                      }
+                    },
+                    "required": ["s3"]
+                  }
+                },
+                "required": ["storage"]
+              }
+            },
+            "required": ["polaris"]
+          }
+        ]
+      }
+    }
+  ]
 }
