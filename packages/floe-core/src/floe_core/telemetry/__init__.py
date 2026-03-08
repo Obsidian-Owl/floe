@@ -60,7 +60,7 @@ from floe_core.telemetry.conventions import (
 )
 
 # Initialization
-from floe_core.telemetry.initialization import ensure_telemetry_initialized
+from floe_core.telemetry.initialization import ensure_telemetry_initialized, reset_telemetry
 
 # Propagation utilities
 from floe_core.telemetry.propagation import (
@@ -152,4 +152,5 @@ __all__: list[str] = [
     "sanitize_error_message",
     # Initialization
     "ensure_telemetry_initialized",
+    "reset_telemetry",
 ]

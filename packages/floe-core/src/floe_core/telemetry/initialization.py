@@ -126,4 +126,39 @@ def ensure_telemetry_initialized() -> None:
     _initialized = True
 
 
-__all__ = ["ensure_telemetry_initialized"]
+def reset_telemetry() -> None:
+    """Shut down the current TracerProvider and reset initialization state.
+
+    Allows telemetry to be re-initialized (e.g. in tests or after a
+    configuration change).  The sequence is:
+
+    1. Retrieve the current global TracerProvider.
+    2. If it is a real SDK TracerProvider, call ``provider.shutdown()`` to
+       flush all pending spans.
+    3. Set ``_initialized = False`` so that a subsequent call to
+       ``ensure_telemetry_initialized()`` will create a fresh provider.
+    4. Call ``reset_tracer()`` to invalidate any cached tracer instances.
+
+    The function is safe to call when telemetry has not been initialized
+    (no-op) and is idempotent (calling it twice does not raise).
+
+    Returns:
+        None
+
+    Examples:
+        >>> reset_telemetry()                      # safe even if never initialized
+        >>> ensure_telemetry_initialized()          # first init
+        >>> reset_telemetry()                      # flush and clear
+        >>> ensure_telemetry_initialized()          # fresh re-init
+    """
+    global _initialized
+
+    provider = trace.get_tracer_provider()
+    if isinstance(provider, TracerProvider):
+        provider.shutdown()
+
+    _initialized = False
+    reset_tracer()
+
+
+__all__ = ["ensure_telemetry_initialized", "reset_telemetry"]
