@@ -251,30 +251,13 @@ wait_for_port localhost 16686 15 || true  # Jaeger optional
 echo "Port-forwards established."
 
 # Verify MinIO bucket exists before running tests (defense-in-depth)
+# Uses boto3 HeadBucket with credentials — anonymous curl returns 403 for both
+# existing and non-existing buckets, making it useless for detection.
 MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
-echo "Verifying MinIO bucket '${MINIO_BUCKET}'..."
-BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:9000/${MINIO_BUCKET}/" 2>/dev/null) || true
-if [[ "$BUCKET_CODE" == "404" ]]; then
-    echo "MinIO bucket '${MINIO_BUCKET}' not found — creating..." >&2
-    MINIO_POD=$(kubectl get pods -n "${TEST_NAMESPACE}" -l app.kubernetes.io/name=minio \
-        -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-    if [[ -z "${MINIO_POD}" ]]; then
-        echo "ERROR: No MinIO pod found in namespace ${TEST_NAMESPACE}" >&2
-        exit 1
-    fi
-    kubectl exec -n "${TEST_NAMESPACE}" "${MINIO_POD}" -- \
-        mc alias set local http://localhost:9000 "${MINIO_USER}" "${MINIO_PASS}" 2>&1 || true
-    kubectl exec -n "${TEST_NAMESPACE}" "${MINIO_POD}" -- \
-        mc mb "local/${MINIO_BUCKET}" --ignore-existing 2>&1
-    # Re-verify
-    BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:9000/${MINIO_BUCKET}/" 2>/dev/null) || true
-    if [[ "$BUCKET_CODE" == "404" ]]; then
-        echo "ERROR: Failed to create MinIO bucket '${MINIO_BUCKET}'" >&2
-        exit 1
-    fi
-    echo "MinIO bucket '${MINIO_BUCKET}' created successfully"
-fi
-echo "MinIO bucket '${MINIO_BUCKET}' accessible (HTTP ${BUCKET_CODE})"
+MINIO_URL="${MINIO_URL:-http://localhost:9000}"
+echo "Verifying MinIO bucket '${MINIO_BUCKET}' via S3 API..."
+python3 "${SCRIPT_DIR}/ensure-bucket.py" "${MINIO_USER}" "${MINIO_PASS}" "${MINIO_URL}" "${MINIO_BUCKET}"
+echo "MinIO bucket '${MINIO_BUCKET}' ready"
 
 # Verify Polaris catalog exists (defense-in-depth for bootstrap job failures)
 POLARIS_CATALOG="${POLARIS_CATALOG:-floe-e2e}"

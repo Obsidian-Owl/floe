@@ -14,11 +14,13 @@ Requirements:
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+import yaml
 
 from testing.fixtures.polling import wait_for_condition
 
@@ -349,3 +351,216 @@ class TestJobExecution:
         assert "kind: Job" in result.stdout or "kind: CronJob" in result.stdout, (
             "No Job or CronJob in rendered output"
         )
+
+
+@pytest.mark.e2e
+@pytest.mark.requirement("AC-32.1")
+def test_minio_persistence_enabled_in_test_values() -> None:
+    """Test that values-test.yaml configures MinIO with persistent storage.
+
+    AC-32.1 requires minio.persistence.enabled=true with size=1Gi in
+    the test values file. Without persistence, MinIO data is lost on
+    pod restart, causing flaky E2E tests when Iceberg metadata or
+    warehouse data disappears mid-suite.
+
+    Validates:
+        - minio.persistence.enabled is exactly True (boolean, not string)
+        - minio.persistence.size is exactly "1Gi"
+        - minio section exists and is a dict (not accidentally deleted)
+        - persistence sub-key exists (not missing entirely)
+    """
+    values_path = (
+        Path(__file__).parent.parent.parent / "charts" / "floe-platform" / "values-test.yaml"
+    )
+    assert values_path.exists(), (
+        f"values-test.yaml not found at {values_path}. Chart directory structure may have changed."
+    )
+
+    raw_content = values_path.read_text()
+    values = yaml.safe_load(raw_content)
+
+    assert isinstance(values, dict), (
+        f"values-test.yaml did not parse as a dict, got {type(values).__name__}"
+    )
+
+    # Verify minio section exists and is a dict
+    assert "minio" in values, "values-test.yaml is missing the 'minio' top-level key entirely"
+    minio_config = values["minio"]
+    assert isinstance(minio_config, dict), (
+        f"minio config should be a dict, got {type(minio_config).__name__}"
+    )
+
+    # Verify minio.enabled is true (persistence is meaningless if MinIO is disabled)
+    assert minio_config.get("enabled") is True, (
+        f"minio.enabled must be true for persistence to take effect, "
+        f"got {minio_config.get('enabled')!r}"
+    )
+
+    # Verify persistence sub-section exists
+    assert "persistence" in minio_config, (
+        "minio.persistence key is missing from values-test.yaml. "
+        "Expected persistence configuration with enabled=true and size=1Gi."
+    )
+    persistence_config = minio_config["persistence"]
+    assert isinstance(persistence_config, dict), (
+        f"minio.persistence should be a dict, got {type(persistence_config).__name__}"
+    )
+
+    # Verify persistence.enabled is exactly True (boolean)
+    assert "enabled" in persistence_config, "minio.persistence.enabled key is missing"
+    assert persistence_config["enabled"] is True, (
+        f"minio.persistence.enabled must be true, got {persistence_config['enabled']!r}. "
+        "Without persistence, MinIO data is lost on pod restart."
+    )
+
+    # Verify persistence.size is exactly "1Gi"
+    assert "size" in persistence_config, (
+        "minio.persistence.size key is missing. Expected size: '1Gi' for test environment."
+    )
+    assert persistence_config["size"] == "1Gi", (
+        f"minio.persistence.size must be '1Gi', got {persistence_config['size']!r}"
+    )
+
+
+def _read_e2e_script() -> str:
+    """Read and return the content of testing/ci/test-e2e.sh."""
+    script_path = Path(__file__).parent.parent.parent / "testing" / "ci" / "test-e2e.sh"
+    assert script_path.exists(), (
+        f"test-e2e.sh not found at {script_path}. Expected at testing/ci/test-e2e.sh"
+    )
+    return script_path.read_text()
+
+
+@pytest.mark.e2e
+@pytest.mark.requirement("AC-32.2")
+def test_bucket_detection_uses_authenticated_s3_api() -> None:
+    """Test that test-e2e.sh uses boto3 HeadBucket for bucket detection, not anonymous curl.
+
+    AC-32.2 requires that the MinIO bucket check in test-e2e.sh uses
+    boto3 HeadBucket with MinIO credentials for bucket detection. Anonymous
+    curl requests to port 9000 are unreliable (MinIO returns 200 for
+    non-existent buckets in some configurations) and bypass authentication.
+
+    Validates:
+        - The bucket verification section contains boto3 or python3-with-boto3 usage
+        - No anonymous curl to port 9000 appears in the bucket verification section
+        - The bucket detection approach is authenticated (uses credentials)
+    """
+    full_content = _read_e2e_script()
+
+    # Extract the MinIO bucket verification section.
+    # Flexible regex: matches "Verify MinIO bucket", "MinIO bucket verification", etc.
+    bucket_section_match = re.search(
+        r"#.*(?:Verify|Check|Ensure).*MinIO.*bucket.*?(?=#.*(?:Verify|Check|Ensure).*Polaris|$)",
+        full_content,
+        re.DOTALL | re.IGNORECASE,
+    )
+    assert bucket_section_match is not None, (
+        "Could not find MinIO bucket verification section in test-e2e.sh. "
+        "Expected a comment mentioning MinIO bucket verification/check."
+    )
+    bucket_section = bucket_section_match.group(0)
+
+    # AC-32.2 NEGATIVE: No anonymous curl for bucket detection.
+    # Match curl calls targeting port 9000 (MinIO) within the bucket section.
+    curl_minio_pattern = re.compile(
+        r"curl\s+.*(?:localhost|127\.0\.0\.1)[:\s]*9000",
+        re.IGNORECASE,
+    )
+    curl_matches = curl_minio_pattern.findall(bucket_section)
+    assert len(curl_matches) == 0, (
+        f"Found {len(curl_matches)} anonymous curl call(s) to MinIO (port 9000) "
+        f"in the bucket verification section. AC-32.2 requires boto3 HeadBucket "
+        f"with MinIO credentials instead. Matches: {curl_matches}"
+    )
+
+    # AC-32.2 POSITIVE: Must use boto3 / python3 with boto3 for bucket detection.
+    # Accept either inline python3 -c with boto3, or a call to a python script
+    # that uses boto3, or direct boto3 references.
+    uses_boto3 = (
+        "boto3" in bucket_section
+        or "head_bucket" in bucket_section.lower()
+        or "HeadBucket" in bucket_section
+    )
+    # Also accept python3 invocation that would use boto3
+    uses_python3_for_s3 = re.search(
+        r"python3?\s+.*(?:boto3|s3_bucket|head_bucket|HeadBucket)",
+        bucket_section,
+        re.IGNORECASE,
+    )
+    assert uses_boto3 or uses_python3_for_s3, (
+        "Bucket verification section does not use boto3 or HeadBucket for "
+        "bucket detection. AC-32.2 requires authenticated S3 API calls via "
+        "boto3 HeadBucket with MinIO credentials. Found section:\n"
+        f"{bucket_section[:500]}"
+    )
+
+    # AC-32.2: Verify credentials are passed (not anonymous boto3)
+    uses_credentials = (
+        "aws_access_key_id" in bucket_section
+        or "MINIO_USER" in bucket_section
+        or "access_key" in bucket_section.lower()
+    )
+    assert uses_credentials, (
+        "Bucket verification uses boto3 but does not pass credentials. "
+        "AC-32.2 requires authenticated S3 API calls with MinIO credentials."
+    )
+
+
+@pytest.mark.e2e
+@pytest.mark.requirement("AC-32.3")
+def test_no_mc_cli_for_bucket_management() -> None:
+    """Test that test-e2e.sh does not use mc CLI or kubectl exec for bucket ops.
+
+    AC-32.3 requires that bucket management in test-e2e.sh does NOT use:
+    - mc mb (MinIO client bucket creation)
+    - mc alias (MinIO client alias configuration)
+    - kubectl exec to run mc commands inside MinIO pods
+
+    These approaches are fragile (depend on mc being installed in the MinIO
+    container image) and create a dependency on the MinIO pod's internal
+    tooling rather than using the standard S3 API.
+
+    Validates:
+        - 'mc mb' does not appear anywhere in the script
+        - 'mc alias' does not appear anywhere in the script
+        - No kubectl exec commands target MinIO for bucket creation
+    """
+    full_content = _read_e2e_script()
+
+    # Filter to non-comment lines for pattern matching
+    code_lines = [
+        line
+        for line in full_content.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    code_content = "\n".join(code_lines)
+
+    # AC-32.3: No 'mc mb' in executable lines
+    mc_mb_matches = re.findall(r"^.*\bmc\s+mb\b.*$", code_content, re.MULTILINE)
+    assert len(mc_mb_matches) == 0, (
+        f"Found {len(mc_mb_matches)} 'mc mb' call(s) in test-e2e.sh. "
+        f"AC-32.3 prohibits mc CLI for bucket management. "
+        f"Lines: {mc_mb_matches}"
+    )
+
+    # AC-32.3: No 'mc alias' in executable lines
+    mc_alias_matches = re.findall(r"^.*\bmc\s+alias\b.*$", code_content, re.MULTILINE)
+    assert len(mc_alias_matches) == 0, (
+        f"Found {len(mc_alias_matches)} 'mc alias' call(s) in test-e2e.sh. "
+        f"AC-32.3 prohibits mc CLI for bucket management. "
+        f"Lines: {mc_alias_matches}"
+    )
+
+    # AC-32.3: No kubectl exec for bucket management.
+    # Catch both direct minio references and indirect via mc commands.
+    kubectl_exec_minio_matches = re.findall(
+        r"^.*kubectl\s+exec\b.*(?:minio|MINIO|mc\s+mb|mc\s+alias).*$",
+        code_content,
+        re.MULTILINE,
+    )
+    assert len(kubectl_exec_minio_matches) == 0, (
+        f"Found {len(kubectl_exec_minio_matches)} 'kubectl exec' call(s) "
+        f"targeting MinIO in test-e2e.sh. AC-32.3 prohibits kubectl exec "
+        f"for bucket management. Lines: {kubectl_exec_minio_matches}"
+    )
