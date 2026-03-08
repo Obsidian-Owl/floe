@@ -34,6 +34,11 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
+# Dagster's implicit job name for ad-hoc asset materializations.
+# Required in the launchRun GraphQL selector since Dagster 1.12.x.
+# Source: dagster._core.definitions.assets_job.IMPLICIT_ASSET_JOB_NAME
+IMPLICIT_ASSET_JOB_NAME = "__ASSET_JOB"
+
 # Demo product paths relative to project root
 DEMO_PRODUCTS = {
     "customer-360": "demo/customer-360/floe.yaml",
@@ -529,6 +534,7 @@ class TestCompileDeployMaterialize:
                 "selector": {
                     "repositoryName": repo_name,
                     "repositoryLocationName": location_name,
+                    "pipelineName": IMPLICIT_ASSET_JOB_NAME,
                     "assetSelection": [{"path": ["stg_customers"]}],
                 },
                 "mode": "default",
