@@ -172,7 +172,15 @@ def deployed_platform(
             "--set",
             "minio.enabled=false",
             "--set",
+            "marquez.enabled=false",
+            "--set",
+            "jaeger.enabled=false",
+            "--set",
+            "cube.enabled=false",
+            "--set",
             "polaris.bootstrap.enabled=false",  # Bootstrap requires MinIO
+            "--set",
+            "postgresql.persistence.enabled=false",  # Avoid PVC provisioning timeout
             "--wait",
             "--timeout",
             "10m",
