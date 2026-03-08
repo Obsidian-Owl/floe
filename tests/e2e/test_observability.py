@@ -1077,8 +1077,7 @@ class TestObservability(IntegrationTestBase):
                 "generate",
             ]
             has_compilation_span = any(
-                any(kw in op.lower() for kw in compilation_keywords)
-                for op in all_operation_names
+                any(kw in op.lower() for kw in compilation_keywords) for op in all_operation_names
             )
 
             assert has_compilation_span, (
