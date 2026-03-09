@@ -253,11 +253,27 @@ echo "Port-forwards established."
 # Verify MinIO bucket exists before running tests (defense-in-depth)
 # Uses boto3 HeadBucket with credentials — anonymous curl returns 403 for both
 # existing and non-existing buckets, making it useless for detection.
+# The bucket should exist from defaultBuckets server startup, but we retry
+# to handle the window between MinIO TCP-ready and API-ready.
 MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
 MINIO_URL="${MINIO_URL:-http://localhost:9000}"
+BUCKET_ATTEMPT=0
+BUCKET_MAX_ATTEMPTS=10
 echo "Verifying MinIO bucket '${MINIO_BUCKET}' via S3 API..."
-python3 "${SCRIPT_DIR}/ensure-bucket.py" "${MINIO_USER}" "${MINIO_PASS}" "${MINIO_URL}" "${MINIO_BUCKET}"
-echo "MinIO bucket '${MINIO_BUCKET}' ready"
+while true; do
+    BUCKET_ATTEMPT=$((BUCKET_ATTEMPT + 1))
+    if uv run python3 "${SCRIPT_DIR}/ensure-bucket.py" "${MINIO_USER}" "${MINIO_PASS}" "${MINIO_URL}" "${MINIO_BUCKET}"; then
+        echo "MinIO bucket '${MINIO_BUCKET}' ready"
+        break
+    fi
+    if [[ $BUCKET_ATTEMPT -ge $BUCKET_MAX_ATTEMPTS ]]; then
+        echo "ERROR: MinIO bucket '${MINIO_BUCKET}' not available after ${BUCKET_MAX_ATTEMPTS} attempts" >&2
+        echo "Check MinIO pod status: kubectl get pods -n floe-test -l app.kubernetes.io/name=minio" >&2
+        exit 1
+    fi
+    echo "  Attempt ${BUCKET_ATTEMPT}/${BUCKET_MAX_ATTEMPTS} - bucket not ready, waiting 3s..."
+    sleep 3
+done
 
 # Verify Polaris catalog exists (defense-in-depth for bootstrap job failures)
 POLARIS_CATALOG="${POLARIS_CATALOG:-floe-e2e}"
