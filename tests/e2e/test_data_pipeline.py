@@ -1032,16 +1032,29 @@ class TestDataPipeline(IntegrationTestBase):
         )
 
         # Test 2: Check for retention macro in dbt project
-        macros_dir = project_dir / "macros"
-        retention_macro_found = False
-        assert macros_dir.exists(), (
-            f"macros/ directory not found at {macros_dir}. "
-            "dbt project should have a macros directory."
+        # Resolve macro paths dynamically from dbt_project.yml
+        dbt_project_yml_path = project_dir / "dbt_project.yml"
+        dbt_config = (
+            yaml.safe_load(dbt_project_yml_path.read_text())
+            if dbt_project_yml_path.exists()
+            else {}
         )
-        for macro_file in macros_dir.glob("**/*.sql"):
-            content = macro_file.read_text()
-            if "retention" in content.lower() or "expire" in content.lower():
-                retention_macro_found = True
+        macro_paths = dbt_config.get("macro-paths", ["macros"])
+        retention_macro_found = False
+        for macro_path in macro_paths:
+            resolved_macros_dir = (project_dir / macro_path).resolve()
+            # Guard against path traversal — macro dir must stay within repo
+            assert resolved_macros_dir.is_relative_to(project_root.resolve()), (
+                f"Macro path escapes repo root: {resolved_macros_dir}"
+            )
+            if not resolved_macros_dir.exists():
+                continue
+            for macro_file in resolved_macros_dir.glob("**/*.sql"):
+                content = macro_file.read_text()
+                if "retention" in content.lower() or "expire" in content.lower():
+                    retention_macro_found = True
+                    break
+            if retention_macro_found:
                 break
 
         # At least one retention mechanism should be defined
@@ -1099,8 +1112,6 @@ class TestDataPipeline(IntegrationTestBase):
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
 
-        project_dir = self._get_demo_project_path(project_root)
-
         # Test 1: Verify demo values have snapshot retention configuration
         values_demo_path = project_root / "charts" / "floe-platform" / "values-demo.yaml"
         assert values_demo_path.exists(), (
@@ -1119,14 +1130,15 @@ class TestDataPipeline(IntegrationTestBase):
             "(snapshotKeepLast or similar snapshot policy)"
         )
 
-        # Test 2: Verify floe.yaml has retention configuration
-        floe_yaml_path = project_dir / "floe.yaml"
-        assert floe_yaml_path.exists(), "floe.yaml should exist"
+        # Test 2: Verify manifest.yaml has data_retention_days configuration
+        manifest_yaml_path = project_root / "demo" / "manifest.yaml"
+        assert manifest_yaml_path.exists(), "manifest.yaml should exist in demo/"
 
-        floe_config = yaml.safe_load(floe_yaml_path.read_text())
-        has_retention = (
-            "retention" in str(floe_config).lower()
-            or "snapshot" in str(floe_config).lower()
-            or "expiry" in str(floe_config).lower()
+        manifest_config = yaml.safe_load(manifest_yaml_path.read_text())
+        data_retention_days = manifest_config.get("governance", {}).get("data_retention_days")
+        assert data_retention_days is not None, (
+            "manifest.yaml governance section must contain data_retention_days"
         )
-        assert has_retention, "floe.yaml should contain retention or snapshot configuration"
+        assert data_retention_days > 0, (
+            f"manifest.yaml data_retention_days must be positive, got {data_retention_days}"
+        )

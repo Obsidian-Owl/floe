@@ -8,6 +8,7 @@ All E2E tests require the full platform stack running in K8s (Kind cluster).
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import uuid
@@ -19,6 +20,8 @@ import httpx
 import pytest
 
 from testing.fixtures.polling import wait_for_condition
+
+logger = logging.getLogger(__name__)
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -856,6 +859,23 @@ def dbt_e2e_profile(
                 prof_path.unlink()
 
             bak_path.unlink(missing_ok=True)
+
+    # --- Stale .bak detection guard (WU-36 AC-36.1) ---
+    # A prior session may have crashed before _restore_backups() ran,
+    # leaving orphaned .bak files with the E2E profile still in place.
+    # If we detect such a .bak, restore the original profiles.yml now,
+    # BEFORE creating new backups, so make compile-demo does not fail.
+    for product_dir in _DBT_DEMO_PRODUCTS:
+        project_dir = project_root / "demo" / product_dir
+        profile_path = project_dir / "profiles.yml"
+        bak_path = project_dir / "profiles.yml.bak"
+        if bak_path.exists():
+            logger.warning(
+                "Stale .bak detected for %s — restoring original profiles.yml "
+                "(previous session likely crashed without teardown).",
+                product_dir,
+            )
+            bak_path.rename(profile_path)
 
     try:
         for product_dir, profile_name in _DBT_DEMO_PRODUCTS.items():
