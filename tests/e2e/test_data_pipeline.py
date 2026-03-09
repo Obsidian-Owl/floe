@@ -1043,6 +1043,10 @@ class TestDataPipeline(IntegrationTestBase):
         retention_macro_found = False
         for macro_path in macro_paths:
             resolved_macros_dir = (project_dir / macro_path).resolve()
+            # Guard against path traversal — macro dir must stay within repo
+            assert str(resolved_macros_dir).startswith(str(project_root.resolve())), (
+                f"Macro path escapes repo root: {resolved_macros_dir}"
+            )
             if not resolved_macros_dir.exists():
                 continue
             for macro_file in resolved_macros_dir.glob("**/*.sql"):

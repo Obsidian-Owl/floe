@@ -20,46 +20,15 @@ Requirements:
 
 from __future__ import annotations
 
-import ast
 import re
 from pathlib import Path
 
 import pytest
 
+from testing.fixtures.source_parsing import get_function_source, strip_comments_and_docstrings
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 E2E_TEST_FILE = REPO_ROOT / "tests" / "e2e" / "test_data_pipeline.py"
-
-
-def _get_function_source(file_path: Path, func_name: str) -> str:
-    """Extract the source text of a specific method from a Python file.
-
-    Parses the file's AST, locates the function/method by name, and returns
-    its raw source lines. Works for methods nested inside classes.
-
-    Args:
-        file_path: Path to the Python source file.
-        func_name: Name of the function or method to extract.
-
-    Returns:
-        The raw source text of the function body.
-
-    Raises:
-        ValueError: If the function is not found in the file.
-    """
-    source = file_path.read_text()
-    tree = ast.parse(source)
-
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name == func_name:
-                lines = source.splitlines()
-                # node.lineno is 1-based, node.end_lineno is inclusive
-                start = node.lineno - 1
-                end = node.end_lineno if node.end_lineno else start + 1
-                return "\n".join(lines[start:end])
-
-    msg = f"Function {func_name!r} not found in {file_path}"
-    raise ValueError(msg)
 
 
 @pytest.fixture(scope="module")
@@ -73,14 +42,24 @@ def retention_test_source() -> str:
         f"E2E test file not found at {E2E_TEST_FILE}. "
         "Cannot validate macro path resolution without the source."
     )
-    return _get_function_source(E2E_TEST_FILE, "test_data_retention_enforcement")
+    return get_function_source(E2E_TEST_FILE, "test_data_retention_enforcement")
+
+
+@pytest.fixture(scope="module")
+def retention_test_code(retention_test_source: str) -> str:
+    """Executable code only (no comments/docstrings) from test_data_retention_enforcement.
+
+    Returns:
+        Source text with comments and docstrings removed.
+    """
+    return strip_comments_and_docstrings(retention_test_source)
 
 
 class TestNoHardcodedMacrosDir:
     """Verify the test does NOT hardcode ``project_dir / "macros"`` as the sole path."""
 
     @pytest.mark.requirement("AC-36.2")
-    def test_no_hardcoded_macros_path_as_sole_source(self, retention_test_source: str) -> None:
+    def test_no_hardcoded_macros_path_as_sole_source(self, retention_test_code: str) -> None:
         """Source must NOT use ``project_dir / "macros"`` as the only macro directory.
 
         The broken pattern is:
@@ -91,19 +70,24 @@ class TestNoHardcodedMacrosDir:
         A correct implementation reads dbt_project.yml's macro-paths config,
         which may point to ``../macros`` or multiple directories. It must NOT
         fall back to a single hardcoded path without also reading the config.
+
+        Uses comment-stripped code to prevent bypassing via a comment containing
+        ``dbt_project.yml``.
         """
         # Pattern: assignment of project_dir / "macros" used as the only
         # macro directory (not augmented by dbt_project.yml reading).
+        # Uses comment-stripped code so a comment like
+        # "# dbt_project.yml is the config" doesn't satisfy the check.
         has_hardcoded_macros = bool(
-            re.search(r'project_dir\s*/\s*["\']macros["\']', retention_test_source)
+            re.search(r'project_dir\s*/\s*["\']macros["\']', retention_test_code)
         )
-        reads_dbt_project_yml = bool(re.search(r"dbt_project\.yml", retention_test_source))
+        reads_dbt_project_yml = bool(re.search(r"dbt_project\.yml", retention_test_code))
 
-        # If it hardcodes project_dir/"macros" but never reads dbt_project.yml,
-        # it's using the broken pattern.
+        # If it hardcodes project_dir/"macros" but never reads dbt_project.yml
+        # in executable code, it's using the broken pattern.
         assert not (has_hardcoded_macros and not reads_dbt_project_yml), (
             'test_data_retention_enforcement hardcodes `project_dir / "macros"` '
-            "without reading dbt_project.yml's macro-paths config. "
+            "without reading dbt_project.yml's macro-paths config in executable code. "
             "It must resolve macro paths from the dbt project configuration."
         )
 

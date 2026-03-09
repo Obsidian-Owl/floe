@@ -392,11 +392,19 @@ class TestStaleBackupGuardEdgeCases:
         After restoring profiles.yml from .bak, the .bak must be
         removed so it is not re-detected as stale. Without cleanup,
         every session would repeat the restoration unnecessarily.
+
+        Note: The current implementation uses ``bak_path.rename(profile_path)``
+        which atomically moves the .bak to profiles.yml — serving as both
+        restore AND cleanup in a single operation. This test accepts either
+        an explicit ``unlink()`` (two-step: copy + delete) or ``rename()``
+        (atomic move that inherently removes the source file).
         """
         source = _get_fixture_source()
         guard = _get_guard_region(source)
 
-        # After restore, .bak must be cleaned up
+        # After restore, .bak must be cleaned up.
+        # rename() inherently removes the source (.bak) file — it serves
+        # as both restore and cleanup atomically.
         has_unlink = "unlink" in guard
         has_rename = "rename" in guard or "replace" in guard
 
@@ -420,11 +428,11 @@ class TestStaleBackupGuardEdgeCases:
 
         has_log = re.search(r"(?:log|logger)\.\w+\(", guard) is not None
         has_warnings = "warnings.warn" in guard
-        has_print = "print(" in guard
 
-        assert has_log or has_warnings or has_print, (
+        assert has_log or has_warnings, (
             "Stale backup guard should log or warn when a stale .bak "
             "is detected and restored. Silent restoration hides crash "
-            "recovery from developers. Expected logger.warning(), "
-            "warnings.warn(), or print() call in the guard region."
+            "recovery from developers. Expected logger.warning() or "
+            "warnings.warn() call in the guard region. "
+            "Bare print() is not acceptable — use structured logging."
         )

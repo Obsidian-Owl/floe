@@ -21,75 +21,15 @@ Requirements:
 
 from __future__ import annotations
 
-import ast
 import re
 from pathlib import Path
 
 import pytest
 
+from testing.fixtures.source_parsing import get_function_source, strip_comments_and_docstrings
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 E2E_TEST_FILE = REPO_ROOT / "tests" / "e2e" / "test_data_pipeline.py"
-
-
-def _get_function_source(file_path: Path, func_name: str) -> str:
-    """Extract the source text of a specific method from a Python file.
-
-    Parses the file's AST, locates the function/method by name, and returns
-    its raw source lines. Works for methods nested inside classes.
-
-    Args:
-        file_path: Path to the Python source file.
-        func_name: Name of the function or method to extract.
-
-    Returns:
-        The raw source text of the function body.
-
-    Raises:
-        ValueError: If the function is not found in the file.
-    """
-    source = file_path.read_text()
-    tree = ast.parse(source)
-
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name == func_name:
-                lines = source.splitlines()
-                # node.lineno is 1-based, node.end_lineno is inclusive
-                start = node.lineno - 1
-                end = node.end_lineno if node.end_lineno else start + 1
-                return "\n".join(lines[start:end])
-
-    msg = f"Function {func_name!r} not found in {file_path}"
-    raise ValueError(msg)
-
-
-def _strip_comments_and_docstrings(source: str) -> str:
-    """Remove comments and docstrings from Python source, leaving only executable code.
-
-    This prevents a lazy implementer from passing structural tests by adding
-    keywords in a comment (e.g., ``# TODO: check manifest.yaml data_retention_days``)
-    without actually writing the code.
-
-    Args:
-        source: Raw Python source text.
-
-    Returns:
-        Source with comments and docstrings removed.
-    """
-    # Remove single-line comments (# ...)
-    code_lines: list[str] = []
-    for line in source.splitlines():
-        # Strip inline comments but preserve strings containing #
-        # Simple heuristic: remove everything after # that isn't inside quotes
-        stripped = re.sub(r'#[^"\']*$', "", line)
-        code_lines.append(stripped)
-    code = "\n".join(code_lines)
-
-    # Remove triple-quoted strings (docstrings)
-    code = re.sub(r'"""[\s\S]*?"""', '""""""', code)
-    code = re.sub(r"'''[\s\S]*?'''", "''''''", code)
-
-    return code
 
 
 @pytest.fixture(scope="module")
@@ -103,7 +43,7 @@ def snapshot_expiry_source() -> str:
         f"E2E test file not found at {E2E_TEST_FILE}. "
         "Cannot validate retention config location without the source."
     )
-    return _get_function_source(E2E_TEST_FILE, "test_snapshot_expiry_enforcement")
+    return get_function_source(E2E_TEST_FILE, "test_snapshot_expiry_enforcement")
 
 
 @pytest.fixture(scope="module")
@@ -116,7 +56,31 @@ def snapshot_expiry_code(snapshot_expiry_source: str) -> str:
     Returns:
         Source text with comments and docstrings removed.
     """
-    return _strip_comments_and_docstrings(snapshot_expiry_source)
+    return strip_comments_and_docstrings(snapshot_expiry_source)
+
+
+@pytest.fixture(scope="module")
+def data_retention_source() -> str:
+    """Source text of test_data_retention_enforcement from the E2E file.
+
+    Returns:
+        The complete source text of the function.
+    """
+    assert E2E_TEST_FILE.exists(), (
+        f"E2E test file not found at {E2E_TEST_FILE}. "
+        "Cannot validate retention config location without the source."
+    )
+    return get_function_source(E2E_TEST_FILE, "test_data_retention_enforcement")
+
+
+@pytest.fixture(scope="module")
+def data_retention_code(data_retention_source: str) -> str:
+    """Executable code only (no comments/docstrings) from test_data_retention_enforcement.
+
+    Returns:
+        Source text with comments and docstrings removed.
+    """
+    return strip_comments_and_docstrings(data_retention_source)
 
 
 class TestReferencesManifestYaml:
@@ -130,9 +94,11 @@ class TestReferencesManifestYaml:
         ``demo/manifest.yaml``, not in ``floe.yaml``. The test must reference
         manifest.yaml in executable code (not just in a comment or docstring).
         """
-        has_manifest_ref = bool(re.search(r"manifest\.yaml|manifest", snapshot_expiry_code))
+        manifest_pattern = r"manifest\.yaml|manifest_yaml|manifest_config|manifest_path"
+        has_manifest_ref = bool(re.search(manifest_pattern, snapshot_expiry_code))
         assert has_manifest_ref, (
             "test_snapshot_expiry_enforcement does not reference 'manifest.yaml' "
+            "(or manifest_yaml/manifest_config/manifest_path variable) "
             "in executable code (comments and docstrings excluded). "
             "Retention config (data_retention_days) is in manifest.yaml, not floe.yaml."
         )
@@ -197,23 +163,28 @@ class TestDoesNotSolelyCheckFloeYaml:
         requires manifest-based retention checking in executable code.
         """
         # Detect the broken pattern: retention/snapshot/expiry keywords checked
-        # against a variable loaded exclusively from floe.yaml
-        broken_floe_only_pattern = bool(
-            re.search(
-                r"floe_config.*(?:retention|snapshot|expiry)",
-                snapshot_expiry_code,
-                re.DOTALL,
-            )
+        # against a variable loaded exclusively from floe.yaml.
+        # Uses per-line matching (no DOTALL) to avoid false positives from
+        # unrelated uses of floe_config and retention on distant lines.
+        broken_floe_only_pattern = any(
+            re.search(r"floe_config.*(?:retention|snapshot|expiry)", line)
+            for line in snapshot_expiry_code.splitlines()
         )
 
-        # Unconditionally require manifest-based retention checking in code
-        has_manifest_based_check = bool(
-            re.search(
-                r"manifest.*(?:retention|data_retention)",
-                snapshot_expiry_code,
-                re.DOTALL,
-            )
+        # Unconditionally require manifest-based retention checking in code.
+        # Uses per-line matching to ensure manifest and retention co-occur
+        # on the same line or in adjacent variable usage (not distant lines).
+        has_manifest_based_check = any(
+            re.search(r"manifest.*(?:retention|data_retention)", line)
+            for line in snapshot_expiry_code.splitlines()
         )
+        # Also accept structured access pattern across lines:
+        # manifest_config.get("governance", {}).get("data_retention_days")
+        if not has_manifest_based_check:
+            has_manifest_based_check = (
+                "manifest_config" in snapshot_expiry_code
+                and "data_retention_days" in snapshot_expiry_code
+            )
 
         if broken_floe_only_pattern:
             assert has_manifest_based_check, (
@@ -294,4 +265,83 @@ class TestNoVagueStringSearch:
             "This is the same broken approach as before, just pointed at a "
             "different file. Use structured access like "
             "manifest_config['governance']['data_retention_days'] instead."
+        )
+
+
+class TestDataRetentionEnforcementPattern:
+    """Validate test_data_retention_enforcement does not solely use floe.yaml string search.
+
+    The ``test_data_retention_enforcement`` function has the same broken pattern
+    as ``test_snapshot_expiry_enforcement``: it checks
+    ``"retention" in str(floe_config).lower()`` against floe.yaml where no
+    retention keywords exist. The test passes incidentally because the macro
+    fallback (Test 2) finds retention macros. But the floe.yaml string search
+    (Test 1) is dead code that always evaluates to False.
+
+    These tests guard against regression — ensuring that if the macro fallback
+    is ever removed, the floe.yaml pattern is not the sole retention check.
+    """
+
+    @pytest.mark.requirement("AC-36.3")
+    def test_data_retention_has_non_floe_yaml_retention_check(
+        self, data_retention_code: str
+    ) -> None:
+        """test_data_retention_enforcement must not solely rely on floe.yaml for retention.
+
+        The function uses ``"retention" in str(floe_config).lower()`` which
+        always returns False for customer-360's floe.yaml. The macro path
+        fallback saves it, but the primary retention check is dead code.
+        This test ensures at least one non-floe_config retention mechanism
+        exists in executable code (e.g., dbt macro search or manifest.yaml).
+        """
+        # The macro-based retention search is the valid fallback
+        has_macro_retention = bool(
+            re.search(r"retention_macro_found|macro.*retention", data_retention_code)
+        )
+        # Or a manifest-based check (if refactored in future)
+        has_manifest_check = bool(
+            re.search(r"manifest.*retention|data_retention_days", data_retention_code)
+        )
+
+        assert has_macro_retention or has_manifest_check, (
+            "test_data_retention_enforcement has no valid retention check beyond "
+            "the broken 'retention in str(floe_config).lower()' pattern. "
+            "It needs either a dbt macro search or manifest.yaml check."
+        )
+
+    @pytest.mark.requirement("AC-36.3")
+    def test_data_retention_not_solely_floe_config_string_search(
+        self, data_retention_code: str
+    ) -> None:
+        """The floe_config string search must NOT be the sole retention assertion.
+
+        The broken pattern:
+            has_retention_config = "retention" in str(floe_config).lower()
+            assert has_retention_config  # <-- sole assertion, always False
+
+        A correct implementation must have an alternative path (macro search
+        or manifest check) that makes the final assertion pass independently
+        of the floe_config string search.
+        """
+        # Check if the final assertion uses `or` with an alternative
+        has_or_fallback = bool(
+            re.search(
+                r"assert\s+.*has_retention_config\s+or\s+\w+",
+                data_retention_code,
+            )
+        )
+        # Or the assertion doesn't reference has_retention_config at all
+        # (meaning floe_config check was removed entirely)
+        no_sole_floe_assertion = not bool(
+            re.search(
+                r"assert\s+has_retention_config\s*[,\n]",
+                data_retention_code,
+            )
+        )
+
+        assert has_or_fallback or no_sole_floe_assertion, (
+            "test_data_retention_enforcement asserts 'has_retention_config' "
+            "(from floe.yaml string search) as the sole condition. "
+            "This always fails for customer-360. The assertion must include "
+            "an alternative (e.g., 'assert has_retention_config or retention_macro_found')."
         )
