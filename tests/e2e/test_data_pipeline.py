@@ -1044,7 +1044,7 @@ class TestDataPipeline(IntegrationTestBase):
         for macro_path in macro_paths:
             resolved_macros_dir = (project_dir / macro_path).resolve()
             # Guard against path traversal — macro dir must stay within repo
-            assert str(resolved_macros_dir).startswith(str(project_root.resolve())), (
+            assert resolved_macros_dir.is_relative_to(project_root.resolve()), (
                 f"Macro path escapes repo root: {resolved_macros_dir}"
             )
             if not resolved_macros_dir.exists():
@@ -1111,8 +1111,6 @@ class TestDataPipeline(IntegrationTestBase):
         """
         self.check_infrastructure("polaris", 8181)
         self.check_infrastructure("minio", 9000)
-
-        _project_dir = self._get_demo_project_path(project_root)
 
         # Test 1: Verify demo values have snapshot retention configuration
         values_demo_path = project_root / "charts" / "floe-platform" / "values-demo.yaml"
