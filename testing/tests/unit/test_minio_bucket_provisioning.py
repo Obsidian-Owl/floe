@@ -691,3 +691,82 @@ class TestBucketInvocationConsistency:
             f"Found bare python3 invocation(s) of ensure-bucket.py without "
             f"'uv run': {bare_calls}. All calls must use 'uv run python3'."
         )
+
+
+# ---------------------------------------------------------------------------
+# AC-3: wait-for-services.sh uses uv run for ensure-bucket.py
+# ---------------------------------------------------------------------------
+
+WAIT_FOR_SERVICES_SH = REPO_ROOT / "testing" / "ci" / "wait-for-services.sh"
+
+
+@pytest.fixture(scope="module")
+def wait_for_services_script() -> str:
+    """Read wait-for-services.sh content.
+
+    Returns:
+        The full text of wait-for-services.sh.
+
+    Raises:
+        AssertionError: If the file does not exist.
+    """
+    assert WAIT_FOR_SERVICES_SH.exists(), (
+        f"wait-for-services.sh not found at {WAIT_FOR_SERVICES_SH}."
+    )
+    return WAIT_FOR_SERVICES_SH.read_text()
+
+
+class TestWaitForServicesUvRun:
+    """AC-3: wait-for-services.sh must use ``uv run python3`` for ensure-bucket.py."""
+
+    @pytest.mark.requirement("AC-3")
+    def test_ensure_bucket_uses_uv_run_in_wait_for_services(
+        self, wait_for_services_script: str
+    ) -> None:
+        """The ensure-bucket.py invocation must use ``uv run python3``.
+
+        System python3 may not have boto3 installed. The uv virtual
+        environment has it as a transitive dependency. This must match
+        the pattern used in test-e2e.sh.
+        """
+        # Find non-comment lines that invoke ensure-bucket.py
+        lines = wait_for_services_script.splitlines()
+        invocation_lines = [
+            line
+            for line in lines
+            if "ensure-bucket.py" in line
+            and not line.lstrip().startswith("#")
+        ]
+        assert len(invocation_lines) > 0, (
+            "No invocation of ensure-bucket.py found in wait-for-services.sh."
+        )
+        for line in invocation_lines:
+            assert "uv run python3" in line or "uv run python" in line, (
+                f"ensure-bucket.py invocation in wait-for-services.sh does not "
+                f"use 'uv run python3'. Found: {line.strip()!r}. "
+                "System python3 may not have boto3."
+            )
+
+    @pytest.mark.requirement("AC-3")
+    def test_no_bare_python3_ensure_bucket_in_wait_for_services(
+        self, wait_for_services_script: str
+    ) -> None:
+        """No bare ``python3`` invocation of ensure-bucket.py should exist.
+
+        All invocations must go through ``uv run python3`` to ensure
+        boto3 is available from the uv virtual environment.
+        """
+        lines = wait_for_services_script.splitlines()
+        bare_calls = [
+            line.strip()
+            for line in lines
+            if "ensure-bucket.py" in line
+            and "python3" in line
+            and "uv run" not in line
+            and not line.lstrip().startswith("#")
+        ]
+        assert len(bare_calls) == 0, (
+            f"Found bare python3 invocation(s) of ensure-bucket.py in "
+            f"wait-for-services.sh: {bare_calls}. "
+            "Use 'uv run python3' instead."
+        )

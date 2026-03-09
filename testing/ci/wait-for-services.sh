@@ -80,7 +80,7 @@ MINIO_ATTEMPT=0
 MINIO_MAX_ATTEMPTS=30
 while true; do
     MINIO_ATTEMPT=$((MINIO_ATTEMPT + 1))
-    if python3 "$SCRIPT_DIR/ensure-bucket.py" "${MINIO_USER}" "${MINIO_PASS}" "${MINIO_URL}" "${MINIO_BUCKET}"; then
+    if uv run python3 "$SCRIPT_DIR/ensure-bucket.py" "${MINIO_USER}" "${MINIO_PASS}" "${MINIO_URL}" "${MINIO_BUCKET}"; then
         echo "MinIO bucket '${MINIO_BUCKET}' verified"
         break
     fi
