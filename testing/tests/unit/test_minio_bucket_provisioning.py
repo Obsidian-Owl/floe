@@ -770,3 +770,56 @@ class TestWaitForServicesUvRun:
             f"wait-for-services.sh: {bare_calls}. "
             "Use 'uv run python3' instead."
         )
+
+
+# ---------------------------------------------------------------------------
+# AC-4: Bootstrap job documents curl limitation
+# ---------------------------------------------------------------------------
+
+BOOTSTRAP_JOB = (
+    REPO_ROOT / "charts" / "floe-platform" / "templates"
+    / "job-polaris-bootstrap.yaml"
+)
+
+
+class TestBootstrapJobCurlDocumentation:
+    """AC-4: Bootstrap job must document the anonymous curl limitation."""
+
+    @pytest.mark.requirement("AC-4")
+    def test_bootstrap_job_documents_403_behavior(self) -> None:
+        """The bootstrap job template must document the 403-for-both-states behavior.
+
+        Anonymous curl to MinIO returns HTTP 403 for both existing and
+        non-existing buckets. The comment block near the curl check must
+        explain this limitation so future maintainers don't misinterpret
+        the check as a bucket existence verification.
+        """
+        assert BOOTSTRAP_JOB.exists(), (
+            f"Bootstrap job template not found at {BOOTSTRAP_JOB}."
+        )
+        content = BOOTSTRAP_JOB.read_text()
+        assert "403" in content, (
+            "Bootstrap job template does not mention HTTP 403 anywhere. "
+            "The anonymous curl bucket check returns 403 for both existing "
+            "and non-existing buckets — this must be documented."
+        )
+
+    @pytest.mark.requirement("AC-4")
+    def test_bootstrap_job_documents_default_buckets_guarantee(self) -> None:
+        """The bootstrap job template must reference the ``defaultBuckets`` guarantee.
+
+        Since ``defaultBuckets`` creates the bucket at MinIO startup
+        (before the bootstrap job runs), the curl check is a health
+        check, not a bucket existence check. The comment must explain
+        this relationship.
+        """
+        assert BOOTSTRAP_JOB.exists(), (
+            f"Bootstrap job template not found at {BOOTSTRAP_JOB}."
+        )
+        content = BOOTSTRAP_JOB.read_text()
+        assert "defaultBuckets" in content, (
+            "Bootstrap job template does not mention 'defaultBuckets'. "
+            "The comment block must explain that defaultBuckets guarantees "
+            "the bucket exists at MinIO startup, making this curl check "
+            "a health verification rather than a bucket existence check."
+        )
