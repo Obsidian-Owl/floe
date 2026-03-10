@@ -804,18 +804,25 @@ class TestObservability(IntegrationTestBase):
             assert "key" in tag, "Tag missing 'key' field"
             assert "value" in tag or "vStr" in tag or "vLong" in tag, "Tag missing value field"
 
-        # Check for floe-specific attributes across all spans in the trace
+        # Check for domain-specific attributes across all spans in the trace
+        # TODO(#144): When attribute naming migrates to floe.{domain}.* convention,
+        # update these prefixes to floe.compile.*, floe.governance.*, floe.enforcement.*
         all_tag_keys: set[str] = set()
         for span in first_trace["spans"]:
             for tag in span.get("tags", []):
                 all_tag_keys.add(tag.get("key", ""))
 
-        floe_attributes = [k for k in all_tag_keys if "floe" in k.lower()]
-        assert len(floe_attributes) > 0, (
-            "TRACE GAP: No floe-specific attributes found in trace spans.\n"
+        # Production uses domain-specific prefixes, not just floe.*
+        domain_attributes = [
+            k
+            for k in all_tag_keys
+            if k.startswith(("compile.", "governance.", "enforcement.", "floe."))
+        ]
+        assert len(domain_attributes) > 0, (
+            "TRACE GAP: No domain-specific attributes found in trace spans.\n"
             f"Tag keys found: {sorted(all_tag_keys)}\n"
-            "Expected attributes like: floe.product_name, floe.stage, floe.pipeline_name\n"
-            "Fix: Add floe.* attributes to OTel spans during compilation and execution."
+            "Expected attributes with prefixes: compile.*, governance.*, enforcement.*, floe.*\n"
+            "Fix: Ensure OTel spans include domain-specific attributes during compilation and execution."
         )
 
     @pytest.mark.e2e
