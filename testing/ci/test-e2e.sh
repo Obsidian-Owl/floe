@@ -382,11 +382,9 @@ else
     exit 1
 fi
 
-# Install PyIceberg from git for Polaris 1.2.0 compatibility
-# TODO(pyiceberg-0.11.1): Remove git install once PyPI release available
-echo "Installing PyIceberg from git (Polaris 1.2.0 PUT fix)..."
-uv pip install "pyiceberg @ git+https://github.com/apache/iceberg-python.git@9687d080f28951464cf02fb2645e2a1185838b21" 2>&1 || {
-    echo "ERROR: PyIceberg git install failed -- E2E tests WILL fail with HttpMethod errors" >&2
+echo "Installing pyiceberg[s3fs]==0.11.1..."
+uv pip install "pyiceberg[s3fs]==0.11.1" 2>&1 || {
+    echo "ERROR: PyIceberg install failed -- E2E tests WILL fail" >&2
     exit 1
 }
 
@@ -394,12 +392,8 @@ echo ""
 echo "Running E2E tests..."
 
 # Run E2E tests
-# TODO(pyiceberg-0.11.1): Remove UV_NO_SYNC once PyPI release available
-# UV_NO_SYNC=1: Prevent uv from reverting manually-installed packages (e.g.,
-# pyiceberg from git with Polaris 1.2.0 PUT fix).
-# Tracking: https://github.com/apache/iceberg-python/pull/3010
 DAGSTER_URL="http://localhost:${DAGSTER_HOST_PORT}" \
-UV_NO_SYNC=1 uv run pytest \
+uv run pytest \
     tests/e2e/ \
     -v \
     --tb=short \

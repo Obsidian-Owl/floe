@@ -123,12 +123,8 @@ RUN pip install --no-cache-dir \
         "dagster==${DAGSTER_VERSION}" \
         "sqlalchemy>=2.0,<2.1"
 
-# TODO(pyiceberg-0.11.1): Remove git install once PyPI release available
-# PyIceberg 0.11.0 rejects Polaris 1.2.0+ PUT in HttpMethod enum.
-# Fixed in PR #3010, pinned to merge commit for reproducibility.
-# Tracking: https://github.com/apache/iceberg-python/pull/3010
 RUN pip install --no-cache-dir \
-    "pyiceberg @ git+https://github.com/apache/iceberg-python.git@9687d080f28951464cf02fb2645e2a1185838b21"
+    "pyiceberg[s3fs]==0.11.1"
 
 # Validate dependency tree is consistent
 RUN pip check
