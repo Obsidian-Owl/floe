@@ -35,11 +35,11 @@ def reset_otel_global_state() -> Generator[None, None, None]:
     from opentelemetry import metrics, trace
     from opentelemetry.metrics._internal import _ProxyMeterProvider
     from opentelemetry.sdk.metrics import MeterProvider
-    from opentelemetry.trace import ProxyTracerProvider
 
     # Reset OTel global state
     trace._TRACER_PROVIDER_SET_ONCE._done = False
-    trace._TRACER_PROVIDER = ProxyTracerProvider()
+    # None, not ProxyTracerProvider() — avoids recursion in get_tracer()
+    trace._TRACER_PROVIDER = None
     metrics._internal._METER_PROVIDER_SET_ONCE._done = False
     metrics._internal._METER_PROVIDER = _ProxyMeterProvider()
 
@@ -64,7 +64,8 @@ def reset_otel_global_state() -> Generator[None, None, None]:
 
     # Reset OTel global state
     trace._TRACER_PROVIDER_SET_ONCE._done = False
-    trace._TRACER_PROVIDER = ProxyTracerProvider()
+    # None, not ProxyTracerProvider() — avoids recursion in get_tracer()
+    trace._TRACER_PROVIDER = None
     metrics._internal._METER_PROVIDER_SET_ONCE._done = False
     metrics._internal._METER_PROVIDER = _ProxyMeterProvider()
 

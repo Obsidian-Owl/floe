@@ -29,7 +29,6 @@ from unittest.mock import patch
 import pytest
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider as SdkTracerProvider
-from opentelemetry.trace import ProxyTracerProvider
 
 
 @pytest.fixture(autouse=True)
@@ -44,7 +43,8 @@ def _reset_otel_global_state() -> Generator[None, None, None]:
     """
     # Reset before test
     trace._TRACER_PROVIDER_SET_ONCE._done = False
-    trace._TRACER_PROVIDER = ProxyTracerProvider()
+    # None, not ProxyTracerProvider() — avoids recursion in get_tracer()
+    trace._TRACER_PROVIDER = None
 
     from floe_core.telemetry.tracer_factory import reset_tracer
 

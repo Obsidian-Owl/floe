@@ -241,15 +241,11 @@ wait_for_services_helm() {
     log_info "All Helm-deployed services are ready"
 }
 
-# Install PyIceberg from git for Polaris 1.2.0 compatibility
+# Install released PyIceberg version
 install_pyiceberg_fix() {
-    # TODO(pyiceberg-0.11.1): Remove git install once PyPI release available
-    # PyIceberg 0.11.0 rejects Polaris 1.2.0+ PUT in HttpMethod enum.
-    # Fixed in PR #3010, pinned to merge commit for reproducibility.
-    # Tracking: https://github.com/apache/iceberg-python/pull/3010
-    log_info "Installing PyIceberg from git (Polaris 1.2.0 PUT fix)..."
-    uv pip install "pyiceberg @ git+https://github.com/apache/iceberg-python.git@9687d080f28951464cf02fb2645e2a1185838b21" 2>&1 || {
-        log_warn "PyIceberg git install failed — E2E tests may fail with HttpMethod errors"
+    log_info "Installing pyiceberg[s3fs]==0.11.1..."
+    uv pip install "pyiceberg[s3fs]==0.11.1" 2>&1 || {
+        log_warn "PyIceberg install failed — E2E tests may fail"
     }
 }
 

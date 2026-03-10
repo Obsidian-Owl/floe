@@ -166,13 +166,13 @@ def reset_telemetry() -> None:
     if hasattr(trace, "_TRACER_PROVIDER_SET_ONCE"):
         trace._TRACER_PROVIDER_SET_ONCE._done = False
 
-    # Restore the default ProxyTracerProvider so that any spans emitted
-    # between reset and re-init are handled gracefully (no-op) rather than
-    # routed to the shut-down provider which silently drops them.
+    # Set _TRACER_PROVIDER to None (not ProxyTracerProvider()) to avoid infinite
+    # recursion: ProxyTracerProvider.get_tracer() reads _TRACER_PROVIDER to find
+    # the "real" provider — when it IS the provider, it recurses infinitely.
+    # None causes get_tracer() to return a NoOp tracer instead.
     if hasattr(trace, "_TRACER_PROVIDER"):
-        from opentelemetry.trace import ProxyTracerProvider
-
-        trace._TRACER_PROVIDER = ProxyTracerProvider()
+        # None, not ProxyTracerProvider() — avoids recursion in get_tracer()
+        trace._TRACER_PROVIDER = None
 
     _initialized = False
     reset_tracer()
