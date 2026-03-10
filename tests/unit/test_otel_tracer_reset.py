@@ -10,9 +10,11 @@ to find the "real" provider.  When ``_TRACER_PROVIDER`` IS a
 Two test categories:
 
 **Structural** (source-parsing, per P28/P29):
-    Inspect source files to verify the fix was applied at all 7 locations
-    and that no ``ProxyTracerProvider()`` assignment to ``_TRACER_PROVIDER``
-    exists anywhere in the codebase.
+    Inspect source files to verify the fix was applied at all 6 locations
+    that previously used ``ProxyTracerProvider()`` and that no such
+    assignment to ``_TRACER_PROVIDER`` exists anywhere in the codebase.
+    (The 7th reset site, ``test_e2e_fixture_wiring.py`` teardown, uses
+    ``SdkTracerProvider()`` — not buggy, covered by codebase-wide scan.)
 
 **Behavioral**:
     After calling the production ``reset_telemetry()``, verify
@@ -33,16 +35,20 @@ See Also:
 from __future__ import annotations
 
 import re
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+from opentelemetry import trace
 
 from testing.fixtures.source_parsing import strip_comments_and_docstrings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# The 7 files that must be fixed, with the specific function/fixture
-# containing the assignment.
+# The 6 files that previously assigned ProxyTracerProvider() to _TRACER_PROVIDER.
+# The 7th reset site (test_e2e_fixture_wiring.py teardown) uses SdkTracerProvider()
+# and was never buggy — it's covered by the codebase-wide scan in
+# TestNoProxyAssignmentCodebaseWide.
 AFFECTED_FILES: list[Path] = [
     REPO_ROOT / "packages" / "floe-core" / "src" / "floe_core" / "telemetry" / "initialization.py",
     REPO_ROOT / "benchmarks" / "conftest.py",
@@ -73,12 +79,12 @@ SCAN_DIRS: list[str] = ["packages", "benchmarks", "tests"]
 
 
 # ---------------------------------------------------------------------------
-# Structural tests: No ProxyTracerProvider() assignment in any of the 7 files
+# Structural tests: No ProxyTracerProvider() assignment in any of the 6 files
 # ---------------------------------------------------------------------------
 
 
 class TestNoProxyAssignmentInAffectedFiles:
-    """Verify none of the 7 affected files assign ProxyTracerProvider() to _TRACER_PROVIDER."""
+    """Verify none of the 6 affected files assign ProxyTracerProvider() to _TRACER_PROVIDER."""
 
     @pytest.mark.requirement("AC-2")
     @pytest.mark.parametrize(
@@ -159,7 +165,7 @@ class TestNoProxyAssignmentCodebaseWide:
 
 
 # ---------------------------------------------------------------------------
-# Structural test: All 7 locations use = None
+# Structural test: All 6 locations use = None
 # ---------------------------------------------------------------------------
 
 
@@ -274,6 +280,26 @@ class TestProductionSiteHasRationaleComment:
 
 class TestNoRecursionAfterReset:
     """Verify that trace.get_tracer() does not recurse after reset_telemetry()."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_otel_state(self) -> Generator[None, None, None]:
+        """Capture and restore OTel global state around each behavioral test.
+
+        Behavioral tests modify trace._TRACER_PROVIDER and _SET_ONCE — this
+        fixture ensures no pollution leaks to subsequent tests.
+
+        Yields:
+            None after capturing state.
+        """
+        original_done = getattr(
+            getattr(trace, "_TRACER_PROVIDER_SET_ONCE", None), "_done", None
+        )
+        original_provider = getattr(trace, "_TRACER_PROVIDER", None)
+        yield
+        if hasattr(trace, "_TRACER_PROVIDER_SET_ONCE") and original_done is not None:
+            trace._TRACER_PROVIDER_SET_ONCE._done = original_done
+        if hasattr(trace, "_TRACER_PROVIDER"):
+            trace._TRACER_PROVIDER = original_provider
 
     @pytest.mark.requirement("AC-2")
     def test_get_tracer_after_reset_does_not_raise_recursion_error(self) -> None:
