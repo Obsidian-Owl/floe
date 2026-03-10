@@ -44,11 +44,11 @@ def reset_otel_global_state(
     from opentelemetry.metrics._internal import _ProxyMeterProvider
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.trace import ProxyTracerProvider
 
-    # Reset before test - use Proxy to allow test to set its own provider
+    # Reset before test — use None (not ProxyTracerProvider()) to avoid recursion in get_tracer()
     trace._TRACER_PROVIDER_SET_ONCE._done = False
-    trace._TRACER_PROVIDER = ProxyTracerProvider()
+    # None, not ProxyTracerProvider() — avoids recursion in get_tracer()
+    trace._TRACER_PROVIDER = None
 
     metrics._internal._METER_PROVIDER_SET_ONCE._done = False
     metrics._internal._METER_PROVIDER = _ProxyMeterProvider()
