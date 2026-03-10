@@ -291,9 +291,7 @@ class TestNoRecursionAfterReset:
         Yields:
             None after capturing state.
         """
-        original_done = getattr(
-            getattr(trace, "_TRACER_PROVIDER_SET_ONCE", None), "_done", None
-        )
+        original_done = getattr(getattr(trace, "_TRACER_PROVIDER_SET_ONCE", None), "_done", None)
         original_provider = getattr(trace, "_TRACER_PROVIDER", None)
         yield
         if hasattr(trace, "_TRACER_PROVIDER_SET_ONCE") and original_done is not None:
