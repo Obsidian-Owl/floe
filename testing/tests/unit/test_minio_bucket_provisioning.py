@@ -55,14 +55,12 @@ def values_test_config() -> dict[str, Any]:
         AssertionError: If the file does not exist or cannot be parsed.
     """
     assert VALUES_TEST.exists(), (
-        f"values-test.yaml not found at {VALUES_TEST}. "
-        "Cannot validate MinIO bucket configuration."
+        f"values-test.yaml not found at {VALUES_TEST}. Cannot validate MinIO bucket configuration."
     )
     content = VALUES_TEST.read_text()
     parsed = yaml.safe_load(content)
     assert isinstance(parsed, dict), (
-        "values-test.yaml did not parse to a dict. "
-        f"Got type: {type(parsed).__name__}"
+        f"values-test.yaml did not parse to a dict. Got type: {type(parsed).__name__}"
     )
     return parsed
 
@@ -83,8 +81,7 @@ def minio_config(values_test_config: dict[str, Any]) -> dict[str, Any]:
     )
     minio = values_test_config["minio"]
     assert isinstance(minio, dict), (
-        f"minio: key in values-test.yaml is not a dict. "
-        f"Got type: {type(minio).__name__}"
+        f"minio: key in values-test.yaml is not a dict. Got type: {type(minio).__name__}"
     )
     return minio
 
@@ -141,9 +138,7 @@ class TestDefaultBucketsValue:
         )
 
     @pytest.mark.requirement("AC-1")
-    def test_default_buckets_contains_floe_iceberg(
-        self, minio_config: dict[str, Any]
-    ) -> None:
+    def test_default_buckets_contains_floe_iceberg(self, minio_config: dict[str, Any]) -> None:
         """The ``defaultBuckets`` string must contain ``floe-iceberg``.
 
         The ``floe-iceberg`` bucket is required by Polaris and PyIceberg
@@ -166,9 +161,7 @@ class TestDefaultBucketsValue:
         )
 
     @pytest.mark.requirement("AC-1")
-    def test_default_buckets_has_no_empty_entries(
-        self, minio_config: dict[str, Any]
-    ) -> None:
+    def test_default_buckets_has_no_empty_entries(self, minio_config: dict[str, Any]) -> None:
         """The ``defaultBuckets`` string must not have empty entries from extra commas.
 
         Trailing commas or double commas (e.g., ``"floe-data,,floe-iceberg"``)
@@ -194,9 +187,7 @@ class TestDeadBucketsKeyAbsent:
     """AC-1: The dead ``minio.buckets`` key must NOT be present."""
 
     @pytest.mark.requirement("AC-1")
-    def test_minio_buckets_key_does_not_exist(
-        self, minio_config: dict[str, Any]
-    ) -> None:
+    def test_minio_buckets_key_does_not_exist(self, minio_config: dict[str, Any]) -> None:
         """The ``minio.buckets`` key (list format) must not be present.
 
         The ``buckets`` key with list-of-dicts format was used by older
@@ -215,9 +206,7 @@ class TestDeadBucketsKeyAbsent:
         )
 
     @pytest.mark.requirement("AC-1")
-    def test_no_list_format_bucket_definition(
-        self, minio_config: dict[str, Any]
-    ) -> None:
+    def test_no_list_format_bucket_definition(self, minio_config: dict[str, Any]) -> None:
         """No bucket provisioning key should use the list-of-dicts format.
 
         This catches variations like ``provisioning.buckets``, ``initBuckets``,
@@ -255,9 +244,7 @@ class TestConsistencyWithValuesDev:
         already correctly uses ``defaultBuckets``. If this test fails,
         the reference itself has regressed.
         """
-        assert VALUES_DEV.exists(), (
-            f"values-dev.yaml not found at {VALUES_DEV}."
-        )
+        assert VALUES_DEV.exists(), f"values-dev.yaml not found at {VALUES_DEV}."
         dev_config = yaml.safe_load(VALUES_DEV.read_text())
         assert isinstance(dev_config, dict), "values-dev.yaml is not a dict"
         minio_dev = dev_config.get("minio", {})
@@ -269,9 +256,7 @@ class TestConsistencyWithValuesDev:
         assert isinstance(minio_dev["defaultBuckets"], str), (
             "values-dev.yaml minio.defaultBuckets is not a string."
         )
-        assert minio_dev["defaultBuckets"] != "", (
-            "values-dev.yaml minio.defaultBuckets is empty."
-        )
+        assert minio_dev["defaultBuckets"] != "", "values-dev.yaml minio.defaultBuckets is empty."
 
     @pytest.mark.requirement("AC-1")
     def test_values_dev_does_not_have_dead_buckets_key(self) -> None:
@@ -288,9 +273,7 @@ class TestConsistencyWithValuesDev:
         )
 
     @pytest.mark.requirement("AC-1")
-    def test_floe_iceberg_bucket_in_both_files(
-        self, minio_config: dict[str, Any]
-    ) -> None:
+    def test_floe_iceberg_bucket_in_both_files(self, minio_config: dict[str, Any]) -> None:
         """Both values-test.yaml and values-dev.yaml must provision ``floe-iceberg``.
 
         The ``floe-iceberg`` bucket is critical for E2E tests. Both
@@ -358,7 +341,7 @@ def _extract_bucket_section(script_text: str) -> str:
     # "# Install" or "# Run" after the bucket section.
     end_match = re.search(
         r"^# (?:Verify Polaris|Install|Run)",
-        script_text[start_pos + 1:],
+        script_text[start_pos + 1 :],
         re.MULTILINE,
     )
     if end_match is not None:
@@ -380,8 +363,7 @@ def test_e2e_script() -> str:
         AssertionError: If the file does not exist.
     """
     assert TEST_E2E_SH.exists(), (
-        f"test-e2e.sh not found at {TEST_E2E_SH}. "
-        "Cannot validate bucket retry loop."
+        f"test-e2e.sh not found at {TEST_E2E_SH}. Cannot validate bucket retry loop."
     )
     return TEST_E2E_SH.read_text()
 
@@ -400,9 +382,7 @@ class TestBucketRetryLoopExists:
     """AC-2: The ensure-bucket.py call in test-e2e.sh must have a retry loop."""
 
     @pytest.mark.requirement("AC-2")
-    def test_bucket_section_contains_loop_keyword(
-        self, bucket_section: str
-    ) -> None:
+    def test_bucket_section_contains_loop_keyword(self, bucket_section: str) -> None:
         """The bucket section must contain a ``while`` or ``for`` loop.
 
         A bare invocation of ``ensure-bucket.py`` without a loop means a
@@ -414,9 +394,7 @@ class TestBucketRetryLoopExists:
         """
         # Strip comment lines before checking for loop keywords
         code_lines = [
-            line
-            for line in bucket_section.splitlines()
-            if not line.lstrip().startswith("#")
+            line for line in bucket_section.splitlines() if not line.lstrip().startswith("#")
         ]
         code_only = "\n".join(code_lines)
         has_while = re.search(r"\bwhile\b", code_only) is not None
@@ -429,9 +407,7 @@ class TestBucketRetryLoopExists:
         )
 
     @pytest.mark.requirement("AC-2")
-    def test_bucket_section_has_attempt_counter(
-        self, bucket_section: str
-    ) -> None:
+    def test_bucket_section_has_attempt_counter(self, bucket_section: str) -> None:
         """The retry loop must have an attempt counter variable.
 
         Without a counter, the loop either runs forever (infinite loop) or
@@ -440,12 +416,15 @@ class TestBucketRetryLoopExists:
         """
         # Match arithmetic increment patterns: VAR=$((VAR + 1)) or
         # VAR=$(( VAR + 1 )) or ((VAR++)) or ((VAR+=1))
-        has_increment = re.search(
-            r"\w+\s*=\s*\$\(\(\s*\w+\s*\+\s*1\s*\)\)|"
-            r"\(\(\s*\w+\s*\+\+\s*\)\)|"
-            r"\(\(\s*\w+\s*\+=\s*1\s*\)\)",
-            bucket_section,
-        ) is not None
+        has_increment = (
+            re.search(
+                r"\w+\s*=\s*\$\(\(\s*\w+\s*\+\s*1\s*\)\)|"
+                r"\(\(\s*\w+\s*\+\+\s*\)\)|"
+                r"\(\(\s*\w+\s*\+=\s*1\s*\)\)",
+                bucket_section,
+            )
+            is not None
+        )
         assert has_increment, (
             "The bucket verification section in test-e2e.sh does not contain "
             "an attempt counter increment (e.g., ATTEMPT=$((ATTEMPT + 1))). "
@@ -458,9 +437,7 @@ class TestBucketRetryMaxAttempts:
     """AC-2: The retry loop must cap at <= 10 attempts."""
 
     @pytest.mark.requirement("AC-2")
-    def test_max_attempts_variable_defined(
-        self, bucket_section: str
-    ) -> None:
+    def test_max_attempts_variable_defined(self, bucket_section: str) -> None:
         """A max-attempts variable must be defined in the bucket section.
 
         The variable name should follow shell convention (e.g.,
@@ -479,9 +456,7 @@ class TestBucketRetryMaxAttempts:
         )
 
     @pytest.mark.requirement("AC-2")
-    def test_max_attempts_at_most_ten(
-        self, bucket_section: str
-    ) -> None:
+    def test_max_attempts_at_most_ten(self, bucket_section: str) -> None:
         """The max attempt count must be <= 10.
 
         The bucket should exist from ``defaultBuckets`` server startup,
@@ -506,9 +481,7 @@ class TestBucketRetryMaxAttempts:
         )
 
     @pytest.mark.requirement("AC-2")
-    def test_max_attempts_at_least_two(
-        self, bucket_section: str
-    ) -> None:
+    def test_max_attempts_at_least_two(self, bucket_section: str) -> None:
         """The max attempt count must be >= 2 (at least one retry).
 
         A max of 1 means no retry at all, defeating the purpose of the
@@ -529,9 +502,7 @@ class TestBucketRetryMaxAttempts:
         )
 
     @pytest.mark.requirement("AC-2")
-    def test_loop_has_max_check(
-        self, bucket_section: str
-    ) -> None:
+    def test_loop_has_max_check(self, bucket_section: str) -> None:
         """The loop body must compare the attempt counter against the max.
 
         Without this comparison (e.g., ``-ge $MAX_ATTEMPTS``), the loop
@@ -540,14 +511,17 @@ class TestBucketRetryMaxAttempts:
         # Match patterns like: $ATTEMPT -ge $MAX_ATTEMPTS or
         # $ATTEMPT -ge $MINIO_MAX_ATTEMPTS or
         # [[ $ATTEMPT -ge $MAX ]] etc.
-        has_max_check = re.search(
-            r"-ge\s+\$\{?\w*MAX_ATTEMPTS\}?|"
-            r"-ge\s+\$\{?\w*MAX_RETRIES\}?|"
-            r"-gt\s+\$\{?\w*MAX_ATTEMPTS\}?|"
-            r"-gt\s+\$\{?\w*MAX_RETRIES\}?",
-            bucket_section,
-            re.IGNORECASE,
-        ) is not None
+        has_max_check = (
+            re.search(
+                r"-ge\s+\$\{?\w*MAX_ATTEMPTS\}?|"
+                r"-ge\s+\$\{?\w*MAX_RETRIES\}?|"
+                r"-gt\s+\$\{?\w*MAX_ATTEMPTS\}?|"
+                r"-gt\s+\$\{?\w*MAX_RETRIES\}?",
+                bucket_section,
+                re.IGNORECASE,
+            )
+            is not None
+        )
         assert has_max_check, (
             "The bucket retry loop does not compare the attempt counter "
             "against a max-attempts variable (e.g., -ge $MAX_ATTEMPTS). "
@@ -559,18 +533,19 @@ class TestBucketRetryExhaustion:
     """AC-2: On retry exhaustion, must exit non-zero with stderr message."""
 
     @pytest.mark.requirement("AC-2")
-    def test_exhaustion_exits_nonzero(
-        self, bucket_section: str
-    ) -> None:
+    def test_exhaustion_exits_nonzero(self, bucket_section: str) -> None:
         """When retries are exhausted, the script must exit with non-zero code.
 
         Without ``exit 1`` (or similar), the script continues to the E2E
         test runner and runs tests against a broken environment.
         """
-        has_exit = re.search(
-            r"exit\s+[1-9]",
-            bucket_section,
-        ) is not None
+        has_exit = (
+            re.search(
+                r"exit\s+[1-9]",
+                bucket_section,
+            )
+            is not None
+        )
         assert has_exit, (
             "The bucket verification section does not contain 'exit 1' (or "
             "any non-zero exit). On retry exhaustion, the script must abort "
@@ -578,9 +553,7 @@ class TestBucketRetryExhaustion:
         )
 
     @pytest.mark.requirement("AC-2")
-    def test_exhaustion_prints_to_stderr(
-        self, bucket_section: str
-    ) -> None:
+    def test_exhaustion_prints_to_stderr(self, bucket_section: str) -> None:
         """The exhaustion error message must be printed to stderr (``>&2``).
 
         Error messages on stdout get mixed with test output and are hard to
@@ -590,10 +563,13 @@ class TestBucketRetryExhaustion:
         # Look for stderr redirect near an ERROR echo in the bucket section
         # The pattern should be: echo "ERROR: ..." >&2 somewhere after the
         # max-attempts check
-        has_stderr_error = re.search(
-            r'echo\s+"ERROR:.*>&2',
-            bucket_section,
-        ) is not None
+        has_stderr_error = (
+            re.search(
+                r'echo\s+"ERROR:.*>&2',
+                bucket_section,
+            )
+            is not None
+        )
         assert has_stderr_error, (
             "The bucket verification section does not print an ERROR message "
             "to stderr (>&2) on retry exhaustion. Error output must go to "
@@ -605,9 +581,7 @@ class TestBucketRetryDelay:
     """AC-2: The retry loop must have a sleep between attempts."""
 
     @pytest.mark.requirement("AC-2")
-    def test_retry_has_sleep_between_attempts(
-        self, bucket_section: str
-    ) -> None:
+    def test_retry_has_sleep_between_attempts(self, bucket_section: str) -> None:
         """The retry loop must include a ``sleep`` call between attempts.
 
         Without a delay, the retry loop hammers MinIO as fast as possible,
@@ -622,9 +596,7 @@ class TestBucketRetryDelay:
         )
 
     @pytest.mark.requirement("AC-2")
-    def test_retry_sleep_interval_is_three_seconds(
-        self, bucket_section: str
-    ) -> None:
+    def test_retry_sleep_interval_is_three_seconds(self, bucket_section: str) -> None:
         """The sleep interval must be 3 seconds.
 
         The spec requires 3-second intervals. Shorter intervals waste CPU;
@@ -645,19 +617,20 @@ class TestBucketInvocationConsistency:
     """AC-2/AC-3: ensure-bucket.py must be invoked with ``uv run python3``."""
 
     @pytest.mark.requirement("AC-2")
-    def test_ensure_bucket_uses_uv_run_python3(
-        self, bucket_section: str
-    ) -> None:
+    def test_ensure_bucket_uses_uv_run_python3(self, bucket_section: str) -> None:
         """The ensure-bucket.py call must use ``uv run python3``.
 
         AC-3 requires all Python invocations in CI scripts to use
         ``uv run python3`` for environment consistency. A bare ``python3``
         call may use a different Python than the one managed by uv.
         """
-        has_uv_call = re.search(
-            r"uv\s+run\s+python3\s+.*ensure-bucket\.py",
-            bucket_section,
-        ) is not None
+        has_uv_call = (
+            re.search(
+                r"uv\s+run\s+python3\s+.*ensure-bucket\.py",
+                bucket_section,
+            )
+            is not None
+        )
         assert has_uv_call, (
             "The ensure-bucket.py invocation in the bucket section does not "
             "use 'uv run python3'. All Python calls in CI scripts must use "
@@ -665,9 +638,7 @@ class TestBucketInvocationConsistency:
         )
 
     @pytest.mark.requirement("AC-2")
-    def test_no_bare_python3_ensure_bucket(
-        self, bucket_section: str
-    ) -> None:
+    def test_no_bare_python3_ensure_bucket(self, bucket_section: str) -> None:
         """There must be no bare ``python3`` call to ensure-bucket.py.
 
         This is the inverse check: even if a ``uv run python3`` call exists,
@@ -734,8 +705,7 @@ class TestWaitForServicesUvRun:
         invocation_lines = [
             line
             for line in lines
-            if "ensure-bucket.py" in line
-            and not line.lstrip().startswith("#")
+            if "ensure-bucket.py" in line and not line.lstrip().startswith("#")
         ]
         assert len(invocation_lines) > 0, (
             "No invocation of ensure-bucket.py found in wait-for-services.sh."
@@ -776,10 +746,7 @@ class TestWaitForServicesUvRun:
 # AC-4: Bootstrap job documents curl limitation
 # ---------------------------------------------------------------------------
 
-BOOTSTRAP_JOB = (
-    REPO_ROOT / "charts" / "floe-platform" / "templates"
-    / "job-polaris-bootstrap.yaml"
-)
+BOOTSTRAP_JOB = REPO_ROOT / "charts" / "floe-platform" / "templates" / "job-polaris-bootstrap.yaml"
 
 
 class TestBootstrapJobCurlDocumentation:
@@ -794,9 +761,7 @@ class TestBootstrapJobCurlDocumentation:
         explain this limitation so future maintainers don't misinterpret
         the check as a bucket existence verification.
         """
-        assert BOOTSTRAP_JOB.exists(), (
-            f"Bootstrap job template not found at {BOOTSTRAP_JOB}."
-        )
+        assert BOOTSTRAP_JOB.exists(), f"Bootstrap job template not found at {BOOTSTRAP_JOB}."
         content = BOOTSTRAP_JOB.read_text()
         assert "403" in content, (
             "Bootstrap job template does not mention HTTP 403 anywhere. "
@@ -813,9 +778,7 @@ class TestBootstrapJobCurlDocumentation:
         check, not a bucket existence check. The comment must explain
         this relationship.
         """
-        assert BOOTSTRAP_JOB.exists(), (
-            f"Bootstrap job template not found at {BOOTSTRAP_JOB}."
-        )
+        assert BOOTSTRAP_JOB.exists(), f"Bootstrap job template not found at {BOOTSTRAP_JOB}."
         content = BOOTSTRAP_JOB.read_text()
         assert "defaultBuckets" in content, (
             "Bootstrap job template does not mention 'defaultBuckets'. "
