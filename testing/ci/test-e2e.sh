@@ -259,6 +259,13 @@ echo "Port-forwards established."
 # to handle the window between MinIO TCP-ready and API-ready.
 MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
 MINIO_URL="${MINIO_URL:-http://localhost:9000}"
+
+# Fail fast on missing credentials — don't waste retry time on config errors
+if [[ -z "${MINIO_USER}" ]] || [[ -z "${MINIO_PASS}" ]]; then
+    echo "ERROR: MINIO_USER and MINIO_PASS must be set" >&2
+    exit 1
+fi
+
 BUCKET_ATTEMPT=0
 BUCKET_MAX_ATTEMPTS=10
 echo "Verifying MinIO bucket '${MINIO_BUCKET}' via S3 API..."
@@ -353,11 +360,11 @@ payload = {
 print(json.dumps(payload))
 " "${POLARIS_CATALOG}" "${MINIO_BUCKET}")
 
-    CREATE_CODE=$(curl -s -o /tmp/polaris-create.txt -w '%{http_code}' -X POST \
+    CREATE_CODE=$(printf '%s' "${CATALOG_JSON}" | curl -s -o /tmp/polaris-create.txt -w '%{http_code}' -X POST \
         -H "Authorization: Bearer ${POLARIS_TOKEN}" \
         -H "Content-Type: application/json" \
         "http://localhost:8181/api/management/v1/catalogs" \
-        -d "${CATALOG_JSON}" 2>/dev/null) || true
+        -d @- 2>/dev/null) || true
 
     if [[ "${CREATE_CODE}" == "200" ]] || [[ "${CREATE_CODE}" == "201" ]]; then
         echo "Polaris catalog '${POLARIS_CATALOG}' created successfully"

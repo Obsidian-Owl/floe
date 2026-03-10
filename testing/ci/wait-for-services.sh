@@ -79,6 +79,9 @@ MINIO_URL="${MINIO_URL:-http://localhost:9000}"
 MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
 echo "Verifying MinIO bucket '${MINIO_BUCKET}' exists..."
 MINIO_ATTEMPT=0
+# 30 attempts (vs 10 in test-e2e.sh): this script runs at cluster startup
+# when MinIO may still be pulling images or initializing PVCs. test-e2e.sh
+# runs after wait-for-services.sh has already confirmed readiness.
 MINIO_MAX_ATTEMPTS=30
 while true; do
     MINIO_ATTEMPT=$((MINIO_ATTEMPT + 1))
