@@ -20,8 +20,10 @@ KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
 TEST_NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 E2E_TIMEOUT="${E2E_TIMEOUT:-600}"
 COLLECT_LOGS="${COLLECT_LOGS:-true}"
-MINIO_USER="${MINIO_USER:-minioadmin}"
-MINIO_PASS="${MINIO_PASS:-minioadmin123}"
+# Export credentials as env vars so child processes (ensure-bucket.py)
+# can read them without exposing via process arguments.
+export MINIO_USER="${MINIO_USER:-minioadmin}"
+export MINIO_PASS="${MINIO_PASS:-minioadmin123}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
@@ -262,7 +264,7 @@ BUCKET_MAX_ATTEMPTS=10
 echo "Verifying MinIO bucket '${MINIO_BUCKET}' via S3 API..."
 while true; do
     BUCKET_ATTEMPT=$((BUCKET_ATTEMPT + 1))
-    if uv run python3 "${SCRIPT_DIR}/ensure-bucket.py" "${MINIO_USER}" "${MINIO_PASS}" "${MINIO_URL}" "${MINIO_BUCKET}"; then
+    if uv run python3 "${SCRIPT_DIR}/ensure-bucket.py" "${MINIO_URL}" "${MINIO_BUCKET}"; then
         echo "MinIO bucket '${MINIO_BUCKET}' ready"
         break
     fi
@@ -279,12 +281,22 @@ done
 POLARIS_CATALOG="${POLARIS_CATALOG:-floe-e2e}"
 POLARIS_CLIENT_ID="${POLARIS_CLIENT_ID:-demo-admin}"
 POLARIS_CLIENT_SECRET="${POLARIS_CLIENT_SECRET:-demo-secret}"
+
+# Validate catalog name to prevent URL injection
+if [[ ! "${POLARIS_CATALOG}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "ERROR: Invalid catalog name format: '${POLARIS_CATALOG}'" >&2
+    exit 1
+fi
+
 echo "Verifying Polaris catalog '${POLARIS_CATALOG}'..."
 
-# Acquire OAuth token (use python3 for robust JSON parsing)
-POLARIS_TOKEN=$(curl -s -X POST \
+# Acquire OAuth token — pipe credentials via stdin (-d @-) to avoid
+# exposing them in process arguments (visible in ps aux).
+POLARIS_TOKEN=$(printf 'grant_type=client_credentials&client_id=%s&client_secret=%s&scope=PRINCIPAL_ROLE:ALL' \
+    "${POLARIS_CLIENT_ID}" "${POLARIS_CLIENT_SECRET}" | \
+    curl -s -X POST \
     "http://localhost:8181/api/catalog/v1/oauth/tokens" \
-    -d "grant_type=client_credentials&client_id=${POLARIS_CLIENT_ID}&client_secret=${POLARIS_CLIENT_SECRET}&scope=PRINCIPAL_ROLE:ALL" \
+    -d @- \
     2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))") || true
 
 if [[ -z "${POLARIS_TOKEN}" ]]; then
@@ -302,10 +314,14 @@ if [[ "${CATALOG_CODE}" == "404" ]]; then
     echo "WARNING: Bootstrap hook may have failed. Check bootstrap job logs:" >&2
     echo "WARNING:   kubectl logs -n ${TEST_NAMESPACE} -l job-name=floe-platform-bootstrap --tail=50" >&2
     echo "Polaris catalog '${POLARIS_CATALOG}' not found — creating..." >&2
-    # Build JSON payload with python3 to safely escape special characters
+    # Build JSON payload with python3 to safely escape special characters.
+    # Credentials read from environment (MINIO_USER, MINIO_PASS) to avoid
+    # exposing them in process arguments (visible in ps aux).
     CATALOG_JSON=$(python3 -c "
-import json, sys
+import json, os, sys
 MINIO_ENDPOINT = 'http://floe-platform-minio:9000'
+minio_user = os.environ.get('MINIO_USER', '')
+minio_pass = os.environ.get('MINIO_PASS', '')
 payload = {
     'catalog': {
         'name': sys.argv[1],
@@ -314,13 +330,13 @@ payload = {
             'default-base-location': f's3://{sys.argv[2]}',
             's3.endpoint': MINIO_ENDPOINT,
             's3.path-style-access': 'true',
-            's3.access-key-id': sys.argv[3],
-            's3.secret-access-key': sys.argv[4],
+            's3.access-key-id': minio_user,
+            's3.secret-access-key': minio_pass,
             's3.region': 'us-east-1',
             'table-default.s3.endpoint': MINIO_ENDPOINT,
             'table-default.s3.path-style-access': 'true',
-            'table-default.s3.access-key-id': sys.argv[3],
-            'table-default.s3.secret-access-key': sys.argv[4],
+            'table-default.s3.access-key-id': minio_user,
+            'table-default.s3.secret-access-key': minio_pass,
             'table-default.s3.region': 'us-east-1',
         },
         'storageConfigInfo': {
@@ -335,7 +351,7 @@ payload = {
     }
 }
 print(json.dumps(payload))
-" "${POLARIS_CATALOG}" "${MINIO_BUCKET}" "${MINIO_USER}" "${MINIO_PASS}")
+" "${POLARIS_CATALOG}" "${MINIO_BUCKET}")
 
     CREATE_CODE=$(curl -s -o /tmp/polaris-create.txt -w '%{http_code}' -X POST \
         -H "Authorization: Bearer ${POLARIS_TOKEN}" \
