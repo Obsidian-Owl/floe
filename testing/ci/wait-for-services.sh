@@ -25,8 +25,10 @@ POD_TIMEOUT="${POD_TIMEOUT:-300}"
 JOB_TIMEOUT="${JOB_TIMEOUT:-180}"
 POLARIS_URL="${POLARIS_URL:-http://localhost:8181}"
 POLARIS_CATALOG_NAME="${POLARIS_CATALOG_NAME:-floe-e2e}"
-MINIO_USER="${MINIO_USER:-minioadmin}"
-MINIO_PASS="${MINIO_PASS:-minioadmin123}"
+# Export credentials as env vars so child processes (ensure-bucket.py)
+# can read them without exposing via process arguments.
+export MINIO_USER="${MINIO_USER:-minioadmin}"
+export MINIO_PASS="${MINIO_PASS:-minioadmin123}"
 
 # Source Polaris auth helper
 # shellcheck source=testing/ci/polaris-auth.sh
@@ -77,10 +79,13 @@ MINIO_URL="${MINIO_URL:-http://localhost:9000}"
 MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
 echo "Verifying MinIO bucket '${MINIO_BUCKET}' exists..."
 MINIO_ATTEMPT=0
+# 30 attempts (vs 10 in test-e2e.sh): this script runs at cluster startup
+# when MinIO may still be pulling images or initializing PVCs. test-e2e.sh
+# runs after wait-for-services.sh has already confirmed readiness.
 MINIO_MAX_ATTEMPTS=30
 while true; do
     MINIO_ATTEMPT=$((MINIO_ATTEMPT + 1))
-    if python3 "$SCRIPT_DIR/ensure-bucket.py" "${MINIO_USER}" "${MINIO_PASS}" "${MINIO_URL}" "${MINIO_BUCKET}"; then
+    if uv run python3 "$SCRIPT_DIR/ensure-bucket.py" "${MINIO_URL}" "${MINIO_BUCKET}"; then
         echo "MinIO bucket '${MINIO_BUCKET}' verified"
         break
     fi

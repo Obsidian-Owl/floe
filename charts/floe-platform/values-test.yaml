@@ -217,9 +217,7 @@ minio:
   auth:
     rootUser: minioadmin
     rootPassword: minioadmin123  # pragma: allowlist secret
-  buckets:
-    - name: floe-iceberg
-      policy: none
+  defaultBuckets: "floe-iceberg"
   service:
     type: NodePort
     nodePort: 30900

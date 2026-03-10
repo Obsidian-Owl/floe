@@ -29,9 +29,13 @@ get_polaris_token() {
     local client_secret="${POLARIS_CLIENT_SECRET:-demo-secret}"
 
     local token
-    token=$(curl -sf -X POST \
+    # Pipe credentials via stdin (-d @-) to avoid exposing them in
+    # process arguments (visible in ps aux / /proc/*/cmdline).
+    token=$(printf 'grant_type=client_credentials&client_id=%s&client_secret=%s&scope=PRINCIPAL_ROLE:ALL' \
+        "$client_id" "$client_secret" | \
+        curl -sf -X POST \
         "$polaris_url/api/catalog/v1/oauth/tokens" \
-        -d "grant_type=client_credentials&client_id=$client_id&client_secret=$client_secret&scope=PRINCIPAL_ROLE:ALL" \
+        -d @- \
         2>/dev/null | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
 
     if [[ -z "$token" ]]; then
@@ -55,6 +59,12 @@ verify_polaris_catalog() {
     local polaris_url="${1:?Usage: verify_polaris_catalog <polaris_url> <catalog_name> <token>}"
     local catalog_name="${2:?Usage: verify_polaris_catalog <polaris_url> <catalog_name> <token>}"
     local token="${3:?Usage: verify_polaris_catalog <polaris_url> <catalog_name> <token>}"
+
+    # Validate catalog name to prevent URL injection (alphanumeric, hyphens, underscores only)
+    if [[ ! "$catalog_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        echo "ERROR: Invalid catalog name: '$catalog_name' (must be alphanumeric, hyphens, underscores)" >&2
+        return 1
+    fi
 
     local http_code
     http_code=$(curl -s -o /dev/null -w '%{http_code}' \

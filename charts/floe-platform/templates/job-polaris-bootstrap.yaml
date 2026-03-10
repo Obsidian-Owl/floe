@@ -170,17 +170,24 @@ spec:
 
               {{- if .Values.polaris.storage.s3.enabled }}
               {{- $bucketName := trimPrefix "s3://" .Values.polaris.bootstrap.defaultBaseLocation | splitList "/" | first }}
-              # Verify MinIO bucket exists before creating catalog
-              log "Step 2/4: Verifying MinIO bucket '{{ $bucketName }}' exists..."
+              # Verify MinIO is responsive before creating catalog.
+              # NOTE: This anonymous curl check returns HTTP 403 for BOTH existing
+              # and non-existing buckets (MinIO security: no bucket enumeration for
+              # anonymous callers). It is NOT a bucket existence check — it is a
+              # health/responsiveness check only. The bucket is guaranteed to exist
+              # at this point because defaultBuckets creates it at MinIO startup
+              # (before this bootstrap job runs). The ensure-bucket.py script in
+              # test-e2e.sh provides authenticated defense-in-depth verification.
+              log "Step 2/4: Verifying MinIO is responsive for bucket '{{ $bucketName }}'..."
               MINIO_URL="{{ .Values.polaris.storage.s3.endpoint }}"
               BUCKET_NAME="{{ $bucketName }}"
               BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "$MINIO_URL/$BUCKET_NAME/" 2>/dev/null)
               if [ "$BUCKET_CODE" = "404" ]; then
                 log "ERROR: MinIO bucket '$BUCKET_NAME' does not exist (HTTP 404)" >&2
-                log "Ensure MinIO provisioning job completed successfully." >&2
+                log "Ensure defaultBuckets includes '$BUCKET_NAME' in values." >&2
                 exit 1
               fi
-              log "MinIO bucket '$BUCKET_NAME' accessible (HTTP $BUCKET_CODE)"
+              log "MinIO responsive for bucket '$BUCKET_NAME' (HTTP $BUCKET_CODE)"
               {{- end }}
 
               log "Step 3/4: Creating catalog '{{ .Values.polaris.bootstrap.catalogName }}'..."
