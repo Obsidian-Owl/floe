@@ -263,7 +263,7 @@ class TestStartswithUsedForPrefixMatching:
         has_domain_startswith = False
         for prefix in REQUIRED_PRODUCTION_PREFIXES:
             # Match patterns like: .startswith("compile.") or .startswith('compile.')
-            pattern = re.compile(rf'\.startswith\(\s*["\']' + re.escape(prefix) + r'["\']')
+            pattern = re.compile(r'\.startswith\(\s*["\']' + re.escape(prefix) + r'["\']')
             if pattern.search(executable_code):
                 has_domain_startswith = True
                 break

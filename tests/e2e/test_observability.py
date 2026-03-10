@@ -822,7 +822,8 @@ class TestObservability(IntegrationTestBase):
             "TRACE GAP: No domain-specific attributes found in trace spans.\n"
             f"Tag keys found: {sorted(all_tag_keys)}\n"
             "Expected attributes with prefixes: compile.*, governance.*, enforcement.*, floe.*\n"
-            "Fix: Ensure OTel spans include domain-specific attributes during compilation and execution."
+            "Fix: Ensure OTel spans include domain-specific attributes "
+            "during compilation and execution."
         )
 
     @pytest.mark.e2e

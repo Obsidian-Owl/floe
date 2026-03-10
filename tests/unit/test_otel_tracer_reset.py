@@ -290,9 +290,8 @@ class TestNoRecursionAfterReset:
         We call reset_telemetry() then get_tracer() and assert no
         RecursionError is raised.
         """
-        from opentelemetry import trace
-
         from floe_core.telemetry.initialization import reset_telemetry
+        from opentelemetry import trace
 
         # Reset OTel state to a clean slate first
         if hasattr(trace, "_TRACER_PROVIDER_SET_ONCE"):
@@ -327,9 +326,8 @@ class TestNoRecursionAfterReset:
         This extends the behavioral test to cover the full span creation path,
         which is the actual use case that triggers the bug in production.
         """
-        from opentelemetry import trace
-
         from floe_core.telemetry.initialization import reset_telemetry
+        from opentelemetry import trace
 
         # Reset to clean slate
         if hasattr(trace, "_TRACER_PROVIDER_SET_ONCE"):
@@ -359,9 +357,8 @@ class TestNoRecursionAfterReset:
         A sloppy fix might prevent RecursionError but return a broken tracer.
         We verify the tracer can start a span and the span has a valid context.
         """
-        from opentelemetry import trace
-
         from floe_core.telemetry.initialization import reset_telemetry
+        from opentelemetry import trace
 
         # Reset to clean slate
         if hasattr(trace, "_TRACER_PROVIDER_SET_ONCE"):
