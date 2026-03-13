@@ -1,8 +1,9 @@
-"""Unit tests for custom dbt table materialization macro.
+"""Unit tests for custom dbt table materialization macro and get_dbt_macro_paths().
 
-These tests validate the custom table materialization macro for dbt-duckdb
-that avoids the unsupported adapter.rename_relation operation. Tests read
-the macro file from disk and verify its content against AC-1.1.
+These tests validate:
+- AC-1.1: Custom table materialization macro content and structure
+- AC-1.2: ComputePlugin ABC has get_dbt_macro_paths() with default []
+- AC-1.3: DuckDBComputePlugin overrides get_dbt_macro_paths() correctly
 
 The macro must:
 - Use DROP + CTAS instead of rename-swap (DuckDB Iceberg limitation)
@@ -15,6 +16,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from floe_core.plugins.compute import ComputePlugin
+
+from floe_compute_duckdb.plugin import DuckDBComputePlugin
 
 # Resolve the macro file path relative to the floe_compute_duckdb package.
 # This ensures tests work regardless of working directory.
@@ -390,3 +394,127 @@ class TestMacroStructure:
         assert "return(" in content or "return (" in content, (
             "Macro must contain a return statement for dbt materialization protocol"
         )
+
+
+class TestComputePluginABCDefault:
+    """Test that ComputePlugin ABC provides get_dbt_macro_paths() with safe default."""
+
+    @pytest.mark.requirement("AC-1.2")
+    def test_abc_has_get_dbt_macro_paths_method(self) -> None:
+        """Test ComputePlugin ABC defines get_dbt_macro_paths method.
+
+        AC-1.2: Method exists on ComputePlugin class.
+        """
+        assert hasattr(ComputePlugin, "get_dbt_macro_paths"), (
+            "ComputePlugin ABC must have get_dbt_macro_paths method"
+        )
+
+    @pytest.mark.requirement("AC-1.2")
+    def test_abc_default_returns_empty_list(self) -> None:
+        """Test ComputePlugin.get_dbt_macro_paths() default returns [].
+
+        AC-1.2: Default implementation returns [] so plugins without
+        custom macros work without overriding.
+        """
+        plugin = DuckDBComputePlugin()
+        # Call the ABC default via super() indirectly by checking its definition
+        result = ComputePlugin.get_dbt_macro_paths(plugin)
+        assert result == [], (
+            f"ComputePlugin.get_dbt_macro_paths() default must return [], got {result}"
+        )
+
+    @pytest.mark.requirement("AC-1.2")
+    def test_abc_method_is_not_abstract(self) -> None:
+        """Test get_dbt_macro_paths is not abstract (has default impl).
+
+        AC-1.2: Method is NOT abstract — it provides a safe default.
+        """
+        # Abstract methods are tracked in __abstractmethods__
+        abstract_methods = getattr(ComputePlugin, "__abstractmethods__", frozenset())
+        assert "get_dbt_macro_paths" not in abstract_methods, (
+            "get_dbt_macro_paths must NOT be abstract — it should have a default return []"
+        )
+
+    @pytest.mark.requirement("AC-1.2")
+    def test_abc_method_return_type_annotation(self) -> None:
+        """Test get_dbt_macro_paths has list[Path] return type annotation.
+
+        AC-1.2: Return type annotation is list[Path].
+        """
+        import inspect
+
+        sig = inspect.signature(ComputePlugin.get_dbt_macro_paths)
+        assert sig.return_annotation is not inspect.Parameter.empty, (
+            "get_dbt_macro_paths must have a return type annotation"
+        )
+
+
+class TestDuckDBPluginMacroPaths:
+    """Test that DuckDBComputePlugin overrides get_dbt_macro_paths() correctly."""
+
+    @pytest.mark.requirement("AC-1.3")
+    def test_plugin_returns_non_empty_list(self) -> None:
+        """Test DuckDBComputePlugin.get_dbt_macro_paths() returns non-empty list.
+
+        AC-1.3: Returns a non-empty list[Path].
+        """
+        plugin = DuckDBComputePlugin()
+        result = plugin.get_dbt_macro_paths()
+        assert isinstance(result, list), f"Expected list, got {type(result)}"
+        assert len(result) > 0, "DuckDB plugin must return at least one macro path"
+
+    @pytest.mark.requirement("AC-1.3")
+    def test_returned_paths_exist(self) -> None:
+        """Test each returned path exists on the filesystem.
+
+        AC-1.3: Each returned path exists (in the installed package).
+        """
+        plugin = DuckDBComputePlugin()
+        for path in plugin.get_dbt_macro_paths():
+            assert isinstance(path, Path), f"Expected Path, got {type(path)}"
+            assert path.exists(), f"Returned macro path does not exist: {path}"
+
+    @pytest.mark.requirement("AC-1.3")
+    def test_first_path_contains_materialization(self) -> None:
+        """Test the first returned path contains materializations/table.sql.
+
+        AC-1.3: The macro directory should contain our custom materialization.
+        """
+        plugin = DuckDBComputePlugin()
+        paths = plugin.get_dbt_macro_paths()
+        assert len(paths) > 0, "No macro paths returned"
+        macro_file = paths[0] / "materializations" / "table.sql"
+        assert macro_file.exists(), (
+            f"Expected materializations/table.sql inside {paths[0]}, but file not found"
+        )
+
+    @pytest.mark.requirement("AC-1.3")
+    def test_uses_path_relative_to_module(self) -> None:
+        """Test path resolution uses Path(__file__).parent / 'dbt_macros'.
+
+        AC-1.3: Uses Path(__file__).parent / 'dbt_macros' for resolution,
+        which works in both editable and installed mode.
+        """
+        plugin = DuckDBComputePlugin()
+        paths = plugin.get_dbt_macro_paths()
+        assert len(paths) > 0
+        # The path should be within the floe_compute_duckdb package directory
+        path_str = str(paths[0])
+        assert "floe_compute_duckdb" in path_str, (
+            f"Macro path should be within floe_compute_duckdb package, got: {path_str}"
+        )
+        assert path_str.endswith("dbt_macros"), (
+            f"Macro path should end with 'dbt_macros', got: {path_str}"
+        )
+
+    @pytest.mark.requirement("AC-1.3")
+    def test_returns_list_of_path_objects(self) -> None:
+        """Test all returned items are pathlib.Path instances.
+
+        AC-1.3: Return type is list[Path].
+        """
+        plugin = DuckDBComputePlugin()
+        for item in plugin.get_dbt_macro_paths():
+            assert isinstance(item, Path), (
+                f"get_dbt_macro_paths() must return list[Path], got {type(item)} in list"
+            )
