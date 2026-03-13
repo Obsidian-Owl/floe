@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import re
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from floe_core.compute_config import (
@@ -181,6 +182,20 @@ class DuckDBComputePlugin(ComputePlugin):
             Canonical tracer name for DuckDB compute plugin.
         """
         return TRACER_NAME
+
+    def get_dbt_macro_paths(self) -> list[Path]:
+        """Return paths to directories containing custom dbt macros.
+
+        DuckDB ships an Iceberg-compatible table materialization that uses
+        DROP+CREATE instead of the default rename-swap pattern (which is
+        unsupported on Iceberg REST catalogs).
+
+        Returns:
+            List containing the dbt_macros directory path if it exists,
+            empty list otherwise.
+        """
+        macro_dir = Path(__file__).parent / "dbt_macros"
+        return [macro_dir] if macro_dir.exists() else []
 
     def generate_dbt_profile(self, config: ComputeConfig) -> dict[str, Any]:
         """Generate dbt profile.yml configuration for DuckDB.
