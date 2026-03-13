@@ -45,6 +45,24 @@ if TYPE_CHECKING:
 # Used to prevent SQL injection in ATTACH statements
 _SAFE_IDENTIFIER_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
+# Allowed URI schemes for catalog endpoints
+_ALLOWED_URI_SCHEMES = {"http", "https"}
+
+# Regex for safe warehouse identifiers (alphanumeric, underscores, hyphens, slashes, colons)
+# Permits S3 paths like s3://bucket/path and simple identifiers like floe_warehouse
+_SAFE_WAREHOUSE_PATTERN = re.compile(r"^[a-zA-Z0-9_\-/:.\s]+$")
+
+# Allowed keys for DuckDB attach options — prevents arbitrary key injection
+_ALLOWED_ATTACH_OPTION_KEYS = frozenset(
+    {
+        "catalog_uri",
+        "read_only",
+        "schema",
+        "access_mode",
+        "type",
+    }
+)
+
 
 def _validate_sql_identifier(value: str, field_name: str) -> None:
     """Validate that a value is a safe SQL identifier.
@@ -78,6 +96,96 @@ def _escape_sql_string(value: str) -> str:
         The escaped string safe for use in SQL literals.
     """
     return value.replace("'", "''")
+
+
+def _validate_db_path(path: str) -> None:
+    """Validate that a database path is safe for use with DuckDB.
+
+    Prevents path traversal attacks by rejecting paths containing '..'
+    and enforcing allowed path patterns.
+
+    Args:
+        path: The database file path to validate.
+
+    Raises:
+        ValueError: If the path contains traversal sequences or invalid characters.
+    """
+    if ".." in path:
+        msg = "Database path must not contain '..' (path traversal)"
+        raise ValueError(msg)
+
+    # Allow :memory: (DuckDB in-memory mode)
+    if path == ":memory:":
+        return
+
+    # Allow absolute paths and relative filenames
+    resolved = Path(path)
+    if (
+        not str(resolved)
+        .replace("/", "")
+        .replace("\\", "")
+        .replace(".", "")
+        .replace("_", "")
+        .replace("-", "")
+        .replace(":", "")
+    ):
+        msg = f"Invalid database path: '{path}'"
+        raise ValueError(msg)
+
+
+def _validate_catalog_uri(uri: str) -> None:
+    """Validate that a catalog URI uses an allowed scheme.
+
+    Args:
+        uri: The catalog URI to validate.
+
+    Raises:
+        ValueError: If the URI scheme is not http or https.
+    """
+    # Extract scheme (everything before '://')
+    if "://" in uri:
+        scheme = uri.split("://", 1)[0].lower()
+    else:
+        scheme = ""
+
+    if scheme not in _ALLOWED_URI_SCHEMES:
+        allowed = ", ".join(sorted(_ALLOWED_URI_SCHEMES))
+        msg = f"Invalid catalog URI scheme: '{scheme}'. Allowed schemes: {allowed}"
+        raise ValueError(msg)
+
+
+def _validate_warehouse(warehouse: str) -> None:
+    """Validate that a warehouse identifier contains only safe characters.
+
+    Args:
+        warehouse: The warehouse name or S3 path to validate.
+
+    Raises:
+        ValueError: If the warehouse contains unsafe characters.
+    """
+    if not _SAFE_WAREHOUSE_PATTERN.match(warehouse):
+        msg = (
+            f"Invalid warehouse: '{warehouse}'. "
+            "Must contain only alphanumeric characters, underscores, "
+            "hyphens, slashes, dots, and colons."
+        )
+        raise ValueError(msg)
+
+
+def _sanitize_path_for_logging(path: str) -> str:
+    """Sanitize a database path for safe inclusion in logs and OTel spans.
+
+    Reduces path to its basename to avoid leaking directory structure.
+
+    Args:
+        path: The database path to sanitize.
+
+    Returns:
+        A sanitized path safe for logging.
+    """
+    if path == ":memory:":
+        return ":memory:"
+    return Path(path).name
 
 
 class DuckDBComputePlugin(ComputePlugin):
@@ -251,11 +359,14 @@ class DuckDBComputePlugin(ComputePlugin):
         connection = config.connection
         db_path = connection.get("path", ":memory:")
 
+        # HIGH-2: Validate database path before use
+        _validate_db_path(db_path)
+
         with compute_span(
             tracer,
             "generate_profile",
             engine="duckdb",
-            db_path=db_path,
+            db_path=_sanitize_path_for_logging(db_path),
         ):
             profile: dict[str, Any] = {
                 "type": "duckdb",
@@ -301,8 +412,15 @@ class DuckDBComputePlugin(ComputePlugin):
                     if "type" in attach:
                         attach_entry["type"] = attach["type"]
 
-                    # Additional options can be included
+                    # MEDIUM-4: Validate attach option keys against allowlist
                     if "options" in attach and attach["options"]:
+                        for key in attach["options"]:
+                            if key not in _ALLOWED_ATTACH_OPTION_KEYS:
+                                msg = (
+                                    f"Invalid attach option key: '{key}'. "
+                                    f"Allowed keys: {sorted(_ALLOWED_ATTACH_OPTION_KEYS)}"
+                                )
+                                raise ValueError(msg)
                         attach_entry.update(attach["options"])
 
                     attach_list.append(attach_entry)
@@ -350,16 +468,22 @@ class DuckDBComputePlugin(ComputePlugin):
         import duckdb
 
         path = config.connection.get("path", ":memory:")
-        tracer = get_tracer()
 
-        with compute_span(tracer, "validate_connection", engine="duckdb", db_path=path):
+        # HIGH-2: Validate database path before connecting
+        _validate_db_path(path)
+
+        tracer = get_tracer()
+        # HIGH-1: Sanitize path for OTel spans — only log basename
+        safe_path = _sanitize_path_for_logging(path)
+
+        with compute_span(tracer, "validate_connection", engine="duckdb", db_path=safe_path):
             start_time = time.perf_counter()
 
             with start_validation_span(self.name) as span:
-                span.set_attribute("db.path", path)
+                span.set_attribute("db.system", "duckdb")
 
                 try:
-                    conn = duckdb.connect(path, read_only=False)
+                    conn = duckdb.connect(path, read_only=True)
                     try:
                         # Simple validation query
                         query_result = conn.execute("SELECT 1").fetchone()
@@ -369,7 +493,7 @@ class DuckDBComputePlugin(ComputePlugin):
                             result = ConnectionResult(
                                 status=ConnectionStatus.HEALTHY,
                                 latency_ms=latency_ms,
-                                message=f"Connected to DuckDB successfully (path: {path})",
+                                message="DuckDB connection validated successfully",
                             )
                             span.set_attribute("validation.status", "healthy")
                             record_validation_duration(self.name, latency_ms, "healthy")
@@ -389,14 +513,14 @@ class DuckDBComputePlugin(ComputePlugin):
                 except Exception as e:
                     latency_ms = (time.perf_counter() - start_time) * 1000
                     span.set_attribute("validation.status", "unhealthy")
-                    span.set_attribute("error.message", str(e))
+                    # HIGH-1: Log only exception type, not full message
+                    span.set_attribute("error.type", type(e).__name__)
                     record_validation_duration(self.name, latency_ms, "unhealthy")
                     record_validation_error(self.name, type(e).__name__)
                     return ConnectionResult(
                         status=ConnectionStatus.UNHEALTHY,
                         latency_ms=latency_ms,
-                        message=f"Failed to connect to DuckDB: {e}",
-                        warnings=[f"Error details: {e!s}"],
+                        message="DuckDB connection validation failed",
                     )
 
     def get_resource_requirements(self, workload_size: str) -> ResourceSpec:
@@ -475,20 +599,25 @@ class DuckDBComputePlugin(ComputePlugin):
                 "LOAD iceberg;",
             ]
 
-            # Escape string values to prevent SQL injection
-            catalog_name_escaped = _escape_sql_string(catalog_config.catalog_name)
+            # catalog_name is already validated as a safe identifier —
+            # no escaping needed (identifiers can't contain quotes)
+            catalog_name = catalog_config.catalog_name
 
             # Build ATTACH statement with options
             attach_parts = [
-                f"ATTACH '{catalog_name_escaped}' AS {catalog_config.catalog_name}",
+                f"ATTACH '{catalog_name}' AS {catalog_name}",
                 "(TYPE ICEBERG",
             ]
 
             if catalog_config.catalog_uri:
+                # MEDIUM-3: Validate URI scheme before embedding in SQL
+                _validate_catalog_uri(catalog_config.catalog_uri)
                 uri_escaped = _escape_sql_string(catalog_config.catalog_uri)
                 attach_parts.append(f", ENDPOINT '{uri_escaped}'")
 
             if catalog_config.warehouse:
+                # MEDIUM-3: Validate warehouse character set
+                _validate_warehouse(catalog_config.warehouse)
                 warehouse_escaped = _escape_sql_string(catalog_config.warehouse)
                 attach_parts.append(f", WAREHOUSE '{warehouse_escaped}'")
 
