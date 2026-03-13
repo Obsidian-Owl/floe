@@ -319,7 +319,7 @@ class DuckDBComputePlugin(ComputePlugin):
 
         Example:
             >>> plugin.get_required_dbt_packages()
-            ['dbt-duckdb>=1.7.0', 'duckdb>=0.9.0']
+            ['dbt-duckdb>=1.7.0', 'duckdb>=1.4.0']
         """
         return ["dbt-duckdb>=1.7.0", "duckdb>=1.4.0"]
 
