@@ -551,6 +551,137 @@ class TestVersionPins:
         )
 
 
+class TestBoundaryConditions:
+    """Test boundary conditions from the spec.
+
+    These cover edge cases that a sloppy implementation might miss:
+    - get_dbt_macro_paths() returns [] when dbt_macros/ doesn't exist
+    - Macro conditionally drops only when existing relation is present
+    - ABC return type annotation is exactly list[Path]
+    - DuckDBComputePlugin returns exactly 1 macro path directory
+    """
+
+    @pytest.mark.requirement("AC-1.3")
+    def test_get_dbt_macro_paths_returns_empty_when_dir_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test get_dbt_macro_paths() returns [] when dbt_macros/ dir is absent.
+
+        Spec boundary condition: guard check returns empty list when the
+        macro directory does not exist on disk. Without this guard, a plugin
+        installed without macro files would return a nonexistent path.
+        """
+        import floe_compute_duckdb.plugin as plugin_mod
+
+        # Point the module's __file__ to a temp dir with no dbt_macros/ subdir
+        fake_plugin_file = str(tmp_path / "plugin.py")
+        monkeypatch.setattr(plugin_mod, "__file__", fake_plugin_file)
+
+        # Precondition: dbt_macros/ does NOT exist under tmp_path
+        assert not (tmp_path / "dbt_macros").exists()
+
+        plugin = DuckDBComputePlugin()
+        result = plugin.get_dbt_macro_paths()
+        assert result == [], f"Expected empty list when dbt_macros/ does not exist, got {result}"
+
+    @pytest.mark.requirement("AC-1.1")
+    def test_macro_conditional_drop_guard(self) -> None:
+        """Test macro conditionally drops only when existing relation is present.
+
+        Spec boundary condition: macro must skip drop on first run when no
+        existing table exists. An unconditional drop would fail at runtime.
+        The macro must contain a guard like 'existing_relation is not none'.
+        """
+        content = _read_macro()
+        import re
+
+        # Strip comments to ensure the guard is in executable code
+        no_jinja_comments = re.sub(r"\{#.*?#\}", "", content, flags=re.DOTALL)
+        no_comments = re.sub(r"--[^\n]*", "", no_jinja_comments)
+
+        # Must have a conditional check before drop_relation
+        # The standard dbt pattern is: {% if existing_relation is not none %}
+        assert (
+            "existing_relation is not none" in no_comments.lower()
+            or "existing_relation is not none" in no_comments
+        ), (
+            "Macro must check 'existing_relation is not none' before dropping. "
+            "An unconditional drop fails on first run when no table exists."
+        )
+
+        # Verify the conditional appears BEFORE drop_relation
+        guard_pos = no_comments.lower().find("existing_relation is not none")
+        drop_pos = no_comments.find("adapter.drop_relation")
+        assert guard_pos < drop_pos, (
+            "Conditional guard 'existing_relation is not none' must appear "
+            "BEFORE adapter.drop_relation"
+        )
+
+    @pytest.mark.requirement("AC-1.1")
+    def test_macro_loads_cached_relation(self) -> None:
+        """Test macro uses load_cached_relation to check for existing table.
+
+        The macro must call load_cached_relation(this) to determine whether
+        a relation already exists before attempting to drop it.
+        """
+        content = _read_macro()
+        assert "load_cached_relation" in content, (
+            "Macro must call load_cached_relation(this) to check for existing relations"
+        )
+
+    @pytest.mark.requirement("AC-1.2")
+    def test_abc_method_return_type_is_list_path(self) -> None:
+        """Test get_dbt_macro_paths return type annotation is list[Path].
+
+        AC-1.2 requires the return type to be specifically list[Path],
+        not just any non-empty annotation.
+        """
+        import inspect
+
+        sig = inspect.signature(ComputePlugin.get_dbt_macro_paths)
+        annotation = sig.return_annotation
+        annotation_str = str(annotation)
+        assert "list" in annotation_str.lower(), (
+            f"Return annotation must be list[Path], got: {annotation}"
+        )
+        assert "Path" in annotation_str, f"Return annotation must be list[Path], got: {annotation}"
+
+    @pytest.mark.requirement("AC-1.3")
+    def test_plugin_returns_exactly_one_macro_directory(self) -> None:
+        """Test DuckDBComputePlugin returns exactly one macro path directory.
+
+        The plugin ships one set of macros in dbt_macros/. Returning more
+        or fewer directories indicates a bug.
+        """
+        plugin = DuckDBComputePlugin()
+        result = plugin.get_dbt_macro_paths()
+        assert len(result) == 1, (
+            f"Expected exactly 1 macro path directory, got {len(result)}: {result}"
+        )
+
+    @pytest.mark.requirement("AC-1.3")
+    def test_plugin_returns_directory_not_file(self) -> None:
+        """Test returned path is a directory, not a file.
+
+        dbt macro-paths expects directories, not individual files.
+        """
+        plugin = DuckDBComputePlugin()
+        paths = plugin.get_dbt_macro_paths()
+        for path in paths:
+            assert path.is_dir(), f"Macro path must be a directory, got file: {path}"
+
+    @pytest.mark.requirement("AC-1.1")
+    def test_macro_contains_commit(self) -> None:
+        """Test macro calls adapter.commit() after operations.
+
+        dbt materializations must commit the transaction.
+        """
+        content = _read_macro()
+        assert "adapter.commit()" in content, (
+            "Macro must call adapter.commit() to finalize the transaction"
+        )
+
+
 class TestWheelPackaging:
     """Test that dbt_macros/ is included in the wheel distribution."""
 
