@@ -321,7 +321,7 @@ class DuckDBComputePlugin(ComputePlugin):
             >>> plugin.get_required_dbt_packages()
             ['dbt-duckdb>=1.7.0', 'duckdb>=0.9.0']
         """
-        return ["dbt-duckdb>=1.7.0", "duckdb>=0.9.0"]
+        return ["dbt-duckdb>=1.7.0", "duckdb>=1.4.0"]
 
     def validate_connection(self, config: ComputeConfig) -> ConnectionResult:
         """Test connection to DuckDB using native driver.

@@ -518,3 +518,61 @@ class TestDuckDBPluginMacroPaths:
             assert isinstance(item, Path), (
                 f"get_dbt_macro_paths() must return list[Path], got {type(item)} in list"
             )
+
+
+class TestVersionPins:
+    """Test that DuckDB version pins are updated to >=1.4.0."""
+
+    @pytest.mark.requirement("AC-1.4")
+    def test_pyproject_duckdb_version_pin(self) -> None:
+        """Test pyproject.toml requires duckdb>=1.4.0.
+
+        AC-1.4: DuckDB >=1.4.0 is required for Iceberg REST write support.
+        """
+        pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        content = pyproject_path.read_text()
+        assert "duckdb>=1.4.0" in content, "pyproject.toml must contain duckdb>=1.4.0 (not >=0.9.0)"
+        assert "duckdb>=0.9.0" not in content, (
+            "pyproject.toml still contains outdated duckdb>=0.9.0 pin"
+        )
+
+    @pytest.mark.requirement("AC-1.4")
+    def test_plugin_get_required_dbt_packages_version(self) -> None:
+        """Test get_required_dbt_packages() returns duckdb>=1.4.0.
+
+        AC-1.4: The plugin must advertise the correct minimum DuckDB version.
+        """
+        plugin = DuckDBComputePlugin()
+        packages = plugin.get_required_dbt_packages()
+        duckdb_pins = [p for p in packages if p.startswith("duckdb")]
+        assert len(duckdb_pins) == 1, f"Expected exactly one duckdb pin, got {duckdb_pins}"
+        assert duckdb_pins[0] == "duckdb>=1.4.0", (
+            f"Expected 'duckdb>=1.4.0', got '{duckdb_pins[0]}'"
+        )
+
+
+class TestWheelPackaging:
+    """Test that dbt_macros/ is included in the wheel distribution."""
+
+    @pytest.mark.requirement("AC-1.5")
+    def test_dbt_macros_inside_package(self) -> None:
+        """Test dbt_macros/ directory is inside src/floe_compute_duckdb/.
+
+        AC-1.5: Macros inside the package directory are auto-included
+        by hatch via the packages = ['src/floe_compute_duckdb'] config.
+        """
+        package_root = Path(__file__).resolve().parents[2] / "src" / "floe_compute_duckdb"
+        macros_dir = package_root / "dbt_macros"
+        assert macros_dir.exists(), f"dbt_macros/ not found inside package at {macros_dir}"
+        assert macros_dir.is_dir(), "dbt_macros must be a directory"
+
+    @pytest.mark.requirement("AC-1.5")
+    def test_macro_file_inside_package_for_wheel(self) -> None:
+        """Test materializations/table.sql exists inside the package tree.
+
+        AC-1.5: The actual macro file must be inside the package for
+        hatch to include it in the wheel.
+        """
+        package_root = Path(__file__).resolve().parents[2] / "src" / "floe_compute_duckdb"
+        macro_file = package_root / "dbt_macros" / "materializations" / "table.sql"
+        assert macro_file.exists(), f"table.sql not found at {macro_file} — won't be in wheel"
