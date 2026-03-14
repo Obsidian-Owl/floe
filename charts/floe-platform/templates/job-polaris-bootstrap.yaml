@@ -152,9 +152,12 @@ spec:
               fi
 
               POLARIS_URL="http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.port | default 8181 }}"
-              {{- $totalSteps := 4 }}
+              {{- $totalSteps := 3 }}
+              {{- if .Values.polaris.storage.s3.enabled }}
+              {{- $totalSteps = add $totalSteps 1 }}
+              {{- end }}
               {{- if .Values.polaris.bootstrap.grants.enabled }}
-              {{- $totalSteps = 7 }}
+              {{- $totalSteps = add $totalSteps 3 }}
               {{- end }}
 
               log "Step 1/{{ $totalSteps }}: Acquiring OAuth token..."
@@ -286,7 +289,10 @@ spec:
               CATALOG_NAME="{{ .Values.polaris.bootstrap.catalogName }}"
               PRINCIPAL_ROLE="{{ .Values.polaris.bootstrap.grants.principalRole }}"
 
-              # Validate grant values — reject shell metacharacters and path traversal
+              # Validate grant values — reject shell metacharacters and path traversal.
+              # eval is safe here: GRANT_VAR_NAME iterates only over the hardcoded list above.
+              # If this loop is ever extended to include user-controlled variable names,
+              # the eval becomes a code injection vector — use a case statement instead.
               for GRANT_VAR_NAME in CATALOG_ROLE CATALOG_NAME PRINCIPAL_ROLE; do
                 eval GRANT_VAR_VAL="\$$GRANT_VAR_NAME"
                 case "$GRANT_VAR_VAL" in
@@ -294,6 +300,15 @@ spec:
                   "") log "ERROR: $GRANT_VAR_NAME is empty" >&2; exit 42 ;;
                 esac
               done
+
+              # Validate privilege values — Polaris privileges are uppercase [A-Z_] identifiers.
+              # Rendered at Helm template time, so this catches values.yaml misconfigurations.
+              {{- range .Values.polaris.bootstrap.grants.privileges }}
+              case "{{ . }}" in
+                *[!A-Z_]*) log "ERROR: privilege contains invalid characters: {{ . }}" >&2; exit 42 ;;
+                "") log "ERROR: privilege is empty" >&2; exit 42 ;;
+              esac
+              {{- end }}
               log "Step 5/{{ $totalSteps }}: Creating catalog role '$CATALOG_ROLE' on catalog '$CATALOG_NAME'..."
               ROLE_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
                 -H "Authorization: Bearer $TOKEN" \
