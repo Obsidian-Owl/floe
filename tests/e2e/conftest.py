@@ -8,8 +8,10 @@ All E2E tests require the full platform stack running in K8s (Kind cluster).
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
+import shutil
 import subprocess
 import uuid
 from collections.abc import Callable, Generator
@@ -877,6 +879,40 @@ def dbt_e2e_profile(
             )
             bak_path.rename(profile_path)
 
+    # --- Copy custom materialization macro from floe-compute-duckdb plugin ---
+    # Demo projects use macro-paths: ["../macros"], so macros must be in
+    # demo/macros/. The custom table materialization (Iceberg-aware DROP+CREATE)
+    # lives in the plugin package and needs to be copied here for dbt to find it.
+    macro_dest_dir = project_root / "demo" / "macros" / "materializations"
+    macro_dest = macro_dest_dir / "table.sql"
+    _macro_copied = False
+
+    try:
+        macro_source = (
+            Path(importlib.import_module("floe_compute_duckdb").__file__).parent
+            / "dbt_macros"
+            / "materializations"
+            / "table.sql"
+        )
+    except (ImportError, TypeError):
+        pytest.fail(
+            "Custom table materialization not found in floe-compute-duckdb plugin.\n"
+            "Install with: uv pip install -e plugins/floe-compute-duckdb\n"
+            "The plugin provides the Iceberg-aware table materialization macro."
+        )
+
+    if not macro_source.exists():
+        pytest.fail(
+            f"Custom table materialization not found at {macro_source}.\n"
+            "Expected: plugins/floe-compute-duckdb/src/floe_compute_duckdb/"
+            "dbt_macros/materializations/table.sql"
+        )
+
+    macro_dest_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(macro_source, macro_dest)
+    _macro_copied = True
+    logger.info("Copied custom table materialization macro to %s", macro_dest)
+
     try:
         for product_dir, profile_name in _DBT_DEMO_PRODUCTS.items():
             project_dir = project_root / "demo" / product_dir
@@ -901,11 +937,20 @@ def dbt_e2e_profile(
     except Exception:
         # Setup failed mid-loop — restore any profiles already backed up
         _restore_backups()
+        if _macro_copied and macro_dest.exists():
+            macro_dest.unlink()
         raise
 
     yield profile_paths
 
     _restore_backups()
+    # Clean up copied macro file
+    if _macro_copied and macro_dest.exists():
+        macro_dest.unlink()
+        # Remove materializations dir if empty (we created it)
+        if macro_dest_dir.exists() and not any(macro_dest_dir.iterdir()):
+            macro_dest_dir.rmdir()
+        logger.info("Cleaned up custom table materialization macro from %s", macro_dest)
     # Clean up env vars set for dbt env_var() resolution
     for var_name in _e2e_env_vars:
         os.environ.pop(var_name, None)
