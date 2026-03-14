@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib
 import logging
 import os
+import re
 import shutil
 import subprocess
 import uuid
@@ -509,9 +510,17 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         )
         return catalog
 
-    token = token_response.json()["access_token"]
+    token = token_response.json().get("access_token")
+    if not token:
+        logger.warning(
+            "Polaris token response missing access_token field: %s",
+            token_response.text,
+        )
+        return catalog
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     catalog_name = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
+    if not re.fullmatch(r"[a-zA-Z0-9_-]+", catalog_name):
+        pytest.fail(f"POLARIS_WAREHOUSE contains unsafe characters: {catalog_name!r}")
 
     # Step 1: Create catalog_admin role (idempotent — 201 created, 409 exists)
     role_response = httpx.post(
@@ -828,7 +837,10 @@ def dbt_e2e_profile(
     cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
     parts = cred.split(":", 1)
     if len(parts) != 2:
-        pytest.fail(f"POLARIS_CREDENTIAL must be 'client_id:client_secret', got: {cred!r}")
+        pytest.fail(
+            "POLARIS_CREDENTIAL must be 'client_id:client_secret'; "
+            f"got a value with {len(cred)} characters and no ':' separator"
+        )
     client_id, client_secret = parts
     warehouse = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
 

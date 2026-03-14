@@ -94,6 +94,10 @@ wait_for_port() {
 # and checking for any valid response (even 4xx/5xx counts as "working").
 port_already_available() {
     local port=$1
+    if [[ ! "${port}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: port_already_available called with non-numeric port: '${port}'" >&2
+        return 1
+    fi
     # First check TCP
     if ! (echo >/dev/tcp/localhost/"${port}") 2>/dev/null; then
         return 1
