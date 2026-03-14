@@ -413,13 +413,13 @@ class TestAttachOptionsAllowlist:
 
 
 class TestValidateConnectionReadOnly:
-    """HIGH-2: validate_connection uses read_only=True for safety."""
+    """HIGH-2: validate_connection uses read_only for file paths, not :memory:."""
 
     @pytest.mark.requirement("001-SEC-001")
-    def test_validate_connection_uses_read_only(
+    def test_validate_connection_memory_not_read_only(
         self, plugin: DuckDBComputePlugin, mock_duckdb_success: MagicMock
     ) -> None:
-        """Test validate_connection connects with read_only=True."""
+        """Test :memory: connections use read_only=False (DuckDB requirement)."""
         with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
             config = ComputeConfig(
                 plugin="duckdb",
@@ -427,4 +427,21 @@ class TestValidateConnectionReadOnly:
             )
             plugin.validate_connection(config)
 
-        mock_duckdb_success.connect.assert_called_once_with(":memory:", read_only=True)
+        # :memory: cannot use read_only=True (DuckDB raises InvalidInputException)
+        mock_duckdb_success.connect.assert_called_once_with(":memory:", read_only=False)
+
+    @pytest.mark.requirement("001-SEC-001")
+    def test_validate_connection_file_path_read_only(
+        self, plugin: DuckDBComputePlugin, mock_duckdb_success: MagicMock
+    ) -> None:
+        """Test file-based paths use read_only=True for validation safety."""
+        with patch.dict("sys.modules", {"duckdb": mock_duckdb_success}):
+            config = ComputeConfig(
+                plugin="duckdb",
+                connection={"path": "/data/analytics.duckdb"},
+            )
+            plugin.validate_connection(config)
+
+        mock_duckdb_success.connect.assert_called_once_with(
+            "/data/analytics.duckdb", read_only=True
+        )

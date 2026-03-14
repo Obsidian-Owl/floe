@@ -50,7 +50,7 @@ _ALLOWED_URI_SCHEMES = {"http", "https"}
 
 # Regex for safe warehouse identifiers (alphanumeric, underscores, hyphens, slashes, colons)
 # Permits S3 paths like s3://bucket/path and simple identifiers like floe_warehouse
-_SAFE_WAREHOUSE_PATTERN = re.compile(r"^[a-zA-Z0-9_\-/:.\s]+$")
+_SAFE_WAREHOUSE_PATTERN = re.compile(r"^[a-zA-Z0-9_\-/:. ]+$")
 
 # Allowed keys for DuckDB attach options — prevents arbitrary key injection
 _ALLOWED_ATTACH_OPTION_KEYS = frozenset(
@@ -483,7 +483,7 @@ class DuckDBComputePlugin(ComputePlugin):
                 span.set_attribute("db.system", "duckdb")
 
                 try:
-                    conn = duckdb.connect(path, read_only=True)
+                    conn = duckdb.connect(path, read_only=path != ":memory:")
                     try:
                         # Simple validation query
                         query_result = conn.execute("SELECT 1").fetchone()
@@ -606,7 +606,7 @@ class DuckDBComputePlugin(ComputePlugin):
             # Build ATTACH statement with options
             attach_parts = [
                 f"ATTACH '{catalog_name}' AS {catalog_name}",
-                "(TYPE ICEBERG",
+                " (TYPE ICEBERG",
             ]
 
             if catalog_config.catalog_uri:
