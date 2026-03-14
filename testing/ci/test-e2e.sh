@@ -88,9 +88,22 @@ wait_for_port() {
     return 1
 }
 
-# Check if a port is already listening (e.g. via Kind NodePort mapping)
+# Check if a port is already listening AND responsive (e.g. via Kind NodePort mapping).
+# A TCP-only check is insufficient: OrbStack can bind ports that forward to a stale
+# container, causing connection resets. We verify by sending a minimal HTTP request
+# and checking for any valid response (even 4xx/5xx counts as "working").
 port_already_available() {
-    (echo >/dev/tcp/localhost/"$1") 2>/dev/null
+    local port=$1
+    # First check TCP
+    if ! (echo >/dev/tcp/localhost/"${port}") 2>/dev/null; then
+        return 1
+    fi
+    # Verify the connection actually works (not a stale OrbStack mapping)
+    local http_code
+    http_code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 3 \
+        "http://localhost:${port}/" 2>/dev/null) || true
+    # http_code "000" means connection reset/refused — port is stale
+    [[ "${http_code}" != "000" ]]
 }
 
 # Wait for a pod to be Ready with kubectl wait. Exits non-zero on timeout.
