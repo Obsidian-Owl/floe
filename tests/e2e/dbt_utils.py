@@ -33,6 +33,12 @@ def run_dbt(
     Returns:
         Completed process result.  Callers must check ``returncode``.
     """
+    # Auto-add --full-refresh for seed commands: Iceberg tables persist
+    # across test runs and prior snapshots may reference deleted data files
+    # (HTTP 404 on stale parquet), causing incremental seed to fail.
+    if args and args[0] == "seed" and "--full-refresh" not in args:
+        args = [*args, "--full-refresh"]
+
     return subprocess.run(
         [
             "dbt",
