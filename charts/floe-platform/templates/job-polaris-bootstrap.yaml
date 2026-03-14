@@ -152,8 +152,12 @@ spec:
               fi
 
               POLARIS_URL="http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.port | default 8181 }}"
+              {{- $totalSteps := 4 }}
+              {{- if .Values.polaris.bootstrap.grants.enabled }}
+              {{- $totalSteps = 7 }}
+              {{- end }}
 
-              log "Step 1/4: Acquiring OAuth token..."
+              log "Step 1/{{ $totalSteps }}: Acquiring OAuth token..."
               # NOTE: grep/cut token extraction assumes compact JSON (no whitespace around colons).
               # Polaris returns compact JSON by default. jq unavailable in curl image.
               TOKEN=$(printf 'grant_type=client_credentials&client_id=%s&client_secret=%s&scope=PRINCIPAL_ROLE:ALL' \
@@ -178,7 +182,7 @@ spec:
               # at this point because defaultBuckets creates it at MinIO startup
               # (before this bootstrap job runs). The ensure-bucket.py script in
               # test-e2e.sh provides authenticated defense-in-depth verification.
-              log "Step 2/4: Verifying MinIO is responsive for bucket '{{ $bucketName }}'..."
+              log "Step 2/{{ $totalSteps }}: Verifying MinIO is responsive for bucket '{{ $bucketName }}'..."
               MINIO_URL="{{ .Values.polaris.storage.s3.endpoint }}"
               BUCKET_NAME="{{ $bucketName }}"
               BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "$MINIO_URL/$BUCKET_NAME/" 2>/dev/null)
@@ -190,7 +194,7 @@ spec:
               log "MinIO responsive for bucket '$BUCKET_NAME' (HTTP $BUCKET_CODE)"
               {{- end }}
 
-              log "Step 3/4: Creating catalog '{{ .Values.polaris.bootstrap.catalogName }}'..."
+              log "Step 3/{{ $totalSteps }}: Creating catalog '{{ .Values.polaris.bootstrap.catalogName }}'..."
               {{- if .Values.polaris.storage.s3.enabled }}
               # Build catalog JSON with S3 credentials from environment
               CATALOG_JSON=$(cat <<EOJSON
@@ -257,7 +261,7 @@ spec:
               fi
 
               # Verify catalog exists via management API
-              log "Step 4/4: Verifying catalog '{{ .Values.polaris.bootstrap.catalogName }}' via management API..."
+              log "Step 4/{{ $totalSteps }}: Verifying catalog '{{ .Values.polaris.bootstrap.catalogName }}' via management API..."
               VERIFY_CODE=$(curl -s -o /tmp/verify.txt -w '%{http_code}' \
                 -H "Authorization: Bearer $TOKEN" \
                 "$POLARIS_URL/api/management/v1/catalogs/{{ .Values.polaris.bootstrap.catalogName }}")
@@ -275,6 +279,65 @@ spec:
                 exit 1
               fi
               log "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' verified successfully"
+
+              {{- if .Values.polaris.bootstrap.grants.enabled }}
+              # Step 5/{{ $totalSteps }}: Create catalog role (idempotent — 201 created, 409 already exists)
+              CATALOG_ROLE="{{ .Values.polaris.bootstrap.grants.catalogRole }}"
+              CATALOG_NAME="{{ .Values.polaris.bootstrap.catalogName }}"
+              log "Step 5/{{ $totalSteps }}: Creating catalog role '$CATALOG_ROLE' on catalog '$CATALOG_NAME'..."
+              ROLE_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                "$POLARIS_URL/api/management/v1/catalogs/$CATALOG_NAME/catalog-roles" \
+                -d "{\"name\": \"$CATALOG_ROLE\"}")
+
+              if [ "$ROLE_CODE" = "201" ]; then
+                log "Catalog role '$CATALOG_ROLE' created successfully"
+              elif [ "$ROLE_CODE" = "409" ]; then
+                log "Catalog role '$CATALOG_ROLE' already exists (HTTP 409) - OK"
+              else
+                log "ERROR: Failed to create catalog role (HTTP $ROLE_CODE)" >&2
+                head -5 /tmp/response.txt >&2
+                exit 1
+              fi
+
+              # Step 6/{{ $totalSteps }}: Grant privileges to catalog role
+              {{- range .Values.polaris.bootstrap.grants.privileges }}
+              log "Step 6/{{ $totalSteps }}: Granting privilege '{{ . }}' to catalog role '$CATALOG_ROLE'..."
+              GRANT_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X PUT \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                "$POLARIS_URL/api/management/v1/catalogs/$CATALOG_NAME/catalog-roles/$CATALOG_ROLE/grants" \
+                -d "{\"type\": \"catalog\", \"privilege\": \"{{ . }}\"}")
+
+              if [ "$GRANT_CODE" = "201" ] || [ "$GRANT_CODE" = "200" ]; then
+                log "Privilege '{{ . }}' granted successfully"
+              else
+                log "ERROR: Failed to grant privilege '{{ . }}' (HTTP $GRANT_CODE)" >&2
+                head -5 /tmp/response.txt >&2
+                exit 1
+              fi
+              {{- end }}
+
+              # Step 7/{{ $totalSteps }}: Assign catalog role to principal role (idempotent — 200/204 success, 409 already assigned)
+              PRINCIPAL_ROLE="{{ .Values.polaris.bootstrap.grants.principalRole }}"
+              log "Step 7/{{ $totalSteps }}: Assigning catalog role '$CATALOG_ROLE' to principal role '$PRINCIPAL_ROLE'..."
+              ASSIGN_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X PUT \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                "$POLARIS_URL/api/management/v1/principal-roles/$PRINCIPAL_ROLE/catalog-roles/$CATALOG_NAME" \
+                -d "{\"name\": \"$CATALOG_ROLE\"}")
+
+              if [ "$ASSIGN_CODE" = "200" ] || [ "$ASSIGN_CODE" = "204" ]; then
+                log "Catalog role '$CATALOG_ROLE' assigned to principal role '$PRINCIPAL_ROLE' successfully"
+              elif [ "$ASSIGN_CODE" = "409" ]; then
+                log "Catalog role '$CATALOG_ROLE' already assigned to '$PRINCIPAL_ROLE' (HTTP 409) - OK"
+              else
+                log "ERROR: Failed to assign catalog role (HTTP $ASSIGN_CODE)" >&2
+                head -5 /tmp/response.txt >&2
+                exit 1
+              fi
+              {{- end }}
 
               log "Bootstrap complete!"
           volumeMounts:

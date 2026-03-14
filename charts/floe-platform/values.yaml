@@ -290,6 +290,13 @@ polaris:
     defaultBaseLocation: "s3://floe-iceberg"
     allowedLocations:
       - "s3://floe-iceberg"
+    # Grant configuration — creates catalog role, assigns privileges, links to principal role
+    grants:
+      enabled: true
+      catalogRole: "catalog_admin"
+      principalRole: "ALL"
+      privileges:
+        - CATALOG_MANAGE_CONTENT
 
 # =============================================================================
 # OpenTelemetry Collector Configuration (Observability)

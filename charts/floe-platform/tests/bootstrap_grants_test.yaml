@@ -1,0 +1,214 @@
+# T1/T2/T3: Bootstrap grant tests
+# Verifies Polaris catalog role creation, privilege grants, and
+# principal role assignment steps in the bootstrap job.
+suite: bootstrap grants
+templates:
+  - templates/job-polaris-bootstrap.yaml
+tests:
+  # --- T1: Grant configuration defaults ---
+  - it: should render grant steps when grants.enabled is true
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "catalog-roles"
+
+  - it: should skip grant steps when grants.enabled is false
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: false
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "catalog-roles"
+
+  # --- T2: Create catalog role (idempotent) ---
+  - it: should POST to catalog-roles endpoint
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "-X POST[\\s\\S]*catalog-roles"
+
+  - it: should handle 201 and 409 for catalog role creation
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "ROLE_CODE"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"201"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"409"'
+
+  # --- T2: Grant privileges ---
+  - it: should PUT to catalog-roles grants endpoint
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "catalog-roles/.*/grants"
+
+  - it: should render each privilege in the loop
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges:
+        - TABLE_CREATE
+        - TABLE_WRITE_DATA
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "TABLE_CREATE"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "TABLE_WRITE_DATA"
+
+  # --- T2: Assign catalog role to principal role ---
+  - it: should PUT to principal-roles endpoint
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      # Shell variable $PRINCIPAL_ROLE is set from Go template value
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'PRINCIPAL_ROLE="ALL"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "principal-roles/\\$PRINCIPAL_ROLE/catalog-roles"
+
+  - it: should handle 200/204 and 409 for principal role assignment
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "ASSIGN_CODE"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"200".*"204"|"204".*"200"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"409"'
+
+  # --- T3: Configurability ---
+  - it: should propagate custom catalogRole name
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: my_custom_role
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "my_custom_role"
+
+  - it: should propagate custom principalRole
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: service_admin
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'PRINCIPAL_ROLE="service_admin"'
+
+  # --- T3: Boundary conditions ---
+  - it: should render no grant PUT calls with empty privileges list
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges: []
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      # Role creation and assignment still happen
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "catalog-roles"
+      # But no privilege grant calls
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "catalog-roles/.*/grants"
+
+  - it: should use correct catalog name in grant API paths
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.catalogName: my-special-catalog
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      # CATALOG_NAME shell var is set from Go template value
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'CATALOG_NAME="my-special-catalog"'
