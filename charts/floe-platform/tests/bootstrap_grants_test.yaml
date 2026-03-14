@@ -231,3 +231,46 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: "exit 42"
+
+  - it: should validate privilege values against invalid characters
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      # Privilege validation block is rendered
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'case "CATALOG_MANAGE_CONTENT"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "privilege contains invalid characters"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "privilege is empty"
+
+  # --- Step counting ---
+  - it: should count steps correctly when s3 disabled and grants enabled
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.storage.s3.enabled: false
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      # Without S3 (3 base) + grants (3) = 6 total steps
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "Step 1/6:"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "Step 5/6:"
