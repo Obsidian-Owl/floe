@@ -1,7 +1,7 @@
 -- stg_positions: Clean positions, validate quantity > 0
 
 {{ config(
-    materialized='view',
+    materialized='table',
     tags=['staging']
 ) }}
 

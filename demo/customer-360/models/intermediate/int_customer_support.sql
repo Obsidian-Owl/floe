@@ -7,9 +7,9 @@ tickets as (
 customer_support as (
     select
         customer_id,
-        count(*) as ticket_count,
+        cast(count(*) as bigint) as ticket_count,
         avg(resolution_hours) as avg_resolution_hours,
-        sum(case when resolved_at is null then 1 else 0 end) as open_tickets
+        cast(sum(case when resolved_at is null then 1 else 0 end) as bigint) as open_tickets
     from tickets
     group by customer_id
 ),

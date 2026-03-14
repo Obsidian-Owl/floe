@@ -8,8 +8,8 @@ transactions as (
 customer_orders as (
     select
         customer_id,
-        count(*) as total_orders,
-        sum(amount) as total_spend,
+        cast(count(*) as bigint) as total_orders,
+        cast(sum(amount) as double) as total_spend,
         avg(amount) as avg_order_value,
         min(txn_date) as first_order_date,
         max(txn_date) as last_order_date

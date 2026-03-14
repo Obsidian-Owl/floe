@@ -38,6 +38,7 @@ No pytest.skip() - see .claude/rules/testing-standards.md
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -127,18 +128,35 @@ class TestDataPipeline(IntegrationTestBase):
     def _load_iceberg_table(self, catalog: Any, namespace: str, table_name: str) -> Any:
         """Load Iceberg table from Polaris catalog.
 
+        Fixes PyIceberg server-config override: Polaris returns K8s-internal
+        ``s3.endpoint`` (``floe-platform-minio``) via table-default config,
+        which overrides the client-side endpoint. After loading, the table's
+        FileIO is replaced with one pointing to the host-accessible MinIO URL.
+
         Args:
             catalog: PyIceberg REST catalog instance.
             namespace: Polaris namespace name.
             table_name: Table name within the namespace.
 
         Returns:
-            PyIceberg Table object.
+            PyIceberg Table object with corrected S3 endpoint.
 
         Raises:
             NoSuchTableError: If table does not exist.
         """
-        return catalog.load_table(f"{namespace}.{table_name}")
+        from pyiceberg.io import load_file_io
+
+        table = catalog.load_table(f"{namespace}.{table_name}")
+
+        # Polaris table-default.s3.endpoint overrides client config with
+        # K8s-internal hostname (floe-platform-minio). Replace FileIO
+        # so scans resolve against the host-accessible MinIO URL.
+        minio_url = os.environ.get("MINIO_URL", "http://localhost:9000")
+        io_props = dict(table.io.properties)
+        io_props["s3.endpoint"] = minio_url
+        table.io = load_file_io(properties=io_props)
+
+        return table
 
     def _get_iceberg_row_count(self, catalog: Any, namespace: str, table_name: str) -> int:
         """Get row count from Iceberg table via PyIceberg scan.
