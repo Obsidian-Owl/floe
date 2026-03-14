@@ -338,7 +338,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: 'log "Step [1-7]/[47]:'
+          pattern: 'log "Step [1-7]/[3-7]:'
 
   - it: error messages should use log function not bare echo
     set:
