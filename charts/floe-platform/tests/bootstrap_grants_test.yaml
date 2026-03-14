@@ -212,3 +212,22 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: 'CATALOG_NAME="my-special-catalog"'
+
+  # --- Input validation ---
+  - it: should validate grant variable names against shell metacharacters
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "invalid characters"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "exit 42"

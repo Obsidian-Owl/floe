@@ -155,6 +155,12 @@ polaris:
     defaultBaseLocation: "s3://floe-iceberg"
     allowedLocations:
       - "s3://floe-iceberg"
+    grants:
+      enabled: true
+      catalogRole: "catalog_admin"
+      principalRole: "ALL"
+      privileges:
+        - CATALOG_MANAGE_CONTENT
   service:
     type: NodePort
     port: 8181
@@ -220,7 +226,9 @@ minio:
   defaultBuckets: "floe-iceberg"
   service:
     type: NodePort
-    nodePort: 30900
+    nodePorts:
+      api: 30900
+      console: 30901
 
 # =============================================================================
 # OpenTelemetry Collector (Disabled for Basic Tests)

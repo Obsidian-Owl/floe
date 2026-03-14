@@ -292,7 +292,7 @@ polaris:
       - "s3://floe-iceberg"
     # Grant configuration — creates catalog role, assigns privileges, links to principal role
     grants:
-      enabled: true
+      enabled: false
       catalogRole: "catalog_admin"
       principalRole: "ALL"
       privileges:
