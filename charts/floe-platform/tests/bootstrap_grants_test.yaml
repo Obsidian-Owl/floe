@@ -273,4 +273,8 @@ tests:
           pattern: "Step 1/6:"
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: "Step 5/6:"
+          pattern: "Step 6/6:"
+      # No step should exceed the total (overflow regression)
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "Step [7-9]/6:"

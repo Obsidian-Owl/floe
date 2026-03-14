@@ -159,8 +159,9 @@ spec:
               {{- if .Values.polaris.bootstrap.grants.enabled }}
               {{- $totalSteps = add $totalSteps 3 }}
               {{- end }}
+              {{- $step := 1 }}
 
-              log "Step 1/{{ $totalSteps }}: Acquiring OAuth token..."
+              log "Step {{ $step }}/{{ $totalSteps }}: Acquiring OAuth token..."
               # NOTE: grep/cut token extraction assumes compact JSON (no whitespace around colons).
               # Polaris returns compact JSON by default. jq unavailable in curl image.
               TOKEN=$(printf 'grant_type=client_credentials&client_id=%s&client_secret=%s&scope=PRINCIPAL_ROLE:ALL' \
@@ -185,7 +186,8 @@ spec:
               # at this point because defaultBuckets creates it at MinIO startup
               # (before this bootstrap job runs). The ensure-bucket.py script in
               # test-e2e.sh provides authenticated defense-in-depth verification.
-              log "Step 2/{{ $totalSteps }}: Verifying MinIO is responsive for bucket '{{ $bucketName }}'..."
+              {{- $step = add $step 1 }}
+              log "Step {{ $step }}/{{ $totalSteps }}: Verifying MinIO is responsive for bucket '{{ $bucketName }}'..."
               MINIO_URL="{{ .Values.polaris.storage.s3.endpoint }}"
               BUCKET_NAME="{{ $bucketName }}"
               BUCKET_CODE=$(curl -s -o /dev/null -w '%{http_code}' "$MINIO_URL/$BUCKET_NAME/" 2>/dev/null)
@@ -197,7 +199,8 @@ spec:
               log "MinIO responsive for bucket '$BUCKET_NAME' (HTTP $BUCKET_CODE)"
               {{- end }}
 
-              log "Step 3/{{ $totalSteps }}: Creating catalog '{{ .Values.polaris.bootstrap.catalogName }}'..."
+              {{- $step = add $step 1 }}
+              log "Step {{ $step }}/{{ $totalSteps }}: Creating catalog '{{ .Values.polaris.bootstrap.catalogName }}'..."
               {{- if .Values.polaris.storage.s3.enabled }}
               # Build catalog JSON with S3 credentials from environment
               CATALOG_JSON=$(cat <<EOJSON
@@ -264,7 +267,8 @@ spec:
               fi
 
               # Verify catalog exists via management API
-              log "Step 4/{{ $totalSteps }}: Verifying catalog '{{ .Values.polaris.bootstrap.catalogName }}' via management API..."
+              {{- $step = add $step 1 }}
+              log "Step {{ $step }}/{{ $totalSteps }}: Verifying catalog '{{ .Values.polaris.bootstrap.catalogName }}' via management API..."
               VERIFY_CODE=$(curl -s -o /tmp/verify.txt -w '%{http_code}' \
                 -H "Authorization: Bearer $TOKEN" \
                 "$POLARIS_URL/api/management/v1/catalogs/{{ .Values.polaris.bootstrap.catalogName }}")
@@ -284,7 +288,7 @@ spec:
               log "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' verified successfully"
 
               {{- if .Values.polaris.bootstrap.grants.enabled }}
-              # Step 5/{{ $totalSteps }}: Create catalog role (idempotent — 201 created, 409 already exists)
+              # Create catalog role (idempotent — 201 created, 409 already exists)
               CATALOG_ROLE="{{ .Values.polaris.bootstrap.grants.catalogRole }}"
               CATALOG_NAME="{{ .Values.polaris.bootstrap.catalogName }}"
               PRINCIPAL_ROLE="{{ .Values.polaris.bootstrap.grants.principalRole }}"
@@ -302,14 +306,16 @@ spec:
               done
 
               # Validate privilege values — Polaris privileges are uppercase [A-Z_] identifiers.
-              # Rendered at Helm template time, so this catches values.yaml misconfigurations.
+              # Values are rendered from values.yaml at Helm template time, but the case
+              # statement executes at pod runtime — catching misconfigurations at startup.
               {{- range .Values.polaris.bootstrap.grants.privileges }}
               case "{{ . }}" in
                 *[!A-Z_]*) log "ERROR: privilege contains invalid characters: {{ . }}" >&2; exit 42 ;;
                 "") log "ERROR: privilege is empty" >&2; exit 42 ;;
               esac
               {{- end }}
-              log "Step 5/{{ $totalSteps }}: Creating catalog role '$CATALOG_ROLE' on catalog '$CATALOG_NAME'..."
+              {{- $step = add $step 1 }}
+              log "Step {{ $step }}/{{ $totalSteps }}: Creating catalog role '$CATALOG_ROLE' on catalog '$CATALOG_NAME'..."
               ROLE_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
@@ -326,9 +332,10 @@ spec:
                 exit 1
               fi
 
-              # Step 6/{{ $totalSteps }}: Grant privileges to catalog role
+              # Grant privileges to catalog role
+              {{- $step = add $step 1 }}
               {{- range .Values.polaris.bootstrap.grants.privileges }}
-              log "Step 6/{{ $totalSteps }}: Granting privilege '{{ . }}' to catalog role '$CATALOG_ROLE'..."
+              log "Step {{ $step }}/{{ $totalSteps }}: Granting privilege '{{ . }}' to catalog role '$CATALOG_ROLE'..."
               GRANT_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X PUT \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
@@ -344,8 +351,9 @@ spec:
               fi
               {{- end }}
 
-              # Step 7/{{ $totalSteps }}: Assign catalog role to principal role (idempotent — 200/204 success, 409 already assigned)
-              log "Step 7/{{ $totalSteps }}: Assigning catalog role '$CATALOG_ROLE' to principal role '$PRINCIPAL_ROLE'..."
+              # Assign catalog role to principal role (idempotent — 200/204 success, 409 already assigned)
+              {{- $step = add $step 1 }}
+              log "Step {{ $step }}/{{ $totalSteps }}: Assigning catalog role '$CATALOG_ROLE' to principal role '$PRINCIPAL_ROLE'..."
               ASSIGN_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X PUT \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
