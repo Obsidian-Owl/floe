@@ -626,11 +626,15 @@ class TestCatalogAttachmentSecurity:
         assert "''value''" in attach_stmt
 
     @pytest.mark.requirement("001-FR-002")
-    def test_warehouse_with_quotes_escaped(
+    def test_warehouse_with_quotes_rejected(
         self,
         duckdb_plugin: DuckDBComputePlugin,
     ) -> None:
-        """Test that single quotes in warehouse path are properly escaped."""
+        """Test that single quotes in warehouse path are rejected.
+
+        Warehouse paths with quotes are rejected by character-set validation
+        to prevent SQL injection, rather than relying solely on escaping.
+        """
         from floe_core.compute_config import CatalogConfig
 
         config = CatalogConfig(
@@ -640,9 +644,5 @@ class TestCatalogAttachmentSecurity:
             warehouse="s3://bucket/path'with'quotes",
         )
 
-        sql = duckdb_plugin.get_catalog_attachment_sql(config)
-        assert sql is not None
-
-        attach_stmt = [s for s in sql if "ATTACH" in s][0]
-        # Single quotes should be doubled for SQL escaping
-        assert "path''with''quotes" in attach_stmt
+        with pytest.raises(ValueError, match="Invalid warehouse"):
+            duckdb_plugin.get_catalog_attachment_sql(config)

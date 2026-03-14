@@ -29,6 +29,7 @@ Example:
 from __future__ import annotations
 
 from abc import abstractmethod
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from floe_core.compute_config import (
@@ -242,6 +243,30 @@ class ComputePlugin(PluginMetadata):
             '2Gi'
         """
         ...
+
+    def get_dbt_macro_paths(self) -> list[Path]:
+        """Return paths to directories containing custom dbt macros.
+
+        Compute plugins can ship custom dbt macros (e.g., materialization
+        overrides) that need to be added to dbt's macro-paths. The returned
+        paths are added to the dbt project's macro search path at runtime.
+
+        Override this method to provide plugin-specific macro directories.
+        The default implementation returns an empty list (no custom macros).
+
+        Returns:
+            List of Path objects pointing to directories containing dbt macros.
+
+        Example:
+            >>> # Plugin with custom macros
+            >>> plugin.get_dbt_macro_paths()
+            [PosixPath('/path/to/plugin/dbt_macros')]
+
+            >>> # Plugin without custom macros (default)
+            >>> base_plugin.get_dbt_macro_paths()
+            []
+        """
+        return []
 
     def get_catalog_attachment_sql(
         self,

@@ -150,7 +150,7 @@ class TestValidateConnectionStatus:
             result = plugin.validate_connection(memory_config)
 
         assert result.message != ""
-        assert ":memory:" in result.message or "DuckDB" in result.message
+        assert "DuckDB" in result.message or "validated" in result.message.lower()
 
     @pytest.mark.requirement("001-FR-018")
     def test_validate_connection_unhealthy_on_error(self, plugin: DuckDBComputePlugin) -> None:
@@ -191,45 +191,44 @@ class TestValidateConnectionStatus:
         assert result.latency_ms >= 0
 
     @pytest.mark.requirement("001-FR-018")
-    def test_validate_connection_unhealthy_includes_error_in_message(
+    def test_validate_connection_unhealthy_uses_generic_message(
         self, plugin: DuckDBComputePlugin
     ) -> None:
-        """Test validate_connection includes error details in message."""
+        """Test validate_connection uses generic message without leaking error details."""
         mock_duckdb = MagicMock()
-        mock_duckdb.connect.side_effect = Exception("Connection timeout")
+        mock_duckdb.connect.side_effect = Exception("Connection timeout at /secret/path")
 
         with patch.dict("sys.modules", {"duckdb": mock_duckdb}):
             config = ComputeConfig(
                 plugin="duckdb",
-                connection={"path": "/nonexistent/path/db.duckdb"},
+                connection={"path": "/data/db.duckdb"},
             )
             result = plugin.validate_connection(config)
 
         assert result.status == ConnectionStatus.UNHEALTHY
-        # Error details should be in the message
-        assert "timeout" in result.message.lower() or "failed" in result.message.lower()
+        # Message should be generic — no raw error details leaked
+        assert "failed" in result.message.lower()
+        assert "secret" not in result.message.lower()
+        assert "timeout" not in result.message.lower()
 
     @pytest.mark.requirement("001-FR-018")
-    def test_validate_connection_unhealthy_populates_warnings(
+    def test_validate_connection_unhealthy_no_raw_warnings(
         self, plugin: DuckDBComputePlugin
     ) -> None:
-        """Test validate_connection adds warnings with error details."""
+        """Test validate_connection does not leak raw error details in warnings."""
         mock_duckdb = MagicMock()
-        mock_duckdb.connect.side_effect = Exception("Connection timeout")
+        mock_duckdb.connect.side_effect = Exception("Connection timeout at /secret/path")
 
         with patch.dict("sys.modules", {"duckdb": mock_duckdb}):
             config = ComputeConfig(
                 plugin="duckdb",
-                connection={"path": "/nonexistent/path/db.duckdb"},
+                connection={"path": "/data/db.duckdb"},
             )
             result = plugin.validate_connection(config)
 
         assert result.status == ConnectionStatus.UNHEALTHY
-        # Should include error details in warnings list
-        assert len(result.warnings) >= 1
-        # At least one warning should contain relevant error info
-        all_warnings = " ".join(result.warnings).lower()
-        assert "timeout" in all_warnings or "error" in all_warnings or "failed" in all_warnings
+        # No warnings containing raw error details
+        assert len(result.warnings) == 0
 
 
 class TestValidateConnectionNativeDriver:
@@ -394,5 +393,5 @@ class TestValidateConnectionOTelMetrics:
             plugin.validate_connection(memory_config)
 
         mock_start.assert_called_once_with("duckdb")
-        mock_span.set_attribute.assert_any_call("db.path", ":memory:")
+        mock_span.set_attribute.assert_any_call("db.system", "duckdb")
         mock_span.set_attribute.assert_any_call("validation.status", "healthy")
