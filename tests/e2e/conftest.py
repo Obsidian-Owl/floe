@@ -485,6 +485,78 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         },
     )
 
+    # --- Apply write grants defensively (idempotent) ---
+    # Ensures the test principal has write permissions even if the Helm
+    # bootstrap job didn't run or hasn't applied grants yet. Mirrors the
+    # bootstrap job's 3-step grant process: create role, grant privilege,
+    # assign to principal role.
+    cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
+    client_id, client_secret = cred.split(":", 1)
+    token_response = httpx.post(
+        f"{polaris_url}/api/catalog/v1/oauth/tokens",
+        data={
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": "PRINCIPAL_ROLE:ALL",
+        },
+        timeout=10.0,
+    )
+    if token_response.status_code != 200:
+        logger.warning(
+            "Failed to get Polaris admin token for grants: %s",
+            token_response.text,
+        )
+        return catalog
+
+    token = token_response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    catalog_name = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
+
+    # Step 1: Create catalog_admin role (idempotent — 201 created, 409 exists)
+    role_response = httpx.post(
+        f"{polaris_url}/api/management/v1/catalogs/{catalog_name}/catalog-roles",
+        headers=headers,
+        json={"name": "catalog_admin"},
+        timeout=10.0,
+    )
+    if role_response.status_code not in (201, 409):
+        logger.warning(
+            "Failed to create catalog_admin role: %s %s",
+            role_response.status_code,
+            role_response.text,
+        )
+
+    # Step 2: Grant CATALOG_MANAGE_CONTENT privilege
+    grant_response = httpx.put(
+        f"{polaris_url}/api/management/v1/catalogs/{catalog_name}"
+        "/catalog-roles/catalog_admin/grants",
+        headers=headers,
+        json={"type": "catalog", "privilege": "CATALOG_MANAGE_CONTENT"},
+        timeout=10.0,
+    )
+    if grant_response.status_code not in (200, 201, 204):
+        logger.warning(
+            "Failed to grant CATALOG_MANAGE_CONTENT: %s %s",
+            grant_response.status_code,
+            grant_response.text,
+        )
+
+    # Step 3: Assign catalog role to ALL principal role (idempotent — 200/204 ok, 409 exists)
+    assign_response = httpx.put(
+        f"{polaris_url}/api/management/v1/principal-roles/ALL/catalog-roles/{catalog_name}",
+        headers=headers,
+        json={"name": "catalog_admin"},
+        timeout=10.0,
+    )
+    if assign_response.status_code not in (200, 204, 409):
+        logger.warning(
+            "Failed to assign catalog_admin to ALL: %s %s",
+            assign_response.status_code,
+            assign_response.text,
+        )
+
+    logger.info("Write grants applied to polaris_client (catalog=%s)", catalog_name)
     return catalog
 
 
@@ -526,79 +598,23 @@ def marquez_client(wait_for_service: Callable[..., None]) -> httpx.Client:
 @pytest.fixture(scope="session")
 def polaris_with_write_grants(
     polaris_client: Any,
-    wait_for_service: Callable[..., None],
 ) -> Any:
-    """Polaris client with write delegation grants configured.
+    """Polaris client with write grants — thin wrapper over polaris_client.
 
-    Sets up the test principal with CREATE_TABLE_DIRECT_WITH_WRITE_DELEGATION
-    permission needed for schema evolution tests.
+    Write grants (CATALOG_MANAGE_CONTENT, which subsumes TABLE_CREATE,
+    TABLE_WRITE_DATA, NAMESPACE_CREATE, etc.) are now applied by
+    polaris_client directly. This fixture exists for backwards
+    compatibility with tests that explicitly request it.
 
     Args:
-        polaris_client: PyIceberg REST catalog fixture.
-        wait_for_service: Helper fixture for service polling.
+        polaris_client: PyIceberg REST catalog with grants already applied.
 
     Returns:
-        PyIceberg REST catalog with write permissions granted.
-
-    Raises:
-        AssertionError: If RBAC setup fails.
+        The same PyIceberg REST catalog instance.
 
     Example:
         table = polaris_with_write_grants.create_table(...)
     """
-    polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
-
-    # Get admin token - read credentials from env, consistent with polaris_client
-    default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
-    cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
-    client_id, client_secret = cred.split(":", 1)
-    token_response = httpx.post(
-        f"{polaris_url}/api/catalog/v1/oauth/tokens",
-        data={
-            "grant_type": "client_credentials",
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "scope": "PRINCIPAL_ROLE:ALL",
-        },
-        timeout=10.0,
-    )
-    if token_response.status_code != 200:
-        pytest.fail(f"Failed to get Polaris admin token: {token_response.text}")
-
-    token = token_response.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-
-    # Grant catalog-level privileges to catalog_admin role
-    catalog_name = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
-    grant_url = (
-        f"{polaris_url}/api/management/v1/catalogs/"
-        f"{catalog_name}/catalog-roles/catalog_admin/grants"
-    )
-
-    for privilege in [
-        "TABLE_WRITE_DATA",
-        "TABLE_CREATE",
-        "NAMESPACE_CREATE",
-        "TABLE_READ_DATA",
-        "NAMESPACE_LIST",
-        "TABLE_LIST",
-    ]:
-        grant_response = httpx.put(
-            grant_url,
-            headers=headers,
-            json={
-                "type": "catalog",
-                "privilege": privilege,
-            },
-            timeout=10.0,
-        )
-        # Ignore 409 Conflict (privilege already granted)
-        if grant_response.status_code not in (200, 201, 204, 409):
-            pytest.fail(
-                f"Failed to grant {privilege} privilege: "
-                f"{grant_response.status_code} {grant_response.text}"
-            )
-
     return polaris_client
 
 
