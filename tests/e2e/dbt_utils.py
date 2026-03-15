@@ -96,23 +96,6 @@ def _purge_iceberg_namespace(namespace: str) -> None:
         logger.debug("Namespace purge skipped for %s: %s", namespace, exc)
 
 
-def _purge_project_namespaces(project_dir: Path) -> None:
-    """Purge all Iceberg namespaces for a dbt project.
-
-    Drops tables in both the model namespace (``{product}``) and the
-    seed namespace (``{product}_raw``) so that dbt can recreate them
-    without hitting ``DROP TABLE CASCADE`` errors.
-
-    Args:
-        project_dir: Path to the dbt project directory.
-    """
-    product_name = project_dir.name.replace("-", "_")
-    # Model namespace: e.g. customer_360, iot_telemetry
-    _purge_iceberg_namespace(product_name)
-    # Seed namespace: e.g. customer_360_raw
-    _purge_iceberg_namespace(f"{product_name}_raw")
-
-
 def run_dbt(
     args: list[str],
     project_dir: Path,
@@ -142,8 +125,14 @@ def run_dbt(
     # Purge existing Iceberg tables before seed/run: DuckDB's Iceberg
     # extension does not support DROP TABLE CASCADE, and tables persist
     # across test runs with potentially stale metadata.
-    if args and args[0] in ("seed", "run"):
-        _purge_project_namespaces(project_dir)
+    if args and args[0] == "seed":
+        # Purge seed namespace only — model tables may depend on seeds
+        product_name = project_dir.name.replace("-", "_")
+        _purge_iceberg_namespace(f"{product_name}_raw")
+    elif args and args[0] == "run":
+        # Purge model namespace only — preserve seed tables as sources
+        product_name = project_dir.name.replace("-", "_")
+        _purge_iceberg_namespace(product_name)
 
     return subprocess.run(
         [
