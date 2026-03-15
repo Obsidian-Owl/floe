@@ -377,7 +377,8 @@ payload = {
 print(json.dumps(payload))
 " "${POLARIS_CATALOG}" "${MINIO_BUCKET}")
 
-    CREATE_CODE=$(printf '%s' "${CATALOG_JSON}" | curl -s -o /tmp/polaris-create.txt -w '%{http_code}' -X POST \
+    POLARIS_TMP=$(mktemp)
+    CREATE_CODE=$(printf '%s' "${CATALOG_JSON}" | curl -s -o "${POLARIS_TMP}" -w '%{http_code}' -X POST \
         -H "Authorization: Bearer ${POLARIS_TOKEN}" \
         -H "Content-Type: application/json" \
         "http://localhost:8181/api/management/v1/catalogs" \
@@ -389,9 +390,11 @@ print(json.dumps(payload))
         echo "Polaris catalog '${POLARIS_CATALOG}' already exists (race condition) — OK"
     else
         echo "ERROR: Failed to create Polaris catalog (HTTP ${CREATE_CODE})" >&2
-        cat /tmp/polaris-create.txt >&2 2>/dev/null || true
+        cat "${POLARIS_TMP}" >&2 2>/dev/null || true
+        rm -f "${POLARIS_TMP}"
         exit 1
     fi
+    rm -f "${POLARIS_TMP}"
 elif [[ "${CATALOG_CODE}" == "200" ]]; then
     echo "Polaris catalog '${POLARIS_CATALOG}' exists (HTTP 200)"
 else

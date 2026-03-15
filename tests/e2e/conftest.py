@@ -505,16 +505,16 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     )
     if token_response.status_code != 200:
         logger.warning(
-            "Failed to get Polaris admin token for grants: %s",
-            token_response.text,
+            "Failed to get Polaris admin token for grants: HTTP %s",
+            token_response.status_code,
         )
         return catalog
 
     token = token_response.json().get("access_token")
     if not token:
         logger.warning(
-            "Polaris token response missing access_token field: %s",
-            token_response.text,
+            "Polaris token response missing access_token field: HTTP %s",
+            token_response.status_code,
         )
         return catalog
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
@@ -531,9 +531,8 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     )
     if role_response.status_code not in (201, 409):
         logger.warning(
-            "Failed to create catalog_admin role: %s %s",
+            "Failed to create catalog_admin role: HTTP %s",
             role_response.status_code,
-            role_response.text,
         )
 
     # Step 2: Grant CATALOG_MANAGE_CONTENT privilege
@@ -546,9 +545,8 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     )
     if grant_response.status_code not in (200, 201, 204):
         logger.warning(
-            "Failed to grant CATALOG_MANAGE_CONTENT: %s %s",
+            "Failed to grant CATALOG_MANAGE_CONTENT: HTTP %s",
             grant_response.status_code,
-            grant_response.text,
         )
 
     # Step 3: Assign catalog role to ALL principal role (idempotent — 200/204 ok, 409 exists)
@@ -560,9 +558,8 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     )
     if assign_response.status_code not in (200, 204, 409):
         logger.warning(
-            "Failed to assign catalog_admin to ALL: %s %s",
+            "Failed to assign catalog_admin to ALL: HTTP %s",
             assign_response.status_code,
-            assign_response.text,
         )
 
     logger.info("Write grants applied to polaris_client (catalog=%s)", catalog_name)
