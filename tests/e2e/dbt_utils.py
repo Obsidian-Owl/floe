@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -134,9 +135,14 @@ def run_dbt(
         product_name = project_dir.name.replace("-", "_")
         _purge_iceberg_namespace(product_name)
 
+    # Use the venv's dbt to avoid PATH conflicts with dbt-fusion or other
+    # system-installed dbt binaries that may not support the duckdb adapter.
+    venv_bin = Path(sys.executable).parent
+    dbt_bin = str(venv_bin / "dbt")
+
     return subprocess.run(
         [
-            "dbt",
+            dbt_bin,
             *args,
             "--project-dir",
             str(project_dir),
