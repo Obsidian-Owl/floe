@@ -20,7 +20,7 @@ aggregated AS (
         MIN(r.value) AS min_value,
         MAX(r.value) AS max_value,
         STDDEV(r.value) AS stddev_value,
-        COUNT(*) AS reading_count
+        CAST(COUNT(*) AS BIGINT) AS reading_count
     FROM readings r
     GROUP BY r.sensor_id
 )

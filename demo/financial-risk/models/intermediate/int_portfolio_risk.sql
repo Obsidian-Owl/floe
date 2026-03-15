@@ -50,7 +50,7 @@ portfolio_aggregates as (
         portfolio_id,
         sum(position_value) as total_value,
         avg(volatility) as avg_volatility,
-        count(distinct position_id) as position_count,
+        cast(count(distinct position_id) as bigint) as position_count,
         max(position_value) as max_position_value
     from position_values
     group by portfolio_id
