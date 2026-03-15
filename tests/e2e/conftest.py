@@ -8,8 +8,11 @@ All E2E tests require the full platform stack running in K8s (Kind cluster).
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
+import re
+import shutil
 import subprocess
 import uuid
 from collections.abc import Callable, Generator
@@ -483,6 +486,82 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         },
     )
 
+    # --- Apply write grants defensively (idempotent) ---
+    # Ensures the test principal has write permissions even if the Helm
+    # bootstrap job didn't run or hasn't applied grants yet. Mirrors the
+    # bootstrap job's 3-step grant process: create role, grant privilege,
+    # assign to principal role.
+    cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
+    client_id, client_secret = cred.split(":", 1)
+    token_response = httpx.post(
+        f"{polaris_url}/api/catalog/v1/oauth/tokens",
+        data={
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": "PRINCIPAL_ROLE:ALL",
+        },
+        timeout=10.0,
+    )
+    if token_response.status_code != 200:
+        pytest.fail(
+            f"Failed to get Polaris admin token for grants: HTTP {token_response.status_code}. "
+            "Tests requiring write access will fail without grants."
+        )
+
+    token = token_response.json().get("access_token")
+    if not token:
+        pytest.fail(
+            "Polaris token response missing access_token field "
+            f"(HTTP {token_response.status_code}). "
+            "Cannot apply write grants without a valid token."
+        )
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    catalog_name = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
+    if not re.fullmatch(r"[a-zA-Z0-9_-]+", catalog_name):
+        pytest.fail(f"POLARIS_WAREHOUSE contains unsafe characters: {catalog_name!r}")
+
+    # Step 1: Create catalog_admin role (idempotent — 201 created, 409 exists)
+    role_response = httpx.post(
+        f"{polaris_url}/api/management/v1/catalogs/{catalog_name}/catalog-roles",
+        headers=headers,
+        json={"name": "catalog_admin"},
+        timeout=10.0,
+    )
+    if role_response.status_code not in (201, 409):
+        logger.warning(
+            "Failed to create catalog_admin role: HTTP %s",
+            role_response.status_code,
+        )
+
+    # Step 2: Grant CATALOG_MANAGE_CONTENT privilege
+    grant_response = httpx.put(
+        f"{polaris_url}/api/management/v1/catalogs/{catalog_name}"
+        "/catalog-roles/catalog_admin/grants",
+        headers=headers,
+        json={"type": "catalog", "privilege": "CATALOG_MANAGE_CONTENT"},
+        timeout=10.0,
+    )
+    if grant_response.status_code not in (200, 201, 204, 409):
+        logger.warning(
+            "Failed to grant CATALOG_MANAGE_CONTENT: HTTP %s",
+            grant_response.status_code,
+        )
+
+    # Step 3: Assign catalog role to ALL principal role (idempotent — 200/204 ok, 409 exists)
+    assign_response = httpx.put(
+        f"{polaris_url}/api/management/v1/principal-roles/ALL/catalog-roles/{catalog_name}",
+        headers=headers,
+        json={"name": "catalog_admin"},
+        timeout=10.0,
+    )
+    if assign_response.status_code not in (200, 204, 409):
+        logger.warning(
+            "Failed to assign catalog_admin to ALL: HTTP %s",
+            assign_response.status_code,
+        )
+
+    logger.info("Write grants applied to polaris_client (catalog=%s)", catalog_name)
     return catalog
 
 
@@ -524,79 +603,23 @@ def marquez_client(wait_for_service: Callable[..., None]) -> httpx.Client:
 @pytest.fixture(scope="session")
 def polaris_with_write_grants(
     polaris_client: Any,
-    wait_for_service: Callable[..., None],
 ) -> Any:
-    """Polaris client with write delegation grants configured.
+    """Polaris client with write grants — thin wrapper over polaris_client.
 
-    Sets up the test principal with CREATE_TABLE_DIRECT_WITH_WRITE_DELEGATION
-    permission needed for schema evolution tests.
+    Write grants (CATALOG_MANAGE_CONTENT, which subsumes TABLE_CREATE,
+    TABLE_WRITE_DATA, NAMESPACE_CREATE, etc.) are now applied by
+    polaris_client directly. This fixture exists for backwards
+    compatibility with tests that explicitly request it.
 
     Args:
-        polaris_client: PyIceberg REST catalog fixture.
-        wait_for_service: Helper fixture for service polling.
+        polaris_client: PyIceberg REST catalog with grants already applied.
 
     Returns:
-        PyIceberg REST catalog with write permissions granted.
-
-    Raises:
-        AssertionError: If RBAC setup fails.
+        The same PyIceberg REST catalog instance.
 
     Example:
         table = polaris_with_write_grants.create_table(...)
     """
-    polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
-
-    # Get admin token - read credentials from env, consistent with polaris_client
-    default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
-    cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
-    client_id, client_secret = cred.split(":", 1)
-    token_response = httpx.post(
-        f"{polaris_url}/api/catalog/v1/oauth/tokens",
-        data={
-            "grant_type": "client_credentials",
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "scope": "PRINCIPAL_ROLE:ALL",
-        },
-        timeout=10.0,
-    )
-    if token_response.status_code != 200:
-        pytest.fail(f"Failed to get Polaris admin token: {token_response.text}")
-
-    token = token_response.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-
-    # Grant catalog-level privileges to catalog_admin role
-    catalog_name = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
-    grant_url = (
-        f"{polaris_url}/api/management/v1/catalogs/"
-        f"{catalog_name}/catalog-roles/catalog_admin/grants"
-    )
-
-    for privilege in [
-        "TABLE_WRITE_DATA",
-        "TABLE_CREATE",
-        "NAMESPACE_CREATE",
-        "TABLE_READ_DATA",
-        "NAMESPACE_LIST",
-        "TABLE_LIST",
-    ]:
-        grant_response = httpx.put(
-            grant_url,
-            headers=headers,
-            json={
-                "type": "catalog",
-                "privilege": privilege,
-            },
-            timeout=10.0,
-        )
-        # Ignore 409 Conflict (privilege already granted)
-        if grant_response.status_code not in (200, 201, 204, 409):
-            pytest.fail(
-                f"Failed to grant {privilege} privilege: "
-                f"{grant_response.status_code} {grant_response.text}"
-            )
-
     return polaris_client
 
 
@@ -810,7 +833,10 @@ def dbt_e2e_profile(
     cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
     parts = cred.split(":", 1)
     if len(parts) != 2:
-        pytest.fail(f"POLARIS_CREDENTIAL must be 'client_id:client_secret', got: {cred!r}")
+        pytest.fail(
+            "POLARIS_CREDENTIAL must be 'client_id:client_secret'; "
+            f"got a value with {len(cred)} characters and no ':' separator"
+        )
     client_id, client_secret = parts
     warehouse = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
 
@@ -877,6 +903,40 @@ def dbt_e2e_profile(
             )
             bak_path.rename(profile_path)
 
+    # --- Copy custom materialization macro from floe-compute-duckdb plugin ---
+    # Demo projects use macro-paths: ["../macros"], so macros must be in
+    # demo/macros/. The custom table materialization (Iceberg-aware DROP+CREATE)
+    # lives in the plugin package and needs to be copied here for dbt to find it.
+    macro_dest_dir = project_root / "demo" / "macros" / "materializations"
+    macro_dest = macro_dest_dir / "table.sql"
+    _macro_copied = False
+
+    try:
+        macro_source = (
+            Path(importlib.import_module("floe_compute_duckdb").__file__).parent
+            / "dbt_macros"
+            / "materializations"
+            / "table.sql"
+        )
+    except (ImportError, TypeError):
+        pytest.fail(
+            "Custom table materialization not found in floe-compute-duckdb plugin.\n"
+            "Install with: uv pip install -e plugins/floe-compute-duckdb\n"
+            "The plugin provides the Iceberg-aware table materialization macro."
+        )
+
+    if not macro_source.exists():
+        pytest.fail(
+            f"Custom table materialization not found at {macro_source}.\n"
+            "Expected: plugins/floe-compute-duckdb/src/floe_compute_duckdb/"
+            "dbt_macros/materializations/table.sql"
+        )
+
+    macro_dest_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(macro_source, macro_dest)
+    _macro_copied = True
+    logger.info("Copied custom table materialization macro to %s", macro_dest)
+
     try:
         for product_dir, profile_name in _DBT_DEMO_PRODUCTS.items():
             project_dir = project_root / "demo" / product_dir
@@ -901,11 +961,20 @@ def dbt_e2e_profile(
     except Exception:
         # Setup failed mid-loop — restore any profiles already backed up
         _restore_backups()
+        if _macro_copied and macro_dest.exists():
+            macro_dest.unlink()
         raise
 
     yield profile_paths
 
     _restore_backups()
+    # Clean up copied macro file
+    if _macro_copied and macro_dest.exists():
+        macro_dest.unlink()
+        # Remove materializations dir if empty (we created it)
+        if macro_dest_dir.exists() and not any(macro_dest_dir.iterdir()):
+            macro_dest_dir.rmdir()
+        logger.info("Cleaned up custom table materialization macro from %s", macro_dest)
     # Clean up env vars set for dbt env_var() resolution
     for var_name in _e2e_env_vars:
         os.environ.pop(var_name, None)

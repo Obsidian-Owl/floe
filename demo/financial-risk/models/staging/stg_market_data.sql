@@ -1,7 +1,7 @@
 -- stg_market_data: Clean market data, compute daily returns
 
 {{ config(
-    materialized='view',
+    materialized='table',
     tags=['staging']
 ) }}
 

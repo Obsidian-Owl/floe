@@ -24,8 +24,8 @@ maintenance AS (
 equipment_anomalies AS (
     SELECT
         m.equipment_id,
-        COUNT(*) AS total_readings,
-        SUM(CASE WHEN a.is_anomaly THEN 1 ELSE 0 END) AS anomaly_count,
+        CAST(COUNT(*) AS BIGINT) AS total_readings,
+        CAST(SUM(CASE WHEN a.is_anomaly THEN 1 ELSE 0 END) AS BIGINT) AS anomaly_count,
         CAST(SUM(CASE WHEN a.is_anomaly THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) * 100 AS anomaly_percentage
     FROM metrics m
     INNER JOIN anomalies a ON m.sensor_id = a.sensor_id
@@ -35,7 +35,7 @@ equipment_anomalies AS (
 equipment_sensors AS (
     SELECT
         equipment_id,
-        COUNT(DISTINCT sensor_id) AS sensor_count
+        CAST(COUNT(DISTINCT sensor_id) AS BIGINT) AS sensor_count
     FROM sensors
     GROUP BY equipment_id
 ),

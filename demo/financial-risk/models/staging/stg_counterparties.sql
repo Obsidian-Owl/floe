@@ -1,7 +1,7 @@
 -- stg_counterparties: Clean counterparty records, validate rating
 
 {{ config(
-    materialized='view',
+    materialized='table',
     tags=['staging']
 ) }}
 

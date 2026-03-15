@@ -342,10 +342,20 @@ class TestStaleBackupGuardOrdering:
         """
         source = _get_fixture_source()
 
-        try_match = re.search(r"try:\s*\n(.*?)except\s+", source, re.DOTALL)
-        assert try_match is not None, "Could not find try/except block in dbt_e2e_profile fixture"
+        # Find the try/except block that contains the backup creation loop
+        # (over _DBT_DEMO_PRODUCTS), not other try blocks (e.g. macro import).
+        try_blocks = list(re.finditer(r"try:\s*\n(.*?)except\s+", source, re.DOTALL))
+        assert try_blocks, "Could not find any try/except block in dbt_e2e_profile fixture"
 
-        try_body = try_match.group(1)
+        try_body = None
+        for match in try_blocks:
+            if "_DBT_DEMO_PRODUCTS" in match.group(1):
+                try_body = match.group(1)
+                break
+        assert try_body is not None, (
+            "Could not find try/except block containing _DBT_DEMO_PRODUCTS "
+            "loop (backup creation) in dbt_e2e_profile fixture"
+        )
 
         assert "write_text" in try_body, (
             "try: block must still contain write_text() calls for "
