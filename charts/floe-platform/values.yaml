@@ -294,7 +294,8 @@ polaris:
     grants:
       enabled: false
       catalogRole: "catalog_admin"
-      principalRole: "ALL"
+      principalRole: "floe-pipeline"
+      bootstrapPrincipal: "root"
       privileges:
         - CATALOG_MANAGE_CONTENT
 
