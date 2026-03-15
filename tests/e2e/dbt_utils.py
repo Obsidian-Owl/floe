@@ -10,34 +10,30 @@ from __future__ import annotations
 import logging
 import subprocess
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Cache the catalog instance across calls to avoid repeated auth
+_catalog_cache: dict[str, Any] = {}
 
-def _purge_seed_namespace(project_dir: Path) -> None:
-    """Drop existing Iceberg seed tables so ``dbt seed`` starts clean.
 
-    DuckDB's Iceberg extension does not support ``DROP TABLE CASCADE``,
-    which ``dbt seed --full-refresh`` emits.  Instead, we use PyIceberg
-    to drop each table individually before dbt runs.  This also handles
-    stale metadata from prior runs (HTTP 404 on deleted parquet files).
+def _get_polaris_catalog() -> Any:
+    """Get or create a cached PyIceberg REST catalog for Polaris.
 
-    Silently does nothing if PyIceberg is not installed or the catalog
-    is unreachable — the seed will still attempt to create the tables.
-
-    Args:
-        project_dir: Path to the dbt project containing dbt_project.yml.
+    Returns:
+        PyIceberg catalog instance, or None if unavailable.
     """
     import os
+
+    if "catalog" in _catalog_cache:
+        return _catalog_cache["catalog"]
 
     try:
         from pyiceberg import catalog as pyiceberg_catalog
     except ImportError:
-        return
-
-    # Derive namespace: {product_name}_raw  (e.g. customer_360_raw)
-    product_name = project_dir.name.replace("-", "_")
-    namespace = f"{product_name}_raw"
+        _catalog_cache["catalog"] = None
+        return None
 
     polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
     default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
@@ -62,19 +58,59 @@ def _purge_seed_namespace(project_dir: Path) -> None:
                 "s3.path-style-access": "true",
             },
         )
+        _catalog_cache["catalog"] = catalog
+        return catalog
+    except Exception as exc:
+        logger.debug("Could not connect to Polaris catalog: %s", exc)
+        _catalog_cache["catalog"] = None
+        return None
 
+
+def _purge_iceberg_namespace(namespace: str) -> None:
+    """Drop all Iceberg tables in a namespace via PyIceberg.
+
+    DuckDB's Iceberg extension does not support ``DROP TABLE CASCADE``,
+    which dbt emits for ``--full-refresh`` and ``materialized='table'``
+    re-runs.  We drop tables individually via PyIceberg before dbt runs.
+
+    Silently does nothing if the catalog is unreachable or the namespace
+    doesn't exist — dbt will create everything from scratch.
+
+    Args:
+        namespace: Polaris namespace to purge (e.g. ``customer_360_raw``).
+    """
+    catalog = _get_polaris_catalog()
+    if catalog is None:
+        return
+
+    try:
         tables = catalog.list_tables(namespace)
         for table_id in tables:
             fqn = f"{table_id[0]}.{table_id[1]}"
             try:
                 catalog.drop_table(fqn)
-                logger.info("Dropped stale seed table %s", fqn)
+                logger.info("Dropped stale Iceberg table %s", fqn)
             except Exception:
                 logger.debug("Could not drop table %s (may not exist)", fqn)
     except Exception as exc:
-        # Namespace doesn't exist yet or catalog unreachable — fine,
-        # dbt seed will create everything from scratch.
-        logger.debug("Seed namespace purge skipped: %s", exc)
+        logger.debug("Namespace purge skipped for %s: %s", namespace, exc)
+
+
+def _purge_project_namespaces(project_dir: Path) -> None:
+    """Purge all Iceberg namespaces for a dbt project.
+
+    Drops tables in both the model namespace (``{product}``) and the
+    seed namespace (``{product}_raw``) so that dbt can recreate them
+    without hitting ``DROP TABLE CASCADE`` errors.
+
+    Args:
+        project_dir: Path to the dbt project directory.
+    """
+    product_name = project_dir.name.replace("-", "_")
+    # Model namespace: e.g. customer_360, iot_telemetry
+    _purge_iceberg_namespace(product_name)
+    # Seed namespace: e.g. customer_360_raw
+    _purge_iceberg_namespace(f"{product_name}_raw")
 
 
 def run_dbt(
@@ -91,9 +127,9 @@ def run_dbt(
     Both ``--project-dir`` and ``--profiles-dir`` point to *project_dir*
     because the ``dbt_e2e_profile`` fixture writes profiles.yml there.
 
-    For ``seed`` commands, existing Iceberg tables in the seed namespace
-    are dropped via PyIceberg first, because DuckDB's Iceberg extension
-    does not support ``DROP TABLE CASCADE`` (required by ``--full-refresh``).
+    For ``seed`` and ``run`` commands, existing Iceberg tables are
+    dropped via PyIceberg first, because DuckDB's Iceberg extension
+    does not support ``DROP TABLE CASCADE``.
 
     Args:
         args: dbt sub-command and flags (e.g. ``["seed"]``, ``["run"]``).
@@ -103,12 +139,11 @@ def run_dbt(
     Returns:
         Completed process result.  Callers must check ``returncode``.
     """
-    # Purge existing seed tables before seeding: Iceberg tables persist
-    # across test runs, and prior snapshots may reference deleted data files.
-    # We can't use --full-refresh because DuckDB's Iceberg extension does
-    # not support DROP TABLE CASCADE.
-    if args and args[0] == "seed":
-        _purge_seed_namespace(project_dir)
+    # Purge existing Iceberg tables before seed/run: DuckDB's Iceberg
+    # extension does not support DROP TABLE CASCADE, and tables persist
+    # across test runs with potentially stale metadata.
+    if args and args[0] in ("seed", "run"):
+        _purge_project_namespaces(project_dir)
 
     return subprocess.run(
         [
