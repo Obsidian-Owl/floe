@@ -504,19 +504,18 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         timeout=10.0,
     )
     if token_response.status_code != 200:
-        logger.warning(
-            "Failed to get Polaris admin token for grants: HTTP %s",
-            token_response.status_code,
+        pytest.fail(
+            f"Failed to get Polaris admin token for grants: HTTP {token_response.status_code}. "
+            "Tests requiring write access will fail without grants."
         )
-        return catalog
 
     token = token_response.json().get("access_token")
     if not token:
-        logger.warning(
-            "Polaris token response missing access_token field: HTTP %s",
-            token_response.status_code,
+        pytest.fail(
+            "Polaris token response missing access_token field "
+            f"(HTTP {token_response.status_code}). "
+            "Cannot apply write grants without a valid token."
         )
-        return catalog
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     catalog_name = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
     if not re.fullmatch(r"[a-zA-Z0-9_-]+", catalog_name):
@@ -543,7 +542,7 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         json={"type": "catalog", "privilege": "CATALOG_MANAGE_CONTENT"},
         timeout=10.0,
     )
-    if grant_response.status_code not in (200, 201, 204):
+    if grant_response.status_code not in (200, 201, 204, 409):
         logger.warning(
             "Failed to grant CATALOG_MANAGE_CONTENT: HTTP %s",
             grant_response.status_code,

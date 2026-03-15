@@ -15,7 +15,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Cache the catalog instance across calls to avoid repeated auth
+# Session-scoped catalog cache — persists across calls within a single
+# pytest session to avoid repeated OAuth. Cleared on process exit.
 _catalog_cache: dict[str, Any] = {}
 
 
@@ -92,7 +93,7 @@ def _purge_iceberg_namespace(namespace: str) -> None:
                 catalog.drop_table(fqn)
                 logger.info("Dropped stale Iceberg table %s", fqn)
             except Exception:
-                logger.debug("Could not drop table %s (may not exist)", fqn)
+                logger.warning("Could not drop table %s (may not exist)", fqn)
     except Exception as exc:
         logger.debug("Namespace purge skipped for %s: %s", namespace, exc)
 
