@@ -126,7 +126,9 @@ class GovernanceConfig(BaseModel):
         pii_encryption: PII encryption policy (required > optional)
         audit_logging: Audit logging policy (enabled > disabled)
         policy_enforcement_level: Enforcement level (strict > warn > off)
-        data_retention_days: Data retention period in days
+        data_retention_days: Row-level data retention period in days
+        default_ttl_hours: Table-level partition TTL in hours
+        snapshot_keep_last: Minimum Iceberg snapshots to retain
         naming: Naming convention configuration (NEW in Epic 3A)
         quality_gates: Quality gate thresholds (NEW in Epic 3A)
         custom_rules: Custom validation rules (NEW in Epic 3B)
@@ -142,7 +144,9 @@ class GovernanceConfig(BaseModel):
         ...     pii_encryption="required",
         ...     audit_logging="enabled",
         ...     policy_enforcement_level="strict",
-        ...     data_retention_days=90
+        ...     data_retention_days=90,
+        ...     default_ttl_hours=24,
+        ...     snapshot_keep_last=3,
         ... )
 
     Strength Ordering (for inheritance validation):
@@ -191,7 +195,23 @@ class GovernanceConfig(BaseModel):
         Field(
             default=None,
             ge=1,
-            description="Data retention period in days (higher is stricter)",
+            description="Row-level data retention period in days (higher is stricter)",
+        ),
+    ]
+    default_ttl_hours: Annotated[
+        int | None,
+        Field(
+            default=None,
+            ge=1,
+            description="Table-level partition TTL in hours for data lifecycle management",
+        ),
+    ]
+    snapshot_keep_last: Annotated[
+        int | None,
+        Field(
+            default=None,
+            ge=1,
+            description="Minimum number of Iceberg snapshots to retain per table",
         ),
     ]
 
