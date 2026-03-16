@@ -55,7 +55,7 @@ tests:
           value: Never
 
   # --- Pod-level security context (PSS restricted) ---
-  - it: pod securityContext should enforce runAsNonRoot with UID 100
+  - it: pod securityContext should enforce runAsNonRoot with UID 10000
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
@@ -66,10 +66,10 @@ tests:
           value: true
       - equal:
           path: spec.template.spec.securityContext.runAsUser
-          value: 100
+          value: 10000
       - equal:
           path: spec.template.spec.securityContext.runAsGroup
-          value: 100
+          value: 10000
 
   - it: pod securityContext should set seccompProfile to RuntimeDefault
     set:

@@ -23,8 +23,8 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 100
-        runAsGroup: 100
+        runAsUser: 10000
+        runAsGroup: 10000
         seccompProfile:
           type: RuntimeDefault
       initContainers:
