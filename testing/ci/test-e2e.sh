@@ -225,10 +225,11 @@ fi
 # Marquez lineage service (if deployed)
 # Note: Marquez API is on port 5000, admin is on port 5001
 if kubectl get svc floe-platform-marquez -n "${TEST_NAMESPACE}" &>/dev/null; then
-    if port_already_available 5000; then
-        echo "  Marquez (5000): already available (NodePort)"
+    MARQUEZ_HOST_PORT="${MARQUEZ_HOST_PORT:-5100}"
+    if port_already_available "${MARQUEZ_HOST_PORT}"; then
+        echo "  Marquez (${MARQUEZ_HOST_PORT}): already available (NodePort)"
     else
-        kubectl port-forward svc/floe-platform-marquez 5000:5000 -n "${TEST_NAMESPACE}" &
+        kubectl port-forward svc/floe-platform-marquez "${MARQUEZ_HOST_PORT}":5000 -n "${TEST_NAMESPACE}" &
         MARQUEZ_PF_PID=$!
     fi
 fi
@@ -264,7 +265,7 @@ else
     echo "  WARNING: OTel HTTP (4318) not yet available — port-forward may be needed" >&2
 fi
 wait_for_port localhost 5432 15
-wait_for_port localhost 5000 15 || true  # Marquez API port (optional)
+wait_for_port localhost "${MARQUEZ_HOST_PORT:-5100}" 15 || true  # Marquez API port (optional)
 wait_for_port localhost 16686 15 || true  # Jaeger optional
 
 echo "Port-forwards established."
