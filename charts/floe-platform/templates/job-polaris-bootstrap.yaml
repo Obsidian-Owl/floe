@@ -328,8 +328,7 @@ spec:
               elif [ "$PR_CREATE_CODE" = "409" ]; then
                 log "Principal role '$PRINCIPAL_ROLE' already exists (HTTP 409) - OK"
               else
-                log "ERROR: Failed to create principal role (HTTP $PR_CREATE_CODE)" >&2
-                head -5 /tmp/response.txt >&2
+                log "ERROR: Failed to create principal role (HTTP $PR_CREATE_CODE). Check Polaris logs for detail." >&2
                 exit 1
               fi
 
@@ -346,8 +345,7 @@ spec:
               elif [ "$PR_ASSIGN_CODE" = "409" ]; then
                 log "Principal role '$PRINCIPAL_ROLE' already assigned to '$BOOTSTRAP_PRINCIPAL' (HTTP 409) - OK"
               else
-                log "ERROR: Failed to assign principal role (HTTP $PR_ASSIGN_CODE)" >&2
-                head -5 /tmp/response.txt >&2
+                log "ERROR: Failed to assign principal role (HTTP $PR_ASSIGN_CODE). Check Polaris logs for detail." >&2
                 exit 1
               fi
 
