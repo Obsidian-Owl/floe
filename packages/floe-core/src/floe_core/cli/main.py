@@ -84,6 +84,13 @@ def cli(ctx: click.Context) -> None:
     The floe CLI provides commands for both Platform Teams and Data Teams
     to manage data platform configuration, governance, and deployment.
     """
+    # Initialize OTel tracing before any subcommand dispatch.
+    # This must run before subcommands import OCI modules that call
+    # trace.get_tracer() — otherwise tracers cache as NoOp.
+    from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+    ensure_telemetry_initialized()
+
     # Ensure context object exists for passing state between commands
     ctx.ensure_object(dict)
 

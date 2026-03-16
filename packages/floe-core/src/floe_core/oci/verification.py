@@ -67,7 +67,15 @@ if TYPE_CHECKING:
     from sigstore.verify import Verifier
 
 logger = logging.getLogger(__name__)
-tracer = trace.get_tracer(__name__)
+
+
+def _get_tracer() -> trace.Tracer:
+    """Get tracer with deferred initialization.
+
+    Called at use-site instead of module level to avoid caching a NoOpTracer
+    before ensure_telemetry_initialized() has run.
+    """
+    return trace.get_tracer(__name__)
 
 
 def _normalize_issuer(issuer_url: str) -> str:
@@ -265,7 +273,7 @@ class VerificationClient:
         Raises:
             SignatureVerificationError: If enforcement="enforce" and verification fails
         """
-        with tracer.start_as_current_span("floe.oci.verify") as span:
+        with _get_tracer().start_as_current_span("floe.oci.verify") as span:
             span.set_attribute("floe.artifact.ref", artifact_ref)
             span.set_attribute("floe.verification.enforcement", self.enforcement)
             if self.environment:
@@ -366,7 +374,7 @@ class VerificationClient:
         from sigstore.verify import Verifier
         from sigstore.verify.policy import Identity
 
-        with tracer.start_as_current_span("floe.oci.verify.bundle"):
+        with _get_tracer().start_as_current_span("floe.oci.verify.bundle"):
             try:
                 bundle_json = _decode_bundle_with_size_limit(metadata.bundle)
                 bundle = Bundle.from_json(bundle_json)
@@ -390,7 +398,7 @@ class VerificationClient:
             self._verifier = Verifier.production(offline=offline)
         verifier = self._verifier
 
-        with tracer.start_as_current_span("floe.oci.verify.policy"):
+        with _get_tracer().start_as_current_span("floe.oci.verify.policy"):
             matched_issuer = self._match_trusted_issuer(metadata)
             if matched_issuer is None:
                 return VerificationResult(
@@ -409,7 +417,7 @@ class VerificationClient:
         span_name = (
             "floe.oci.verify.rekor" if self.policy.require_rekor else "floe.oci.verify.offline"
         )
-        with tracer.start_as_current_span(span_name) as span:
+        with _get_tracer().start_as_current_span(span_name) as span:
             span.set_attribute("floe.verification.offline", not self.policy.require_rekor)
             try:
                 verifier.verify_artifact(
@@ -491,7 +499,7 @@ class VerificationClient:
         Returns:
             VerificationResult with verification status
         """
-        with tracer.start_as_current_span("floe.oci.verify.key_based") as span:
+        with _get_tracer().start_as_current_span("floe.oci.verify.key_based") as span:
             if not check_cosign_available():
                 return VerificationResult(
                     status="invalid",
