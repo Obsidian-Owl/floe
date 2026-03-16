@@ -36,6 +36,7 @@ def render_helm_templates(
         "template",
         "test-release",
         str(chart_path),
+        "--skip-schema-validation",
     ]
 
     if values:

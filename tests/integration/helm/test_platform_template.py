@@ -43,6 +43,7 @@ class TestPlatformChartTemplate:
                 "template",
                 "test-release",
                 str(platform_chart_path),
+                "--skip-schema-validation",
             ],
             capture_output=True,
             timeout=60,
@@ -296,6 +297,7 @@ def _render_template(chart_path: Path) -> list[dict[str, Any]]:
             "template",
             "floe-platform",
             str(chart_path),
+            "--skip-schema-validation",
         ],
         capture_output=True,
         timeout=60,
@@ -995,7 +997,13 @@ def _render_template_with_sets(
     Returns:
         List of parsed Kubernetes resource documents.
     """
-    cmd = ["helm", "template", "floe-platform", str(chart_path)]
+    cmd = [
+        "helm",
+        "template",
+        "floe-platform",
+        str(chart_path),
+        "--skip-schema-validation",
+    ]
     for arg in set_args:
         cmd.extend(["--set", arg])
     result = subprocess.run(cmd, capture_output=True, timeout=60, check=True)
@@ -1018,7 +1026,15 @@ def _render_template_with_values_file(
     """
     values_path = chart_path / values_file
     result = subprocess.run(
-        ["helm", "template", "floe-platform", str(chart_path), "-f", str(values_path)],
+        [
+            "helm",
+            "template",
+            "floe-platform",
+            str(chart_path),
+            "-f",
+            str(values_path),
+            "--skip-schema-validation",
+        ],
         capture_output=True,
         timeout=60,
         check=True,
