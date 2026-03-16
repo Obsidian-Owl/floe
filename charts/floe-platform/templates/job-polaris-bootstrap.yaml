@@ -295,11 +295,15 @@ spec:
               BOOTSTRAP_PRINCIPAL="{{ .Values.polaris.bootstrap.grants.bootstrapPrincipal }}"
 
               # Validate grant values — reject shell metacharacters and path traversal.
-              # eval is safe here: GRANT_VAR_NAME iterates only over the hardcoded list above.
-              # If this loop is ever extended to include user-controlled variable names,
-              # the eval becomes a code injection vector — use a case statement instead.
+              # Uses explicit case dispatch instead of eval to avoid code injection risk.
               for GRANT_VAR_NAME in CATALOG_ROLE CATALOG_NAME PRINCIPAL_ROLE BOOTSTRAP_PRINCIPAL; do
-                eval GRANT_VAR_VAL="\$$GRANT_VAR_NAME"
+                case "$GRANT_VAR_NAME" in
+                  CATALOG_ROLE) GRANT_VAR_VAL="$CATALOG_ROLE" ;;
+                  CATALOG_NAME) GRANT_VAR_VAL="$CATALOG_NAME" ;;
+                  PRINCIPAL_ROLE) GRANT_VAR_VAL="$PRINCIPAL_ROLE" ;;
+                  BOOTSTRAP_PRINCIPAL) GRANT_VAR_VAL="$BOOTSTRAP_PRINCIPAL" ;;
+                  *) log "ERROR: Unknown variable: $GRANT_VAR_NAME" >&2; exit 42 ;;
+                esac
                 case "$GRANT_VAR_VAL" in
                   *[!a-zA-Z0-9_-]*) log "ERROR: $GRANT_VAR_NAME contains invalid characters: $GRANT_VAR_VAL" >&2; exit 42 ;;
                   "") log "ERROR: $GRANT_VAR_NAME is empty" >&2; exit 42 ;;
@@ -377,8 +381,10 @@ spec:
                 "$POLARIS_URL/api/management/v1/catalogs/$CATALOG_NAME/catalog-roles/$CATALOG_ROLE/grants" \
                 -d "{\"grant\": {\"type\": \"catalog\", \"privilege\": \"{{ . }}\"}}")
 
-              if [ "$GRANT_CODE" = "201" ] || [ "$GRANT_CODE" = "200" ]; then
+              if [ "$GRANT_CODE" = "201" ] || [ "$GRANT_CODE" = "200" ] || [ "$GRANT_CODE" = "204" ]; then
                 log "Privilege '{{ . }}' granted successfully"
+              elif [ "$GRANT_CODE" = "409" ]; then
+                log "Privilege '{{ . }}' already granted (HTTP 409) - OK"
               else
                 log "ERROR: Failed to grant privilege '{{ . }}' (HTTP $GRANT_CODE)" >&2
                 head -5 /tmp/response.txt >&2

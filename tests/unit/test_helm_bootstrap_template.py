@@ -102,6 +102,8 @@ def _extract_curl_bodies(text: str) -> list[str]:
     Returns:
         List of body strings (including the escaped quotes).
     """
+    # Non-greedy .*? is safe here: interior \" are followed by content chars,
+    # not [)\s], so the regex only terminates at the true closing quote.
     return re.findall(r'-d\s+"(.*?)"[)\s]', text)
 
 
@@ -810,8 +812,9 @@ class TestStepOrdering:
             re.DOTALL,
         )
         if assign_match is None:
-            # Assignment step not found at all -- ordering is moot
-            return
+            pytest.fail(
+                "Catalog role assignment (PUT .../catalog-roles) not found. Cannot verify ordering."
+            )
 
         assert create_match.start() < assign_match.start(), (
             "Principal role creation (POST /principal-roles) must appear BEFORE "
