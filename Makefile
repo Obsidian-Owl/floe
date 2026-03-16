@@ -282,7 +282,15 @@ helm-test-infra: ## Verify test infrastructure is healthy
 
 compile-demo: ## Compile dbt models and generate Dagster definitions for all demo products
 	@echo "Compiling dbt models for all demo products..."
-	@for product in customer-360 iot-telemetry financial-risk; do \
+	@# Local-only defaults for dbt compile — real environments must override via env vars.
+	@# Credentials match tests/e2e/conftest.py and values-test.yaml (test-only, never production).
+	@export FLOE_E2E_POLARIS_ENDPOINT=$${FLOE_E2E_POLARIS_ENDPOINT:-http://localhost:8181/api/catalog}; \
+	export FLOE_E2E_POLARIS_CLIENT_ID=$${FLOE_E2E_POLARIS_CLIENT_ID:-demo-admin}; \
+	export FLOE_E2E_POLARIS_CLIENT_SECRET=$${FLOE_E2E_POLARIS_CLIENT_SECRET:-demo-secret}; \
+	export FLOE_E2E_POLARIS_OAUTH2_URI=$${FLOE_E2E_POLARIS_OAUTH2_URI:-http://localhost:8181/api/catalog/v1/oauth/tokens}; \
+	export FLOE_E2E_S3_ENDPOINT=$${FLOE_E2E_S3_ENDPOINT:-localhost:9000}; \
+	export FLOE_E2E_S3_USE_SSL=$${FLOE_E2E_S3_USE_SSL:-false}; \
+	for product in customer-360 iot-telemetry financial-risk; do \
 		echo "Compiling $$product..."; \
 		uv run dbt compile --project-dir demo/$$product --profiles-dir demo/$$product || exit 1; \
 	done
