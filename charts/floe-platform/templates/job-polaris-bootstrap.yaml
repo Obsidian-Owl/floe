@@ -392,7 +392,7 @@ spec:
               fi
               {{- end }}
 
-              # Assign catalog role to principal role (idempotent — 200/204 success, 409 already assigned)
+              # Assign catalog role to principal role (idempotent — 200/201/204 success, 409 already assigned)
               {{- $step = add $step 1 }}
               log "Step {{ $step }}/{{ $totalSteps }}: Assigning catalog role '$CATALOG_ROLE' to principal role '$PRINCIPAL_ROLE'..."
               ASSIGN_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X PUT \
@@ -401,7 +401,7 @@ spec:
                 "$POLARIS_URL/api/management/v1/principal-roles/$PRINCIPAL_ROLE/catalog-roles/$CATALOG_NAME" \
                 -d "{\"catalogRole\": {\"name\": \"$CATALOG_ROLE\"}}")
 
-              if [ "$ASSIGN_CODE" = "200" ] || [ "$ASSIGN_CODE" = "204" ]; then
+              if [ "$ASSIGN_CODE" = "200" ] || [ "$ASSIGN_CODE" = "201" ] || [ "$ASSIGN_CODE" = "204" ]; then
                 log "Catalog role '$CATALOG_ROLE' assigned to principal role '$PRINCIPAL_ROLE' successfully"
               elif [ "$ASSIGN_CODE" = "409" ]; then
                 log "Catalog role '$CATALOG_ROLE' already assigned to '$PRINCIPAL_ROLE' (HTTP 409) - OK"
