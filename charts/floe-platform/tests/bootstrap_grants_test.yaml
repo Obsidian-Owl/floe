@@ -12,7 +12,8 @@ tests:
       polaris.bootstrap.enabled: true
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
@@ -39,7 +40,8 @@ tests:
       polaris.bootstrap.enabled: true
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
@@ -54,7 +56,8 @@ tests:
       polaris.bootstrap.enabled: true
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
@@ -76,7 +79,8 @@ tests:
       polaris.bootstrap.enabled: true
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
@@ -91,7 +95,8 @@ tests:
       polaris.bootstrap.enabled: true
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - TABLE_CREATE
         - TABLE_WRITE_DATA
@@ -104,6 +109,28 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: "TABLE_WRITE_DATA"
 
+  - it: should handle 204 and 409 for grant privilege idempotency
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "GRANT_CODE"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"204"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"409"'
+
   # --- T2: Assign catalog role to principal role ---
   - it: should PUT to principal-roles endpoint
     set:
@@ -111,7 +138,8 @@ tests:
       polaris.bootstrap.enabled: true
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
@@ -119,7 +147,7 @@ tests:
       # Shell variable $PRINCIPAL_ROLE is set from Go template value
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: 'PRINCIPAL_ROLE="ALL"'
+          pattern: 'PRINCIPAL_ROLE="floe-pipeline"'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: "principal-roles/\\$PRINCIPAL_ROLE/catalog-roles"
@@ -130,7 +158,8 @@ tests:
       polaris.bootstrap.enabled: true
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
@@ -145,6 +174,48 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"409"'
 
+  # --- T2: Create and assign principal role ---
+  - it: should POST to principal-roles endpoint to create principal role
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "-X POST[\\s\\S]*/api/management/v1/principal-roles"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "PR_CREATE_CODE"
+
+  - it: should PUT to assign principal role to bootstrap principal
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'BOOTSTRAP_PRINCIPAL="root"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "-X PUT[\\s\\S]*/api/management/v1/principals/\\$BOOTSTRAP_PRINCIPAL/principal-roles"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "PR_ASSIGN_CODE"
+
   # --- T3: Configurability ---
   - it: should propagate custom catalogRole name
     set:
@@ -152,7 +223,8 @@ tests:
       polaris.bootstrap.enabled: true
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: my_custom_role
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
@@ -168,6 +240,7 @@ tests:
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
       polaris.bootstrap.grants.principalRole: service_admin
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
@@ -183,7 +256,8 @@ tests:
       polaris.bootstrap.enabled: true
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges: []
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
     asserts:
@@ -203,7 +277,8 @@ tests:
       polaris.bootstrap.catalogName: my-special-catalog
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
@@ -220,7 +295,8 @@ tests:
       polaris.bootstrap.enabled: true
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
@@ -238,7 +314,8 @@ tests:
       polaris.bootstrap.enabled: true
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
@@ -262,19 +339,20 @@ tests:
       polaris.storage.s3.enabled: false
       polaris.bootstrap.grants.enabled: true
       polaris.bootstrap.grants.catalogRole: catalog_admin
-      polaris.bootstrap.grants.principalRole: ALL
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
       polaris.bootstrap.grants.privileges:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
     asserts:
-      # Without S3 (3 base) + grants (3) = 6 total steps
+      # Without S3 (3 base) + grants (5) = 8 total steps
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: "Step 1/6:"
+          pattern: "Step 1/8:"
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: "Step 6/6:"
+          pattern: "Step 8/8:"
       # No step should exceed the total (overflow regression)
       - notMatchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: "Step [7-9]/6:"
+          pattern: "Step 9/8:"

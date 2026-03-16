@@ -157,7 +157,7 @@ spec:
               {{- $totalSteps = add $totalSteps 1 }}
               {{- end }}
               {{- if .Values.polaris.bootstrap.grants.enabled }}
-              {{- $totalSteps = add $totalSteps 3 }}
+              {{- $totalSteps = add $totalSteps 5 }}
               {{- end }}
               {{- $step := 1 }}
 
@@ -292,13 +292,18 @@ spec:
               CATALOG_ROLE="{{ .Values.polaris.bootstrap.grants.catalogRole }}"
               CATALOG_NAME="{{ .Values.polaris.bootstrap.catalogName }}"
               PRINCIPAL_ROLE="{{ .Values.polaris.bootstrap.grants.principalRole }}"
+              BOOTSTRAP_PRINCIPAL="{{ .Values.polaris.bootstrap.grants.bootstrapPrincipal }}"
 
               # Validate grant values — reject shell metacharacters and path traversal.
-              # eval is safe here: GRANT_VAR_NAME iterates only over the hardcoded list above.
-              # If this loop is ever extended to include user-controlled variable names,
-              # the eval becomes a code injection vector — use a case statement instead.
-              for GRANT_VAR_NAME in CATALOG_ROLE CATALOG_NAME PRINCIPAL_ROLE; do
-                eval GRANT_VAR_VAL="\$$GRANT_VAR_NAME"
+              # Uses explicit case dispatch instead of eval to avoid code injection risk.
+              for GRANT_VAR_NAME in CATALOG_ROLE CATALOG_NAME PRINCIPAL_ROLE BOOTSTRAP_PRINCIPAL; do
+                case "$GRANT_VAR_NAME" in
+                  CATALOG_ROLE) GRANT_VAR_VAL="$CATALOG_ROLE" ;;
+                  CATALOG_NAME) GRANT_VAR_VAL="$CATALOG_NAME" ;;
+                  PRINCIPAL_ROLE) GRANT_VAR_VAL="$PRINCIPAL_ROLE" ;;
+                  BOOTSTRAP_PRINCIPAL) GRANT_VAR_VAL="$BOOTSTRAP_PRINCIPAL" ;;
+                  *) log "ERROR: Unknown variable: $GRANT_VAR_NAME" >&2; exit 42 ;;
+                esac
                 case "$GRANT_VAR_VAL" in
                   *[!a-zA-Z0-9_-]*) log "ERROR: $GRANT_VAR_NAME contains invalid characters: $GRANT_VAR_VAL" >&2; exit 42 ;;
                   "") log "ERROR: $GRANT_VAR_NAME is empty" >&2; exit 42 ;;
@@ -315,12 +320,46 @@ spec:
               esac
               {{- end }}
               {{- $step = add $step 1 }}
+              log "Step {{ $step }}/{{ $totalSteps }}: Creating principal role '$PRINCIPAL_ROLE'..."
+              PR_CREATE_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                "$POLARIS_URL/api/management/v1/principal-roles" \
+                -d "{\"principalRole\": {\"name\": \"$PRINCIPAL_ROLE\"}}")
+
+              if [ "$PR_CREATE_CODE" = "201" ]; then
+                log "Principal role '$PRINCIPAL_ROLE' created successfully"
+              elif [ "$PR_CREATE_CODE" = "409" ]; then
+                log "Principal role '$PRINCIPAL_ROLE' already exists (HTTP 409) - OK"
+              else
+                log "ERROR: Failed to create principal role (HTTP $PR_CREATE_CODE). Check Polaris logs for detail." >&2
+                exit 1
+              fi
+
+              {{- $step = add $step 1 }}
+              log "Step {{ $step }}/{{ $totalSteps }}: Assigning principal role '$PRINCIPAL_ROLE' to principal '$BOOTSTRAP_PRINCIPAL'..."
+              PR_ASSIGN_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X PUT \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                "$POLARIS_URL/api/management/v1/principals/$BOOTSTRAP_PRINCIPAL/principal-roles" \
+                -d "{\"principalRole\": {\"name\": \"$PRINCIPAL_ROLE\"}}")
+
+              if [ "$PR_ASSIGN_CODE" = "200" ] || [ "$PR_ASSIGN_CODE" = "201" ] || [ "$PR_ASSIGN_CODE" = "204" ]; then
+                log "Principal role '$PRINCIPAL_ROLE' assigned to principal '$BOOTSTRAP_PRINCIPAL' successfully"
+              elif [ "$PR_ASSIGN_CODE" = "409" ]; then
+                log "Principal role '$PRINCIPAL_ROLE' already assigned to '$BOOTSTRAP_PRINCIPAL' (HTTP 409) - OK"
+              else
+                log "ERROR: Failed to assign principal role (HTTP $PR_ASSIGN_CODE). Check Polaris logs for detail." >&2
+                exit 1
+              fi
+
+              {{- $step = add $step 1 }}
               log "Step {{ $step }}/{{ $totalSteps }}: Creating catalog role '$CATALOG_ROLE' on catalog '$CATALOG_NAME'..."
               ROLE_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/catalogs/$CATALOG_NAME/catalog-roles" \
-                -d "{\"name\": \"$CATALOG_ROLE\"}")
+                -d "{\"catalogRole\": {\"name\": \"$CATALOG_ROLE\"}}")
 
               if [ "$ROLE_CODE" = "201" ]; then
                 log "Catalog role '$CATALOG_ROLE' created successfully"
@@ -340,10 +379,12 @@ spec:
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/catalogs/$CATALOG_NAME/catalog-roles/$CATALOG_ROLE/grants" \
-                -d "{\"type\": \"catalog\", \"privilege\": \"{{ . }}\"}")
+                -d "{\"grant\": {\"type\": \"catalog\", \"privilege\": \"{{ . }}\"}}")
 
-              if [ "$GRANT_CODE" = "201" ] || [ "$GRANT_CODE" = "200" ]; then
+              if [ "$GRANT_CODE" = "201" ] || [ "$GRANT_CODE" = "200" ] || [ "$GRANT_CODE" = "204" ]; then
                 log "Privilege '{{ . }}' granted successfully"
+              elif [ "$GRANT_CODE" = "409" ]; then
+                log "Privilege '{{ . }}' already granted (HTTP 409) - OK"
               else
                 log "ERROR: Failed to grant privilege '{{ . }}' (HTTP $GRANT_CODE)" >&2
                 head -5 /tmp/response.txt >&2
@@ -358,7 +399,7 @@ spec:
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/principal-roles/$PRINCIPAL_ROLE/catalog-roles/$CATALOG_NAME" \
-                -d "{\"name\": \"$CATALOG_ROLE\"}")
+                -d "{\"catalogRole\": {\"name\": \"$CATALOG_ROLE\"}}")
 
               if [ "$ASSIGN_CODE" = "200" ] || [ "$ASSIGN_CODE" = "204" ]; then
                 log "Catalog role '$CATALOG_ROLE' assigned to principal role '$PRINCIPAL_ROLE' successfully"

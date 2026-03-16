@@ -489,8 +489,9 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     # --- Apply write grants defensively (idempotent) ---
     # Ensures the test principal has write permissions even if the Helm
     # bootstrap job didn't run or hasn't applied grants yet. Mirrors the
-    # bootstrap job's 3-step grant process: create role, grant privilege,
-    # assign to principal role.
+    # bootstrap job's 5-step grant process: create principal role, assign
+    # principal role to root, create catalog role, grant privilege,
+    # assign catalog role to principal role.
     cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
     client_id, client_secret = cred.split(":", 1)
     token_response = httpx.post(
@@ -520,12 +521,43 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     catalog_name = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
     if not re.fullmatch(r"[a-zA-Z0-9_-]+", catalog_name):
         pytest.fail(f"POLARIS_WAREHOUSE contains unsafe characters: {catalog_name!r}")
+    principal_role = os.environ.get("POLARIS_PRINCIPAL_ROLE", "floe-pipeline")
+    if not re.fullmatch(r"[a-zA-Z0-9_-]+", principal_role):
+        pytest.fail(f"POLARIS_PRINCIPAL_ROLE contains unsafe characters: {principal_role!r}")
 
-    # Step 1: Create catalog_admin role (idempotent — 201 created, 409 exists)
+    # Step 1: Create principal role (idempotent — 201 created, 409 exists)
+    pr_create_response = httpx.post(
+        f"{polaris_url}/api/management/v1/principal-roles",
+        headers=headers,
+        json={"principalRole": {"name": principal_role}},
+        timeout=10.0,
+    )
+    if pr_create_response.status_code not in (201, 409):
+        logger.warning(
+            "Failed to create principal role %s: HTTP %s",
+            principal_role,
+            pr_create_response.status_code,
+        )
+
+    # Step 2: Assign principal role to root principal (idempotent)
+    pr_assign_response = httpx.put(
+        f"{polaris_url}/api/management/v1/principals/root/principal-roles",
+        headers=headers,
+        json={"principalRole": {"name": principal_role}},
+        timeout=10.0,
+    )
+    if pr_assign_response.status_code not in (200, 201, 204, 409):
+        logger.warning(
+            "Failed to assign principal role %s to root: HTTP %s",
+            principal_role,
+            pr_assign_response.status_code,
+        )
+
+    # Step 3: Create catalog_admin role (idempotent — 201 created, 409 exists)
     role_response = httpx.post(
         f"{polaris_url}/api/management/v1/catalogs/{catalog_name}/catalog-roles",
         headers=headers,
-        json={"name": "catalog_admin"},
+        json={"catalogRole": {"name": "catalog_admin"}},
         timeout=10.0,
     )
     if role_response.status_code not in (201, 409):
@@ -534,12 +566,12 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
             role_response.status_code,
         )
 
-    # Step 2: Grant CATALOG_MANAGE_CONTENT privilege
+    # Step 4: Grant CATALOG_MANAGE_CONTENT privilege
     grant_response = httpx.put(
         f"{polaris_url}/api/management/v1/catalogs/{catalog_name}"
         "/catalog-roles/catalog_admin/grants",
         headers=headers,
-        json={"type": "catalog", "privilege": "CATALOG_MANAGE_CONTENT"},
+        json={"grant": {"type": "catalog", "privilege": "CATALOG_MANAGE_CONTENT"}},
         timeout=10.0,
     )
     if grant_response.status_code not in (200, 201, 204, 409):
@@ -548,16 +580,17 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
             grant_response.status_code,
         )
 
-    # Step 3: Assign catalog role to ALL principal role (idempotent — 200/204 ok, 409 exists)
+    # Step 5: Assign catalog role to principal role (idempotent — 200/204 ok, 409 exists)
     assign_response = httpx.put(
-        f"{polaris_url}/api/management/v1/principal-roles/ALL/catalog-roles/{catalog_name}",
+        f"{polaris_url}/api/management/v1/principal-roles/{principal_role}/catalog-roles/{catalog_name}",
         headers=headers,
-        json={"name": "catalog_admin"},
+        json={"catalogRole": {"name": "catalog_admin"}},
         timeout=10.0,
     )
     if assign_response.status_code not in (200, 204, 409):
         logger.warning(
-            "Failed to assign catalog_admin to ALL: HTTP %s",
+            "Failed to assign catalog_admin to %s: HTTP %s",
+            principal_role,
             assign_response.status_code,
         )
 
