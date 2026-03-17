@@ -80,9 +80,10 @@ nodes:
       - containerPort: 30090
         hostPort: 9090
         protocol: TCP
-      # Marquez API (NodePort 30050 -> localhost 5000)
+      # Marquez API (NodePort 30050 -> localhost 5100)
+      # hostPort 5100 avoids macOS AirPlay conflict on port 5000
       - containerPort: 30050
-        hostPort: 5000
+        hostPort: 5100
         protocol: TCP
       # Marquez Admin (NodePort 30051 -> localhost 5001)
       - containerPort: 30051
