@@ -166,6 +166,11 @@ for entry in "${NON_CRITICAL_SERVICES[@]}"; do
     fi
 done
 
+# Clean up stale jobs from previous runs (crashed sessions leave pods
+# in ContainerCreating that poison pod-health assertions)
+echo "Cleaning up stale jobs from previous runs..."
+kubectl delete jobs --all -n "${TEST_NAMESPACE}" --ignore-not-found
+
 echo ""
 echo "Setting up port-forwards for Helm chart services..."
 echo "(Ports already exposed via Kind NodePorts will be skipped)"
