@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     import pyiceberg.table
     import pyiceberg.transforms
     import pyiceberg.types
+    from floe_core.schemas.compiled_artifacts import ResolvedGovernance
     from pyiceberg.transforms import Transform
 
 # =============================================================================
@@ -1204,6 +1205,49 @@ class IcebergTableManagerConfig(BaseModel):
             "Useful for testing with in-memory catalogs."
         ),
     )
+
+    @classmethod
+    def from_governance(
+        cls,
+        governance: ResolvedGovernance | None,
+    ) -> IcebergTableManagerConfig:
+        """Build config from governance lifecycle fields.
+
+        Converts governance intent to Iceberg table properties:
+        - default_ttl_hours → history.expire.max-snapshot-age-ms (hours * 3600 * 1000)
+        - snapshot_keep_last → min_snapshots_to_keep + history.expire.min-snapshots-to-keep
+
+        Uses duck typing on governance object to avoid runtime import of floe_core.
+
+        Args:
+            governance: Object with default_ttl_hours and snapshot_keep_last attributes,
+                or None for default config.
+
+        Returns:
+            IcebergTableManagerConfig with governance-derived settings merged with defaults.
+        """
+        if governance is None:
+            return cls()
+
+        kwargs: dict[str, Any] = {}
+        extra_props: dict[str, str] = {}
+
+        snapshot_keep_last = getattr(governance, "snapshot_keep_last", None)
+        if snapshot_keep_last is not None:
+            kwargs["min_snapshots_to_keep"] = snapshot_keep_last
+            extra_props["history.expire.min-snapshots-to-keep"] = str(snapshot_keep_last)
+
+        default_ttl_hours = getattr(governance, "default_ttl_hours", None)
+        if default_ttl_hours is not None:
+            extra_props["history.expire.max-snapshot-age-ms"] = str(default_ttl_hours * 3600 * 1000)
+
+        if extra_props:
+            # Merge with defaults (governance overrides)
+            default_props = cls().default_table_properties.copy()
+            default_props.update(extra_props)
+            kwargs["default_table_properties"] = default_props
+
+        return cls(**kwargs)
 
 
 # Note: IcebergIOManagerConfig is NOT part of floe-iceberg.
