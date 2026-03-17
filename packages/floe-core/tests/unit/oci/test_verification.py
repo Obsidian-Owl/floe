@@ -1406,14 +1406,14 @@ class TestVerificationOpenTelemetrySpans:
         provider.add_span_processor(SimpleSpanProcessor(exporter))
         test_tracer = provider.get_tracer("test.verification")
 
-        # Patch the module-level tracer
-        original_tracer = verification_module.tracer
-        verification_module.tracer = test_tracer
+        # Patch the deferred tracer function
+        original_get_tracer = verification_module._get_tracer
+        verification_module._get_tracer = lambda: test_tracer
 
         yield exporter
 
-        # Restore original tracer
-        verification_module.tracer = original_tracer
+        # Restore original tracer function
+        verification_module._get_tracer = original_get_tracer
         exporter.clear()
 
     @pytest.fixture
