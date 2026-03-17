@@ -198,22 +198,16 @@ class GovernanceConfig(BaseModel):
             description="Row-level data retention period in days (higher is stricter)",
         ),
     ]
-    default_ttl_hours: Annotated[
-        int | None,
-        Field(
-            default=None,
-            ge=1,
-            description="Table-level partition TTL in hours for data lifecycle management",
-        ),
-    ]
-    snapshot_keep_last: Annotated[
-        int | None,
-        Field(
-            default=None,
-            ge=1,
-            description="Minimum number of Iceberg snapshots to retain per table",
-        ),
-    ]
+    default_ttl_hours: int | None = Field(
+        default=None,
+        ge=1,
+        description="Table-level partition TTL in hours for data lifecycle management",
+    )
+    snapshot_keep_last: int | None = Field(
+        default=None,
+        ge=1,
+        description="Minimum number of Iceberg snapshots to retain per table",
+    )
 
     # NEW in Epic 3A: Policy Enforcer configuration
     naming: NamingConfig | None = Field(
