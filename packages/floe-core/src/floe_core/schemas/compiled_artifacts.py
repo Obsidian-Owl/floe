@@ -346,13 +346,17 @@ class ResolvedGovernance(BaseModel):
         audit_logging: Audit logging policy (enabled or disabled)
         policy_enforcement_level: Enforcement level (off, warn, strict)
         data_retention_days: Data retention period in days
+        default_ttl_hours: Table-level partition TTL in hours
+        snapshot_keep_last: Minimum Iceberg snapshots to retain per table
 
     Example:
         >>> governance = ResolvedGovernance(
         ...     pii_encryption="required",
         ...     audit_logging="enabled",
         ...     policy_enforcement_level="strict",
-        ...     data_retention_days=90
+        ...     data_retention_days=90,
+        ...     default_ttl_hours=720,
+        ...     snapshot_keep_last=10,
         ... )
         >>> governance.pii_encryption
         'required'
@@ -379,6 +383,18 @@ class ResolvedGovernance(BaseModel):
         default=None,
         ge=1,
         description="Data retention period in days",
+    )
+    default_ttl_hours: int | None = Field(
+        default=None,
+        ge=1,
+        le=8760,
+        description="Table-level partition TTL in hours",
+    )
+    snapshot_keep_last: int | None = Field(
+        default=None,
+        ge=1,
+        le=100,
+        description="Minimum Iceberg snapshots to retain per table",
     )
 
 
