@@ -137,9 +137,15 @@ def e2e_namespace() -> Generator[str, None, None]:
         phase = result.stdout.strip()
         if phase == "Terminating":
             # Wait for deletion to complete (up to 30s)
-            _kubectl(
+            wait_result = _kubectl(
                 ["wait", "--for=delete", f"namespace/{namespace}", "--timeout=30s"],
             )
+            if wait_result.returncode != 0:
+                pytest.fail(
+                    f"Namespace {namespace!r} stuck in Terminating state after 30s. "
+                    "Manual cleanup may be needed (check for blocking finalizers): "
+                    f"kubectl get namespace {namespace} -o yaml"
+                )
             _kubectl(["create", "namespace", namespace])
         # else: namespace exists and is Active — reuse it
     else:

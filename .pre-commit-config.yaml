@@ -172,7 +172,7 @@ repos:
       # GHSA-5pwr-322w-8jr4: pyOpenSSL 25.3.0 - fix in 26.0.0, transitive dep via pyiceberg
       - id: uv-secure
         name: uv-secure (vulnerability audit)
-        entry: bash -c 'uv run --no-sync uv-secure --no-check-uv-tool --ignore-vulns "$(grep -v "^#" .vuln-ignore | grep -v "^$" | paste -sd "," -)" .'
+        entry: bash -c 'IGNORES=$(grep -v "^#" .vuln-ignore 2>/dev/null | grep -v "^$" | paste -sd "," -); uv run --no-sync uv-secure --no-check-uv-tool ${IGNORES:+--ignore-vulns "$IGNORES"} .'
         language: system
         stages: [pre-push]
         pass_filenames: false

@@ -483,21 +483,21 @@ class TestGovernance(IntegrationTestBase):
                 ".vuln-ignore not found at repo root — shared vulnerability ignore "
                 "list is required for E2E security governance tests."
             )
-        ignore_ids = ",".join(
+        ignore_ids_list = [
             line.strip()
             for line in vuln_ignore_path.read_text().splitlines()
             if line.strip() and not line.strip().startswith("#")
-        )
+        ]
 
         cmd = [
             "uv",
             "run",
             "uv-secure",
             "--no-check-uv-tool",
-            "--ignore-vulns",
-            ignore_ids,
-            *lock_files,
         ]
+        if ignore_ids_list:
+            cmd += ["--ignore-vulns", ",".join(ignore_ids_list)]
+        cmd += lock_files
 
         try:
             result = subprocess.run(
