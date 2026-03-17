@@ -23,7 +23,17 @@
     "data_retention_days": {
       "type": ["integer", "null"],
       "minimum": 1,
-      "description": "Data retention period in days (higher is stricter)"
+      "description": "Row-level data retention period in days (higher is stricter)"
+    },
+    "default_ttl_hours": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "Table-level partition TTL in hours for data lifecycle management"
+    },
+    "snapshot_keep_last": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "Minimum number of Iceberg snapshots to retain per table"
     },
     "naming": {
       "$ref": "#/$defs/NamingConfig",

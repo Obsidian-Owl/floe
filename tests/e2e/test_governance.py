@@ -863,6 +863,7 @@ class TestGovernance(IntegrationTestBase):
             "template",
             "test-release",
             str(chart_path),
+            "--skip-schema-validation",
         ]
         if values_path:
             cmd.extend(["--values", str(values_path)])

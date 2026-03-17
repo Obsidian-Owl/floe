@@ -59,7 +59,16 @@ if TYPE_CHECKING:
     from sigstore.oidc import IdentityToken
 
 logger = logging.getLogger(__name__)
-tracer = trace.get_tracer(__name__)
+
+
+def _get_tracer() -> trace.Tracer:
+    """Get tracer with deferred initialization.
+
+    Called at use-site instead of module level to avoid caching a NoOpTracer
+    before ensure_telemetry_initialized() has run.
+    """
+    return trace.get_tracer(__name__)
+
 
 # OCI annotation keys for signature metadata
 ANNOTATION_BUNDLE = "dev.floe.signature.bundle"
@@ -113,7 +122,7 @@ def _trace_span(name: str) -> Iterator[None]:
     Args:
         name: Span name following floe.oci.* convention
     """
-    with tracer.start_as_current_span(name):
+    with _get_tracer().start_as_current_span(name):
         yield
 
 
@@ -128,7 +137,7 @@ def _with_span(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            with tracer.start_as_current_span(name):
+            with _get_tracer().start_as_current_span(name):
                 return func(*args, **kwargs)
 
         return wrapper

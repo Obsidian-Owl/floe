@@ -97,6 +97,12 @@ governance:
   # Data retention period in days (short for demo)
   data_retention_days: 1
 
+  # Table-level partition TTL in hours (short for demo)
+  default_ttl_hours: 24
+
+  # Minimum Iceberg snapshots to retain per table
+  snapshot_keep_last: 3
+
   # Quality gates configuration
   quality_gates:
     minimum_test_coverage: 80

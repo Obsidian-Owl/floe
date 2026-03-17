@@ -60,7 +60,7 @@ def _discover_repository_for_asset(
 
     Args:
         dagster_url: Base URL of the Dagster webserver.
-        asset_path: Asset key path, e.g. ["stg_customers"].
+        asset_path: Asset key path, e.g. ["stg_crm_customers"].
 
     Returns:
         Tuple of (repositoryName, repositoryLocationName).
@@ -506,15 +506,19 @@ class TestCompileDeployMaterialize:
             description="Dagster webserver",
         )
 
-        # Launch materialization for stg_customers asset
+        # Launch materialization for stg_crm_customers asset
         mutation = """
         mutation LaunchRun($executionParams: ExecutionParams!) {
             launchRun(executionParams: $executionParams) {
+                __typename
                 ... on LaunchRunSuccess {
                     run {
                         runId
                         status
                     }
+                }
+                ... on PipelineNotFoundError {
+                    message
                 }
                 ... on PythonError {
                     message
@@ -527,7 +531,9 @@ class TestCompileDeployMaterialize:
         """
 
         # Discover repository context for the target asset (AC-16.1)
-        repo_name, location_name = _discover_repository_for_asset(dagster_url, ["stg_customers"])
+        repo_name, location_name = _discover_repository_for_asset(
+            dagster_url, ["stg_crm_customers"]
+        )
 
         variables = {
             "executionParams": {
@@ -535,7 +541,7 @@ class TestCompileDeployMaterialize:
                     "repositoryName": repo_name,
                     "repositoryLocationName": location_name,
                     "pipelineName": IMPLICIT_ASSET_JOB_NAME,
-                    "assetSelection": [{"path": ["stg_customers"]}],
+                    "assetSelection": [{"path": ["stg_crm_customers"]}],
                 },
                 "mode": "default",
             },
@@ -553,15 +559,19 @@ class TestCompileDeployMaterialize:
         data = response.json()
         launch_result = data.get("data", {}).get("launchRun", {})
 
-        # Check for launch error
-        if "message" in launch_result:
-            pytest.fail(f"Materialization launch failed: {launch_result['message']}")
-        if "errors" in launch_result:
-            errors = [e["message"] for e in launch_result["errors"]]
-            pytest.fail(f"Run config invalid: {errors}")
+        # Dagster launchRun is a GraphQL union: LaunchRunSuccess | error types.
+        # Error types have __typename + message but no "run" key.
+        launch_typename = launch_result.get("__typename", "unknown")
+        if launch_typename != "LaunchRunSuccess":
+            if launch_typename == "RunConfigValidationInvalid":
+                errs = [e.get("message", "") for e in launch_result.get("errors", [])]
+                error_msg = "; ".join(errs) or str(launch_result)
+            else:
+                error_msg = launch_result.get("message", str(launch_result))
+            pytest.fail(f"launchRun returned {launch_typename}: {error_msg}")
 
-        run_id = launch_result["run"]["runId"]
-        assert run_id, "No runId returned from launchRun"
+        run_id = launch_result.get("run", {}).get("runId")
+        assert run_id, "No runId returned from LaunchRunSuccess"
 
         # Poll for run completion
         def check_run_complete() -> bool:

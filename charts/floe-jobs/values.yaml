@@ -101,22 +101,24 @@ dbt:
   # - secretRef:
   #     name: dbt-credentials
 
-  # Volume mounts for dbt project and profiles
+  # Volume mounts for dbt project
+  # Add dbt-profiles volumeMount when dbt.profiles is configured:
+  #   - name: dbt-profiles
+  #     mountPath: /etc/dbt
+  #     readOnly: true
   volumeMounts:
     - name: dbt-project
       mountPath: /dbt
       readOnly: true
-    - name: dbt-profiles
-      mountPath: /etc/dbt
-      readOnly: true
 
-  # Volumes
+  # Volumes for dbt project
+  # Add dbt-profiles volume when dbt.profiles is configured:
+  #   - name: dbt-profiles
+  #     configMap:
+  #       name: dbt-profiles
   volumes:
     - name: dbt-project
       emptyDir: {}
-    - name: dbt-profiles
-      configMap:
-        name: dbt-profiles
 
   # Override default resources
   resources: {}

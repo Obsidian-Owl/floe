@@ -287,7 +287,8 @@ class TestPlatformDeployment:
         Validates that the OpenLineage lineage service is functional and
         can serve namespace queries.
         """
-        marquez_url = os.environ.get("MARQUEZ_URL", "http://localhost:5000")
+        marquez_port = os.environ.get("MARQUEZ_HOST_PORT", "5100")
+        marquez_url = os.environ.get("MARQUEZ_URL", f"http://localhost:{marquez_port}")
         wait_for_service(
             f"{marquez_url}/api/v1/namespaces",
             timeout=90,

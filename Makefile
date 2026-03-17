@@ -81,7 +81,7 @@ help: ## Show this help message
 .PHONY: kind-up
 kind-up: ## Create Kind cluster and deploy test services
 	@echo "Creating Kind cluster..."
-	@./testing/k8s/setup-cluster.sh
+	@SKIP_MONITORING=$${SKIP_MONITORING:-true} ./testing/k8s/setup-cluster.sh
 
 .PHONY: kind-down
 kind-down: ## Destroy Kind cluster

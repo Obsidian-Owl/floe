@@ -618,11 +618,12 @@ def marquez_client(wait_for_service: Callable[..., None]) -> httpx.Client:
         response = marquez_client.get("/api/v1/namespaces")
         namespaces = response.json()["namespaces"]
     """
-    marquez_url = os.environ.get("MARQUEZ_URL", "http://localhost:5000")
+    marquez_port = os.environ.get("MARQUEZ_HOST_PORT", "5100")
+    marquez_url = os.environ.get("MARQUEZ_URL", f"http://localhost:{marquez_port}")
     marquez_timeout = float(os.environ.get("MARQUEZ_TIMEOUT", "90"))
     marquez_description = (
         "Marquez API (requires port-forward: "
-        "kubectl port-forward svc/floe-platform-marquez 5000:5000 -n floe-test)"
+        f"kubectl port-forward svc/floe-platform-marquez {marquez_port}:5000 -n floe-test)"
     )
     wait_for_service(
         f"{marquez_url}/api/v1/namespaces",
@@ -721,7 +722,8 @@ def seed_observability(
     os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
 
     # compile_pipeline posts events directly to this URL
-    os.environ["MARQUEZ_URL"] = "http://localhost:5000/api/v1/lineage"
+    marquez_port = os.environ.get("MARQUEZ_HOST_PORT", "5100")
+    os.environ["MARQUEZ_URL"] = f"http://localhost:{marquez_port}/api/v1/lineage"
 
     root = Path(__file__).parent.parent.parent
     manifest_path = root / "demo" / "manifest.yaml"

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from typing import Annotated, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -126,7 +126,9 @@ class GovernanceConfig(BaseModel):
         pii_encryption: PII encryption policy (required > optional)
         audit_logging: Audit logging policy (enabled > disabled)
         policy_enforcement_level: Enforcement level (strict > warn > off)
-        data_retention_days: Data retention period in days
+        data_retention_days: Row-level data retention period in days
+        default_ttl_hours: Table-level partition TTL in hours
+        snapshot_keep_last: Minimum Iceberg snapshots to retain
         naming: Naming convention configuration (NEW in Epic 3A)
         quality_gates: Quality gate thresholds (NEW in Epic 3A)
         custom_rules: Custom validation rules (NEW in Epic 3B)
@@ -142,7 +144,9 @@ class GovernanceConfig(BaseModel):
         ...     pii_encryption="required",
         ...     audit_logging="enabled",
         ...     policy_enforcement_level="strict",
-        ...     data_retention_days=90
+        ...     data_retention_days=90,
+        ...     default_ttl_hours=24,
+        ...     snapshot_keep_last=3,
         ... )
 
     Strength Ordering (for inheritance validation):
@@ -150,6 +154,8 @@ class GovernanceConfig(BaseModel):
         - audit_logging: enabled > disabled
         - policy_enforcement_level: strict > warn > off
         - data_retention_days: higher is stricter
+        - default_ttl_hours: no inheritance constraint (data lifecycle, not security)
+        - snapshot_keep_last: no inheritance constraint (data lifecycle, not security)
         - naming.enforcement: strict > warn > off
         - quality_gates.minimum_test_coverage: higher is stricter
         - quality_gates.require_descriptions: True > False
@@ -186,14 +192,21 @@ class GovernanceConfig(BaseModel):
         default=None,
         description="Policy enforcement level (strict > warn > off)",
     )
-    data_retention_days: Annotated[
-        int | None,
-        Field(
-            default=None,
-            ge=1,
-            description="Data retention period in days (higher is stricter)",
-        ),
-    ]
+    data_retention_days: int | None = Field(
+        default=None,
+        ge=1,
+        description="Row-level data retention period in days (higher is stricter)",
+    )
+    default_ttl_hours: int | None = Field(
+        default=None,
+        ge=1,
+        description="Table-level partition TTL in hours for data lifecycle management",
+    )
+    snapshot_keep_last: int | None = Field(
+        default=None,
+        ge=1,
+        description="Minimum number of Iceberg snapshots to retain per table",
+    )
 
     # NEW in Epic 3A: Policy Enforcer configuration
     naming: NamingConfig | None = Field(

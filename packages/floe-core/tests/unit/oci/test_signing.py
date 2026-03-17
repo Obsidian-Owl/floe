@@ -415,14 +415,14 @@ class TestOpenTelemetrySpans:
         provider.add_span_processor(SimpleSpanProcessor(exporter))
         test_tracer = provider.get_tracer("test.signing")
 
-        # Patch the module-level tracer
-        original_tracer = signing_module.tracer
-        signing_module.tracer = test_tracer
+        # Patch the deferred tracer function
+        original_get_tracer = signing_module._get_tracer
+        signing_module._get_tracer = lambda: test_tracer
 
         yield exporter
 
-        # Restore original tracer
-        signing_module.tracer = original_tracer
+        # Restore original tracer function
+        signing_module._get_tracer = original_get_tracer
         exporter.clear()
 
     @requires_sigstore
