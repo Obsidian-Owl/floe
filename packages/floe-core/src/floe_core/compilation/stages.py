@@ -473,7 +473,18 @@ def compile_pipeline(
                         audit_logging=manifest.governance.audit_logging,
                         policy_enforcement_level=manifest.governance.policy_enforcement_level,
                         data_retention_days=manifest.governance.data_retention_days,
+                        default_ttl_hours=manifest.governance.default_ttl_hours,
+                        snapshot_keep_last=manifest.governance.snapshot_keep_last,
                     )
+                    if (
+                        resolved_governance.default_ttl_hours is not None
+                        or resolved_governance.snapshot_keep_last is not None
+                    ):
+                        log.info(
+                            "governance_lifecycle_fields_resolved",
+                            default_ttl_hours=resolved_governance.default_ttl_hours,
+                            snapshot_keep_last=resolved_governance.snapshot_keep_last,
+                        )
 
                 duration_ms = (time.perf_counter() - stage_start) * 1000
                 log.info(
