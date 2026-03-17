@@ -563,7 +563,11 @@ class TestCompileDeployMaterialize:
         # Error types have __typename + message but no "run" key.
         launch_typename = launch_result.get("__typename", "unknown")
         if launch_typename != "LaunchRunSuccess":
-            error_msg = launch_result.get("message", str(launch_result))
+            if launch_typename == "RunConfigValidationInvalid":
+                errs = [e.get("message", "") for e in launch_result.get("errors", [])]
+                error_msg = "; ".join(errs) or str(launch_result)
+            else:
+                error_msg = launch_result.get("message", str(launch_result))
             pytest.fail(f"launchRun returned {launch_typename}: {error_msg}")
 
         run_id = launch_result.get("run", {}).get("runId")

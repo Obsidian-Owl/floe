@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from typing import Annotated, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -154,6 +154,8 @@ class GovernanceConfig(BaseModel):
         - audit_logging: enabled > disabled
         - policy_enforcement_level: strict > warn > off
         - data_retention_days: higher is stricter
+        - default_ttl_hours: no inheritance constraint (data lifecycle, not security)
+        - snapshot_keep_last: no inheritance constraint (data lifecycle, not security)
         - naming.enforcement: strict > warn > off
         - quality_gates.minimum_test_coverage: higher is stricter
         - quality_gates.require_descriptions: True > False
@@ -190,14 +192,11 @@ class GovernanceConfig(BaseModel):
         default=None,
         description="Policy enforcement level (strict > warn > off)",
     )
-    data_retention_days: Annotated[
-        int | None,
-        Field(
-            default=None,
-            ge=1,
-            description="Row-level data retention period in days (higher is stricter)",
-        ),
-    ]
+    data_retention_days: int | None = Field(
+        default=None,
+        ge=1,
+        description="Row-level data retention period in days (higher is stricter)",
+    )
     default_ttl_hours: int | None = Field(
         default=None,
         ge=1,
