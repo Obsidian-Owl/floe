@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
+from testing.fixtures.helm import recover_stuck_helm_release
 from testing.fixtures.polling import wait_for_condition
 
 if TYPE_CHECKING:
@@ -120,11 +121,29 @@ def chart_root() -> Path:
 
 @pytest.fixture(scope="module")
 def e2e_namespace() -> Generator[str, None, None]:
-    """Create and manage E2E test namespace."""
+    """Create and manage E2E test namespace.
+
+    Creates the namespace idempotently — safe to call even if a previous
+    crashed run left the namespace behind. Waits for Terminating state
+    to clear before re-creating.
+    """
     namespace = "floe-e2e-helm"
 
-    # Create namespace
-    _kubectl(["create", "namespace", namespace])
+    # Idempotent namespace creation — handles leftover from crashed runs
+    result = _kubectl(
+        ["get", "namespace", namespace, "-o", "jsonpath={.status.phase}"],
+    )
+    if result.returncode == 0:
+        phase = result.stdout.strip()
+        if phase == "Terminating":
+            # Wait for deletion to complete (up to 30s)
+            _kubectl(
+                ["wait", "--for=delete", f"namespace/{namespace}", "--timeout=30s"],
+            )
+            _kubectl(["create", "namespace", namespace])
+        # else: namespace exists and is Active — reuse it
+    else:
+        _kubectl(["create", "namespace", namespace])
 
     yield namespace
 
@@ -141,6 +160,15 @@ def deployed_platform(
     """Deploy floe-platform and yield release name."""
     release_name = "floe-e2e"
     platform_chart = chart_root / "floe-platform"
+
+    # Recover from stuck helm release (pending-upgrade/install/rollback)
+    # left behind by a crashed previous run
+    recover_stuck_helm_release(
+        release_name,
+        e2e_namespace,
+        rollback_timeout="5m",
+        helm_runner=_helm,
+    )
 
     # Update dependencies
     result = _helm(["dependency", "update", str(platform_chart)])
