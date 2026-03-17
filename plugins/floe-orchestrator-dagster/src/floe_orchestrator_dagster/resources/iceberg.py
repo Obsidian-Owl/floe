@@ -36,7 +36,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+    from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedGovernance, ResolvedPlugins
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,7 @@ def create_iceberg_resources(
     catalog_ref: PluginRef,
     storage_ref: PluginRef,
     default_namespace: str = _DEFAULT_NAMESPACE,
+    governance: ResolvedGovernance | None = None,
 ) -> dict[str, Any]:
     """Create Dagster resources dict with IcebergIOManager.
 
@@ -120,9 +121,13 @@ def create_iceberg_resources(
             "storage_plugin": storage_ref.type,
         },
     )
+    from floe_iceberg.models import IcebergTableManagerConfig
+
+    config = IcebergTableManagerConfig.from_governance(governance)
     table_manager = IcebergTableManager(
         catalog_plugin=catalog_plugin,
         storage_plugin=storage_plugin,
+        config=config,
     )
 
     # T111: Create IcebergIOManager
@@ -145,6 +150,7 @@ def create_iceberg_resources(
 
 def try_create_iceberg_resources(
     plugins: ResolvedPlugins | None,
+    governance: ResolvedGovernance | None = None,
 ) -> dict[str, Any]:
     """Attempt to create Iceberg resources, returning empty dict on failure.
 
@@ -180,6 +186,7 @@ def try_create_iceberg_resources(
         return create_iceberg_resources(
             catalog_ref=plugins.catalog,
             storage_ref=plugins.storage,
+            governance=governance,
         )
     except Exception:
         logger.exception(
