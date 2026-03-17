@@ -457,33 +457,36 @@ class TestSchemaEvolution(IntegrationTestBase):
             "Table should accept retention configuration via properties"
         )
 
-        # Verify retention config matches manifest governance values
-        import yaml
+        # Verify retention config matches compiled governance values
+        from floe_core.compilation.stages import compile_pipeline
 
         project_root = Path(__file__).parent.parent.parent
         manifest_path = project_root / "demo" / "manifest.yaml"
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
 
         assert manifest_path.exists(), (
             "demo/manifest.yaml must exist for governance retention validation"
         )
+        assert spec_path.exists(), "demo/customer-360/floe.yaml must exist for compilation"
 
-        with open(manifest_path) as f:
-            manifest = yaml.safe_load(f)
+        # Compile through the pipeline instead of reading raw YAML
+        artifacts = compile_pipeline(spec_path, manifest_path)
 
-        # Extract TTL from manifest governance config
-        governance = manifest.get("governance", {})
-        default_ttl = governance.get("default_ttl_hours")
-
-        assert default_ttl is not None, (
-            "GOVERNANCE GAP: manifest.yaml must define governance.default_ttl_hours. "
+        assert artifacts.governance is not None, (
+            "GOVERNANCE GAP: compile_pipeline must produce governance config. "
+            "Data retention policy is mandatory."
+        )
+        assert artifacts.governance.default_ttl_hours is not None, (
+            "GOVERNANCE GAP: compiled governance must include default_ttl_hours. "
             "Data retention policy is mandatory."
         )
 
-        # Verify our retention config matches manifest TTL
-        ttl_ms = int(default_ttl) * 3600 * 1000
+        # Verify our retention config matches compiled governance TTL
+        default_ttl: int = artifacts.governance.default_ttl_hours
+        ttl_ms = default_ttl * 3600 * 1000
         actual_ms = int(reloaded_table.properties.get("history.expire.max-snapshot-age-ms", "0"))
         assert actual_ms == ttl_ms, (
-            f"Retention must match manifest TTL. "
+            f"Retention must match compiled governance TTL. "
             f"Expected {ttl_ms}ms ({default_ttl}h), "
             f"got {actual_ms}ms."
         )
@@ -568,29 +571,33 @@ class TestSchemaEvolution(IntegrationTestBase):
         assert properties.get("history.expire.max-snapshot-age-ms") == "3600000"
         assert properties.get("history.expire.min-snapshots-to-keep") == "6"
 
-        # Verify snapshot retention matches manifest governance
-        import yaml
+        # Verify snapshot retention matches compiled governance
+        from floe_core.compilation.stages import compile_pipeline
 
         project_root = Path(__file__).parent.parent.parent
         manifest_path = project_root / "demo" / "manifest.yaml"
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
 
         assert manifest_path.exists(), (
             "demo/manifest.yaml must exist for governance snapshot validation"
         )
+        assert spec_path.exists(), "demo/customer-360/floe.yaml must exist for compilation"
 
-        with open(manifest_path) as f:
-            manifest = yaml.safe_load(f)
+        # Compile through the pipeline instead of reading raw YAML
+        artifacts = compile_pipeline(spec_path, manifest_path)
 
-        governance = manifest.get("governance", {})
-        snapshot_keep_last = governance.get("snapshot_keep_last")
-
-        assert snapshot_keep_last is not None, (
-            "GOVERNANCE GAP: manifest.yaml must define governance.snapshot_keep_last. "
+        assert artifacts.governance is not None, (
+            "GOVERNANCE GAP: compile_pipeline must produce governance config. "
+            "Snapshot retention policy is mandatory."
+        )
+        assert artifacts.governance.snapshot_keep_last is not None, (
+            "GOVERNANCE GAP: compiled governance must include snapshot_keep_last. "
             "Snapshot retention policy is mandatory."
         )
 
+        snapshot_keep_last: int = artifacts.governance.snapshot_keep_last
         actual_keep = properties.get("history.expire.min-snapshots-to-keep")
         assert actual_keep == str(snapshot_keep_last), (
-            f"Snapshot retention mismatch: manifest says keep {snapshot_keep_last} "
-            f"but table property is '{actual_keep}'"
+            f"Snapshot retention mismatch: compiled governance says keep "
+            f"{snapshot_keep_last} but table property is '{actual_keep}'"
         )
