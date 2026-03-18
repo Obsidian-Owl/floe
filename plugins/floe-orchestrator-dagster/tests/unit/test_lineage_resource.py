@@ -867,117 +867,12 @@ AC_10 = "AC-10"
 _LINEAGE_MODULE = "floe_orchestrator_dagster.resources.lineage"
 
 
-class TestStartBackgroundLoop:
-    """Tests for _start_background_loop() — AC-10.
-
-    Verifies that the helper creates a new asyncio event loop running
-    in a daemon thread, returned as a (loop, thread) tuple.
-    """
-
-    @pytest.mark.requirement(AC_10)
-    def test_returns_tuple_of_loop_and_thread(self) -> None:
-        """Test _start_background_loop returns (AbstractEventLoop, Thread)."""
-        from floe_orchestrator_dagster.resources.lineage import _start_background_loop
-
-        loop, thread = _start_background_loop()
-        try:
-            assert isinstance(loop, asyncio.AbstractEventLoop), (
-                f"First element must be AbstractEventLoop, got {type(loop)}"
-            )
-            assert isinstance(thread, threading.Thread), (
-                f"Second element must be Thread, got {type(thread)}"
-            )
-        finally:
-            loop.call_soon_threadsafe(loop.stop)
-            thread.join(timeout=5)
-
-    @pytest.mark.requirement(AC_10)
-    def test_thread_is_daemon(self) -> None:
-        """Test background thread is a daemon so it doesn't block process exit."""
-        from floe_orchestrator_dagster.resources.lineage import _start_background_loop
-
-        loop, thread = _start_background_loop()
-        try:
-            assert thread.daemon is True, "Background thread must be a daemon"
-        finally:
-            loop.call_soon_threadsafe(loop.stop)
-            thread.join(timeout=5)
-
-    @pytest.mark.requirement(AC_10)
-    def test_loop_is_running(self) -> None:
-        """Test the event loop is actively running after creation."""
-        from floe_orchestrator_dagster.resources.lineage import _start_background_loop
-
-        loop, thread = _start_background_loop()
-        try:
-            assert loop.is_running(), "Event loop must be running immediately"
-        finally:
-            loop.call_soon_threadsafe(loop.stop)
-            thread.join(timeout=5)
-
-    @pytest.mark.requirement(AC_10)
-    def test_thread_is_alive(self) -> None:
-        """Test the thread is alive after creation."""
-        from floe_orchestrator_dagster.resources.lineage import _start_background_loop
-
-        loop, thread = _start_background_loop()
-        try:
-            assert thread.is_alive(), "Thread must be alive immediately after start"
-        finally:
-            loop.call_soon_threadsafe(loop.stop)
-            thread.join(timeout=5)
-
-    @pytest.mark.requirement(AC_10)
-    def test_loop_can_execute_coroutines(self) -> None:
-        """Test the background loop actually executes submitted coroutines.
-
-        A fake loop that never runs would fail this test.
-        """
-        from floe_orchestrator_dagster.resources.lineage import _start_background_loop
-
-        loop, thread = _start_background_loop()
-        try:
-            sentinel = object()
-
-            async def probe() -> object:
-                return sentinel
-
-            future = asyncio.run_coroutine_threadsafe(probe(), loop)
-            result = future.result(timeout=5)
-            assert result is sentinel, (
-                "Coroutine submitted to background loop must actually execute"
-            )
-        finally:
-            loop.call_soon_threadsafe(loop.stop)
-            thread.join(timeout=5)
-
-    @pytest.mark.requirement(AC_10)
-    def test_multiple_calls_return_independent_loops(self) -> None:
-        """Test each call creates a separate loop and thread.
-
-        Catches singleton/cached implementations.
-        """
-        from floe_orchestrator_dagster.resources.lineage import _start_background_loop
-
-        loop1, thread1 = _start_background_loop()
-        loop2, thread2 = _start_background_loop()
-        try:
-            assert loop1 is not loop2, "Each call must create a new event loop"
-            assert thread1 is not thread2, "Each call must create a new thread"
-        finally:
-            loop1.call_soon_threadsafe(loop1.stop)
-            loop2.call_soon_threadsafe(loop2.stop)
-            thread1.join(timeout=5)
-            thread2.join(timeout=5)
-
-
 class TestCreateLineageResource:
     """Tests for create_lineage_resource(lineage_ref) — AC-8, AC-10.
 
     Verifies the factory loads the plugin from the registry, obtains
-    transport config and namespace strategy, creates an emitter, wraps
-    it in a Dagster @resource with generator teardown, and registers
-    atexit for cleanup.
+    transport config and namespace strategy, creates an emitter, and wraps
+    it in a Dagster @resource with generator teardown.
     """
 
     @pytest.mark.requirement(AC_8)
@@ -1196,41 +1091,6 @@ class TestCreateLineageResource:
             f"Value must be ResourceDefinition, got {type(result['lineage'])}"
         )
 
-    @pytest.mark.requirement(AC_10)
-    def test_atexit_register_called_with_close(self) -> None:
-        """Test factory registers atexit handler calling resource.close().
-
-        This ensures cleanup happens on interpreter shutdown.
-        """
-        from floe_core.schemas.compiled_artifacts import PluginRef
-
-        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
-
-        lineage_ref = PluginRef(type="marquez", version="1.0.0")
-
-        mock_plugin = MagicMock()
-        mock_plugin.get_transport_config.return_value = {"url": "http://marquez:5000"}
-        mock_plugin.get_namespace_strategy.return_value = {
-            "default_namespace": "test-ns",
-        }
-        mock_emitter = MagicMock()
-
-        with (
-            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
-            patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
-            patch(f"{_LINEAGE_MODULE}.atexit") as mock_atexit,
-        ):
-            mock_registry = MagicMock()
-            mock_get_registry.return_value = mock_registry
-            mock_registry.get.return_value = mock_plugin
-
-            create_lineage_resource(lineage_ref)
-
-            mock_atexit.register.assert_called_once()
-            # The registered callable must be a close method
-            registered_fn = mock_atexit.register.call_args[0][0]
-            assert callable(registered_fn), "atexit.register must receive a callable"
-
 
 class TestCreateLineageResourceGeneratorTeardown:
     """Tests for Dagster @resource generator teardown — AC-10.
@@ -1262,7 +1122,6 @@ class TestCreateLineageResourceGeneratorTeardown:
         with (
             patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
             patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
-            patch(f"{_LINEAGE_MODULE}.atexit"),
         ):
             mock_registry = MagicMock()
             mock_get_registry.return_value = mock_registry
@@ -1316,7 +1175,6 @@ class TestCreateLineageResourceGeneratorTeardown:
         with (
             patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
             patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
-            patch(f"{_LINEAGE_MODULE}.atexit"),
         ):
             mock_registry = MagicMock()
             mock_get_registry.return_value = mock_registry

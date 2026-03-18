@@ -50,7 +50,7 @@ class PluginType(Enum):
     STORAGE = "floe.storage"
     TELEMETRY_BACKEND = "floe.telemetry_backends"
     LINEAGE_BACKEND = "floe.lineage_backends"
-    LINEAGE = "floe.lineage_backends"  # Alias for LINEAGE_BACKEND
+    LINEAGE = "floe.lineage_backends"  # Alias for LINEAGE_BACKEND (enum dedup)
     DBT = "floe.dbt"
     SEMANTIC_LAYER = "floe.semantic_layers"
     INGESTION = "floe.ingestion"

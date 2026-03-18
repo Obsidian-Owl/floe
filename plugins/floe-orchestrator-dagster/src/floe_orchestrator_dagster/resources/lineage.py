@@ -18,7 +18,6 @@ Example:
 from __future__ import annotations
 
 import asyncio
-import atexit
 import importlib
 import logging
 import threading
@@ -96,7 +95,7 @@ class LineageResource:
         except Exception as exc:
             logger.warning(
                 "lineage_emit_error",
-                extra={"error": str(exc)},
+                extra={"error_type": type(exc).__name__},
             )
             return default
 
@@ -312,20 +311,6 @@ class NoOpLineageResource:
 # ---------------------------------------------------------------------------
 
 
-def _start_background_loop() -> tuple[asyncio.AbstractEventLoop, threading.Thread]:
-    """Create a new asyncio event loop running in a daemon thread.
-
-    Returns:
-        A ``(loop, thread)`` tuple where *loop* is already running inside
-        *thread*.  The caller is responsible for stopping the loop and joining
-        the thread.
-    """
-    loop = asyncio.new_event_loop()
-    thread = threading.Thread(target=loop.run_forever, daemon=True)
-    thread.start()
-    return loop, thread
-
-
 def create_lineage_resource(lineage_ref: PluginRef) -> dict[str, Any]:
     """Create a Dagster ResourceDefinition for the configured lineage backend.
 
@@ -352,7 +337,6 @@ def create_lineage_resource(lineage_ref: PluginRef) -> dict[str, Any]:
 
     emitter = create_emitter(transport_config, default_namespace)
     resource = LineageResource(emitter=emitter)
-    atexit.register(resource.close)
 
     def _resource_fn(_init_context: Any) -> Any:
         try:
