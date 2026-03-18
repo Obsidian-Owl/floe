@@ -79,12 +79,13 @@ def mock_emitter() -> MagicMock:
 def lineage_resource(mock_emitter: MagicMock) -> Any:
     """Create a LineageResource wrapping a mock emitter.
 
-    Returns the resource after setup. Caller is responsible for close().
+    Yields the resource and ensures cleanup via close().
     """
     from floe_orchestrator_dagster.resources.lineage import LineageResource
 
     resource = LineageResource(emitter=mock_emitter)
-    return resource
+    yield resource
+    resource.close()
 
 
 @pytest.fixture
@@ -412,6 +413,36 @@ class TestLineageResourceClose:
         assert not thread.is_alive(), "Background thread must be joined after close()"
 
     @pytest.mark.requirement(AC_5)
+    def test_close_closes_event_loop(self, lineage_resource: Any) -> None:
+        """Test close() closes the event loop to release file descriptors."""
+        loop = lineage_resource._loop
+
+        lineage_resource.close()
+
+        assert loop.is_closed(), "Event loop must be closed after close() to prevent FD leaks"
+
+    @pytest.mark.requirement(AC_5)
+    def test_close_logs_warning_if_thread_still_alive(
+        self, mock_emitter: MagicMock, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test close() logs a warning when the background thread doesn't stop."""
+        from floe_orchestrator_dagster.resources.lineage import LineageResource
+
+        resource = LineageResource(emitter=mock_emitter)
+
+        # Patch thread.join to be a no-op and thread.is_alive to return True
+        resource._thread.join = MagicMock()  # type: ignore[assignment]
+        resource._thread.is_alive = MagicMock(return_value=True)  # type: ignore[assignment]
+
+        with caplog.at_level(logging.WARNING):
+            resource.close()
+
+        warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+        assert any("did_not_stop" in msg for msg in warning_messages), (
+            "close() must warn when background thread doesn't stop"
+        )
+
+    @pytest.mark.requirement(AC_5)
     def test_close_is_idempotent(self, lineage_resource: Any, mock_emitter: MagicMock) -> None:
         """Test calling close() multiple times is safe and only drains once."""
         lineage_resource.close()
@@ -490,6 +521,7 @@ class TestLineageResourceErrorHandling:
             result = resource.emit_start(JOB_NAME)
 
         assert isinstance(result, UUID), "emit_start must return a UUID even on timeout"
+        future.cancel.assert_called_once()
 
     @pytest.mark.requirement(AC_6)
     def test_emit_start_timeout_logs_warning(

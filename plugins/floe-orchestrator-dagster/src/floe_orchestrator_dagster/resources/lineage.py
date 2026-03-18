@@ -87,6 +87,7 @@ class LineageResource:
         try:
             return future.result(timeout=_EMIT_TIMEOUT)
         except TimeoutError:
+            future.cancel()
             logger.warning(
                 "lineage_emit_timeout",
                 extra={"timeout": _EMIT_TIMEOUT},
@@ -246,6 +247,13 @@ class LineageResource:
         self._emitter.close()
         self._loop.call_soon_threadsafe(self._loop.stop)
         self._thread.join(timeout=_EMIT_TIMEOUT)
+        if self._thread.is_alive():
+            logger.warning(
+                "lineage_background_thread_did_not_stop",
+                extra={"timeout": _EMIT_TIMEOUT},
+            )
+        else:
+            self._loop.close()
 
 
 class NoOpLineageResource:
@@ -265,34 +273,63 @@ class NoOpLineageResource:
         """
         return "default"
 
-    def emit_start(self, job_name: str, **kwargs: Any) -> UUID:
+    def emit_start(
+        self,
+        job_name: str,
+        *,
+        inputs: list[Any] | None = None,
+        outputs: list[Any] | None = None,
+        run_facets: dict[str, Any] | None = None,
+        job_facets: dict[str, Any] | None = None,
+    ) -> UUID:
         """Return a fresh UUID without emitting anything.
 
         Args:
             job_name: Ignored.
-            **kwargs: Ignored.
+            inputs: Ignored.
+            outputs: Ignored.
+            run_facets: Ignored.
+            job_facets: Ignored.
 
         Returns:
             A new unique UUID.
         """
         return uuid4()
 
-    def emit_complete(self, run_id: UUID, job_name: str, **kwargs: Any) -> None:
+    def emit_complete(
+        self,
+        run_id: UUID,
+        job_name: str,
+        *,
+        outputs: list[Any] | None = None,
+        run_facets: dict[str, Any] | None = None,
+        job_facets: dict[str, Any] | None = None,
+    ) -> None:
         """No-op.
 
         Args:
             run_id: Ignored.
             job_name: Ignored.
-            **kwargs: Ignored.
+            outputs: Ignored.
+            run_facets: Ignored.
+            job_facets: Ignored.
         """
 
-    def emit_fail(self, run_id: UUID, job_name: str, **kwargs: Any) -> None:
+    def emit_fail(
+        self,
+        run_id: UUID,
+        job_name: str,
+        *,
+        error_message: str | None = None,
+        run_facets: dict[str, Any] | None = None,
+    ) -> None:
         """No-op.
 
         Args:
             run_id: Ignored.
             job_name: Ignored.
-            **kwargs: Ignored.
+            error_message: Ignored.
+            run_facets: Ignored.
         """
 
     def emit_event(self, event: Any) -> None:
@@ -336,9 +373,9 @@ def create_lineage_resource(lineage_ref: PluginRef) -> dict[str, Any]:
     default_namespace: str = ns_strategy.get("default_namespace", "default")
 
     emitter = create_emitter(transport_config, default_namespace)
-    resource = LineageResource(emitter=emitter)
 
     def _resource_fn(_init_context: Any) -> Any:
+        resource = LineageResource(emitter=emitter)
         try:
             yield resource
         finally:
