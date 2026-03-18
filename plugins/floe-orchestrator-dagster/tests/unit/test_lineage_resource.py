@@ -853,3 +853,815 @@ class TestNoOpLineageResourceOtherMethods:
     def test_emit_fail_accepts_kwargs(self, noop_resource: Any) -> None:
         """Test NoOp emit_fail accepts kwargs without error."""
         noop_resource.emit_fail(uuid4(), JOB_NAME, error_message="err", run_facets={"a": 1})
+
+
+# ===========================================================================
+# Factory Function Tests — AC-8, AC-9, AC-10
+# ===========================================================================
+
+AC_8 = "AC-8"
+AC_9 = "AC-9"
+AC_10 = "AC-10"
+
+# Module path prefix for patching inside lineage.py
+_LINEAGE_MODULE = "floe_orchestrator_dagster.resources.lineage"
+
+
+class TestStartBackgroundLoop:
+    """Tests for _start_background_loop() — AC-10.
+
+    Verifies that the helper creates a new asyncio event loop running
+    in a daemon thread, returned as a (loop, thread) tuple.
+    """
+
+    @pytest.mark.requirement(AC_10)
+    def test_returns_tuple_of_loop_and_thread(self) -> None:
+        """Test _start_background_loop returns (AbstractEventLoop, Thread)."""
+        from floe_orchestrator_dagster.resources.lineage import _start_background_loop
+
+        loop, thread = _start_background_loop()
+        try:
+            assert isinstance(loop, asyncio.AbstractEventLoop), (
+                f"First element must be AbstractEventLoop, got {type(loop)}"
+            )
+            assert isinstance(thread, threading.Thread), (
+                f"Second element must be Thread, got {type(thread)}"
+            )
+        finally:
+            loop.call_soon_threadsafe(loop.stop)
+            thread.join(timeout=5)
+
+    @pytest.mark.requirement(AC_10)
+    def test_thread_is_daemon(self) -> None:
+        """Test background thread is a daemon so it doesn't block process exit."""
+        from floe_orchestrator_dagster.resources.lineage import _start_background_loop
+
+        loop, thread = _start_background_loop()
+        try:
+            assert thread.daemon is True, "Background thread must be a daemon"
+        finally:
+            loop.call_soon_threadsafe(loop.stop)
+            thread.join(timeout=5)
+
+    @pytest.mark.requirement(AC_10)
+    def test_loop_is_running(self) -> None:
+        """Test the event loop is actively running after creation."""
+        from floe_orchestrator_dagster.resources.lineage import _start_background_loop
+
+        loop, thread = _start_background_loop()
+        try:
+            assert loop.is_running(), "Event loop must be running immediately"
+        finally:
+            loop.call_soon_threadsafe(loop.stop)
+            thread.join(timeout=5)
+
+    @pytest.mark.requirement(AC_10)
+    def test_thread_is_alive(self) -> None:
+        """Test the thread is alive after creation."""
+        from floe_orchestrator_dagster.resources.lineage import _start_background_loop
+
+        loop, thread = _start_background_loop()
+        try:
+            assert thread.is_alive(), "Thread must be alive immediately after start"
+        finally:
+            loop.call_soon_threadsafe(loop.stop)
+            thread.join(timeout=5)
+
+    @pytest.mark.requirement(AC_10)
+    def test_loop_can_execute_coroutines(self) -> None:
+        """Test the background loop actually executes submitted coroutines.
+
+        A fake loop that never runs would fail this test.
+        """
+        from floe_orchestrator_dagster.resources.lineage import _start_background_loop
+
+        loop, thread = _start_background_loop()
+        try:
+            sentinel = object()
+
+            async def probe() -> object:
+                return sentinel
+
+            future = asyncio.run_coroutine_threadsafe(probe(), loop)
+            result = future.result(timeout=5)
+            assert result is sentinel, (
+                "Coroutine submitted to background loop must actually execute"
+            )
+        finally:
+            loop.call_soon_threadsafe(loop.stop)
+            thread.join(timeout=5)
+
+    @pytest.mark.requirement(AC_10)
+    def test_multiple_calls_return_independent_loops(self) -> None:
+        """Test each call creates a separate loop and thread.
+
+        Catches singleton/cached implementations.
+        """
+        from floe_orchestrator_dagster.resources.lineage import _start_background_loop
+
+        loop1, thread1 = _start_background_loop()
+        loop2, thread2 = _start_background_loop()
+        try:
+            assert loop1 is not loop2, "Each call must create a new event loop"
+            assert thread1 is not thread2, "Each call must create a new thread"
+        finally:
+            loop1.call_soon_threadsafe(loop1.stop)
+            loop2.call_soon_threadsafe(loop2.stop)
+            thread1.join(timeout=5)
+            thread2.join(timeout=5)
+
+
+class TestCreateLineageResource:
+    """Tests for create_lineage_resource(lineage_ref) — AC-8, AC-10.
+
+    Verifies the factory loads the plugin from the registry, obtains
+    transport config and namespace strategy, creates an emitter, wraps
+    it in a Dagster @resource with generator teardown, and registers
+    atexit for cleanup.
+    """
+
+    @pytest.mark.requirement(AC_8)
+    def test_returns_dict_with_lineage_key(self) -> None:
+        """Test create_lineage_resource returns dict with exactly the 'lineage' key."""
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_transport_config.return_value = {"url": "http://marquez:5000"}
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "test-ns",
+        }
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            result = create_lineage_resource(lineage_ref)
+
+        assert isinstance(result, dict), f"Expected dict, got {type(result)}"
+        assert "lineage" in result, (
+            f"Result must have 'lineage' key, got keys: {list(result.keys())}"
+        )
+        assert len(result) == 1, f"Result must have exactly one key, got: {list(result.keys())}"
+
+    @pytest.mark.requirement(AC_8)
+    def test_loads_plugin_from_registry_with_correct_type(self) -> None:
+        """Test factory calls get_registry().get(PluginType.LINEAGE, ref.type)."""
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_transport_config.return_value = {"url": "http://marquez:5000"}
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "test-ns",
+        }
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            create_lineage_resource(lineage_ref)
+
+            from floe_core.plugin_types import PluginType
+
+            mock_registry.get.assert_called_once_with(PluginType.LINEAGE, "marquez")
+
+    @pytest.mark.requirement(AC_8)
+    def test_calls_get_transport_config_on_plugin(self) -> None:
+        """Test factory invokes plugin.get_transport_config()."""
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+
+        mock_plugin = MagicMock()
+        transport_config = {"url": "http://marquez:5000", "timeout": 30}
+        mock_plugin.get_transport_config.return_value = transport_config
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "prod-ns",
+        }
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            create_lineage_resource(lineage_ref)
+
+            mock_plugin.get_transport_config.assert_called_once()
+
+    @pytest.mark.requirement(AC_8)
+    def test_calls_get_namespace_strategy_on_plugin(self) -> None:
+        """Test factory invokes plugin.get_namespace_strategy()."""
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_transport_config.return_value = {"url": "http://marquez:5000"}
+        ns_strategy = {"default_namespace": "my-namespace"}
+        mock_plugin.get_namespace_strategy.return_value = ns_strategy
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            create_lineage_resource(lineage_ref)
+
+            mock_plugin.get_namespace_strategy.assert_called_once()
+
+    @pytest.mark.requirement(AC_8)
+    def test_creates_emitter_with_transport_config_and_namespace(self) -> None:
+        """Test factory passes transport_config and default_namespace to create_emitter.
+
+        This catches implementations that hardcode config or ignore the plugin output.
+        """
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+
+        mock_plugin = MagicMock()
+        transport_config = {"url": "http://marquez:5000", "timeout": 30}
+        mock_plugin.get_transport_config.return_value = transport_config
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "custom-ns",
+        }
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(
+                f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter
+            ) as mock_create_emitter,
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            create_lineage_resource(lineage_ref)
+
+            mock_create_emitter.assert_called_once_with(transport_config, "custom-ns")
+
+    @pytest.mark.requirement(AC_8)
+    def test_different_plugin_type_uses_correct_registry_lookup(self) -> None:
+        """Test factory uses the ref.type from lineage_ref, not a hardcoded string.
+
+        Catches implementations that hardcode 'marquez' in the registry lookup.
+        """
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(type="atlan", version="2.0.0")
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_transport_config.return_value = {"url": "http://atlan:9000"}
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "atlan-ns",
+        }
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            create_lineage_resource(lineage_ref)
+
+            from floe_core.plugin_types import PluginType
+
+            mock_registry.get.assert_called_once_with(PluginType.LINEAGE, "atlan")
+
+    @pytest.mark.requirement(AC_10)
+    def test_resource_value_is_dagster_resource_definition(self) -> None:
+        """Test the dict value is a Dagster ResourceDefinition."""
+        from dagster import ResourceDefinition
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_transport_config.return_value = {"url": "http://marquez:5000"}
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "test-ns",
+        }
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            result = create_lineage_resource(lineage_ref)
+
+        assert isinstance(result["lineage"], ResourceDefinition), (
+            f"Value must be ResourceDefinition, got {type(result['lineage'])}"
+        )
+
+    @pytest.mark.requirement(AC_10)
+    def test_atexit_register_called_with_close(self) -> None:
+        """Test factory registers atexit handler calling resource.close().
+
+        This ensures cleanup happens on interpreter shutdown.
+        """
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_transport_config.return_value = {"url": "http://marquez:5000"}
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "test-ns",
+        }
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
+            patch(f"{_LINEAGE_MODULE}.atexit") as mock_atexit,
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            create_lineage_resource(lineage_ref)
+
+            mock_atexit.register.assert_called_once()
+            # The registered callable must be a close method
+            registered_fn = mock_atexit.register.call_args[0][0]
+            assert callable(registered_fn), "atexit.register must receive a callable"
+
+
+class TestCreateLineageResourceGeneratorTeardown:
+    """Tests for Dagster @resource generator teardown — AC-10.
+
+    Verifies the resource definition uses a generator pattern that
+    yields the LineageResource and calls close() in the finally block.
+    """
+
+    @pytest.mark.requirement(AC_10)
+    def test_resource_generator_yields_lineage_resource(self) -> None:
+        """Test the @resource generator yields a LineageResource instance.
+
+        Initialises the Dagster resource and verifies the yielded value
+        has the LineageResource interface (emit_start, close, etc.).
+        """
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_transport_config.return_value = {"url": "http://marquez:5000"}
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "test-ns",
+        }
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
+            patch(f"{_LINEAGE_MODULE}.atexit"),
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            result = create_lineage_resource(lineage_ref)
+
+        resource_def = result["lineage"]
+
+        # Invoke the resource definition's generator to get the yielded value
+        # Dagster ResourceDefinition wraps a generator function
+        from dagster import build_init_resource_context
+
+        init_context = build_init_resource_context()
+        resource_instance = resource_def.resource_fn(init_context)
+
+        # If it's a generator, step through it
+        import types
+
+        if isinstance(resource_instance, types.GeneratorType):
+            yielded = next(resource_instance)
+            assert hasattr(yielded, "emit_start"), "Yielded resource must have emit_start method"
+            assert hasattr(yielded, "close"), "Yielded resource must have close method"
+        else:
+            # Non-generator — still must have the interface
+            assert hasattr(resource_instance, "emit_start"), "Resource must have emit_start method"
+            assert hasattr(resource_instance, "close"), "Resource must have close method"
+
+    @pytest.mark.requirement(AC_10)
+    def test_resource_generator_calls_close_on_teardown(self) -> None:
+        """Test the @resource generator calls close() in the finally block.
+
+        This is the critical teardown test — verifies that exhausting the
+        generator (as Dagster does on resource teardown) calls close().
+        """
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import (
+            create_lineage_resource,
+        )
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_transport_config.return_value = {"url": "http://marquez:5000"}
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "test-ns",
+        }
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
+            patch(f"{_LINEAGE_MODULE}.atexit"),
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            result = create_lineage_resource(lineage_ref)
+
+        resource_def = result["lineage"]
+
+        from dagster import build_init_resource_context
+
+        init_context = build_init_resource_context()
+        gen = resource_def.resource_fn(init_context)
+
+        import types
+
+        if isinstance(gen, types.GeneratorType):
+            yielded = next(gen)
+
+            # Spy on close to verify teardown
+            original_close = yielded.close
+            close_called = []
+
+            def spy_close() -> None:
+                close_called.append(True)
+                return original_close()
+
+            yielded.close = spy_close
+
+            # Simulate Dagster teardown by closing the generator
+            gen.close()
+
+            assert len(close_called) > 0, (
+                "Generator teardown must call close() on the LineageResource"
+            )
+        else:
+            pytest.fail(f"Resource function must be a generator (yield pattern), got {type(gen)}")
+
+
+class TestTryCreateLineageResourceNone:
+    """Tests for try_create_lineage_resource(None) — AC-9.
+
+    When plugins is None, must return {"lineage": <NoOp resource>}.
+    """
+
+    @pytest.mark.requirement(AC_9)
+    def test_none_plugins_returns_dict_with_lineage_key(self) -> None:
+        """Test try_create_lineage_resource(None) returns dict with 'lineage' key."""
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        result = try_create_lineage_resource(None)
+
+        assert isinstance(result, dict), f"Expected dict, got {type(result)}"
+        assert "lineage" in result, f"Must have 'lineage' key, got keys: {list(result.keys())}"
+
+    @pytest.mark.requirement(AC_9)
+    def test_none_plugins_returns_exactly_one_key(self) -> None:
+        """Test the result has exactly one key 'lineage', not extra keys."""
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        result = try_create_lineage_resource(None)
+
+        assert len(result) == 1, f"Expected exactly 1 key, got {len(result)}: {list(result.keys())}"
+
+    @pytest.mark.requirement(AC_9)
+    def test_none_plugins_never_returns_empty_dict(self) -> None:
+        """Test try_create_lineage_resource(None) NEVER returns empty dict.
+
+        This is explicitly different from the iceberg pattern where
+        try_create_iceberg_resources returns {} when not configured.
+        Lineage always returns {"lineage": <noop>}.
+        """
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        result = try_create_lineage_resource(None)
+
+        assert result != {}, (
+            "try_create_lineage_resource must NEVER return empty dict — "
+            "must always return {'lineage': <resource>}"
+        )
+
+    @pytest.mark.requirement(AC_9)
+    def test_none_plugins_resource_is_resource_definition(self) -> None:
+        """Test the NoOp fallback is a proper Dagster ResourceDefinition."""
+        from dagster import ResourceDefinition
+
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        result = try_create_lineage_resource(None)
+
+        assert isinstance(result["lineage"], ResourceDefinition), (
+            f"NoOp must be ResourceDefinition, got {type(result['lineage'])}"
+        )
+
+
+class TestTryCreateLineageResourceNoBackend:
+    """Tests for try_create_lineage_resource(plugins_with_no_lineage) — AC-9.
+
+    When plugins.lineage_backend is None, must return {"lineage": <NoOp>}.
+    """
+
+    @pytest.mark.requirement(AC_9)
+    def test_no_lineage_backend_returns_dict_with_lineage_key(self) -> None:
+        """Test plugins with lineage_backend=None returns dict with 'lineage' key."""
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            lineage_backend=None,
+        )
+
+        result = try_create_lineage_resource(plugins)
+
+        assert isinstance(result, dict)
+        assert "lineage" in result
+        assert result != {}, "Must not return empty dict"
+
+    @pytest.mark.requirement(AC_9)
+    def test_no_lineage_backend_does_not_touch_registry(self) -> None:
+        """Test plugins with no lineage_backend does not call get_registry().
+
+        This catches implementations that unconditionally load from registry.
+        """
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            lineage_backend=None,
+        )
+
+        with patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry:
+            try_create_lineage_resource(plugins)
+
+            mock_get_registry.assert_not_called()
+
+    @pytest.mark.requirement(AC_9)
+    def test_no_lineage_backend_resource_is_resource_definition(self) -> None:
+        """Test the NoOp fallback is a Dagster ResourceDefinition."""
+        from dagster import ResourceDefinition
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            lineage_backend=None,
+        )
+
+        result = try_create_lineage_resource(plugins)
+
+        assert isinstance(result["lineage"], ResourceDefinition)
+
+
+class TestTryCreateLineageResourceWithBackend:
+    """Tests for try_create_lineage_resource(plugins_with_lineage) — AC-8.
+
+    When plugins.lineage_backend exists, must delegate to create_lineage_resource.
+    """
+
+    @pytest.mark.requirement(AC_8)
+    def test_with_lineage_backend_calls_create_lineage_resource(self) -> None:
+        """Test that try_create delegates to create_lineage_resource when backend exists."""
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            lineage_backend=lineage_ref,
+        )
+
+        expected_result = {"lineage": MagicMock()}
+
+        with patch(
+            f"{_LINEAGE_MODULE}.create_lineage_resource",
+            return_value=expected_result,
+        ) as mock_create:
+            result = try_create_lineage_resource(plugins)
+
+            mock_create.assert_called_once_with(lineage_ref)
+            assert result is expected_result, (
+                "try_create must return the result of create_lineage_resource"
+            )
+
+    @pytest.mark.requirement(AC_8)
+    def test_with_lineage_backend_passes_exact_ref(self) -> None:
+        """Test the exact PluginRef is forwarded, not a copy or transformation.
+
+        Catches implementations that extract fields instead of passing the ref.
+        """
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        lineage_ref = PluginRef(
+            type="openmetadata",
+            version="3.0.0",
+            config={"api_url": "http://omd:8585"},
+        )
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            lineage_backend=lineage_ref,
+        )
+
+        with patch(
+            f"{_LINEAGE_MODULE}.create_lineage_resource",
+            return_value={"lineage": MagicMock()},
+        ) as mock_create:
+            try_create_lineage_resource(plugins)
+
+            passed_ref = mock_create.call_args[0][0]
+            assert passed_ref is lineage_ref, "Must pass the exact PluginRef object, not a copy"
+
+    @pytest.mark.requirement(AC_8)
+    def test_with_lineage_backend_returns_dict_with_lineage_key(self) -> None:
+        """Test configured lineage returns dict with 'lineage' key."""
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            lineage_backend=lineage_ref,
+        )
+
+        mock_resource_def = MagicMock()
+
+        with patch(
+            f"{_LINEAGE_MODULE}.create_lineage_resource",
+            return_value={"lineage": mock_resource_def},
+        ):
+            result = try_create_lineage_resource(plugins)
+
+        assert "lineage" in result
+        assert result["lineage"] is mock_resource_def
+
+    @pytest.mark.requirement(AC_8)
+    def test_always_returns_dict_never_none(self) -> None:
+        """Test try_create_lineage_resource NEVER returns None.
+
+        Tests all three paths: None plugins, no backend, with backend.
+        """
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        # Path 1: None plugins
+        result1 = try_create_lineage_resource(None)
+        assert result1 is not None, "Must not return None for None plugins"
+        assert isinstance(result1, dict)
+
+        # Path 2: No lineage_backend
+        plugins_no_lineage = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+        )
+        result2 = try_create_lineage_resource(plugins_no_lineage)
+        assert result2 is not None, "Must not return None for no backend"
+        assert isinstance(result2, dict)
+
+        # Path 3: With lineage_backend
+        plugins_with_lineage = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            lineage_backend=PluginRef(type="marquez", version="1.0.0"),
+        )
+
+        with patch(
+            f"{_LINEAGE_MODULE}.create_lineage_resource",
+            return_value={"lineage": MagicMock()},
+        ):
+            result3 = try_create_lineage_resource(plugins_with_lineage)
+        assert result3 is not None, "Must not return None for configured backend"
+        assert isinstance(result3, dict)
+
+
+class TestTryCreateLineageResourceConsistency:
+    """Tests verifying all code paths return the same dict structure — AC-9.
+
+    Every path must return {"lineage": <ResourceDefinition>}.
+    """
+
+    @pytest.mark.requirement(AC_9)
+    def test_all_noop_paths_return_same_resource_type(self) -> None:
+        """Test None plugins and no-backend paths return same ResourceDefinition type.
+
+        Catches implementations that return different types for different NoOp paths.
+        """
+        from dagster import ResourceDefinition
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        # Path 1: None
+        result_none = try_create_lineage_resource(None)
+
+        # Path 2: No backend
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            lineage_backend=None,
+        )
+        result_no_backend = try_create_lineage_resource(plugins)
+
+        # Both must be ResourceDefinition
+        assert isinstance(result_none["lineage"], ResourceDefinition)
+        assert isinstance(result_no_backend["lineage"], ResourceDefinition)
+
+        # Both must have the same type (same NoOp wrapper)
+        assert type(result_none["lineage"]) is type(result_no_backend["lineage"]), (
+            "Both NoOp paths should produce the same ResourceDefinition type"
+        )

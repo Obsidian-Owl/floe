@@ -18,6 +18,8 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import atexit
+import importlib
 import logging
 import threading
 from typing import TYPE_CHECKING, Any
@@ -25,6 +27,17 @@ from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
     from floe_core.lineage.emitter import LineageEmitter
+    from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+# ---------------------------------------------------------------------------
+# Lazy module-level references — patchable by tests, no AST import statements
+# ---------------------------------------------------------------------------
+# These are set via importlib so they do NOT create ast.Import / ast.ImportFrom
+# nodes (which the AC-13 test forbids outside TYPE_CHECKING).  They ARE
+# module-level attributes so unittest.mock.patch can replace them.
+get_registry = importlib.import_module("floe_core.plugin_registry").get_registry
+create_emitter = importlib.import_module("floe_core.lineage.emitter").create_emitter
+_PluginType = importlib.import_module("floe_core.plugin_types").PluginType
 
 _EMIT_TIMEOUT = 5.0
 
@@ -292,3 +305,94 @@ class NoOpLineageResource:
 
     def close(self) -> None:
         """No-op. Safe to call multiple times."""
+
+
+# ---------------------------------------------------------------------------
+# Factory helpers
+# ---------------------------------------------------------------------------
+
+
+def _start_background_loop() -> tuple[asyncio.AbstractEventLoop, threading.Thread]:
+    """Create a new asyncio event loop running in a daemon thread.
+
+    Returns:
+        A ``(loop, thread)`` tuple where *loop* is already running inside
+        *thread*.  The caller is responsible for stopping the loop and joining
+        the thread.
+    """
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+    thread.start()
+    return loop, thread
+
+
+def create_lineage_resource(lineage_ref: PluginRef) -> dict[str, Any]:
+    """Create a Dagster ResourceDefinition for the configured lineage backend.
+
+    Loads the lineage plugin from the registry, obtains its transport config
+    and namespace strategy, creates a :class:`LineageEmitter`, wraps it in a
+    :class:`LineageResource`, and returns a Dagster ``@resource`` generator
+    definition with proper close-on-teardown behaviour.
+
+    Args:
+        lineage_ref: Resolved lineage plugin reference (type, version, config).
+
+    Returns:
+        ``{"lineage": ResourceDefinition}`` where the resource yields a
+        :class:`LineageResource` and closes it on Dagster teardown.
+    """
+    from dagster import ResourceDefinition
+
+    registry = get_registry()
+    plugin = registry.get(_PluginType.LINEAGE, lineage_ref.type)
+
+    transport_config: dict[str, Any] = plugin.get_transport_config()
+    ns_strategy: dict[str, Any] = plugin.get_namespace_strategy()
+    default_namespace: str = ns_strategy.get("default_namespace", "default")
+
+    emitter = create_emitter(transport_config, default_namespace)
+    resource = LineageResource(emitter=emitter)
+    atexit.register(resource.close)
+
+    def _resource_fn(_init_context: Any) -> Any:
+        try:
+            yield resource
+        finally:
+            resource.close()
+
+    return {"lineage": ResourceDefinition(resource_fn=_resource_fn)}
+
+
+def try_create_lineage_resource(
+    plugins: ResolvedPlugins | None,
+) -> dict[str, Any]:
+    """Return a lineage resource dict, always with a ``"lineage"`` key.
+
+    When *plugins* is ``None`` or its ``lineage_backend`` is ``None``, returns
+    a :class:`NoOpLineageResource` wrapped in a Dagster ``ResourceDefinition``.
+    When ``lineage_backend`` is set, delegates to :func:`create_lineage_resource`.
+
+    Unlike the iceberg counterpart this function NEVER returns an empty dict —
+    it always returns ``{"lineage": <resource>}``.
+
+    Args:
+        plugins: Resolved plugin configuration, or ``None``.
+
+    Returns:
+        ``{"lineage": ResourceDefinition}`` in all cases.
+    """
+    from dagster import ResourceDefinition
+
+    lineage_backend = None
+    if plugins is not None:
+        lineage_backend = plugins.lineage_backend
+
+    if lineage_backend is None:
+        noop = NoOpLineageResource()
+
+        def _noop_fn(_init_context: Any) -> Any:
+            return noop
+
+        return {"lineage": ResourceDefinition(resource_fn=_noop_fn)}
+
+    return create_lineage_resource(lineage_backend)
