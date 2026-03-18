@@ -137,6 +137,7 @@ class TestObservability(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-041")
     @pytest.mark.requirement("FR-048")
+    @pytest.mark.requirement("AC-4")
     def test_openlineage_events_in_marquez(
         self,
         e2e_namespace: str,
@@ -249,6 +250,7 @@ class TestObservability(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-042")
+    @pytest.mark.requirement("AC-7")
     def test_trace_lineage_correlation(
         self,
         e2e_namespace: str,
@@ -1006,17 +1008,31 @@ class TestObservability(IntegrationTestBase):
         parent_facet_found = False
         for run in all_runs:
             facets: dict[str, Any] = run.get("facets") or {}
-            if "parentRun" in facets or "parent" in facets:
-                parent_facet_found = True
-                break
-            # Marquez may nest facets under "run" key
-            run_facets: dict[str, Any] = facets.get("run") or {}
-            if "parentRun" in run_facets or "parent" in run_facets:
-                parent_facet_found = True
-                break
+            parent_facet: dict[str, Any] | None = None
+            if "parentRun" in facets:
+                parent_facet = facets["parentRun"]
+            elif "parent" in facets:
+                parent_facet = facets["parent"]
+            else:
+                # Marquez may nest facets under "run" key
+                run_facets: dict[str, Any] = facets.get("run") or {}
+                if "parentRun" in run_facets:
+                    parent_facet = run_facets["parentRun"]
+                elif "parent" in run_facets:
+                    parent_facet = run_facets["parent"]
+
+            if parent_facet is not None and isinstance(parent_facet, dict):
+                # Validate structure: must contain a run reference
+                has_run_ref = bool(
+                    parent_facet.get("run", {}).get("runId") or parent_facet.get("runId")
+                )
+                if has_run_ref:
+                    parent_facet_found = True
+                    break
 
         assert parent_facet_found, (
-            "PARENT FACET GAP: No Marquez runs contain a 'parentRun' facet.\n"
+            "PARENT FACET GAP: No Marquez runs contain a valid 'parentRun' "
+            "facet with a runId.\n"
             "Per-model dbt lineage events MUST include a parentRun facet "
             "linking to the parent Dagster asset run.\n"
             f"Runs inspected: {len(all_runs)}\n"
