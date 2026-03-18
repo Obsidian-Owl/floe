@@ -67,7 +67,7 @@ _RESOURCE_PRESETS: dict[str, ResourceSpec] = {
 }
 
 # PERF: Pre-created frozenset for asset resource keys (avoid per-asset set creation)
-_DBT_RESOURCE_KEYS: frozenset[str] = frozenset({"dbt"})
+_DBT_RESOURCE_KEYS: frozenset[str] = frozenset({"dbt", "lineage"})
 
 
 class DagsterOrchestratorPlugin(OrchestratorPlugin):
@@ -239,6 +239,10 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             # T108-T111: Wire Iceberg resources if catalog and storage are configured
             resources = self._create_iceberg_resources(validated.plugins, validated.governance)
 
+            # AC-11: Wire lineage resources (always returns {"lineage": ...})
+            lineage_resources = self._create_lineage_resources(validated.plugins)
+            resources.update(lineage_resources)
+
             # T047-T049: Wire semantic layer resources and asset if semantic plugin is configured
             semantic_resources = self._create_semantic_resources(validated.plugins)
             resources.update(semantic_resources)
@@ -271,6 +275,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                     "asset_count": len(assets),
                     "model_count": len(models),
                     "has_iceberg": "iceberg" in resources,
+                    "has_lineage": "lineage" in resources,
                     "has_semantic_layer": "semantic_layer" in resources,
                     "has_ingestion": "ingestion" in resources,
                 },
@@ -358,6 +363,30 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         )
 
         return try_create_ingestion_resources(plugins)
+
+    def _create_lineage_resources(
+        self,
+        plugins: Any | None,
+    ) -> dict[str, Any]:
+        """Create lineage resources from resolved plugins configuration.
+
+        Attempts to load the lineage backend plugin and create a resource.
+        Returns a dict with "lineage" key in ALL cases (NoOp when not configured).
+
+        Args:
+            plugins: ResolvedPlugins from CompiledArtifacts, or None.
+
+        Returns:
+            Dictionary with "lineage" key always present.
+
+        Requirements:
+            AC-11: Wire lineage resource into create_definitions()
+        """
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        return try_create_lineage_resource(plugins)
 
     def _models_to_transform_configs(self, models: list[dict[str, Any]]) -> list[TransformConfig]:
         """Convert ResolvedModel dicts to TransformConfig objects.

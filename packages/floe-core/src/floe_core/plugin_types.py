@@ -50,6 +50,10 @@ class PluginType(Enum):
     STORAGE = "floe.storage"
     TELEMETRY_BACKEND = "floe.telemetry_backends"
     LINEAGE_BACKEND = "floe.lineage_backends"
+    # LINEAGE is a convenience alias for LINEAGE_BACKEND (same value).
+    # Python Enum treats same-value members as aliases: LINEAGE won't
+    # appear in list(PluginType) and .name returns "LINEAGE_BACKEND".
+    LINEAGE = "floe.lineage_backends"
     DBT = "floe.dbt"
     SEMANTIC_LAYER = "floe.semantic_layers"
     INGESTION = "floe.ingestion"
