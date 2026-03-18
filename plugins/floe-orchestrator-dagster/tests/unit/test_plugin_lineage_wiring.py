@@ -407,3 +407,54 @@ class TestAssetRequiredResourceKeysIncludesLineage:
                 f"Asset {asset_def.key} from create_definitions() must have 'lineage' "
                 f"in required_resource_keys, got: {required_keys}"
             )
+
+
+class TestLineageResourceExports:
+    """Tests for lineage factory exports from resources package — T5.
+
+    Validates AC-11: The resources package __init__.py MUST export
+    create_lineage_resource and try_create_lineage_resource so that
+    consumers can import them directly from
+    floe_orchestrator_dagster.resources.
+    """
+
+    @pytest.mark.requirement("AC-11")
+    def test_create_lineage_resource_importable_from_resources(self) -> None:
+        """Test create_lineage_resource is exported from resources package.
+
+        Verifies that the factory function is importable via the public
+        resources package API, not only from the private submodule.
+        """
+        from floe_orchestrator_dagster.resources import create_lineage_resource
+
+        assert callable(create_lineage_resource)
+
+    @pytest.mark.requirement("AC-11")
+    def test_try_create_lineage_resource_importable_from_resources(self) -> None:
+        """Test try_create_lineage_resource is exported from resources package.
+
+        Verifies that the try_ variant is importable via the public
+        resources package API, not only from the private submodule.
+        """
+        from floe_orchestrator_dagster.resources import try_create_lineage_resource
+
+        assert callable(try_create_lineage_resource)
+
+    @pytest.mark.requirement("AC-11")
+    def test_lineage_exports_in_all(self) -> None:
+        """Test lineage factory functions are listed in __all__.
+
+        Functions not in __all__ are considered private API and may not
+        appear in wildcard imports or IDE autocompletion. Both factory
+        functions MUST be explicitly listed.
+        """
+        import floe_orchestrator_dagster.resources as resources_mod
+
+        assert hasattr(resources_mod, "__all__"), "resources package must define __all__"
+        assert "create_lineage_resource" in resources_mod.__all__, (
+            f"'create_lineage_resource' must be in resources.__all__, got: {resources_mod.__all__}"
+        )
+        assert "try_create_lineage_resource" in resources_mod.__all__, (
+            f"'try_create_lineage_resource' must be in resources.__all__, "
+            f"got: {resources_mod.__all__}"
+        )

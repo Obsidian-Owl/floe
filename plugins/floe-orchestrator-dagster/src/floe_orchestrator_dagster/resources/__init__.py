@@ -22,6 +22,7 @@ from __future__ import annotations
 from .dbt_resource import DBTResource, load_dbt_plugin
 from .iceberg import create_iceberg_resources, try_create_iceberg_resources
 from .ingestion import create_ingestion_resources, try_create_ingestion_resources
+from .lineage import create_lineage_resource, try_create_lineage_resource
 from .semantic import create_semantic_resources, try_create_semantic_resources
 
 __all__: list[str] = [
@@ -31,6 +32,8 @@ __all__: list[str] = [
     "try_create_iceberg_resources",
     "create_ingestion_resources",
     "try_create_ingestion_resources",
+    "create_lineage_resource",
+    "try_create_lineage_resource",
     "create_semantic_resources",
     "try_create_semantic_resources",
 ]
