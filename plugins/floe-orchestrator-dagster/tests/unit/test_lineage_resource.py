@@ -168,11 +168,14 @@ class TestLineageResourceEmitStart:
         mock_emitter.emit_start = AsyncMock(return_value=specific_id)
 
         resource = LineageResource(emitter=mock_emitter)
-        result = resource.emit_start(JOB_NAME)
+        try:
+            result = resource.emit_start(JOB_NAME)
 
-        assert result == specific_id, (
-            f"emit_start must return the UUID from the emitter, got {result}"
-        )
+            assert result == specific_id, (
+                f"emit_start must return the UUID from the emitter, got {result}"
+            )
+        finally:
+            resource.close()
 
     @pytest.mark.requirement(AC_1)
     def test_emit_start_different_emitter_uuids_propagate(self, mock_emitter: MagicMock) -> None:
@@ -187,11 +190,14 @@ class TestLineageResourceEmitStart:
         mock_emitter.emit_start = AsyncMock(side_effect=[id_1, id_2])
 
         resource = LineageResource(emitter=mock_emitter)
-        result_1 = resource.emit_start("job_a")
-        result_2 = resource.emit_start("job_b")
+        try:
+            result_1 = resource.emit_start("job_a")
+            result_2 = resource.emit_start("job_b")
 
-        assert result_1 == id_1
-        assert result_2 == id_2
+            assert result_1 == id_1
+            assert result_2 == id_2
+        finally:
+            resource.close()
 
 
 class TestLineageResourceEmitComplete:
@@ -347,22 +353,24 @@ class TestLineageResourceBackgroundLoop:
         from floe_orchestrator_dagster.resources.lineage import LineageResource
 
         resource = LineageResource(emitter=mock_emitter)
+        try:
+            with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
+                future = MagicMock(spec=Future)
+                future.result.return_value = uuid4()
+                mock_submit.return_value = future
 
-        with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
-            future = MagicMock(spec=Future)
-            future.result.return_value = uuid4()
-            mock_submit.return_value = future
+                resource.emit_start(JOB_NAME)
 
-            resource.emit_start(JOB_NAME)
-
-            mock_submit.assert_called_once()
-            # First arg should be a coroutine
-            coro_arg = mock_submit.call_args[0][0]
-            assert asyncio.iscoroutine(coro_arg), (
-                "First argument to run_coroutine_threadsafe must be a coroutine"
-            )
-            # Clean up the coroutine to avoid RuntimeWarning
-            coro_arg.close()
+                mock_submit.assert_called_once()
+                # First arg should be a coroutine
+                coro_arg = mock_submit.call_args[0][0]
+                assert asyncio.iscoroutine(coro_arg), (
+                    "First argument to run_coroutine_threadsafe must be a coroutine"
+                )
+                # Clean up the coroutine to avoid RuntimeWarning
+                coro_arg.close()
+        finally:
+            resource.close()
 
 
 class TestLineageResourceClose:
@@ -429,6 +437,8 @@ class TestLineageResourceClose:
         from floe_orchestrator_dagster.resources.lineage import LineageResource
 
         resource = LineageResource(emitter=mock_emitter)
+        real_thread = resource._thread
+        real_loop = resource._loop
 
         # Patch thread.join to be a no-op and thread.is_alive to return True
         resource._thread.join = MagicMock()  # type: ignore[assignment]
@@ -441,6 +451,12 @@ class TestLineageResourceClose:
         assert any("did_not_stop" in msg for msg in warning_messages), (
             "close() must warn when background thread doesn't stop"
         )
+
+        # Clean up the real thread/loop that was left running
+        real_loop.call_soon_threadsafe(real_loop.stop)
+        real_thread.join(timeout=2.0)
+        if not real_loop.is_running():
+            real_loop.close()
 
     @pytest.mark.requirement(AC_5)
     def test_close_is_idempotent(self, lineage_resource: Any, mock_emitter: MagicMock) -> None:
@@ -511,17 +527,19 @@ class TestLineageResourceErrorHandling:
 
         mock_emitter.emit_start = slow_emit
         resource = LineageResource(emitter=mock_emitter)
+        try:
+            # Patch the future to raise TimeoutError immediately
+            with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
+                future = MagicMock(spec=Future)
+                future.result.side_effect = TimeoutError("timed out")
+                mock_submit.return_value = future
 
-        # Patch the future to raise TimeoutError immediately
-        with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
-            future = MagicMock(spec=Future)
-            future.result.side_effect = TimeoutError("timed out")
-            mock_submit.return_value = future
+                result = resource.emit_start(JOB_NAME)
 
-            result = resource.emit_start(JOB_NAME)
-
-        assert isinstance(result, UUID), "emit_start must return a UUID even on timeout"
-        future.cancel.assert_called_once()
+            assert isinstance(result, UUID), "emit_start must return a UUID even on timeout"
+            future.cancel.assert_called_once()
+        finally:
+            resource.close()
 
     @pytest.mark.requirement(AC_6)
     def test_emit_start_timeout_logs_warning(
@@ -532,17 +550,19 @@ class TestLineageResourceErrorHandling:
 
         mock_emitter.emit_start = AsyncMock(return_value=uuid4())
         resource = LineageResource(emitter=mock_emitter)
+        try:
+            with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
+                future = MagicMock(spec=Future)
+                future.result.side_effect = TimeoutError("timed out")
+                mock_submit.return_value = future
 
-        with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
-            future = MagicMock(spec=Future)
-            future.result.side_effect = TimeoutError("timed out")
-            mock_submit.return_value = future
+                with caplog.at_level(logging.WARNING):
+                    resource.emit_start(JOB_NAME)
 
-            with caplog.at_level(logging.WARNING):
-                resource.emit_start(JOB_NAME)
-
-        warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
-        assert len(warning_records) > 0, "Timeout must produce a warning log"
+            warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+            assert len(warning_records) > 0, "Timeout must produce a warning log"
+        finally:
+            resource.close()
 
     @pytest.mark.requirement(AC_6)
     def test_emit_start_exception_returns_uuid(self, mock_emitter: MagicMock) -> None:
@@ -551,11 +571,13 @@ class TestLineageResourceErrorHandling:
 
         mock_emitter.emit_start = AsyncMock(side_effect=RuntimeError("transport down"))
         resource = LineageResource(emitter=mock_emitter)
-
-        result = resource.emit_start(JOB_NAME)
-        assert isinstance(result, UUID), (
-            "emit_start must return a UUID even when the emitter raises"
-        )
+        try:
+            result = resource.emit_start(JOB_NAME)
+            assert isinstance(result, UUID), (
+                "emit_start must return a UUID even when the emitter raises"
+            )
+        finally:
+            resource.close()
 
     @pytest.mark.requirement(AC_6)
     def test_emit_complete_exception_does_not_raise(self, mock_emitter: MagicMock) -> None:
@@ -564,9 +586,11 @@ class TestLineageResourceErrorHandling:
 
         mock_emitter.emit_complete = AsyncMock(side_effect=RuntimeError("transport down"))
         resource = LineageResource(emitter=mock_emitter)
-
-        # Must not raise
-        resource.emit_complete(uuid4(), JOB_NAME)
+        try:
+            # Must not raise
+            resource.emit_complete(uuid4(), JOB_NAME)
+        finally:
+            resource.close()
 
     @pytest.mark.requirement(AC_6)
     def test_emit_fail_exception_does_not_raise(self, mock_emitter: MagicMock) -> None:
@@ -575,9 +599,11 @@ class TestLineageResourceErrorHandling:
 
         mock_emitter.emit_fail = AsyncMock(side_effect=ConnectionError("network error"))
         resource = LineageResource(emitter=mock_emitter)
-
-        # Must not raise
-        resource.emit_fail(uuid4(), JOB_NAME, error_message=ERROR_MESSAGE)
+        try:
+            # Must not raise
+            resource.emit_fail(uuid4(), JOB_NAME, error_message=ERROR_MESSAGE)
+        finally:
+            resource.close()
 
     @pytest.mark.requirement(AC_6)
     def test_emit_start_exception_logs_warning(
@@ -588,12 +614,14 @@ class TestLineageResourceErrorHandling:
 
         mock_emitter.emit_start = AsyncMock(side_effect=RuntimeError("boom"))
         resource = LineageResource(emitter=mock_emitter)
+        try:
+            with caplog.at_level(logging.WARNING):
+                resource.emit_start(JOB_NAME)
 
-        with caplog.at_level(logging.WARNING):
-            resource.emit_start(JOB_NAME)
-
-        warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
-        assert len(warning_records) > 0, "Emitter exception must produce a warning log"
+            warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
+            assert len(warning_records) > 0, "Emitter exception must produce a warning log"
+        finally:
+            resource.close()
 
     @pytest.mark.requirement(AC_6)
     def test_emit_start_uses_5s_timeout(self, mock_emitter: MagicMock) -> None:
@@ -605,23 +633,25 @@ class TestLineageResourceErrorHandling:
 
         mock_emitter.emit_start = AsyncMock(return_value=uuid4())
         resource = LineageResource(emitter=mock_emitter)
+        try:
+            with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
+                future = MagicMock(spec=Future)
+                future.result.return_value = uuid4()
+                mock_submit.return_value = future
 
-        with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
-            future = MagicMock(spec=Future)
-            future.result.return_value = uuid4()
-            mock_submit.return_value = future
+                resource.emit_start(JOB_NAME)
 
-            resource.emit_start(JOB_NAME)
-
-            # Verify timeout=5 (or 5.0) was passed
-            call_args = future.result.call_args
-            if call_args.args:
-                timeout_val = call_args.args[0]
-            else:
-                timeout_val = call_args.kwargs.get("timeout")
-            assert timeout_val == pytest.approx(5.0), (
-                f"emit_start must use 5s timeout, got {timeout_val}"
-            )
+                # Verify timeout=5 (or 5.0) was passed
+                call_args = future.result.call_args
+                if call_args.args:
+                    timeout_val = call_args.args[0]
+                else:
+                    timeout_val = call_args.kwargs.get("timeout")
+                assert timeout_val == pytest.approx(5.0), (
+                    f"emit_start must use 5s timeout, got {timeout_val}"
+                )
+        finally:
+            resource.close()
 
 
 class TestLineageResourceConcurrency:
@@ -641,28 +671,31 @@ class TestLineageResourceConcurrency:
         mock_emitter.emit_start = AsyncMock(side_effect=expected_ids)
 
         resource = LineageResource(emitter=mock_emitter)
-        results: list[UUID | None] = [None] * num_threads
-        errors: list[Exception | None] = [None] * num_threads
+        try:
+            results: list[UUID | None] = [None] * num_threads
+            errors: list[Exception | None] = [None] * num_threads
 
-        def worker(idx: int) -> None:
-            try:
-                results[idx] = resource.emit_start(f"job_{idx}")
-            except Exception as exc:
-                errors[idx] = exc
+            def worker(idx: int) -> None:
+                try:
+                    results[idx] = resource.emit_start(f"job_{idx}")
+                except Exception as exc:
+                    errors[idx] = exc
 
-        threads = [threading.Thread(target=worker, args=(i,)) for i in range(num_threads)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=10)
+            threads = [threading.Thread(target=worker, args=(i,)) for i in range(num_threads)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=10)
 
-        # No thread should have raised
-        for i, err in enumerate(errors):
-            assert err is None, f"Thread {i} raised: {err}"
+            # No thread should have raised
+            for i, err in enumerate(errors):
+                assert err is None, f"Thread {i} raised: {err}"
 
-        # Every result should be a UUID
-        for i, result in enumerate(results):
-            assert isinstance(result, UUID), f"Thread {i} got {type(result)}, not UUID"
+            # Every result should be a UUID
+            for i, result in enumerate(results):
+                assert isinstance(result, UUID), f"Thread {i} got {type(result)}, not UUID"
+        finally:
+            resource.close()
 
     @pytest.mark.requirement(AC_12)
     def test_concurrent_emit_start_returns_unique_uuids(self, mock_emitter: MagicMock) -> None:
@@ -677,21 +710,24 @@ class TestLineageResourceConcurrency:
         mock_emitter.emit_start = AsyncMock(side_effect=expected_ids)
 
         resource = LineageResource(emitter=mock_emitter)
-        results: list[UUID | None] = [None] * num_threads
+        try:
+            results: list[UUID | None] = [None] * num_threads
 
-        def worker(idx: int) -> None:
-            results[idx] = resource.emit_start(f"job_{idx}")
+            def worker(idx: int) -> None:
+                results[idx] = resource.emit_start(f"job_{idx}")
 
-        threads = [threading.Thread(target=worker, args=(i,)) for i in range(num_threads)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=10)
+            threads = [threading.Thread(target=worker, args=(i,)) for i in range(num_threads)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=10)
 
-        uuid_set = {r for r in results if r is not None}
-        assert len(uuid_set) == num_threads, (
-            f"Expected {num_threads} unique UUIDs, got {len(uuid_set)}"
-        )
+            uuid_set = {r for r in results if r is not None}
+            assert len(uuid_set) == num_threads, (
+                f"Expected {num_threads} unique UUIDs, got {len(uuid_set)}"
+            )
+        finally:
+            resource.close()
 
     @pytest.mark.requirement(AC_12)
     def test_concurrent_mixed_operations(self, mock_emitter: MagicMock) -> None:
@@ -703,39 +739,42 @@ class TestLineageResourceConcurrency:
 
         mock_emitter.emit_start = AsyncMock(return_value=uuid4())
         resource = LineageResource(emitter=mock_emitter)
-        errors: list[Exception | None] = [None] * 30
+        try:
+            errors: list[Exception | None] = [None] * 30
 
-        def start_worker(idx: int) -> None:
-            try:
-                resource.emit_start(f"job_{idx}")
-            except Exception as exc:
-                errors[idx] = exc
+            def start_worker(idx: int) -> None:
+                try:
+                    resource.emit_start(f"job_{idx}")
+                except Exception as exc:
+                    errors[idx] = exc
 
-        def complete_worker(idx: int) -> None:
-            try:
-                resource.emit_complete(uuid4(), f"job_{idx}")
-            except Exception as exc:
-                errors[10 + idx] = exc
+            def complete_worker(idx: int) -> None:
+                try:
+                    resource.emit_complete(uuid4(), f"job_{idx}")
+                except Exception as exc:
+                    errors[10 + idx] = exc
 
-        def fail_worker(idx: int) -> None:
-            try:
-                resource.emit_fail(uuid4(), f"job_{idx}", error_message="err")
-            except Exception as exc:
-                errors[20 + idx] = exc
+            def fail_worker(idx: int) -> None:
+                try:
+                    resource.emit_fail(uuid4(), f"job_{idx}", error_message="err")
+                except Exception as exc:
+                    errors[20 + idx] = exc
 
-        threads: list[threading.Thread] = []
-        for i in range(10):
-            threads.append(threading.Thread(target=start_worker, args=(i,)))
-            threads.append(threading.Thread(target=complete_worker, args=(i,)))
-            threads.append(threading.Thread(target=fail_worker, args=(i,)))
+            threads: list[threading.Thread] = []
+            for i in range(10):
+                threads.append(threading.Thread(target=start_worker, args=(i,)))
+                threads.append(threading.Thread(target=complete_worker, args=(i,)))
+                threads.append(threading.Thread(target=fail_worker, args=(i,)))
 
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=15)
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=15)
 
-        for i, err in enumerate(errors):
-            assert err is None, f"Concurrent operation {i} raised: {err}"
+            for i, err in enumerate(errors):
+                assert err is None, f"Concurrent operation {i} raised: {err}"
+        finally:
+            resource.close()
 
 
 class TestLineageResourceTypeChecking:
