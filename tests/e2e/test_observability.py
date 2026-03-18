@@ -838,6 +838,8 @@ class TestObservability(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-041")
+    @pytest.mark.requirement("AC-5")
+    @pytest.mark.requirement("AC-6")
     def test_openlineage_four_emission_points(
         self,
         e2e_namespace: str,
@@ -964,6 +966,62 @@ class TestObservability(IntegrationTestBase):
             "Fix: Emit RunEvent.START at job begin and RunEvent.COMPLETE at job end.\n"
             "All 4 emission points per FR-041: "
             "dbt model START, dbt model COMPLETE, pipeline START, pipeline COMPLETE."
+        )
+
+        # -------------------------------------------------------------------
+        # AC-5: Runtime lineage events have meaningful (non-zero) durations.
+        # -------------------------------------------------------------------
+        from datetime import datetime
+
+        duration_checked = False
+        for run in all_runs:
+            started_at: str = run.get("startedAt", "")
+            ended_at: str = run.get("endedAt", "")
+            if not started_at or not ended_at:
+                continue
+            try:
+                start_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                end_dt = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
+                delta = (end_dt - start_dt).total_seconds()
+                if delta > 0:
+                    duration_checked = True
+                    break
+            except (ValueError, TypeError):
+                continue
+
+        assert duration_checked, (
+            "DURATION GAP: No Marquez runs have non-zero duration "
+            "(startedAt → endedAt).\n"
+            "Runtime lineage events MUST have meaningful durations proving "
+            "they were emitted at actual execution boundaries, "
+            "not back-to-back during compilation.\n"
+            "Fix: Ensure LineageResource emits START at execution begin "
+            "and COMPLETE at execution end with real timestamps."
+        )
+
+        # -------------------------------------------------------------------
+        # AC-6: Per-model events carry a parentRun facet linking to the
+        #       parent Dagster asset run.
+        # -------------------------------------------------------------------
+        parent_facet_found = False
+        for run in all_runs:
+            facets: dict[str, Any] = run.get("facets") or {}
+            if "parentRun" in facets or "parent" in facets:
+                parent_facet_found = True
+                break
+            # Marquez may nest facets under "run" key
+            run_facets: dict[str, Any] = facets.get("run") or {}
+            if "parentRun" in run_facets or "parent" in run_facets:
+                parent_facet_found = True
+                break
+
+        assert parent_facet_found, (
+            "PARENT FACET GAP: No Marquez runs contain a 'parentRun' facet.\n"
+            "Per-model dbt lineage events MUST include a parentRun facet "
+            "linking to the parent Dagster asset run.\n"
+            f"Runs inspected: {len(all_runs)}\n"
+            "Fix: Ensure LineageResource passes parent_run_id "
+            "when extracting per-model lineage events."
         )
 
     @pytest.mark.e2e
