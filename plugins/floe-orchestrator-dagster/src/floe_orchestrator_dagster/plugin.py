@@ -237,7 +237,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             assets = self.create_assets_from_transforms(transform_configs)
 
             # T108-T111: Wire Iceberg resources if catalog and storage are configured
-            resources = self._create_iceberg_resources(validated.plugins)
+            resources = self._create_iceberg_resources(validated.plugins, validated.governance)
 
             # T047-T049: Wire semantic layer resources and asset if semantic plugin is configured
             semantic_resources = self._create_semantic_resources(validated.plugins)
@@ -281,6 +281,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
     def _create_iceberg_resources(
         self,
         plugins: Any | None,
+        governance: Any | None = None,
     ) -> dict[str, Any]:
         """Create Iceberg resources from resolved plugins configuration.
 
@@ -290,6 +291,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         Args:
             plugins: ResolvedPlugins from CompiledArtifacts, or None.
+            governance: ResolvedGovernance from CompiledArtifacts, or None.
 
         Returns:
             Dictionary with "iceberg" key if successful, empty dict otherwise.
@@ -304,7 +306,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             try_create_iceberg_resources,
         )
 
-        return try_create_iceberg_resources(plugins)
+        return try_create_iceberg_resources(plugins, governance=governance)
 
     def _create_semantic_resources(
         self,

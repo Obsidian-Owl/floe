@@ -37,7 +37,10 @@ from floe_core.telemetry.tracing import create_span
 
 if TYPE_CHECKING:
     from floe_core.enforcement.result import EnforcementResult
-    from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+    from floe_core.schemas.compiled_artifacts import (
+        CompiledArtifacts,
+        ResolvedGovernance,
+    )
     from floe_core.schemas.manifest import GovernanceConfig
 
 logger = structlog.get_logger(__name__)
@@ -168,6 +171,48 @@ def _discover_plugins_for_audit() -> list[tuple[PluginType, PluginMetadata]]:
                 )
 
     return results
+
+
+def _resolve_governance(
+    manifest_governance: GovernanceConfig | None,
+    resolved_cls: type[ResolvedGovernance],
+    log: structlog.stdlib.BoundLogger,
+) -> ResolvedGovernance | None:
+    """Convert manifest GovernanceConfig to ResolvedGovernance for artifacts.
+
+    Extracted from the ENFORCE stage to keep that block focused on
+    enforcement logic. Emits a structlog event when lifecycle fields
+    are present.
+
+    Args:
+        manifest_governance: GovernanceConfig from the parsed manifest, or None.
+        resolved_cls: The ResolvedGovernance class (passed to avoid
+            top-level import of compiled_artifacts).
+        log: Bound structlog logger for the current compilation run.
+
+    Returns:
+        A ResolvedGovernance instance, or None if manifest_governance is None.
+    """
+    if manifest_governance is None:
+        return None
+
+    resolved = resolved_cls(
+        pii_encryption=manifest_governance.pii_encryption,
+        audit_logging=manifest_governance.audit_logging,
+        policy_enforcement_level=manifest_governance.policy_enforcement_level,
+        data_retention_days=manifest_governance.data_retention_days,
+        default_ttl_hours=manifest_governance.default_ttl_hours,
+        snapshot_keep_last=manifest_governance.snapshot_keep_last,
+    )
+
+    if resolved.default_ttl_hours is not None or resolved.snapshot_keep_last is not None:
+        log.info(
+            "governance_lifecycle_fields_resolved",
+            default_ttl_hours=resolved.default_ttl_hours,
+            snapshot_keep_last=resolved.snapshot_keep_last,
+        )
+
+    return resolved
 
 
 def compile_pipeline(
@@ -465,15 +510,11 @@ def compile_pipeline(
                     enforcement_level=enforcement_level,
                 )
 
-                # Convert manifest governance to ResolvedGovernance for artifacts
-                resolved_governance: ResolvedGovernance | None = None
-                if manifest.governance is not None:
-                    resolved_governance = ResolvedGovernance(
-                        pii_encryption=manifest.governance.pii_encryption,
-                        audit_logging=manifest.governance.audit_logging,
-                        policy_enforcement_level=manifest.governance.policy_enforcement_level,
-                        data_retention_days=manifest.governance.data_retention_days,
-                    )
+                resolved_governance = _resolve_governance(
+                    manifest.governance,
+                    ResolvedGovernance,
+                    log,
+                )
 
                 duration_ms = (time.perf_counter() - stage_start) * 1000
                 log.info(

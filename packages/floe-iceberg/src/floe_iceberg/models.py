@@ -48,7 +48,7 @@ Example:
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     import pyiceberg.table
     import pyiceberg.transforms
     import pyiceberg.types
+    from floe_core.schemas.compiled_artifacts import ResolvedGovernance
     from pyiceberg.transforms import Transform
 
 # =============================================================================
@@ -1204,6 +1205,82 @@ class IcebergTableManagerConfig(BaseModel):
             "Useful for testing with in-memory catalogs."
         ),
     )
+
+    # Upper bounds for governance lifecycle values (defense-in-depth).
+    # These match the Pydantic schema constraints in ResolvedGovernance,
+    # but are enforced here independently because from_governance() accepts
+    # duck-typed objects that may bypass schema validation.
+    MAX_TTL_HOURS: ClassVar[int] = 8760  # 1 year
+    MAX_SNAPSHOTS: ClassVar[int] = 100
+
+    @classmethod
+    def from_governance(
+        cls,
+        governance: ResolvedGovernance | None,
+    ) -> IcebergTableManagerConfig:
+        """Build config from governance lifecycle fields.
+
+        Converts governance intent to Iceberg table properties:
+        - default_ttl_hours → history.expire.max-snapshot-age-ms (hours * 3600 * 1000)
+        - snapshot_keep_last → min_snapshots_to_keep + history.expire.min-snapshots-to-keep
+
+        Uses duck typing (getattr) so that models.py does not import
+        floe_core.schemas.compiled_artifacts at runtime. The TYPE_CHECKING
+        guard on ResolvedGovernance requires ``from __future__ import
+        annotations`` to remain at the top of this module.
+
+        Args:
+            governance: Object with default_ttl_hours and snapshot_keep_last attributes,
+                or None for default config.
+
+        Returns:
+            IcebergTableManagerConfig with governance-derived settings merged with defaults.
+
+        Raises:
+            ValueError: If lifecycle field values are out of valid range.
+        """
+        if governance is None:
+            return cls()
+
+        kwargs: dict[str, Any] = {}
+        extra_props: dict[str, str] = {}
+
+        snapshot_keep_last = getattr(governance, "snapshot_keep_last", None)
+        if snapshot_keep_last is not None:
+            if (
+                isinstance(snapshot_keep_last, bool)
+                or not isinstance(snapshot_keep_last, int)
+                or not (1 <= snapshot_keep_last <= cls.MAX_SNAPSHOTS)
+            ):
+                msg = (
+                    f"snapshot_keep_last must be int in [1, {cls.MAX_SNAPSHOTS}], "
+                    f"got {snapshot_keep_last!r}"
+                )
+                raise ValueError(msg)
+            kwargs["min_snapshots_to_keep"] = snapshot_keep_last
+            extra_props["history.expire.min-snapshots-to-keep"] = str(snapshot_keep_last)
+
+        default_ttl_hours = getattr(governance, "default_ttl_hours", None)
+        if default_ttl_hours is not None:
+            if (
+                isinstance(default_ttl_hours, bool)
+                or not isinstance(default_ttl_hours, int)
+                or not (1 <= default_ttl_hours <= cls.MAX_TTL_HOURS)
+            ):
+                msg = (
+                    f"default_ttl_hours must be int in [1, {cls.MAX_TTL_HOURS}], "
+                    f"got {default_ttl_hours!r}"
+                )
+                raise ValueError(msg)
+            extra_props["history.expire.max-snapshot-age-ms"] = str(default_ttl_hours * 3600 * 1000)
+
+        if extra_props:
+            # Merge with defaults (governance overrides)
+            default_props = cls().default_table_properties.copy()
+            default_props.update(extra_props)
+            kwargs["default_table_properties"] = default_props
+
+        return cls(**kwargs)
 
 
 # Note: IcebergIOManagerConfig is NOT part of floe-iceberg.

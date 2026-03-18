@@ -41,6 +41,79 @@ governance:
   pii_encryption: required
 """
 
+MANIFEST_WITH_LIFECYCLE_GOVERNANCE_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: strict
+  audit_logging: enabled
+  data_retention_days: 30
+  pii_encryption: required
+  default_ttl_hours: 24
+  snapshot_keep_last: 3
+"""
+
+MANIFEST_WITH_LIFECYCLE_TTL_ONLY_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: warn
+  default_ttl_hours: 48
+"""
+
+MANIFEST_WITH_LIFECYCLE_SNAPSHOT_ONLY_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: warn
+  snapshot_keep_last: 5
+"""
+
+MANIFEST_WITH_LIFECYCLE_DIFFERENT_VALUES_YAML = """\
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+governance:
+  policy_enforcement_level: warn
+  default_ttl_hours: 720
+  snapshot_keep_last: 10
+"""
+
 MANIFEST_WITH_PARTIAL_GOVERNANCE_YAML = """\
 apiVersion: floe.dev/v1
 kind: Manifest
@@ -1943,4 +2016,459 @@ observability:
             f"lineage should be False when manifest sets lineage.enabled=false, "
             f"but got {result.observability.lineage!r}. "
             f"The builder must read lineage from manifest, not use a hardcoded default."
+        )
+
+
+# ==============================================================================
+# Lifecycle governance field wiring tests (AC-2, AC-3)
+# ==============================================================================
+
+
+class TestLifecycleGovernanceWiring:
+    """Tests for lifecycle governance field wiring in ENFORCE stage (AC-2).
+
+    Verifies that compile_pipeline copies default_ttl_hours and
+    snapshot_keep_last from manifest.governance to ResolvedGovernance.
+
+    Current state: the ENFORCE stage at stages.py:468-476 creates
+    ResolvedGovernance with only 4 fields and does NOT pass
+    default_ttl_hours or snapshot_keep_last. These tests MUST FAIL
+    before implementation.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _apply_mocks(self, patch_version_compat: Any, mock_compute_plugin: Any) -> None:
+        """Apply plugin mocks for compilation tests."""
+
+    @pytest.mark.requirement("AC-2")
+    def test_lifecycle_fields_wired_both_set(self, tmp_path: Path) -> None:
+        """Test that both default_ttl_hours and snapshot_keep_last are wired.
+
+        When the manifest governance has default_ttl_hours=24 and
+        snapshot_keep_last=3, the compiled artifacts must have
+        governance.default_ttl_hours == 24 and
+        governance.snapshot_keep_last == 3.
+
+        MUST FAIL because ENFORCE stage does not pass these fields.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_WITH_LIFECYCLE_GOVERNANCE_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.governance is not None, (
+            "artifacts.governance must be populated when manifest has governance section"
+        )
+        assert result.governance.default_ttl_hours == 24, (
+            f"default_ttl_hours must be 24 from manifest but got "
+            f"{result.governance.default_ttl_hours!r}. "
+            f"ENFORCE stage must copy default_ttl_hours from manifest.governance."
+        )
+        assert result.governance.snapshot_keep_last == 3, (
+            f"snapshot_keep_last must be 3 from manifest but got "
+            f"{result.governance.snapshot_keep_last!r}. "
+            f"ENFORCE stage must copy snapshot_keep_last from manifest.governance."
+        )
+
+    @pytest.mark.requirement("AC-2")
+    def test_lifecycle_fields_none_when_not_set(self, tmp_path: Path) -> None:
+        """Test that lifecycle fields are None when manifest omits them.
+
+        When the manifest has governance but no default_ttl_hours or
+        snapshot_keep_last, both must be None in the compiled artifacts.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_WITH_GOVERNANCE_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.governance is not None, (
+            "artifacts.governance must be populated when manifest has governance section"
+        )
+        assert result.governance.default_ttl_hours is None, (
+            f"default_ttl_hours must be None when not set in manifest but got "
+            f"{result.governance.default_ttl_hours!r}"
+        )
+        assert result.governance.snapshot_keep_last is None, (
+            f"snapshot_keep_last must be None when not set in manifest but got "
+            f"{result.governance.snapshot_keep_last!r}"
+        )
+
+    @pytest.mark.requirement("AC-2")
+    def test_lifecycle_fields_only_ttl_set(self, tmp_path: Path) -> None:
+        """Test wiring when only default_ttl_hours is set (snapshot omitted).
+
+        When the manifest governance has default_ttl_hours=48 but no
+        snapshot_keep_last, the compiled artifacts must have
+        governance.default_ttl_hours == 48 and
+        governance.snapshot_keep_last is None.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_WITH_LIFECYCLE_TTL_ONLY_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.governance is not None, (
+            "artifacts.governance must be populated when manifest has governance section"
+        )
+        assert result.governance.default_ttl_hours == 48, (
+            f"default_ttl_hours must be 48 from manifest but got "
+            f"{result.governance.default_ttl_hours!r}"
+        )
+        assert result.governance.snapshot_keep_last is None, (
+            f"snapshot_keep_last must be None when not set in manifest but got "
+            f"{result.governance.snapshot_keep_last!r}"
+        )
+
+    @pytest.mark.requirement("AC-2")
+    def test_lifecycle_fields_only_snapshot_set(self, tmp_path: Path) -> None:
+        """Test wiring when only snapshot_keep_last is set (TTL omitted).
+
+        When the manifest governance has snapshot_keep_last=5 but no
+        default_ttl_hours, the compiled artifacts must have
+        governance.snapshot_keep_last == 5 and
+        governance.default_ttl_hours is None.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_WITH_LIFECYCLE_SNAPSHOT_ONLY_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.governance is not None, (
+            "artifacts.governance must be populated when manifest has governance section"
+        )
+        assert result.governance.default_ttl_hours is None, (
+            f"default_ttl_hours must be None when not set in manifest but got "
+            f"{result.governance.default_ttl_hours!r}"
+        )
+        assert result.governance.snapshot_keep_last == 5, (
+            f"snapshot_keep_last must be 5 from manifest but got "
+            f"{result.governance.snapshot_keep_last!r}"
+        )
+
+    @pytest.mark.requirement("AC-2")
+    def test_lifecycle_fields_different_values_prevent_hardcoding(self, tmp_path: Path) -> None:
+        """Test with different values to catch hardcoded returns.
+
+        Uses default_ttl_hours=720 and snapshot_keep_last=10 (different
+        from the other test manifest which uses 24 and 3). A hardcoded
+        implementation returning 24/3 would fail this test.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_WITH_LIFECYCLE_DIFFERENT_VALUES_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.governance is not None, (
+            "artifacts.governance must be populated when manifest has governance section"
+        )
+        assert result.governance.default_ttl_hours == 720, (
+            f"default_ttl_hours must be 720 from manifest but got "
+            f"{result.governance.default_ttl_hours!r}. "
+            f"Value must come from the manifest, not be hardcoded."
+        )
+        assert result.governance.snapshot_keep_last == 10, (
+            f"snapshot_keep_last must be 10 from manifest but got "
+            f"{result.governance.snapshot_keep_last!r}. "
+            f"Value must come from the manifest, not be hardcoded."
+        )
+
+    @pytest.mark.requirement("AC-2")
+    def test_lifecycle_fields_none_when_no_governance_section(self, tmp_path: Path) -> None:
+        """Test that lifecycle fields are absent when manifest has no governance.
+
+        When the manifest has no governance section at all, artifacts.governance
+        must be None (not a ResolvedGovernance with None fields).
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_NO_GOVERNANCE_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        # When manifest has no governance, artifacts.governance should be None
+        # (lifecycle fields are not relevant -- the whole governance is absent)
+        assert result.governance is None, (
+            f"artifacts.governance must be None when manifest has no governance "
+            f"section, but got {result.governance!r}"
+        )
+
+    @pytest.mark.requirement("AC-2")
+    def test_lifecycle_fields_coexist_with_original_four_fields(self, tmp_path: Path) -> None:
+        """Test that lifecycle fields work alongside the original 4 governance fields.
+
+        Verifies all 6 fields are correctly wired when all are present,
+        preventing a regression where adding lifecycle fields breaks
+        the original 4 fields.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_WITH_LIFECYCLE_GOVERNANCE_YAML)
+
+        result = compile_pipeline(spec_path, manifest_path)
+
+        assert result.governance is not None
+        # Original 4 fields must still work
+        assert result.governance.policy_enforcement_level == "strict"
+        assert result.governance.audit_logging == "enabled"
+        assert result.governance.data_retention_days == 30
+        assert result.governance.pii_encryption == "required"
+        # New lifecycle fields must also work
+        assert result.governance.default_ttl_hours == 24
+        assert result.governance.snapshot_keep_last == 3
+
+
+class TestLifecycleGovernanceDiagnostics:
+    """Tests for structlog diagnostics on lifecycle governance fields (AC-3).
+
+    Verifies that the ENFORCE stage emits a structlog info event with key
+    'governance_lifecycle_fields_resolved' when any lifecycle governance
+    field is not None. The condition is 'is not None', not truthiness.
+
+    Current state: No structlog event for lifecycle fields exists.
+    These tests MUST FAIL before implementation.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _apply_mocks(self, patch_version_compat: Any, mock_compute_plugin: Any) -> None:
+        """Apply plugin mocks for compilation tests."""
+
+    @pytest.mark.requirement("AC-3")
+    def test_lifecycle_log_emitted_when_both_fields_set(self, tmp_path: Path) -> None:
+        """Test structlog event emitted when both lifecycle fields are set.
+
+        When manifest has default_ttl_hours=24 and snapshot_keep_last=3,
+        the ENFORCE stage must emit a structlog info event with key
+        'governance_lifecycle_fields_resolved' containing both values.
+        """
+        import structlog.testing
+
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_WITH_LIFECYCLE_GOVERNANCE_YAML)
+
+        with structlog.testing.capture_logs() as captured:
+            compile_pipeline(spec_path, manifest_path)
+
+        lifecycle_events = [
+            e for e in captured if e.get("event") == "governance_lifecycle_fields_resolved"
+        ]
+        assert len(lifecycle_events) == 1, (
+            f"Expected exactly 1 'governance_lifecycle_fields_resolved' event "
+            f"but found {len(lifecycle_events)}. Events: {[e.get('event') for e in captured]}"
+        )
+
+        event = lifecycle_events[0]
+        assert event["default_ttl_hours"] == 24, (
+            f"Log event must contain default_ttl_hours=24 but got "
+            f"{event.get('default_ttl_hours')!r}"
+        )
+        assert event["snapshot_keep_last"] == 3, (
+            f"Log event must contain snapshot_keep_last=3 but got "
+            f"{event.get('snapshot_keep_last')!r}"
+        )
+
+    @pytest.mark.requirement("AC-3")
+    def test_lifecycle_log_not_emitted_when_both_fields_none(self, tmp_path: Path) -> None:
+        """Test structlog event NOT emitted when both lifecycle fields are None.
+
+        When manifest has governance but no default_ttl_hours or
+        snapshot_keep_last, the ENFORCE stage must NOT emit the
+        'governance_lifecycle_fields_resolved' event.
+        """
+        import structlog.testing
+
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_WITH_GOVERNANCE_YAML)
+
+        with structlog.testing.capture_logs() as captured:
+            compile_pipeline(spec_path, manifest_path)
+
+        lifecycle_events = [
+            e for e in captured if e.get("event") == "governance_lifecycle_fields_resolved"
+        ]
+        assert len(lifecycle_events) == 0, (
+            f"Expected NO 'governance_lifecycle_fields_resolved' event when both "
+            f"lifecycle fields are None, but found {len(lifecycle_events)}: {lifecycle_events}"
+        )
+
+    @pytest.mark.requirement("AC-3")
+    def test_lifecycle_log_emitted_when_only_ttl_set(self, tmp_path: Path) -> None:
+        """Test structlog event emitted when only default_ttl_hours is set.
+
+        The condition is 'is not None', not truthiness. When
+        default_ttl_hours=48 and snapshot_keep_last=None, the event
+        must still fire because at least one field is not None.
+        """
+        import structlog.testing
+
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_WITH_LIFECYCLE_TTL_ONLY_YAML)
+
+        with structlog.testing.capture_logs() as captured:
+            compile_pipeline(spec_path, manifest_path)
+
+        lifecycle_events = [
+            e for e in captured if e.get("event") == "governance_lifecycle_fields_resolved"
+        ]
+        assert len(lifecycle_events) == 1, (
+            f"Expected 'governance_lifecycle_fields_resolved' event when "
+            f"default_ttl_hours is set (even though snapshot_keep_last is None), "
+            f"but found {len(lifecycle_events)} events"
+        )
+
+        event = lifecycle_events[0]
+        assert event["default_ttl_hours"] == 48, (
+            f"Log event must contain default_ttl_hours=48 but got "
+            f"{event.get('default_ttl_hours')!r}"
+        )
+        assert event["snapshot_keep_last"] is None, (
+            f"Log event must contain snapshot_keep_last=None but got "
+            f"{event.get('snapshot_keep_last')!r}"
+        )
+
+    @pytest.mark.requirement("AC-3")
+    def test_lifecycle_log_emitted_when_only_snapshot_set(self, tmp_path: Path) -> None:
+        """Test structlog event emitted when only snapshot_keep_last is set.
+
+        When default_ttl_hours=None and snapshot_keep_last=5, the event
+        must still fire because at least one field is not None.
+        """
+        import structlog.testing
+
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_WITH_LIFECYCLE_SNAPSHOT_ONLY_YAML)
+
+        with structlog.testing.capture_logs() as captured:
+            compile_pipeline(spec_path, manifest_path)
+
+        lifecycle_events = [
+            e for e in captured if e.get("event") == "governance_lifecycle_fields_resolved"
+        ]
+        assert len(lifecycle_events) == 1, (
+            f"Expected 'governance_lifecycle_fields_resolved' event when "
+            f"snapshot_keep_last is set (even though default_ttl_hours is None), "
+            f"but found {len(lifecycle_events)} events"
+        )
+
+        event = lifecycle_events[0]
+        assert event["default_ttl_hours"] is None, (
+            f"Log event must contain default_ttl_hours=None but got "
+            f"{event.get('default_ttl_hours')!r}"
+        )
+        assert event["snapshot_keep_last"] == 5, (
+            f"Log event must contain snapshot_keep_last=5 but got "
+            f"{event.get('snapshot_keep_last')!r}"
+        )
+
+    @pytest.mark.requirement("AC-3")
+    def test_lifecycle_log_not_emitted_when_no_governance(self, tmp_path: Path) -> None:
+        """Test structlog event NOT emitted when manifest has no governance.
+
+        When the manifest has no governance section at all, there are no
+        lifecycle fields to resolve, so the event must not fire.
+        """
+        import structlog.testing
+
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_NO_GOVERNANCE_YAML)
+
+        with structlog.testing.capture_logs() as captured:
+            compile_pipeline(spec_path, manifest_path)
+
+        lifecycle_events = [
+            e for e in captured if e.get("event") == "governance_lifecycle_fields_resolved"
+        ]
+        assert len(lifecycle_events) == 0, (
+            f"Expected NO 'governance_lifecycle_fields_resolved' event when "
+            f"manifest has no governance, but found {len(lifecycle_events)}: "
+            f"{lifecycle_events}"
+        )
+
+    @pytest.mark.requirement("AC-3")
+    def test_lifecycle_log_event_is_info_level(self, tmp_path: Path) -> None:
+        """Test that the lifecycle log event is at info level.
+
+        The spec requires a structlog info event. Verify the log_level
+        is 'info', not 'debug' or 'warning'.
+        """
+        import structlog.testing
+
+        from floe_core.compilation.stages import compile_pipeline
+
+        spec_path = tmp_path / "floe.yaml"
+        spec_path.write_text(SPEC_MINIMAL_YAML)
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(MANIFEST_WITH_LIFECYCLE_GOVERNANCE_YAML)
+
+        with structlog.testing.capture_logs() as captured:
+            compile_pipeline(spec_path, manifest_path)
+
+        lifecycle_events = [
+            e for e in captured if e.get("event") == "governance_lifecycle_fields_resolved"
+        ]
+        assert len(lifecycle_events) == 1, (
+            "Expected 'governance_lifecycle_fields_resolved' event but found none"
+        )
+        assert lifecycle_events[0]["log_level"] == "info", (
+            f"Lifecycle event must be at 'info' level but was "
+            f"'{lifecycle_events[0].get('log_level')}'"
         )

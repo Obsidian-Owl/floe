@@ -443,60 +443,63 @@ class TestSchemaEvolution(IntegrationTestBase):
             "Table should use Iceberg format version 1 or 2"
         )
 
-        # Verify table supports property management for retention configuration
+        # Compile governance to get the canonical TTL value
+        from floe_core.compilation.stages import compile_pipeline
+
+        project_root = Path(__file__).parent.parent.parent
+        manifest_path = project_root / "demo" / "manifest.yaml"
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+
+        assert manifest_path.exists(), (
+            "demo/manifest.yaml must exist for governance retention validation"
+        )
+        assert spec_path.exists(), "demo/customer-360/floe.yaml must exist for compilation"
+
+        artifacts = compile_pipeline(spec_path, manifest_path)
+
+        assert artifacts.governance is not None, (
+            "GOVERNANCE GAP: compile_pipeline must produce governance config. "
+            "Data retention policy is mandatory."
+        )
+        assert artifacts.governance.default_ttl_hours is not None, (
+            "GOVERNANCE GAP: compiled governance must include default_ttl_hours. "
+            "Data retention policy is mandatory."
+        )
+
+        default_ttl: int = artifacts.governance.default_ttl_hours
+        ttl_ms = str(default_ttl * 3600 * 1000)
+
+        # Set table retention property using governance-derived value
         txn = reloaded_table.transaction()
         txn.set_properties(
             **{
-                "history.expire.max-snapshot-age-ms": "3600000",
+                "history.expire.max-snapshot-age-ms": ttl_ms,
             }
         )
         txn.commit_transaction()
 
         reloaded_table = polaris_with_write_grants.load_table(table_name)
-        assert reloaded_table.properties.get("history.expire.max-snapshot-age-ms") == "3600000", (
+        assert reloaded_table.properties.get("history.expire.max-snapshot-age-ms") == ttl_ms, (
             "Table should accept retention configuration via properties"
         )
 
-        # Verify retention config matches manifest governance values
-        import yaml
-
-        project_root = Path(__file__).parent.parent.parent
-        manifest_path = project_root / "demo" / "manifest.yaml"
-
-        assert manifest_path.exists(), (
-            "demo/manifest.yaml must exist for governance retention validation"
-        )
-
-        with open(manifest_path) as f:
-            manifest = yaml.safe_load(f)
-
-        # Extract TTL from manifest governance config
-        governance = manifest.get("governance", {})
-        default_ttl = governance.get("default_ttl_hours")
-
-        assert default_ttl is not None, (
-            "GOVERNANCE GAP: manifest.yaml must define governance.default_ttl_hours. "
-            "Data retention policy is mandatory."
-        )
-
-        # Verify our retention config matches manifest TTL
-        ttl_ms = int(default_ttl) * 3600 * 1000
+        # Verify round-trip: table property matches compiled governance TTL
         actual_ms = int(reloaded_table.properties.get("history.expire.max-snapshot-age-ms", "0"))
-        assert actual_ms == ttl_ms, (
-            f"Retention must match manifest TTL. "
-            f"Expected {ttl_ms}ms ({default_ttl}h), "
+        assert actual_ms == default_ttl * 3600 * 1000, (
+            f"Retention must match compiled governance TTL. "
+            f"Expected {default_ttl * 3600 * 1000}ms ({default_ttl}h), "
             f"got {actual_ms}ms."
         )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-032")
     def test_snapshot_expiry(self, polaris_with_write_grants: Any) -> None:
-        """Test that Iceberg snapshots are capped at 6.
+        """Test that Iceberg snapshot retention matches compiled governance.
 
         Validates:
-        - Create multiple snapshots (>6)
-        - Verify only most recent 6 retained
-        - Older snapshots expired
+        - Create multiple schema versions
+        - Set retention properties from compiled governance values
+        - Verify table properties match governance snapshot_keep_last
 
         Args:
             polaris_with_write_grants: PyIceberg REST catalog with write permissions.
@@ -553,44 +556,54 @@ class TestSchemaEvolution(IntegrationTestBase):
         schema_history = table.schemas()
         assert len(schema_history) > 1, "Schema history not tracked"
 
-        # Verify table supports property management for snapshot retention
+        # Compile governance to get canonical snapshot retention value
+        from floe_core.compilation.stages import compile_pipeline
+
+        project_root = Path(__file__).parent.parent.parent
+        manifest_path = project_root / "demo" / "manifest.yaml"
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+
+        assert manifest_path.exists(), (
+            "demo/manifest.yaml must exist for governance snapshot validation"
+        )
+        assert spec_path.exists(), "demo/customer-360/floe.yaml must exist for compilation"
+
+        artifacts = compile_pipeline(spec_path, manifest_path)
+
+        assert artifacts.governance is not None, (
+            "GOVERNANCE GAP: compile_pipeline must produce governance config. "
+            "Snapshot retention policy is mandatory."
+        )
+        assert artifacts.governance.snapshot_keep_last is not None, (
+            "GOVERNANCE GAP: compiled governance must include snapshot_keep_last. "
+            "Snapshot retention policy is mandatory."
+        )
+        assert artifacts.governance.default_ttl_hours is not None, (
+            "GOVERNANCE GAP: compiled governance must include default_ttl_hours. "
+            "Snapshot expiry test requires TTL."
+        )
+
+        snapshot_keep_last: int = artifacts.governance.snapshot_keep_last
+        ttl_ms = str(artifacts.governance.default_ttl_hours * 3600 * 1000)
+
+        # Set table properties using governance-derived values
         txn = table.transaction()
         txn.set_properties(
             **{
-                "history.expire.max-snapshot-age-ms": "3600000",
-                "history.expire.min-snapshots-to-keep": "6",
+                "history.expire.max-snapshot-age-ms": ttl_ms,
+                "history.expire.min-snapshots-to-keep": str(snapshot_keep_last),
             }
         )
         txn.commit_transaction()
 
         table = polaris_with_write_grants.load_table(table_name)
         properties = table.properties
-        assert properties.get("history.expire.max-snapshot-age-ms") == "3600000"
-        assert properties.get("history.expire.min-snapshots-to-keep") == "6"
+        assert properties.get("history.expire.max-snapshot-age-ms") == ttl_ms
+        assert properties.get("history.expire.min-snapshots-to-keep") == str(snapshot_keep_last)
 
-        # Verify snapshot retention matches manifest governance
-        import yaml
-
-        project_root = Path(__file__).parent.parent.parent
-        manifest_path = project_root / "demo" / "manifest.yaml"
-
-        assert manifest_path.exists(), (
-            "demo/manifest.yaml must exist for governance snapshot validation"
-        )
-
-        with open(manifest_path) as f:
-            manifest = yaml.safe_load(f)
-
-        governance = manifest.get("governance", {})
-        snapshot_keep_last = governance.get("snapshot_keep_last")
-
-        assert snapshot_keep_last is not None, (
-            "GOVERNANCE GAP: manifest.yaml must define governance.snapshot_keep_last. "
-            "Snapshot retention policy is mandatory."
-        )
-
+        # Verify round-trip: table properties match compiled governance
         actual_keep = properties.get("history.expire.min-snapshots-to-keep")
         assert actual_keep == str(snapshot_keep_last), (
-            f"Snapshot retention mismatch: manifest says keep {snapshot_keep_last} "
-            f"but table property is '{actual_keep}'"
+            f"Snapshot retention mismatch: compiled governance says keep "
+            f"{snapshot_keep_last} but table property is '{actual_keep}'"
         )

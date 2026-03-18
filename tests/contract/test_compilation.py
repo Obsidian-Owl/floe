@@ -875,13 +875,15 @@ class TestObservabilityConfigLineageFields:
 
     @pytest.mark.contract
     @pytest.mark.requirement("AC-9.3")
-    def test_compiled_artifacts_version_is_0_8_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION has been bumped to 0.8.0.
+    def test_compiled_artifacts_version_is_at_least_0_8_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION is at least 0.8.0.
 
         AC-9.3 requires the version bump to reflect the new lineage fields.
+        Subsequent features may bump higher (e.g., 0.9.0 for governance lifecycle).
         """
-        assert COMPILED_ARTIFACTS_VERSION == "0.8.0", (
-            f"COMPILED_ARTIFACTS_VERSION must be '0.8.0' after adding lineage fields, "
+        major, minor, _patch = (int(x) for x in COMPILED_ARTIFACTS_VERSION.split("."))
+        assert (major, minor) >= (0, 8), (
+            f"COMPILED_ARTIFACTS_VERSION must be >= '0.8.0' after adding lineage fields, "
             f"got '{COMPILED_ARTIFACTS_VERSION}'"
         )
 

@@ -33,7 +33,10 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedPlugins,
     ResolvedTransforms,
 )
-from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+from floe_core.schemas.versions import (
+    COMPILED_ARTIFACTS_VERSION,
+    COMPILED_ARTIFACTS_VERSION_HISTORY,
+)
 from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
 
@@ -776,3 +779,379 @@ class TestYamlSerialization:
 
         with pytest.raises(ValidationError):
             CompiledArtifacts.from_yaml_file(invalid_schema_path)
+
+
+# ==============================================================================
+# T1: Governance Lifecycle Fields + Version Bump
+# ==============================================================================
+
+
+class TestGovernanceLifecycleFields:
+    """Tests for default_ttl_hours and snapshot_keep_last on ResolvedGovernance.
+
+    AC-1: ResolvedGovernance MUST have default_ttl_hours: int | None and
+    snapshot_keep_last: int | None, both defaulting to None with ge=1 and
+    le=8760 (TTL) / le=100 (snapshots) validation.
+    """
+
+    # --- Happy path: fields exist and accept valid values ---
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_lifecycle_fields_accept_valid_values(self) -> None:
+        """Test that default_ttl_hours and snapshot_keep_last accept valid integers."""
+        governance = ResolvedGovernance(
+            default_ttl_hours=24,
+            snapshot_keep_last=3,
+        )
+        assert governance.default_ttl_hours == 24
+        assert governance.snapshot_keep_last == 3
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_lifecycle_fields_default_to_none(self) -> None:
+        """Test that both lifecycle fields default to None when omitted."""
+        governance = ResolvedGovernance()
+        assert governance.default_ttl_hours is None
+        assert governance.snapshot_keep_last is None
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_lifecycle_fields_explicit_none(self) -> None:
+        """Test that both lifecycle fields accept explicit None."""
+        governance = ResolvedGovernance(
+            default_ttl_hours=None,
+            snapshot_keep_last=None,
+        )
+        assert governance.default_ttl_hours is None
+        assert governance.snapshot_keep_last is None
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_lifecycle_fields_with_existing_fields(self) -> None:
+        """Test lifecycle fields coexist with existing governance fields."""
+        governance = ResolvedGovernance(
+            pii_encryption="required",
+            audit_logging="enabled",
+            policy_enforcement_level="strict",
+            data_retention_days=90,
+            default_ttl_hours=720,
+            snapshot_keep_last=10,
+        )
+        assert governance.pii_encryption == "required"
+        assert governance.audit_logging == "enabled"
+        assert governance.policy_enforcement_level == "strict"
+        assert governance.data_retention_days == 90
+        assert governance.default_ttl_hours == 720
+        assert governance.snapshot_keep_last == 10
+
+    # --- Boundary: minimum valid (1) ---
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_ttl_hours_minimum_valid(self) -> None:
+        """Test that default_ttl_hours=1 is the minimum valid value."""
+        governance = ResolvedGovernance(default_ttl_hours=1)
+        assert governance.default_ttl_hours == 1
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_snapshot_keep_last_minimum_valid(self) -> None:
+        """Test that snapshot_keep_last=1 is the minimum valid value."""
+        governance = ResolvedGovernance(snapshot_keep_last=1)
+        assert governance.snapshot_keep_last == 1
+
+    # --- Boundary: maximum valid ---
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_ttl_hours_maximum_valid(self) -> None:
+        """Test that default_ttl_hours=8760 (1 year) is the maximum valid value."""
+        governance = ResolvedGovernance(default_ttl_hours=8760)
+        assert governance.default_ttl_hours == 8760
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_snapshot_keep_last_maximum_valid(self) -> None:
+        """Test that snapshot_keep_last=100 is the maximum valid value."""
+        governance = ResolvedGovernance(snapshot_keep_last=100)
+        assert governance.snapshot_keep_last == 100
+
+    # --- Boundary: just above maximum (must reject) ---
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_ttl_hours_exceeds_maximum_rejected(self) -> None:
+        """Test that default_ttl_hours=8761 exceeds the 1-year max and is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ResolvedGovernance(default_ttl_hours=8761)
+        errors = exc_info.value.errors()
+        assert any(
+            e["loc"] == ("default_ttl_hours",) and "less than or equal to" in str(e["msg"])
+            for e in errors
+        ), f"Expected le validation error for default_ttl_hours, got: {errors}"
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_snapshot_keep_last_exceeds_maximum_rejected(self) -> None:
+        """Test that snapshot_keep_last=101 exceeds the max and is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ResolvedGovernance(snapshot_keep_last=101)
+        errors = exc_info.value.errors()
+        assert any(
+            e["loc"] == ("snapshot_keep_last",) and "less than or equal to" in str(e["msg"])
+            for e in errors
+        ), f"Expected le validation error for snapshot_keep_last, got: {errors}"
+
+    # --- Below minimum (must reject) ---
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_ttl_hours_zero_rejected(self) -> None:
+        """Test that default_ttl_hours=0 is rejected (ge=1)."""
+        with pytest.raises(ValidationError) as exc_info:
+            ResolvedGovernance(default_ttl_hours=0)
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("default_ttl_hours",) for e in errors), (
+            f"Expected validation error for default_ttl_hours, got: {errors}"
+        )
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_snapshot_keep_last_zero_rejected(self) -> None:
+        """Test that snapshot_keep_last=0 is rejected (ge=1)."""
+        with pytest.raises(ValidationError) as exc_info:
+            ResolvedGovernance(snapshot_keep_last=0)
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("snapshot_keep_last",) for e in errors), (
+            f"Expected validation error for snapshot_keep_last, got: {errors}"
+        )
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_ttl_hours_negative_rejected(self) -> None:
+        """Test that default_ttl_hours=-1 is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ResolvedGovernance(default_ttl_hours=-1)
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("default_ttl_hours",) for e in errors), (
+            f"Expected validation error for default_ttl_hours, got: {errors}"
+        )
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_snapshot_keep_last_negative_rejected(self) -> None:
+        """Test that snapshot_keep_last=-1 is rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ResolvedGovernance(snapshot_keep_last=-1)
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("snapshot_keep_last",) for e in errors), (
+            f"Expected validation error for snapshot_keep_last, got: {errors}"
+        )
+
+    # --- Large overflow values ---
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_ttl_hours_very_large_rejected(self) -> None:
+        """Test that default_ttl_hours=100000 is rejected."""
+        with pytest.raises(ValidationError):
+            ResolvedGovernance(default_ttl_hours=100000)
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_snapshot_keep_last_very_large_rejected(self) -> None:
+        """Test that snapshot_keep_last=999 is rejected."""
+        with pytest.raises(ValidationError):
+            ResolvedGovernance(snapshot_keep_last=999)
+
+    # --- Frozen immutability ---
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_lifecycle_fields_are_frozen(self) -> None:
+        """Test that lifecycle fields cannot be mutated after creation."""
+        governance = ResolvedGovernance(default_ttl_hours=24, snapshot_keep_last=3)
+        with pytest.raises(ValidationError):
+            governance.default_ttl_hours = 48  # type: ignore[misc]
+        with pytest.raises(ValidationError):
+            governance.snapshot_keep_last = 5  # type: ignore[misc]
+
+    # --- Serialization roundtrip ---
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_lifecycle_fields_serialization_roundtrip(self) -> None:
+        """Test that lifecycle fields survive model_dump / model_validate roundtrip."""
+        governance = ResolvedGovernance(
+            pii_encryption="required",
+            default_ttl_hours=168,
+            snapshot_keep_last=7,
+        )
+        data = governance.model_dump(mode="json")
+        restored = ResolvedGovernance.model_validate(data)
+        assert restored.default_ttl_hours == 168
+        assert restored.snapshot_keep_last == 7
+        assert restored.pii_encryption == "required"
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_lifecycle_fields_none_serialization_roundtrip(self) -> None:
+        """Test that None lifecycle fields survive roundtrip."""
+        governance = ResolvedGovernance()
+        data = governance.model_dump(mode="json")
+        restored = ResolvedGovernance.model_validate(data)
+        assert restored.default_ttl_hours is None
+        assert restored.snapshot_keep_last is None
+
+    @pytest.mark.requirement("T1-AC-1")
+    def test_lifecycle_fields_present_in_json_schema(self) -> None:
+        """Test that lifecycle fields appear in the JSON schema with correct constraints."""
+        schema = ResolvedGovernance.model_json_schema()
+        props = schema["properties"]
+
+        def _int_branch(field_schema: dict[str, Any]) -> dict[str, Any]:
+            """Extract the integer branch from anyOf (Pydantic v2 nullable output)."""
+            any_of = field_schema.get("anyOf", [])
+            for branch in any_of:
+                if branch.get("type") == "integer":
+                    return branch
+            return field_schema  # fallback: flat schema
+
+        assert "default_ttl_hours" in props, "default_ttl_hours missing from schema"
+        ttl_int = _int_branch(props["default_ttl_hours"])
+        # Check ge=1 constraint
+        assert ttl_int.get("minimum") == 1 or ttl_int.get("exclusiveMinimum") == 0, (
+            f"default_ttl_hours missing ge=1 constraint: {ttl_int}"
+        )
+        # Check le=8760 constraint
+        assert ttl_int.get("maximum") == 8760 or ttl_int.get("exclusiveMaximum") == 8761, (
+            f"default_ttl_hours missing le=8760 constraint: {ttl_int}"
+        )
+
+        assert "snapshot_keep_last" in props, "snapshot_keep_last missing from schema"
+        snap_int = _int_branch(props["snapshot_keep_last"])
+        # Check ge=1 constraint
+        assert snap_int.get("minimum") == 1 or snap_int.get("exclusiveMinimum") == 0, (
+            f"snapshot_keep_last missing ge=1 constraint: {snap_int}"
+        )
+        # Check le=100 constraint
+        assert snap_int.get("maximum") == 100 or snap_int.get("exclusiveMaximum") == 101, (
+            f"snapshot_keep_last missing le=100 constraint: {snap_int}"
+        )
+
+
+class TestCompiledArtifactsVersionBump:
+    """Tests for AC-6: version bump to 0.9.0 with history entry."""
+
+    @pytest.mark.requirement("T1-AC-6")
+    def test_compiled_artifacts_version_is_0_9_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.9.0'."""
+        assert COMPILED_ARTIFACTS_VERSION == "0.9.0", (
+            f"Expected version '0.9.0', got '{COMPILED_ARTIFACTS_VERSION}'"
+        )
+
+    @pytest.mark.requirement("T1-AC-6")
+    def test_version_history_contains_0_9_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.9.0' entry."""
+        assert "0.9.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
+            f"Version '0.9.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
+        )
+
+    @pytest.mark.requirement("T1-AC-6")
+    def test_version_history_0_9_0_references_governance_lifecycle(self) -> None:
+        """Test that the 0.9.0 history entry mentions governance lifecycle fields."""
+        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.9.0", "")
+        # Must reference both the domain concept and the fields
+        entry_lower = entry.lower()
+        assert "governance" in entry_lower or "lifecycle" in entry_lower or "ttl" in entry_lower, (
+            f"Version 0.9.0 history entry does not reference governance/lifecycle: '{entry}'"
+        )
+
+    @pytest.mark.requirement("T1-AC-6")
+    def test_compiled_artifacts_default_version_is_0_9_0(self) -> None:
+        """Test that CompiledArtifacts().version defaults to '0.9.0'."""
+        artifacts = CompiledArtifacts(
+            metadata=CompilationMetadata(
+                compiled_at=datetime.now(),
+                floe_version="0.9.0",
+                source_hash="sha256:abc123",
+                product_name="test",
+                product_version="1.0.0",
+            ),
+            identity=ProductIdentity(
+                product_id="default.test",
+                domain="default",
+                repository="github.com/acme/test",
+            ),
+            observability=ObservabilityConfig(
+                telemetry=TelemetryConfig(
+                    resource_attributes=ResourceAttributes(
+                        service_name="test",
+                        service_version="1.0.0",
+                        deployment_environment="dev",
+                        floe_namespace="test",
+                        floe_product_name="test",
+                        floe_product_version="1.0.0",
+                        floe_mode="dev",
+                    ),
+                ),
+                lineage_namespace="test",
+            ),
+        )
+        assert artifacts.version == "0.9.0"
+
+
+class TestGovernanceBackwardCompatibility:
+    """Tests for AC-7: backward compatibility with pre-0.9.0 governance data."""
+
+    @pytest.mark.requirement("T1-AC-7")
+    def test_old_governance_dict_without_lifecycle_fields_deserializes(self) -> None:
+        """Test that pre-0.9.0 governance JSON (no lifecycle fields) deserializes with None."""
+        old_governance_data: dict[str, Any] = {
+            "pii_encryption": "required",
+            "audit_logging": "enabled",
+            "policy_enforcement_level": "strict",
+            "data_retention_days": 90,
+        }
+        governance = ResolvedGovernance.model_validate(old_governance_data)
+        assert governance.pii_encryption == "required"
+        assert governance.audit_logging == "enabled"
+        assert governance.policy_enforcement_level == "strict"
+        assert governance.data_retention_days == 90
+        assert governance.default_ttl_hours is None
+        assert governance.snapshot_keep_last is None
+
+    @pytest.mark.requirement("T1-AC-7")
+    def test_empty_governance_dict_deserializes(self) -> None:
+        """Test that empty governance dict deserializes with all fields None."""
+        governance = ResolvedGovernance.model_validate({})
+        assert governance.default_ttl_hours is None
+        assert governance.snapshot_keep_last is None
+        assert governance.pii_encryption is None
+
+    @pytest.mark.requirement("T1-AC-7")
+    def test_new_governance_dict_with_lifecycle_fields_deserializes(self) -> None:
+        """Test that 0.9.0 governance JSON with lifecycle fields deserializes correctly."""
+        new_governance_data: dict[str, Any] = {
+            "pii_encryption": "optional",
+            "default_ttl_hours": 48,
+            "snapshot_keep_last": 5,
+        }
+        governance = ResolvedGovernance.model_validate(new_governance_data)
+        assert governance.pii_encryption == "optional"
+        assert governance.default_ttl_hours == 48
+        assert governance.snapshot_keep_last == 5
+
+    @pytest.mark.requirement("T1-AC-7")
+    def test_full_compiled_artifacts_without_lifecycle_fields_deserializes(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        """Test full CompiledArtifacts with old-style governance roundtrips correctly."""
+        # Build artifacts with governance that has no lifecycle fields
+        artifacts = CompiledArtifacts(
+            metadata=sample_compilation_metadata,
+            identity=sample_product_identity,
+            observability=sample_observability_config,
+            governance=ResolvedGovernance(
+                pii_encryption="required",
+                data_retention_days=365,
+            ),
+        )
+        # Serialize to dict, remove lifecycle fields to simulate old format
+        data = artifacts.model_dump(mode="json")
+        gov_data = data["governance"]
+        gov_data.pop("default_ttl_hours", None)
+        gov_data.pop("snapshot_keep_last", None)
+
+        # Deserialize - must not fail
+        restored = CompiledArtifacts.model_validate(data)
+        assert restored.governance is not None
+        assert restored.governance.pii_encryption == "required"
+        assert restored.governance.data_retention_days == 365
+        assert restored.governance.default_ttl_hours is None
+        assert restored.governance.snapshot_keep_last is None
