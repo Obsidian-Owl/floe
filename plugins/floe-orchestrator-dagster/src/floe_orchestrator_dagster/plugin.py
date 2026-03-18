@@ -21,11 +21,13 @@ Example:
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 from dagster import AssetKey, AssetsDefinition, asset
 from floe_core.lineage import LineageDataset, RunState
+from floe_core.lineage.facets import TraceCorrelationFacetBuilder
 from floe_core.plugins.orchestrator import (
     OrchestratorPlugin,
     ResourceSpec,
@@ -35,6 +37,7 @@ from floe_core.plugins.orchestrator import (
 from floe_core.schemas import CompiledArtifacts
 from pydantic import ValidationError as PydanticValidationError
 
+from floe_orchestrator_dagster.lineage_extraction import extract_dbt_model_lineage
 from floe_orchestrator_dagster.tracing import (
     ATTR_ASSET_COUNT,
     TRACER_NAME,
@@ -536,6 +539,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
             Materializes the dbt model by delegating to DBTPlugin through
             DBTResource. The model is selected using dbt's select syntax.
+            Emits OpenLineage events for start, per-model lineage, and
+            completion or failure.
 
             Args:
                 context: Dagster AssetExecutionContext.
@@ -545,10 +550,44 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 FR-030: Delegate to DBTPlugin, never invoke dbtRunner directly
                 FR-031: Use DBTRunResult for metadata
             """
-            # Run the specific model using dbt select syntax
-            result = dbt.run_models(select=model_name)
+            lineage = context.resources.lineage
+            run_id = None
 
-            # Log execution results (FR-031: use DBTRunResult for metadata)
+            # 1. Emit START (with trace correlation) — never blocks dbt execution
+            run_facets: dict[str, object] = {}
+            try:
+                trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
+                if trace_facet is not None:
+                    run_facets["traceCorrelation"] = trace_facet
+            except Exception:
+                logger.warning("lineage_trace_facet_failed", exc_info=True)
+            try:
+                run_id = lineage.emit_start(model_name, run_facets=run_facets or None)
+            except Exception:
+                logger.warning("lineage_emit_start_failed", exc_info=True)
+                run_id = uuid4()  # fallback so downstream calls have a valid ID
+
+            # 2. Run dbt — on throw: emit FAIL, re-raise
+            try:
+                result = dbt.run_models(select=model_name)
+            except Exception as exc:
+                try:
+                    lineage.emit_fail(run_id, model_name, error_message=type(exc).__name__)
+                except Exception:
+                    logger.warning("lineage_emit_fail_failed", exc_info=True)
+                raise
+
+            # 3. Extract per-model lineage (after dbt returns, before success check — AC-8)
+            try:
+                events = extract_dbt_model_lineage(
+                    result.project_dir, run_id, model_name, lineage.namespace
+                )
+                for event in events:
+                    lineage.emit_event(event)
+            except Exception:
+                logger.warning("lineage_extraction_failed", exc_info=True)
+
+            # 4. Log execution results (FR-031: use DBTRunResult for metadata)
             context.log.info(
                 f"dbt model '{model_name}' completed: "
                 f"success={result.success}, "
@@ -556,9 +595,20 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 f"failures={result.failures}"
             )
 
+            # 5. Check success — emit FAIL on dbt-reported failure, then raise
             if not result.success:
                 msg = f"dbt model '{model_name}' failed with {result.failures} failures"
+                try:
+                    lineage.emit_fail(run_id, model_name, error_message=msg)
+                except Exception:
+                    logger.warning("lineage_emit_fail_failed", exc_info=True)
                 raise RuntimeError(msg)
+
+            # 6. Emit COMPLETE — never blocks the asset return
+            try:
+                lineage.emit_complete(run_id, model_name)
+            except Exception:
+                logger.warning("lineage_emit_complete_failed", exc_info=True)
 
         return _asset_fn
 
@@ -750,60 +800,6 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             )
 
         return _RESOURCE_PRESETS[workload_size]
-
-    def _validate_event_type(self, event_type: str) -> None:
-        """Validate lineage event type.
-
-        Args:
-            event_type: Event type to validate.
-
-        Raises:
-            ValueError: If event_type is not START, COMPLETE, or FAIL.
-        """
-        valid_types = {"START", "COMPLETE", "FAIL"}
-        if event_type not in valid_types:
-            raise ValueError(
-                f"Invalid event_type: '{event_type}'. "
-                f"Must be one of: {', '.join(sorted(valid_types))}"
-            )
-
-    def _build_openlineage_event(
-        self,
-        event_type: str,
-        job: str,
-        inputs: list[LineageDataset],
-        outputs: list[LineageDataset],
-    ) -> dict[str, Any]:
-        """Build OpenLineage event structure.
-
-        Creates a dictionary following the OpenLineage spec for lineage events.
-
-        Args:
-            event_type: One of "START", "COMPLETE", or "FAIL".
-            job: Job name.
-            inputs: List of input datasets.
-            outputs: List of output datasets.
-
-        Returns:
-            Dictionary representing OpenLineage event.
-        """
-        from datetime import datetime, timezone
-
-        # Build input/output dataset structures
-        input_datasets = [{"namespace": ds.namespace, "name": ds.name} for ds in inputs]
-        output_datasets = [{"namespace": ds.namespace, "name": ds.name} for ds in outputs]
-
-        return {
-            "eventType": event_type,
-            "eventTime": datetime.now(timezone.utc).isoformat(),
-            "producer": f"floe-orchestrator-dagster/{self.version}",
-            "job": {
-                "namespace": "floe",
-                "name": job,
-            },
-            "inputs": input_datasets,
-            "outputs": output_datasets,
-        }
 
     def emit_lineage_event(
         self,
@@ -1131,7 +1127,6 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             - Spec 2b-compilation-pipeline: Technology ownership boundaries
         """
         import re
-        from pathlib import Path
 
         # Sanitize product name to valid Python identifier
         safe_name = product_name.replace("-", "_")
