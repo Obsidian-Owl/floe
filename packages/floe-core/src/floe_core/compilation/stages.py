@@ -37,7 +37,10 @@ from floe_core.telemetry.tracing import create_span
 
 if TYPE_CHECKING:
     from floe_core.enforcement.result import EnforcementResult
-    from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+    from floe_core.schemas.compiled_artifacts import (
+        CompiledArtifacts,
+        ResolvedGovernance,
+    )
     from floe_core.schemas.manifest import GovernanceConfig
 
 logger = structlog.get_logger(__name__)
@@ -171,10 +174,10 @@ def _discover_plugins_for_audit() -> list[tuple[PluginType, PluginMetadata]]:
 
 
 def _resolve_governance(
-    manifest_governance: Any,
-    resolved_cls: type[Any],
-    log: Any,
-) -> Any | None:
+    manifest_governance: GovernanceConfig | None,
+    resolved_cls: type[ResolvedGovernance],
+    log: structlog.stdlib.BoundLogger,
+) -> ResolvedGovernance | None:
     """Convert manifest GovernanceConfig to ResolvedGovernance for artifacts.
 
     Extracted from the ENFORCE stage to keep that block focused on

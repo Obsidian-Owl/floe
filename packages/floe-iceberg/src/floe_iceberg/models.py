@@ -1247,8 +1247,10 @@ class IcebergTableManagerConfig(BaseModel):
 
         snapshot_keep_last = getattr(governance, "snapshot_keep_last", None)
         if snapshot_keep_last is not None:
-            if not isinstance(snapshot_keep_last, int) or not (
-                1 <= snapshot_keep_last <= cls.MAX_SNAPSHOTS
+            if (
+                isinstance(snapshot_keep_last, bool)
+                or not isinstance(snapshot_keep_last, int)
+                or not (1 <= snapshot_keep_last <= cls.MAX_SNAPSHOTS)
             ):
                 msg = (
                     f"snapshot_keep_last must be int in [1, {cls.MAX_SNAPSHOTS}], "
@@ -1260,8 +1262,10 @@ class IcebergTableManagerConfig(BaseModel):
 
         default_ttl_hours = getattr(governance, "default_ttl_hours", None)
         if default_ttl_hours is not None:
-            if not isinstance(default_ttl_hours, int) or not (
-                1 <= default_ttl_hours <= cls.MAX_TTL_HOURS
+            if (
+                isinstance(default_ttl_hours, bool)
+                or not isinstance(default_ttl_hours, int)
+                or not (1 <= default_ttl_hours <= cls.MAX_TTL_HOURS)
             ):
                 msg = (
                     f"default_ttl_hours must be int in [1, {cls.MAX_TTL_HOURS}], "

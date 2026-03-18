@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from floe_iceberg.models import IcebergTableManagerConfig
 
@@ -285,41 +286,49 @@ class TestDuckTyping:
         """from_governance must NOT import ResolvedGovernance at runtime.
 
         Importing floe_core at runtime would create a circular dependency.
-        We verify by checking the module's runtime imports do not include floe_core.
+        We verify using AST analysis to find any floe_core imports outside
+        TYPE_CHECKING guards.
         """
+        import ast
         import sys
 
         # Call the method to trigger any lazy imports
         gov = SimpleNamespace(default_ttl_hours=1, snapshot_keep_last=1)
         IcebergTableManagerConfig.from_governance(gov)
 
-        # floe_core should NOT have been imported as a side effect
+        # Parse the module source with AST for robust import detection
         iceberg_models = sys.modules["floe_iceberg.models"]
-        # Check the module dict for floe_core references brought in at call time
         module_source_file = iceberg_models.__file__
         assert module_source_file is not None
         with open(module_source_file) as f:
-            source = f.read()
-        # Allow TYPE_CHECKING imports but not bare runtime imports
-        # A runtime "from floe_core" or "import floe_core" outside TYPE_CHECKING is forbidden
-        import re
+            tree = ast.parse(f.read())
 
-        # Find all import lines not inside TYPE_CHECKING blocks
-        lines = source.split("\n")
-        in_type_checking = False
-        for line in lines:
-            stripped = line.strip()
-            if stripped == "if TYPE_CHECKING:":
-                in_type_checking = True
-                continue
-            if in_type_checking and stripped and not stripped.startswith(("#", "from", "import")):
-                # Non-import line inside TYPE_CHECKING — still in block if indented
-                if not line.startswith((" ", "\t")):
-                    in_type_checking = False
-            if not in_type_checking:
-                assert not re.match(r"^\s*(from\s+floe_core|import\s+floe_core)", stripped), (
-                    f"Runtime import of floe_core found: {stripped}"
+        # Collect line numbers inside TYPE_CHECKING guards
+        guarded_lines: set[int] = set()
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.If)
+                and isinstance(node.test, ast.Name)
+                and node.test.id == "TYPE_CHECKING"
+            ):
+                for child in ast.walk(node):
+                    if hasattr(child, "lineno"):
+                        guarded_lines.add(child.lineno)
+
+        # Check all top-level and nested imports for floe_core outside guards
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module and "floe_core" in node.module:
+                assert node.lineno in guarded_lines, (
+                    f"Runtime import of floe_core at line {node.lineno}: "
+                    f"from {node.module} import ..."
                 )
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if "floe_core" in alias.name:
+                        assert node.lineno in guarded_lines, (
+                            f"Runtime import of floe_core at line {node.lineno}: "
+                            f"import {alias.name}"
+                        )
 
 
 # ===========================================================================
@@ -341,7 +350,7 @@ class TestReturnType:
         """Returned config must be frozen (immutable) like all IcebergTableManagerConfig."""
         gov = _governance(default_ttl_hours=24, snapshot_keep_last=3)
         config = IcebergTableManagerConfig.from_governance(gov)
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(ValidationError):
             config.min_snapshots_to_keep = 99  # type: ignore[misc]
 
 
@@ -479,5 +488,19 @@ class TestFromGovernanceBoundsValidation:
     def test_snapshot_keep_last_non_int_raises(self) -> None:
         """String snapshot_keep_last must raise ValueError (type check)."""
         gov = _governance(snapshot_keep_last="5")
+        with pytest.raises(ValueError, match="snapshot_keep_last must be int in"):
+            IcebergTableManagerConfig.from_governance(gov)
+
+    @pytest.mark.requirement("AC-4")
+    def test_ttl_hours_bool_raises(self) -> None:
+        """bool is a subclass of int but must be rejected."""
+        gov = _governance(default_ttl_hours=True)
+        with pytest.raises(ValueError, match="default_ttl_hours must be int in"):
+            IcebergTableManagerConfig.from_governance(gov)
+
+    @pytest.mark.requirement("AC-4")
+    def test_snapshot_keep_last_bool_raises(self) -> None:
+        """bool is a subclass of int but must be rejected."""
+        gov = _governance(snapshot_keep_last=False)
         with pytest.raises(ValueError, match="snapshot_keep_last must be int in"):
             IcebergTableManagerConfig.from_governance(gov)

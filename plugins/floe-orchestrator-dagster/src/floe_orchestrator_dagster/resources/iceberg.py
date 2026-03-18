@@ -161,6 +161,8 @@ def try_create_iceberg_resources(
     Args:
         plugins: Resolved plugin selections from CompiledArtifacts.
             May be None if no plugins are configured.
+        governance: Resolved governance config from CompiledArtifacts.
+            Used to derive Iceberg table lifecycle properties (TTL, snapshot retention).
 
     Returns:
         Dictionary with "iceberg" key if successful, empty dict otherwise.
