@@ -48,7 +48,7 @@ Example:
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -1206,6 +1206,13 @@ class IcebergTableManagerConfig(BaseModel):
         ),
     )
 
+    # Upper bounds for governance lifecycle values (defense-in-depth).
+    # These match the Pydantic schema constraints in ResolvedGovernance,
+    # but are enforced here independently because from_governance() accepts
+    # duck-typed objects that may bypass schema validation.
+    MAX_TTL_HOURS: ClassVar[int] = 8760  # 1 year
+    MAX_SNAPSHOTS: ClassVar[int] = 100
+
     @classmethod
     def from_governance(
         cls,
@@ -1217,7 +1224,10 @@ class IcebergTableManagerConfig(BaseModel):
         - default_ttl_hours → history.expire.max-snapshot-age-ms (hours * 3600 * 1000)
         - snapshot_keep_last → min_snapshots_to_keep + history.expire.min-snapshots-to-keep
 
-        Uses duck typing on governance object to avoid runtime import of floe_core.
+        Uses duck typing (getattr) so that models.py does not import
+        floe_core.schemas.compiled_artifacts at runtime. The TYPE_CHECKING
+        guard on ResolvedGovernance requires ``from __future__ import
+        annotations`` to remain at the top of this module.
 
         Args:
             governance: Object with default_ttl_hours and snapshot_keep_last attributes,
@@ -1225,6 +1235,9 @@ class IcebergTableManagerConfig(BaseModel):
 
         Returns:
             IcebergTableManagerConfig with governance-derived settings merged with defaults.
+
+        Raises:
+            ValueError: If lifecycle field values are out of valid range.
         """
         if governance is None:
             return cls()
@@ -1234,11 +1247,27 @@ class IcebergTableManagerConfig(BaseModel):
 
         snapshot_keep_last = getattr(governance, "snapshot_keep_last", None)
         if snapshot_keep_last is not None:
+            if not isinstance(snapshot_keep_last, int) or not (
+                1 <= snapshot_keep_last <= cls.MAX_SNAPSHOTS
+            ):
+                msg = (
+                    f"snapshot_keep_last must be int in [1, {cls.MAX_SNAPSHOTS}], "
+                    f"got {snapshot_keep_last!r}"
+                )
+                raise ValueError(msg)
             kwargs["min_snapshots_to_keep"] = snapshot_keep_last
             extra_props["history.expire.min-snapshots-to-keep"] = str(snapshot_keep_last)
 
         default_ttl_hours = getattr(governance, "default_ttl_hours", None)
         if default_ttl_hours is not None:
+            if not isinstance(default_ttl_hours, int) or not (
+                1 <= default_ttl_hours <= cls.MAX_TTL_HOURS
+            ):
+                msg = (
+                    f"default_ttl_hours must be int in [1, {cls.MAX_TTL_HOURS}], "
+                    f"got {default_ttl_hours!r}"
+                )
+                raise ValueError(msg)
             extra_props["history.expire.max-snapshot-age-ms"] = str(default_ttl_hours * 3600 * 1000)
 
         if extra_props:

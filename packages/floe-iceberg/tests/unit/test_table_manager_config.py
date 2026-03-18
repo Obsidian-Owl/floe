@@ -362,11 +362,11 @@ class TestEdgeCases:
         assert config.default_table_properties[KEEP_KEY] == "1"
 
     @pytest.mark.requirement("AC-4")
-    def test_large_ttl_hours(self) -> None:
-        """Very large TTL should compute correctly without overflow."""
-        gov = _governance(default_ttl_hours=87600)  # 10 years
+    def test_max_valid_ttl_hours(self) -> None:
+        """Maximum valid TTL (1 year) should compute correctly."""
+        gov = _governance(default_ttl_hours=8760)  # 1 year = max
         config = IcebergTableManagerConfig.from_governance(gov)
-        expected_ms = str(87600 * 3600 * 1000)
+        expected_ms = str(8760 * 3600 * 1000)
         assert config.default_table_properties[AGE_MS_KEY] == expected_ms
 
     @pytest.mark.requirement("AC-4")
@@ -417,3 +417,67 @@ class TestEdgeCases:
             config_a.default_table_properties[KEEP_KEY]
             != config_b.default_table_properties[KEEP_KEY]
         )
+
+
+class TestFromGovernanceBoundsValidation:
+    """Tests for defense-in-depth bounds checks in from_governance().
+
+    Validates that out-of-range or wrong-type values raise ValueError
+    even when bypassing Pydantic schema validation (duck-typed callers).
+    """
+
+    @pytest.mark.requirement("AC-4")
+    def test_ttl_hours_exceeds_max_raises(self) -> None:
+        """TTL above 8760 (1 year) must raise ValueError."""
+        gov = _governance(default_ttl_hours=8761)
+        with pytest.raises(ValueError, match="default_ttl_hours must be int in"):
+            IcebergTableManagerConfig.from_governance(gov)
+
+    @pytest.mark.requirement("AC-4")
+    def test_ttl_hours_zero_raises(self) -> None:
+        """TTL of 0 is below the minimum of 1."""
+        gov = _governance(default_ttl_hours=0)
+        with pytest.raises(ValueError, match="default_ttl_hours must be int in"):
+            IcebergTableManagerConfig.from_governance(gov)
+
+    @pytest.mark.requirement("AC-4")
+    def test_ttl_hours_negative_raises(self) -> None:
+        """Negative TTL must raise ValueError."""
+        gov = _governance(default_ttl_hours=-1)
+        with pytest.raises(ValueError, match="default_ttl_hours must be int in"):
+            IcebergTableManagerConfig.from_governance(gov)
+
+    @pytest.mark.requirement("AC-4")
+    def test_snapshot_keep_last_exceeds_max_raises(self) -> None:
+        """snapshot_keep_last above 100 must raise ValueError."""
+        gov = _governance(snapshot_keep_last=101)
+        with pytest.raises(ValueError, match="snapshot_keep_last must be int in"):
+            IcebergTableManagerConfig.from_governance(gov)
+
+    @pytest.mark.requirement("AC-4")
+    def test_snapshot_keep_last_zero_raises(self) -> None:
+        """snapshot_keep_last of 0 is below the minimum of 1."""
+        gov = _governance(snapshot_keep_last=0)
+        with pytest.raises(ValueError, match="snapshot_keep_last must be int in"):
+            IcebergTableManagerConfig.from_governance(gov)
+
+    @pytest.mark.requirement("AC-4")
+    def test_snapshot_keep_last_negative_raises(self) -> None:
+        """Negative snapshot_keep_last must raise ValueError."""
+        gov = _governance(snapshot_keep_last=-5)
+        with pytest.raises(ValueError, match="snapshot_keep_last must be int in"):
+            IcebergTableManagerConfig.from_governance(gov)
+
+    @pytest.mark.requirement("AC-4")
+    def test_ttl_hours_non_int_raises(self) -> None:
+        """Float TTL must raise ValueError (type check)."""
+        gov = _governance(default_ttl_hours=24.5)
+        with pytest.raises(ValueError, match="default_ttl_hours must be int in"):
+            IcebergTableManagerConfig.from_governance(gov)
+
+    @pytest.mark.requirement("AC-4")
+    def test_snapshot_keep_last_non_int_raises(self) -> None:
+        """String snapshot_keep_last must raise ValueError (type check)."""
+        gov = _governance(snapshot_keep_last="5")
+        with pytest.raises(ValueError, match="snapshot_keep_last must be int in"):
+            IcebergTableManagerConfig.from_governance(gov)
