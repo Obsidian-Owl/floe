@@ -96,11 +96,11 @@ def mock_lineage_resource() -> MagicMock:
     """Create a mock lineage resource with the full lineage API.
 
     Returns:
-        MagicMock with emit_start, emit_complete, emit_fail, emit_event, default_namespace.
+        MagicMock with emit_start, emit_complete, emit_fail, emit_event, namespace.
     """
     lineage = MagicMock()
     lineage.emit_start.return_value = FAKE_RUN_ID
-    lineage.default_namespace = FAKE_NAMESPACE
+    lineage.namespace = FAKE_NAMESPACE
     return lineage
 
 
@@ -794,7 +794,7 @@ class TestExtractAndEmitLineageEvents:
         mock_dbt_resource: MagicMock,
         mock_lineage_resource: MagicMock,
     ) -> None:
-        """Test extract receives the namespace from lineage.default_namespace."""
+        """Test extract receives the namespace from lineage.namespace."""
         with (
             patch(_EXTRACT_FN, return_value=[]) as mock_extract,
             patch(f"{_TRACE_CORRELATION_BUILDER}.from_otel_context", return_value=None),

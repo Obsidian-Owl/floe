@@ -572,7 +572,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 result = dbt.run_models(select=model_name)
             except Exception as exc:
                 try:
-                    lineage.emit_fail(run_id, model_name, error_message=str(exc))
+                    lineage.emit_fail(run_id, model_name, error_message=type(exc).__name__)
                 except Exception:
                     logger.warning("lineage_emit_fail_failed", exc_info=True)
                 raise
@@ -580,7 +580,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             # 3. Extract per-model lineage (after dbt returns, before success check — AC-8)
             try:
                 events = extract_dbt_model_lineage(
-                    result.project_dir, run_id, model_name, lineage.default_namespace
+                    result.project_dir, run_id, model_name, lineage.namespace
                 )
                 for event in events:
                     lineage.emit_event(event)
