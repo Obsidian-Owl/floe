@@ -801,60 +801,6 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         return _RESOURCE_PRESETS[workload_size]
 
-    def _validate_event_type(self, event_type: str) -> None:
-        """Validate lineage event type.
-
-        Args:
-            event_type: Event type to validate.
-
-        Raises:
-            ValueError: If event_type is not START, COMPLETE, or FAIL.
-        """
-        valid_types = {"START", "COMPLETE", "FAIL"}
-        if event_type not in valid_types:
-            raise ValueError(
-                f"Invalid event_type: '{event_type}'. "
-                f"Must be one of: {', '.join(sorted(valid_types))}"
-            )
-
-    def _build_openlineage_event(
-        self,
-        event_type: str,
-        job: str,
-        inputs: list[LineageDataset],
-        outputs: list[LineageDataset],
-    ) -> dict[str, Any]:
-        """Build OpenLineage event structure.
-
-        Creates a dictionary following the OpenLineage spec for lineage events.
-
-        Args:
-            event_type: One of "START", "COMPLETE", or "FAIL".
-            job: Job name.
-            inputs: List of input datasets.
-            outputs: List of output datasets.
-
-        Returns:
-            Dictionary representing OpenLineage event.
-        """
-        from datetime import datetime, timezone
-
-        # Build input/output dataset structures
-        input_datasets = [{"namespace": ds.namespace, "name": ds.name} for ds in inputs]
-        output_datasets = [{"namespace": ds.namespace, "name": ds.name} for ds in outputs]
-
-        return {
-            "eventType": event_type,
-            "eventTime": datetime.now(timezone.utc).isoformat(),
-            "producer": f"floe-orchestrator-dagster/{self.version}",
-            "job": {
-                "namespace": "floe",
-                "name": job,
-            },
-            "inputs": input_datasets,
-            "outputs": output_datasets,
-        }
-
     def emit_lineage_event(
         self,
         event_type: RunState,
