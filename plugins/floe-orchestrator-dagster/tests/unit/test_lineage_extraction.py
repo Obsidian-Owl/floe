@@ -1148,6 +1148,129 @@ class TestAC9GracefulDegradation:
         )
         assert events == []
 
+    @pytest.mark.requirement("AC-9")
+    def test_oserror_on_artifact_read_returns_empty_list(
+        self,
+        project_dir: Path,
+        parent_run_id: UUID,
+    ) -> None:
+        """OSError (e.g. permission denied) when reading artifact returns empty list."""
+        target = project_dir / "target"
+        manifest_path = target / "manifest.json"
+        manifest_path.write_text("{}")
+        # Make file unreadable to trigger OSError
+        manifest_path.chmod(0o000)
+        _write_run_results(target, results=[_make_result(MODEL_UID_STG_CUSTOMERS)])
+
+        try:
+            events = extract_dbt_model_lineage(
+                project_dir=project_dir,
+                parent_run_id=parent_run_id,
+                parent_job_name=PARENT_JOB_NAME,
+                namespace=DEFAULT_NAMESPACE,
+            )
+            assert events == []
+        finally:
+            manifest_path.chmod(0o644)
+
+    @pytest.mark.requirement("AC-6")
+    def test_malformed_timing_entry_missing_keys_uses_fallback(
+        self,
+        project_dir: Path,
+        parent_run_id: UUID,
+    ) -> None:
+        """Timing entries missing started_at/completed_at should use fallback, not crash."""
+        target = project_dir / "target"
+        _write_manifest(
+            target,
+            nodes={MODEL_UID_STG_CUSTOMERS: _make_node()},
+            parent_map={MODEL_UID_STG_CUSTOMERS: []},
+        )
+        # Timing with missing keys
+        _write_run_results(
+            target,
+            results=[
+                _make_result(
+                    MODEL_UID_STG_CUSTOMERS,
+                    timing=[{"name": "execute"}],  # Missing started_at/completed_at
+                )
+            ],
+        )
+
+        events = extract_dbt_model_lineage(
+            project_dir=project_dir,
+            parent_run_id=parent_run_id,
+            parent_job_name=PARENT_JOB_NAME,
+            namespace=DEFAULT_NAMESPACE,
+        )
+        assert len(events) == 2
+        assert isinstance(events[0].event_time, datetime)
+
+    @pytest.mark.requirement("AC-9")
+    def test_bad_model_does_not_abort_remaining_models(
+        self,
+        project_dir: Path,
+        parent_run_id: UUID,
+    ) -> None:
+        """If one model's extraction raises, remaining models still produce events."""
+        target = project_dir / "target"
+        # First model has a valid node, second model is NOT in manifest (will cause extractor error)
+        _write_manifest(
+            target,
+            nodes={
+                MODEL_UID_STG_CUSTOMERS: _make_node(),
+                # dim_customers NOT in nodes — extractor may raise
+            },
+            parent_map={MODEL_UID_STG_CUSTOMERS: []},
+        )
+        _write_run_results(
+            target,
+            results=[
+                # This model is in the manifest — should succeed
+                _make_result(MODEL_UID_STG_CUSTOMERS),
+                # This model is NOT in the manifest — extraction should fail gracefully
+                _make_result(MODEL_UID_DIM_CUSTOMERS),
+            ],
+        )
+
+        events = extract_dbt_model_lineage(
+            project_dir=project_dir,
+            parent_run_id=parent_run_id,
+            parent_job_name=PARENT_JOB_NAME,
+            namespace=DEFAULT_NAMESPACE,
+        )
+        # At minimum the first model should have produced events
+        stg_events = [e for e in events if "stg_customers" in e.job.name]
+        assert len(stg_events) >= 2
+
+    @pytest.mark.requirement("AC-4")
+    def test_skipped_model_emits_fail_state(
+        self,
+        project_dir: Path,
+        parent_run_id: UUID,
+    ) -> None:
+        """A model with status 'skipped' should emit FAIL, not COMPLETE."""
+        target = project_dir / "target"
+        _write_manifest(
+            target,
+            nodes={MODEL_UID_STG_CUSTOMERS: _make_node()},
+            parent_map={MODEL_UID_STG_CUSTOMERS: []},
+        )
+        _write_run_results(
+            target,
+            results=[_make_result(MODEL_UID_STG_CUSTOMERS, status="skipped")],
+        )
+
+        events = extract_dbt_model_lineage(
+            project_dir=project_dir,
+            parent_run_id=parent_run_id,
+            parent_job_name=PARENT_JOB_NAME,
+            namespace=DEFAULT_NAMESPACE,
+        )
+        assert len(events) == 2
+        assert events[0].event_type == RunState.START
+        assert events[1].event_type == RunState.FAIL
+
 
 # ===========================================================================
 # AC-12: Column lineage facets when available

@@ -77,9 +77,9 @@ def _load_json(path: Path, artifact_name: str) -> dict[str, Any] | None:
     try:
         data: dict[str, Any] = json.loads(path.read_text())
         return data
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, OSError):
         logger.warning(
-            "dbt artifact malformed JSON: %s at %s",
+            "dbt artifact unreadable: %s at %s",
             artifact_name,
             str(path),
         )
@@ -160,9 +160,12 @@ def _resolve_timing(
     fallback = datetime.now(timezone.utc)
     if not timing:
         return (fallback, fallback)
-    start_time = _parse_iso_datetime(timing[0]["started_at"])
-    end_time = _parse_iso_datetime(timing[-1]["completed_at"])
-    return (start_time, end_time)
+    try:
+        start_time = _parse_iso_datetime(timing[0]["started_at"])
+        end_time = _parse_iso_datetime(timing[-1]["completed_at"])
+        return (start_time, end_time)
+    except (KeyError, ValueError):
+        return (fallback, fallback)
 
 
 # ---------------------------------------------------------------------------
@@ -218,49 +221,55 @@ def extract_dbt_model_lineage(
 
     events: list[LineageEvent] = []
 
+    _FAIL_STATUSES = {"error", "skipped"}
+
     for result in run_results.get("results", []):
         unique_id: str = result.get("unique_id", "")
         if not unique_id.startswith("model."):
             continue
 
-        inputs, outputs = extractor.extract_model(unique_id)
+        try:
+            inputs, outputs = extractor.extract_model(unique_id)
 
-        # Enrich outputs with columnLineage facet when model declares columns
-        # and the extractor did not add the facet (happens when upstream has no columns).
-        node = manifest.get("nodes", {}).get(unique_id, {})
-        outputs = _enrich_outputs_with_column_lineage(outputs, node, inputs, namespace)
+            # Enrich outputs with columnLineage facet when model declares columns
+            # and the extractor did not add the facet (happens when upstream has no columns).
+            node = manifest.get("nodes", {}).get(unique_id, {})
+            outputs = _enrich_outputs_with_column_lineage(outputs, node, inputs, namespace)
 
-        model_run_id = uuid4()
-        run = LineageRun(run_id=model_run_id, facets={"parentRun": parent_facet})
-        job = LineageJob(namespace=namespace, name=unique_id)
+            model_run_id = uuid4()
+            run = LineageRun(run_id=model_run_id, facets={"parentRun": parent_facet})
+            job = LineageJob(namespace=namespace, name=unique_id)
 
-        timing: list[dict[str, str]] = result.get("timing", [])
-        start_time, end_time = _resolve_timing(timing)
+            timing: list[dict[str, str]] = result.get("timing", [])
+            start_time, end_time = _resolve_timing(timing)
 
-        # START event
-        events.append(
-            LineageEvent(
-                event_type=RunState.START,
-                event_time=start_time,
-                run=run,
-                job=job,
-                inputs=inputs,
-                outputs=outputs,
+            # START event
+            events.append(
+                LineageEvent(
+                    event_type=RunState.START,
+                    event_time=start_time,
+                    run=run,
+                    job=job,
+                    inputs=inputs,
+                    outputs=outputs,
+                )
             )
-        )
 
-        # COMPLETE or FAIL event
-        status: str = result.get("status", "")
-        end_state = RunState.FAIL if status == "error" else RunState.COMPLETE
-        events.append(
-            LineageEvent(
-                event_type=end_state,
-                event_time=end_time,
-                run=run,
-                job=job,
-                inputs=inputs,
-                outputs=outputs,
+            # COMPLETE or FAIL event
+            status: str = result.get("status", "")
+            end_state = RunState.FAIL if status in _FAIL_STATUSES else RunState.COMPLETE
+            events.append(
+                LineageEvent(
+                    event_type=end_state,
+                    event_time=end_time,
+                    run=run,
+                    job=job,
+                    inputs=inputs,
+                    outputs=outputs,
+                )
             )
-        )
+        except Exception:
+            logger.warning("lineage_model_extraction_failed: %s", unique_id, exc_info=True)
+            continue
 
     return events
