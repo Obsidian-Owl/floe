@@ -25,8 +25,11 @@ from __future__ import annotations
 
 import os
 
-from opentelemetry import trace
+from opentelemetry import metrics, trace
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -40,6 +43,9 @@ _DEFAULT_SERVICE_NAME = "floe-platform"
 # Module-level idempotency flag.  Set to True after successful initialisation
 # so that subsequent calls return immediately without re-configuring.
 _initialized: bool = False
+
+# Module-level reference to the active MeterProvider (for reset_telemetry).
+_meter_provider: MeterProvider | None = None
 
 
 def ensure_telemetry_initialized() -> None:
@@ -115,6 +121,22 @@ def ensure_telemetry_initialized() -> None:
 
     # Register as the global provider.
     trace.set_tracer_provider(provider)
+
+    # Create OTLP metric exporter using same endpoint as traces.
+    metric_exporter = OTLPMetricExporter(endpoint=endpoint)
+
+    # Wrap in PeriodicExportingMetricReader (SDK defaults: 60s interval).
+    metric_reader = PeriodicExportingMetricReader(exporter=metric_exporter)
+
+    # Build MeterProvider with the same resource as TracerProvider.
+    meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+
+    # Register as the global meter provider.
+    metrics.set_meter_provider(meter_provider)
+
+    # Store reference for reset_telemetry().
+    global _meter_provider
+    _meter_provider = meter_provider
 
     # Configure structlog to inject trace_id / span_id into log records.
     configure_logging()

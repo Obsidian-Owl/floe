@@ -23,7 +23,8 @@ from unittest.mock import patch
 
 import pytest
 import structlog
-from opentelemetry import trace
+from opentelemetry import metrics, trace
+from opentelemetry.sdk.metrics import MeterProvider as SdkMeterProvider
 from opentelemetry.sdk.trace import TracerProvider
 
 
@@ -43,10 +44,20 @@ def _reset_otel_state() -> Generator[None, None, None]:
     """
     from opentelemetry.sdk.trace import TracerProvider as SdkTracerProvider
 
-    # Reset before test
+    # Reset TracerProvider before test
     trace._TRACER_PROVIDER_SET_ONCE._done = False
     # None, not ProxyTracerProvider() — avoids recursion in get_tracer()
     trace._TRACER_PROVIDER = None
+
+    # Reset MeterProvider before test
+    if hasattr(metrics, "_internal"):
+        if hasattr(metrics._internal, "_METER_PROVIDER_SET_ONCE"):
+            metrics._internal._METER_PROVIDER_SET_ONCE._done = False
+        if hasattr(metrics._internal, "_METER_PROVIDER"):
+            metrics._internal._METER_PROVIDER = None
+        # Restore proxy so meters auto-upgrade
+        if hasattr(metrics._internal, "_PROXY_METER_PROVIDER"):
+            metrics._internal._PROXY_METER_PROVIDER = metrics._internal._ProxyMeterProvider()
 
     from floe_core.telemetry.tracer_factory import reset_tracer
 
@@ -54,9 +65,18 @@ def _reset_otel_state() -> Generator[None, None, None]:
 
     yield
 
-    # Reset after test - use SDK provider to avoid recursion
+    # Reset TracerProvider after test - use SDK provider to avoid recursion
     trace._TRACER_PROVIDER_SET_ONCE._done = False
     trace._TRACER_PROVIDER = SdkTracerProvider()
+
+    # Reset MeterProvider after test
+    if hasattr(metrics, "_internal"):
+        if hasattr(metrics._internal, "_METER_PROVIDER_SET_ONCE"):
+            metrics._internal._METER_PROVIDER_SET_ONCE._done = False
+        if hasattr(metrics._internal, "_METER_PROVIDER"):
+            metrics._internal._METER_PROVIDER = None
+        if hasattr(metrics._internal, "_PROXY_METER_PROVIDER"):
+            metrics._internal._PROXY_METER_PROVIDER = metrics._internal._ProxyMeterProvider()
 
     reset_tracer()
 
@@ -681,3 +701,240 @@ class TestEndpointEdgeCases:
         assert isinstance(provider, TracerProvider), (
             "HTTPS endpoint should still initialize TracerProvider."
         )
+
+
+class TestMeterProviderInitialization:
+    """Test MeterProvider initialization alongside TracerProvider.
+
+    AC-1: MeterProvider MUST be created when OTEL_EXPORTER_OTLP_ENDPOINT is set.
+    AC-2: MeterProvider MUST NOT be created when endpoint is absent/empty/whitespace.
+    AC-3: MeterProvider MUST NOT be created for invalid endpoint schemes.
+    AC-4: Calling ensure_telemetry_initialized() twice MUST NOT create duplicate
+           MeterProviders.
+    """
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_meter_provider_created_with_endpoint(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that an SDK MeterProvider is registered when endpoint is set.
+
+        A sloppy implementation that only creates a TracerProvider but ignores
+        MeterProvider would leave the default _ProxyMeterProvider in place.
+        This test catches that by verifying the exact type.
+        """
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+        monkeypatch.setenv("OTEL_SERVICE_NAME", "test-svc")
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        meter_provider = metrics.get_meter_provider()
+        assert isinstance(meter_provider, SdkMeterProvider), (
+            f"Expected SDK MeterProvider but got {type(meter_provider).__name__}. "
+            "ensure_telemetry_initialized() must create and register an SDK "
+            "MeterProvider when OTEL_EXPORTER_OTLP_ENDPOINT is set."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_meter_provider_uses_periodic_metric_reader(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that MeterProvider is configured with a PeriodicExportingMetricReader.
+
+        A sloppy implementation might create a bare MeterProvider without any
+        metric reader. Without a reader, no metrics are exported. We inspect
+        the internal _sdk_config to verify the reader type.
+        """
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4317")
+        monkeypatch.setenv("OTEL_SERVICE_NAME", "test-svc")
+
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        meter_provider = metrics.get_meter_provider()
+        assert isinstance(meter_provider, SdkMeterProvider)
+
+        # SdkMeterProvider stores metric readers in _sdk_config.metric_readers
+        # or _measurement_consumer._reader_storages (implementation varies).
+        # Check _all_metric_readers or _sdk_config for the reader.
+        metric_readers = getattr(meter_provider, "_all_metric_readers", None)
+        if metric_readers is None:
+            # Fallback: try _sdk_config for older SDK versions
+            sdk_config = getattr(meter_provider, "_sdk_config", None)
+            metric_readers = getattr(sdk_config, "metric_readers", []) if sdk_config else []
+
+        reader_types = [type(r).__name__ for r in metric_readers]
+        assert any(isinstance(r, PeriodicExportingMetricReader) for r in metric_readers), (
+            f"Expected a PeriodicExportingMetricReader but found: {reader_types}. "
+            "MeterProvider must be configured with PeriodicExportingMetricReader "
+            "for metrics to be exported periodically."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_meter_provider_uses_otlp_metric_exporter(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that the metric reader uses an OTLPMetricExporter (gRPC).
+
+        A sloppy implementation might use a ConsoleMetricExporter or
+        InMemoryMetricExporter. This test verifies the exporter type
+        is OTLP-based, consistent with the TracerProvider's OTLPSpanExporter.
+        """
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4317")
+
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        meter_provider = metrics.get_meter_provider()
+        assert isinstance(meter_provider, SdkMeterProvider)
+
+        metric_readers = getattr(meter_provider, "_all_metric_readers", None)
+        if metric_readers is None:
+            sdk_config = getattr(meter_provider, "_sdk_config", None)
+            metric_readers = getattr(sdk_config, "metric_readers", []) if sdk_config else []
+
+        periodic_readers = [
+            r for r in metric_readers if isinstance(r, PeriodicExportingMetricReader)
+        ]
+        assert len(periodic_readers) > 0, "No PeriodicExportingMetricReader found"
+
+        # PeriodicExportingMetricReader stores the exporter in _exporter
+        exporter = getattr(periodic_readers[0], "_exporter", None)
+        assert exporter is not None, "PeriodicExportingMetricReader has no _exporter attribute"
+
+        exporter_type_name = type(exporter).__name__
+        assert "OTLP" in exporter_type_name, (
+            f"Expected OTLPMetricExporter but got {exporter_type_name}. "
+            "MeterProvider must use OTLPMetricExporter (gRPC) to export "
+            "metrics to the same OTLP endpoint as the TracerProvider."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_meter_provider_not_created_without_endpoint(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that no SDK MeterProvider is created when endpoint is absent.
+
+        When OTEL_EXPORTER_OTLP_ENDPOINT is not in the environment, the
+        meter provider must remain the default _ProxyMeterProvider.
+        """
+        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+        monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        meter_provider = metrics.get_meter_provider()
+        assert not isinstance(meter_provider, SdkMeterProvider), (
+            "Expected default proxy meter provider when OTEL_EXPORTER_OTLP_ENDPOINT "
+            f"is not set, but got {type(meter_provider).__name__}. "
+            "ensure_telemetry_initialized() must NOT create a MeterProvider "
+            "when the endpoint is absent."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_meter_provider_not_created_with_empty_endpoint(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that empty string endpoint does not create an SDK MeterProvider.
+
+        Edge case: env var exists but is empty. Should NOT initialize metrics.
+        """
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        meter_provider = metrics.get_meter_provider()
+        assert not isinstance(meter_provider, SdkMeterProvider), (
+            "Empty OTEL_EXPORTER_OTLP_ENDPOINT should not create an SDK MeterProvider."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_meter_provider_not_created_with_whitespace_endpoint(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that whitespace-only endpoint does not create an SDK MeterProvider.
+
+        Edge case: env var is spaces/tabs. Should NOT initialize metrics.
+        """
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "   \t  ")
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        meter_provider = metrics.get_meter_provider()
+        assert not isinstance(meter_provider, SdkMeterProvider), (
+            "Whitespace-only OTEL_EXPORTER_OTLP_ENDPOINT should not create an SDK MeterProvider."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_meter_provider_not_created_invalid_scheme(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that invalid scheme (not http/https) does not create an SDK MeterProvider.
+
+        If the endpoint has an ftp://, gopher://, or other exotic scheme,
+        the function should skip MeterProvider creation just as it skips
+        TracerProvider creation.
+        """
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "ftp://invalid:4317")
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        meter_provider = metrics.get_meter_provider()
+        assert not isinstance(meter_provider, SdkMeterProvider), (
+            "ftp:// scheme should not create an SDK MeterProvider. "
+            "Only http:// and https:// are valid OTLP endpoint schemes."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_idempotent_no_duplicate_meter_provider(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that calling twice does not register a second MeterProvider.
+
+        The _initialized flag must prevent re-entry. We verify that the
+        MeterProvider instance is the same on both calls, and that calling
+        twice does not create a new one. We also verify via
+        opentelemetry.metrics.set_meter_provider patch that it was called
+        exactly once.
+        """
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        # Patch at the opentelemetry.metrics module level, not at the
+        # initialization module level (which may not yet import metrics).
+        with patch.object(
+            metrics, "set_meter_provider", wraps=metrics.set_meter_provider
+        ) as mock_set_meter:
+            ensure_telemetry_initialized()
+            ensure_telemetry_initialized()
+
+            assert mock_set_meter.call_count == 1, (
+                f"metrics.set_meter_provider was called {mock_set_meter.call_count} "
+                "times. ensure_telemetry_initialized() must be idempotent — "
+                "only set MeterProvider once."
+            )
