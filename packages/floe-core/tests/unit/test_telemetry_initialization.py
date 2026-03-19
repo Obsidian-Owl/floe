@@ -18,8 +18,11 @@ See Also:
 
 from __future__ import annotations
 
+import json
+import logging
 from collections.abc import Generator
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 import structlog
@@ -1046,3 +1049,143 @@ class TestLoggingDecoupling:
                 "After reset_telemetry(), a new ensure_telemetry_initialized() "
                 "must re-configure logging."
             )
+
+    @pytest.mark.requirement("FR-045")
+    def test_compilation_logs_contain_trace_id_via_stdlib(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Test that compilation logs include trace_id when captured via stdlib.
+
+        AC-4: After ensure_telemetry_initialized(), compile_pipeline() logs
+        captured via logging.getLogger("floe_core") contain trace_id in
+        32-hex-char format.
+
+        This is the core scenario from issue #166: structlog must route
+        through stdlib logging with add_trace_context processor so that
+        stdlib handlers capture structured JSON with trace context.
+
+        Note: An OTLP endpoint is set so that ensure_telemetry_initialized()
+        creates a real TracerProvider (producing spans with valid trace_id).
+        Without a TracerProvider, spans have INVALID (zero) trace_id and
+        add_trace_context correctly skips injection.
+        """
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+        # Reset structlog to clear any cached loggers from previous tests.
+        # Module-level loggers (e.g. in stages.py) cache their config on
+        # first use; without this reset, they continue using PrintLoggerFactory
+        # instead of picking up the stdlib LoggerFactory from configure_logging().
+        structlog.reset_defaults()
+
+        from floe_core.telemetry.initialization import (
+            ensure_telemetry_initialized,
+            reset_telemetry,
+        )
+
+        ensure_telemetry_initialized()
+
+        # Set up stdlib handler to capture logs from floe_core namespace
+        captured: list[str] = []
+        handler = _CaptureHandler(captured)
+        handler.setLevel(logging.DEBUG)
+        root_logger = logging.getLogger("floe_core")
+        root_logger.addHandler(handler)
+        root_logger.setLevel(logging.DEBUG)
+
+        try:
+            # Write minimal spec and manifest YAML for compile_pipeline
+            spec_path = tmp_path / "floe.yaml"
+            spec_path.write_text(
+                "apiVersion: floe.dev/v1\n"
+                "kind: FloeSpec\n"
+                "metadata:\n"
+                "  name: test-product\n"
+                "  version: 1.0.0\n"
+                "transforms:\n"
+                "  - name: customers\n"
+                "    tags: []\n"
+            )
+            manifest_path = tmp_path / "manifest.yaml"
+            manifest_path.write_text(
+                "apiVersion: floe.dev/v1\n"
+                "kind: Manifest\n"
+                "metadata:\n"
+                "  name: test-platform\n"
+                "  version: 1.0.0\n"
+                "  owner: test@example.com\n"
+                "plugins:\n"
+                "  compute:\n"
+                "    type: duckdb\n"
+                "  orchestrator:\n"
+                "    type: dagster\n"
+            )
+
+            # Mock compute plugin (unit test — no real plugin installed)
+            mock_plugin = MagicMock()
+            mock_plugin.get_config_schema.return_value = None
+            mock_plugin.generate_dbt_profile.return_value = {
+                "type": "duckdb",
+                "path": ":memory:",
+            }
+
+            with (
+                patch(
+                    "floe_core.plugins.loader.is_compatible",
+                    return_value=True,
+                ),
+                patch(
+                    "floe_core.compilation.dbt_profiles.get_compute_plugin",
+                    return_value=mock_plugin,
+                ),
+            ):
+                from floe_core.compilation.stages import compile_pipeline
+
+                artifacts = compile_pipeline(spec_path, manifest_path)
+                assert artifacts is not None, "Compilation should succeed"
+        finally:
+            root_logger.removeHandler(handler)
+            reset_telemetry()
+
+        # Parse captured log lines and look for trace_id
+        trace_id_pattern = r"^[0-9a-f]{32}$"
+        import re
+
+        lines_with_trace_id: list[str] = []
+        for line in captured:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                parsed = json.loads(line)
+                tid = parsed.get("trace_id", "")
+                if re.match(trace_id_pattern, tid):
+                    lines_with_trace_id.append(tid)
+            except (json.JSONDecodeError, TypeError):
+                # Non-JSON lines (e.g. from logging.basicConfig) are expected
+                continue
+
+        assert len(lines_with_trace_id) > 0, (
+            "No compilation log lines contain trace_id in 32-hex-char format. "
+            "ensure_telemetry_initialized() must configure structlog with "
+            "add_trace_context processor and stdlib LoggerFactory so that "
+            "stdlib handlers capture trace context. "
+            f"Captured {len(captured)} log lines total."
+        )
+
+
+class _CaptureHandler(logging.Handler):
+    """Logging handler that appends formatted messages to a list.
+
+    Used in tests to capture log output in-memory for assertion
+    without interfering with pytest's log capturing.
+    """
+
+    def __init__(self, target: list[str]) -> None:
+        super().__init__()
+        self._target = target
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Format and append log record to target list."""
+        self._target.append(self.format(record))
