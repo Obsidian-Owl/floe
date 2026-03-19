@@ -84,10 +84,11 @@ def cli(ctx: click.Context) -> None:
     The floe CLI provides commands for both Platform Teams and Data Teams
     to manage data platform configuration, governance, and deployment.
     """
-    # Initialize OTel tracing at CLI entry so the real TracerProvider is
-    # registered before any signing/verification operations begin.
-    # OCI modules use a deferred _get_tracer() pattern (not module-level),
-    # so the provider must be set before the first span is started.
+    # Initialize OTel tracing and metrics at CLI entry.  The OTel API
+    # returns ProxyTracer / ProxyMeter instances that auto-upgrade when
+    # set_tracer_provider() / set_meter_provider() is called, so
+    # module-level tracer acquisition (e.g. attestation.py, webhooks.py)
+    # is safe — proxies silently upgrade once initialization completes.
     # Skip for --help (no subcommand) to avoid unnecessary setup.
     if ctx.invoked_subcommand is not None:
         from floe_core.telemetry.initialization import ensure_telemetry_initialized

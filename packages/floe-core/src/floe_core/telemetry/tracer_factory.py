@@ -1,9 +1,15 @@
-"""Thread-safe tracer factory for consistent OpenTelemetry initialization.
+"""Thread-safe tracer factory with ProxyTracer auto-upgrade support.
 
-This module provides a centralized, thread-safe tracer factory that handles:
+This module provides a centralized, thread-safe tracer cache that handles:
 - Lazy initialization with double-checked locking
 - Graceful fallback to NoOpTracer on initialization failure
 - Test isolation via reset_tracer()
+
+The cache stores ProxyTracer instances obtained from the OTel API via
+``trace.get_tracer()``.  These proxies auto-upgrade to real SDK tracers
+when ``set_tracer_provider()`` is called (e.g. by
+``ensure_telemetry_initialized()``).  ``reset_tracer()`` clears the cache
+to force fresh tracer acquisition after a provider reset.
 
 All floe packages should import get_tracer and reset_tracer from this module
 to ensure consistent behavior and proper thread-safety.
