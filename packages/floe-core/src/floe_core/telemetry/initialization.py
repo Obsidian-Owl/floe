@@ -90,6 +90,8 @@ def ensure_telemetry_initialized() -> None:
     global _initialized, _meter_provider, _logging_configured
 
     # Idempotency guard: skip if already initialised.
+    # NOTE: _initialized implies _logging_configured is already True,
+    # because logging is configured before _initialized is set below.
     if _initialized:
         return
 

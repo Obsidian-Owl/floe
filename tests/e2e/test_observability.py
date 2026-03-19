@@ -515,8 +515,9 @@ class TestObservability(IntegrationTestBase):
         manifest_path = project_root / "demo" / "manifest.yaml"
 
         # Initialize telemetry so structlog is configured with trace context
-        # injection via stdlib LoggerFactory.  Even without an OTLP endpoint,
-        # this enables trace_id/span_id in logs from ProxyTracer spans.
+        # injection via stdlib LoggerFactory.  In this E2E environment the
+        # OTLP endpoint is set, so a real TracerProvider is created and spans
+        # carry valid (non-zero) trace_ids.
         ensure_telemetry_initialized()
 
         # Capture log output during compilation

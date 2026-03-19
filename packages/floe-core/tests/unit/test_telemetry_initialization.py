@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -1091,6 +1092,7 @@ class TestLoggingDecoupling:
         handler = _CaptureHandler(captured)
         handler.setLevel(logging.DEBUG)
         root_logger = logging.getLogger("floe_core")
+        original_level = root_logger.level
         root_logger.addHandler(handler)
         root_logger.setLevel(logging.DEBUG)
 
@@ -1146,24 +1148,35 @@ class TestLoggingDecoupling:
                 assert artifacts is not None, "Compilation should succeed"
         finally:
             root_logger.removeHandler(handler)
+            root_logger.setLevel(original_level)
             reset_telemetry()
+            # Clear cached structlog loggers so subsequent tests that
+            # configure different logger factories get fresh proxies.
+            structlog.reset_defaults()
+            # structlog.reset_defaults() resets global config but does NOT
+            # invalidate BoundLoggerLazyProxy instances that cached their
+            # `bind` method (via cache_logger_on_first_use).  The cached
+            # closure holds a reference to the old stdlib-backed logger,
+            # so later tests that reconfigure with PrintLoggerFactory get
+            # no output.  Delete the instance-level `bind` override to
+            # restore the class method, which re-reads _CONFIG on next call.
+            _clear_structlog_proxy_caches()
 
         # Parse captured log lines and look for trace_id
         trace_id_pattern = r"^[0-9a-f]{32}$"
-        import re
-
+        non_json_count = 0
         lines_with_trace_id: list[str] = []
-        for line in captured:
-            line = line.strip()
-            if not line:
+        for raw_line in captured:
+            stripped = raw_line.strip()
+            if not stripped:
                 continue
             try:
-                parsed = json.loads(line)
+                parsed = json.loads(stripped)
                 tid = parsed.get("trace_id", "")
                 if re.match(trace_id_pattern, tid):
                     lines_with_trace_id.append(tid)
             except (json.JSONDecodeError, TypeError):
-                # Non-JSON lines (e.g. from logging.basicConfig) are expected
+                non_json_count += 1
                 continue
 
         assert len(lines_with_trace_id) > 0, (
@@ -1171,8 +1184,39 @@ class TestLoggingDecoupling:
             "ensure_telemetry_initialized() must configure structlog with "
             "add_trace_context processor and stdlib LoggerFactory so that "
             "stdlib handlers capture trace context. "
-            f"Captured {len(captured)} log lines total."
+            f"Captured {len(captured)} lines total, {non_json_count} non-JSON."
         )
+
+        # All trace_ids from a single compilation should be identical
+        # (propagated from the parent compile.pipeline span).
+        unique_trace_ids = set(lines_with_trace_id)
+        assert len(unique_trace_ids) == 1, (
+            f"Expected all trace_ids to match (single parent span) but got "
+            f"{len(unique_trace_ids)} distinct values: {unique_trace_ids}"
+        )
+
+
+def _clear_structlog_proxy_caches() -> None:
+    """Clear cached ``bind`` overrides on structlog ``BoundLoggerLazyProxy`` instances.
+
+    When ``cache_logger_on_first_use=True``, structlog replaces each proxy's
+    ``bind`` method with a closure that returns the already-assembled logger.
+    ``structlog.reset_defaults()`` resets the global config but does NOT
+    invalidate these instance-level overrides.  Deleting the override restores
+    the class-level ``bind`` which re-reads ``_CONFIG`` on the next call.
+    """
+    import sys
+
+    for mod in list(sys.modules.values()):
+        try:
+            attrs = vars(mod)
+        except TypeError:
+            continue
+        for attr in attrs.values():
+            if getattr(type(attr), "__name__", "") == "BoundLoggerLazyProxy" and "bind" in getattr(
+                attr, "__dict__", {}
+            ):
+                del attr.__dict__["bind"]
 
 
 class _CaptureHandler(logging.Handler):
