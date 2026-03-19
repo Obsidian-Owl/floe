@@ -5,8 +5,9 @@ Validates graceful error handling when a service pod is killed mid-operation.
 Workflow:
     Start operation → kill a service pod → verify graceful error (not silent failure)
 
-NOTE: persistence.enabled=false in values-test.yaml — data does NOT survive
-pod restart. This test verifies ERROR HANDLING ONLY, not retry-after-restore.
+NOTE: postgresql.persistence.enabled=false in values-test.yaml — PostgreSQL
+uses emptyDir, data does NOT survive pod restart. This test verifies ERROR
+HANDLING ONLY, not retry-after-restore.
 
 Prerequisites:
     - Kind cluster: make kind-up

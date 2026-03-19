@@ -1,0 +1,131 @@
+# PostgreSQL StatefulSet volume rendering tests (#137)
+# Validates that persistence and initdb.scripts branches each produce
+# a single volumes: block with the correct entries.
+suite: postgresql statefulset volumes
+templates:
+  - templates/statefulset-postgresql.yaml
+  - templates/secret-postgresql.yaml
+tests:
+  # -----------------------------------------------------------------
+  # AC-1 / AC-5.1: persistence=false + initdb.scripts populated
+  # -----------------------------------------------------------------
+  - it: should render both data and init-scripts volumes when persistence=false
+    template: templates/statefulset-postgresql.yaml
+    set:
+      postgresql.persistence.enabled: false
+      postgresql.primary.initdb.scripts:
+        init-databases.sql: "CREATE DATABASE dagster;"
+    asserts:
+      - isKind:
+          of: StatefulSet
+      # No volumeClaimTemplates when persistence is disabled
+      - isNull:
+          path: spec.volumeClaimTemplates
+      # data volume uses emptyDir
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            emptyDir: {}
+      # init-scripts volume references configMap
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: init-scripts
+            configMap:
+              name: floe-platform-postgresql-init
+      # postgresql container mounts init-scripts
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: init-scripts
+            mountPath: /docker-entrypoint-initdb.d
+
+  # -----------------------------------------------------------------
+  # AC-2 / AC-5.2: persistence=true + initdb.scripts populated (default)
+  # -----------------------------------------------------------------
+  - it: should render init-scripts volume and volumeClaimTemplates when persistence=true
+    template: templates/statefulset-postgresql.yaml
+    set:
+      postgresql.persistence.enabled: true
+      postgresql.primary.initdb.scripts:
+        init-databases.sql: "CREATE DATABASE dagster;"
+    asserts:
+      - isKind:
+          of: StatefulSet
+      # volumeClaimTemplates has data PVC
+      - exists:
+          path: spec.volumeClaimTemplates[0].metadata.name
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: data
+      # init-scripts volume present
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: init-scripts
+            configMap:
+              name: floe-platform-postgresql-init
+      # postgresql container mounts init-scripts
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: init-scripts
+            mountPath: /docker-entrypoint-initdb.d
+
+  # -----------------------------------------------------------------
+  # AC-3 / AC-5.3: persistence=false + no initdb.scripts
+  # -----------------------------------------------------------------
+  - it: should render only data emptyDir volume when persistence=false and no initdb scripts
+    template: templates/statefulset-postgresql.yaml
+    set:
+      postgresql.persistence.enabled: false
+      postgresql.primary.initdb.scripts: null
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - isNull:
+          path: spec.volumeClaimTemplates
+      # Only data volume, no init-scripts
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            emptyDir: {}
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: init-scripts
+          any: true
+      # No init-scripts volumeMount on postgresql container
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: init-scripts
+          any: true
+
+  # -----------------------------------------------------------------
+  # AC-2b / AC-5.4: persistence=true + no initdb.scripts
+  # -----------------------------------------------------------------
+  - it: should render only volumeClaimTemplates when persistence=true and no initdb scripts
+    template: templates/statefulset-postgresql.yaml
+    set:
+      postgresql.primary.initdb.scripts: null
+    asserts:
+      - isKind:
+          of: StatefulSet
+      # volumeClaimTemplates has data PVC
+      - exists:
+          path: spec.volumeClaimTemplates[0].metadata.name
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.name
+          value: data
+      # No volumes block (only volumeClaimTemplates)
+      - notExists:
+          path: spec.template.spec.volumes
+      # No init-scripts volumeMount on postgresql container
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: init-scripts
+          any: true
