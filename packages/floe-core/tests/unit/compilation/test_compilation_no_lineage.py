@@ -253,7 +253,10 @@ class TestCompilePipelineNoLineage:
     # ------------------------------------------------------------------
     @pytest.mark.requirement("AC-1")
     def test_compile_pipeline_without_marquez_url_returns_valid_artifacts(
-        self, spec_path: Path, manifest_path: Path
+        self,
+        spec_path: Path,
+        manifest_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Compilation without MARQUEZ_URL produces valid CompiledArtifacts.
 
@@ -265,12 +268,9 @@ class TestCompilePipelineNoLineage:
         from floe_core.schemas.compiled_artifacts import CompiledArtifacts
         from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
-        # Ensure MARQUEZ_URL is absent
-        with patch.dict("os.environ", {}, clear=False):
-            import os
-
-            os.environ.pop(MARQUEZ_URL_KEY, None)
-            result = compile_pipeline(spec_path, manifest_path)
+        # Ensure MARQUEZ_URL is absent (monkeypatch auto-restores)
+        monkeypatch.delenv(MARQUEZ_URL_KEY, raising=False)
+        result = compile_pipeline(spec_path, manifest_path)
 
         assert isinstance(result, CompiledArtifacts)
         assert result.version == COMPILED_ARTIFACTS_VERSION

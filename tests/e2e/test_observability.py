@@ -878,8 +878,9 @@ class TestObservability(IntegrationTestBase):
                 "Run via make test-e2e or: kubectl port-forward svc/marquez 5000:5000 -n floe-test"
             )
 
-        # seed_observability fixture already ran compile_pipeline() with MARQUEZ_URL
-        # set, emitting OpenLineage events to Marquez. Query those events directly.
+        # seed_observability Phase 2 triggered a Dagster asset run for
+        # stg_crm_customers, causing LineageResource to emit runtime
+        # OpenLineage events to Marquez. Query those events here.
 
         # Query Marquez for events emitted BY the platform after compilation
         # Check known namespaces where the platform would emit events

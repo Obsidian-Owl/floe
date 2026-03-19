@@ -743,7 +743,7 @@ def _discover_repo_for_asset(
             json={"query": asset_query},
             timeout=30.0,
         )
-    except Exception as exc:  # noqa: BLE001
+    except httpx.HTTPError as exc:
         logger.warning("seed_observability: assetNodes query failed: %s", type(exc).__name__)
         response = None
 
@@ -778,7 +778,7 @@ def _discover_repo_for_asset(
             nodes = resp.json().get("data", {}).get("repositoriesOrError", {}).get("nodes", [])
             if nodes:
                 return (nodes[0]["name"], nodes[0]["location"]["name"])
-    except Exception as exc:  # noqa: BLE001
+    except httpx.HTTPError as exc:
         logger.warning(
             "seed_observability: repository fallback query failed: %s",
             type(exc).__name__,
@@ -843,7 +843,7 @@ def _trigger_lineage_run(
             json={"query": _LAUNCH_RUN_MUTATION, "variables": variables},
             timeout=30.0,
         )
-    except Exception as exc:  # noqa: BLE001
+    except httpx.HTTPError as exc:
         logger.warning(
             "seed_observability: launchRun request failed (%s); skipping lineage run",
             type(exc).__name__,
@@ -893,7 +893,7 @@ def _trigger_lineage_run(
                 return False
             status = resp.json().get("data", {}).get("runOrError", {}).get("status")
             return status in ("SUCCESS", "FAILURE", "CANCELED")
-        except Exception:  # noqa: BLE001
+        except httpx.HTTPError:
             return False
 
     completed = wait_for_condition(
@@ -910,17 +910,43 @@ def _trigger_lineage_run(
         )
         return
 
-    logger.info("seed_observability: lineage run %s completed", run_id)
+    # Check terminal state — warn if the run did not succeed.
+    try:
+        status_resp = httpx.post(
+            f"{dagster_url}/graphql",
+            json={"query": _RUN_STATUS_QUERY, "variables": {"runId": run_id}},
+            timeout=10.0,
+        )
+        final_status = (
+            status_resp.json().get("data", {}).get("runOrError", {}).get("status")
+            if status_resp.status_code == 200
+            else None
+        )
+    except httpx.HTTPError:
+        final_status = None
+
+    if final_status != "SUCCESS":
+        logger.warning(
+            "seed_observability: lineage run %s ended with status %s; "
+            "COMPLETE lineage events may be absent",
+            run_id,
+            final_status,
+        )
+        return
+
+    logger.info("seed_observability: lineage run %s completed successfully", run_id)
 
     # Wait for Marquez to ingest the emitted OpenLineage events.
     def _marquez_has_lineage() -> bool:
-        """Return True when Marquez has at least one run for the seeded namespace."""
+        """Return True when Marquez has at least one job from the seeded run."""
         try:
-            resp = marquez_client.get("/api/v1/namespaces", timeout=10.0)
-            if resp.status_code != 200:
-                return False
-            namespaces = resp.json().get("namespaces", [])
-            return len(namespaces) > 0
+            for ns in ("default", "floe-platform", "customer-360"):
+                resp = marquez_client.get(f"/api/v1/namespaces/{ns}/jobs", timeout=10.0)
+                if resp.status_code == 200:
+                    jobs = resp.json().get("jobs", [])
+                    if len(jobs) > 0:
+                        return True
+            return False
         except Exception:  # noqa: BLE001
             return False
 
