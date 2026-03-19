@@ -107,13 +107,13 @@ spec:
             - name: init-scripts
               mountPath: /docker-entrypoint-initdb.d
             {{- end }}
+  {{- if .Values.postgresql.persistence.enabled }}
+      {{- if .Values.postgresql.primary.initdb.scripts }}
       volumes:
-        {{- if .Values.postgresql.primary.initdb.scripts }}
         - name: init-scripts
           configMap:
             name: {{ include "floe-platform.fullname" . }}-postgresql-init
-        {{- end }}
-  {{- if .Values.postgresql.persistence.enabled }}
+      {{- end }}
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -137,5 +137,10 @@ spec:
       volumes:
         - name: data
           emptyDir: {}
+        {{- if .Values.postgresql.primary.initdb.scripts }}
+        - name: init-scripts
+          configMap:
+            name: {{ include "floe-platform.fullname" . }}-postgresql-init
+        {{- end }}
   {{- end }}
 {{- end }}
