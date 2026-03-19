@@ -88,6 +88,8 @@ def _reset_otel_state() -> Generator[None, None, None]:
     init_mod._initialized = False
     if hasattr(init_mod, "_meter_provider"):
         init_mod._meter_provider = None
+    if hasattr(init_mod, "_logging_configured"):
+        init_mod._logging_configured = False
 
     structlog.reset_defaults()
 

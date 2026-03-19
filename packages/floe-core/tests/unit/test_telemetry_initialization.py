@@ -88,6 +88,8 @@ def _reset_otel_state() -> Generator[None, None, None]:
             init_mod._initialized = False
         if hasattr(init_mod, "_meter_provider"):
             init_mod._meter_provider = None
+        if hasattr(init_mod, "_logging_configured"):
+            init_mod._logging_configured = False
     except (ImportError, AttributeError):
         pass
 
@@ -560,14 +562,15 @@ class TestConfigureLogging:
             mock_configure.assert_called_once()
 
     @pytest.mark.requirement("001-FR-040")
-    def test_does_not_configure_logging_when_no_endpoint(
+    def test_configures_logging_even_without_endpoint(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test that configure_logging() is NOT called when no endpoint is set.
+        """Test that configure_logging() IS called even when no endpoint is set.
 
-        No-op path should not configure logging. It would be a side effect
-        unrelated to the no-op decision.
+        Structured logging with trace context injection is useful regardless
+        of whether an OTLP exporter is configured — logs get trace_id from
+        any active span (including ProxyTracer's NonRecordingSpan).
         """
         monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
 
@@ -576,7 +579,7 @@ class TestConfigureLogging:
         with patch("floe_core.telemetry.initialization.configure_logging") as mock_configure:
             ensure_telemetry_initialized()
 
-            mock_configure.assert_not_called()
+            mock_configure.assert_called_once()
 
 
 class TestReturnValue:

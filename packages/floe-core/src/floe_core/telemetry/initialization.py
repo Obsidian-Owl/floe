@@ -4,13 +4,16 @@ This module provides ensure_telemetry_initialized(), a zero-argument entry
 point that bootstraps the OpenTelemetry SDK from environment variables.
 
 Behaviour:
-- Reads OTEL_EXPORTER_OTLP_ENDPOINT; if absent/empty/whitespace, does nothing.
+- Always configures structlog with trace context injection (regardless of
+  OTEL_EXPORTER_OTLP_ENDPOINT), so structured logs include trace_id/span_id
+  even when no OTLP exporter is configured.
+- Reads OTEL_EXPORTER_OTLP_ENDPOINT; if absent/empty/whitespace, returns
+  after configuring logging (no TracerProvider/MeterProvider created).
 - Reads OTEL_SERVICE_NAME; defaults to 'floe-platform' if absent/empty.
 - Creates TracerProvider with OTLPSpanExporter + BatchSpanProcessor.
 - Registers it globally via trace.set_tracer_provider().
-- Calls configure_logging() to wire structlog with trace context.
 - Calls reset_tracer() to invalidate any stale cached NoOp tracers.
-- Is idempotent: a module-level flag prevents double-initialisation.
+- Is idempotent: module-level flags prevent double-initialisation.
 
 Requirements Covered:
 - FR-040: OTel tracing initialization
@@ -47,19 +50,27 @@ _initialized: bool = False
 # Module-level reference to the active MeterProvider (for reset_telemetry).
 _meter_provider: MeterProvider | None = None
 
+# Module-level flag for idempotent logging configuration.  Separate from
+# _initialized because logging should be configured even without an OTLP
+# endpoint (structured logs with trace context are useful regardless).
+_logging_configured: bool = False
+
 
 def ensure_telemetry_initialized() -> None:
     """Initialize OTel tracing from environment variables if not already done.
 
-    Reads OTEL_EXPORTER_OTLP_ENDPOINT from the environment.  If the value is
-    absent, empty, or whitespace-only, this function is a no-op.  Otherwise it
-    configures a TracerProvider with an OTLPSpanExporter backed by a
-    BatchSpanProcessor, registers it as the global provider, configures
-    structlog with trace context injection, and resets the tracer_factory cache
+    Always configures structlog with trace context injection (via
+    ``configure_logging()``), regardless of whether an OTLP endpoint is set.
+    This ensures structured logs include ``trace_id`` and ``span_id`` from
+    any active span, including the default ProxyTracer's NonRecordingSpan.
+
+    If OTEL_EXPORTER_OTLP_ENDPOINT is set, additionally creates a
+    TracerProvider with an OTLPSpanExporter backed by a BatchSpanProcessor,
+    registers it as the global provider, and resets the tracer_factory cache
     so that subsequent get_tracer()/create_span() calls use the new provider.
 
-    The function is idempotent: only the first call with a valid endpoint
-    performs initialisation.  Subsequent calls return immediately.
+    The function is idempotent: logging configuration and OTLP setup each
+    have their own guard flags to prevent redundant work.
 
     Environment Variables:
         OTEL_EXPORTER_OTLP_ENDPOINT: OTLP collector endpoint, e.g.
@@ -76,15 +87,23 @@ def ensure_telemetry_initialized() -> None:
         >>> ensure_telemetry_initialized()  # configures SDK
         >>> ensure_telemetry_initialized()  # no-op on second call
     """
-    global _initialized, _meter_provider
+    global _initialized, _meter_provider, _logging_configured
 
     # Idempotency guard: skip if already initialised.
     if _initialized:
         return
 
+    # Always configure structured logging with trace context injection,
+    # even without an OTLP endpoint.  Logs get trace_id/span_id from
+    # any active span (including ProxyTracer's NonRecordingSpan).
+    if not _logging_configured:
+        configure_logging()
+        _logging_configured = True
+
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
     if not endpoint:
         # No endpoint configured — leave default (NoOp/Proxy) provider in place.
+        # Logging is already configured above.
         return
 
     # Validate endpoint scheme is http or https.
@@ -142,9 +161,6 @@ def ensure_telemetry_initialized() -> None:
     # Store reference for reset_telemetry().
     _meter_provider = meter_provider
 
-    # Configure structlog to inject trace_id / span_id into log records.
-    configure_logging()
-
     # Invalidate the tracer_factory cache so subsequent tracer requests use
     # the new provider rather than stale cached NoOp tracers.
     reset_tracer()
@@ -184,7 +200,7 @@ def reset_telemetry() -> None:
         >>> reset_telemetry()                      # flush and clear
         >>> ensure_telemetry_initialized()          # fresh re-init
     """
-    global _initialized, _meter_provider
+    global _initialized, _meter_provider, _logging_configured
 
     provider = trace.get_tracer_provider()
     if isinstance(provider, TracerProvider):
@@ -224,6 +240,7 @@ def reset_telemetry() -> None:
 
     _meter_provider = None
     _initialized = False
+    _logging_configured = False
     reset_tracer()
 
 
