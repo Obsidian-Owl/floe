@@ -189,13 +189,13 @@ polaris:
 # =============================================================================
 postgresql:
   enabled: true
+  persistence:
+    enabled: false
   auth:
     username: floe
     password: "floe-test-password-1234"  # pragma: allowlist secret
     database: floe
   primary:
-    persistence:
-      enabled: false
     resources:
       requests:
         cpu: 100m
