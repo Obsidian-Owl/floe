@@ -86,6 +86,8 @@ def _reset_otel_state() -> Generator[None, None, None]:
 
         if hasattr(init_mod, "_initialized"):
             init_mod._initialized = False
+        if hasattr(init_mod, "_meter_provider"):
+            init_mod._meter_provider = None
     except (ImportError, AttributeError):
         pass
 
