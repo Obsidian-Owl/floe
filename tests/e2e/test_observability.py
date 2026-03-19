@@ -505,10 +505,20 @@ class TestObservability(IntegrationTestBase):
         from pathlib import Path
 
         from floe_core.compilation.stages import compile_pipeline
+        from floe_core.telemetry.initialization import (
+            ensure_telemetry_initialized,
+            reset_telemetry,
+        )
 
         project_root = Path(__file__).parent.parent.parent
         spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
         manifest_path = project_root / "demo" / "manifest.yaml"
+
+        # Initialize telemetry so structlog is configured with trace context
+        # injection via stdlib LoggerFactory.  In this E2E environment the
+        # OTLP endpoint is set, so a real TracerProvider is created and spans
+        # carry valid (non-zero) trace_ids.
+        ensure_telemetry_initialized()
 
         # Capture log output during compilation
         log_buffer = io.StringIO()
@@ -522,6 +532,7 @@ class TestObservability(IntegrationTestBase):
             assert artifacts is not None, "Compilation should succeed"
         finally:
             root_logger.removeHandler(handler)
+            reset_telemetry()
 
         log_output = log_buffer.getvalue()
 

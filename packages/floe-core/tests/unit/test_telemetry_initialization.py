@@ -18,8 +18,12 @@ See Also:
 
 from __future__ import annotations
 
+import json
+import logging
+import re
 from collections.abc import Generator
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 import structlog
@@ -88,6 +92,8 @@ def _reset_otel_state() -> Generator[None, None, None]:
             init_mod._initialized = False
         if hasattr(init_mod, "_meter_provider"):
             init_mod._meter_provider = None
+        if hasattr(init_mod, "_logging_configured"):
+            init_mod._logging_configured = False
     except (ImportError, AttributeError):
         pass
 
@@ -95,6 +101,7 @@ def _reset_otel_state() -> Generator[None, None, None]:
     # (LoggerFactory, JSONRenderer, cache_logger_on_first_use) don't
     # leak into other test modules.
     structlog.reset_defaults()
+    _clear_structlog_proxy_caches()
 
 
 class TestEnsureTelemetryInitializedImport:
@@ -560,14 +567,15 @@ class TestConfigureLogging:
             mock_configure.assert_called_once()
 
     @pytest.mark.requirement("001-FR-040")
-    def test_does_not_configure_logging_when_no_endpoint(
+    def test_configures_logging_even_without_endpoint(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test that configure_logging() is NOT called when no endpoint is set.
+        """Test that configure_logging() IS called even when no endpoint is set.
 
-        No-op path should not configure logging. It would be a side effect
-        unrelated to the no-op decision.
+        Structured logging with trace context injection is useful regardless
+        of whether an OTLP exporter is configured — logs get trace_id from
+        any active span (including ProxyTracer's NonRecordingSpan).
         """
         monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
 
@@ -576,7 +584,7 @@ class TestConfigureLogging:
         with patch("floe_core.telemetry.initialization.configure_logging") as mock_configure:
             ensure_telemetry_initialized()
 
-            mock_configure.assert_not_called()
+            mock_configure.assert_called_once()
 
 
 class TestReturnValue:
@@ -940,3 +948,289 @@ class TestMeterProviderInitialization:
                 "times. ensure_telemetry_initialized() must be idempotent — "
                 "only set MeterProvider once."
             )
+
+
+class TestLoggingDecoupling:
+    """Test that logging configuration is decoupled from OTLP endpoint.
+
+    Issue #166: configure_logging() must run even without an OTLP endpoint
+    so that structlog routes through stdlib logging with trace context.
+    """
+
+    @pytest.mark.requirement("FR-045")
+    def test_logging_configured_without_otlp_sets_flag(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that _logging_configured flag is set after init without OTLP.
+
+        AC-1: ensure_telemetry_initialized() without OTLP endpoint must still
+        call configure_logging() and set the _logging_configured flag.
+        """
+        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+
+        import floe_core.telemetry.initialization as init_mod
+
+        assert init_mod._logging_configured is False, (
+            "Precondition: _logging_configured should be False before init"
+        )
+
+        init_mod.ensure_telemetry_initialized()
+
+        assert init_mod._logging_configured is True, (
+            "_logging_configured must be True after ensure_telemetry_initialized() "
+            "even when no OTLP endpoint is set."
+        )
+
+    @pytest.mark.requirement("FR-045")
+    def test_logging_idempotent_without_otlp(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that configure_logging() is called only once across repeated calls.
+
+        AC-2: The _logging_configured flag prevents redundant configure_logging()
+        calls when no OTLP endpoint is set (where _initialized is never set).
+        """
+        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        with patch("floe_core.telemetry.initialization.configure_logging") as mock_configure:
+            ensure_telemetry_initialized()
+            ensure_telemetry_initialized()
+            ensure_telemetry_initialized()
+
+            assert mock_configure.call_count == 1, (
+                f"configure_logging was called {mock_configure.call_count} times. "
+                "The _logging_configured flag should prevent redundant calls."
+            )
+
+    @pytest.mark.requirement("FR-045")
+    def test_reset_telemetry_resets_logging_flag(self) -> None:
+        """Test that reset_telemetry() clears _logging_configured.
+
+        AC-3: After reset, the next ensure_telemetry_initialized() call must
+        re-configure logging (e.g. after test isolation reset).
+        """
+        import floe_core.telemetry.initialization as init_mod
+
+        init_mod._logging_configured = True
+
+        init_mod.reset_telemetry()
+
+        assert init_mod._logging_configured is False, (
+            "reset_telemetry() must set _logging_configured = False "
+            "so that logging can be re-configured after reset."
+        )
+
+    @pytest.mark.requirement("FR-045")
+    def test_reset_allows_logging_reconfiguration(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that after reset, configure_logging is called again.
+
+        AC-3 behavioral: init → reset → init must call configure_logging twice.
+        """
+        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        with patch("floe_core.telemetry.initialization.configure_logging") as mock_configure:
+            ensure_telemetry_initialized()
+            assert mock_configure.call_count == 1
+
+            from floe_core.telemetry.initialization import reset_telemetry
+
+            reset_telemetry()
+
+            ensure_telemetry_initialized()
+            assert mock_configure.call_count == 2, (
+                f"configure_logging was called {mock_configure.call_count} times. "
+                "After reset_telemetry(), a new ensure_telemetry_initialized() "
+                "must re-configure logging."
+            )
+
+    @pytest.mark.requirement("FR-045")
+    def test_compilation_logs_contain_trace_id_via_stdlib(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Test that compilation logs include trace_id when captured via stdlib.
+
+        AC-4: After ensure_telemetry_initialized(), compile_pipeline() logs
+        captured via logging.getLogger("floe_core") contain trace_id in
+        32-hex-char format.
+
+        This is the core scenario from issue #166: structlog must route
+        through stdlib logging with add_trace_context processor so that
+        stdlib handlers capture structured JSON with trace context.
+
+        Note: An OTLP endpoint is set so that ensure_telemetry_initialized()
+        creates a real TracerProvider (producing spans with valid trace_id).
+        Without a TracerProvider, spans have INVALID (zero) trace_id and
+        add_trace_context correctly skips injection.
+        """
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+        # Reset structlog to clear any cached loggers from previous tests.
+        # Module-level loggers (e.g. in stages.py) cache their config on
+        # first use; without this reset, they continue using PrintLoggerFactory
+        # instead of picking up the stdlib LoggerFactory from configure_logging().
+        structlog.reset_defaults()
+
+        from floe_core.telemetry.initialization import (
+            ensure_telemetry_initialized,
+            reset_telemetry,
+        )
+
+        ensure_telemetry_initialized()
+
+        # Set up stdlib handler to capture logs from floe_core namespace
+        captured: list[str] = []
+        handler = _CaptureHandler(captured)
+        handler.setLevel(logging.DEBUG)
+        root_logger = logging.getLogger("floe_core")
+        original_level = root_logger.level
+        root_logger.addHandler(handler)
+        root_logger.setLevel(logging.DEBUG)
+
+        try:
+            # Write minimal spec and manifest YAML for compile_pipeline
+            spec_path = tmp_path / "floe.yaml"
+            spec_path.write_text(
+                "apiVersion: floe.dev/v1\n"
+                "kind: FloeSpec\n"
+                "metadata:\n"
+                "  name: test-product\n"
+                "  version: 1.0.0\n"
+                "transforms:\n"
+                "  - name: customers\n"
+                "    tags: []\n"
+            )
+            manifest_path = tmp_path / "manifest.yaml"
+            manifest_path.write_text(
+                "apiVersion: floe.dev/v1\n"
+                "kind: Manifest\n"
+                "metadata:\n"
+                "  name: test-platform\n"
+                "  version: 1.0.0\n"
+                "  owner: test@example.com\n"
+                "plugins:\n"
+                "  compute:\n"
+                "    type: duckdb\n"
+                "  orchestrator:\n"
+                "    type: dagster\n"
+            )
+
+            # Mock compute plugin (unit test — no real plugin installed)
+            mock_plugin = MagicMock()
+            mock_plugin.get_config_schema.return_value = None
+            mock_plugin.generate_dbt_profile.return_value = {
+                "type": "duckdb",
+                "path": ":memory:",
+            }
+
+            with (
+                patch(
+                    "floe_core.plugins.loader.is_compatible",
+                    return_value=True,
+                ),
+                patch(
+                    "floe_core.compilation.dbt_profiles.get_compute_plugin",
+                    return_value=mock_plugin,
+                ),
+            ):
+                from floe_core.compilation.stages import compile_pipeline
+
+                artifacts = compile_pipeline(spec_path, manifest_path)
+                assert artifacts is not None, "Compilation should succeed"
+        finally:
+            root_logger.removeHandler(handler)
+            root_logger.setLevel(original_level)
+            reset_telemetry()
+            # Clear cached structlog loggers so subsequent tests that
+            # configure different logger factories get fresh proxies.
+            structlog.reset_defaults()
+            # structlog.reset_defaults() resets global config but does NOT
+            # invalidate BoundLoggerLazyProxy instances that cached their
+            # `bind` method (via cache_logger_on_first_use).  The cached
+            # closure holds a reference to the old stdlib-backed logger,
+            # so later tests that reconfigure with PrintLoggerFactory get
+            # no output.  Delete the instance-level `bind` override to
+            # restore the class method, which re-reads _CONFIG on next call.
+            _clear_structlog_proxy_caches()
+
+        # Parse captured log lines and look for trace_id
+        trace_id_pattern = r"^[0-9a-f]{32}$"
+        non_json_count = 0
+        lines_with_trace_id: list[str] = []
+        for raw_line in captured:
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            try:
+                parsed = json.loads(stripped)
+                tid = parsed.get("trace_id", "")
+                if re.match(trace_id_pattern, tid):
+                    lines_with_trace_id.append(tid)
+            except (json.JSONDecodeError, TypeError):
+                non_json_count += 1
+                continue
+
+        assert len(lines_with_trace_id) > 0, (
+            "No compilation log lines contain trace_id in 32-hex-char format. "
+            "ensure_telemetry_initialized() must configure structlog with "
+            "add_trace_context processor and stdlib LoggerFactory so that "
+            "stdlib handlers capture trace context. "
+            f"Captured {len(captured)} lines total, {non_json_count} non-JSON."
+        )
+
+        # All trace_ids from a single compilation should be identical
+        # (propagated from the parent compile.pipeline span).
+        unique_trace_ids = set(lines_with_trace_id)
+        assert len(unique_trace_ids) == 1, (
+            f"Expected all trace_ids to match (single parent span) but got "
+            f"{len(unique_trace_ids)} distinct values: {unique_trace_ids}"
+        )
+
+
+def _clear_structlog_proxy_caches() -> None:
+    """Clear cached ``bind`` overrides on structlog ``BoundLoggerLazyProxy`` instances.
+
+    When ``cache_logger_on_first_use=True``, structlog replaces each proxy's
+    ``bind`` method with a closure that returns the already-assembled logger.
+    ``structlog.reset_defaults()`` resets the global config but does NOT
+    invalidate these instance-level overrides.  Deleting the override restores
+    the class-level ``bind`` which re-reads ``_CONFIG`` on the next call.
+    """
+    import sys
+
+    for mod in list(sys.modules.values()):
+        try:
+            attrs = vars(mod)
+        except TypeError:
+            continue
+        for attr in attrs.values():
+            if getattr(type(attr), "__name__", "") == "BoundLoggerLazyProxy" and "bind" in getattr(
+                attr, "__dict__", {}
+            ):
+                del attr.__dict__["bind"]
+
+
+class _CaptureHandler(logging.Handler):
+    """Logging handler that appends formatted messages to a list.
+
+    Used in tests to capture log output in-memory for assertion
+    without interfering with pytest's log capturing.
+    """
+
+    def __init__(self, target: list[str]) -> None:
+        super().__init__()
+        self._target = target
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Format and append log record to target list."""
+        self._target.append(self.format(record))
