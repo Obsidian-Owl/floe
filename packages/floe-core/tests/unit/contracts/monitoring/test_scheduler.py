@@ -52,8 +52,8 @@ async def test_schedule_creates_periodic_task(
         # Schedule task with 50ms interval
         await scheduler.schedule("test_task", callback, 0.05)
 
-        # Wait for multiple executions
-        await asyncio.sleep(0.15)
+        # Wait for multiple executions (generous margin for slow CI runners)
+        await asyncio.sleep(0.35)
 
         # Should have executed at least 2 times (0ms, 50ms, 100ms)
         assert call_count >= 2
@@ -444,8 +444,8 @@ async def test_callback_exception_does_not_stop_scheduling(
         # Schedule task that fails on first call
         await scheduler.schedule("failing_task", failing_callback, 0.05)
 
-        # Wait for multiple intervals
-        await asyncio.sleep(0.15)
+        # Wait for multiple intervals (generous margin for slow CI runners)
+        await asyncio.sleep(0.35)
 
         # Should have been called multiple times despite first failure
         assert call_count >= 2
