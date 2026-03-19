@@ -76,7 +76,7 @@ def ensure_telemetry_initialized() -> None:
         >>> ensure_telemetry_initialized()  # configures SDK
         >>> ensure_telemetry_initialized()  # no-op on second call
     """
-    global _initialized
+    global _initialized, _meter_provider
 
     # Idempotency guard: skip if already initialised.
     if _initialized:
@@ -140,7 +140,6 @@ def ensure_telemetry_initialized() -> None:
     metrics.set_meter_provider(meter_provider)
 
     # Store reference for reset_telemetry().
-    global _meter_provider
     _meter_provider = meter_provider
 
     # Configure structlog to inject trace_id / span_id into log records.

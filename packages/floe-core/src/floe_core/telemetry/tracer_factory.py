@@ -19,7 +19,6 @@ Contract Version: 1.0.0
 
 from __future__ import annotations
 
-import sys
 import threading
 from typing import TYPE_CHECKING
 
@@ -82,13 +81,13 @@ def get_tracer(name: str = "floe") -> Tracer:
             # OTel global state corrupted (common in test environments)
             _tracer_init_failed = True
             return trace.NoOpTracer()
-        except Exception:
+        except Exception as exc:
             # Log type only — never str(exc) to avoid credential leak (S-VI).
             import structlog
 
             structlog.get_logger(__name__).warning(
                 "tracer_init_failed",
-                exc_type=type(sys.exc_info()[1]).__name__,
+                exc_type=type(exc).__name__,
             )
             _tracer_init_failed = True
             return trace.NoOpTracer()

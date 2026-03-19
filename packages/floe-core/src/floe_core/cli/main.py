@@ -139,14 +139,17 @@ def main(argv: list[str] | None = None) -> None:
     except click.Abort:
         click.echo("Aborted!", err=True)
         sys.exit(1)
-    except Exception:
-        # Log exception type only — never str(exc) which may contain
-        # credential-bearing URLs from transport errors (CWE-532, S-VI).
+    except Exception as exc:
+        # Log exception type and traceback for operator diagnostics, but
+        # never expose str(exc) to users — transport errors may contain
+        # credential-bearing URLs (CWE-532, S-VI).  exc_info=True writes
+        # the traceback to operator-controlled log files only; the user
+        # sees only the generic message below.
         import structlog
 
         structlog.get_logger(__name__).error(
             "cli_unexpected_error",
-            exc_type=type(sys.exc_info()[1]).__name__,
+            exc_type=type(exc).__name__,
             exc_info=True,
         )
         click.echo("An unexpected error occurred. Check logs for details.", err=True)
