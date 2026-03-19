@@ -101,6 +101,7 @@ def _reset_otel_state() -> Generator[None, None, None]:
     # (LoggerFactory, JSONRenderer, cache_logger_on_first_use) don't
     # leak into other test modules.
     structlog.reset_defaults()
+    _clear_structlog_proxy_caches()
 
 
 class TestEnsureTelemetryInitializedImport:

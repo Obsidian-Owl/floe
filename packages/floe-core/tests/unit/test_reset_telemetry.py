@@ -92,6 +92,30 @@ def _reset_otel_state() -> Generator[None, None, None]:
         init_mod._logging_configured = False
 
     structlog.reset_defaults()
+    _clear_structlog_proxy_caches()
+
+
+def _clear_structlog_proxy_caches() -> None:
+    """Clear cached ``bind`` overrides on structlog ``BoundLoggerLazyProxy`` instances.
+
+    When ``cache_logger_on_first_use=True``, structlog replaces each proxy's
+    ``bind`` method with a closure that returns the already-assembled logger.
+    ``structlog.reset_defaults()`` resets the global config but does NOT
+    invalidate these instance-level overrides.  Deleting the override restores
+    the class-level ``bind`` which re-reads ``_CONFIG`` on the next call.
+    """
+    import sys
+
+    for mod in list(sys.modules.values()):
+        try:
+            attrs = vars(mod)
+        except TypeError:
+            continue
+        for attr in attrs.values():
+            if getattr(type(attr), "__name__", "") == "BoundLoggerLazyProxy" and "bind" in getattr(
+                attr, "__dict__", {}
+            ):
+                del attr.__dict__["bind"]
 
 
 class TestResetTelemetryImport:
