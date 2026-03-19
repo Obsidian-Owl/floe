@@ -5,6 +5,7 @@ Provides fixtures specific to telemetry module unit tests.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Generator
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,27 @@ import pytest
 
 if TYPE_CHECKING:
     from floe_core.telemetry import ResourceAttributes, SamplingConfig
+
+
+def _clear_structlog_proxy_caches() -> None:
+    """Clear cached ``bind`` overrides on structlog ``BoundLoggerLazyProxy`` instances.
+
+    When ``cache_logger_on_first_use=True``, structlog replaces each proxy's
+    ``bind`` method with a closure that returns the already-assembled logger.
+    ``structlog.reset_defaults()`` resets the global config but does NOT
+    invalidate these instance-level overrides.  Deleting the override restores
+    the class-level ``bind`` which re-reads ``_CONFIG`` on the next call.
+    """
+    for mod in list(sys.modules.values()):
+        try:
+            attrs = vars(mod)
+        except TypeError:
+            continue
+        for attr in attrs.values():
+            if getattr(type(attr), "__name__", "") == "BoundLoggerLazyProxy" and "bind" in getattr(
+                attr, "__dict__", {}
+            ):
+                del attr.__dict__["bind"]
 
 
 @pytest.fixture(autouse=True)
@@ -90,6 +112,13 @@ def reset_structlog_after_test(
 
     # Reset structlog to defaults after test
     structlog.reset_defaults()
+    # structlog.reset_defaults() resets global config but does NOT invalidate
+    # BoundLoggerLazyProxy instances that cached their `bind` method (via
+    # cache_logger_on_first_use).  The cached closure holds a reference to the
+    # old stdlib-backed logger, causing tests that reconfigure with
+    # PrintLoggerFactory to get no output.  Delete the instance-level `bind`
+    # override so the class method re-reads _CONFIG on next call.
+    _clear_structlog_proxy_caches()
 
 
 @pytest.fixture
