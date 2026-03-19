@@ -3,9 +3,9 @@
 Validates the Helm upgrade path:
     Deploy v1 → modify values → helm upgrade → verify rolling update completes
 
-NOTE: persistence.enabled=false in values-test.yaml — data does NOT survive
-pod restart. This test validates the Helm upgrade MECHANISM (rolling update,
-service continuity), NOT data durability.
+NOTE: postgresql.persistence.enabled=false in values-test.yaml — PostgreSQL
+uses emptyDir, data does NOT survive pod restart. This test validates the
+Helm upgrade MECHANISM (rolling update, service continuity), NOT data durability.
 
 Prerequisites:
     - Kind cluster: make kind-up
