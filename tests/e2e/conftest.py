@@ -683,27 +683,316 @@ def jaeger_client(wait_for_service: Callable[..., None]) -> httpx.Client:
     return httpx.Client(base_url=jaeger_url, timeout=30.0)
 
 
+# ---------------------------------------------------------------------------
+# Lineage seeding helpers (used by seed_observability)
+# ---------------------------------------------------------------------------
+
+_IMPLICIT_ASSET_JOB_NAME = "__ASSET_JOB"
+
+_LAUNCH_RUN_MUTATION = """
+mutation LaunchRun($executionParams: ExecutionParams!) {
+    launchRun(executionParams: $executionParams) {
+        __typename
+        ... on LaunchRunSuccess {
+            run { runId status }
+        }
+        ... on PipelineNotFoundError { message }
+        ... on PythonError { message }
+        ... on RunConfigValidationInvalid { errors { message } }
+    }
+}
+"""
+
+_RUN_STATUS_QUERY = """
+query RunStatus($runId: ID!) {
+    runOrError(runId: $runId) {
+        ... on Run { status }
+    }
+}
+"""
+
+
+def _discover_repo_for_asset(
+    dagster_url: str,
+    asset_path: list[str],
+) -> tuple[str, str] | None:
+    """Return (repositoryName, repositoryLocationName) for the given asset.
+
+    Falls back to the first available repository if the asset is not found.
+    Returns None if no repositories are found at all.
+
+    Args:
+        dagster_url: Base URL of the Dagster webserver.
+        asset_path: Asset key path, e.g. ``["stg_crm_customers"]``.
+
+    Returns:
+        Tuple of ``(repositoryName, repositoryLocationName)``, or ``None``.
+    """
+    # First attempt: find the exact asset's repository.
+    asset_query = """
+    {
+        assetNodes {
+            assetKey { path }
+            repository { name location { name } }
+        }
+    }
+    """
+    try:
+        response = httpx.post(
+            f"{dagster_url}/graphql",
+            json={"query": asset_query},
+            timeout=30.0,
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("seed_observability: assetNodes query failed: %s", type(exc).__name__)
+        response = None
+
+    if response is not None and response.status_code == 200:
+        nodes = response.json().get("data", {}).get("assetNodes", [])
+        for node in nodes:
+            if node["assetKey"]["path"] == asset_path:
+                repo = node["repository"]
+                return (repo["name"], repo["location"]["name"])
+        logger.warning(
+            "seed_observability: asset %s not found in assetNodes; trying fallback",
+            asset_path,
+        )
+
+    # Fallback: use the first available repository.
+    repos_query = """
+    {
+        repositoriesOrError {
+            ... on RepositoryConnection {
+                nodes { name location { name } }
+            }
+        }
+    }
+    """
+    try:
+        resp = httpx.post(
+            f"{dagster_url}/graphql",
+            json={"query": repos_query},
+            timeout=30.0,
+        )
+        if resp.status_code == 200:
+            nodes = resp.json().get("data", {}).get("repositoriesOrError", {}).get("nodes", [])
+            if nodes:
+                return (nodes[0]["name"], nodes[0]["location"]["name"])
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "seed_observability: repository fallback query failed: %s",
+            type(exc).__name__,
+        )
+
+    return None
+
+
+def _trigger_lineage_run(
+    wait_for_service: Callable[..., None],
+    marquez_client: httpx.Client,
+) -> None:
+    """Trigger a Dagster asset run to emit runtime OpenLineage events.
+
+    Triggers materialization of the ``stg_crm_customers`` asset in the
+    customer-360 product, polls for run completion, then waits for Marquez
+    to ingest the emitted lineage events.
+
+    This function is best-effort: failures are logged as warnings rather
+    than raising so that tests not dependent on lineage data are unaffected.
+
+    Args:
+        wait_for_service: Service readiness polling helper.
+        marquez_client: Marquez HTTP client (used to poll for lineage ingestion).
+    """
+    dagster_url = os.environ.get("DAGSTER_URL", "http://localhost:3000")
+    try:
+        wait_for_service(
+            f"{dagster_url}/server_info",
+            timeout=60,
+            description="Dagster webserver (lineage seeding)",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "seed_observability: Dagster not ready for lineage seeding (%s); skipping",
+            type(exc).__name__,
+        )
+        return
+
+    repo_info = _discover_repo_for_asset(dagster_url, ["stg_crm_customers"])
+    if repo_info is None:
+        logger.warning("seed_observability: no Dagster repositories found; skipping lineage run")
+        return
+
+    repo_name, location_name = repo_info
+
+    variables: dict[str, Any] = {
+        "executionParams": {
+            "selector": {
+                "repositoryName": repo_name,
+                "repositoryLocationName": location_name,
+                "pipelineName": _IMPLICIT_ASSET_JOB_NAME,
+                "assetSelection": [{"path": ["stg_crm_customers"]}],
+            },
+            "mode": "default",
+        },
+    }
+
+    try:
+        response = httpx.post(
+            f"{dagster_url}/graphql",
+            json={"query": _LAUNCH_RUN_MUTATION, "variables": variables},
+            timeout=30.0,
+        )
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "seed_observability: launchRun request failed (%s); skipping lineage run",
+            type(exc).__name__,
+        )
+        return
+
+    if response.status_code != 200:
+        logger.warning(
+            "seed_observability: launchRun returned HTTP %d; skipping lineage run",
+            response.status_code,
+        )
+        return
+
+    launch_result = response.json().get("data", {}).get("launchRun", {})
+    launch_typename = launch_result.get("__typename", "unknown")
+
+    if launch_typename != "LaunchRunSuccess":
+        if launch_typename == "RunConfigValidationInvalid":
+            errs = [e.get("message", "") for e in launch_result.get("errors", [])]
+            error_msg = "; ".join(errs) or str(launch_result)
+        else:
+            error_msg = launch_result.get("message", str(launch_result))
+        logger.warning(
+            "seed_observability: launchRun returned %s: %s; skipping lineage run",
+            launch_typename,
+            error_msg,
+        )
+        return
+
+    run_id: str = launch_result.get("run", {}).get("runId", "")
+    if not run_id:
+        logger.warning("seed_observability: no runId in LaunchRunSuccess; skipping poll")
+        return
+
+    logger.info("seed_observability: launched Dagster run %s for lineage seeding", run_id)
+
+    # Poll for run completion.
+    def _run_complete() -> bool:
+        """Return True when the Dagster run has reached a terminal state."""
+        try:
+            resp = httpx.post(
+                f"{dagster_url}/graphql",
+                json={"query": _RUN_STATUS_QUERY, "variables": {"runId": run_id}},
+                timeout=10.0,
+            )
+            if resp.status_code != 200:
+                return False
+            status = resp.json().get("data", {}).get("runOrError", {}).get("status")
+            return status in ("SUCCESS", "FAILURE", "CANCELED")
+        except httpx.HTTPError:
+            return False
+
+    completed = wait_for_condition(
+        _run_complete,
+        timeout=180.0,
+        interval=5.0,
+        description=f"Dagster lineage run {run_id} to complete",
+        raise_on_timeout=False,
+    )
+    if not completed:
+        logger.warning(
+            "seed_observability: lineage run %s did not complete within 180s; continuing",
+            run_id,
+        )
+        return
+
+    # Check terminal state — warn if the run did not succeed.
+    try:
+        status_resp = httpx.post(
+            f"{dagster_url}/graphql",
+            json={"query": _RUN_STATUS_QUERY, "variables": {"runId": run_id}},
+            timeout=10.0,
+        )
+        final_status = (
+            status_resp.json().get("data", {}).get("runOrError", {}).get("status")
+            if status_resp.status_code == 200
+            else None
+        )
+    except httpx.HTTPError:
+        final_status = None
+
+    if final_status != "SUCCESS":
+        logger.warning(
+            "seed_observability: lineage run %s ended with status %s; "
+            "COMPLETE lineage events may be absent",
+            run_id,
+            final_status,
+        )
+        return
+
+    logger.info("seed_observability: lineage run %s completed successfully", run_id)
+
+    # Wait for Marquez to ingest the emitted OpenLineage events.
+    def _marquez_has_lineage() -> bool:
+        """Return True when Marquez has at least one job from the seeded run."""
+        try:
+            for ns in ("default", "floe-platform", "customer-360"):
+                resp = marquez_client.get(f"/api/v1/namespaces/{ns}/jobs", timeout=10.0)
+                if resp.status_code == 200:
+                    jobs = resp.json().get("jobs", [])
+                    if len(jobs) > 0:
+                        return True
+            return False
+        except Exception:  # noqa: BLE001
+            return False
+
+    ingested = wait_for_condition(
+        _marquez_has_lineage,
+        timeout=30.0,
+        interval=3.0,
+        description="Marquez to ingest lineage events",
+        raise_on_timeout=False,
+    )
+    if not ingested:
+        logger.warning(
+            "seed_observability: Marquez lineage ingestion not confirmed within 30s; continuing"
+        )
+    else:
+        logger.info("seed_observability: Marquez lineage ingestion confirmed")
+
+
 @pytest.fixture(scope="session")
 def seed_observability(
     marquez_client: httpx.Client,
+    wait_for_service: Callable[..., None],
 ) -> None:
-    """Seed Marquez and Jaeger with real pipeline data via compile_pipeline().
+    """Seed Jaeger and Marquez with real pipeline data.
 
-    Compiles all 3 demo products (customer-360, iot-telemetry, financial-risk)
-    with per-product OTEL_SERVICE_NAME so Jaeger registers each as a distinct
-    service.  Uses standard OTel env vars (OTEL_EXPORTER_OTLP_ENDPOINT,
-    OTEL_EXPORTER_OTLP_INSECURE) — no custom env var names.
-
-    Between products, reset_telemetry() shuts down the current TracerProvider
+    Phase 1 — OTel spans: Compiles all 3 demo products (customer-360,
+    iot-telemetry, financial-risk) with per-product OTEL_SERVICE_NAME so
+    Jaeger registers each as a distinct service.  Uses standard OTel env vars
+    (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_INSECURE).  Between
+    products, reset_telemetry() shuts down the current TracerProvider
     (flushing pending spans) and clears the initialized flag so that the next
     ensure_telemetry_initialized() creates a fresh provider with the new
     service name.
 
+    Phase 2 — OpenLineage events: Triggers a Dagster run for the
+    stg_crm_customers asset (customer-360 product) so that LineageResource
+    emits runtime OpenLineage events to Marquez.  Polls for run completion.
+    A warning (not a failure) is logged if the Dagster run cannot be
+    triggered, since some tests do not depend on lineage data.
+
     Args:
         marquez_client: Marquez HTTP client (ensures Marquez is ready).
+        wait_for_service: Service readiness polling helper.
 
     Raises:
-        pytest.Failed: If seeding fails (compilation error).
+        pytest.Failed: If compilation seeding fails.
     """
     from floe_core.compilation.stages import compile_pipeline
     from floe_core.telemetry.initialization import (
@@ -711,19 +1000,14 @@ def seed_observability(
         reset_telemetry,
     )
 
-    # Save env vars before mutation so we can restore them in finally.
+    # Save OTel env vars before mutation so we can restore them in finally.
     old_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
     old_insecure = os.environ.get("OTEL_EXPORTER_OTLP_INSECURE")
     old_service = os.environ.get("OTEL_SERVICE_NAME")
-    old_marquez = os.environ.get("MARQUEZ_URL")
 
     # Standard OTel env vars for Kind cluster (no TLS)
     os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
     os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
-
-    # compile_pipeline posts events directly to this URL
-    marquez_port = os.environ.get("MARQUEZ_HOST_PORT", "5100")
-    os.environ["MARQUEZ_URL"] = f"http://localhost:{marquez_port}/api/v1/lineage"
 
     root = Path(__file__).parent.parent.parent
     manifest_path = root / "demo" / "manifest.yaml"
@@ -731,6 +1015,9 @@ def seed_observability(
     demo_products = ["customer-360", "iot-telemetry", "financial-risk"]
 
     try:
+        # ------------------------------------------------------------------
+        # Phase 1: Compile each demo product to emit OTel spans to Jaeger.
+        # ------------------------------------------------------------------
         for product in demo_products:
             reset_telemetry()
             os.environ["OTEL_SERVICE_NAME"] = product
@@ -746,17 +1033,23 @@ def seed_observability(
     except Exception as exc:
         pytest.fail(f"Observability seeding failed (compile_pipeline): {exc}")
     finally:
-        # Restore all mutated env vars to avoid leaking to other fixtures.
+        # Restore all mutated OTel env vars to avoid leaking to other fixtures.
         for key, old_val in (
             ("OTEL_EXPORTER_OTLP_ENDPOINT", old_endpoint),
             ("OTEL_EXPORTER_OTLP_INSECURE", old_insecure),
             ("OTEL_SERVICE_NAME", old_service),
-            ("MARQUEZ_URL", old_marquez),
         ):
             if old_val is None:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = old_val
+
+    # ----------------------------------------------------------------------
+    # Phase 2: Trigger a Dagster run to emit runtime OpenLineage events.
+    # ----------------------------------------------------------------------
+    # This is best-effort: a warning is logged on failure rather than
+    # pytest.fail(), so tests that only rely on OTel spans are not blocked.
+    _trigger_lineage_run(wait_for_service, marquez_client)
 
 
 # ---------------------------------------------------------------------------

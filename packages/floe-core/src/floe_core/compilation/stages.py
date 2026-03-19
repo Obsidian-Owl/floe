@@ -20,8 +20,6 @@ See Also:
 
 from __future__ import annotations
 
-import asyncio
-import os
 import re
 import time
 from datetime import datetime, timezone
@@ -264,67 +262,6 @@ def compile_pipeline(
 
     log = logger.bind(spec_path=str(spec_path), manifest_path=str(manifest_path))
 
-    # Lineage emission setup (best-effort, env-var gated)
-    marquez_url = os.environ.get("MARQUEZ_URL", "").strip()
-    lineage_emitter = None
-    if marquez_url:
-        from urllib.parse import urlparse
-
-        parsed = urlparse(marquez_url)
-        if parsed.scheme not in ("http", "https"):
-            from floe_core.telemetry.sanitization import sanitize_error_message as _sanitize
-
-            logger.warning(
-                "marquez_url_invalid_scheme",
-                url=_sanitize(marquez_url),
-                scheme=parsed.scheme,
-            )
-        else:
-            # Strip userinfo (credentials) from URL before transport construction
-            if parsed.username or parsed.password:
-                from urllib.parse import urlunparse
-
-                clean_netloc = parsed.hostname or ""
-                if parsed.port:
-                    clean_netloc += f":{parsed.port}"
-                marquez_url = urlunparse(
-                    (
-                        parsed.scheme,
-                        clean_netloc,
-                        parsed.path,
-                        parsed.params,
-                        parsed.query,
-                        parsed.fragment,
-                    )
-                )
-
-            from floe_core.lineage.emitter import create_emitter
-
-            transport_config: dict[str, Any] = {"type": "http", "url": marquez_url}
-            lineage_emitter = create_emitter(
-                transport_config,
-                default_namespace="floe-platform",
-                producer="floe",
-            )
-
-    # Persistent event loop for lineage emission — asyncio.run() creates and
-    # destroys a loop per call, which cancels the HttpLineageTransport's background
-    # consumer task before events are POSTed. A persistent loop keeps the consumer
-    # alive across emit_start/emit_complete calls.
-    _lineage_loop: asyncio.AbstractEventLoop | None = None
-    if lineage_emitter is not None:
-        _lineage_loop = asyncio.new_event_loop()
-
-    def _emit_sync(coro: Any) -> Any:
-        """Bridge async lineage calls into sync context (best-effort)."""
-        if _lineage_loop is None:
-            return None
-        try:
-            return _lineage_loop.run_until_complete(coro)
-        except Exception:
-            logger.warning("lineage_emission_failed", exc_info=True)
-            return None
-
     # Track total compilation time
     pipeline_start = time.perf_counter()
 
@@ -336,367 +273,280 @@ def compile_pipeline(
             "compile.manifest_path": str(manifest_path),
         },
     ) as pipeline_span:
-        # Emit pipeline-level START event (best-effort, before any stage)
-        pipeline_job_name = "compile_pipeline"
-        pipeline_run_id = None
-        if lineage_emitter is not None:
-            from floe_core.lineage.facets import TraceCorrelationFacetBuilder
-
-            trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
-            pipeline_run_facets: dict[str, Any] | None = (
-                {"traceCorrelation": trace_facet} if trace_facet is not None else None
+        # Stage 1: LOAD - Parse YAML files
+        stage_start = time.perf_counter()
+        with create_span(
+            "compile.load",
+            attributes={"compile.stage": CompilationStage.LOAD.value},
+        ):
+            log.info("compilation_stage_start", stage=CompilationStage.LOAD.value)
+            spec = load_floe_spec(spec_path)
+            manifest = load_manifest(manifest_path)
+            duration_ms = (time.perf_counter() - stage_start) * 1000
+            log.info(
+                "compilation_stage_complete",
+                stage=CompilationStage.LOAD.value,
+                product_name=spec.metadata.name,
+                duration_ms=round(duration_ms, 2),
             )
-            pipeline_run_id = _emit_sync(
-                lineage_emitter.emit_start(
-                    pipeline_job_name,
-                    run_facets=pipeline_run_facets,
+
+        # Stage 2: VALIDATE - Schema validation and quality provider validation
+        stage_start = time.perf_counter()
+        with create_span(
+            "compile.validate",
+            attributes={"compile.stage": CompilationStage.VALIDATE.value},
+        ):
+            log.info("compilation_stage_start", stage=CompilationStage.VALIDATE.value)
+            if manifest.plugins.quality is not None:
+                from floe_core.validation.quality_validation import (
+                    validate_quality_provider,
                 )
+
+                validate_quality_provider(manifest.plugins.quality.provider)
+                log.debug(
+                    "quality_provider_validated",
+                    provider=manifest.plugins.quality.provider,
+                )
+            duration_ms = (time.perf_counter() - stage_start) * 1000
+            log.info(
+                "compilation_stage_complete",
+                stage=CompilationStage.VALIDATE.value,
+                duration_ms=round(duration_ms, 2),
             )
 
-        try:
-            # Stage 1: LOAD - Parse YAML files
-            stage_start = time.perf_counter()
-            with create_span(
-                "compile.load",
-                attributes={"compile.stage": CompilationStage.LOAD.value},
-            ):
-                log.info("compilation_stage_start", stage=CompilationStage.LOAD.value)
-                spec = load_floe_spec(spec_path)
-                manifest = load_manifest(manifest_path)
-                duration_ms = (time.perf_counter() - stage_start) * 1000
-                log.info(
-                    "compilation_stage_complete",
-                    stage=CompilationStage.LOAD.value,
-                    product_name=spec.metadata.name,
-                    duration_ms=round(duration_ms, 2),
-                )
+        # Stage 3: RESOLVE - Plugin and manifest inheritance resolution
+        stage_start = time.perf_counter()
+        with create_span(
+            "compile.resolve",
+            attributes={"compile.stage": CompilationStage.RESOLVE.value},
+        ) as resolve_span:
+            log.info("compilation_stage_start", stage=CompilationStage.RESOLVE.value)
+            resolved_manifest = resolve_manifest_inheritance(manifest)
+            plugins = resolve_plugins(resolved_manifest)
+            transforms = resolve_transform_compute(spec, resolved_manifest)
+            # Add resolution details as span attributes
+            resolve_span.set_attribute("compile.compute_plugin", plugins.compute.type)
+            resolve_span.set_attribute("compile.orchestrator_plugin", plugins.orchestrator.type)
+            resolve_span.set_attribute("compile.model_count", len(transforms.models))
+            duration_ms = (time.perf_counter() - stage_start) * 1000
+            log.info(
+                "compilation_stage_complete",
+                stage=CompilationStage.RESOLVE.value,
+                compute_plugin=plugins.compute.type,
+                orchestrator_plugin=plugins.orchestrator.type,
+                model_count=len(transforms.models),
+                duration_ms=round(duration_ms, 2),
+            )
 
-            # Stage 2: VALIDATE - Schema validation and quality provider validation
-            stage_start = time.perf_counter()
-            with create_span(
-                "compile.validate",
-                attributes={"compile.stage": CompilationStage.VALIDATE.value},
-            ):
-                log.info("compilation_stage_start", stage=CompilationStage.VALIDATE.value)
-                if manifest.plugins.quality is not None:
-                    from floe_core.validation.quality_validation import (
-                        validate_quality_provider,
-                    )
+        # Stage 4: ENFORCE - Policy enforcement
+        stage_start = time.perf_counter()
+        with create_span(
+            "compile.enforce",
+            attributes={
+                "compile.stage": CompilationStage.ENFORCE.value,
+                "enforcement.dry_run": dry_run,
+            },
+        ):
+            log.info(
+                "compilation_stage_start",
+                stage=CompilationStage.ENFORCE.value,
+                dry_run=dry_run,
+            )
+            # Validate sink destinations against enterprise whitelist
+            if manifest.approved_sinks is not None and spec.destinations is not None:
+                from floe_core.schemas.plugins import validate_sink_whitelist
 
-                    validate_quality_provider(manifest.plugins.quality.provider)
-                    log.debug(
-                        "quality_provider_validated",
-                        provider=manifest.plugins.quality.provider,
-                    )
-                duration_ms = (time.perf_counter() - stage_start) * 1000
-                log.info(
-                    "compilation_stage_complete",
-                    stage=CompilationStage.VALIDATE.value,
-                    duration_ms=round(duration_ms, 2),
-                )
-
-            # Stage 3: RESOLVE - Plugin and manifest inheritance resolution
-            stage_start = time.perf_counter()
-            with create_span(
-                "compile.resolve",
-                attributes={"compile.stage": CompilationStage.RESOLVE.value},
-            ) as resolve_span:
-                log.info("compilation_stage_start", stage=CompilationStage.RESOLVE.value)
-                resolved_manifest = resolve_manifest_inheritance(manifest)
-                plugins = resolve_plugins(resolved_manifest)
-                transforms = resolve_transform_compute(spec, resolved_manifest)
-                # Add resolution details as span attributes
-                resolve_span.set_attribute("compile.compute_plugin", plugins.compute.type)
-                resolve_span.set_attribute("compile.orchestrator_plugin", plugins.orchestrator.type)
-                resolve_span.set_attribute("compile.model_count", len(transforms.models))
-                duration_ms = (time.perf_counter() - stage_start) * 1000
-                log.info(
-                    "compilation_stage_complete",
-                    stage=CompilationStage.RESOLVE.value,
-                    compute_plugin=plugins.compute.type,
-                    orchestrator_plugin=plugins.orchestrator.type,
-                    model_count=len(transforms.models),
-                    duration_ms=round(duration_ms, 2),
-                )
-
-            # Stage 4: ENFORCE - Policy enforcement
-            stage_start = time.perf_counter()
-            with create_span(
-                "compile.enforce",
-                attributes={
-                    "compile.stage": CompilationStage.ENFORCE.value,
-                    "enforcement.dry_run": dry_run,
-                },
-            ):
-                log.info(
-                    "compilation_stage_start",
-                    stage=CompilationStage.ENFORCE.value,
-                    dry_run=dry_run,
-                )
-                # Validate sink destinations against enterprise whitelist
-                if manifest.approved_sinks is not None and spec.destinations is not None:
-                    from floe_core.schemas.plugins import validate_sink_whitelist
-
-                    for destination in spec.destinations:
-                        validate_sink_whitelist(
-                            sink_type=destination.sink_type,
-                            approved_sinks=manifest.approved_sinks,
-                        )
-                    log.info(
-                        "sink_whitelist_validated",
-                        destination_count=len(spec.destinations),
+                for destination in spec.destinations:
+                    validate_sink_whitelist(
+                        sink_type=destination.sink_type,
                         approved_sinks=manifest.approved_sinks,
                     )
-
-                # Plugin instrumentation audit (FR-016, FR-017)
-                from floe_core.telemetry.audit import verify_plugin_instrumentation
-
-                _audit_plugins = _discover_plugins_for_audit()
-                _audit_warnings = verify_plugin_instrumentation(_audit_plugins)
-                for _warn_msg in _audit_warnings:
-                    log.warning("uninstrumented_plugin", message=_warn_msg)
-
-                # Build pre-manifest enforcement summary from spec-level checks
-                # Full post-dbt enforcement uses run_enforce_stage() separately
-                from floe_core.schemas.compiled_artifacts import (
-                    EnforcementResultSummary,
-                    ResolvedGovernance,
-                )
-
-                # Enforcement level precedence: "stricter wins"
-                # Strength ordering: off < warn < strict
-                # Manifest is authoritative; spec can only strengthen (never weaken)
-                _ENFORCEMENT_STRENGTH: dict[str, int] = {"off": 0, "warn": 1, "strict": 2}
-
-                manifest_level: Literal["off", "warn", "strict"] | None = None
-                if manifest.governance is not None:
-                    manifest_level = manifest.governance.policy_enforcement_level
-
-                spec_governance = getattr(spec, "governance", None)
-                spec_level: Literal["off", "warn", "strict"] | None = None
-                if spec_governance is not None:
-                    raw_level = getattr(spec_governance, "enforcement_level", None)
-                    if raw_level in ("off", "warn", "strict"):
-                        spec_level = raw_level
-
-                # Start with default "warn"
-                enforcement_level: Literal["off", "warn", "strict"] = "warn"
-
-                # Apply "stricter wins" merge
-                if manifest_level is not None and spec_level is not None:
-                    # Both present — pick the stricter one
-                    spec_strength = _ENFORCEMENT_STRENGTH.get(spec_level, 1)
-                    manifest_strength = _ENFORCEMENT_STRENGTH.get(manifest_level, 1)
-                    if spec_strength >= manifest_strength:
-                        enforcement_level = spec_level
-                    else:
-                        enforcement_level = manifest_level
-                elif manifest_level is not None:
-                    enforcement_level = manifest_level
-                elif spec_level is not None:
-                    enforcement_level = spec_level
-                # else: both None, keep default "warn"
-
-                policy_types_checked: list[str] = ["plugin_instrumentation"]
-                if manifest.approved_sinks is not None and spec.destinations is not None:
-                    policy_types_checked.append("sink_whitelist")
-
-                enforcement_result = EnforcementResultSummary(
-                    passed=True,
-                    error_count=0,
-                    warning_count=len(_audit_warnings),
-                    policy_types_checked=policy_types_checked,
-                    models_validated=0,
-                    enforcement_level=enforcement_level,
-                )
-
-                resolved_governance = _resolve_governance(
-                    manifest.governance,
-                    ResolvedGovernance,
-                    log,
-                )
-
-                duration_ms = (time.perf_counter() - stage_start) * 1000
                 log.info(
-                    "compilation_stage_complete",
-                    stage=CompilationStage.ENFORCE.value,
-                    dry_run=dry_run,
-                    duration_ms=round(duration_ms, 2),
+                    "sink_whitelist_validated",
+                    destination_count=len(spec.destinations),
+                    approved_sinks=manifest.approved_sinks,
                 )
 
-            # Stage 5: COMPILE - Transform compilation and dbt profile generation
-            stage_start = time.perf_counter()
-            with create_span(
-                "compile.compile",
-                attributes={"compile.stage": CompilationStage.COMPILE.value},
-            ) as compile_span:
-                log.info("compilation_stage_start", stage=CompilationStage.COMPILE.value)
-                # Generate dbt profiles using compute plugin
-                dbt_profiles = generate_dbt_profiles(
-                    plugins=plugins,
-                    product_name=spec.metadata.name,
-                )
-                compile_span.set_attribute("compile.profile_name", spec.metadata.name)
-                duration_ms = (time.perf_counter() - stage_start) * 1000
-                log.info(
-                    "compilation_stage_complete",
-                    stage=CompilationStage.COMPILE.value,
-                    profile_name=spec.metadata.name,
-                    duration_ms=round(duration_ms, 2),
-                )
+            # Plugin instrumentation audit (FR-016, FR-017)
+            from floe_core.telemetry.audit import verify_plugin_instrumentation
 
-            # Emit per-model START/COMPLETE events after COMPILE stage (best-effort)
-            if lineage_emitter is not None:
-                from floe_core.lineage.facets import TraceCorrelationFacetBuilder
+            _audit_plugins = _discover_plugins_for_audit()
+            _audit_warnings = verify_plugin_instrumentation(_audit_plugins)
+            for _warn_msg in _audit_warnings:
+                log.warning("uninstrumented_plugin", message=_warn_msg)
 
-                for model in transforms.models:
-                    model_job_name = f"dbt_model_{model.name}"
-                    model_trace = TraceCorrelationFacetBuilder.from_otel_context()
-                    model_run_facets: dict[str, Any] | None = (
-                        {"traceCorrelation": model_trace} if model_trace is not None else None
-                    )
-                    model_run_id = _emit_sync(
-                        lineage_emitter.emit_start(
-                            model_job_name,
-                            run_facets=model_run_facets,
-                        )
-                    )
-                    if model_run_id is not None:
-                        _emit_sync(
-                            lineage_emitter.emit_complete(
-                                model_run_id,
-                                model_job_name,
-                                run_facets=model_run_facets,
-                            )
-                        )
-
-            # Post-COMPILE enforcement: validate models from resolved transforms
-            # Only runs when governance config is present in the manifest
-            if manifest.governance is not None:
-                synthetic_dbt_manifest: dict[str, Any] = {"nodes": {}}
-                for model in transforms.models:
-                    node_key = f"model.floe.{model.name}"
-                    synthetic_dbt_manifest["nodes"][node_key] = {
-                        "name": model.name,
-                        "resource_type": "model",
-                        "tags": list(model.tags) if model.tags else [],
-                        "depends_on": {
-                            "nodes": [f"model.floe.{d}" for d in (model.depends_on or [])]
-                        },
-                        "description": "",
-                        "columns": {},
-                    }
-
-                enforce_result = run_enforce_stage(
-                    governance_config=manifest.governance,
-                    dbt_manifest=synthetic_dbt_manifest,
-                    dry_run=dry_run,
-                )
-
-                from floe_core.enforcement.result import create_enforcement_summary
-
-                post_summary = create_enforcement_summary(enforce_result)
-
-                merged_policy_types = sorted(
-                    set(enforcement_result.policy_types_checked)
-                    | set(post_summary.policy_types_checked)
-                )
-                enforcement_result = EnforcementResultSummary(
-                    passed=enforcement_result.passed and post_summary.passed,
-                    error_count=enforcement_result.error_count + post_summary.error_count,
-                    warning_count=enforcement_result.warning_count + post_summary.warning_count,
-                    policy_types_checked=merged_policy_types,
-                    models_validated=post_summary.models_validated,
-                    enforcement_level=enforcement_result.enforcement_level,
-                    secrets_scanned=post_summary.secrets_scanned,
-                )
-
-            # Stage 6: GENERATE - Build final CompiledArtifacts
-            stage_start = time.perf_counter()
-            with create_span(
-                "compile.generate",
-                attributes={"compile.stage": CompilationStage.GENERATE.value},
-            ) as generate_span:
-                log.info("compilation_stage_start", stage=CompilationStage.GENERATE.value)
-                quality_config = resolved_manifest.plugins.quality
-                artifacts = build_artifacts(
-                    spec=spec,
-                    manifest=resolved_manifest,
-                    plugins=plugins,
-                    transforms=transforms,
-                    dbt_profiles=dbt_profiles,
-                    spec_path=spec_path,
-                    manifest_path=manifest_path,
-                    enforcement_result=enforcement_result,
-                    quality_config=quality_config,
-                    governance=resolved_governance,
-                )
-                generate_span.set_attribute("compile.artifacts_version", artifacts.version)
-                duration_ms = (time.perf_counter() - stage_start) * 1000
-                log.info(
-                    "compilation_stage_complete",
-                    stage=CompilationStage.GENERATE.value,
-                    version=artifacts.version,
-                    duration_ms=round(duration_ms, 2),
-                )
-
-            # Set final attributes on parent span
-            pipeline_span.set_attribute("compile.product_name", spec.metadata.name)
-            pipeline_span.set_attribute("compile.artifacts_version", artifacts.version)
-
-            # Log total compilation time
-            total_duration_ms = (time.perf_counter() - pipeline_start) * 1000
-            pipeline_span.set_attribute("compile.total_duration_ms", round(total_duration_ms, 2))
-            log.info(
-                "compilation_complete",
-                product_name=spec.metadata.name,
-                version=artifacts.version,
-                total_duration_ms=round(total_duration_ms, 2),
+            # Build pre-manifest enforcement summary from spec-level checks
+            # Full post-dbt enforcement uses run_enforce_stage() separately
+            from floe_core.schemas.compiled_artifacts import (
+                EnforcementResultSummary,
+                ResolvedGovernance,
             )
 
-            # Emit pipeline-level COMPLETE event (best-effort)
-            if lineage_emitter is not None and pipeline_run_id is not None:
-                from floe_core.lineage.facets import TraceCorrelationFacetBuilder
+            # Enforcement level precedence: "stricter wins"
+            # Strength ordering: off < warn < strict
+            # Manifest is authoritative; spec can only strengthen (never weaken)
+            _ENFORCEMENT_STRENGTH: dict[str, int] = {"off": 0, "warn": 1, "strict": 2}
 
-                complete_trace = TraceCorrelationFacetBuilder.from_otel_context()
-                complete_run_facets: dict[str, Any] | None = (
-                    {"traceCorrelation": complete_trace} if complete_trace is not None else None
-                )
-                _emit_sync(
-                    lineage_emitter.emit_complete(
-                        pipeline_run_id,
-                        pipeline_job_name,
-                        run_facets=complete_run_facets,
-                    )
-                )
+            manifest_level: Literal["off", "warn", "strict"] | None = None
+            if manifest.governance is not None:
+                manifest_level = manifest.governance.policy_enforcement_level
 
-            return artifacts
+            spec_governance = getattr(spec, "governance", None)
+            spec_level: Literal["off", "warn", "strict"] | None = None
+            if spec_governance is not None:
+                raw_level = getattr(spec_governance, "enforcement_level", None)
+                if raw_level in ("off", "warn", "strict"):
+                    spec_level = raw_level
 
-        except Exception as exc:
-            # Emit pipeline-level FAIL event (best-effort), then re-raise
-            if lineage_emitter is not None and pipeline_run_id is not None:
-                from floe_core.telemetry.sanitization import sanitize_error_message
+            # Start with default "warn"
+            enforcement_level: Literal["off", "warn", "strict"] = "warn"
 
-                _emit_sync(
-                    lineage_emitter.emit_fail(
-                        pipeline_run_id,
-                        pipeline_job_name,
-                        error_message=sanitize_error_message(str(exc)),
-                    )
-                )
-            raise
+            # Apply "stricter wins" merge
+            if manifest_level is not None and spec_level is not None:
+                # Both present — pick the stricter one
+                spec_strength = _ENFORCEMENT_STRENGTH.get(spec_level, 1)
+                manifest_strength = _ENFORCEMENT_STRENGTH.get(manifest_level, 1)
+                if spec_strength >= manifest_strength:
+                    enforcement_level = spec_level
+                else:
+                    enforcement_level = manifest_level
+            elif manifest_level is not None:
+                enforcement_level = manifest_level
+            elif spec_level is not None:
+                enforcement_level = spec_level
+            # else: both None, keep default "warn"
 
-        finally:
-            # Drain the async queue and close the emitter to flush pending events
-            if lineage_emitter is not None and _lineage_loop is not None:
-                try:
-                    transport = lineage_emitter.transport
-                    _lineage_loop.run_until_complete(transport.close_async())
-                except Exception:
-                    logger.warning("lineage_close_failed", exc_info=True)
-                    lineage_emitter.close()
-                finally:
-                    _lineage_loop.close()
+            policy_types_checked: list[str] = ["plugin_instrumentation"]
+            if manifest.approved_sinks is not None and spec.destinations is not None:
+                policy_types_checked.append("sink_whitelist")
+
+            enforcement_result = EnforcementResultSummary(
+                passed=True,
+                error_count=0,
+                warning_count=len(_audit_warnings),
+                policy_types_checked=policy_types_checked,
+                models_validated=0,
+                enforcement_level=enforcement_level,
+            )
+
+            resolved_governance = _resolve_governance(
+                manifest.governance,
+                ResolvedGovernance,
+                log,
+            )
+
+            duration_ms = (time.perf_counter() - stage_start) * 1000
+            log.info(
+                "compilation_stage_complete",
+                stage=CompilationStage.ENFORCE.value,
+                dry_run=dry_run,
+                duration_ms=round(duration_ms, 2),
+            )
+
+        # Stage 5: COMPILE - Transform compilation and dbt profile generation
+        stage_start = time.perf_counter()
+        with create_span(
+            "compile.compile",
+            attributes={"compile.stage": CompilationStage.COMPILE.value},
+        ) as compile_span:
+            log.info("compilation_stage_start", stage=CompilationStage.COMPILE.value)
+            # Generate dbt profiles using compute plugin
+            dbt_profiles = generate_dbt_profiles(
+                plugins=plugins,
+                product_name=spec.metadata.name,
+            )
+            compile_span.set_attribute("compile.profile_name", spec.metadata.name)
+            duration_ms = (time.perf_counter() - stage_start) * 1000
+            log.info(
+                "compilation_stage_complete",
+                stage=CompilationStage.COMPILE.value,
+                profile_name=spec.metadata.name,
+                duration_ms=round(duration_ms, 2),
+            )
+
+        # Post-COMPILE enforcement: validate models from resolved transforms
+        # Only runs when governance config is present in the manifest
+        if manifest.governance is not None:
+            synthetic_dbt_manifest: dict[str, Any] = {"nodes": {}}
+            for model in transforms.models:
+                node_key = f"model.floe.{model.name}"
+                synthetic_dbt_manifest["nodes"][node_key] = {
+                    "name": model.name,
+                    "resource_type": "model",
+                    "tags": list(model.tags) if model.tags else [],
+                    "depends_on": {"nodes": [f"model.floe.{d}" for d in (model.depends_on or [])]},
+                    "description": "",
+                    "columns": {},
+                }
+
+            enforce_result = run_enforce_stage(
+                governance_config=manifest.governance,
+                dbt_manifest=synthetic_dbt_manifest,
+                dry_run=dry_run,
+            )
+
+            from floe_core.enforcement.result import create_enforcement_summary
+
+            post_summary = create_enforcement_summary(enforce_result)
+
+            merged_policy_types = sorted(
+                set(enforcement_result.policy_types_checked)
+                | set(post_summary.policy_types_checked)
+            )
+            enforcement_result = EnforcementResultSummary(
+                passed=enforcement_result.passed and post_summary.passed,
+                error_count=enforcement_result.error_count + post_summary.error_count,
+                warning_count=enforcement_result.warning_count + post_summary.warning_count,
+                policy_types_checked=merged_policy_types,
+                models_validated=post_summary.models_validated,
+                enforcement_level=enforcement_result.enforcement_level,
+                secrets_scanned=post_summary.secrets_scanned,
+            )
+
+        # Stage 6: GENERATE - Build final CompiledArtifacts
+        stage_start = time.perf_counter()
+        with create_span(
+            "compile.generate",
+            attributes={"compile.stage": CompilationStage.GENERATE.value},
+        ) as generate_span:
+            log.info("compilation_stage_start", stage=CompilationStage.GENERATE.value)
+            quality_config = resolved_manifest.plugins.quality
+            artifacts = build_artifacts(
+                spec=spec,
+                manifest=resolved_manifest,
+                plugins=plugins,
+                transforms=transforms,
+                dbt_profiles=dbt_profiles,
+                spec_path=spec_path,
+                manifest_path=manifest_path,
+                enforcement_result=enforcement_result,
+                quality_config=quality_config,
+                governance=resolved_governance,
+            )
+            generate_span.set_attribute("compile.artifacts_version", artifacts.version)
+            duration_ms = (time.perf_counter() - stage_start) * 1000
+            log.info(
+                "compilation_stage_complete",
+                stage=CompilationStage.GENERATE.value,
+                version=artifacts.version,
+                duration_ms=round(duration_ms, 2),
+            )
+
+        # Set final attributes on parent span
+        pipeline_span.set_attribute("compile.product_name", spec.metadata.name)
+        pipeline_span.set_attribute("compile.artifacts_version", artifacts.version)
+
+        # Log total compilation time
+        total_duration_ms = (time.perf_counter() - pipeline_start) * 1000
+        pipeline_span.set_attribute("compile.total_duration_ms", round(total_duration_ms, 2))
+        log.info(
+            "compilation_complete",
+            product_name=spec.metadata.name,
+            version=artifacts.version,
+            total_duration_ms=round(total_duration_ms, 2),
+        )
+
+    return artifacts
 
 
 def run_enforce_stage(

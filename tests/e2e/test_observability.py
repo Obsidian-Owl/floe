@@ -137,6 +137,7 @@ class TestObservability(IntegrationTestBase):
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-041")
     @pytest.mark.requirement("FR-048")
+    @pytest.mark.requirement("AC-4")
     def test_openlineage_events_in_marquez(
         self,
         e2e_namespace: str,
@@ -229,19 +230,27 @@ class TestObservability(IntegrationTestBase):
             f"Namespaces checked: default, customer-360, floe-platform, {test_namespace}"
         )
 
-        # Validate jobs are from THIS pipeline (match expected product names)
+        # Validate jobs are from THIS pipeline (match expected product names).
+        # Runtime lineage uses dbt model unique_ids (model.customer_360.*)
+        # or Dagster asset keys — match several known prefixes.
         job_names = [job.get("name", "") for job in all_jobs]
         has_pipeline_job = any(
-            "customer" in name.lower() or "pipeline" in name.lower() for name in job_names
+            "model." in name.lower()
+            or "stg_" in name.lower()
+            or "mart_" in name.lower()
+            or "customer" in name.lower()
+            or "pipeline" in name.lower()
+            for name in job_names
         )
         assert has_pipeline_job, (
             f"OBSERVABILITY GAP: Jobs found but none match expected pipeline products.\n"
             f"Job names found: {job_names}\n"
-            "Expected job names containing 'customer' or 'pipeline'."
+            "Expected job names containing 'model.', 'stg_', 'mart_', 'customer', or 'pipeline'."
         )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-042")
+    @pytest.mark.requirement("AC-7")
     def test_trace_lineage_correlation(
         self,
         e2e_namespace: str,
@@ -288,6 +297,8 @@ class TestObservability(IntegrationTestBase):
         assert all_namespaces_response.status_code == 200
         all_namespaces = all_namespaces_response.json().get("namespaces", [])
 
+        # Runtime lineage events may land in "default" or any configured namespace.
+        # Include "default" as a fallback so jobs emitted without a custom namespace are found.
         floe_namespaces = [
             ns["name"]
             for ns in all_namespaces
@@ -295,6 +306,7 @@ class TestObservability(IntegrationTestBase):
             or "customer" in ns["name"].lower()
             or "iot" in ns["name"].lower()
             or "financial" in ns["name"].lower()
+            or ns["name"].lower() == "default"
         ]
 
         # BOTH systems must have pipeline data for correlation to work (AND, not OR)
@@ -828,6 +840,8 @@ class TestObservability(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-041")
+    @pytest.mark.requirement("AC-5")
+    @pytest.mark.requirement("AC-6")
     def test_openlineage_four_emission_points(
         self,
         e2e_namespace: str,
@@ -864,8 +878,9 @@ class TestObservability(IntegrationTestBase):
                 "Run via make test-e2e or: kubectl port-forward svc/marquez 5000:5000 -n floe-test"
             )
 
-        # seed_observability fixture already ran compile_pipeline() with MARQUEZ_URL
-        # set, emitting OpenLineage events to Marquez. Query those events directly.
+        # seed_observability Phase 2 triggered a Dagster asset run for
+        # stg_crm_customers, causing LineageResource to emit runtime
+        # OpenLineage events to Marquez. Query those events here.
 
         # Query Marquez for events emitted BY the platform after compilation
         # Check known namespaces where the platform would emit events
@@ -902,12 +917,22 @@ class TestObservability(IntegrationTestBase):
 
         # Validate the 4 emission points exist
         # Look for: dbt model START, dbt model COMPLETE, pipeline START, pipeline COMPLETE
+        # Runtime job names are dbt unique_ids (e.g. "model.customer_360.stg_crm_customers")
+        # or Dagster asset keys — match on "model." prefix, staging/mart prefixes, or legacy names
         job_names = {job.get("name", "") for job in all_jobs}
         has_dbt_model_job = any(
-            "dbt" in name.lower() or "model" in name.lower() for name in job_names
+            "dbt" in name.lower()
+            or "model." in name.lower()
+            or "stg_" in name.lower()
+            or "mart_" in name.lower()
+            for name in job_names
         )
         has_pipeline_job = any(
-            "pipeline" in name.lower() or "daily" in name.lower() for name in job_names
+            "pipeline" in name.lower()
+            or "daily" in name.lower()
+            or "customer" in name.lower()
+            or "asset" in name.lower()
+            for name in job_names
         )
 
         # Check run states for START and COMPLETE events
@@ -920,14 +945,16 @@ class TestObservability(IntegrationTestBase):
         assert has_dbt_model_job, (
             "EMISSION GAP: No dbt model jobs found in Marquez.\n"
             f"Job names found: {sorted(job_names)}\n"
-            "Expected: Jobs with 'dbt' or 'model' in the name for per-model emission points.\n"
+            "Expected: Jobs with 'dbt', 'model.', 'stg_', or 'mart_' in the name "
+            "for per-model emission points.\n"
             "Fix: Emit RunEvent.START and RunEvent.COMPLETE for each dbt model execution."
         )
 
         assert has_pipeline_job, (
             "EMISSION GAP: No pipeline-level jobs found in Marquez.\n"
             f"Job names found: {sorted(job_names)}\n"
-            "Expected: Jobs with 'pipeline' in the name for pipeline-level emission.\n"
+            "Expected: Jobs with 'pipeline', 'daily', 'customer', or 'asset' in the name "
+            "for pipeline-level emission.\n"
             "Fix: Emit RunEvent.START and RunEvent.COMPLETE for pipeline execution."
         )
 
@@ -942,6 +969,76 @@ class TestObservability(IntegrationTestBase):
             "Fix: Emit RunEvent.START at job begin and RunEvent.COMPLETE at job end.\n"
             "All 4 emission points per FR-041: "
             "dbt model START, dbt model COMPLETE, pipeline START, pipeline COMPLETE."
+        )
+
+        # -------------------------------------------------------------------
+        # AC-5: Runtime lineage events have meaningful (non-zero) durations.
+        # -------------------------------------------------------------------
+        from datetime import datetime
+
+        duration_checked = False
+        for run in all_runs:
+            started_at: str = run.get("startedAt", "")
+            ended_at: str = run.get("endedAt", "")
+            if not started_at or not ended_at:
+                continue
+            try:
+                start_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                end_dt = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
+                delta = (end_dt - start_dt).total_seconds()
+                if delta > 0:
+                    duration_checked = True
+                    break
+            except (ValueError, TypeError):
+                continue
+
+        assert duration_checked, (
+            "DURATION GAP: No Marquez runs have non-zero duration "
+            "(startedAt → endedAt).\n"
+            "Runtime lineage events MUST have meaningful durations proving "
+            "they were emitted at actual execution boundaries, "
+            "not back-to-back during compilation.\n"
+            "Fix: Ensure LineageResource emits START at execution begin "
+            "and COMPLETE at execution end with real timestamps."
+        )
+
+        # -------------------------------------------------------------------
+        # AC-6: Per-model events carry a parentRun facet linking to the
+        #       parent Dagster asset run.
+        # -------------------------------------------------------------------
+        parent_facet_found = False
+        for run in all_runs:
+            facets: dict[str, Any] = run.get("facets") or {}
+            parent_facet: dict[str, Any] | None = None
+            if "parentRun" in facets:
+                parent_facet = facets["parentRun"]
+            elif "parent" in facets:
+                parent_facet = facets["parent"]
+            else:
+                # Marquez may nest facets under "run" key
+                run_facets: dict[str, Any] = facets.get("run") or {}
+                if "parentRun" in run_facets:
+                    parent_facet = run_facets["parentRun"]
+                elif "parent" in run_facets:
+                    parent_facet = run_facets["parent"]
+
+            if parent_facet is not None and isinstance(parent_facet, dict):
+                # Validate structure: must contain a run reference
+                has_run_ref = bool(
+                    parent_facet.get("run", {}).get("runId") or parent_facet.get("runId")
+                )
+                if has_run_ref:
+                    parent_facet_found = True
+                    break
+
+        assert parent_facet_found, (
+            "PARENT FACET GAP: No Marquez runs contain a valid 'parentRun' "
+            "facet with a runId.\n"
+            "Per-model dbt lineage events MUST include a parentRun facet "
+            "linking to the parent Dagster asset run.\n"
+            f"Runs inspected: {len(all_runs)}\n"
+            "Fix: Ensure LineageResource passes parent_run_id "
+            "when extracting per-model lineage events."
         )
 
     @pytest.mark.e2e
