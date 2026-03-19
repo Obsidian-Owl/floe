@@ -88,6 +88,11 @@ def ensure_telemetry_initialized() -> None:
         return
 
     # Validate endpoint scheme is http or https.
+    # Trust boundary: OTEL_EXPORTER_OTLP_ENDPOINT is operator-controlled
+    # (set via Helm values or container env, not user input).  We check
+    # the scheme to reject obvious misconfigurations (ftp://, file://) but
+    # do NOT block loopback/internal IPs — the operator is trusted to
+    # configure valid collector addresses.
     from urllib.parse import urlparse
 
     parsed = urlparse(endpoint)
@@ -150,6 +155,13 @@ def ensure_telemetry_initialized() -> None:
 
 def reset_telemetry() -> None:
     """Shut down the current TracerProvider and MeterProvider, reset state.
+
+    .. warning::
+
+        This function mutates private OTel SDK internals to work around
+        the lack of a public reset API.  It is intended for **test use
+        only**.  Do not call in production multi-threaded code — the
+        private state mutation is not thread-safe.
 
     Allows telemetry to be re-initialized (e.g. in tests or after a
     configuration change).  The sequence is:

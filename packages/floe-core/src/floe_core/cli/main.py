@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import sys
 from importlib.metadata import version as get_version
-from typing import TYPE_CHECKING
 
 import click
 
@@ -47,9 +46,6 @@ from floe_core.cli.network import network
 from floe_core.cli.platform import platform
 from floe_core.cli.rbac import rbac
 from floe_core.cli.sla.report import report as sla_report
-
-if TYPE_CHECKING:
-    pass
 
 
 def _get_version() -> str:
@@ -143,9 +139,17 @@ def main(argv: list[str] | None = None) -> None:
     except click.Abort:
         click.echo("Aborted!", err=True)
         sys.exit(1)
-    except Exception as e:
-        # Log unexpected errors to stderr
-        click.echo(f"Error: {e}", err=True)
+    except Exception:
+        # Log exception type only — never str(exc) which may contain
+        # credential-bearing URLs from transport errors (CWE-532, S-VI).
+        import structlog
+
+        structlog.get_logger(__name__).error(
+            "cli_unexpected_error",
+            exc_type=type(sys.exc_info()[1]).__name__,
+            exc_info=True,
+        )
+        click.echo("An unexpected error occurred. Check logs for details.", err=True)
         sys.exit(1)
 
 

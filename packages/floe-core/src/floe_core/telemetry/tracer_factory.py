@@ -19,6 +19,7 @@ Contract Version: 1.0.0
 
 from __future__ import annotations
 
+import sys
 import threading
 from typing import TYPE_CHECKING
 
@@ -82,7 +83,13 @@ def get_tracer(name: str = "floe") -> Tracer:
             _tracer_init_failed = True
             return trace.NoOpTracer()
         except Exception:
-            # Other OTel initialization failures
+            # Log type only — never str(exc) to avoid credential leak (S-VI).
+            import structlog
+
+            structlog.get_logger(__name__).warning(
+                "tracer_init_failed",
+                exc_type=type(sys.exc_info()[1]).__name__,
+            )
             _tracer_init_failed = True
             return trace.NoOpTracer()
 
