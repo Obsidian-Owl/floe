@@ -19,3 +19,6 @@ GHSA-jr27-m4p2-rc6r
 
 # pypdf 6.8.0 — fix in 6.9.1, transitive via devtools/agent-memory
 GHSA-qpxp-75px-xjcp
+
+# deepdiff 8.6.1 — fix in 8.6.2, transitive dep
+GHSA-54jj-px8x-5w5q
