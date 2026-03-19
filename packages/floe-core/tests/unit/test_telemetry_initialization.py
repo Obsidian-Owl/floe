@@ -943,3 +943,106 @@ class TestMeterProviderInitialization:
                 "times. ensure_telemetry_initialized() must be idempotent — "
                 "only set MeterProvider once."
             )
+
+
+class TestLoggingDecoupling:
+    """Test that logging configuration is decoupled from OTLP endpoint.
+
+    Issue #166: configure_logging() must run even without an OTLP endpoint
+    so that structlog routes through stdlib logging with trace context.
+    """
+
+    @pytest.mark.requirement("FR-045")
+    def test_logging_configured_without_otlp_sets_flag(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that _logging_configured flag is set after init without OTLP.
+
+        AC-1: ensure_telemetry_initialized() without OTLP endpoint must still
+        call configure_logging() and set the _logging_configured flag.
+        """
+        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+
+        import floe_core.telemetry.initialization as init_mod
+
+        assert init_mod._logging_configured is False, (
+            "Precondition: _logging_configured should be False before init"
+        )
+
+        init_mod.ensure_telemetry_initialized()
+
+        assert init_mod._logging_configured is True, (
+            "_logging_configured must be True after ensure_telemetry_initialized() "
+            "even when no OTLP endpoint is set."
+        )
+
+    @pytest.mark.requirement("FR-045")
+    def test_logging_idempotent_without_otlp(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that configure_logging() is called only once across repeated calls.
+
+        AC-2: The _logging_configured flag prevents redundant configure_logging()
+        calls when no OTLP endpoint is set (where _initialized is never set).
+        """
+        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        with patch("floe_core.telemetry.initialization.configure_logging") as mock_configure:
+            ensure_telemetry_initialized()
+            ensure_telemetry_initialized()
+            ensure_telemetry_initialized()
+
+            assert mock_configure.call_count == 1, (
+                f"configure_logging was called {mock_configure.call_count} times. "
+                "The _logging_configured flag should prevent redundant calls."
+            )
+
+    @pytest.mark.requirement("FR-045")
+    def test_reset_telemetry_resets_logging_flag(self) -> None:
+        """Test that reset_telemetry() clears _logging_configured.
+
+        AC-3: After reset, the next ensure_telemetry_initialized() call must
+        re-configure logging (e.g. after test isolation reset).
+        """
+        import floe_core.telemetry.initialization as init_mod
+
+        init_mod._logging_configured = True
+
+        init_mod.reset_telemetry()
+
+        assert init_mod._logging_configured is False, (
+            "reset_telemetry() must set _logging_configured = False "
+            "so that logging can be re-configured after reset."
+        )
+
+    @pytest.mark.requirement("FR-045")
+    def test_reset_allows_logging_reconfiguration(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that after reset, configure_logging is called again.
+
+        AC-3 behavioral: init → reset → init must call configure_logging twice.
+        """
+        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        with patch("floe_core.telemetry.initialization.configure_logging") as mock_configure:
+            ensure_telemetry_initialized()
+            assert mock_configure.call_count == 1
+
+            from floe_core.telemetry.initialization import reset_telemetry
+
+            reset_telemetry()
+
+            ensure_telemetry_initialized()
+            assert mock_configure.call_count == 2, (
+                f"configure_logging was called {mock_configure.call_count} times. "
+                "After reset_telemetry(), a new ensure_telemetry_initialized() "
+                "must re-configure logging."
+            )
