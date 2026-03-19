@@ -16,3 +16,6 @@ GHSA-w8v5-vhqr-4h9v
 
 # pyasn1 0.6.2 — fix in 0.6.3, transitive dep
 GHSA-jr27-m4p2-rc6r
+
+# pypdf 6.8.0 — fix in 6.9.1, transitive via devtools/agent-memory
+GHSA-qpxp-75px-xjcp
