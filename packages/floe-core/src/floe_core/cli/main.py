@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import sys
 from importlib.metadata import version as get_version
-from typing import TYPE_CHECKING
 
 import click
 
@@ -47,9 +46,6 @@ from floe_core.cli.network import network
 from floe_core.cli.platform import platform
 from floe_core.cli.rbac import rbac
 from floe_core.cli.sla.report import report as sla_report
-
-if TYPE_CHECKING:
-    pass
 
 
 def _get_version() -> str:
@@ -84,10 +80,11 @@ def cli(ctx: click.Context) -> None:
     The floe CLI provides commands for both Platform Teams and Data Teams
     to manage data platform configuration, governance, and deployment.
     """
-    # Initialize OTel tracing at CLI entry so the real TracerProvider is
-    # registered before any signing/verification operations begin.
-    # OCI modules use a deferred _get_tracer() pattern (not module-level),
-    # so the provider must be set before the first span is started.
+    # Initialize OTel tracing and metrics at CLI entry.  The OTel API
+    # returns ProxyTracer / ProxyMeter instances that auto-upgrade when
+    # set_tracer_provider() / set_meter_provider() is called, so
+    # module-level tracer acquisition (e.g. attestation.py, webhooks.py)
+    # is safe — proxies silently upgrade once initialization completes.
     # Skip for --help (no subcommand) to avoid unnecessary setup.
     if ctx.invoked_subcommand is not None:
         from floe_core.telemetry.initialization import ensure_telemetry_initialized
@@ -142,9 +139,20 @@ def main(argv: list[str] | None = None) -> None:
     except click.Abort:
         click.echo("Aborted!", err=True)
         sys.exit(1)
-    except Exception as e:
-        # Log unexpected errors to stderr
-        click.echo(f"Error: {e}", err=True)
+    except Exception as exc:
+        # Log exception type and traceback for operator diagnostics, but
+        # never expose str(exc) to users — transport errors may contain
+        # credential-bearing URLs (CWE-532, S-VI).  exc_info=True writes
+        # the traceback to operator-controlled log files only; the user
+        # sees only the generic message below.
+        import structlog
+
+        structlog.get_logger(__name__).error(
+            "cli_unexpected_error",
+            exc_type=type(exc).__name__,
+            exc_info=True,
+        )
+        click.echo("An unexpected error occurred. Check logs for details.", err=True)
         sys.exit(1)
 
 
