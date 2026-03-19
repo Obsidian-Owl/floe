@@ -5,9 +5,14 @@ Tests cover T1 RED phase for AC-35.1 and AC-35.6:
 - AC-35.6: reset_telemetry() calls provider.shutdown() before clearing _initialized,
   and a subsequent ensure_telemetry_initialized() creates a fresh provider
 
+Tests cover T2 RED phase for AC-5 and AC-6:
+- AC-5: reset_telemetry() shuts down MeterProvider and clears set-once guard
+- AC-6: reset + re-init produces fresh MeterProvider (distinct id())
+
 Requirements Covered:
 - AC-35.1: reset_telemetry export and basic contract
 - AC-35.6: Shutdown ordering and fresh provider creation
+- 001-FR-040: MeterProvider reset behavior
 
 See Also:
     - packages/floe-core/src/floe_core/telemetry/initialization.py
@@ -20,7 +25,8 @@ from unittest.mock import patch
 
 import pytest
 import structlog
-from opentelemetry import trace
+from opentelemetry import metrics, trace
+from opentelemetry.sdk.metrics import MeterProvider as SdkMeterProvider
 from opentelemetry.sdk.trace import TracerProvider
 
 
@@ -30,9 +36,10 @@ def _reset_otel_state() -> Generator[None, None, None]:
 
     Ensures test isolation by:
     1. Resetting the global TracerProvider to a ProxyTracerProvider
-    2. Clearing the tracer_factory cache via reset_tracer()
-    3. Resetting the _initialized flag in initialization.py
-    4. Restoring structlog defaults
+    2. Resetting the global MeterProvider and its set-once guard
+    3. Clearing the tracer_factory cache via reset_tracer()
+    4. Resetting the _initialized flag in initialization.py
+    5. Restoring structlog defaults
 
     Yields:
         None after resetting state.
@@ -41,23 +48,46 @@ def _reset_otel_state() -> Generator[None, None, None]:
 
     from floe_core.telemetry.tracer_factory import reset_tracer
 
-    # Reset before test
+    # Reset TracerProvider before test
     trace._TRACER_PROVIDER_SET_ONCE._done = False
     # None, not ProxyTracerProvider() — avoids recursion in get_tracer()
     trace._TRACER_PROVIDER = None
+
+    # Reset MeterProvider before test
+    if hasattr(metrics, "_internal"):
+        if hasattr(metrics._internal, "_METER_PROVIDER_SET_ONCE"):
+            metrics._internal._METER_PROVIDER_SET_ONCE._done = False
+        if hasattr(metrics._internal, "_METER_PROVIDER"):
+            metrics._internal._METER_PROVIDER = None
+        # Restore proxy so meters auto-upgrade
+        if hasattr(metrics._internal, "_PROXY_METER_PROVIDER"):
+            metrics._internal._PROXY_METER_PROVIDER = metrics._internal._ProxyMeterProvider()
+
     reset_tracer()
 
     yield
 
-    # Reset after test
+    # Reset TracerProvider after test
     trace._TRACER_PROVIDER_SET_ONCE._done = False
     trace._TRACER_PROVIDER = SdkTracerProvider()
+
+    # Reset MeterProvider after test
+    if hasattr(metrics, "_internal"):
+        if hasattr(metrics._internal, "_METER_PROVIDER_SET_ONCE"):
+            metrics._internal._METER_PROVIDER_SET_ONCE._done = False
+        if hasattr(metrics._internal, "_METER_PROVIDER"):
+            metrics._internal._METER_PROVIDER = None
+        if hasattr(metrics._internal, "_PROXY_METER_PROVIDER"):
+            metrics._internal._PROXY_METER_PROVIDER = metrics._internal._ProxyMeterProvider()
+
     reset_tracer()
 
     # Reset the initialization module's internal state
     import floe_core.telemetry.initialization as init_mod
 
     init_mod._initialized = False
+    if hasattr(init_mod, "_meter_provider"):
+        init_mod._meter_provider = None
 
     structlog.reset_defaults()
 
@@ -514,3 +544,225 @@ class TestResetTelemetryEdgeCases:
             f"reset_telemetry() should take no required arguments, "
             f"but has: {[p.name for p in required_params]}"
         )
+
+
+class TestResetMeterProvider:
+    """Test that reset_telemetry() handles MeterProvider shutdown and reset.
+
+    AC-5: reset_telemetry() MUST call shutdown() on the SDK MeterProvider
+    and clear the set-once guard to allow re-initialization.
+
+    AC-6: After reset, ensure_telemetry_initialized() MUST create a new
+    MeterProvider with a distinct id() from the first.
+    """
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_reset_shuts_down_meter_provider(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that reset_telemetry() calls MeterProvider.shutdown().
+
+        AC-5 requires that the MeterProvider is shut down to flush pending
+        metrics before clearing state. A sloppy implementation that only
+        resets TracerProvider but ignores MeterProvider would leave metrics
+        undelivered.
+
+        Uses patch.object with wraps to verify shutdown() is called on the
+        actual MeterProvider instance created by ensure_telemetry_initialized().
+        """
+        import floe_core.telemetry.initialization as init_mod
+
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+        monkeypatch.setenv("OTEL_SERVICE_NAME", "test-meter-shutdown")
+
+        init_mod.ensure_telemetry_initialized()
+
+        # Retrieve the MeterProvider stored by ensure_telemetry_initialized
+        meter_provider = init_mod._meter_provider
+        assert isinstance(meter_provider, SdkMeterProvider), (
+            "Precondition: ensure_telemetry_initialized() must create an SDK "
+            f"MeterProvider and store it in _meter_provider. Got: {type(meter_provider)}"
+        )
+
+        with patch.object(
+            meter_provider, "shutdown", wraps=meter_provider.shutdown
+        ) as mock_shutdown:
+            init_mod.reset_telemetry()
+            assert mock_shutdown.call_count == 1, (
+                "reset_telemetry() must call MeterProvider.shutdown() to flush "
+                "pending metrics. shutdown() was not called."
+            )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_reset_clears_meter_provider_reference(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that reset_telemetry() sets _meter_provider to None.
+
+        AC-5 requires that the set-once guard is cleared after reset. The
+        module-level _meter_provider reference must also be cleared to avoid
+        holding a reference to a shut-down provider and to signal that no
+        active MeterProvider exists.
+
+        A sloppy implementation that shuts down the MeterProvider but forgets
+        to clear _meter_provider would leave a stale reference that could be
+        used after shutdown.
+        """
+        import floe_core.telemetry.initialization as init_mod
+
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+        monkeypatch.setenv("OTEL_SERVICE_NAME", "test-meter-clear")
+
+        init_mod.ensure_telemetry_initialized()
+        assert init_mod._meter_provider is not None, (
+            "Precondition: _meter_provider should be set after init"
+        )
+
+        init_mod.reset_telemetry()
+        assert init_mod._meter_provider is None, (
+            "reset_telemetry() must set _meter_provider = None after shutdown. "
+            f"Got: {init_mod._meter_provider!r}"
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_reset_re_init_creates_fresh_meter_provider(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that reset + re-init produces a new MeterProvider (distinct id).
+
+        AC-6 requires that after reset_telemetry(), a subsequent call to
+        ensure_telemetry_initialized() creates a completely new MeterProvider.
+        The new provider MUST be a distinct Python object (different id())
+        from the one created in the first initialization.
+
+        This test verifies BOTH the module-level _meter_provider reference
+        AND the global OTel meter provider are fresh. Checking only
+        _meter_provider is insufficient because ensure_telemetry_initialized()
+        always creates a new object — the critical behavior is that
+        set_meter_provider() actually registers it globally (which requires
+        reset_telemetry() to clear _METER_PROVIDER_SET_ONCE._done).
+        """
+        import floe_core.telemetry.initialization as init_mod
+
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+        monkeypatch.setenv("OTEL_SERVICE_NAME", "test-meter-fresh")
+
+        # First initialization
+        init_mod.ensure_telemetry_initialized()
+        first_meter_provider = init_mod._meter_provider
+        assert isinstance(first_meter_provider, SdkMeterProvider), (
+            "Precondition: first init must create an SDK MeterProvider"
+        )
+        first_id = id(first_meter_provider)
+
+        # Capture the global meter provider to verify it gets replaced
+        first_global_provider = metrics.get_meter_provider()
+        first_global_id = id(first_global_provider)
+
+        # Reset telemetry (this should handle both Tracer and Meter providers)
+        init_mod.reset_telemetry()
+
+        # Re-initialize
+        init_mod.ensure_telemetry_initialized()
+        second_meter_provider = init_mod._meter_provider
+        assert isinstance(second_meter_provider, SdkMeterProvider), (
+            "After reset + re-init, _meter_provider must be a new SDK "
+            f"MeterProvider. Got: {type(second_meter_provider)}"
+        )
+
+        second_id = id(second_meter_provider)
+        assert first_id != second_id, (
+            "After reset_telemetry() + ensure_telemetry_initialized(), "
+            "the MeterProvider must be a NEW instance (different id()). "
+            f"Both have id={first_id}."
+        )
+
+        # Critical: verify the GLOBAL meter provider was also replaced.
+        # This catches the case where reset_telemetry() forgets to clear
+        # _METER_PROVIDER_SET_ONCE._done — set_meter_provider() would be
+        # silently ignored, and the global provider would remain stale.
+        second_global_provider = metrics.get_meter_provider()
+        second_global_id = id(second_global_provider)
+        assert first_global_id != second_global_id, (
+            "After reset + re-init, the GLOBAL meter provider (from "
+            "metrics.get_meter_provider()) must be a new instance. "
+            f"Both have id={first_global_id}. reset_telemetry() likely "
+            "forgot to clear metrics._internal._METER_PROVIDER_SET_ONCE._done, "
+            "so set_meter_provider() silently ignored the new provider."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_reset_when_no_meter_provider_does_not_crash(self) -> None:
+        """Test that reset_telemetry() is safe when no MeterProvider was created.
+
+        AC-5 edge case: If ensure_telemetry_initialized() was never called
+        (or the no-op path was taken because OTEL_EXPORTER_OTLP_ENDPOINT
+        was empty), reset_telemetry() must not raise when _meter_provider
+        is None.
+
+        This tests the hasattr guard pattern required by AC-5.
+        """
+        import floe_core.telemetry.initialization as init_mod
+
+        # Ensure we start with no meter provider
+        assert init_mod._meter_provider is None, (
+            "Precondition: _meter_provider should be None before any init"
+        )
+
+        # Must not raise
+        init_mod.reset_telemetry()
+
+        # _meter_provider should still be None
+        assert init_mod._meter_provider is None
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_full_lifecycle_with_meter_provider(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test full init-reset-init-reset lifecycle for MeterProvider.
+
+        AC-5 + AC-6: Exercises two complete cycles to verify no accumulated
+        state corruption in MeterProvider handling. Each cycle must:
+        1. Create a new, distinct MeterProvider
+        2. Shut it down cleanly on reset
+        3. Clear _meter_provider to None
+
+        A sloppy implementation that leaks state between cycles would fail
+        on the second cycle (e.g., set_meter_provider silently ignored,
+        or _meter_provider still references old provider).
+        """
+        import floe_core.telemetry.initialization as init_mod
+
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+        monkeypatch.setenv("OTEL_SERVICE_NAME", "meter-cycle-1")
+
+        # Cycle 1: init
+        init_mod.ensure_telemetry_initialized()
+        provider_1 = init_mod._meter_provider
+        assert isinstance(provider_1, SdkMeterProvider), "Cycle 1: must create SDK MeterProvider"
+        provider_1_id = id(provider_1)
+
+        # Cycle 1: reset
+        init_mod.reset_telemetry()
+        assert init_mod._meter_provider is None, "Cycle 1: _meter_provider must be None after reset"
+
+        # Cycle 2: init with different config
+        monkeypatch.setenv("OTEL_SERVICE_NAME", "meter-cycle-2")
+        init_mod.ensure_telemetry_initialized()
+        provider_2 = init_mod._meter_provider
+        assert isinstance(provider_2, SdkMeterProvider), "Cycle 2: must create SDK MeterProvider"
+        provider_2_id = id(provider_2)
+
+        # Verify distinct providers across cycles
+        assert provider_1_id != provider_2_id, (
+            "Each init cycle must produce a distinct MeterProvider instance. "
+            f"Cycle 1 id={provider_1_id}, Cycle 2 id={provider_2_id}"
+        )
+
+        # Cycle 2: reset
+        init_mod.reset_telemetry()
+        assert init_mod._meter_provider is None, "Cycle 2: _meter_provider must be None after reset"

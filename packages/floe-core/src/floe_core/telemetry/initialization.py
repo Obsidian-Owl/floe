@@ -149,17 +149,17 @@ def ensure_telemetry_initialized() -> None:
 
 
 def reset_telemetry() -> None:
-    """Shut down the current TracerProvider and reset initialization state.
+    """Shut down the current TracerProvider and MeterProvider, reset state.
 
     Allows telemetry to be re-initialized (e.g. in tests or after a
     configuration change).  The sequence is:
 
-    1. Retrieve the current global TracerProvider.
-    2. If it is a real SDK TracerProvider, call ``provider.shutdown()`` to
-       flush all pending spans.
-    3. Set ``_initialized = False`` so that a subsequent call to
-       ``ensure_telemetry_initialized()`` will create a fresh provider.
-    4. Call ``reset_tracer()`` to invalidate any cached tracer instances.
+    1. Retrieve the current global TracerProvider; if SDK, call shutdown().
+    2. If a MeterProvider was created, call shutdown() on it.
+    3. Reset OTel API "set once" guards for both providers.
+    4. Set ``_initialized = False`` so that a subsequent call to
+       ``ensure_telemetry_initialized()`` will create fresh providers.
+    5. Call ``reset_tracer()`` to invalidate any cached tracer instances.
 
     The function is safe to call when telemetry has not been initialized
     (no-op) and is idempotent (calling it twice does not raise).
@@ -173,11 +173,15 @@ def reset_telemetry() -> None:
         >>> reset_telemetry()                      # flush and clear
         >>> ensure_telemetry_initialized()          # fresh re-init
     """
-    global _initialized
+    global _initialized, _meter_provider
 
     provider = trace.get_tracer_provider()
     if isinstance(provider, TracerProvider):
         provider.shutdown()
+
+    # Shut down MeterProvider if one was created.
+    if _meter_provider is not None:
+        _meter_provider.shutdown()
 
     # Reset the OTel API's "set once" guard so that a subsequent call to
     # trace.set_tracer_provider() in ensure_telemetry_initialized() is
@@ -193,9 +197,21 @@ def reset_telemetry() -> None:
     # the "real" provider — when it IS the provider, it recurses infinitely.
     # None causes get_tracer() to return a NoOp tracer instead.
     if hasattr(trace, "_TRACER_PROVIDER"):
-        # None, not ProxyTracerProvider() — avoids recursion in get_tracer()
         trace._TRACER_PROVIDER = None
 
+    # Reset the MeterProvider "set once" guard and global state so that a
+    # subsequent set_meter_provider() call is accepted.
+    # TODO(otel-init-unification): Remove if OTel adds a public reset API.
+    if hasattr(metrics, "_internal"):
+        if hasattr(metrics._internal, "_METER_PROVIDER_SET_ONCE"):
+            metrics._internal._METER_PROVIDER_SET_ONCE._done = False
+        if hasattr(metrics._internal, "_METER_PROVIDER"):
+            metrics._internal._METER_PROVIDER = None
+        # Restore proxy so meters auto-upgrade on next set_meter_provider().
+        if hasattr(metrics._internal, "_PROXY_METER_PROVIDER"):
+            metrics._internal._PROXY_METER_PROVIDER = metrics._internal._ProxyMeterProvider()
+
+    _meter_provider = None
     _initialized = False
     reset_tracer()
 
