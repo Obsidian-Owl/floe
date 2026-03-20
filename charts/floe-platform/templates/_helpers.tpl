@@ -63,6 +63,12 @@ floe.dev/environment: {{ .Values.global.environment | default "dev" }}
 Immutable labels for resources with immutable label fields (e.g. volumeClaimTemplates).
 Excludes helm.sh/chart and app.kubernetes.io/version which change on every chart upgrade.
 See: helm/charts#7803 (Bitnami StatefulSet upgrade footgun).
+
+WARNING: global.commonLabels are included here for label-policy compatibility.
+If you change a commonLabel value after initial install, you MUST enable
+postgresql.preUpgradeCleanup.enabled=true so the pre-upgrade hook can
+delete and recreate the StatefulSet. Without the hook, K8s will reject
+the update with an immutable field error.
 */}}
 {{- define "floe-platform.immutableLabels" -}}
 {{ include "floe-platform.selectorLabels" . }}
