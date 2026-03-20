@@ -60,6 +60,21 @@ floe.dev/environment: {{ .Values.global.environment | default "dev" }}
 {{- end }}
 
 {{/*
+Immutable labels for resources with immutable label fields (e.g. volumeClaimTemplates).
+Excludes helm.sh/chart and app.kubernetes.io/version which change on every chart upgrade.
+See: helm/charts#7803 (Bitnami StatefulSet upgrade footgun).
+*/}}
+{{- define "floe-platform.immutableLabels" -}}
+{{ include "floe-platform.selectorLabels" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: floe-platform
+floe.dev/environment: {{ .Values.global.environment | default "dev" }}
+{{- with .Values.global.commonLabels }}
+{{ toYaml . }}
+{{- end }}
+{{- end }}
+
+{{/*
 Selector labels for pod selection.
 */}}
 {{- define "floe-platform.selectorLabels" -}}

@@ -105,6 +105,50 @@ tests:
           any: true
 
   # -----------------------------------------------------------------
+  # AC-1/AC-2/AC-9: volumeClaimTemplates labels must NOT include mutable values
+  # -----------------------------------------------------------------
+  - it: should NOT include mutable labels in volumeClaimTemplates
+    template: templates/statefulset-postgresql.yaml
+    set:
+      postgresql.persistence.enabled: true
+      postgresql.primary.initdb.scripts: null
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.labels["helm.sh/chart"]
+      - notExists:
+          path: spec.volumeClaimTemplates[0].metadata.labels["app.kubernetes.io/version"]
+      - exists:
+          path: spec.volumeClaimTemplates[0].metadata.labels["app.kubernetes.io/name"]
+      - exists:
+          path: spec.volumeClaimTemplates[0].metadata.labels["app.kubernetes.io/instance"]
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.labels["app.kubernetes.io/managed-by"]
+          value: Helm
+      - equal:
+          path: spec.volumeClaimTemplates[0].metadata.labels["app.kubernetes.io/part-of"]
+          value: floe-platform
+
+  # -----------------------------------------------------------------
+  # AC-3: Non-PVC labels still use full floe-platform.labels
+  # -----------------------------------------------------------------
+  - it: should include full labels on StatefulSet metadata (not VCT)
+    template: templates/statefulset-postgresql.yaml
+    set:
+      postgresql.persistence.enabled: true
+      postgresql.primary.initdb.scripts: null
+    asserts:
+      - isKind:
+          of: StatefulSet
+      # StatefulSet metadata should still have helm.sh/chart
+      - exists:
+          path: metadata.labels["helm.sh/chart"]
+      # Pod template should still have helm.sh/chart
+      - exists:
+          path: spec.template.metadata.labels["helm.sh/chart"]
+
+  # -----------------------------------------------------------------
   # AC-2b / AC-5.4: persistence=true + no initdb.scripts
   # -----------------------------------------------------------------
   - it: should render only volumeClaimTemplates when persistence=true and no initdb scripts
