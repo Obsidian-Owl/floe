@@ -23,7 +23,7 @@ tests:
         documentIndex: 3
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
-          value: before-hook-creation,hook-succeeded
+          value: before-hook-creation,hook-succeeded,hook-failed
         documentIndex: 3
       - equal:
           path: metadata.annotations["helm.sh/hook-weight"]
@@ -108,14 +108,19 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
           value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
       - contains:
           path: spec.template.spec.containers[0].securityContext.capabilities.drop
           content: ALL
-      # Resource limits set
-      - exists:
+      # Resource limits — exact values to catch accidental changes
+      - equal:
           path: spec.template.spec.containers[0].resources.limits.cpu
-      - exists:
+          value: 100m
+      - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
+          value: 64Mi
 
   # -----------------------------------------------------------------
   # AC-7: Correct StatefulSet target name

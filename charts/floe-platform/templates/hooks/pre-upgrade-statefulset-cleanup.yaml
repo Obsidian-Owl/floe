@@ -20,7 +20,7 @@ metadata:
     {{- include "floe-platform.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": pre-upgrade
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
     "helm.sh/hook-weight": "-10"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -32,7 +32,7 @@ metadata:
     {{- include "floe-platform.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": pre-upgrade
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
     "helm.sh/hook-weight": "-10"
 rules:
   - apiGroups: ["apps"]
@@ -48,7 +48,7 @@ metadata:
     {{- include "floe-platform.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": pre-upgrade
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
     "helm.sh/hook-weight": "-10"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -68,7 +68,7 @@ metadata:
     {{- include "floe-platform.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": pre-upgrade
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
     "helm.sh/hook-weight": "-5"
 spec:
   backoffLimit: 1
@@ -80,9 +80,15 @@ spec:
       restartPolicy: Never
       serviceAccountName: {{ include "floe-platform.fullname" . }}-pre-upgrade
       automountServiceAccountToken: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
       containers:
         - name: cleanup
-          image: bitnami/kubectl:latest
+          image: "{{ .Values.postgresql.preUpgradeCleanup.image.repository }}:{{ .Values.postgresql.preUpgradeCleanup.image.tag }}"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           command:
             - /bin/sh
             - -c
@@ -100,6 +106,7 @@ spec:
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
+            readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:
               drop:
