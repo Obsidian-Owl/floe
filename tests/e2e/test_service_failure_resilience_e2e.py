@@ -61,6 +61,9 @@ class TestServiceFailureResilience:
             "MinIO not healthy before test — cannot test failure resilience"
         )
 
+        # Capture pod UID before deletion for termination tracking
+        original_uid = _get_pod_uid("app.kubernetes.io/name=minio")
+
         # Delete the MinIO pod (K8s will restart it)
         result = run_kubectl(
             [
@@ -75,9 +78,6 @@ class TestServiceFailureResilience:
             timeout=30,
         )
         assert result.returncode == 0, f"Failed to delete MinIO pod: {result.stderr}"
-
-        # Wait for the original pod to terminate (UID disappears)
-        original_uid = _get_pod_uid("app.kubernetes.io/name=minio")
         if original_uid:
             terminated = wait_for_condition(
                 lambda: _check_pod_terminated("app.kubernetes.io/name=minio", original_uid),
@@ -145,6 +145,9 @@ class TestServiceFailureResilience:
         )
         assert response.status_code == 200, "Polaris not healthy before test"
 
+        # Capture pod UID before deletion for termination tracking
+        original_uid = _get_pod_uid("app.kubernetes.io/component=polaris")
+
         # Delete Polaris pod
         result = run_kubectl(
             [
@@ -159,9 +162,6 @@ class TestServiceFailureResilience:
             timeout=30,
         )
         assert result.returncode == 0, f"Failed to delete Polaris pod: {result.stderr}"
-
-        # Wait for the original pod to terminate (UID disappears)
-        original_uid = _get_pod_uid("app.kubernetes.io/component=polaris")
         if original_uid:
             terminated = wait_for_condition(
                 lambda: _check_pod_terminated("app.kubernetes.io/component=polaris", original_uid),
