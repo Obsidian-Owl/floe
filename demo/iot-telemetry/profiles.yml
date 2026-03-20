@@ -3,5 +3,30 @@ iot_telemetry:
   outputs:
     dev:
       type: duckdb
-      path: "target/demo.duckdb"
+      path: ":memory:"
+      database: ice
+      schema: iot_telemetry
       threads: 1
+      extensions:
+        - httpfs
+        - iceberg
+      attach:
+        - path: floe-e2e
+          alias: ice
+          type: iceberg
+          options:
+            ENDPOINT: "{{ env_var('FLOE_E2E_POLARIS_ENDPOINT') }}"
+            CLIENT_ID: "{{ env_var('FLOE_E2E_POLARIS_CLIENT_ID') }}"
+            CLIENT_SECRET: "{{ env_var('FLOE_E2E_POLARIS_CLIENT_SECRET') }}"
+            OAUTH2_SERVER_URI: "{{ env_var('FLOE_E2E_POLARIS_OAUTH2_URI') }}"
+            OAUTH2_SCOPE: PRINCIPAL_ROLE:ALL
+            OAUTH2_GRANT_TYPE: client_credentials
+            ACCESS_DELEGATION_MODE: none
+      secrets:
+        - type: s3
+          key_id: "{{ env_var('AWS_ACCESS_KEY_ID') }}"
+          secret: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+          endpoint: "{{ env_var('FLOE_E2E_S3_ENDPOINT') }}"
+          url_style: path
+          use_ssl: "{{ env_var('FLOE_E2E_S3_USE_SSL', 'false') }}"
+          region: "{{ env_var('AWS_REGION', 'us-east-1') }}"
