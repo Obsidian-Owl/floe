@@ -418,6 +418,19 @@ jobs:
         run: |
           helm dependency update charts/floe-platform
 
+      - name: Install helm-diff plugin
+        run: helm plugin install https://github.com/databus23/helm-diff --version v3.9.12
+
+      - name: Diff upgrade (informational)
+        continue-on-error: true
+        run: |
+          helm diff upgrade floe-test charts/floe-platform \
+            --namespace floe-test \
+            --values charts/floe-platform/values-test.yaml \
+            --detailed-exitcode \
+            --suppress-secrets \
+            --three-way-merge 2>&1 | head -200
+
       - name: Install floe-platform chart with test values
         run: |
           helm upgrade --install floe-test charts/floe-platform \
