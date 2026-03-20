@@ -427,6 +427,16 @@ postgresql:
     size: 8Gi
     storageClass: ""
 
+  # Pre-upgrade cleanup hook
+  # Deletes PostgreSQL StatefulSet with --cascade=orphan before upgrade
+  # to avoid immutable field conflicts (volumeClaimTemplates labels).
+  # Pods and PVCs are preserved; the new StatefulSet adopts them.
+  preUpgradeCleanup:
+    enabled: false
+    image:
+      repository: bitnami/kubectl
+      tag: "1.32"
+
   # Resource limits
   resources:
     requests:

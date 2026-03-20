@@ -191,6 +191,11 @@ postgresql:
   enabled: true
   persistence:
     enabled: false
+  preUpgradeCleanup:
+    enabled: true
+    image:
+      repository: bitnami/kubectl
+      tag: "1.32"
   auth:
     username: floe
     password: "floe-test-password-1234"  # pragma: allowlist secret

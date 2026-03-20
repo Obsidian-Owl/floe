@@ -1,0 +1,141 @@
+# Pre-upgrade hook tests (AC-4, AC-5, AC-5b, AC-6, AC-7, AC-10)
+# Validates the StatefulSet cleanup hook lifecycle, RBAC, and security.
+suite: pre-upgrade statefulset cleanup hook
+templates:
+  - templates/hooks/pre-upgrade-statefulset-cleanup.yaml
+tests:
+  # -----------------------------------------------------------------
+  # AC-4: Hook rendered when enabled
+  # -----------------------------------------------------------------
+  - it: should render Job with pre-upgrade hook annotation when enabled
+    set:
+      postgresql.enabled: true
+      postgresql.preUpgradeCleanup.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 4
+      - isKind:
+          of: Job
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: pre-upgrade
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded,hook-failed
+        documentIndex: 3
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-5"
+        documentIndex: 3
+
+  # -----------------------------------------------------------------
+  # AC-4: RBAC resources rendered
+  # -----------------------------------------------------------------
+  - it: should render ServiceAccount, Role, and RoleBinding
+    set:
+      postgresql.enabled: true
+      postgresql.preUpgradeCleanup.enabled: true
+    asserts:
+      - isKind:
+          of: ServiceAccount
+        documentIndex: 0
+      - isKind:
+          of: Role
+        documentIndex: 1
+      - isKind:
+          of: RoleBinding
+        documentIndex: 2
+
+  # -----------------------------------------------------------------
+  # AC-4: Role grants correct permissions
+  # -----------------------------------------------------------------
+  - it: should grant get and delete on statefulsets
+    set:
+      postgresql.enabled: true
+      postgresql.preUpgradeCleanup.enabled: true
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Role
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["apps"]
+            resources: ["statefulsets"]
+            verbs: ["get", "delete"]
+
+  # -----------------------------------------------------------------
+  # AC-5: Hook absent when disabled
+  # -----------------------------------------------------------------
+  - it: should NOT render any resources when preUpgradeCleanup disabled
+    set:
+      postgresql.enabled: true
+      postgresql.preUpgradeCleanup.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # -----------------------------------------------------------------
+  # AC-5b: Hook absent when PostgreSQL disabled
+  # -----------------------------------------------------------------
+  - it: should NOT render any resources when postgresql disabled
+    set:
+      postgresql.enabled: false
+      postgresql.preUpgradeCleanup.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # -----------------------------------------------------------------
+  # AC-6: Security hardening
+  # -----------------------------------------------------------------
+  - it: should have hardened security context on Job container
+    set:
+      postgresql.enabled: true
+      postgresql.preUpgradeCleanup.enabled: true
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+      # Resource limits — exact values to catch accidental changes
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 100m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 64Mi
+
+  # -----------------------------------------------------------------
+  # AC-7: Correct StatefulSet target name
+  # -----------------------------------------------------------------
+  - it: should target the correct StatefulSet name in script
+    set:
+      postgresql.enabled: true
+      postgresql.preUpgradeCleanup.enabled: true
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: Job
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "floe-platform-postgresql"
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: "--cascade=orphan"

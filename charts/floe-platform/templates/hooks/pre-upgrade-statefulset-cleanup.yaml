@@ -1,0 +1,121 @@
+{{/*
+Pre-upgrade hook: delete PostgreSQL StatefulSet with --cascade=orphan.
+
+StatefulSet volumeClaimTemplates are immutable after creation (K8s limitation,
+KEP-4650 closed). This hook deletes the StatefulSet controller object before
+the upgrade applies, allowing Helm to recreate it with updated fields.
+Pods and PVCs are preserved via --cascade=orphan.
+
+Gated by: postgresql.enabled AND postgresql.preUpgradeCleanup.enabled
+See: helm/charts#7803, kubernetes/kubernetes#69041
+*/}}
+{{- if and .Values.postgresql.enabled .Values.postgresql.preUpgradeCleanup.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-pre-upgrade
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    "helm.sh/hook-weight": "-10"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-pre-upgrade
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    "helm.sh/hook-weight": "-10"
+rules:
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-pre-upgrade
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    "helm.sh/hook-weight": "-10"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "floe-platform.fullname" . }}-pre-upgrade
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "floe-platform.fullname" . }}-pre-upgrade
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-pg-pre-upgrade
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+    "helm.sh/hook-weight": "-5"
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        {{- include "floe-platform.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "floe-platform.fullname" . }}-pre-upgrade
+      automountServiceAccountToken: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      containers:
+        - name: cleanup
+          image: "{{ .Values.postgresql.preUpgradeCleanup.image.repository }}:{{ .Values.postgresql.preUpgradeCleanup.image.tag }}"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              STS_NAME="{{ include "floe-platform.fullname" . }}-postgresql"
+              NS="{{ .Release.Namespace }}"
+              if kubectl get statefulset "$STS_NAME" -n "$NS" >/dev/null 2>&1; then
+                echo "Deleting StatefulSet $STS_NAME (orphan pods/PVCs)..."
+                kubectl delete statefulset "$STS_NAME" -n "$NS" --cascade=orphan
+                echo "StatefulSet deleted. Pods and PVCs preserved."
+              else
+                echo "StatefulSet $STS_NAME not found — no cleanup needed."
+              fi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+{{- end }}
