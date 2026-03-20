@@ -38,6 +38,7 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
+        stages: [pre-commit]
         exclude: ^(\.sisyphus/|\.claude/skills/|\.claude/reviews/|\.specify/|tests/fixtures/|docs/reference/)
 
   # General file hygiene
