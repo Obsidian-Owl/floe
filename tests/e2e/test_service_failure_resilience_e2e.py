@@ -87,12 +87,22 @@ class TestServiceFailureResilience:
                 raise_on_timeout=False,
             )
             if not terminated:
-                warnings.warn(
-                    f"MinIO pod {original_uid[:8]} was replaced before termination "
-                    f"check — sub-second replacement.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+                # Pod was replaced sub-second — verify the new pod is different
+                new_uid = _get_pod_uid("app.kubernetes.io/name=minio")
+                if new_uid and new_uid != original_uid:
+                    warnings.warn(
+                        f"MinIO pod {original_uid[:8]} was replaced before termination "
+                        f"check — new pod {new_uid[:8]} confirmed.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                else:
+                    warnings.warn(
+                        f"MinIO pod {original_uid[:8]} termination not confirmed "
+                        f"(new UID: {new_uid!r}).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
 
         # Verify the service becomes unavailable (error, not silent)
         # Port-forward may break when pod restarts — that's expected
@@ -171,12 +181,22 @@ class TestServiceFailureResilience:
                 raise_on_timeout=False,
             )
             if not terminated:
-                warnings.warn(
-                    f"Polaris pod {original_uid[:8]} was replaced before termination "
-                    f"check — sub-second replacement.",
-                    UserWarning,
-                    stacklevel=2,
-                )
+                # Pod was replaced sub-second — verify the new pod is different
+                new_uid = _get_pod_uid("app.kubernetes.io/component=polaris")
+                if new_uid and new_uid != original_uid:
+                    warnings.warn(
+                        f"Polaris pod {original_uid[:8]} was replaced before termination "
+                        f"check — new pod {new_uid[:8]} confirmed.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                else:
+                    warnings.warn(
+                        f"Polaris pod {original_uid[:8]} termination not confirmed "
+                        f"(new UID: {new_uid!r}).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
 
         # Verify service disruption
         service_down = False
@@ -323,6 +343,9 @@ def _check_pod_ready(label_selector: str) -> bool:
 
 def _get_pod_uid(label_selector: str) -> str | None:
     """Get the UID of the first pod matching the selector.
+
+    Note: assumes a single-replica deployment. For multi-replica workloads,
+    this returns only ``items[0]`` and may miss additional pods.
 
     Args:
         label_selector: K8s label selector string.
