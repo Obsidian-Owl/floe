@@ -18,7 +18,9 @@ from testing.fixtures.services import (
     _PORT_UNSET,
     SERVICE_DEFAULT_PORTS,
     ServiceEndpoint,
+    ServiceUnavailableError,
     _get_effective_port,
+    check_infrastructure,
     get_effective_port,
 )
 
@@ -733,3 +735,335 @@ class TestServiceEndpointUrl:
         monkeypatch.setenv("INTEGRATION_TEST_HOST", "localhost")
         endpoint = ServiceEndpoint("dagster", 3000)
         assert not endpoint.url.endswith("/")
+
+
+# ---------------------------------------------------------------------------
+# AC-6: check_infrastructure() accepts both tuple and string formats
+# ---------------------------------------------------------------------------
+
+
+class TestCheckInfrastructureMixedFormats:
+    """Tests for check_infrastructure() accepting mixed tuple/string service entries.
+
+    The function must accept ``list[tuple[str, int] | str]`` where bare strings
+    resolve their port via the standard precedence chain (env var, then
+    SERVICE_DEFAULT_PORTS). Currently the implementation destructures with
+    ``for service_name, port in services`` which crashes on string entries.
+    """
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_string_entry_accepted_without_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that a bare string service entry does not raise ValueError/TypeError.
+
+        Current implementation does ``for service_name, port in services``
+        which raises ``ValueError: too many values to unpack`` on a string.
+        """
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            lambda host, port, timeout: True,
+        )
+        # Must not raise
+        result = check_infrastructure(
+            ["polaris"],
+            raise_on_failure=False,  # type: ignore[list-item]
+        )
+        assert isinstance(result, dict)
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_string_entry_returns_service_name_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that a bare string entry produces a dict key matching the service name."""
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            lambda host, port, timeout: True,
+        )
+        result = check_infrastructure(
+            ["polaris"],
+            raise_on_failure=False,  # type: ignore[list-item]
+        )
+        assert "polaris" in result
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_string_entry_resolves_port_from_defaults(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that a bare string resolves its port via SERVICE_DEFAULT_PORTS.
+
+        Captures the (host, port) passed to _tcp_health_check to verify
+        that the resolved port is 8181 for 'polaris', not some garbage value.
+        """
+        captured_calls: list[tuple[str, int]] = []
+
+        def capturing_health_check(host: str, port: int, timeout: float) -> bool:
+            captured_calls.append((host, port))
+            return True
+
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            capturing_health_check,
+        )
+        check_infrastructure(
+            ["polaris"],
+            raise_on_failure=False,  # type: ignore[list-item]
+        )
+        assert len(captured_calls) == 1
+        _host, port = captured_calls[0]
+        assert port == 8181
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_string_entry_resolves_port_from_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that a bare string respects env var override for port.
+
+        POLARIS_PORT=9999 should override the default 8181.
+        """
+        captured_calls: list[tuple[str, int]] = []
+
+        def capturing_health_check(host: str, port: int, timeout: float) -> bool:
+            captured_calls.append((host, port))
+            return True
+
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            capturing_health_check,
+        )
+        monkeypatch.setenv("POLARIS_PORT", "9999")
+        check_infrastructure(
+            ["polaris"],
+            raise_on_failure=False,  # type: ignore[list-item]
+        )
+        assert len(captured_calls) == 1
+        _host, port = captured_calls[0]
+        assert port == 9999
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_tuple_entry_still_works(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Regression: tuple entries must continue to work after the change.
+
+        Guards against an implementation that handles strings but breaks tuples.
+        """
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            lambda host, port, timeout: True,
+        )
+        result = check_infrastructure([("polaris", 8181)], raise_on_failure=False)
+        assert result == {"polaris": True}
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_tuple_entry_uses_explicit_port(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that tuple entries use the explicitly provided port, not the default.
+
+        Passes port 7777 for polaris (default is 8181). Verifies the explicit
+        port reaches _tcp_health_check.
+        """
+        captured_calls: list[tuple[str, int]] = []
+
+        def capturing_health_check(host: str, port: int, timeout: float) -> bool:
+            captured_calls.append((host, port))
+            return True
+
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            capturing_health_check,
+        )
+        check_infrastructure([("polaris", 7777)], raise_on_failure=False)
+        assert len(captured_calls) == 1
+        _host, port = captured_calls[0]
+        assert port == 7777
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_mixed_list_returns_both_keys(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that a mixed list of tuples and strings returns all service keys.
+
+        check_infrastructure([("dagster", 3100), "polaris"]) must return a dict
+        with both 'dagster' and 'polaris' keys.
+        """
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            lambda host, port, timeout: True,
+        )
+        result = check_infrastructure(
+            [("dagster", 3100), "polaris"],  # type: ignore[list-item]
+            raise_on_failure=False,
+        )
+        assert set(result.keys()) == {"dagster", "polaris"}
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_mixed_list_resolves_correct_ports(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that mixed entries resolve to correct ports.
+
+        ("dagster", 3100) should use port 3100 (explicit).
+        "polaris" should use port 8181 (from SERVICE_DEFAULT_PORTS).
+        """
+        captured_calls: list[tuple[str, int]] = []
+
+        def capturing_health_check(host: str, port: int, timeout: float) -> bool:
+            captured_calls.append((host, port))
+            return True
+
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            capturing_health_check,
+        )
+        check_infrastructure(
+            [("dagster", 3100), "polaris"],  # type: ignore[list-item]
+            raise_on_failure=False,
+        )
+        assert len(captured_calls) == 2
+        ports_by_call = {call[1] for call in captured_calls}
+        assert 3100 in ports_by_call, "Explicit tuple port 3100 not passed to health check"
+        assert 8181 in ports_by_call, "Resolved string port 8181 not passed to health check"
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_empty_list_returns_empty_dict(self) -> None:
+        """Test that check_infrastructure([], raise_on_failure=False) returns {}.
+
+        No monkeypatching needed -- empty list should never call health check.
+        """
+        result = check_infrastructure([], raise_on_failure=False)
+        assert result == {}
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_empty_list_returns_dict_type(self) -> None:
+        """Test that empty list returns a dict, not None or some other type."""
+        result = check_infrastructure([], raise_on_failure=False)
+        assert isinstance(result, dict)
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_duplicate_service_later_overwrites_earlier(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that duplicate service names: later entry overwrites earlier in result.
+
+        First entry is ("polaris", 8181) with health=False, second is "polaris"
+        with health=True. The result dict should have polaris=True (last wins).
+        """
+        call_count = 0
+
+        def alternating_health_check(host: str, port: int, timeout: float) -> bool:
+            nonlocal call_count
+            call_count += 1
+            # First call returns False, second returns True
+            return call_count >= 2
+
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            alternating_health_check,
+        )
+        result = check_infrastructure(
+            [("polaris", 8181), "polaris"],  # type: ignore[list-item]
+            raise_on_failure=False,
+        )
+        # Later entry (True) should overwrite earlier (False)
+        assert result["polaris"] is True
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_duplicate_service_only_one_key_in_result(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that duplicates don't create multiple keys -- dict has one entry."""
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            lambda host, port, timeout: True,
+        )
+        result = check_infrastructure(
+            [("polaris", 8181), "polaris"],  # type: ignore[list-item]
+            raise_on_failure=False,
+        )
+        assert len(result) == 1
+        assert "polaris" in result
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_string_entry_health_false_when_unreachable(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that a string entry returns False when the service is unreachable.
+
+        Ensures the function actually performs a health check on string entries,
+        not just returning True unconditionally.
+        """
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            lambda host, port, timeout: False,
+        )
+        result = check_infrastructure(
+            ["polaris"],
+            raise_on_failure=False,  # type: ignore[list-item]
+        )
+        assert result["polaris"] is False
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_multiple_string_entries(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that multiple bare string entries all work.
+
+        Guards against an implementation that only handles the first string.
+        """
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            lambda host, port, timeout: True,
+        )
+        result = check_infrastructure(
+            ["polaris", "minio", "postgres"],  # type: ignore[list-item]
+            raise_on_failure=False,
+        )
+        assert set(result.keys()) == {"polaris", "minio", "postgres"}
+        assert all(v is True for v in result.values())
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_multiple_strings_resolve_distinct_ports(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that each string entry resolves to its own default port.
+
+        Guards against a hardcoded port for all string entries.
+        """
+        captured_ports: dict[int, str] = {}
+
+        def capturing_health_check(host: str, port: int, timeout: float) -> bool:
+            captured_ports[port] = host
+            return True
+
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            capturing_health_check,
+        )
+        check_infrastructure(
+            ["polaris", "minio", "postgres"],  # type: ignore[list-item]
+            raise_on_failure=False,
+        )
+        assert 8181 in captured_ports, "polaris should resolve to port 8181"
+        assert 9000 in captured_ports, "minio should resolve to port 9000"
+        assert 5432 in captured_ports, "postgres should resolve to port 5432"
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_string_entry_raise_on_failure_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that raise_on_failure=True works with string entries.
+
+        When a string entry fails health check with raise_on_failure=True,
+        ServiceUnavailableError should be raised (same as tuple entries).
+        """
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            lambda host, port, timeout: False,
+        )
+        with pytest.raises(ServiceUnavailableError):
+            check_infrastructure(
+                ["polaris"],  # type: ignore[list-item]
+                raise_on_failure=True,
+            )
+
+    @pytest.mark.requirement("env-resilient-AC-6")
+    def test_string_unknown_service_raises_valueerror(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that a string for an unknown service (no default port) raises ValueError.
+
+        If 'totally-unknown-service' has no entry in SERVICE_DEFAULT_PORTS
+        and no env var, port resolution should fail with ValueError.
+        """
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            lambda host, port, timeout: True,
+        )
+        monkeypatch.delenv("TOTALLY_UNKNOWN_SERVICE_PORT", raising=False)
+        with pytest.raises(ValueError, match="totally-unknown-service"):
+            check_infrastructure(
+                ["totally-unknown-service"],  # type: ignore[list-item]
+                raise_on_failure=False,
+            )

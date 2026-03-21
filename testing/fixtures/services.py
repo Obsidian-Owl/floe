@@ -269,7 +269,7 @@ def check_service_health(
 
 
 def check_infrastructure(
-    services: list[tuple[str, int]],
+    services: list[tuple[str, int] | str],
     namespace: str = "floe-test",
     timeout: float = 5.0,
     *,
@@ -280,8 +280,12 @@ def check_infrastructure(
     Checks all specified services and returns their health status.
     Optionally raises an exception if any service is unavailable.
 
+    Each entry in *services* may be either:
+    - ``("service_name", port)`` — explicit port (legacy format)
+    - ``"service_name"`` — port resolved via env var / defaults
+
     Args:
-        services: List of (service_name, port) tuples to check.
+        services: List of service specs to check.
         namespace: K8s namespace. Defaults to "floe-test".
         timeout: Connection timeout per service in seconds. Defaults to 5.0.
         raise_on_failure: If True, raise ServiceUnavailableError for the
@@ -295,30 +299,30 @@ def check_infrastructure(
             is unavailable.
 
     Example:
-        # Check multiple services
-        health = check_infrastructure([
-            ("polaris", 8181),
-            ("minio", 9000),
-            ("postgres", 5432),
-        ])
+        # New string format (port resolved from env/defaults)
+        health = check_infrastructure(["polaris", "minio", "postgres"])
 
-        # With exception on failure
-        try:
-            check_infrastructure([("polaris", 8181)])
-        except ServiceUnavailableError as e:
-            print(f"Required service unavailable: {e}")
+        # Legacy tuple format still works
+        health = check_infrastructure([("polaris", 8181)])
+
+        # Mixed list
+        health = check_infrastructure([("dagster", 3100), "polaris"])
     """
     results: dict[str, bool] = {}
 
-    for service_name, port in services:
-        endpoint = ServiceEndpoint(service_name, port, namespace)
-        is_healthy = _tcp_health_check(endpoint.host, port, timeout)
-        results[service_name] = is_healthy
+    for spec in services:
+        if isinstance(spec, str):
+            endpoint = ServiceEndpoint(spec, namespace=namespace)
+        else:
+            name, port = spec
+            endpoint = ServiceEndpoint(name, port, namespace)
+        is_healthy = _tcp_health_check(endpoint.host, endpoint.port, timeout)
+        results[endpoint.name] = is_healthy
 
         if raise_on_failure and not is_healthy:
             raise ServiceUnavailableError(
                 endpoint,
-                f"TCP connection to {endpoint.host}:{port} failed",
+                f"TCP connection to {endpoint.host}:{endpoint.port} failed",
             )
 
     return results
