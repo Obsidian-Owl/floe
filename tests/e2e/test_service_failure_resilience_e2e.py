@@ -61,6 +61,9 @@ class TestServiceFailureResilience:
             "MinIO not healthy before test — cannot test failure resilience"
         )
 
+        # Capture pod UID before deletion for termination tracking
+        original_uid = _get_pod_uid("app.kubernetes.io/name=minio")
+
         # Delete the MinIO pod (K8s will restart it)
         result = run_kubectl(
             [
@@ -75,11 +78,36 @@ class TestServiceFailureResilience:
             timeout=30,
         )
         assert result.returncode == 0, f"Failed to delete MinIO pod: {result.stderr}"
+        if original_uid:
+            terminated = wait_for_condition(
+                lambda: _check_pod_terminated("app.kubernetes.io/name=minio", original_uid),
+                timeout=30.0,
+                interval=1.0,
+                description=f"MinIO pod {original_uid[:8]} to terminate",
+                raise_on_timeout=False,
+            )
+            if not terminated:
+                # Pod was replaced sub-second — verify the new pod is different
+                new_uid = _get_pod_uid("app.kubernetes.io/name=minio")
+                if new_uid and new_uid != original_uid:
+                    warnings.warn(
+                        f"MinIO pod {original_uid[:8]} was replaced before termination "
+                        f"check — new pod {new_uid[:8]} confirmed.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                else:
+                    warnings.warn(
+                        f"MinIO pod {original_uid[:8]} termination not confirmed "
+                        f"(new UID: {new_uid!r}).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
 
         # Verify the service becomes unavailable (error, not silent)
         # Port-forward may break when pod restarts — that's expected
         service_down = False
-        for _ in range(5):
+        for _ in range(10):
             try:
                 response = httpx.get(
                     f"{minio_url}/minio/health/ready",
@@ -127,6 +155,9 @@ class TestServiceFailureResilience:
         )
         assert response.status_code == 200, "Polaris not healthy before test"
 
+        # Capture pod UID before deletion for termination tracking
+        original_uid = _get_pod_uid("app.kubernetes.io/component=polaris")
+
         # Delete Polaris pod
         result = run_kubectl(
             [
@@ -141,10 +172,35 @@ class TestServiceFailureResilience:
             timeout=30,
         )
         assert result.returncode == 0, f"Failed to delete Polaris pod: {result.stderr}"
+        if original_uid:
+            terminated = wait_for_condition(
+                lambda: _check_pod_terminated("app.kubernetes.io/component=polaris", original_uid),
+                timeout=30.0,
+                interval=1.0,
+                description=f"Polaris pod {original_uid[:8]} to terminate",
+                raise_on_timeout=False,
+            )
+            if not terminated:
+                # Pod was replaced sub-second — verify the new pod is different
+                new_uid = _get_pod_uid("app.kubernetes.io/component=polaris")
+                if new_uid and new_uid != original_uid:
+                    warnings.warn(
+                        f"Polaris pod {original_uid[:8]} was replaced before termination "
+                        f"check — new pod {new_uid[:8]} confirmed.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                else:
+                    warnings.warn(
+                        f"Polaris pod {original_uid[:8]} termination not confirmed "
+                        f"(new UID: {new_uid!r}).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
 
         # Verify service disruption
         service_down = False
-        for _ in range(5):
+        for _ in range(10):
             try:
                 response = httpx.get(
                     f"{polaris_health_url}/q/health/ready",
@@ -283,6 +339,65 @@ def _check_pod_ready(label_selector: str) -> bool:
         return False
     statuses = result.stdout.strip().split()
     return bool(statuses and all(s == "True" for s in statuses))
+
+
+def _get_pod_uid(label_selector: str) -> str | None:
+    """Get the UID of the first pod matching the selector.
+
+    Note: assumes a single-replica deployment. For multi-replica workloads,
+    this returns only ``items[0]`` and may miss additional pods.
+
+    Args:
+        label_selector: K8s label selector string.
+
+    Returns:
+        Pod UID string, or None if no pod found.
+    """
+    result = run_kubectl(
+        [
+            "get",
+            "pods",
+            "-l",
+            label_selector,
+            "-o",
+            "jsonpath={.items[0].metadata.uid}",
+        ],
+        namespace=NAMESPACE,
+    )
+    if result.returncode != 0:
+        return None
+    uid = result.stdout.strip()
+    return uid if uid else None
+
+
+def _check_pod_terminated(label_selector: str, original_uid: str) -> bool:
+    """Check if the pod with the given UID has been terminated.
+
+    Returns True when no pod with the original UID exists (either gone
+    entirely or replaced with a new UID).
+
+    Args:
+        label_selector: K8s label selector string.
+        original_uid: The UID of the pod that was deleted.
+
+    Returns:
+        True if the original pod is no longer present.
+    """
+    result = run_kubectl(
+        [
+            "get",
+            "pods",
+            "-l",
+            label_selector,
+            "-o",
+            "jsonpath={.items[*].metadata.uid}",
+        ],
+        namespace=NAMESPACE,
+    )
+    if result.returncode != 0:
+        return False
+    current_uids = result.stdout.strip().split()
+    return original_uid not in current_uids
 
 
 def _check_port_forward_health(url: str) -> bool:

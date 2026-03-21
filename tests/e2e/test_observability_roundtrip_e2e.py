@@ -165,28 +165,53 @@ class TestObservabilityRoundTrip:
     ) -> None:
         """Verify OTel Collector accepts OTLP spans.
 
-        Uses the global TracerProvider (configured by seed_observability via
-        ensure_telemetry_initialized) to send a test span to the OTel
-        Collector and verifies it's accepted without error.
+        Re-initializes telemetry after seed_observability's final
+        reset_telemetry() call, which leaves the provider as None /
+        ProxyTracerProvider. Sets OTel env vars, initializes an SDK
+        provider, sends a test span, and flushes.
 
         Args:
-            seed_observability: Ensures OTel tracing is initialized.
+            seed_observability: Seeds demo products with OTel tracing.
         """
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
         from opentelemetry import trace as otel_trace
+        from opentelemetry.sdk.trace import TracerProvider as SdkTracerProvider
 
-        provider = otel_trace.get_tracer_provider()
-        tracer = provider.get_tracer("e2e-test")
-        with tracer.start_as_current_span("e2e_observability_test") as span:
-            span.set_attribute("test.type", "observability_roundtrip")
-
-        # Force flush — this will raise if collector rejects
         otel_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-        flush_ok = provider.force_flush(timeout_millis=10_000)
-        assert flush_ok, (
-            f"OTel Collector did not accept span within 10s.\n"
-            f"Endpoint: {otel_endpoint}\n"
-            f"Check collector: kubectl logs -n floe-test -l app.kubernetes.io/name=otel --tail=20"
-        )
+        saved_env: dict[str, str | None] = {
+            "OTEL_EXPORTER_OTLP_ENDPOINT": os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"),
+            "OTEL_EXPORTER_OTLP_INSECURE": os.environ.get("OTEL_EXPORTER_OTLP_INSECURE"),
+        }
+        try:
+            os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = otel_endpoint
+            os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
+
+            ensure_telemetry_initialized()
+
+            provider = otel_trace.get_tracer_provider()
+            assert isinstance(provider, SdkTracerProvider), (
+                f"Expected SdkTracerProvider after re-initialization, "
+                f"got {type(provider).__name__}. "
+                f"ensure_telemetry_initialized() may not have set a real provider."
+            )
+
+            tracer = provider.get_tracer("e2e-test")
+            with tracer.start_as_current_span("e2e_observability_test") as span:
+                span.set_attribute("test.type", "observability_roundtrip")
+
+            flush_ok = provider.force_flush(timeout_millis=10_000)
+            assert flush_ok, (
+                f"OTel Collector did not accept span within 10s.\n"
+                f"Endpoint: {otel_endpoint}\n"
+                f"Check collector: kubectl logs -n floe-test "
+                f"-l app.kubernetes.io/name=otel --tail=20"
+            )
+        finally:
+            for key, value in saved_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
     @pytest.mark.requirement("AC-2.3")
     def test_jaeger_query_api_functional(

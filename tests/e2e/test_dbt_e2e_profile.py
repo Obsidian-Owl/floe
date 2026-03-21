@@ -586,8 +586,8 @@ class TestBackupBehavior:
         assert backup_dev.get("type") == "duckdb", (
             f"Backup for '{product}' does not have original type: duckdb."
         )
-        assert backup_dev.get("path") == ":memory:", (
-            f"Backup for '{product}' does not have original path: :memory:.\n"
+        assert backup_dev.get("path") == "target/demo.duckdb", (
+            f"Backup for '{product}' does not have original path: target/demo.duckdb.\n"
             f"Got: {backup_dev.get('path')!r}. "
             f"Backup appears to be a copy of the E2E profile, not the original."
         )
