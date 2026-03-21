@@ -15,7 +15,9 @@ from __future__ import annotations
 import pytest
 
 from testing.fixtures.services import (
+    _PORT_UNSET,
     SERVICE_DEFAULT_PORTS,
+    ServiceEndpoint,
     _get_effective_port,
     get_effective_port,
 )
@@ -400,3 +402,334 @@ class TestPublicApi:
         """Test that public function also raises ValueError for unknown services."""
         with pytest.raises(ValueError):
             get_effective_port("completely-unknown-service")
+
+
+# ---------------------------------------------------------------------------
+# AC-4: ServiceEndpoint resolves port via __post_init__
+# ---------------------------------------------------------------------------
+
+
+class TestServiceEndpointPortResolution:
+    """Tests for ServiceEndpoint port resolution via __post_init__.
+
+    ServiceEndpoint must accept name-only construction (port omitted),
+    resolving the port from SERVICE_DEFAULT_PORTS or env vars. The sentinel
+    value _PORT_UNSET (-1) triggers resolution when passed explicitly.
+    """
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_sentinel_value_is_negative_one(self) -> None:
+        """Test that _PORT_UNSET sentinel is exactly -1.
+
+        Guards against the sentinel being changed to 0 or None, which
+        would break the resolution logic.
+        """
+        assert _PORT_UNSET == -1
+        assert isinstance(_PORT_UNSET, int)
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_name_only_resolves_from_defaults(self) -> None:
+        """Test that ServiceEndpoint('dagster') resolves port from defaults.
+
+        When port is omitted, __post_init__ must resolve it from
+        SERVICE_DEFAULT_PORTS. Currently this fails because port is a
+        required positional argument with no default.
+        """
+        endpoint = ServiceEndpoint("dagster")
+        assert endpoint.port == 3000
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_name_only_resolves_different_services(self) -> None:
+        """Test that multiple services each resolve to their own default port.
+
+        Guards against a hardcoded return value that always returns 3000.
+        """
+        dagster = ServiceEndpoint("dagster")
+        polaris = ServiceEndpoint("polaris")
+        minio = ServiceEndpoint("minio")
+        postgres = ServiceEndpoint("postgres")
+
+        assert dagster.port == 3000
+        assert polaris.port == 8181
+        assert minio.port == 9000
+        assert postgres.port == 5432
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_explicit_port_preserved(self) -> None:
+        """Test that ServiceEndpoint('dagster', 3100).port == 3100.
+
+        An explicit port must be used as-is, never overridden by defaults.
+        """
+        endpoint = ServiceEndpoint("dagster", 3100)
+        assert endpoint.port == 3100
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_explicit_port_not_overridden_by_default(self) -> None:
+        """Test explicit port differs from default and is preserved.
+
+        A sloppy implementation might always resolve from defaults,
+        ignoring the explicit port. Use a port that differs from the
+        default (3000) to catch this.
+        """
+        endpoint = ServiceEndpoint("dagster", 5555)
+        assert endpoint.port == 5555
+        assert endpoint.port != SERVICE_DEFAULT_PORTS["dagster"]
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_sentinel_triggers_resolution(self) -> None:
+        """Test that ServiceEndpoint('dagster', -1).port == 3000.
+
+        Passing the sentinel value _PORT_UNSET (-1) explicitly must trigger
+        port resolution, NOT store -1 as the port.
+        """
+        endpoint = ServiceEndpoint("dagster", _PORT_UNSET)
+        assert endpoint.port == 3000
+        assert endpoint.port != -1
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_sentinel_minus_one_resolves_multiple_services(self) -> None:
+        """Test sentinel resolution works for different services.
+
+        Guards against sentinel resolution being hardcoded for dagster only.
+        """
+        polaris = ServiceEndpoint("polaris", -1)
+        minio = ServiceEndpoint("minio", -1)
+
+        assert polaris.port == 8181
+        assert minio.port == 9000
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_env_var_overrides_default_resolution(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test env var is respected during name-only construction.
+
+        With DAGSTER_PORT=4000, ServiceEndpoint('dagster') should
+        resolve port to 4000, not the default 3000.
+        """
+        monkeypatch.setenv("DAGSTER_PORT", "4000")
+        endpoint = ServiceEndpoint("dagster")
+        assert endpoint.port == 4000
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_env_var_overrides_sentinel_resolution(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test env var is respected when sentinel is passed explicitly.
+
+        With POLARIS_PORT=9999, ServiceEndpoint('polaris', -1) should
+        resolve port to 9999.
+        """
+        monkeypatch.setenv("POLARIS_PORT", "9999")
+        endpoint = ServiceEndpoint("polaris", -1)
+        assert endpoint.port == 9999
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_explicit_port_not_overridden_by_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that an explicit (non-sentinel) port is NOT overridden by env var.
+
+        When the user provides a real port (not -1), the env var should be
+        irrelevant. The explicit port takes absolute priority.
+        """
+        monkeypatch.setenv("DAGSTER_PORT", "4000")
+        endpoint = ServiceEndpoint("dagster", 3100)
+        assert endpoint.port == 3100
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_unknown_service_raises_valueerror(self) -> None:
+        """Test that ServiceEndpoint('unknown_service') raises ValueError.
+
+        When port is omitted for a service not in SERVICE_DEFAULT_PORTS and
+        with no env var, construction must fail with ValueError.
+        """
+        with pytest.raises(ValueError, match="unknown_service"):
+            ServiceEndpoint("unknown_service")
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_unknown_service_with_explicit_port_succeeds(self) -> None:
+        """Test that ServiceEndpoint('unknown_service', 8080).port == 8080.
+
+        An unknown service name is fine if port is explicitly provided.
+        Resolution is only needed when port is sentinel or omitted.
+        """
+        endpoint = ServiceEndpoint("unknown_service", 8080)
+        assert endpoint.port == 8080
+        assert endpoint.name == "unknown_service"
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_frozen_after_construction(self) -> None:
+        """Test that the dataclass remains frozen=True after __post_init__.
+
+        The frozen constraint must survive the addition of __post_init__.
+        Assigning to .port after construction must raise.
+        """
+        endpoint = ServiceEndpoint("dagster", 3000)
+        with pytest.raises(AttributeError):
+            endpoint.port = 9999  # type: ignore[misc]
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_frozen_after_name_only_construction(self) -> None:
+        """Test frozen is enforced even when port was resolved via __post_init__.
+
+        A common implementation mistake: using object.__setattr__ in
+        __post_init__ but forgetting to re-freeze. Verify that the
+        resolved endpoint is truly immutable.
+        """
+        endpoint = ServiceEndpoint("dagster")
+        with pytest.raises(AttributeError):
+            endpoint.name = "something_else"  # type: ignore[misc]
+        with pytest.raises(AttributeError):
+            endpoint.port = 5555  # type: ignore[misc]
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_namespace_default_preserved(self) -> None:
+        """Test that namespace still defaults to 'floe-test' with name-only construction."""
+        endpoint = ServiceEndpoint("dagster")
+        assert endpoint.namespace == "floe-test"
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_namespace_can_be_overridden_with_name_only(self) -> None:
+        """Test namespace override works with name-only (port-resolving) construction."""
+        endpoint = ServiceEndpoint("dagster", namespace="custom-ns")
+        assert endpoint.namespace == "custom-ns"
+        assert endpoint.port == 3000
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_port_stored_as_integer(self) -> None:
+        """Test that resolved port is stored as int, not string or float."""
+        endpoint = ServiceEndpoint("dagster")
+        assert isinstance(endpoint.port, int)
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_hyphenated_service_resolves(self) -> None:
+        """Test that hyphenated service names resolve correctly.
+
+        'dagster-webserver' and 'otel-collector-grpc' have hyphens that
+        must be handled in both dict lookup and env var construction.
+        """
+        dw = ServiceEndpoint("dagster-webserver")
+        assert dw.port == 3000
+
+        otel = ServiceEndpoint("otel-collector-grpc")
+        assert otel.port == 4317
+
+    @pytest.mark.requirement("env-resilient-AC-4")
+    def test_env_var_for_hyphenated_service(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test env var override for hyphenated service during resolution.
+
+        DAGSTER_WEBSERVER_PORT should override dagster-webserver default.
+        """
+        monkeypatch.setenv("DAGSTER_WEBSERVER_PORT", "6000")
+        endpoint = ServiceEndpoint("dagster-webserver")
+        assert endpoint.port == 6000
+
+
+# ---------------------------------------------------------------------------
+# AC-5: ServiceEndpoint.url property
+# ---------------------------------------------------------------------------
+
+
+class TestServiceEndpointUrl:
+    """Tests for ServiceEndpoint.url property.
+
+    The url property must return 'http://{host}:{port}' where host
+    comes from get_effective_host and port is the resolved port.
+    """
+
+    @pytest.mark.requirement("env-resilient-AC-5")
+    def test_url_property_exists(self) -> None:
+        """Test that ServiceEndpoint has a url property.
+
+        Currently ServiceEndpoint has no url attribute, so this fails.
+        """
+        endpoint = ServiceEndpoint("dagster", 3000)
+        _ = endpoint.url  # Should not raise AttributeError
+
+    @pytest.mark.requirement("env-resilient-AC-5")
+    def test_url_starts_with_http(self) -> None:
+        """Test that url starts with 'http://'."""
+        endpoint = ServiceEndpoint("dagster", 3000)
+        assert endpoint.url.startswith("http://")
+
+    @pytest.mark.requirement("env-resilient-AC-5")
+    def test_url_contains_port(self) -> None:
+        """Test that url contains the correct port number."""
+        endpoint = ServiceEndpoint("dagster", 3000)
+        assert endpoint.url.endswith(":3000")
+
+    @pytest.mark.requirement("env-resilient-AC-5")
+    def test_url_contains_different_port(self) -> None:
+        """Test url with a non-default port to guard against hardcoding.
+
+        If url always returns ':3000' regardless, this catches it.
+        """
+        endpoint = ServiceEndpoint("polaris", 8181)
+        assert ":8181" in endpoint.url
+        assert endpoint.url.endswith(":8181")
+
+    @pytest.mark.requirement("env-resilient-AC-5")
+    def test_url_format_matches_spec(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that url returns exactly 'http://{host}:{port}'.
+
+        Forces localhost via env var so we get a deterministic host value.
+        """
+        monkeypatch.setenv("INTEGRATION_TEST_HOST", "localhost")
+        endpoint = ServiceEndpoint("dagster", 3000)
+        assert endpoint.url == "http://localhost:3000"
+
+    @pytest.mark.requirement("env-resilient-AC-5")
+    def test_url_uses_get_effective_host(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that url uses get_effective_host for the host portion.
+
+        Set a service-specific host override and verify it appears in url.
+        """
+        monkeypatch.setenv("POLARIS_HOST", "my-custom-host")
+        endpoint = ServiceEndpoint("polaris", 8181)
+        assert endpoint.url == "http://my-custom-host:8181"
+
+    @pytest.mark.requirement("env-resilient-AC-5")
+    def test_url_with_k8s_host(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test url with K8s DNS hostname.
+
+        When INTEGRATION_TEST_HOST=k8s, host should be the FQDN.
+        """
+        monkeypatch.setenv("INTEGRATION_TEST_HOST", "k8s")
+        endpoint = ServiceEndpoint("dagster", 3000)
+        assert endpoint.url == "http://dagster.floe-test.svc.cluster.local:3000"
+
+    @pytest.mark.requirement("env-resilient-AC-5")
+    def test_url_with_resolved_port(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test url works correctly when port was resolved via __post_init__.
+
+        Combines AC-4 (port resolution) with AC-5 (url property).
+        """
+        monkeypatch.setenv("INTEGRATION_TEST_HOST", "localhost")
+        endpoint = ServiceEndpoint("polaris")
+        assert endpoint.url == "http://localhost:8181"
+
+    @pytest.mark.requirement("env-resilient-AC-5")
+    def test_url_is_property_not_method(self) -> None:
+        """Test that url is a property (no parentheses needed), not a method.
+
+        Accessing .url should return a string directly, not a callable.
+        """
+        endpoint = ServiceEndpoint("dagster", 3000)
+        result = endpoint.url
+        assert isinstance(result, str)
+
+    @pytest.mark.requirement("env-resilient-AC-5")
+    def test_url_with_custom_namespace(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test url reflects custom namespace in K8s DNS host.
+
+        When using K8s host resolution, the namespace should appear in the FQDN.
+        """
+        monkeypatch.setenv("INTEGRATION_TEST_HOST", "k8s")
+        endpoint = ServiceEndpoint("dagster", 3000, namespace="production")
+        assert endpoint.url == "http://dagster.production.svc.cluster.local:3000"
+
+    @pytest.mark.requirement("env-resilient-AC-5")
+    def test_url_no_trailing_slash(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test url does not include a trailing slash.
+
+        Consumers will append paths, so a trailing slash would cause
+        double-slash issues like 'http://host:port//api/v1'.
+        """
+        monkeypatch.setenv("INTEGRATION_TEST_HOST", "localhost")
+        endpoint = ServiceEndpoint("dagster", 3000)
+        assert not endpoint.url.endswith("/")

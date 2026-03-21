@@ -178,15 +178,24 @@ def _can_resolve_host(hostname: str) -> bool:
 class ServiceEndpoint:
     """Represents a K8s service endpoint.
 
+    When ``port`` is omitted (or set to the sentinel ``_PORT_UNSET``), it is
+    resolved automatically via :func:`_get_effective_port` using the standard
+    precedence chain (env var → dict default).
+
     Attributes:
         name: Service name (e.g., "polaris", "postgres")
-        port: Service port number
+        port: Service port number.  Defaults to automatic resolution.
         namespace: K8s namespace. Defaults to "floe-test"
     """
 
     name: str
-    port: int
+    port: int = _PORT_UNSET
     namespace: str = "floe-test"
+
+    def __post_init__(self) -> None:
+        """Resolve port from env/defaults when the sentinel is used."""
+        if self.port == _PORT_UNSET:
+            object.__setattr__(self, "port", _get_effective_port(self.name))
 
     @property
     def host(self) -> str:
@@ -196,6 +205,11 @@ class ServiceEndpoint:
         on host (e.g., with Kind NodePort mappings).
         """
         return _get_effective_host(self.name, self.namespace)
+
+    @property
+    def url(self) -> str:
+        """Construct ``http://{host}:{port}`` URL."""
+        return f"http://{self.host}:{self.port}"
 
     @property
     def k8s_host(self) -> str:
