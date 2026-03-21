@@ -28,6 +28,98 @@ import os
 import socket
 from dataclasses import dataclass
 
+# ---------------------------------------------------------------------------
+# Port resolution constants and utilities
+# ---------------------------------------------------------------------------
+
+SERVICE_DEFAULT_PORTS: dict[str, int] = {
+    "dagster-webserver": 3000,
+    "dagster": 3000,
+    "polaris": 8181,
+    "polaris-management": 8182,
+    "minio": 9000,
+    "minio-console": 9001,
+    "postgres": 5432,
+    "jaeger-query": 16686,
+    "otel-collector-grpc": 4317,
+    "otel-collector-http": 4318,
+    "marquez": 5100,
+    "oci-registry": 5000,
+    "registry": 5000,
+}
+"""Default ports for well-known floe platform services."""
+
+_PORT_UNSET: int = -1
+"""Sentinel value indicating a port has not been set."""
+
+
+def _get_effective_port(service_name: str, default: int | None = None) -> int:
+    """Determine the effective port for a service.
+
+    Resolves port using the following precedence:
+      1. Environment variable ``{SERVICE_NAME}_PORT`` (hyphens → underscores, uppercase)
+      2. Explicit ``default`` parameter (if not None)
+      3. ``SERVICE_DEFAULT_PORTS`` lookup
+      4. ``ValueError`` if none of the above applies
+
+    Args:
+        service_name: Name of the service (e.g., ``"polaris"``).
+        default: Optional caller-supplied default port.
+
+    Returns:
+        Resolved port as an integer.
+
+    Raises:
+        ValueError: If the env var contains a non-integer value, or if no
+            port can be determined.
+    """
+    env_key = f"{service_name.upper().replace('-', '_')}_PORT"
+    env_val = os.environ.get(env_key)
+    if env_val is not None and env_val != "":
+        try:
+            return int(env_val)
+        except ValueError:
+            raise ValueError(
+                f"Invalid port value for {env_key}={env_val!r}: must be an integer"
+            ) from None
+    if default is not None:
+        return default
+    if service_name in SERVICE_DEFAULT_PORTS:
+        return SERVICE_DEFAULT_PORTS[service_name]
+    known = ", ".join(sorted(SERVICE_DEFAULT_PORTS.keys()))
+    raise ValueError(
+        f"No port for service {service_name!r}: "
+        f"set {env_key} env var or use a known service ({known})"
+    )
+
+
+def get_effective_port(service_name: str, default: int | None = None) -> int:
+    """Get the effective port for a service.
+
+    Public wrapper around :func:`_get_effective_port`.  Resolves port using
+    the following precedence:
+      1. Environment variable ``{SERVICE_NAME}_PORT``
+      2. Explicit ``default`` parameter
+      3. ``SERVICE_DEFAULT_PORTS`` lookup
+      4. ``ValueError`` if none of the above applies
+
+    Args:
+        service_name: Name of the service (e.g., ``"polaris"``).
+        default: Optional caller-supplied default port.
+
+    Returns:
+        Resolved port as an integer.
+
+    Raises:
+        ValueError: If the env var contains a non-integer value, or if no
+            port can be determined.
+
+    Example:
+        port = get_effective_port("polaris")
+        uri = f"http://localhost:{port}/api/catalog"
+    """
+    return _get_effective_port(service_name, default)
+
 
 def _get_effective_host(service_name: str, namespace: str) -> str:
     """Determine the effective host for a service.
@@ -266,9 +358,11 @@ def get_effective_host(
 
 # Module exports
 __all__ = [
+    "SERVICE_DEFAULT_PORTS",
     "ServiceEndpoint",
     "ServiceUnavailableError",
     "check_infrastructure",
     "check_service_health",
     "get_effective_host",
+    "get_effective_port",
 ]
