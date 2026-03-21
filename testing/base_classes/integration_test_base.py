@@ -32,6 +32,7 @@ from testing.fixtures.services import (
     check_infrastructure,
     check_service_health,
     get_effective_host,
+    get_effective_port,
 )
 
 
@@ -64,7 +65,7 @@ class IntegrationTestBase:
     """
 
     # Class attributes - override in subclasses
-    required_services: ClassVar[list[tuple[str, int]]] = []
+    required_services: ClassVar[list[tuple[str, int] | str]] = []
     namespace: ClassVar[str] = "floe-test"
 
     # Instance attributes for tracking resources
@@ -128,7 +129,7 @@ class IntegrationTestBase:
     def check_infrastructure(
         self,
         service_name: str,
-        port: int,
+        port: int | None = None,
         namespace: str | None = None,
     ) -> None:
         """Verify a specific service is available.
@@ -138,7 +139,8 @@ class IntegrationTestBase:
 
         Args:
             service_name: Name of the K8s service (e.g., "polaris").
-            port: Port number to check.
+            port: Port number to check. When ``None``, resolves via
+                ``get_effective_port(service_name)`` (env var → defaults).
             namespace: K8s namespace. Defaults to self.namespace.
 
         Raises:
@@ -147,13 +149,15 @@ class IntegrationTestBase:
         Example:
             def test_with_dagster(self) -> None:
                 self.check_infrastructure("dagster-webserver", 3000)
-                # Test implementation...
+                # Or let the port resolve automatically:
+                self.check_infrastructure("dagster-webserver")
         """
         effective_namespace = namespace or self.namespace
+        effective_port = port if port is not None else get_effective_port(service_name)
 
-        if not check_service_health(service_name, port, effective_namespace):
+        if not check_service_health(service_name, effective_port, effective_namespace):
             pytest.fail(
-                f"Service {service_name}:{port} not available in {effective_namespace}\n"
+                f"Service {service_name}:{effective_port} not available in {effective_namespace}\n"
                 f"Start infrastructure with: make kind-up"
             )
 

@@ -765,7 +765,7 @@ class TestCheckInfrastructureMixedFormats:
         # Must not raise
         result = check_infrastructure(
             ["polaris"],
-            raise_on_failure=False,  # type: ignore[list-item]
+            raise_on_failure=False,
         )
         assert isinstance(result, dict)
 
@@ -778,7 +778,7 @@ class TestCheckInfrastructureMixedFormats:
         )
         result = check_infrastructure(
             ["polaris"],
-            raise_on_failure=False,  # type: ignore[list-item]
+            raise_on_failure=False,
         )
         assert "polaris" in result
 
@@ -803,7 +803,7 @@ class TestCheckInfrastructureMixedFormats:
         )
         check_infrastructure(
             ["polaris"],
-            raise_on_failure=False,  # type: ignore[list-item]
+            raise_on_failure=False,
         )
         assert len(captured_calls) == 1
         _host, port = captured_calls[0]
@@ -828,7 +828,7 @@ class TestCheckInfrastructureMixedFormats:
         monkeypatch.setenv("POLARIS_PORT", "9999")
         check_infrastructure(
             ["polaris"],
-            raise_on_failure=False,  # type: ignore[list-item]
+            raise_on_failure=False,
         )
         assert len(captured_calls) == 1
         _host, port = captured_calls[0]
@@ -881,7 +881,7 @@ class TestCheckInfrastructureMixedFormats:
             lambda host, port, timeout: True,
         )
         result = check_infrastructure(
-            [("dagster", 3100), "polaris"],  # type: ignore[list-item]
+            [("dagster", 3100), "polaris"],
             raise_on_failure=False,
         )
         assert set(result.keys()) == {"dagster", "polaris"}
@@ -904,7 +904,7 @@ class TestCheckInfrastructureMixedFormats:
             capturing_health_check,
         )
         check_infrastructure(
-            [("dagster", 3100), "polaris"],  # type: ignore[list-item]
+            [("dagster", 3100), "polaris"],
             raise_on_failure=False,
         )
         assert len(captured_calls) == 2
@@ -949,7 +949,7 @@ class TestCheckInfrastructureMixedFormats:
             alternating_health_check,
         )
         result = check_infrastructure(
-            [("polaris", 8181), "polaris"],  # type: ignore[list-item]
+            [("polaris", 8181), "polaris"],
             raise_on_failure=False,
         )
         # Later entry (True) should overwrite earlier (False)
@@ -965,7 +965,7 @@ class TestCheckInfrastructureMixedFormats:
             lambda host, port, timeout: True,
         )
         result = check_infrastructure(
-            [("polaris", 8181), "polaris"],  # type: ignore[list-item]
+            [("polaris", 8181), "polaris"],
             raise_on_failure=False,
         )
         assert len(result) == 1
@@ -986,7 +986,7 @@ class TestCheckInfrastructureMixedFormats:
         )
         result = check_infrastructure(
             ["polaris"],
-            raise_on_failure=False,  # type: ignore[list-item]
+            raise_on_failure=False,
         )
         assert result["polaris"] is False
 
@@ -1001,7 +1001,7 @@ class TestCheckInfrastructureMixedFormats:
             lambda host, port, timeout: True,
         )
         result = check_infrastructure(
-            ["polaris", "minio", "postgres"],  # type: ignore[list-item]
+            ["polaris", "minio", "postgres"],
             raise_on_failure=False,
         )
         assert set(result.keys()) == {"polaris", "minio", "postgres"}
@@ -1024,7 +1024,7 @@ class TestCheckInfrastructureMixedFormats:
             capturing_health_check,
         )
         check_infrastructure(
-            ["polaris", "minio", "postgres"],  # type: ignore[list-item]
+            ["polaris", "minio", "postgres"],
             raise_on_failure=False,
         )
         assert 8181 in captured_ports, "polaris should resolve to port 8181"
@@ -1044,7 +1044,7 @@ class TestCheckInfrastructureMixedFormats:
         )
         with pytest.raises(ServiceUnavailableError):
             check_infrastructure(
-                ["polaris"],  # type: ignore[list-item]
+                ["polaris"],
                 raise_on_failure=True,
             )
 
@@ -1064,6 +1064,415 @@ class TestCheckInfrastructureMixedFormats:
         monkeypatch.delenv("TOTALLY_UNKNOWN_SERVICE_PORT", raising=False)
         with pytest.raises(ValueError, match="totally-unknown-service"):
             check_infrastructure(
-                ["totally-unknown-service"],  # type: ignore[list-item]
+                ["totally-unknown-service"],
                 raise_on_failure=False,
             )
+
+
+# ---------------------------------------------------------------------------
+# AC-7: IntegrationTestBase port resolution
+# ---------------------------------------------------------------------------
+
+
+class TestIntegrationTestBasePortResolution:
+    """Tests for IntegrationTestBase accepting string-format required_services
+    and instance check_infrastructure with optional port parameter.
+
+    These tests verify:
+    - required_services accepts bare strings (not just tuples)
+    - check_infrastructure(service_name) works without explicit port
+    - Port resolution uses get_effective_port when port is omitted
+    - Backward compatibility: tuple format and explicit port still work
+    """
+
+    @pytest.mark.requirement("env-resilient-AC-7")
+    def test_string_required_services_setup_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that a subclass with required_services = ['polaris'] passes setup_method.
+
+        The module-level check_infrastructure already handles strings, so this
+        should work once the ClassVar type hint is updated to accept strings.
+        """
+        from testing.base_classes.integration_test_base import IntegrationTestBase
+
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            lambda host, port, timeout: True,
+        )
+
+        class MyTest(IntegrationTestBase):
+            required_services = ["polaris"]
+
+        instance = MyTest()
+        # Should not raise -- setup_method delegates to module check_infrastructure
+        instance.setup_method()
+
+    @pytest.mark.requirement("env-resilient-AC-7")
+    def test_string_required_services_resolves_correct_port(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that string-format required_services resolves port from defaults.
+
+        When required_services = ['polaris'], setup_method should call
+        check_infrastructure which resolves polaris to port 8181.
+        """
+        from testing.base_classes.integration_test_base import IntegrationTestBase
+
+        captured_ports: list[int] = []
+
+        def capturing_health_check(host: str, port: int, timeout: float) -> bool:
+            captured_ports.append(port)
+            return True
+
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            capturing_health_check,
+        )
+
+        class MyTest(IntegrationTestBase):
+            required_services = ["polaris"]
+
+        instance = MyTest()
+        instance.setup_method()
+
+        assert 8181 in captured_ports, (
+            "String 'polaris' should resolve to port 8181 via SERVICE_DEFAULT_PORTS"
+        )
+
+    @pytest.mark.requirement("env-resilient-AC-7")
+    def test_tuple_required_services_still_works(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test backward compat: required_services = [('polaris', 8181)] still works.
+
+        Ensures the change to accept strings does not break existing tuple format.
+        """
+        from testing.base_classes.integration_test_base import IntegrationTestBase
+
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            lambda host, port, timeout: True,
+        )
+
+        class MyTest(IntegrationTestBase):
+            required_services = [("polaris", 8181)]
+
+        instance = MyTest()
+        # Must not raise
+        instance.setup_method()
+
+    @pytest.mark.requirement("env-resilient-AC-7")
+    def test_mixed_required_services(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test mixed format: required_services = [('dagster', 3100), 'polaris'].
+
+        Both tuple and string entries must be accepted in a single list.
+        """
+        from testing.base_classes.integration_test_base import IntegrationTestBase
+
+        captured_ports: list[int] = []
+
+        def capturing_health_check(host: str, port: int, timeout: float) -> bool:
+            captured_ports.append(port)
+            return True
+
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            capturing_health_check,
+        )
+
+        class MyTest(IntegrationTestBase):
+            required_services = [("dagster", 3100), "polaris"]
+
+        instance = MyTest()
+        instance.setup_method()
+
+        assert 3100 in captured_ports, "Explicit tuple port 3100 should be checked"
+        assert 8181 in captured_ports, "String 'polaris' should resolve to 8181"
+
+    @pytest.mark.requirement("env-resilient-AC-7")
+    def test_instance_check_infrastructure_no_port(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test self.check_infrastructure('polaris') without explicit port.
+
+        This is the core AC-7 requirement: calling check_infrastructure with
+        only a service name should resolve the port via get_effective_port.
+        Currently FAILS because port: int is a required parameter.
+        """
+        from testing.base_classes.integration_test_base import IntegrationTestBase
+
+        monkeypatch.setattr(
+            "testing.fixtures.services._tcp_health_check",
+            lambda host, port, timeout: True,
+        )
+
+        class MyTest(IntegrationTestBase):
+            required_services = []
+
+        instance = MyTest()
+        instance.setup_method()
+
+        # Must not raise TypeError for missing 'port' argument
+        instance.check_infrastructure("polaris")
+
+    @pytest.mark.requirement("env-resilient-AC-7")
+    def test_instance_check_infrastructure_no_port_resolves_8181(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test self.check_infrastructure('polaris') resolves port to 8181.
+
+        When port is omitted, the method must use get_effective_port to
+        determine the correct port. For polaris, that's 8181.
+        """
+        from testing.base_classes.integration_test_base import IntegrationTestBase
+
+        captured_ports: list[int] = []
+
+        def capturing_health_check(
+            service_name: str,
+            port: int,
+            namespace: str,
+            timeout: float = 5.0,
+        ) -> bool:
+            captured_ports.append(port)
+            return True
+
+        monkeypatch.setattr(
+            "testing.base_classes.integration_test_base.check_service_health",
+            capturing_health_check,
+        )
+
+        class MyTest(IntegrationTestBase):
+            required_services = []
+
+        instance = MyTest()
+        instance.setup_method()
+
+        instance.check_infrastructure("polaris")
+
+        assert len(captured_ports) == 1
+        assert captured_ports[0] == 8181, (
+            "check_infrastructure('polaris') must resolve port to 8181"
+        )
+
+    @pytest.mark.requirement("env-resilient-AC-7")
+    def test_instance_check_infrastructure_no_port_different_services(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that port resolution works for multiple services, not just polaris.
+
+        Guards against a hardcoded 8181 return when port is omitted.
+        """
+        from testing.base_classes.integration_test_base import IntegrationTestBase
+
+        captured_calls: list[tuple[str, int]] = []
+
+        def capturing_health_check(
+            service_name: str,
+            port: int,
+            namespace: str,
+            timeout: float = 5.0,
+        ) -> bool:
+            captured_calls.append((service_name, port))
+            return True
+
+        monkeypatch.setattr(
+            "testing.base_classes.integration_test_base.check_service_health",
+            capturing_health_check,
+        )
+
+        class MyTest(IntegrationTestBase):
+            required_services = []
+
+        instance = MyTest()
+        instance.setup_method()
+
+        instance.check_infrastructure("polaris")
+        instance.check_infrastructure("minio")
+        instance.check_infrastructure("postgres")
+
+        assert len(captured_calls) == 3
+        ports_by_service = dict(captured_calls)
+        assert ports_by_service["polaris"] == 8181
+        assert ports_by_service["minio"] == 9000
+        assert ports_by_service["postgres"] == 5432
+
+    @pytest.mark.requirement("env-resilient-AC-7")
+    def test_instance_check_infrastructure_explicit_port_still_works(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test backward compat: self.check_infrastructure('polaris', 8181) still works.
+
+        The explicit port parameter must continue to be accepted and used.
+        """
+        from testing.base_classes.integration_test_base import IntegrationTestBase
+
+        captured_ports: list[int] = []
+
+        def capturing_health_check(
+            service_name: str,
+            port: int,
+            namespace: str,
+            timeout: float = 5.0,
+        ) -> bool:
+            captured_ports.append(port)
+            return True
+
+        monkeypatch.setattr(
+            "testing.base_classes.integration_test_base.check_service_health",
+            capturing_health_check,
+        )
+
+        class MyTest(IntegrationTestBase):
+            required_services = []
+
+        instance = MyTest()
+        instance.setup_method()
+
+        instance.check_infrastructure("polaris", 8181)
+
+        assert captured_ports == [8181]
+
+    @pytest.mark.requirement("env-resilient-AC-7")
+    def test_instance_check_infrastructure_explicit_port_overrides_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that explicit port 7777 is used, not the default 8181.
+
+        Guards against implementation that ignores the port parameter and
+        always resolves from defaults.
+        """
+        from testing.base_classes.integration_test_base import IntegrationTestBase
+
+        captured_ports: list[int] = []
+
+        def capturing_health_check(
+            service_name: str,
+            port: int,
+            namespace: str,
+            timeout: float = 5.0,
+        ) -> bool:
+            captured_ports.append(port)
+            return True
+
+        monkeypatch.setattr(
+            "testing.base_classes.integration_test_base.check_service_health",
+            capturing_health_check,
+        )
+
+        class MyTest(IntegrationTestBase):
+            required_services = []
+
+        instance = MyTest()
+        instance.setup_method()
+
+        instance.check_infrastructure("polaris", 7777)
+
+        assert captured_ports == [7777], "Explicit port 7777 must be used, not default 8181"
+
+    @pytest.mark.requirement("env-resilient-AC-7")
+    def test_instance_check_infrastructure_no_port_env_var_override(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that POLARIS_PORT=9999 is used when port is omitted.
+
+        With env var set, check_infrastructure('polaris') should resolve to
+        port 9999 via get_effective_port, not the default 8181.
+        """
+        from testing.base_classes.integration_test_base import IntegrationTestBase
+
+        monkeypatch.setenv("POLARIS_PORT", "9999")
+
+        captured_ports: list[int] = []
+
+        def capturing_health_check(
+            service_name: str,
+            port: int,
+            namespace: str,
+            timeout: float = 5.0,
+        ) -> bool:
+            captured_ports.append(port)
+            return True
+
+        monkeypatch.setattr(
+            "testing.base_classes.integration_test_base.check_service_health",
+            capturing_health_check,
+        )
+
+        class MyTest(IntegrationTestBase):
+            required_services = []
+
+        instance = MyTest()
+        instance.setup_method()
+
+        instance.check_infrastructure("polaris")
+
+        assert len(captured_ports) == 1
+        assert captured_ports[0] == 9999, (
+            "With POLARIS_PORT=9999, check_infrastructure('polaris') must use 9999"
+        )
+
+    @pytest.mark.requirement("env-resilient-AC-7")
+    def test_instance_check_infrastructure_namespace_passthrough(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that namespace parameter is still forwarded when port is omitted.
+
+        check_infrastructure('polaris', namespace='custom-ns') with no port
+        must forward 'custom-ns' to check_service_health.
+        """
+        from testing.base_classes.integration_test_base import IntegrationTestBase
+
+        captured_namespaces: list[str] = []
+
+        def capturing_health_check(
+            service_name: str,
+            port: int,
+            namespace: str,
+            timeout: float = 5.0,
+        ) -> bool:
+            captured_namespaces.append(namespace)
+            return True
+
+        monkeypatch.setattr(
+            "testing.base_classes.integration_test_base.check_service_health",
+            capturing_health_check,
+        )
+
+        class MyTest(IntegrationTestBase):
+            required_services = []
+
+        instance = MyTest()
+        instance.setup_method()
+
+        instance.check_infrastructure("polaris", namespace="custom-ns")
+
+        assert captured_namespaces == ["custom-ns"]
+
+    @pytest.mark.requirement("env-resilient-AC-7")
+    def test_instance_check_infrastructure_fails_on_unhealthy_service(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that check_infrastructure still calls pytest.fail when service is down.
+
+        Port resolution must not break the failure behavior. When port is
+        omitted and service is unhealthy, pytest.fail must be called.
+        """
+        from testing.base_classes.integration_test_base import IntegrationTestBase
+
+        def unhealthy_check(
+            service_name: str,
+            port: int,
+            namespace: str,
+            timeout: float = 5.0,
+        ) -> bool:
+            return False
+
+        monkeypatch.setattr(
+            "testing.base_classes.integration_test_base.check_service_health",
+            unhealthy_check,
+        )
+
+        class MyTest(IntegrationTestBase):
+            required_services = []
+
+        instance = MyTest()
+        instance.setup_method()
+
+        with pytest.raises(pytest.fail.Exception, match="polaris"):
+            instance.check_infrastructure("polaris")
