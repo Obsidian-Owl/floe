@@ -1476,3 +1476,268 @@ class TestIntegrationTestBasePortResolution:
 
         with pytest.raises(pytest.fail.Exception, match="polaris"):
             instance.check_infrastructure("polaris")
+
+
+# ---------------------------------------------------------------------------
+# AC-8: test-e2e.sh canonical env var exports
+# ---------------------------------------------------------------------------
+
+
+class TestShellEnvVarExports:
+    """Tests for canonical env var exports in testing/ci/test-e2e.sh.
+
+    After port-forward setup and before pytest invocation, test-e2e.sh must
+    export DAGSTER_WEBSERVER_PORT, DAGSTER_PORT, and MARQUEZ_PORT so they
+    propagate to the pytest child process. These are static content tests
+    that read the shell script as text and verify the correct export lines
+    exist in the correct order.
+    """
+
+    @pytest.fixture()
+    def script_content(self) -> str:
+        """Read the test-e2e.sh script content."""
+        from pathlib import Path
+
+        script_path = Path(__file__).resolve().parents[3] / "testing" / "ci" / "test-e2e.sh"
+        return script_path.read_text()
+
+    @pytest.fixture()
+    def script_lines(self, script_content: str) -> list[str]:
+        """Split script content into lines for positional analysis."""
+        return script_content.splitlines()
+
+    # --- Existence tests ---
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_export_dagster_webserver_port_exists(self, script_content: str) -> None:
+        """Test that 'export DAGSTER_WEBSERVER_PORT' appears in the script.
+
+        Without this export, the pytest child process will not see the
+        DAGSTER_WEBSERVER_PORT env var set by the shell script.
+        """
+        assert "export DAGSTER_WEBSERVER_PORT" in script_content
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_export_dagster_port_exists(self, script_content: str) -> None:
+        """Test that 'export DAGSTER_PORT' appears in the script.
+
+        This must be a distinct line from DAGSTER_WEBSERVER_PORT.
+        """
+        assert "export DAGSTER_PORT" in script_content
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_export_dagster_port_is_distinct_from_webserver(self, script_lines: list[str]) -> None:
+        """Test that DAGSTER_PORT and DAGSTER_WEBSERVER_PORT are on separate lines.
+
+        A sloppy implementation might only export DAGSTER_WEBSERVER_PORT and
+        claim DAGSTER_PORT is 'covered'. They must be distinct export lines
+        so both env var names are available to the pytest child process.
+        """
+        dagster_port_lines = [
+            line.strip() for line in script_lines if line.strip().startswith("export DAGSTER_PORT=")
+        ]
+        dagster_webserver_lines = [
+            line.strip()
+            for line in script_lines
+            if line.strip().startswith("export DAGSTER_WEBSERVER_PORT=")
+        ]
+        assert len(dagster_port_lines) >= 1, "No 'export DAGSTER_PORT=...' line found"
+        assert len(dagster_webserver_lines) >= 1, (
+            "No 'export DAGSTER_WEBSERVER_PORT=...' line found"
+        )
+        # They must be different lines (DAGSTER_PORT= must not be a substring
+        # match of DAGSTER_WEBSERVER_PORT=)
+        assert dagster_port_lines[0] != dagster_webserver_lines[0], (
+            "DAGSTER_PORT and DAGSTER_WEBSERVER_PORT should be separate export lines"
+        )
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_export_marquez_port_exists(self, script_content: str) -> None:
+        """Test that 'export MARQUEZ_PORT' appears in the script."""
+        assert "export MARQUEZ_PORT" in script_content
+
+    # --- Use `export` (not plain assignment) ---
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_dagster_webserver_port_uses_export(self, script_lines: list[str]) -> None:
+        """Test that DAGSTER_WEBSERVER_PORT uses 'export', not plain assignment.
+
+        A plain 'DAGSTER_WEBSERVER_PORT=...' (without export) would set the
+        var only in the shell, not propagating to the pytest child process.
+        """
+        export_lines = [
+            line.strip()
+            for line in script_lines
+            if line.strip().startswith("export DAGSTER_WEBSERVER_PORT=")
+        ]
+        assert len(export_lines) >= 1, "DAGSTER_WEBSERVER_PORT must be set with 'export'"
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_dagster_port_uses_export(self, script_lines: list[str]) -> None:
+        """Test that DAGSTER_PORT uses 'export', not plain assignment."""
+        export_lines = [
+            line.strip() for line in script_lines if line.strip().startswith("export DAGSTER_PORT=")
+        ]
+        assert len(export_lines) >= 1, "DAGSTER_PORT must be set with 'export'"
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_marquez_port_uses_export(self, script_lines: list[str]) -> None:
+        """Test that MARQUEZ_PORT uses 'export', not plain assignment."""
+        export_lines = [
+            line.strip() for line in script_lines if line.strip().startswith("export MARQUEZ_PORT=")
+        ]
+        assert len(export_lines) >= 1, "MARQUEZ_PORT must be set with 'export'"
+
+    # --- Source variable correctness ---
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_dagster_webserver_port_uses_dagster_host_port(self, script_lines: list[str]) -> None:
+        """Test that DAGSTER_WEBSERVER_PORT derives from DAGSTER_HOST_PORT.
+
+        Must not be hardcoded to a port number like '3100'. It must reference
+        the DAGSTER_HOST_PORT variable so users can override the port.
+        """
+        export_lines = [
+            line.strip()
+            for line in script_lines
+            if line.strip().startswith("export DAGSTER_WEBSERVER_PORT=")
+        ]
+        assert len(export_lines) >= 1
+        assert "DAGSTER_HOST_PORT" in export_lines[0], (
+            "DAGSTER_WEBSERVER_PORT must reference DAGSTER_HOST_PORT, not hardcode a port"
+        )
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_dagster_port_uses_dagster_host_port(self, script_lines: list[str]) -> None:
+        """Test that DAGSTER_PORT derives from DAGSTER_HOST_PORT.
+
+        Must not be hardcoded to a port number like '3100'.
+        """
+        export_lines = [
+            line.strip() for line in script_lines if line.strip().startswith("export DAGSTER_PORT=")
+        ]
+        assert len(export_lines) >= 1
+        assert "DAGSTER_HOST_PORT" in export_lines[0], (
+            "DAGSTER_PORT must reference DAGSTER_HOST_PORT, not hardcode a port"
+        )
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_marquez_port_uses_marquez_host_port_with_default(
+        self, script_lines: list[str]
+    ) -> None:
+        """Test that MARQUEZ_PORT derives from MARQUEZ_HOST_PORT with default 5100.
+
+        The export must reference MARQUEZ_HOST_PORT and provide a fallback
+        default of 5100, e.g. '${MARQUEZ_HOST_PORT:-5100}'.
+        """
+        export_lines = [
+            line.strip() for line in script_lines if line.strip().startswith("export MARQUEZ_PORT=")
+        ]
+        assert len(export_lines) >= 1
+        line = export_lines[0]
+        assert "MARQUEZ_HOST_PORT" in line, "MARQUEZ_PORT must reference MARQUEZ_HOST_PORT"
+        assert "5100" in line, "MARQUEZ_PORT must have default 5100"
+
+    # --- Ordering: after port-forward setup, before pytest ---
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_exports_after_port_forwards_established(self, script_lines: list[str]) -> None:
+        """Test that all exports appear AFTER 'Port-forwards established' message.
+
+        The exports must come after port-forward setup is complete, otherwise
+        the DAGSTER_HOST_PORT variable may not be fully resolved yet.
+        """
+        port_forwards_line: int | None = None
+        export_lines_idx: list[int] = []
+
+        for idx, line in enumerate(script_lines):
+            if "Port-forwards established" in line:
+                port_forwards_line = idx
+            if line.strip().startswith("export DAGSTER_WEBSERVER_PORT="):
+                export_lines_idx.append(idx)
+            if line.strip().startswith("export DAGSTER_PORT="):
+                export_lines_idx.append(idx)
+            if line.strip().startswith("export MARQUEZ_PORT="):
+                export_lines_idx.append(idx)
+
+        assert port_forwards_line is not None, (
+            "Script must contain 'Port-forwards established' message"
+        )
+        assert len(export_lines_idx) >= 3, f"Expected 3 export lines, found {len(export_lines_idx)}"
+        for idx in export_lines_idx:
+            assert idx > port_forwards_line, (
+                f"Export at line {idx + 1} must come after 'Port-forwards established' "
+                f"at line {port_forwards_line + 1}"
+            )
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_exports_before_pytest_invocation(self, script_lines: list[str]) -> None:
+        """Test that all exports appear BEFORE 'uv run pytest' invocation.
+
+        The exports must be set before pytest runs, otherwise the pytest
+        child process will not see them.
+        """
+        pytest_line: int | None = None
+        export_lines_idx: list[int] = []
+
+        for idx, line in enumerate(script_lines):
+            if "uv run pytest" in line and pytest_line is None:
+                pytest_line = idx
+            if line.strip().startswith("export DAGSTER_WEBSERVER_PORT="):
+                export_lines_idx.append(idx)
+            if line.strip().startswith("export DAGSTER_PORT="):
+                export_lines_idx.append(idx)
+            if line.strip().startswith("export MARQUEZ_PORT="):
+                export_lines_idx.append(idx)
+
+        assert pytest_line is not None, "Script must contain 'uv run pytest' invocation"
+        assert len(export_lines_idx) >= 3, f"Expected 3 export lines, found {len(export_lines_idx)}"
+        for idx in export_lines_idx:
+            assert idx < pytest_line, (
+                f"Export at line {idx + 1} must come before 'uv run pytest' "
+                f"at line {pytest_line + 1}"
+            )
+
+    # --- Guard against hardcoded values ---
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_dagster_exports_not_hardcoded_to_3100(self, script_lines: list[str]) -> None:
+        """Test that DAGSTER_WEBSERVER_PORT and DAGSTER_PORT are not hardcoded to 3100.
+
+        A sloppy implementation might write 'export DAGSTER_PORT=3100' instead
+        of referencing the DAGSTER_HOST_PORT variable. This would break when
+        users override DAGSTER_HOST_PORT to a different value.
+        """
+        for line in script_lines:
+            stripped = line.strip()
+            if stripped.startswith("export DAGSTER_WEBSERVER_PORT="):
+                assert stripped != 'export DAGSTER_WEBSERVER_PORT="3100"', (
+                    "DAGSTER_WEBSERVER_PORT must not be hardcoded to 3100"
+                )
+                assert stripped != "export DAGSTER_WEBSERVER_PORT=3100", (
+                    "DAGSTER_WEBSERVER_PORT must not be hardcoded to 3100"
+                )
+            if stripped.startswith("export DAGSTER_PORT="):
+                assert stripped != 'export DAGSTER_PORT="3100"', (
+                    "DAGSTER_PORT must not be hardcoded to 3100"
+                )
+                assert stripped != "export DAGSTER_PORT=3100", (
+                    "DAGSTER_PORT must not be hardcoded to 3100"
+                )
+
+    @pytest.mark.requirement("env-resilient-AC-8")
+    def test_marquez_port_not_hardcoded_to_5100(self, script_lines: list[str]) -> None:
+        """Test that MARQUEZ_PORT is not hardcoded to 5100 without referencing variable.
+
+        'export MARQUEZ_PORT=5100' would ignore any user override of
+        MARQUEZ_HOST_PORT. It must use '${MARQUEZ_HOST_PORT:-5100}' or similar.
+        """
+        for line in script_lines:
+            stripped = line.strip()
+            if stripped.startswith("export MARQUEZ_PORT="):
+                assert stripped != 'export MARQUEZ_PORT="5100"', (
+                    "MARQUEZ_PORT must reference MARQUEZ_HOST_PORT, not hardcode 5100"
+                )
+                assert stripped != "export MARQUEZ_PORT=5100", (
+                    "MARQUEZ_PORT must reference MARQUEZ_HOST_PORT, not hardcode 5100"
+                )
