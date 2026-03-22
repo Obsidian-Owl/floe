@@ -1148,11 +1148,11 @@ def dbt_e2e_profile(
 ) -> Generator[dict[str, Path], None, None]:
     """Configure dbt to write to Iceberg tables via Polaris REST catalog.
 
-    Writes E2E ``profiles.yml`` files to each demo project directory,
-    backing up the originals as ``profiles.yml.bak``.  The
-    The ``run_dbt()`` helper in ``dbt_utils.py`` passes
-    ``--profiles-dir`` pointing to the project directory, so profiles
-    must live there.
+    Writes E2E ``profiles.yml`` files to an isolated directory at
+    ``tests/e2e/generated_profiles/<product>/profiles.yml``.  Demo
+    profiles are never overwritten.  The ``run_dbt()`` helper in
+    ``dbt_utils.py`` auto-detects the generated profiles directory
+    and uses it as ``--profiles-dir``.
 
     Credentials are sourced from environment variables, consistent with
     the ``polaris_client`` fixture.
@@ -1162,7 +1162,8 @@ def dbt_e2e_profile(
         ``profiles.yml`` paths.
 
     Note:
-        Originals are restored on session teardown.
+        Generated profiles are cleaned up on session teardown.
+        Stale profiles from crashed prior sessions are cleaned at setup (P36).
     """
     # --- Resolve credentials from environment and publish as env vars ---
     # dbt profiles use {{ env_var(...) }} Jinja references (FR-014),
