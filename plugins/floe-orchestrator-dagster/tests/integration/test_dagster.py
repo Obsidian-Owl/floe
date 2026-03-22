@@ -15,7 +15,7 @@ Note:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, ClassVar
+from typing import Any
 
 import pytest
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
@@ -28,7 +28,7 @@ class TestDagsterConnectionValidation(IntegrationTestBase):
     Validates SC-004: Connection validation works with real Dagster service.
     """
 
-    required_services: ClassVar[list[tuple[str, int]]] = [("dagster-webserver", 3000)]
+    required_services = ["dagster-webserver"]
 
     @pytest.mark.integration
     @pytest.mark.requirement("SC-004")
@@ -84,7 +84,7 @@ class TestDagsterDefinitionsLoading(IntegrationTestBase):
     Validates SC-002: Generated definitions can be loaded in Dagster.
     """
 
-    required_services: ClassVar[list[tuple[str, int]]] = [("dagster-webserver", 3000)]
+    required_services = ["dagster-webserver"]
 
     @pytest.fixture
     def valid_compiled_artifacts(self) -> dict[str, Any]:

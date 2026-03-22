@@ -38,7 +38,7 @@ class TestNamespaceOperations(IntegrationTestBase):
         - polaris:8181 - Polaris REST API
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     def _get_test_config(self) -> PolarisCatalogConfig:
         """Create test configuration for Polaris.
@@ -299,7 +299,7 @@ class TestNamespaceHierarchy(IntegrationTestBase):
         - polaris:8181 - Polaris REST API
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     def _get_test_config(self) -> PolarisCatalogConfig:
         """Create test configuration for Polaris."""
@@ -479,7 +479,7 @@ class TestNamespaceEdgeCases(IntegrationTestBase):
         - polaris:8181 - Polaris REST API
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     def _get_test_config(self) -> PolarisCatalogConfig:
         """Create test configuration for Polaris."""

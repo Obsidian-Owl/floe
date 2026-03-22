@@ -113,7 +113,7 @@ class TestRollbackWorkflow(IntegrationTestBase):
     They are xfail until T050 implements rollback().
     """
 
-    required_services: list[tuple[str, int]] = [("registry", 5000)]
+    required_services = ["registry"]
 
     @pytest.mark.xfail(reason="Integration: Requires Kind cluster with registry")
     @pytest.mark.requirement("8C-FR-013")

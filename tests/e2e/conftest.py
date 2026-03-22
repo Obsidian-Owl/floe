@@ -23,6 +23,7 @@ import httpx
 import pytest
 
 from testing.fixtures.polling import wait_for_condition
+from testing.fixtures.services import ServiceEndpoint, get_effective_port
 
 logger = logging.getLogger(__name__)
 
@@ -402,7 +403,7 @@ def dagster_client(wait_for_service: Callable[..., None]) -> Any:
     Example:
         status = dagster_client.get_run_status(run_id)
     """
-    url = os.environ.get("DAGSTER_URL", "http://localhost:3000")
+    url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
     wait_for_service(f"{url}/server_info", timeout=60, description="Dagster webserver")
 
     # Import here to fail properly if not installed
@@ -439,8 +440,8 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     Example:
         tables = polaris_client.list_tables("my_namespace")
     """
-    polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
-    polaris_mgmt_url = os.environ.get("POLARIS_MGMT_URL", "http://localhost:8182")
+    polaris_url = os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
+    polaris_mgmt_url = os.environ.get("POLARIS_MGMT_URL", ServiceEndpoint("polaris-management").url)
     # Extended timeout for CI environments where startup may be slower
     polaris_timeout = float(os.environ.get("POLARIS_TIMEOUT", "90"))
     # Use management health endpoint (port 8182) — does not require auth
@@ -464,7 +465,7 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     # Load catalog with REST configuration
     # Demo credentials for local testing only - production uses K8s secrets
     default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
-    minio_url = os.environ.get("MINIO_URL", "http://localhost:9000")
+    minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
     catalog = pyiceberg_catalog.load_catalog(
         "polaris",
         **{
@@ -618,8 +619,19 @@ def marquez_client(wait_for_service: Callable[..., None]) -> httpx.Client:
         response = marquez_client.get("/api/v1/namespaces")
         namespaces = response.json()["namespaces"]
     """
-    marquez_port = os.environ.get("MARQUEZ_HOST_PORT", "5100")
-    marquez_url = os.environ.get("MARQUEZ_URL", f"http://localhost:{marquez_port}")
+    legacy_port = os.environ.get("MARQUEZ_HOST_PORT")
+    if legacy_port is not None:
+        import warnings
+
+        warnings.warn(
+            "MARQUEZ_HOST_PORT is deprecated; use MARQUEZ_PORT instead",
+            DeprecationWarning,
+            stacklevel=1,
+        )
+        if not os.environ.get("MARQUEZ_PORT"):
+            os.environ["MARQUEZ_PORT"] = legacy_port
+    marquez_port = get_effective_port("marquez")
+    marquez_url = os.environ.get("MARQUEZ_URL", ServiceEndpoint("marquez").url)
     marquez_timeout = float(os.environ.get("MARQUEZ_TIMEOUT", "90"))
     marquez_description = (
         "Marquez API (requires port-forward: "
@@ -677,7 +689,7 @@ def jaeger_client(wait_for_service: Callable[..., None]) -> httpx.Client:
         response = jaeger_client.get("/api/services")
         services = response.json()["data"]
     """
-    jaeger_url = os.environ.get("JAEGER_URL", "http://localhost:16686")
+    jaeger_url = os.environ.get("JAEGER_URL", ServiceEndpoint("jaeger-query").url)
     wait_for_service(f"{jaeger_url}/api/services", timeout=60, description="Jaeger query API")
 
     return httpx.Client(base_url=jaeger_url, timeout=30.0)
@@ -804,7 +816,7 @@ def _trigger_lineage_run(
         wait_for_service: Service readiness polling helper.
         marquez_client: Marquez HTTP client (used to poll for lineage ingestion).
     """
-    dagster_url = os.environ.get("DAGSTER_URL", "http://localhost:3000")
+    dagster_url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
     try:
         wait_for_service(
             f"{dagster_url}/server_info",
@@ -1155,8 +1167,8 @@ def dbt_e2e_profile(
     # --- Resolve credentials from environment and publish as env vars ---
     # dbt profiles use {{ env_var(...) }} Jinja references (FR-014),
     # so credentials are resolved at runtime, never written to disk.
-    polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
-    minio_url = os.environ.get("MINIO_URL", "http://localhost:9000")
+    polaris_url = os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
+    minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
     default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
     cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
     parts = cred.split(":", 1)

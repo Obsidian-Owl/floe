@@ -25,7 +25,7 @@ Example:
     from testing.base_classes import IntegrationTestBase
 
     class TestPolarisCatalog(IntegrationTestBase):
-        required_services = [("polaris", 8181)]
+        required_services = ["polaris"]
 
         def test_create_namespace(self) -> None:
             namespace = self.generate_unique_namespace("test")

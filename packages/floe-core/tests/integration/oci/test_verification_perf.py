@@ -123,7 +123,7 @@ class TestVerificationPerformance(IntegrationTestBase):
     Requirements: SC-006
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     @pytest.mark.requirement("8B-SC-006")
@@ -321,7 +321,7 @@ class TestVerificationScalability(IntegrationTestBase):
     Requirements: SC-006
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     @pytest.mark.requirement("8B-SC-006")

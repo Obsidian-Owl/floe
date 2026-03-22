@@ -12,7 +12,7 @@ Example:
     from testing.base_classes.integration_test_base import IntegrationTestBase
 
     class TestPolarisCatalog(IntegrationTestBase):
-        required_services = [("polaris", 8181), ("minio", 9000)]
+        required_services = ["polaris", "minio"]
 
         @pytest.mark.requirement("9c-FR-001")
         def test_create_catalog(self) -> None:
@@ -45,18 +45,18 @@ class IntegrationTestBase:
     from this class will fail fast if required infrastructure is unavailable.
 
     Class Attributes:
-        required_services: List of (service_name, port) tuples that must be
-            available for tests to run. Override in subclass.
+        required_services: List of service names (or legacy (name, port) tuples)
+            that must be available for tests to run. Override in subclass.
         namespace: Default K8s namespace for test services.
         _created_namespaces: Track namespaces created during test for cleanup.
 
     Usage:
         class TestMyCatalog(IntegrationTestBase):
-            required_services = [("polaris", 8181), ("minio", 9000)]
+            required_services = ["polaris", "minio"]
 
             @pytest.mark.requirement("9c-FR-001")
             def test_create_catalog(self) -> None:
-                self.check_infrastructure("polaris", 8181)
+                self.check_infrastructure("polaris")
                 namespace = self.generate_unique_namespace("test")
                 # Test implementation...
 
@@ -149,8 +149,7 @@ class IntegrationTestBase:
 
         Example:
             def test_with_dagster(self) -> None:
-                self.check_infrastructure("dagster-webserver", 3000)
-                # Or let the port resolve automatically:
+                # Port resolves automatically from SERVICE_DEFAULT_PORTS:
                 self.check_infrastructure("dagster-webserver")
         """
         effective_namespace = namespace or self.namespace

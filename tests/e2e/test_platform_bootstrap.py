@@ -26,6 +26,7 @@ import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 from testing.fixtures.polling import wait_for_condition
+from testing.fixtures.services import ServiceEndpoint
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -85,11 +86,11 @@ class TestPlatformBootstrap(IntegrationTestBase):
     # Required services for all platform bootstrap tests
     # Only NodePort-accessible services (ClusterIP-only services checked individually)
     required_services = [
-        ("polaris", 8181),
-        ("polaris-mgmt", 8182),
-        ("dagster-webserver", 3000),
-        ("minio", 9000),
-        ("jaeger-query", 16686),
+        "polaris",
+        "polaris-management",
+        "dagster-webserver",
+        "minio",
+        "jaeger-query",
     ]
 
     # K8s namespace for E2E tests
@@ -198,10 +199,13 @@ class TestPlatformBootstrap(IntegrationTestBase):
         """
         # Define core NodePort service endpoints (always deployed)
         core_services = [
-            ("http://localhost:3000/server_info", "Dagster webserver"),
-            ("http://localhost:8182/q/health/ready", "Polaris catalog health"),
-            ("http://localhost:9000/minio/health/live", "MinIO API"),
-            ("http://localhost:9001/minio/health/live", "MinIO UI"),
+            (f"{ServiceEndpoint('dagster-webserver').url}/server_info", "Dagster webserver"),
+            (
+                f"{ServiceEndpoint('polaris-management').url}/q/health/ready",
+                "Polaris catalog health",
+            ),
+            (f"{ServiceEndpoint('minio').url}/minio/health/live", "MinIO API"),
+            (f"{ServiceEndpoint('minio-console').url}/minio/health/live", "MinIO UI"),
         ]
 
         # Wait for core services
@@ -210,7 +214,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
 
         # Jaeger MUST be deployed and functional for observability
         wait_for_service(
-            "http://localhost:16686/api/services",
+            f"{ServiceEndpoint('jaeger-query').url}/api/services",
             timeout=60.0,
             description="Jaeger query",
         )
@@ -386,7 +390,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
 
         # Check MinIO health endpoint via localhost NodePort
         with httpx.Client(timeout=10.0) as client:
-            response = client.get("http://localhost:9000/minio/health/live")
+            response = client.get(f"{ServiceEndpoint('minio').url}/minio/health/live")
             assert response.status_code == 200, (
                 f"MinIO health check failed: HTTP {response.status_code}\n"
                 "Check MinIO pod: kubectl logs -n floe-test -l app.kubernetes.io/name=minio"
@@ -398,7 +402,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
         expected_bucket = os.environ.get("MINIO_BUCKET", "floe-iceberg")
         s3 = boto3.client(
             "s3",
-            endpoint_url="http://localhost:9000",
+            endpoint_url=ServiceEndpoint("minio").url,
             aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
             aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin123"),
             region_name=os.environ.get("AWS_REGION", "us-east-1"),
@@ -489,7 +493,9 @@ class TestPlatformBootstrap(IntegrationTestBase):
         provider = TracerProvider(resource=resource)
 
         # Use localhost for NodePort access
-        exporter = OTLPSpanExporter(endpoint="http://localhost:4317", insecure=True)
+        exporter = OTLPSpanExporter(
+            endpoint=ServiceEndpoint("otel-collector-grpc").url, insecure=True
+        )
 
         processor = BatchSpanProcessor(exporter)
         provider.add_span_processor(processor)
@@ -530,7 +536,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
 
         if jaeger_result.returncode == 0 and "Running" in jaeger_result.stdout:
             # Jaeger is deployed - verify span appears
-            jaeger_client = httpx.Client(base_url="http://localhost:16686", timeout=10.0)
+            jaeger_client = httpx.Client(base_url=ServiceEndpoint("jaeger-query").url, timeout=10.0)
 
             def check_span_in_jaeger() -> bool:
                 """Check if test span appears in Jaeger."""
@@ -566,7 +572,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 assert span_found, (
                     f"Test span not found in Jaeger after 30s\n"
                     f"Service: {test_service_name}\n"
-                    f"Check Jaeger UI: http://localhost:16686"
+                    f"Check Jaeger UI: {ServiceEndpoint('jaeger-query').url}"
                 )
             finally:
                 jaeger_client.close()
@@ -605,14 +611,14 @@ class TestPlatformBootstrap(IntegrationTestBase):
         # Jaeger UI MUST be accessible and functional
         with httpx.Client(timeout=10.0) as client:
             # Verify UI is accessible
-            response = client.get("http://localhost:16686/search")
+            response = client.get(f"{ServiceEndpoint('jaeger-query').url}/search")
             assert response.status_code == 200, (
                 f"Jaeger UI not accessible: HTTP {response.status_code}\n"
-                f"URL: http://localhost:16686/search"
+                f"URL: {ServiceEndpoint('jaeger-query').url}/search"
             )
 
             # Verify Jaeger can list services (functional query, not just HTTP 200)
-            services_response = client.get("http://localhost:16686/api/services")
+            services_response = client.get(f"{ServiceEndpoint('jaeger-query').url}/api/services")
             assert services_response.status_code == 200, (
                 f"Jaeger services API failed: HTTP {services_response.status_code}"
             )
@@ -678,7 +684,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
         Raises:
             AssertionError: If Dagster GraphQL API is not functional.
         """
-        dagster_url = os.environ.get("DAGSTER_URL", "http://localhost:3000")
+        dagster_url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
 
         try:
             with httpx.Client(timeout=10.0) as client:
@@ -727,7 +733,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
             AssertionError: If inter-service connectivity is broken.
         """
         # Verify Dagster can reach PostgreSQL by checking Dagster's health
-        dagster_url = os.environ.get("DAGSTER_URL", "http://localhost:3000")
+        dagster_url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
         try:
             with httpx.Client(timeout=10.0) as client:
                 response = client.get(f"{dagster_url}/server_info")
@@ -794,7 +800,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
             )
 
             # Verify Marquez API is functional
-            marquez_url = os.environ.get("MARQUEZ_URL", "http://localhost:5000")
+            marquez_url = os.environ.get("MARQUEZ_URL", ServiceEndpoint("marquez").url)
             try:
                 with httpx.Client(timeout=10.0) as client:
                     # List namespaces (basic CRUD operation)

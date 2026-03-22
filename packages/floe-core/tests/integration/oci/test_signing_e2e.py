@@ -129,7 +129,7 @@ class TestKeylessSigningE2E(IntegrationTestBase):
     Requirements: FR-001, FR-002, FR-008, SC-001
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     @pytest.fixture

@@ -130,7 +130,7 @@ class TestSBOMGenerationE2E(IntegrationTestBase):
     Requirements: FR-005, FR-006
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     @pytest.mark.requirement("8B-FR-005")
@@ -261,7 +261,7 @@ class TestAttestationAttachmentE2E(IntegrationTestBase):
     Requirements: FR-006, FR-007
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     @pytest.mark.requirement("8B-FR-006")
@@ -410,7 +410,7 @@ class TestAttestationTracingE2E(IntegrationTestBase):
     Requirements: SC-007
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     @pytest.mark.requirement("8B-SC-007")
@@ -458,7 +458,7 @@ class TestSBOMVerificationPolicyE2E(IntegrationTestBase):
     Requirements: FR-006
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     @pytest.mark.requirement("8B-FR-006")

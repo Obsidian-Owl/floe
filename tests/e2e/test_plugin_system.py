@@ -65,7 +65,7 @@ class TestPluginSystem(IntegrationTestBase):
     """
 
     # No external services required - plugin system tests run on host
-    required_services: ClassVar[list[tuple[str, int]]] = []
+    required_services: ClassVar[list[str]] = []
 
     # Logger instance for test observability
     logger: ClassVar[logging.Logger] = logging.getLogger(__name__)

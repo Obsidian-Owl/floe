@@ -30,6 +30,8 @@ from typing import TYPE_CHECKING, Any
 import httpx
 import pytest
 
+from testing.fixtures.services import ServiceEndpoint
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -307,7 +309,7 @@ class TestCompileDeployMaterialize:
         for each demo product. This test queries the Dagster GraphQL API
         to verify the locations are actually loaded and responsive.
         """
-        dagster_url = os.environ.get("DAGSTER_URL", "http://localhost:3000")
+        dagster_url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
         wait_for_service(
             f"{dagster_url}/server_info",
             timeout=60,
@@ -374,7 +376,7 @@ class TestCompileDeployMaterialize:
         After code locations are loaded, Dagster should expose the assets
         defined in the demo products (dbt models become Dagster assets).
         """
-        dagster_url = os.environ.get("DAGSTER_URL", "http://localhost:3000")
+        dagster_url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
         wait_for_service(
             f"{dagster_url}/server_info",
             timeout=60,
@@ -499,7 +501,7 @@ class TestCompileDeployMaterialize:
         """
         from testing.fixtures.polling import wait_for_condition
 
-        dagster_url = os.environ.get("DAGSTER_URL", "http://localhost:3000")
+        dagster_url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
         wait_for_service(
             f"{dagster_url}/server_info",
             timeout=60,

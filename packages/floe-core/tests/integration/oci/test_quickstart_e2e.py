@@ -44,7 +44,7 @@ class TestQuickstartExamples(IntegrationTestBase):
     Requirements: SC-001 (Documentation accuracy)
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     def _create_test_artifacts(self, unique_id: str) -> Any:

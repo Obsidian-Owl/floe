@@ -36,9 +36,9 @@ class TestSchemaEvolution(IntegrationTestBase):
     """
 
     required_services = [
-        ("dagster-webserver", 3000),
-        ("polaris", 8181),
-        ("minio", 9000),
+        "dagster-webserver",
+        "polaris",
+        "minio",
     ]
 
     @pytest.mark.e2e

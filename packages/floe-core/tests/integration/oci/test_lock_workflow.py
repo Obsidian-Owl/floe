@@ -108,7 +108,7 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
     4. Verify promotion succeeds
     """
 
-    required_services = [("registry", 5000)]
+    required_services = ["registry"]
 
     @pytest.mark.requirement("FR-035")
     @pytest.mark.requirement("FR-036")
@@ -126,7 +126,7 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
         )
 
         # Check infrastructure
-        self.check_infrastructure("registry", 5000)
+        self.check_infrastructure("registry")
         unique_id = self.generate_unique_namespace("locktest")
 
         # Setup registry and client
@@ -243,7 +243,7 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
         )
 
         # Check infrastructure
-        self.check_infrastructure("registry", 5000)
+        self.check_infrastructure("registry")
         unique_id = self.generate_unique_namespace("lockpersist")
 
         # Setup registry and client
@@ -304,7 +304,7 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
         )
 
         # Check infrastructure
-        self.check_infrastructure("registry", 5000)
+        self.check_infrastructure("registry")
         unique_id = self.generate_unique_namespace("unlockidem")
 
         # Setup
@@ -347,7 +347,7 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
 class TestLockErrorHandling(IntegrationTestBase):
     """Integration tests for lock error handling."""
 
-    required_services = [("registry", 5000)]
+    required_services = ["registry"]
 
     @pytest.mark.requirement("FR-036")
     @pytest.mark.integration
@@ -363,7 +363,7 @@ class TestLockErrorHandling(IntegrationTestBase):
         )
 
         # Check infrastructure
-        self.check_infrastructure("registry", 5000)
+        self.check_infrastructure("registry")
         unique_id = self.generate_unique_namespace("lockerr")
 
         # Setup

@@ -46,6 +46,7 @@ SERVICE_DEFAULT_PORTS: dict[str, int] = {
     "otel-collector-http": 4318,
     "marquez": 5100,
     "oci-registry": 5000,
+    "oci-registry-auth": 5000,
     "registry": 5000,
 }
 """Default ports for well-known floe platform services."""

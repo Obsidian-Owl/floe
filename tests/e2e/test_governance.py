@@ -38,6 +38,7 @@ import pytest
 import yaml
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
+from testing.fixtures.services import ServiceEndpoint
 
 SENSITIVE_FIELD_PATTERNS = [
     r"password",
@@ -84,8 +85,8 @@ class TestGovernance(IntegrationTestBase):
     """
 
     # Services required for E2E governance tests
-    required_services: ClassVar[list[tuple[str, int]]] = [
-        ("polaris", 8181),
+    required_services: ClassVar[list[str]] = [
+        "polaris",
     ]
 
     @pytest.mark.e2e
@@ -103,7 +104,7 @@ class TestGovernance(IntegrationTestBase):
         3. Validate ingress rules specify 'from' selectors (not allow-all)
         4. Validate egress rules exist when Egress policy type declared
         """
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
 
         chart_root = self._find_chart_root()
         policy_path = chart_root / "floe-platform" / "templates" / "networkpolicy.yaml"
@@ -322,7 +323,7 @@ class TestGovernance(IntegrationTestBase):
         2. Attempt catalog creation (write) with invalid token -> expect 401/403
         3. Verify RBAC denies both operation types
         """
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
 
         polaris_url = self._get_polaris_url()
 
@@ -606,7 +607,7 @@ class TestGovernance(IntegrationTestBase):
         3. Verify no stack trace patterns present (Traceback, File "...", etc.)
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
 
         polaris_url = self._get_polaris_url()
 
@@ -661,7 +662,7 @@ class TestGovernance(IntegrationTestBase):
         3. Verify artifacts contain governance enforcement results
         4. Validate enforcement results indicate policies were checked
         """
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
 
         polaris_url = self._get_polaris_url()
 
@@ -910,4 +911,4 @@ class TestGovernance(IntegrationTestBase):
         """Get Polaris catalog URL from environment or default."""
         import os
 
-        return os.environ.get("POLARIS_URL", "http://localhost:8181")
+        return os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)

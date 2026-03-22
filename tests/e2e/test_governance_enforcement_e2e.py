@@ -29,35 +29,42 @@ import pytest
 import yaml
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
-# Shared plugin config for custom manifests — must include all required plugins
-# to avoid RESOLVE stage E201 errors.
-_REQUIRED_PLUGINS: dict[str, Any] = {
-    "compute": {
-        "type": "duckdb",
-        "config": {"threads": 1, "memory_limit": "256MB"},
-    },
-    "orchestrator": {
-        "type": "dagster",
-        "config": {"default_schedule": "*/10 * * * *"},
-    },
-    "catalog": {
-        "type": "polaris",
-        "config": {
-            "uri": "http://localhost:8181/api/catalog",
-            "warehouse": "floe-test",
-            "credential": "demo-admin:demo-secret",  # pragma: allowlist secret
+from testing.fixtures.services import ServiceEndpoint
+
+
+def _make_required_plugins() -> dict[str, Any]:
+    """Build shared plugin config for custom manifests.
+
+    Deferred to a function so ``ServiceEndpoint`` is evaluated at call time
+    (inside tests/fixtures), not at import/collection time.
+    """
+    return {
+        "compute": {
+            "type": "duckdb",
+            "config": {"threads": 1, "memory_limit": "256MB"},
         },
-    },
-    "storage": {
-        "type": "s3",
-        "config": {
-            "endpoint": "http://localhost:9000",
-            "bucket": "floe-data",
-            "region": "us-east-1",
-            "path_style_access": True,
+        "orchestrator": {
+            "type": "dagster",
+            "config": {"default_schedule": "*/10 * * * *"},
         },
-    },
-}
+        "catalog": {
+            "type": "polaris",
+            "config": {
+                "uri": f"{ServiceEndpoint('polaris').url}/api/catalog",
+                "warehouse": "floe-test",
+                "credential": "demo-admin:demo-secret",  # pragma: allowlist secret
+            },
+        },
+        "storage": {
+            "type": "s3",
+            "config": {
+                "endpoint": ServiceEndpoint("minio").url,
+                "bucket": "floe-data",
+                "region": "us-east-1",
+                "path_style_access": True,
+            },
+        },
+    }
 
 
 @pytest.mark.e2e
@@ -134,7 +141,7 @@ class TestGovernanceEnforcement:
                 "description": "Strict governance test",
                 "owner": "test@floe.dev",
             },
-            "plugins": _REQUIRED_PLUGINS,
+            "plugins": _make_required_plugins(),
             "governance": {
                 "policy_enforcement_level": "strict",
                 "audit_logging": "enabled",
@@ -277,7 +284,7 @@ class TestGovernanceEnforcement:
                 "description": "No enforcement test",
                 "owner": "test@floe.dev",
             },
-            "plugins": _REQUIRED_PLUGINS,
+            "plugins": _make_required_plugins(),
             "governance": {
                 "policy_enforcement_level": "off",
                 "audit_logging": "disabled",

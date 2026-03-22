@@ -122,7 +122,7 @@ class TestPromotionWorkflow(IntegrationTestBase):
     Requirements: FR-001, FR-002, FR-006, FR-008
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     def _create_test_artifacts_json(self, tmp_path: Path, unique_id: str) -> Path:

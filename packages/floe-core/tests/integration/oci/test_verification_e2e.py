@@ -131,7 +131,7 @@ class TestVerificationDuringPullE2E(IntegrationTestBase):
     Requirements: FR-009, FR-010, SC-006
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     @pytest.mark.requirement("8B-FR-009")
@@ -365,7 +365,7 @@ class TestPerEnvironmentPolicyE2E(IntegrationTestBase):
     Requirements: FR-014
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     @pytest.mark.requirement("8B-FR-014")
@@ -515,7 +515,7 @@ class TestVerificationTracingE2E(IntegrationTestBase):
     Requirements: SC-007
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     @pytest.mark.requirement("8B-SC-007")
@@ -595,7 +595,7 @@ class TestCertificateRotationGracePeriodE2E(IntegrationTestBase):
     Requirements: FR-012
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     @pytest.mark.requirement("8B-FR-012")
@@ -719,7 +719,7 @@ class TestOfflineVerificationBundleE2E(IntegrationTestBase):
     Requirements: FR-015
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     @pytest.mark.requirement("8B-FR-015")

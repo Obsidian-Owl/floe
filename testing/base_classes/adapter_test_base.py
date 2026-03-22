@@ -8,7 +8,7 @@ Example:
 
     class TestPolarisCatalogAdapter(AdapterTestBase):
         adapter_type = "catalog"
-        required_services = [("polaris", 8181)]
+        required_services = ["polaris"]
 
         def test_catalog_connection(self) -> None:
             adapter = self.create_adapter()
@@ -37,7 +37,7 @@ class AdapterTestBase(IntegrationTestBase):
     Usage:
         class TestPolarisCatalogAdapter(AdapterTestBase):
             adapter_type = "catalog"
-            required_services = [("polaris", 8181)]
+            required_services = ["polaris"]
             adapter_config = {"uri": "http://polaris:8181/api/catalog"}
 
             @pytest.mark.requirement("adapter-FR-001")

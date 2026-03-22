@@ -53,9 +53,9 @@ class TestObservability(IntegrationTestBase):
     # Services required for observability E2E tests
     # Only NodePort-accessible services in required_services
     # Other services (marquez, prometheus, otel-collector) checked individually
-    required_services: ClassVar[list[tuple[str, int]]] = [
-        ("dagster", 3000),
-        ("jaeger-query", 16686),
+    required_services: ClassVar[list[str]] = [
+        "dagster",
+        "jaeger-query",
     ]
 
     @pytest.mark.e2e
@@ -80,8 +80,8 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster", 3000)
-        self.check_infrastructure("jaeger-query", 16686)
+        self.check_infrastructure("dagster")
+        self.check_infrastructure("jaeger-query")
 
         # Query Jaeger for customer-360 service traces
         service_name = "customer-360"
@@ -159,13 +159,13 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster", 3000)
+        self.check_infrastructure("dagster")
         try:
-            self.check_infrastructure("marquez", 5000)
+            self.check_infrastructure("marquez")
         except Exception:
             pytest.fail(
-                "Marquez not accessible at localhost:5000. "
-                "Run via make test-e2e or: kubectl port-forward svc/marquez 5000:5000 -n floe-test"
+                "Marquez not accessible at localhost:5100. "
+                "Run via make test-e2e or: kubectl port-forward svc/marquez 5100:5000 -n floe-test"
             )
 
         # Verify Marquez API responds with namespaces list
@@ -274,14 +274,14 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster", 3000)
-        self.check_infrastructure("jaeger-query", 16686)
+        self.check_infrastructure("dagster")
+        self.check_infrastructure("jaeger-query")
         try:
-            self.check_infrastructure("marquez", 5000)
+            self.check_infrastructure("marquez")
         except Exception:
             pytest.fail(
-                "Marquez not accessible at localhost:5000. "
-                "Run via make test-e2e or: kubectl port-forward svc/marquez 5000:5000 -n floe-test"
+                "Marquez not accessible at localhost:5100. "
+                "Run via make test-e2e or: kubectl port-forward svc/marquez 5100:5000 -n floe-test"
             )
 
         # Query for REAL traces in Jaeger for any floe-related service
@@ -398,7 +398,7 @@ class TestObservability(IntegrationTestBase):
         import subprocess
 
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster", 3000)
+        self.check_infrastructure("dagster")
 
         # Verify OTel Collector is deployed AND healthy
         result = subprocess.run(
@@ -497,7 +497,7 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster", 3000)
+        self.check_infrastructure("dagster")
 
         # Validate that compilation emits structured logs with trace context
         import io
@@ -625,7 +625,7 @@ class TestObservability(IntegrationTestBase):
         from floe_core.compilation.stages import compile_pipeline
 
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster", 3000)
+        self.check_infrastructure("dagster")
 
         project_root = Path(__file__).parent.parent.parent
         spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
@@ -682,13 +682,13 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client (for infrastructure check).
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster", 3000)
+        self.check_infrastructure("dagster")
         try:
-            self.check_infrastructure("marquez", 5000)
+            self.check_infrastructure("marquez")
         except Exception:
             pytest.fail(
-                "Marquez not accessible at localhost:5000. "
-                "Run via make test-e2e or: kubectl port-forward svc/marquez 5000:5000 -n floe-test"
+                "Marquez not accessible at localhost:5100. "
+                "Run via make test-e2e or: kubectl port-forward svc/marquez 5100:5000 -n floe-test"
             )
 
         # Create a test namespace
@@ -774,8 +774,8 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster", 3000)
-        self.check_infrastructure("jaeger-query", 16686)
+        self.check_infrastructure("dagster")
+        self.check_infrastructure("jaeger-query")
 
         # Query for traces from customer-360 service (real service name)
         service_name = "customer-360"
@@ -880,13 +880,13 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster", 3000)
+        self.check_infrastructure("dagster")
         try:
-            self.check_infrastructure("marquez", 5000)
+            self.check_infrastructure("marquez")
         except Exception:
             pytest.fail(
-                "Marquez not accessible at localhost:5000. "
-                "Run via make test-e2e or: kubectl port-forward svc/marquez 5000:5000 -n floe-test"
+                "Marquez not accessible at localhost:5100. "
+                "Run via make test-e2e or: kubectl port-forward svc/marquez 5100:5000 -n floe-test"
             )
 
         # seed_observability Phase 2 triggered a Dagster asset run for
@@ -1080,8 +1080,8 @@ class TestObservability(IntegrationTestBase):
         from floe_core.compilation.stages import compile_pipeline
 
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster", 3000)
-        self.check_infrastructure("jaeger-query", 16686)
+        self.check_infrastructure("dagster")
+        self.check_infrastructure("jaeger-query")
 
         project_root = Path(__file__).parent.parent.parent
         spec_path = project_root / "demo" / "customer-360" / "floe.yaml"

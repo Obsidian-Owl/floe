@@ -27,6 +27,7 @@ import httpx
 import pytest
 
 from testing.fixtures.polling import wait_for_condition
+from testing.fixtures.services import ServiceEndpoint
 from tests.e2e.conftest import run_kubectl
 
 # K8s namespace
@@ -53,7 +54,7 @@ class TestServiceFailureResilience:
 
         This validates error detection, NOT data recovery.
         """
-        minio_url = os.environ.get("MINIO_URL", "http://localhost:9000")
+        minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
 
         # Verify MinIO is healthy before the test
         response = httpx.get(f"{minio_url}/minio/health/ready", timeout=5.0)
@@ -146,7 +147,9 @@ class TestServiceFailureResilience:
 
         Similar to MinIO test but for the Polaris catalog service.
         """
-        polaris_health_url = os.environ.get("POLARIS_HEALTH_URL", "http://localhost:8182")
+        polaris_health_url = os.environ.get(
+            "POLARIS_HEALTH_URL", ServiceEndpoint("polaris-management").url
+        )
 
         # Verify Polaris is healthy (management endpoint, no OAuth needed)
         response = httpx.get(
