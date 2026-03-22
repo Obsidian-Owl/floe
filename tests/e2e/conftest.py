@@ -699,8 +699,6 @@ def jaeger_client(wait_for_service: Callable[..., None]) -> httpx.Client:
 # Lineage seeding helpers (used by seed_observability)
 # ---------------------------------------------------------------------------
 
-_IMPLICIT_ASSET_JOB_NAME = "__ASSET_JOB"
-
 _LAUNCH_RUN_MUTATION = """
 mutation LaunchRun($executionParams: ExecutionParams!) {
     launchRun(executionParams: $executionParams) {
@@ -726,26 +724,31 @@ query RunStatus($runId: ID!) {
 
 def _discover_repo_for_asset(
     dagster_url: str,
-    asset_path: list[str],
-) -> tuple[str, str] | None:
-    """Return (repositoryName, repositoryLocationName) for the given asset.
+    search_term: str,
+) -> tuple[str, str, list[str], str] | None:
+    """Return (repo, location, asset_path, job_name) for an asset.
 
-    Falls back to the first available repository if the asset is not found.
-    Returns None if no repositories are found at all.
+    Searches all assets for one whose key path contains ``search_term``
+    in any segment.  Resolves the ``__ASSET_JOB`` variant from the
+    asset's ``jobNames``.
+
+    Returns ``None`` if no repositories or matching assets are found
+    (best-effort — callers log a warning and continue).
 
     Args:
         dagster_url: Base URL of the Dagster webserver.
-        asset_path: Asset key path, e.g. ``["stg_crm_customers"]``.
+        search_term: Term to match in any segment of an asset key path.
 
     Returns:
-        Tuple of ``(repositoryName, repositoryLocationName)``, or ``None``.
+        4-tuple ``(repo_name, location_name, asset_path, job_name)``
+        or ``None``.
     """
-    # First attempt: find the exact asset's repository.
     asset_query = """
     {
         assetNodes {
             assetKey { path }
             repository { name location { name } }
+            jobNames
         }
     }
     """
@@ -756,46 +759,43 @@ def _discover_repo_for_asset(
             timeout=30.0,
         )
     except httpx.HTTPError as exc:
-        logger.warning("seed_observability: assetNodes query failed: %s", type(exc).__name__)
-        response = None
-
-    if response is not None and response.status_code == 200:
-        nodes = response.json().get("data", {}).get("assetNodes", [])
-        for node in nodes:
-            if node["assetKey"]["path"] == asset_path:
-                repo = node["repository"]
-                return (repo["name"], repo["location"]["name"])
         logger.warning(
-            "seed_observability: asset %s not found in assetNodes; trying fallback",
-            asset_path,
-        )
-
-    # Fallback: use the first available repository.
-    repos_query = """
-    {
-        repositoriesOrError {
-            ... on RepositoryConnection {
-                nodes { name location { name } }
-            }
-        }
-    }
-    """
-    try:
-        resp = httpx.post(
-            f"{dagster_url}/graphql",
-            json={"query": repos_query},
-            timeout=30.0,
-        )
-        if resp.status_code == 200:
-            nodes = resp.json().get("data", {}).get("repositoriesOrError", {}).get("nodes", [])
-            if nodes:
-                return (nodes[0]["name"], nodes[0]["location"]["name"])
-    except httpx.HTTPError as exc:
-        logger.warning(
-            "seed_observability: repository fallback query failed: %s",
+            "seed_observability: assetNodes query failed: %s",
             type(exc).__name__,
         )
+        return None
 
+    if response.status_code != 200:
+        logger.warning(
+            "seed_observability: assetNodes returned HTTP %d",
+            response.status_code,
+        )
+        return None
+
+    nodes = response.json().get("data", {}).get("assetNodes", [])
+    for node in nodes:
+        path: list[str] = node["assetKey"]["path"]
+        if search_term in path:
+            repo = node["repository"]
+            job_names: list[str] = node.get("jobNames", [])
+            if "__ASSET_JOB" in job_names:
+                job_name = "__ASSET_JOB"
+            else:
+                prefixed = [j for j in job_names if j.startswith("__ASSET_JOB")]
+                job_name = prefixed[0] if prefixed else "__ASSET_JOB"
+            return (
+                repo["name"],
+                repo["location"]["name"],
+                path,
+                job_name,
+            )
+
+    available = [n["assetKey"]["path"] for n in nodes[:10]]
+    logger.warning(
+        "seed_observability: asset '%s' not found in assetNodes. Available (first 10): %s",
+        search_term,
+        available,
+    )
     return None
 
 
@@ -830,20 +830,22 @@ def _trigger_lineage_run(
         )
         return
 
-    repo_info = _discover_repo_for_asset(dagster_url, ["stg_crm_customers"])
-    if repo_info is None:
-        logger.warning("seed_observability: no Dagster repositories found; skipping lineage run")
+    discovery = _discover_repo_for_asset(dagster_url, "stg_crm_customers")
+    if discovery is None:
+        logger.warning(
+            "seed_observability: asset discovery returned None; skipping lineage run",
+        )
         return
 
-    repo_name, location_name = repo_info
+    repo_name, location_name, asset_path, job_name = discovery
 
     variables: dict[str, Any] = {
         "executionParams": {
             "selector": {
                 "repositoryName": repo_name,
                 "repositoryLocationName": location_name,
-                "pipelineName": _IMPLICIT_ASSET_JOB_NAME,
-                "assetSelection": [{"path": ["stg_crm_customers"]}],
+                "pipelineName": job_name,
+                "assetSelection": [{"path": asset_path}],
             },
             "mode": "default",
         },
