@@ -256,6 +256,93 @@ def test_discovery_selects_numbered_variant_over_unrelated_jobs() -> None:
     )
 
 
+@pytest.mark.requirement("WU2-AC-2")
+def test_discovery_falls_back_when_no_asset_job_prefix() -> None:
+    """When jobNames has no __ASSET_JOB* entry, fallback to __ASSET_JOB.
+
+    A Dagster deployment may have assets with only custom job names
+    (e.g., ["daily_refresh"]). The function falls back to "__ASSET_JOB"
+    as the implicit asset job name. This test documents that behavior.
+    """
+    node = _make_asset_node(
+        path=["stg_crm_customers"],
+        job_names=["daily_refresh", "custom_pipeline"],
+    )
+    mock_response = _make_graphql_response([node])
+
+    with patch(
+        "test_compile_deploy_materialize_e2e.httpx.post",
+        return_value=mock_response,
+    ):
+        result = _discover_repository_for_asset(
+            "http://dagster:3000",
+            "stg_crm_customers",
+        )
+
+    assert len(result) == 4, f"Expected 4-tuple, got {len(result)}-tuple: {result}"
+    _, _, _, job_name = result
+    assert job_name == "__ASSET_JOB", (
+        f"Must fall back to '__ASSET_JOB' when no __ASSET_JOB* prefix in jobNames, got '{job_name}'"
+    )
+
+
+@pytest.mark.requirement("WU2-AC-2")
+def test_discovery_falls_back_when_job_names_missing() -> None:
+    """When jobNames key is absent from the GraphQL response, fallback.
+
+    Some Dagster versions or custom schemas may omit jobNames entirely.
+    The function must not crash and should fall back to "__ASSET_JOB".
+    """
+    node = _make_asset_node(
+        path=["stg_crm_customers"],
+        # job_names=None omits the key entirely from the response
+    )
+    mock_response = _make_graphql_response([node])
+
+    with patch(
+        "test_compile_deploy_materialize_e2e.httpx.post",
+        return_value=mock_response,
+    ):
+        result = _discover_repository_for_asset(
+            "http://dagster:3000",
+            "stg_crm_customers",
+        )
+
+    assert len(result) == 4, f"Expected 4-tuple, got {len(result)}-tuple: {result}"
+    _, _, _, job_name = result
+    assert job_name == "__ASSET_JOB", (
+        f"Must fall back to '__ASSET_JOB' when jobNames key is absent, got '{job_name}'"
+    )
+
+
+@pytest.mark.requirement("WU2-AC-2")
+def test_discovery_falls_back_when_job_names_empty() -> None:
+    """When jobNames is an empty list, fallback to __ASSET_JOB.
+
+    Covers the edge case where the key exists but has no entries.
+    """
+    node = _make_asset_node(
+        path=["stg_crm_customers"],
+        job_names=[],
+    )
+    mock_response = _make_graphql_response([node])
+
+    with patch(
+        "test_compile_deploy_materialize_e2e.httpx.post",
+        return_value=mock_response,
+    ):
+        result = _discover_repository_for_asset(
+            "http://dagster:3000",
+            "stg_crm_customers",
+        )
+
+    assert len(result) == 4, f"Expected 4-tuple, got {len(result)}-tuple: {result}"
+    _, _, _, job_name = result
+    assert job_name == "__ASSET_JOB", (
+        f"Must fall back to '__ASSET_JOB' when jobNames is empty, got '{job_name}'"
+    )
+
+
 # ---------------------------------------------------------------------------
 # AC-3: Fail with diagnostic when asset not found
 # ---------------------------------------------------------------------------
@@ -314,7 +401,7 @@ def test_discovery_handles_empty_asset_nodes() -> None:
         return_value=mock_response,
     ):
         with pytest.raises(
-            (pytest.fail.Exception, SystemExit, RuntimeError),
+            (pytest.fail.Exception, SystemExit),
         ) as exc_info:
             _discover_repository_for_asset("http://dagster:3000", "stg_crm_customers")
 
@@ -325,6 +412,84 @@ def test_discovery_handles_empty_asset_nodes() -> None:
         or "no asset" in error_msg.lower()
         or "not found" in error_msg.lower()
     ), f"Diagnostic must indicate search term or 'no assets found', got: {error_msg}"
+
+
+@pytest.mark.requirement("WU2-AC-3")
+def test_discovery_fails_on_non_200_http_status() -> None:
+    """When Dagster returns a non-200 status, pytest.fail with status code.
+
+    During cluster startup Dagster may return 502/503. The function must
+    fail with a diagnostic rather than crashing on malformed JSON.
+    """
+    mock_resp = MagicMock()
+    mock_resp.status_code = 502
+
+    with patch(
+        "test_compile_deploy_materialize_e2e.httpx.post",
+        return_value=mock_resp,
+    ):
+        with pytest.raises(
+            (pytest.fail.Exception, SystemExit),
+        ) as exc_info:
+            _discover_repository_for_asset("http://dagster:3000", "stg_crm_customers")
+
+    error_msg = str(exc_info.value)
+    assert "502" in error_msg, f"Diagnostic must include the HTTP status code, got: {error_msg}"
+    assert "stg_crm_customers" in error_msg, (
+        f"Diagnostic must mention the search term, got: {error_msg}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# BC-2: Multiple matching assets — first match returned
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.requirement("WU2-AC-1")
+def test_discovery_returns_first_match_when_multiple_assets_match() -> None:
+    """When multiple assets contain the search term, return the first match.
+
+    Documents first-match semantics: the function iterates assetNodes in
+    order and returns the first asset whose path contains the search term.
+    """
+    nodes = [
+        _make_asset_node(
+            path=["project_a", "stg_crm_customers"],
+            repo_name="repo_a",
+            location_name="loc_a",
+            job_names=["__ASSET_JOB"],
+        ),
+        _make_asset_node(
+            path=["project_b", "stg_crm_customers"],
+            repo_name="repo_b",
+            location_name="loc_b",
+            job_names=["__ASSET_JOB_0"],
+        ),
+    ]
+    mock_response = _make_graphql_response(nodes)
+
+    with patch(
+        "test_compile_deploy_materialize_e2e.httpx.post",
+        return_value=mock_response,
+    ):
+        result = _discover_repository_for_asset(
+            "http://dagster:3000",
+            "stg_crm_customers",
+        )
+
+    assert len(result) == 4, f"Expected 4-tuple, got {len(result)}-tuple: {result}"
+    repo_name, location_name, asset_path, job_name = result
+    # First match semantics: repo_a should be returned
+    assert repo_name == "repo_a", (
+        f"Must return first matching asset's repo (repo_a), got '{repo_name}'"
+    )
+    assert location_name == "loc_a", (
+        f"Must return first matching asset's location (loc_a), got '{location_name}'"
+    )
+    assert asset_path == ["project_a", "stg_crm_customers"], (
+        f"Must return first matching asset's path, got {asset_path}"
+    )
+    assert job_name == "__ASSET_JOB", f"Must return first matching asset's job, got '{job_name}'"
 
 
 # ---------------------------------------------------------------------------
