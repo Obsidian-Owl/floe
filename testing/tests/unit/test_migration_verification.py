@@ -59,7 +59,7 @@ class TestMigrationVerification:
             [
                 "grep",
                 "-rn",
-                r'required_services.*=.*\[.*("',
+                r'required_services.*=.*\[\s*\("',
                 "--include=*.py",
                 "testing/",
                 "packages/",
@@ -124,7 +124,7 @@ class TestMigrationVerification:
             [
                 "grep",
                 "-n",
-                r'required_services.*=.*\[.*("',
+                r'required_services.*=.*\[\s*\("',
                 *target_files,
             ],
             capture_output=True,

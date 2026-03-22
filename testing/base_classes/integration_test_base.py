@@ -45,8 +45,8 @@ class IntegrationTestBase:
     from this class will fail fast if required infrastructure is unavailable.
 
     Class Attributes:
-        required_services: List of (service_name, port) tuples that must be
-            available for tests to run. Override in subclass.
+        required_services: List of service names (or legacy (name, port) tuples)
+            that must be available for tests to run. Override in subclass.
         namespace: Default K8s namespace for test services.
         _created_namespaces: Track namespaces created during test for cleanup.
 
