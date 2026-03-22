@@ -159,9 +159,9 @@ nodes:
       - containerPort: 8181
         hostPort: 8181
         protocol: TCP  # Polaris
-      - containerPort: 4566
-        hostPort: 4566
-        protocol: TCP  # LocalStack
+      - containerPort: 9000
+        hostPort: 9000
+        protocol: TCP  # MinIO
       - containerPort: 16686
         hostPort: 16686
         protocol: TCP  # Jaeger UI
@@ -184,7 +184,7 @@ polaris:
       memory: 1Gi
       cpu: 1000m
 
-localstack:
+minio:
   service:
     type: ClusterIP  # Internal only
   persistence:
