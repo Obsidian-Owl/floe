@@ -98,10 +98,10 @@ class TestDataPipeline(IntegrationTestBase):
     """
 
     # Services required for E2E pipeline tests
-    required_services: ClassVar[list[tuple[str, int]]] = [
-        ("dagster", 3000),
-        ("polaris", 8181),
-        ("minio", 9000),
+    required_services: ClassVar[list[str]] = [
+        "dagster",
+        "polaris",
+        "minio",
     ]
 
     def _get_demo_project_path(self, project_root: Path, product: str = "customer-360") -> Path:
@@ -214,9 +214,9 @@ class TestDataPipeline(IntegrationTestBase):
             project_root: Repository root path.
             dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
-        self.check_infrastructure("dagster", 3000)
-        self.check_infrastructure("polaris", 8181)
-        self.check_infrastructure("minio", 9000)
+        self.check_infrastructure("dagster")
+        self.check_infrastructure("polaris")
+        self.check_infrastructure("minio")
 
         project_dir = self._get_demo_project_path(project_root, product)
         target_dir = project_dir / "target"
@@ -270,8 +270,8 @@ class TestDataPipeline(IntegrationTestBase):
             dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         # Check infrastructure availability
-        self.check_infrastructure("dagster", 3000)
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("dagster")
+        self.check_infrastructure("polaris")
 
         project_dir = self._get_demo_project_path(project_root, product)
 
@@ -365,8 +365,8 @@ class TestDataPipeline(IntegrationTestBase):
             project_root: Repository root path.
             dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
-        self.check_infrastructure("polaris", 8181)
-        self.check_infrastructure("minio", 9000)
+        self.check_infrastructure("polaris")
+        self.check_infrastructure("minio")
 
         project_dir = self._get_demo_project_path(project_root)
         target_dir = project_dir / "target"
@@ -447,8 +447,8 @@ class TestDataPipeline(IntegrationTestBase):
             project_root: Repository root path.
             dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
-        self.check_infrastructure("polaris", 8181)
-        self.check_infrastructure("minio", 9000)
+        self.check_infrastructure("polaris")
+        self.check_infrastructure("minio")
 
         project_dir = self._get_demo_project_path(project_root)
         target_dir = project_dir / "target"
@@ -532,7 +532,7 @@ class TestDataPipeline(IntegrationTestBase):
             dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         # Check infrastructure availability
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
 
         project_dir = self._get_demo_project_path(project_root, product)
 
@@ -597,8 +597,8 @@ class TestDataPipeline(IntegrationTestBase):
             project_root: Repository root path.
             dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
-        self.check_infrastructure("polaris", 8181)
-        self.check_infrastructure("minio", 9000)
+        self.check_infrastructure("polaris")
+        self.check_infrastructure("minio")
 
         project_dir = self._get_demo_project_path(project_root)
         target_dir = project_dir / "target"
@@ -651,7 +651,7 @@ class TestDataPipeline(IntegrationTestBase):
             dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         # Check infrastructure availability
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
 
         project_dir = self._get_demo_project_path(project_root, product)
 
@@ -707,7 +707,7 @@ class TestDataPipeline(IntegrationTestBase):
             dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         # Check infrastructure availability
-        self.check_infrastructure("dagster", 3000)
+        self.check_infrastructure("dagster")
 
         project_dir = self._get_demo_project_path(project_root)
 
@@ -761,7 +761,7 @@ class TestDataPipeline(IntegrationTestBase):
             dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         # Check infrastructure availability
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
 
         project_dir = self._get_demo_project_path(project_root)
 
@@ -831,7 +831,7 @@ class TestDataPipeline(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability
-        self.check_infrastructure("dagster", 3000)
+        self.check_infrastructure("dagster")
 
         # Test 1: Verify sensor module exists and is importable
         try:
@@ -1029,8 +1029,8 @@ class TestDataPipeline(IntegrationTestBase):
             project_root: Repository root path.
             dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
-        self.check_infrastructure("polaris", 8181)
-        self.check_infrastructure("minio", 9000)
+        self.check_infrastructure("polaris")
+        self.check_infrastructure("minio")
 
         project_dir = self._get_demo_project_path(project_root)
         target_dir = project_dir / "target"
@@ -1127,8 +1127,8 @@ class TestDataPipeline(IntegrationTestBase):
             e2e_namespace: Unique namespace for test isolation.
             polaris_client: PyIceberg REST catalog fixture.
         """
-        self.check_infrastructure("polaris", 8181)
-        self.check_infrastructure("minio", 9000)
+        self.check_infrastructure("polaris")
+        self.check_infrastructure("minio")
 
         # Test 1: Verify demo values have snapshot retention configuration
         values_demo_path = project_root / "charts" / "floe-platform" / "values-demo.yaml"

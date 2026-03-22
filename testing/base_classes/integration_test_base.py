@@ -149,8 +149,7 @@ class IntegrationTestBase:
 
         Example:
             def test_with_dagster(self) -> None:
-                self.check_infrastructure("dagster-webserver", 3000)
-                # Or let the port resolve automatically:
+                # Port resolves automatically from SERVICE_DEFAULT_PORTS:
                 self.check_infrastructure("dagster-webserver")
         """
         effective_namespace = namespace or self.namespace

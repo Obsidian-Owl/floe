@@ -30,9 +30,9 @@ class TestDemoMode(IntegrationTestBase):
     """
 
     required_services = [
-        ("dagster-webserver", 3000),
-        ("polaris", 8181),
-        ("jaeger-query", 16686),
+        "dagster-webserver",
+        "polaris",
+        "jaeger-query",
     ]
 
     @pytest.mark.e2e
@@ -76,8 +76,8 @@ class TestDemoMode(IntegrationTestBase):
             assert seeds_dir.is_dir(), f"Seeds path exists but is not a directory in {product}"
 
         # Verify all services are healthy
-        for service_name, port in self.required_services:
-            self.check_infrastructure(service_name, port)
+        for service_name in self.required_services:
+            self.check_infrastructure(service_name)
 
         # Validate each product's definitions.py is importable (no syntax errors)
         import importlib.util

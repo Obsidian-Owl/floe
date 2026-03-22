@@ -85,11 +85,11 @@ class TestPlatformBootstrap(IntegrationTestBase):
     # Required services for all platform bootstrap tests
     # Only NodePort-accessible services (ClusterIP-only services checked individually)
     required_services = [
-        ("polaris", 8181),
-        ("polaris-mgmt", 8182),
-        ("dagster-webserver", 3000),
-        ("minio", 9000),
-        ("jaeger-query", 16686),
+        "polaris",
+        "polaris-mgmt",
+        "dagster-webserver",
+        "minio",
+        "jaeger-query",
     ]
 
     # K8s namespace for E2E tests
