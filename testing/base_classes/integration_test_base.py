@@ -12,7 +12,7 @@ Example:
     from testing.base_classes.integration_test_base import IntegrationTestBase
 
     class TestPolarisCatalog(IntegrationTestBase):
-        required_services = [("polaris", 8181), ("minio", 9000)]
+        required_services = ["polaris", "minio"]
 
         @pytest.mark.requirement("9c-FR-001")
         def test_create_catalog(self) -> None:
@@ -52,11 +52,11 @@ class IntegrationTestBase:
 
     Usage:
         class TestMyCatalog(IntegrationTestBase):
-            required_services = [("polaris", 8181), ("minio", 9000)]
+            required_services = ["polaris", "minio"]
 
             @pytest.mark.requirement("9c-FR-001")
             def test_create_catalog(self) -> None:
-                self.check_infrastructure("polaris", 8181)
+                self.check_infrastructure("polaris")
                 namespace = self.generate_unique_namespace("test")
                 # Test implementation...
 

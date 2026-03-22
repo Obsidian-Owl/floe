@@ -108,7 +108,7 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
     4. Verify promotion succeeds
     """
 
-    required_services = [("registry", 5000)]
+    required_services = ["registry"]
 
     @pytest.mark.requirement("FR-035")
     @pytest.mark.requirement("FR-036")
@@ -347,7 +347,7 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
 class TestLockErrorHandling(IntegrationTestBase):
     """Integration tests for lock error handling."""
 
-    required_services = [("registry", 5000)]
+    required_services = ["registry"]
 
     @pytest.mark.requirement("FR-036")
     @pytest.mark.integration

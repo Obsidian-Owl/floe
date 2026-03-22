@@ -119,7 +119,7 @@ class TestPushToRegistry(IntegrationTestBase):
     Requirements: FR-001, SC-009
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     def _create_test_artifacts_json(self, tmp_path: Path, unique_id: str) -> Path:
@@ -278,7 +278,7 @@ class TestPullFromRegistry(IntegrationTestBase):
     Requirements: FR-002, SC-009
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     def _create_test_artifacts_json(self, tmp_path: Path, unique_id: str) -> Path:
@@ -448,7 +448,7 @@ class TestInspectFromRegistry(IntegrationTestBase):
     Requirements: FR-003, SC-009
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     def _create_test_artifacts_json(self, tmp_path: Path, unique_id: str) -> Path:
@@ -572,7 +572,7 @@ class TestListFromRegistry(IntegrationTestBase):
     Requirements: FR-004, SC-009
     """
 
-    required_services = [("oci-registry", 5000)]
+    required_services = ["oci-registry"]
     namespace = "floe-test"
 
     def _create_test_artifacts_json(self, tmp_path: Path, unique_id: str) -> Path:
@@ -685,7 +685,7 @@ class TestBasicAuthRegistry(IntegrationTestBase):
     See testing/k8s/services/registry-auth.yaml.
     """
 
-    required_services = [("oci-registry-auth", 5000)]
+    required_services = ["oci-registry-auth"]
     namespace = "floe-test"
 
     def _create_test_artifacts_json(self, tmp_path: Path, unique_id: str) -> Path:

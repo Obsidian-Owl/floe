@@ -57,7 +57,7 @@ class TestCredentialVending(IntegrationTestBase):
         - minio:9000 - MinIO S3-compatible storage with STS
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     def _get_test_config(self) -> PolarisCatalogConfig:
         """Create test configuration for Polaris.
@@ -542,7 +542,7 @@ class TestCredentialVendingHierarchicalNamespace(IntegrationTestBase):
         - polaris:8181 - Polaris REST API
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     def _get_test_config(self) -> PolarisCatalogConfig:
         """Create test configuration for Polaris."""

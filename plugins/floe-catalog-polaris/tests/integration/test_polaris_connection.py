@@ -39,7 +39,7 @@ class TestPolarisConnection(IntegrationTestBase):
         - polaris:8181 - Polaris REST API
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     def _get_test_config(self) -> PolarisCatalogConfig:
         """Create test configuration for Polaris.
@@ -299,7 +299,7 @@ class TestPolarisConnectionEdgeCases(IntegrationTestBase):
     Tests unusual scenarios and boundary conditions for connection handling.
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     def _get_test_config(self) -> PolarisCatalogConfig:
         """Create test configuration for Polaris."""

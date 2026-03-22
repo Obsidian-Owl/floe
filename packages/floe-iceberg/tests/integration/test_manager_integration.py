@@ -30,7 +30,7 @@ class TestIcebergTableManagerIntegration(IntegrationTestBase):
         - MinIO S3 at localhost:9000
     """
 
-    required_services = [("polaris", 8181), ("minio", 9000)]
+    required_services = ["polaris", "minio"]
 
     # =========================================================================
     # T097: create_table with real Polaris

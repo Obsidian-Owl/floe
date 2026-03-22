@@ -22,8 +22,6 @@ No pytest.skip() - see .claude/rules/testing-standards.md
 
 from __future__ import annotations
 
-from typing import ClassVar
-
 import pytest
 import structlog
 from floe_core.oci.client import OCIClient
@@ -58,7 +56,7 @@ class TestPromotion(IntegrationTestBase):
     """
 
     # Services required for E2E promotion tests
-    required_services: ClassVar[list[tuple[str, int]]] = [("dagster-webserver", 3000)]
+    required_services = ["dagster-webserver"]
 
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""

@@ -17,7 +17,7 @@ Note:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, ClassVar
+from typing import Any
 
 import pytest
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
@@ -30,7 +30,7 @@ class TestSemanticDefinitionsWiring(IntegrationTestBase):
     Validates FR-055: create_definitions produces Definitions with semantic resources.
     """
 
-    required_services: ClassVar[list[tuple[str, int]]] = [("dagster-webserver", 3000)]
+    required_services = ["dagster-webserver"]
 
     @pytest.fixture
     def compiled_artifacts_with_semantic(self) -> dict[str, Any]:

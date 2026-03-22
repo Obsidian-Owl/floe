@@ -63,7 +63,7 @@ class TestTableOperations(IntegrationTestBase):
         - polaris:8181 - Polaris REST API
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     def _get_test_config(self) -> PolarisCatalogConfig:
         """Create test configuration for Polaris.
@@ -406,7 +406,7 @@ class TestTableLifecycle(IntegrationTestBase):
     Tests complete workflows involving create, list, and drop operations.
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     def _get_test_config(self) -> PolarisCatalogConfig:
         """Create test configuration for Polaris."""
@@ -561,7 +561,7 @@ class TestTableEdgeCases(IntegrationTestBase):
     Tests unusual inputs and boundary conditions.
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     def _get_test_config(self) -> PolarisCatalogConfig:
         """Create test configuration for Polaris."""
@@ -735,7 +735,7 @@ class TestTableInHierarchicalNamespace(IntegrationTestBase):
     Tests table operations when namespaces use dot notation.
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     def _get_test_config(self) -> PolarisCatalogConfig:
         """Create test configuration for Polaris."""

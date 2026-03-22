@@ -15,7 +15,7 @@ Usage:
     from testing.fixtures import wait_for_condition, wait_for_service
 
     class TestMyCatalog(IntegrationTestBase):
-        required_services = [("polaris", 8181), ("minio", 9000)]
+        required_services = ["polaris", "minio"]
 
         @pytest.mark.requirement("9c-FR-012")
         def test_create_catalog(self) -> None:

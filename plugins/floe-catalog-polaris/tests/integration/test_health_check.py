@@ -41,7 +41,7 @@ class TestHealthCheckIntegration(IntegrationTestBase):
         - polaris:8181 - Polaris REST API
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     @pytest.mark.requirement("FR-050")
     @pytest.mark.integration
@@ -216,7 +216,7 @@ class TestHealthCheckTimeout(IntegrationTestBase):
     Uses polaris_config fixture from conftest.py for configuration.
     """
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     @pytest.mark.requirement("FR-052")
     @pytest.mark.integration
