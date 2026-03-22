@@ -162,7 +162,7 @@ class TestRunDbtProfilesDir:
         finally:
             # Clean up so we don't leave artifacts in the source tree
             if e2e_dir.exists():
-                shutil.rmtree(e2e_dir.parent)
+                shutil.rmtree(e2e_dir)
 
     def test_falls_back_to_project_dir_when_no_generated_profiles(
         self,
@@ -260,7 +260,7 @@ class TestRunDbtProfilesDir:
                 )
         finally:
             if e2e_dir.exists():
-                shutil.rmtree(e2e_dir.parent)
+                shutil.rmtree(e2e_dir)
 
     def test_run_dbt_uses_product_name_from_project_dir(
         self,
@@ -296,7 +296,7 @@ class TestRunDbtProfilesDir:
                 )
         finally:
             if e2e_dir.exists():
-                shutil.rmtree(e2e_dir.parent)
+                shutil.rmtree(e2e_dir)
 
 
 # ---------------------------------------------------------------------------
