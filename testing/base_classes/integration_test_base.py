@@ -22,6 +22,7 @@ Example:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import ClassVar
 
 import pytest
@@ -65,7 +66,7 @@ class IntegrationTestBase:
     """
 
     # Class attributes - override in subclasses
-    required_services: ClassVar[list[tuple[str, int] | str]] = []
+    required_services: ClassVar[Sequence[tuple[str, int] | str]] = []
     namespace: ClassVar[str] = "floe-test"
 
     # Instance attributes for tracking resources

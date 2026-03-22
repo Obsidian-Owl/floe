@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import os
 import socket
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 # ---------------------------------------------------------------------------
@@ -269,7 +270,7 @@ def check_service_health(
 
 
 def check_infrastructure(
-    services: list[tuple[str, int] | str],
+    services: Sequence[tuple[str, int] | str],
     namespace: str = "floe-test",
     timeout: float = 5.0,
     *,
