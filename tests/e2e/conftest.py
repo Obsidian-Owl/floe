@@ -1217,6 +1217,14 @@ def dbt_e2e_profile(
     # the generated_profiles directory and uses it as --profiles-dir.
     generated_profiles_root = Path(__file__).parent / "generated_profiles"
 
+    # --- P36: Clean stale generated profiles from crashed prior sessions ---
+    if generated_profiles_root.exists():
+        logger.warning(
+            "Stale generated_profiles detected — cleaning up "
+            "(previous session likely crashed without teardown).",
+        )
+        shutil.rmtree(generated_profiles_root, ignore_errors=True)
+
     # --- Stale .bak migration (WU-36 AC-36.1) ---
     # Legacy sessions may have crashed leaving orphaned .bak files from the
     # old approach that overwrote demo profiles.  Restore them now so the
