@@ -21,12 +21,6 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-# The function under test. Current signature is:
-#   _discover_repository_for_asset(dagster_url, asset_path) -> tuple[str, str]
-# NEW expected signature (after implementation):
-#   _discover_repository_for_asset(dagster_url, search_term) -> tuple[str, str, list[str], str]
-#   Returns: (repo_name, location_name, asset_path, job_name)
 from test_compile_deploy_materialize_e2e import _discover_repository_for_asset
 
 
