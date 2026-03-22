@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 import httpx
 import pytest
 
+from testing.fixtures.services import ServiceEndpoint
 from tests.e2e.conftest import run_helm, run_kubectl
 
 if TYPE_CHECKING:
@@ -206,7 +207,7 @@ class TestPlatformDeployment:
         Validates that Dagster is not just running but functionally healthy:
         returns a valid JSON response with dagster_version field.
         """
-        dagster_url = os.environ.get("DAGSTER_URL", "http://localhost:3000")
+        dagster_url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
         wait_for_service(
             f"{dagster_url}/server_info",
             timeout=60,
@@ -236,7 +237,9 @@ class TestPlatformDeployment:
         the Quarkus management port (8182). The catalog API (8181) requires
         OAuth credentials, so health checks use the management endpoint.
         """
-        polaris_health_url = os.environ.get("POLARIS_HEALTH_URL", "http://localhost:8182")
+        polaris_health_url = os.environ.get(
+            "POLARIS_HEALTH_URL", ServiceEndpoint("polaris-management").url
+        )
         wait_for_service(
             f"{polaris_health_url}/q/health/ready",
             timeout=90,
@@ -264,7 +267,7 @@ class TestPlatformDeployment:
         Validates that MinIO S3-compatible storage is ready to accept
         read/write operations, not just listening on the port.
         """
-        minio_url = os.environ.get("MINIO_URL", "http://localhost:9000")
+        minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
         wait_for_service(
             f"{minio_url}/minio/health/ready",
             timeout=60,
@@ -312,7 +315,7 @@ class TestPlatformDeployment:
         Validates that the distributed tracing backend is functional and
         can serve service queries.
         """
-        jaeger_url = os.environ.get("JAEGER_URL", "http://localhost:16686")
+        jaeger_url = os.environ.get("JAEGER_URL", ServiceEndpoint("jaeger-query").url)
         wait_for_service(
             f"{jaeger_url}/api/services",
             timeout=60,
@@ -376,7 +379,7 @@ class TestPlatformDeployment:
         Goes beyond HTTP 200 — actually executes a GraphQL query to verify
         the API is functionally correct, not just listening.
         """
-        dagster_url = os.environ.get("DAGSTER_URL", "http://localhost:3000")
+        dagster_url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
         wait_for_service(
             f"{dagster_url}/server_info",
             timeout=60,

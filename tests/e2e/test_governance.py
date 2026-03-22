@@ -38,6 +38,7 @@ import pytest
 import yaml
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
+from testing.fixtures.services import ServiceEndpoint
 
 SENSITIVE_FIELD_PATTERNS = [
     r"password",
@@ -910,4 +911,4 @@ class TestGovernance(IntegrationTestBase):
         """Get Polaris catalog URL from environment or default."""
         import os
 
-        return os.environ.get("POLARIS_URL", "http://localhost:8181")
+        return os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)

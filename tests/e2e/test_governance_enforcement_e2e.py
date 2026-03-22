@@ -29,6 +29,8 @@ import pytest
 import yaml
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
+from testing.fixtures.services import ServiceEndpoint
+
 # Shared plugin config for custom manifests — must include all required plugins
 # to avoid RESOLVE stage E201 errors.
 _REQUIRED_PLUGINS: dict[str, Any] = {
@@ -43,7 +45,7 @@ _REQUIRED_PLUGINS: dict[str, Any] = {
     "catalog": {
         "type": "polaris",
         "config": {
-            "uri": "http://localhost:8181/api/catalog",
+            "uri": f"{ServiceEndpoint('polaris').url}/api/catalog",
             "warehouse": "floe-test",
             "credential": "demo-admin:demo-secret",  # pragma: allowlist secret
         },
@@ -51,7 +53,7 @@ _REQUIRED_PLUGINS: dict[str, Any] = {
     "storage": {
         "type": "s3",
         "config": {
-            "endpoint": "http://localhost:9000",
+            "endpoint": ServiceEndpoint("minio").url,
             "bucket": "floe-data",
             "region": "us-east-1",
             "path_style_access": True,

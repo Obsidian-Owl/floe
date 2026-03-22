@@ -47,6 +47,7 @@ import pytest
 from dbt_utils import run_dbt
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
+from testing.fixtures.services import ServiceEndpoint
 
 ALL_PRODUCTS = ["customer-360", "iot-telemetry", "financial-risk"]
 """All demo product directories to test across."""
@@ -151,7 +152,7 @@ class TestDataPipeline(IntegrationTestBase):
         # Polaris table-default.s3.endpoint overrides client config with
         # K8s-internal hostname (floe-platform-minio). Replace FileIO
         # so scans resolve against the host-accessible MinIO URL.
-        minio_url = os.environ.get("MINIO_URL", "http://localhost:9000")
+        minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
         io_props = dict(table.io.properties)
         io_props["s3.endpoint"] = minio_url
         table.io = load_file_io(properties=io_props)

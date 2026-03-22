@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from testing.fixtures.services import ServiceEndpoint
+
 logger = logging.getLogger(__name__)
 
 # Session-scoped catalog cache — persists across calls within a single
@@ -37,7 +39,7 @@ def _get_polaris_catalog() -> Any:
         _catalog_cache["catalog"] = None
         return None
 
-    polaris_url = os.environ.get("POLARIS_URL", "http://localhost:8181")
+    polaris_url = os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
     default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
 
     try:
@@ -49,7 +51,7 @@ def _get_polaris_catalog() -> Any:
                 "credential": os.environ.get("POLARIS_CREDENTIAL", default_cred),
                 "scope": "PRINCIPAL_ROLE:ALL",
                 "warehouse": os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"),
-                "s3.endpoint": os.environ.get("MINIO_URL", "http://localhost:9000"),
+                "s3.endpoint": os.environ.get("MINIO_URL", ServiceEndpoint("minio").url),
                 "s3.access-key-id": os.environ.get(  # pragma: allowlist secret
                     "AWS_ACCESS_KEY_ID", "minioadmin"
                 ),
