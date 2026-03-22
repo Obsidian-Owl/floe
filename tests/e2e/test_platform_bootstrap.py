@@ -87,7 +87,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
     # Only NodePort-accessible services (ClusterIP-only services checked individually)
     required_services = [
         "polaris",
-        "polaris-mgmt",
+        "polaris-management",
         "dagster-webserver",
         "minio",
         "jaeger-query",
