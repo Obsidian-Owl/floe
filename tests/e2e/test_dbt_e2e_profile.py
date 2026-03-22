@@ -512,89 +512,76 @@ class TestNoHardcodedCredentials:
 
 @pytest.mark.e2e
 @pytest.mark.requirement("WU-24-T2")
-class TestBackupBehavior:
-    """Validate that original profiles are backed up (not destroyed)."""
+class TestProfileIsolation:
+    """Validate that demo profiles are never modified (profile isolation)."""
 
     @pytest.mark.requirement("WU-24-T2")
     @pytest.mark.parametrize("product", list(DEMO_PRODUCTS.keys()))
-    def test_original_profile_is_backed_up(
+    def test_demo_profile_untouched_during_session(
         self,
         dbt_e2e_profile: dict[str, Path],
         project_root: Path,
         product: str,
     ) -> None:
-        """A backup of the original profiles.yml must exist during the session.
+        """Demo profiles.yml must remain unmodified during the E2E session.
 
-        The fixture must not silently destroy the original DuckDB-only profile.
-        We check for a backup file (e.g., profiles.yml.bak or profiles.yml.orig)
-        in the same directory.
+        The fixture writes E2E profiles to an isolated generated_profiles
+        directory, never overwriting demo/<product>/profiles.yml.  Verify
+        the demo profile still contains the original DuckDB-only config.
+        """
+        demo_dir = project_root / "demo" / product
+        demo_profile = demo_dir / "profiles.yml"
+
+        assert demo_profile.exists(), f"Demo profile not found at {demo_profile}."
+
+        demo_content: dict[str, Any] = yaml.safe_load(demo_profile.read_text())
+        profile_name = DEMO_PRODUCTS[product]
+
+        assert profile_name in demo_content, (
+            f"Demo profile for '{product}' missing key '{profile_name}'."
+        )
+
+        demo_dev = demo_content[profile_name]["outputs"]["dev"]
+        assert demo_dev.get("type") == "duckdb", (
+            f"Demo profile for '{product}' was modified: type is "
+            f"'{demo_dev.get('type')}', expected 'duckdb'."
+        )
+        assert demo_dev.get("path") == "target/demo.duckdb", (
+            f"Demo profile for '{product}' was modified: path is "
+            f"'{demo_dev.get('path')}', expected 'target/demo.duckdb'."
+        )
+        # Original should NOT have attach (proves it was not overwritten)
+        assert "attach" not in demo_dev, (
+            f"Demo profile for '{product}' contains 'attach' config. "
+            f"This means the E2E profile leaked into the demo directory."
+        )
+
+    @pytest.mark.requirement("WU-24-T2")
+    @pytest.mark.parametrize("product", list(DEMO_PRODUCTS.keys()))
+    def test_no_backup_files_created(
+        self,
+        dbt_e2e_profile: dict[str, Path],
+        project_root: Path,
+        product: str,
+    ) -> None:
+        """No .bak files should exist — profile isolation means no overwrites.
+
+        The old approach created .bak files.  With generated_profiles
+        isolation, no backup is needed because demo profiles are untouched.
         """
         demo_dir = project_root / "demo" / product
 
-        # Check for common backup file naming conventions
-        possible_backups = [
+        stale_backups = [
             demo_dir / "profiles.yml.bak",
             demo_dir / "profiles.yml.orig",
             demo_dir / "profiles.yml.backup",
             demo_dir / "profiles.yml.original",
         ]
 
-        found_backup = any(backup.exists() for backup in possible_backups)
-        assert found_backup, (
-            f"No backup of original profiles.yml found for '{product}'.\n"
-            f"Checked: {[str(p) for p in possible_backups]}\n"
-            f"The fixture must back up the original profile before overwriting."
-        )
-
-    @pytest.mark.requirement("WU-24-T2")
-    @pytest.mark.parametrize("product", list(DEMO_PRODUCTS.keys()))
-    def test_backup_contains_original_duckdb_only_config(
-        self,
-        dbt_e2e_profile: dict[str, Path],
-        project_root: Path,
-        product: str,
-    ) -> None:
-        """Backup file must contain the original DuckDB-only config.
-
-        Verifies the backup has the simple DuckDB profile structure
-        (type: duckdb, path: target/demo.duckdb) without Iceberg attach.
-        This proves the backup is the real original, not a copy of the
-        E2E profile.
-        """
-        demo_dir = project_root / "demo" / product
-
-        # Find whichever backup convention was used
-        backup_path: Path | None = None
-        for suffix in (".bak", ".orig", ".backup", ".original"):
-            candidate = demo_dir / f"profiles.yml{suffix}"
-            if candidate.exists():
-                backup_path = candidate
-                break
-
-        assert backup_path is not None, (
-            f"No backup file found for '{product}' -- cannot verify original content."
-        )
-
-        backup_content: dict[str, Any] = yaml.safe_load(backup_path.read_text())
-        profile_name = DEMO_PRODUCTS[product]
-
-        assert profile_name in backup_content, (
-            f"Backup for '{product}' missing profile key '{profile_name}'."
-        )
-
-        backup_dev = backup_content[profile_name]["outputs"]["dev"]
-        assert backup_dev.get("type") == "duckdb", (
-            f"Backup for '{product}' does not have original type: duckdb."
-        )
-        assert backup_dev.get("path") == "target/demo.duckdb", (
-            f"Backup for '{product}' does not have original path: target/demo.duckdb.\n"
-            f"Got: {backup_dev.get('path')!r}. "
-            f"Backup appears to be a copy of the E2E profile, not the original."
-        )
-        # Original should NOT have attach (proves it is the original, not E2E)
-        assert "attach" not in backup_dev, (
-            f"Backup for '{product}' contains 'attach' config. "
-            f"This means the backup is a copy of the E2E profile, not the original."
+        found = [str(p) for p in stale_backups if p.exists()]
+        assert not found, (
+            f"Stale backup files found for '{product}': {found}.\n"
+            f"Profile isolation should not create backup files."
         )
 
 

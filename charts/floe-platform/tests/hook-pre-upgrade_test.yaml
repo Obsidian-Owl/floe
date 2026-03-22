@@ -67,6 +67,36 @@ tests:
             verbs: ["get", "delete"]
 
   # -----------------------------------------------------------------
+  # AC-4b: Job has activeDeadlineSeconds to prevent hung upgrades
+  # -----------------------------------------------------------------
+  - it: should set activeDeadlineSeconds on hook Job
+    set:
+      postgresql.enabled: true
+      postgresql.preUpgradeCleanup.enabled: true
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 120
+
+  # -----------------------------------------------------------------
+  # AC-4c: Job has backoffLimit for fast failure
+  # -----------------------------------------------------------------
+  - it: should set backoffLimit on hook Job
+    set:
+      postgresql.enabled: true
+      postgresql.preUpgradeCleanup.enabled: true
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.backoffLimit
+          value: 1
+
+  # -----------------------------------------------------------------
   # AC-5: Hook absent when disabled
   # -----------------------------------------------------------------
   - it: should NOT render any resources when preUpgradeCleanup disabled

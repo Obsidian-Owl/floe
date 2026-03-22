@@ -1148,11 +1148,11 @@ def dbt_e2e_profile(
 ) -> Generator[dict[str, Path], None, None]:
     """Configure dbt to write to Iceberg tables via Polaris REST catalog.
 
-    Writes E2E ``profiles.yml`` files to each demo project directory,
-    backing up the originals as ``profiles.yml.bak``.  The
-    The ``run_dbt()`` helper in ``dbt_utils.py`` passes
-    ``--profiles-dir`` pointing to the project directory, so profiles
-    must live there.
+    Writes E2E ``profiles.yml`` files to an isolated directory at
+    ``tests/e2e/generated_profiles/<product>/profiles.yml``.  Demo
+    profiles are never overwritten.  The ``run_dbt()`` helper in
+    ``dbt_utils.py`` auto-detects the generated profiles directory
+    and uses it as ``--profiles-dir``.
 
     Credentials are sourced from environment variables, consistent with
     the ``polaris_client`` fixture.
@@ -1162,7 +1162,8 @@ def dbt_e2e_profile(
         ``profiles.yml`` paths.
 
     Note:
-        Originals are restored on session teardown.
+        Generated profiles are cleaned up on session teardown.
+        Stale profiles from crashed prior sessions are cleaned at setup (P36).
     """
     # --- Resolve credentials from environment and publish as env vars ---
     # dbt profiles use {{ env_var(...) }} Jinja references (FR-014),
@@ -1209,28 +1210,26 @@ def dbt_e2e_profile(
     )
     os.environ.setdefault("AWS_REGION", "us-east-1")
 
-    backups: dict[str, str | None] = {}
     profile_paths: dict[str, Path] = {}
 
-    def _restore_backups() -> None:
-        """Restore original profiles and remove backups."""
-        for prod_dir, orig_content in backups.items():
-            proj_dir = project_root / "demo" / prod_dir
-            prof_path = proj_dir / "profiles.yml"
-            bak_path = proj_dir / "profiles.yml.bak"
+    # --- Profile isolation (WU-1 AC-3) ---
+    # Write E2E profiles to tests/e2e/generated_profiles/<product>/profiles.yml
+    # instead of overwriting demo/<product>/profiles.yml.  run_dbt() auto-detects
+    # the generated_profiles directory and uses it as --profiles-dir.
+    generated_profiles_root = Path(__file__).parent / "generated_profiles"
 
-            if orig_content is not None:
-                prof_path.write_text(orig_content)
-            elif prof_path.exists():
-                prof_path.unlink()
+    # --- P36: Clean stale generated profiles from crashed prior sessions ---
+    if generated_profiles_root.exists():
+        logger.warning(
+            "Stale generated_profiles detected — cleaning up "
+            "(previous session likely crashed without teardown).",
+        )
+        shutil.rmtree(generated_profiles_root, ignore_errors=True)
 
-            bak_path.unlink(missing_ok=True)
-
-    # --- Stale .bak detection guard (WU-36 AC-36.1) ---
-    # A prior session may have crashed before _restore_backups() ran,
-    # leaving orphaned .bak files with the E2E profile still in place.
-    # If we detect such a .bak, restore the original profiles.yml now,
-    # BEFORE creating new backups, so make compile-demo does not fail.
+    # --- Stale .bak migration (WU-36 AC-36.1) ---
+    # Legacy sessions may have crashed leaving orphaned .bak files from the
+    # old approach that overwrote demo profiles.  Restore them now so the
+    # demo directory is clean.
     for product_dir in _DBT_DEMO_PRODUCTS:
         project_dir = project_root / "demo" / product_dir
         profile_path = project_dir / "profiles.yml"
@@ -1279,17 +1278,9 @@ def dbt_e2e_profile(
 
     try:
         for product_dir, profile_name in _DBT_DEMO_PRODUCTS.items():
-            project_dir = project_root / "demo" / product_dir
-            profile_path = project_dir / "profiles.yml"
-            backup_path = project_dir / "profiles.yml.bak"
-
-            # Back up original
-            if profile_path.exists():
-                original_content = profile_path.read_text()
-                backups[product_dir] = original_content
-                backup_path.write_text(original_content)
-            else:
-                backups[product_dir] = None
+            gen_dir = generated_profiles_root / product_dir
+            gen_dir.mkdir(parents=True, exist_ok=True)
+            profile_path = gen_dir / "profiles.yml"
 
             # Write E2E profile (credentials via env_var, not plaintext)
             e2e_content = _build_dbt_iceberg_profile(
@@ -1299,15 +1290,18 @@ def dbt_e2e_profile(
             profile_path.write_text(e2e_content)
             profile_paths[product_dir] = profile_path
     except Exception:
-        # Setup failed mid-loop — restore any profiles already backed up
-        _restore_backups()
+        # Setup failed mid-loop — clean up any generated profiles
+        if generated_profiles_root.exists():
+            shutil.rmtree(generated_profiles_root, ignore_errors=True)
         if _macro_copied and macro_dest.exists():
             macro_dest.unlink()
         raise
 
     yield profile_paths
 
-    _restore_backups()
+    # Clean up generated profiles directory
+    if generated_profiles_root.exists():
+        shutil.rmtree(generated_profiles_root, ignore_errors=True)
     # Clean up copied macro file
     if _macro_copied and macro_dest.exists():
         macro_dest.unlink()

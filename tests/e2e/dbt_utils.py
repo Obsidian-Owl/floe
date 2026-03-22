@@ -111,8 +111,10 @@ def run_dbt(
     control error handling -- no dead-code assertions, no hidden
     CalledProcessError surprises.
 
-    Both ``--project-dir`` and ``--profiles-dir`` point to *project_dir*
-    because the ``dbt_e2e_profile`` fixture writes profiles.yml there.
+    ``--profiles-dir`` is resolved automatically: if a generated profiles
+    directory exists at ``tests/e2e/generated_profiles/<product>/``, it is
+    used; otherwise ``project_dir`` is used as a fallback.  The
+    ``dbt_e2e_profile`` fixture writes profiles to the generated directory.
 
     For ``seed`` and ``run`` commands, existing Iceberg tables are
     dropped via PyIceberg first, because DuckDB's Iceberg extension
@@ -143,6 +145,13 @@ def run_dbt(
     venv_bin = Path(sys.executable).parent
     dbt_bin = str(venv_bin / "dbt")
 
+    # Profile isolation: prefer generated profiles directory (written by the
+    # dbt_e2e_profile fixture) over demo project profiles.  This prevents
+    # E2E test profiles from overwriting the demo's checked-in profiles.yml,
+    # which would break concurrent ``make demo`` runs.
+    generated_profiles = Path(__file__).parent / "generated_profiles" / project_dir.name
+    profiles_dir = str(generated_profiles) if generated_profiles.is_dir() else str(project_dir)
+
     return subprocess.run(
         [
             dbt_bin,
@@ -150,7 +159,7 @@ def run_dbt(
             "--project-dir",
             str(project_dir),
             "--profiles-dir",
-            str(project_dir),
+            profiles_dir,
         ],
         cwd=project_dir,
         capture_output=True,
