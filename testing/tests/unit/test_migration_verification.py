@@ -12,9 +12,13 @@ the scan.
 
 from __future__ import annotations
 
+import pathlib
 import subprocess
 
 import pytest
+
+_REPO_ROOT: pathlib.Path = pathlib.Path(__file__).resolve().parents[3]
+"""Absolute path to the repository root (testing/tests/unit/ → repo root)."""
 
 # Files that legitimately contain tuple-format for backward-compat testing.
 _EXCLUDED_FILES: frozenset[str] = frozenset(
@@ -61,10 +65,10 @@ class TestMigrationVerification:
                 "-rn",
                 r'required_services.*=.*\[\s*\("',
                 "--include=*.py",
-                "testing/",
-                "packages/",
-                "plugins/",
-                "tests/",
+                str(_REPO_ROOT / "testing"),
+                str(_REPO_ROOT / "packages"),
+                str(_REPO_ROOT / "plugins"),
+                str(_REPO_ROOT / "tests"),
             ],
             capture_output=True,
             text=True,
@@ -91,10 +95,10 @@ class TestMigrationVerification:
                 "-rn",
                 r'self\.check_infrastructure(".*",\s*[0-9]',
                 "--include=*.py",
-                "tests/",
-                "packages/",
-                "plugins/",
-                "testing/",
+                str(_REPO_ROOT / "tests"),
+                str(_REPO_ROOT / "packages"),
+                str(_REPO_ROOT / "plugins"),
+                str(_REPO_ROOT / "testing"),
             ],
             capture_output=True,
             text=True,
@@ -115,10 +119,10 @@ class TestMigrationVerification:
         rather than the deprecated tuple-format.
         """
         target_files = [
-            "testing/__init__.py",
-            "testing/base_classes/__init__.py",
-            "testing/base_classes/integration_test_base.py",
-            "testing/base_classes/adapter_test_base.py",
+            str(_REPO_ROOT / "testing/__init__.py"),
+            str(_REPO_ROOT / "testing/base_classes/__init__.py"),
+            str(_REPO_ROOT / "testing/base_classes/integration_test_base.py"),
+            str(_REPO_ROOT / "testing/base_classes/adapter_test_base.py"),
         ]
         result = subprocess.run(
             [

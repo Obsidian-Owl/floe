@@ -619,6 +619,17 @@ def marquez_client(wait_for_service: Callable[..., None]) -> httpx.Client:
         response = marquez_client.get("/api/v1/namespaces")
         namespaces = response.json()["namespaces"]
     """
+    legacy_port = os.environ.get("MARQUEZ_HOST_PORT")
+    if legacy_port is not None:
+        import warnings
+
+        warnings.warn(
+            "MARQUEZ_HOST_PORT is deprecated; use MARQUEZ_PORT instead",
+            DeprecationWarning,
+            stacklevel=1,
+        )
+        if not os.environ.get("MARQUEZ_PORT"):
+            os.environ["MARQUEZ_PORT"] = legacy_port
     marquez_port = get_effective_port("marquez")
     marquez_url = os.environ.get("MARQUEZ_URL", ServiceEndpoint("marquez").url)
     marquez_timeout = float(os.environ.get("MARQUEZ_TIMEOUT", "90"))
