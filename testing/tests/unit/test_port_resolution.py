@@ -193,9 +193,10 @@ class TestGetEffectivePortPrecedence:
         """Test that ValueError message lists known services to help the user."""
         with pytest.raises(ValueError, match="polaris") as exc_info:
             _get_effective_port("nonexistent-service")
-        # Should mention at least some known services
+        # Should list multiple known services to help the user
         error_msg = str(exc_info.value)
-        assert "dagster" in error_msg or "SERVICE_DEFAULT_PORTS" in error_msg
+        assert "polaris" in error_msg, "Error should list known services"
+        assert "dagster" in error_msg, "Error should list known services"
 
     @pytest.mark.requirement("env-resilient-AC-2")
     def test_empty_env_var_treated_as_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -338,23 +339,40 @@ class TestInvalidEnvVar:
             _get_effective_port("polaris")
 
     @pytest.mark.requirement("env-resilient-AC-9")
-    def test_whitespace_only_env_var_treated_as_unset_or_invalid(
+    def test_port_zero_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that port 0 is rejected as out of TCP range."""
+        monkeypatch.setenv("POLARIS_PORT", "0")
+        with pytest.raises(ValueError, match="1-65535"):
+            _get_effective_port("polaris")
+
+    @pytest.mark.requirement("env-resilient-AC-9")
+    def test_port_above_65535_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that port above 65535 is rejected as out of TCP range."""
+        monkeypatch.setenv("POLARIS_PORT", "99999")
+        with pytest.raises(ValueError, match="1-65535"):
+            _get_effective_port("polaris")
+
+    @pytest.mark.requirement("env-resilient-AC-9")
+    def test_negative_port_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that negative port is rejected as out of TCP range."""
+        monkeypatch.setenv("POLARIS_PORT", "-1")
+        with pytest.raises(ValueError, match="1-65535"):
+            _get_effective_port("polaris")
+
+    @pytest.mark.requirement("env-resilient-AC-9")
+    def test_whitespace_only_env_var_treated_as_unset(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that whitespace-only env var does not silently become port 0.
+        """Test that whitespace-only env var falls through to defaults.
 
-        Whitespace should either be treated as unset (falling through to
-        defaults) or raise a clear error. It must NOT silently resolve.
+        Whitespace is stripped and treated as empty, so the env var is
+        effectively unset and resolution falls through to the defaults dict.
         """
         monkeypatch.setenv("POLARIS_PORT", "   ")
-        # Either falls through to dict default (8181) or raises ValueError
-        # It must NOT return 0 or some garbage value
-        try:
-            result = _get_effective_port("polaris")
-            # If it didn't raise, it must have fallen through to default
-            assert result == 8181
-        except ValueError:
-            pass  # Also acceptable - whitespace is not a valid integer
+        # Whitespace-only is stripped and treated as empty, falling through
+        # to the SERVICE_DEFAULT_PORTS dict default
+        result = _get_effective_port("polaris")
+        assert result == 8181
 
 
 # ---------------------------------------------------------------------------

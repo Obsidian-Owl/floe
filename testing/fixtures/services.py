@@ -76,13 +76,16 @@ def _get_effective_port(service_name: str, default: int | None = None) -> int:
     """
     env_key = f"{service_name.upper().replace('-', '_')}_PORT"
     env_val = os.environ.get(env_key)
-    if env_val is not None and env_val != "":
+    if env_val is not None and env_val.strip() != "":
         try:
-            return int(env_val)
+            port = int(env_val)
         except ValueError:
             raise ValueError(
                 f"Invalid port value for {env_key}={env_val!r}: must be an integer"
             ) from None
+        if not (1 <= port <= 65535):
+            raise ValueError(f"Invalid port value for {env_key}={port}: must be 1-65535")
+        return port
     if default is not None:
         return default
     if service_name in SERVICE_DEFAULT_PORTS:
