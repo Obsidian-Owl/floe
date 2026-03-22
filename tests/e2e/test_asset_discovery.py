@@ -12,7 +12,6 @@ This test suite covers:
 - AC-2: Discovery resolves correct __ASSET_JOB variant from jobNames
 - AC-3: Discovery fails with diagnostic listing available assets
 
-Done when all fail before implementation.
 """
 
 from __future__ import annotations

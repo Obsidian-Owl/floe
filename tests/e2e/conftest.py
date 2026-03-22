@@ -781,7 +781,7 @@ def _discover_repo_for_asset(
             if "__ASSET_JOB" in job_names:
                 job_name = "__ASSET_JOB"
             else:
-                prefixed = [j for j in job_names if j.startswith("__ASSET_JOB")]
+                prefixed = sorted(j for j in job_names if j.startswith("__ASSET_JOB"))
                 job_name = prefixed[0] if prefixed else "__ASSET_JOB"
             return (
                 repo["name"],

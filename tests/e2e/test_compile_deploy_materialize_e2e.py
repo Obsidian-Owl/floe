@@ -82,11 +82,18 @@ def _discover_repository_for_asset(
         }
     }
     """
-    response = httpx.post(
-        f"{dagster_url}/graphql",
-        json={"query": query},
-        timeout=30.0,
-    )
+    try:
+        response = httpx.post(
+            f"{dagster_url}/graphql",
+            json={"query": query},
+            timeout=30.0,
+        )
+    except httpx.HTTPError as exc:
+        pytest.fail(
+            f"assetNodes query raised {type(exc).__name__} while discovering "
+            f"asset '{search_term}'. "
+            "Check that Dagster is reachable and the GraphQL endpoint is up."
+        )
     if response.status_code != 200:
         pytest.fail(
             f"assetNodes query returned status {response.status_code}. "
@@ -98,7 +105,7 @@ def _discover_repository_for_asset(
 
     for node in asset_nodes:
         path = node["assetKey"]["path"]
-        if search_term in path:
+        if search_term in path:  # exact match against any path segment
             repo = node["repository"]
             repo_name: str = repo["name"]
             location_name: str = repo["location"]["name"]
@@ -107,8 +114,8 @@ def _discover_repository_for_asset(
             if "__ASSET_JOB" in job_names:
                 job_name: str = "__ASSET_JOB"
             else:
-                # Pick first job with "__ASSET_JOB" prefix (e.g. "__ASSET_JOB_0")
-                prefixed = [j for j in job_names if j.startswith("__ASSET_JOB")]
+                # Pick lowest-numbered "__ASSET_JOB" variant for determinism
+                prefixed = sorted(j for j in job_names if j.startswith("__ASSET_JOB"))
                 job_name = prefixed[0] if prefixed else "__ASSET_JOB"
             return (repo_name, location_name, path, job_name)
 

@@ -298,9 +298,9 @@ class TestObservability(IntegrationTestBase):
                 for term in (
                     "floe",
                     "dagster",
-                    "customer",
-                    "iot",
-                    "financial",
+                    "customer-360",
+                    "iot-telemetry",
+                    "financial-risk",
                 )
             )
         ]
