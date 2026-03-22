@@ -357,10 +357,10 @@ Quick navigation for available test infrastructure. For detailed usage, see the 
 from testing.base_classes import IntegrationTestBase
 
 class TestMyFeature(IntegrationTestBase):
-    required_services = [("polaris", 8181), ("localstack", 4566)]
+    required_services = ["polaris", "minio"]
 
     def test_something(self) -> None:
-        self.check_infrastructure("polaris", 8181)  # FAILS if unavailable
+        self.check_infrastructure("polaris")  # FAILS if unavailable
         ns = self.generate_unique_namespace("test")  # Test isolation
         host = self.get_service_host("polaris")      # K8s-aware hostname
 ```
@@ -462,14 +462,14 @@ from testing.base_classes.integration_test_base import IntegrationTestBase
 class TestPolarisIntegration(IntegrationTestBase):
     """Integration tests for Polaris catalog."""
 
-    required_services = [("polaris", 8181), ("localstack", 4566)]
+    required_services = ["polaris", "minio"]
 
     @pytest.mark.requirement("4c-FR-001")
     @pytest.mark.integration
     def test_create_catalog(self) -> None:
         """Test catalog creation with Polaris."""
         # Auto-checks infrastructure
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
 
         # Generate unique namespace (isolation)
         namespace = self.generate_unique_namespace("test_polaris")
@@ -790,13 +790,13 @@ from testing.base_classes.integration_test_base import IntegrationTestBase
 class TestPolarisIntegration(IntegrationTestBase):
     """Integration tests for Polaris catalog."""
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     @pytest.mark.requirement("REQ-042")
     @pytest.mark.integration
     def test_create_catalog(self):
         """Test catalog creation succeeds with valid input."""
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
         namespace = self.generate_unique_namespace("test")
 
         catalog = create_catalog(

@@ -398,12 +398,12 @@ from testing.base_classes.integration_test_base import IntegrationTestBase
 
 class TestPolarisIntegration(IntegrationTestBase):
     """Integration tests for Polaris catalog."""
-    required_services = [("polaris", 8181), ("localstack", 4566)]
+    required_services = ["polaris", "minio"]
 
     @pytest.mark.requirement("004-FR-001")
     def test_create_catalog(self) -> None:
         """Test catalog creation with real Polaris."""
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
         namespace = self.generate_unique_namespace("test_polaris")
         catalog = create_catalog(name=f"{namespace}_catalog")
         assert catalog is not None

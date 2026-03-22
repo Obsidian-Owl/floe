@@ -159,9 +159,9 @@ nodes:
       - containerPort: 8181
         hostPort: 8181
         protocol: TCP  # Polaris
-      - containerPort: 4566
-        hostPort: 4566
-        protocol: TCP  # LocalStack
+      - containerPort: 9000
+        hostPort: 9000
+        protocol: TCP  # MinIO
       - containerPort: 16686
         hostPort: 16686
         protocol: TCP  # Jaeger UI
@@ -184,7 +184,7 @@ polaris:
       memory: 1Gi
       cpu: 1000m
 
-localstack:
+minio:
   service:
     type: ClusterIP  # Internal only
   persistence:
@@ -228,7 +228,7 @@ from testing.base_classes.integration_test_base import IntegrationTestBase
 class MyK8sTest(IntegrationTestBase):
     """Test using K8s service discovery."""
 
-    required_services = [("polaris", 8181)]
+    required_services = ["polaris"]
 
     def test_something(self):
         # Automatically detects if running in K8s vs host
@@ -236,7 +236,7 @@ class MyK8sTest(IntegrationTestBase):
         # Returns "polaris" in K8s, "localhost" on host
 
         # Check infrastructure availability
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
 ```
 
 ---
