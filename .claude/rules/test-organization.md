@@ -111,12 +111,12 @@ from testing.base_classes.integration_test_base import IntegrationTestBase
 class TestPolarisCatalog(IntegrationTestBase):
     """Integration tests for Polaris catalog."""
 
-    required_services = [("polaris", 8181), ("localstack", 4566)]
+    required_services = ["polaris", "minio"]
 
     @pytest.mark.requirement("004-FR-001")
     def test_create_catalog(self) -> None:
         """Test catalog creation with real Polaris instance."""
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
         namespace = self.generate_unique_namespace("test_polaris")
 
         catalog = create_catalog(name=f"{namespace}_catalog")
@@ -184,12 +184,12 @@ from testing.base_classes import IntegrationTestBase
 class TestMyFeature(IntegrationTestBase):
     """Integration tests for feature X."""
 
-    required_services = [("polaris", 8181), ("localstack", 4566)]
+    required_services = ["polaris", "minio"]
 
     @pytest.mark.requirement("XXX-FR-001")
     def test_feature_with_real_service(self) -> None:
         """Test feature with actual external service."""
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
         namespace = self.generate_unique_namespace("test_feature")
         # ... test implementation
 ```
@@ -209,11 +209,7 @@ from testing.base_classes import IntegrationTestBase
 class TestFullPipelineWorkflow(IntegrationTestBase):
     """E2E tests validating the complete floe workflow."""
 
-    required_services = [
-        ("dagster", 3000),
-        ("polaris", 8181),
-        ("localstack", 4566),
-    ]
+    required_services = ["dagster", "polaris", "minio"]
 
     @pytest.mark.e2e
     @pytest.mark.requirement("E2E-001")
