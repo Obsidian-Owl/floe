@@ -26,7 +26,103 @@ from __future__ import annotations
 
 import os
 import socket
+from collections.abc import Sequence
 from dataclasses import dataclass
+
+# ---------------------------------------------------------------------------
+# Port resolution constants and utilities
+# ---------------------------------------------------------------------------
+
+SERVICE_DEFAULT_PORTS: dict[str, int] = {
+    "dagster-webserver": 3000,
+    "dagster": 3000,
+    "polaris": 8181,
+    "polaris-management": 8182,
+    "minio": 9000,
+    "minio-console": 9001,
+    "postgres": 5432,
+    "jaeger-query": 16686,
+    "otel-collector-grpc": 4317,
+    "otel-collector-http": 4318,
+    "marquez": 5100,
+    "oci-registry": 5000,
+    "registry": 5000,
+}
+"""Default ports for well-known floe platform services."""
+
+_PORT_UNSET: int = -1
+"""Sentinel value indicating a port has not been set."""
+
+
+def _get_effective_port(service_name: str, default: int | None = None) -> int:
+    """Determine the effective port for a service.
+
+    Resolves port using the following precedence:
+      1. Environment variable ``{SERVICE_NAME}_PORT`` (hyphens → underscores, uppercase)
+      2. Explicit ``default`` parameter (if not None)
+      3. ``SERVICE_DEFAULT_PORTS`` lookup
+      4. ``ValueError`` if none of the above applies
+
+    Args:
+        service_name: Name of the service (e.g., ``"polaris"``).
+        default: Optional caller-supplied default port.
+
+    Returns:
+        Resolved port as an integer.
+
+    Raises:
+        ValueError: If the env var contains a non-integer value, or if no
+            port can be determined.
+    """
+    env_key = f"{service_name.upper().replace('-', '_')}_PORT"
+    env_val = os.environ.get(env_key)
+    if env_val is not None and env_val.strip() != "":
+        try:
+            port = int(env_val)
+        except ValueError:
+            raise ValueError(
+                f"Invalid port value for {env_key}={env_val!r}: must be an integer"
+            ) from None
+        if not (1 <= port <= 65535):
+            raise ValueError(f"Invalid port value for {env_key}={port}: must be 1-65535")
+        return port
+    if default is not None:
+        return default
+    if service_name in SERVICE_DEFAULT_PORTS:
+        return SERVICE_DEFAULT_PORTS[service_name]
+    known = ", ".join(sorted(SERVICE_DEFAULT_PORTS.keys()))
+    raise ValueError(
+        f"No port for service {service_name!r}: "
+        f"set {env_key} env var or use a known service ({known})"
+    )
+
+
+def get_effective_port(service_name: str, default: int | None = None) -> int:
+    """Get the effective port for a service.
+
+    Public wrapper around :func:`_get_effective_port`.  Resolves port using
+    the following precedence:
+      1. Environment variable ``{SERVICE_NAME}_PORT``
+      2. Explicit ``default`` parameter
+      3. ``SERVICE_DEFAULT_PORTS`` lookup
+      4. ``ValueError`` if none of the above applies
+
+    Args:
+        service_name: Name of the service (e.g., ``"polaris"``).
+        default: Optional caller-supplied default port.
+
+    Returns:
+        Resolved port as an integer.
+
+    Raises:
+        ValueError: If the env var contains a non-integer value, or if no
+            port can be determined.
+
+    Example:
+        port = get_effective_port("polaris")
+        uri = f"http://localhost:{port}/api/catalog"
+    """
+    return _get_effective_port(service_name, default)
 
 
 def _get_effective_host(service_name: str, namespace: str) -> str:
@@ -86,15 +182,24 @@ def _can_resolve_host(hostname: str) -> bool:
 class ServiceEndpoint:
     """Represents a K8s service endpoint.
 
+    When ``port`` is omitted (or set to the sentinel ``_PORT_UNSET``), it is
+    resolved automatically via :func:`_get_effective_port` using the standard
+    precedence chain (env var → dict default).
+
     Attributes:
         name: Service name (e.g., "polaris", "postgres")
-        port: Service port number
+        port: Service port number.  Defaults to automatic resolution.
         namespace: K8s namespace. Defaults to "floe-test"
     """
 
     name: str
-    port: int
+    port: int = _PORT_UNSET
     namespace: str = "floe-test"
+
+    def __post_init__(self) -> None:
+        """Resolve port from env/defaults when the sentinel is used."""
+        if self.port == _PORT_UNSET:
+            object.__setattr__(self, "port", _get_effective_port(self.name))
 
     @property
     def host(self) -> str:
@@ -104,6 +209,11 @@ class ServiceEndpoint:
         on host (e.g., with Kind NodePort mappings).
         """
         return _get_effective_host(self.name, self.namespace)
+
+    @property
+    def url(self) -> str:
+        """Construct ``http://{host}:{port}`` URL."""
+        return f"http://{self.host}:{self.port}"
 
     @property
     def k8s_host(self) -> str:
@@ -163,7 +273,7 @@ def check_service_health(
 
 
 def check_infrastructure(
-    services: list[tuple[str, int]],
+    services: Sequence[tuple[str, int] | str],
     namespace: str = "floe-test",
     timeout: float = 5.0,
     *,
@@ -174,8 +284,12 @@ def check_infrastructure(
     Checks all specified services and returns their health status.
     Optionally raises an exception if any service is unavailable.
 
+    Each entry in *services* may be either:
+    - ``("service_name", port)`` — explicit port (legacy format)
+    - ``"service_name"`` — port resolved via env var / defaults
+
     Args:
-        services: List of (service_name, port) tuples to check.
+        services: List of service specs to check.
         namespace: K8s namespace. Defaults to "floe-test".
         timeout: Connection timeout per service in seconds. Defaults to 5.0.
         raise_on_failure: If True, raise ServiceUnavailableError for the
@@ -189,30 +303,30 @@ def check_infrastructure(
             is unavailable.
 
     Example:
-        # Check multiple services
-        health = check_infrastructure([
-            ("polaris", 8181),
-            ("minio", 9000),
-            ("postgres", 5432),
-        ])
+        # New string format (port resolved from env/defaults)
+        health = check_infrastructure(["polaris", "minio", "postgres"])
 
-        # With exception on failure
-        try:
-            check_infrastructure([("polaris", 8181)])
-        except ServiceUnavailableError as e:
-            print(f"Required service unavailable: {e}")
+        # Legacy tuple format still works
+        health = check_infrastructure([("polaris", 8181)])
+
+        # Mixed list
+        health = check_infrastructure([("dagster", 3100), "polaris"])
     """
     results: dict[str, bool] = {}
 
-    for service_name, port in services:
-        endpoint = ServiceEndpoint(service_name, port, namespace)
-        is_healthy = _tcp_health_check(endpoint.host, port, timeout)
-        results[service_name] = is_healthy
+    for spec in services:
+        if isinstance(spec, str):
+            endpoint = ServiceEndpoint(spec, namespace=namespace)
+        else:
+            name, port = spec
+            endpoint = ServiceEndpoint(name, port, namespace)
+        is_healthy = _tcp_health_check(endpoint.host, endpoint.port, timeout)
+        results[endpoint.name] = is_healthy
 
         if raise_on_failure and not is_healthy:
             raise ServiceUnavailableError(
                 endpoint,
-                f"TCP connection to {endpoint.host}:{port} failed",
+                f"TCP connection to {endpoint.host}:{endpoint.port} failed",
             )
 
     return results
@@ -266,9 +380,11 @@ def get_effective_host(
 
 # Module exports
 __all__ = [
+    "SERVICE_DEFAULT_PORTS",
     "ServiceEndpoint",
     "ServiceUnavailableError",
     "check_infrastructure",
     "check_service_health",
     "get_effective_host",
+    "get_effective_port",
 ]
