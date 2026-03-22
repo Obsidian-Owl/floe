@@ -190,11 +190,11 @@ class MyIntegrationTest(IntegrationTestBase):
     """Integration test with automatic service detection."""
 
     # Declare required services (automatic health checking)
-    required_services = [("polaris", 8181), ("localstack", 4566)]
+    required_services = ["polaris", "minio"]
 
     def test_something(self):
         # Automatically checks infrastructure before running
-        self.check_infrastructure("polaris", 8181)
+        self.check_infrastructure("polaris")
 
         # Generate unique namespace for isolation
         namespace = self.generate_unique_namespace("test_feature")
