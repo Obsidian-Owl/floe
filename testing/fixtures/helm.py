@@ -75,7 +75,8 @@ def recover_stuck_helm_release(
     """Detect and recover from stuck Helm release states.
 
     Checks for pending-upgrade, pending-install, pending-rollback, and failed
-    states and performs rollback to the last known good revision.
+    states. Scans ``helm history`` to find the most recent revision with status
+    "deployed" and rolls back to that revision.
 
     Args:
         release: Helm release name.
@@ -86,11 +87,11 @@ def recover_stuck_helm_release(
             Defaults to the internal ``_run_helm`` helper.
 
     Returns:
-        True if recovery was performed, False if release was healthy or
-        did not exist.
+        True if recovery was performed, False if release was healthy,
+        did not exist, or no deployed revision was found in history.
 
     Raises:
-        RuntimeError: If rollback fails after detecting stuck state.
+        RuntimeError: If helm history or rollback fails after detecting stuck state.
         ValueError: If helm status output is not valid JSON.
     """
     run = helm_runner or _run_helm
@@ -115,14 +116,32 @@ def recover_stuck_helm_release(
         )
         raise ValueError(msg)
 
-    rollback_revision = max(1, current_revision - 1)
-
-    if current_revision == 1:
-        print(
-            f"WARNING: Helm release '{release}' stuck in '{release_status}' at "
-            f"revision 1. Rollback to revision 1 re-deploys the same revision — "
-            f"if this fails, try: helm uninstall {release} -n {namespace}"
+    # Scan helm history to find the most recent deployed revision
+    history_result = run(["history", release, "-n", namespace, "-o", "json"])
+    if history_result.returncode != 0:
+        msg = (
+            f"Helm history failed for release '{release}': {history_result.stderr}\n"
+            f"Cannot determine last known good revision. Manual intervention required:\n"
+            f"  helm history {release} -n {namespace}"
         )
+        raise RuntimeError(msg)
+
+    history_entries: list[dict[str, object]] = json.loads(history_result.stdout)
+    rollback_revision: int | None = None
+    for entry in reversed(history_entries):
+        if entry.get("status") == "deployed":
+            rev = entry.get("revision")
+            if isinstance(rev, int):
+                rollback_revision = rev
+                break
+
+    if rollback_revision is None:
+        print(
+            f"WARNING: Helm release '{release}' stuck in '{release_status}' but "
+            f"no deployed revision found in history. Cannot auto-recover.\n"
+            f"Manual intervention required: helm uninstall {release} -n {namespace}"
+        )
+        return False
 
     print(
         f"WARNING: Helm release '{release}' in '{release_status}' state. "

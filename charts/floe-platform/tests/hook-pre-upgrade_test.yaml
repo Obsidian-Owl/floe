@@ -79,7 +79,7 @@ tests:
           of: Job
       - equal:
           path: spec.activeDeadlineSeconds
-          value: 120
+          value: 300
 
   # -----------------------------------------------------------------
   # AC-4c: Job has backoffLimit for fast failure

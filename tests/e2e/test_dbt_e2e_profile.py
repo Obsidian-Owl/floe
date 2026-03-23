@@ -136,13 +136,14 @@ class TestProfileFilesExistAndAreValidYaml:
         project_root: Path,
         product: str,
     ) -> None:
-        """Profile must be written to the demo/<product>/ directory.
+        """Profile must be written to the generated_profiles/<product>/ directory.
 
-        Ensures the fixture writes to the correct location where dbt
-        will actually discover it, not some temp directory.
+        Ensures the fixture writes to the isolated E2E profiles directory
+        (tests/e2e/generated_profiles/<product>/) as documented in the
+        dbt_e2e_profile fixture docstring. Demo profiles are never overwritten.
         """
         profile_path = dbt_e2e_profile[product]
-        expected_dir = project_root / "demo" / product
+        expected_dir = project_root / "tests" / "e2e" / "generated_profiles" / product
         assert profile_path.parent == expected_dir, (
             f"Profile for '{product}' written to wrong directory.\n"
             f"Expected parent: {expected_dir}\n"
