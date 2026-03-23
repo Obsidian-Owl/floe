@@ -377,3 +377,101 @@ class HttpLineageTransport:
 
         if self._consumer_task is not None:
             await self._consumer_task
+
+
+class SyncNoOpTransport:
+    """Synchronous no-op lineage transport that discards all events.
+
+    Use in contexts where lineage emission is not required and an event
+    loop is unavailable.
+    """
+
+    def emit(self, _event: LineageEvent) -> None:
+        """Discard the event silently.
+
+        Args:
+            _event: The lineage event to discard.
+        """
+
+    def close(self) -> None:
+        """No-op close."""
+
+
+class SyncConsoleLineageTransport:
+    """Synchronous lineage transport that logs events via structlog.
+
+    Use in contexts where an event loop is unavailable and structured
+    log output is the desired sink.
+    """
+
+    def __init__(self) -> None:
+        """Initialise the console transport."""
+        self._log: structlog.stdlib.BoundLogger = structlog.get_logger("floe.lineage.console")
+
+    def emit(self, event: LineageEvent) -> None:
+        """Log the lineage event fields via structlog.
+
+        Args:
+            event: The lineage event to log.
+        """
+        self._log.info(
+            "lineage_event",
+            event_type=event.event_type.value,
+            job_namespace=event.job.namespace,
+            job_name=event.job.name,
+            run_id=str(event.run.run_id),
+            producer=event.producer,
+            inputs_count=len(event.inputs),
+            outputs_count=len(event.outputs),
+        )
+
+    def close(self) -> None:
+        """No-op close."""
+
+
+class SyncHttpLineageTransport:
+    """Synchronous HTTP lineage transport using httpx.Client.
+
+    Sends OpenLineage events to a remote HTTP endpoint using a blocking
+    httpx.Client. Exceptions from the HTTP layer propagate to the caller;
+    error isolation is the emitter's responsibility.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        timeout: float = 5.0,
+        api_key: str | None = None,
+    ) -> None:
+        """Initialise the sync HTTP transport.
+
+        Args:
+            url: The OpenLineage API endpoint URL.
+            timeout: Request timeout in seconds (default 5.0).
+            api_key: Optional Bearer token for Authorization header.
+        """
+        import httpx
+
+        self._url = url
+        self._timeout = timeout
+        self._api_key = api_key
+        self._client: httpx.Client = httpx.Client(timeout=timeout)
+
+    def emit(self, event: LineageEvent) -> None:
+        """Send the lineage event as a blocking HTTP POST.
+
+        Args:
+            event: The lineage event to send.
+
+        Raises:
+            httpx.HTTPError: If the HTTP request fails.
+        """
+        payload = to_openlineage_event(event)
+        headers: dict[str, str] = {}
+        if self._api_key is not None:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        self._client.post(self._url, json=payload, headers=headers)
+
+    def close(self) -> None:
+        """Close the underlying httpx.Client, releasing connections."""
+        self._client.close()
