@@ -75,12 +75,11 @@ class TestServiceFailureResilience:
             "MinIO",
             namespace=NAMESPACE,
         )
-        original_uid, new_uid, recovery_secs = result
+        _original_uid, _new_uid, recovery_secs = result
 
-        assert new_uid != original_uid, (
-            f"MinIO pod UID did not change after deletion: {original_uid[:8]}"
-        )
-        assert recovery_secs < 30.0, f"MinIO recovery took {recovery_secs:.1f}s (limit: 30s)"
+        # assert_pod_recovery guarantees UID changed (raises PodRecoveryError otherwise).
+        # Bound covers delete RPC + recovery polling (30s each worst-case).
+        assert recovery_secs < 60.0, f"MinIO recovery took {recovery_secs:.1f}s (limit: 60s)"
 
     @pytest.mark.requirement("AC-2.7")
     def test_polaris_pod_restart_detected(self) -> None:
@@ -106,12 +105,11 @@ class TestServiceFailureResilience:
             "Polaris",
             namespace=NAMESPACE,
         )
-        original_uid, new_uid, recovery_secs = result
+        _original_uid, _new_uid, recovery_secs = result
 
-        assert new_uid != original_uid, (
-            f"Polaris pod UID did not change after deletion: {original_uid[:8]}"
-        )
-        assert recovery_secs < 30.0, f"Polaris recovery took {recovery_secs:.1f}s (limit: 30s)"
+        # assert_pod_recovery guarantees UID changed (raises PodRecoveryError otherwise).
+        # Bound covers delete RPC + recovery polling (30s each worst-case).
+        assert recovery_secs < 60.0, f"Polaris recovery took {recovery_secs:.1f}s (limit: 60s)"
 
         # Wait for port-forward to reconnect (port 8182 management health)
         polaris_health_ready = wait_for_condition(

@@ -141,19 +141,22 @@ def check_pod_ready(label_selector: str, namespace: str) -> bool:
         namespace: K8s namespace to query.
 
     Returns:
-        True if all matching pods are Ready.
+        True if all matching pods are Ready. False on kubectl failure or timeout.
     """
-    result = run_kubectl(
-        [
-            "get",
-            "pods",
-            "-l",
-            label_selector,
-            "-o",
-            "jsonpath={.items[*].status.conditions[?(@.type=='Ready')].status}",
-        ],
-        namespace=namespace,
-    )
+    try:
+        result = run_kubectl(
+            [
+                "get",
+                "pods",
+                "-l",
+                label_selector,
+                "-o",
+                "jsonpath={.items[*].status.conditions[?(@.type=='Ready')].status}",
+            ],
+            namespace=namespace,
+        )
+    except subprocess.TimeoutExpired:
+        return False
     if result.returncode != 0:
         return False
     statuses = result.stdout.strip().split()
@@ -194,7 +197,7 @@ def assert_pod_recovery(
             f"Check: kubectl get pods -n {namespace} -l {label_selector}"
         )
 
-    # 2. Delete the pod
+    # 2. Delete the pod (timer includes delete + recovery for total wall-clock)
     start = time.monotonic()
     result = run_kubectl(
         [

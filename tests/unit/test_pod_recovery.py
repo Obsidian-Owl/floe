@@ -20,7 +20,7 @@ Test Type Rationale:
 from __future__ import annotations
 
 import subprocess
-from typing import Any
+from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -41,10 +41,10 @@ from testing.fixtures.kubernetes import (
 
 
 @pytest.fixture()
-def mock_subprocess() -> Any:
+def mock_subprocess() -> Generator[MagicMock, None, None]:
     """Patch subprocess.run for kubectl/helm tests.
 
-    Returns:
+    Yields:
         The MagicMock replacing subprocess.run.
     """
     with patch("testing.fixtures.kubernetes.subprocess.run") as mock_run:
@@ -52,12 +52,12 @@ def mock_subprocess() -> Any:
 
 
 @pytest.fixture()
-def recovery_mocks() -> Any:
+def recovery_mocks() -> Generator[dict[str, MagicMock], None, None]:
     """Patch get_pod_uid, run_kubectl, and wait_for_condition for assert_pod_recovery tests.
 
     Provides a dict of mocks keyed by function name.
 
-    Returns:
+    Yields:
         Dict with keys 'get_pod_uid', 'run_kubectl', 'wait_for_condition'.
     """
     with (
@@ -278,6 +278,18 @@ class TestRunHelm:
 
         assert result is expected
 
+    @pytest.mark.requirement("AC-2.7")
+    def test_does_not_use_shell(self, mock_subprocess: MagicMock) -> None:
+        """Verify subprocess.run is NOT called with shell=True (security)."""
+        mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        run_helm(["list"])
+
+        _, kwargs = mock_subprocess.call_args
+        assert kwargs.get("shell", False) is False
+
 
 # ---------------------------------------------------------------------------
 # TestGetPodUid
@@ -487,17 +499,17 @@ class TestCheckPodReady:
         assert result is False
 
     @pytest.mark.requirement("AC-2.7")
-    def test_raises_on_subprocess_timeout(self, mock_subprocess: MagicMock) -> None:
-        """Verify check_pod_ready propagates TimeoutExpired.
+    def test_returns_false_on_subprocess_timeout(self, mock_subprocess: MagicMock) -> None:
+        """Verify False when subprocess times out.
 
-        Unlike get_pod_uid which catches TimeoutExpired and returns None,
-        check_pod_ready does not catch it — callers must handle it.
-        This documents the asymmetry.
+        Like get_pod_uid, check_pod_ready catches TimeoutExpired and returns
+        False — consistent behavior for both pod query functions.
         """
         mock_subprocess.side_effect = subprocess.TimeoutExpired(cmd=["kubectl"], timeout=60)
 
-        with pytest.raises(subprocess.TimeoutExpired):
-            check_pod_ready(label_selector="app=slow", namespace="default")
+        result = check_pod_ready(label_selector="app=slow", namespace="default")
+
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
