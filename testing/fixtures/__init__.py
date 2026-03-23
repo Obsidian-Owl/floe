@@ -123,6 +123,17 @@ from testing.fixtures.ingestion import (
     sample_ingestion_source_config,
 )
 
+# Kubernetes utilities
+from testing.fixtures.kubernetes import (
+    PodRecoveryError,
+    PodRecoveryResult,
+    assert_pod_recovery,
+    check_pod_ready,
+    get_pod_uid,
+    run_helm,
+    run_kubectl,
+)
+
 # Lineage fixtures
 from testing.fixtures.lineage import (
     mock_lineage_backend,
@@ -285,6 +296,14 @@ __all__ = [
     "create_secret_violation",
     "create_valid_token_result",
     "create_valid_user_info",
+    # Kubernetes utilities
+    "PodRecoveryError",
+    "PodRecoveryResult",
+    "assert_pod_recovery",
+    "check_pod_ready",
+    "get_pod_uid",
+    "run_helm",
+    "run_kubectl",
     # Data generation helpers
     "create_model_instance",
     "generate_random_string",
