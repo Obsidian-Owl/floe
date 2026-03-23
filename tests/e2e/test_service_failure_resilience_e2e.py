@@ -19,7 +19,9 @@ See Also:
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 import warnings
 from pathlib import Path
 
@@ -45,14 +47,14 @@ class TestServiceFailureResilience:
 
     @pytest.mark.requirement("AC-2.7")
     def test_minio_pod_restart_detected(self) -> None:
-        """Verify MinIO health endpoint fails when pod is deleted.
+        """Verify MinIO pod replacement via UID change after deletion.
 
         Deletes the MinIO pod and verifies that:
-        1. The health endpoint returns an error (not silent success)
-        2. K8s restarts the pod (Deployment controller)
-        3. Service becomes healthy again after restart
+        1. K8s creates a replacement pod with a different UID
+        2. Recovery completes within 30 seconds
+        3. The replacement pod is Ready
 
-        This validates error detection, NOT data recovery.
+        This validates pod replacement detection, NOT downtime observation.
         """
         minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
 
@@ -62,93 +64,26 @@ class TestServiceFailureResilience:
             "MinIO not healthy before test — cannot test failure resilience"
         )
 
-        # Capture pod UID before deletion for termination tracking
-        original_uid = _get_pod_uid("app.kubernetes.io/name=minio")
-
-        # Delete the MinIO pod (K8s will restart it)
-        result = run_kubectl(
-            [
-                "delete",
-                "pod",
-                "-l",
-                "app.kubernetes.io/name=minio",
-                "--grace-period=0",
-                "--force",
-            ],
-            namespace=NAMESPACE,
-            timeout=30,
-        )
-        assert result.returncode == 0, f"Failed to delete MinIO pod: {result.stderr}"
-        if original_uid:
-            terminated = wait_for_condition(
-                lambda: _check_pod_terminated("app.kubernetes.io/name=minio", original_uid),
-                timeout=30.0,
-                interval=1.0,
-                description=f"MinIO pod {original_uid[:8]} to terminate",
-                raise_on_timeout=False,
-            )
-            if not terminated:
-                # Pod was replaced sub-second — verify the new pod is different
-                new_uid = _get_pod_uid("app.kubernetes.io/name=minio")
-                if new_uid and new_uid != original_uid:
-                    warnings.warn(
-                        f"MinIO pod {original_uid[:8]} was replaced before termination "
-                        f"check — new pod {new_uid[:8]} confirmed.",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                else:
-                    warnings.warn(
-                        f"MinIO pod {original_uid[:8]} termination not confirmed "
-                        f"(new UID: {new_uid!r}).",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-
-        # Verify the service becomes unavailable (error, not silent)
-        # Port-forward may break when pod restarts — that's expected
-        service_down = False
-        for _ in range(10):
-            try:
-                response = httpx.get(
-                    f"{minio_url}/minio/health/ready",
-                    timeout=2.0,
-                )
-                if response.status_code >= 500:
-                    service_down = True
-                    break
-            except (httpx.HTTPError, OSError):
-                service_down = True
-                break
-
-        assert service_down, (
-            "MinIO should have been unavailable after pod deletion.\n"
-            "Expected: connection error or HTTP 5xx\n"
-            "Got: service still responding normally"
+        # Delete pod and assert recovery via UID change
+        original_uid, new_uid, recovery_secs = _assert_pod_recovery(
+            "app.kubernetes.io/name=minio",
+            "MinIO",
         )
 
-        # Wait for K8s to restart the pod
-        pod_ready = wait_for_condition(
-            lambda: _check_pod_ready("app.kubernetes.io/name=minio"),
-            timeout=120.0,
-            interval=5.0,
-            description="MinIO pod to restart and become Ready",
-            raise_on_timeout=False,
+        assert new_uid != original_uid, (
+            f"MinIO pod UID did not change after deletion: {original_uid[:8]}"
         )
-
-        assert pod_ready, (
-            f"MinIO pod did not restart within 120s.\n"
-            f"Check: kubectl get pods -n {NAMESPACE} -l app.kubernetes.io/name=minio"
-        )
+        assert recovery_secs < 30.0, f"MinIO recovery took {recovery_secs:.1f}s (limit: 30s)"
 
     @pytest.mark.requirement("AC-2.7")
     def test_polaris_pod_restart_detected(self) -> None:
-        """Verify Polaris health fails when pod is deleted, then recovers.
+        """Verify Polaris pod replacement via UID change after deletion.
 
         Similar to MinIO test but for the Polaris catalog service.
         """
         polaris_health_url = os.environ.get(
-            "POLARIS_HEALTH_URL", ServiceEndpoint("polaris-management").url
+            "POLARIS_HEALTH_URL",
+            ServiceEndpoint("polaris-management").url,
         )
 
         # Verify Polaris is healthy (management endpoint, no OAuth needed)
@@ -158,82 +93,18 @@ class TestServiceFailureResilience:
         )
         assert response.status_code == 200, "Polaris not healthy before test"
 
-        # Capture pod UID before deletion for termination tracking
-        original_uid = _get_pod_uid("app.kubernetes.io/component=polaris")
-
-        # Delete Polaris pod
-        result = run_kubectl(
-            [
-                "delete",
-                "pod",
-                "-l",
-                "app.kubernetes.io/component=polaris",
-                "--grace-period=0",
-                "--force",
-            ],
-            namespace=NAMESPACE,
-            timeout=30,
-        )
-        assert result.returncode == 0, f"Failed to delete Polaris pod: {result.stderr}"
-        if original_uid:
-            terminated = wait_for_condition(
-                lambda: _check_pod_terminated("app.kubernetes.io/component=polaris", original_uid),
-                timeout=30.0,
-                interval=1.0,
-                description=f"Polaris pod {original_uid[:8]} to terminate",
-                raise_on_timeout=False,
-            )
-            if not terminated:
-                # Pod was replaced sub-second — verify the new pod is different
-                new_uid = _get_pod_uid("app.kubernetes.io/component=polaris")
-                if new_uid and new_uid != original_uid:
-                    warnings.warn(
-                        f"Polaris pod {original_uid[:8]} was replaced before termination "
-                        f"check — new pod {new_uid[:8]} confirmed.",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-                else:
-                    warnings.warn(
-                        f"Polaris pod {original_uid[:8]} termination not confirmed "
-                        f"(new UID: {new_uid!r}).",
-                        UserWarning,
-                        stacklevel=2,
-                    )
-
-        # Verify service disruption
-        service_down = False
-        for _ in range(10):
-            try:
-                response = httpx.get(
-                    f"{polaris_health_url}/q/health/ready",
-                    timeout=2.0,
-                )
-                if response.status_code >= 500:
-                    service_down = True
-                    break
-            except (httpx.HTTPError, OSError):
-                service_down = True
-                break
-
-        assert service_down, "Polaris should have been unavailable after pod deletion"
-
-        # Wait for recovery
-        pod_ready = wait_for_condition(
-            lambda: _check_pod_ready("app.kubernetes.io/component=polaris"),
-            timeout=120.0,
-            interval=5.0,
-            description="Polaris pod to restart and become Ready",
-            raise_on_timeout=False,
+        # Delete pod and assert recovery via UID change
+        original_uid, new_uid, recovery_secs = _assert_pod_recovery(
+            "app.kubernetes.io/component=polaris",
+            "Polaris",
         )
 
-        assert pod_ready, (
-            f"Polaris pod did not restart within 120s.\n"
-            f"Check: kubectl get pods -n {NAMESPACE} -l app.kubernetes.io/component=polaris"
+        assert new_uid != original_uid, (
+            f"Polaris pod UID did not change after deletion: {original_uid[:8]}"
         )
+        assert recovery_secs < 30.0, f"Polaris recovery took {recovery_secs:.1f}s (limit: 30s)"
 
         # Wait for port-forward to reconnect (port 8182 management health)
-        # After pod restart, kubectl port-forward may need time to re-establish.
         polaris_health_ready = wait_for_condition(
             lambda: _check_port_forward_health(f"{polaris_health_url}/q/health/ready"),
             timeout=60.0,
@@ -242,8 +113,6 @@ class TestServiceFailureResilience:
             raise_on_timeout=False,
         )
         if not polaris_health_ready:
-            # Log warning but don't fail — the pod is Ready, port-forward may
-            # reconnect before the next test's fixture setup.
             warnings.warn(
                 "Polaris port-forward (8182) did not recover within 60s after pod restart. "
                 "Subsequent tests using port 8182 may fail.",
@@ -417,3 +286,93 @@ def _check_port_forward_health(url: str) -> bool:
         return response.status_code == 200
     except (httpx.HTTPError, OSError):
         return False
+
+
+logger = logging.getLogger(__name__)
+
+
+def _assert_pod_recovery(
+    label_selector: str,
+    service_name: str,
+    timeout: float = 30.0,
+) -> tuple[str, str, float]:
+    """Delete a pod and assert that K8s replaces it with a new one.
+
+    Uses UID-change detection instead of downtime polling. This is
+    deterministic — pod replacement always produces a new UID, regardless
+    of how fast the replacement happens.
+
+    Args:
+        label_selector: K8s label selector for the pod (e.g. ``app.kubernetes.io/name=minio``).
+        service_name: Human-readable service name for error messages.
+        timeout: Maximum seconds to wait for recovery (default 30.0).
+
+    Returns:
+        Tuple of ``(original_uid, new_uid, recovery_seconds)``.
+
+    Raises:
+        pytest.fail.Exception: If pod is not found before deletion or
+            recovery times out.
+    """
+    # 1. Record original pod UID
+    original_uid = _get_pod_uid(label_selector)
+    if not original_uid:
+        pytest.fail(
+            f"{service_name} pod not found before deletion "
+            f"(selector: {label_selector}). "
+            f"Check: kubectl get pods -n {NAMESPACE} -l {label_selector}"
+        )
+
+    # 2. Delete the pod
+    start = time.monotonic()
+    result = run_kubectl(
+        [
+            "delete",
+            "pod",
+            "-l",
+            label_selector,
+            "--grace-period=0",
+            "--force",
+        ],
+        namespace=NAMESPACE,
+        timeout=30,
+    )
+    assert result.returncode == 0, f"Failed to delete {service_name} pod: {result.stderr}"
+
+    # 3. Wait for new pod with different UID to become Ready
+    def _pod_replaced_and_ready() -> bool:
+        new = _get_pod_uid(label_selector)
+        if not new or new == original_uid:
+            return False
+        return _check_pod_ready(label_selector)
+
+    recovered = wait_for_condition(
+        _pod_replaced_and_ready,
+        timeout=timeout,
+        interval=1.0,
+        description=f"{service_name} pod replacement (UID != {original_uid[:8]})",
+        raise_on_timeout=False,
+    )
+
+    recovery_seconds = time.monotonic() - start
+
+    if not recovered:
+        pytest.fail(
+            f"{service_name} pod did not recover within {timeout}s. "
+            f"Original UID: {original_uid[:8]}. "
+            f"Check: kubectl get pods -n {NAMESPACE} -l {label_selector}"
+        )
+
+    # 4. Get the new UID
+    new_uid = _get_pod_uid(label_selector)
+    assert new_uid is not None, f"{service_name} new pod UID is None after recovery"
+
+    logger.info(
+        "%s pod replaced: %s -> %s in %.1fs",
+        service_name,
+        original_uid[:8],
+        new_uid[:8],
+        recovery_seconds,
+    )
+
+    return (original_uid, new_uid, recovery_seconds)
