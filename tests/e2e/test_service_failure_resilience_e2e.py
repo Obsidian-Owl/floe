@@ -242,36 +242,6 @@ def _get_pod_uid(label_selector: str) -> str | None:
     return uid if uid else None
 
 
-def _check_pod_terminated(label_selector: str, original_uid: str) -> bool:
-    """Check if the pod with the given UID has been terminated.
-
-    Returns True when no pod with the original UID exists (either gone
-    entirely or replaced with a new UID).
-
-    Args:
-        label_selector: K8s label selector string.
-        original_uid: The UID of the pod that was deleted.
-
-    Returns:
-        True if the original pod is no longer present.
-    """
-    result = run_kubectl(
-        [
-            "get",
-            "pods",
-            "-l",
-            label_selector,
-            "-o",
-            "jsonpath={.items[*].metadata.uid}",
-        ],
-        namespace=NAMESPACE,
-    )
-    if result.returncode != 0:
-        return False
-    current_uids = result.stdout.strip().split()
-    return original_uid not in current_uids
-
-
 def _check_port_forward_health(url: str) -> bool:
     """Check if a port-forwarded health endpoint is reachable.
 

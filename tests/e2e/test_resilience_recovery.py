@@ -197,7 +197,7 @@ class TestRecoveryTiming:
         assert isinstance(recovery_secs, float), (
             f"recovery_seconds must be float, got {type(recovery_secs).__name__}"
         )
-        assert recovery_secs >= 0.0, f"recovery_seconds must be non-negative, got {recovery_secs}"
+        assert recovery_secs > 0.0, f"recovery_seconds must be positive, got {recovery_secs}"
 
     def test_default_timeout_is_30_seconds(self) -> None:
         """The default timeout parameter must be 30.0 seconds."""
@@ -454,10 +454,7 @@ class TestPodNotFoundBeforeDeletion:
             except pytest.fail.Exception:
                 pass  # Expected
 
-        (
-            mock_kubectl.assert_not_called(),
-            ("kubectl delete must not be called when original pod is not found"),
-        )
+        mock_kubectl.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -623,3 +620,211 @@ def test_uid_passthrough_not_hardcoded(orig_uid: str, new_uid: str) -> None:
 
     assert result_orig == orig_uid
     assert result_new == new_uid
+
+
+# ---------------------------------------------------------------------------
+# F-03: Callable verification — wait_for_condition receives a closure
+# that actually checks UID change
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.requirement("WU3-AC-1")
+class TestWaitCallableVerifiesUIDChange:
+    """Verify the closure passed to wait_for_condition checks UID change."""
+
+    def test_callable_returns_false_when_uid_unchanged(self) -> None:
+        """The closure must return False when _get_pod_uid returns the same UID."""
+        helper = _import_helper()
+        captured_callable: list[Any] = []
+
+        def capture_wait(fn: Any, **kwargs: Any) -> bool:
+            captured_callable.append(fn)
+            return True  # Let the helper proceed
+
+        with (
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e._get_pod_uid",
+                side_effect=["uid-original", "uid-new"],
+            ),
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e.run_kubectl",
+                return_value=subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="", stderr=""
+                ),
+            ),
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e.wait_for_condition",
+                side_effect=capture_wait,
+            ),
+        ):
+            helper("app.kubernetes.io/name=minio", "MinIO")
+
+        assert len(captured_callable) == 1, "wait_for_condition must be called exactly once"
+        condition_fn = captured_callable[0]
+
+        # When _get_pod_uid returns same UID, closure should return False
+        with patch(
+            "tests.e2e.test_service_failure_resilience_e2e._get_pod_uid",
+            return_value="uid-original",
+        ):
+            assert condition_fn() is False, "Closure must return False when UID has not changed"
+
+    def test_callable_returns_true_when_uid_changed_and_ready(self) -> None:
+        """The closure must return True when UID changed AND pod is Ready."""
+        helper = _import_helper()
+        captured_callable: list[Any] = []
+
+        def capture_wait(fn: Any, **kwargs: Any) -> bool:
+            captured_callable.append(fn)
+            return True
+
+        with (
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e._get_pod_uid",
+                side_effect=["uid-original", "uid-new"],
+            ),
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e.run_kubectl",
+                return_value=subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="", stderr=""
+                ),
+            ),
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e.wait_for_condition",
+                side_effect=capture_wait,
+            ),
+        ):
+            helper("app.kubernetes.io/name=minio", "MinIO")
+
+        condition_fn = captured_callable[0]
+
+        # When UID changed AND pod is ready, closure should return True
+        with (
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e._get_pod_uid",
+                return_value="uid-different",
+            ),
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e._check_pod_ready",
+                return_value=True,
+            ),
+        ):
+            assert condition_fn() is True, (
+                "Closure must return True when UID changed and pod is Ready"
+            )
+
+
+# ---------------------------------------------------------------------------
+# BC-1 extension: kubectl delete failure (F-04, F-06)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.requirement("WU3-BC-1")
+class TestKubectlDeleteFailure:
+    """Verify clear error when kubectl delete command fails."""
+
+    def test_delete_returncode_nonzero_raises(self) -> None:
+        """AssertionError when kubectl delete returns non-zero exit code."""
+        helper = _import_helper()
+
+        with (
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e._get_pod_uid",
+                return_value="uid-exists",
+            ),
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e.run_kubectl",
+                return_value=subprocess.CompletedProcess(
+                    args=[],
+                    returncode=1,
+                    stdout="",
+                    stderr="error: pod not found",
+                ),
+            ),
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e.wait_for_condition",
+                return_value=True,
+            ),
+            pytest.raises(AssertionError) as exc_info,
+        ):
+            helper("app.kubernetes.io/name=minio", "MinIO")
+
+        error_msg = str(exc_info.value)
+        assert "MinIO" in error_msg, (
+            f"Delete failure message must name the service. Got: {error_msg}"
+        )
+        assert "error: pod not found" in error_msg, (
+            f"Delete failure message must include stderr. Got: {error_msg}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# BC-3: Multiple pods match selector (F-01)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.requirement("WU3-BC-3")
+class TestMultiplePodsMatchSelector:
+    """Verify helper handles multi-pod scenarios gracefully."""
+
+    def test_uses_first_pod_uid_from_items(self) -> None:
+        """When multiple pods exist, _get_pod_uid returns items[0] UID.
+
+        The helper documents this as a single-replica assumption. Verify
+        it still produces a valid result (no crash, correct UID tracking).
+        """
+        helper = _import_helper()
+
+        # _get_pod_uid uses items[0] — returns first pod's UID regardless
+        # of how many pods exist. We verify the helper works correctly
+        # when this function returns deterministic results.
+        first_pod_uid = "pod-0-uid-original"
+        replacement_uid = "pod-0-uid-replacement"
+
+        with (
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e._get_pod_uid",
+                side_effect=[first_pod_uid, replacement_uid],
+            ),
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e.run_kubectl",
+                return_value=subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="pod deleted", stderr=""
+                ),
+            ),
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e.wait_for_condition",
+                return_value=True,
+            ),
+        ):
+            orig, new, secs = helper("app.kubernetes.io/name=minio", "MinIO")
+
+        assert orig == first_pod_uid, "Must track the first pod's UID"
+        assert new == replacement_uid, "Must return the replacement pod's UID"
+        assert orig != new, "UIDs must differ"
+
+    def test_get_pod_uid_uses_items_zero(self) -> None:
+        """Verify _get_pod_uid queries items[0] specifically (not items[*])."""
+        import tests.e2e.test_service_failure_resilience_e2e as mod
+
+        with patch(
+            "tests.e2e.test_service_failure_resilience_e2e.run_kubectl",
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="uid-first-pod", stderr=""
+            ),
+        ) as mock_kubectl:
+            result = mod._get_pod_uid("app.kubernetes.io/name=minio")
+
+        assert result == "uid-first-pod"
+        # Verify the jsonpath uses items[0] (single pod selection)
+        kubectl_args = mock_kubectl.call_args
+        all_args_flat: list[str] = []
+        for a in kubectl_args.args:
+            if isinstance(a, list):
+                all_args_flat.extend(str(x) for x in a)
+            else:
+                all_args_flat.append(str(a))
+        jsonpath_args = [a for a in all_args_flat if "items[0]" in a]
+        assert len(jsonpath_args) > 0, (
+            "_get_pod_uid must use items[0] in jsonpath to select a single pod"
+        )
