@@ -449,8 +449,28 @@ class SyncHttpLineageTransport:
             url: The OpenLineage API endpoint URL.
             timeout: Request timeout in seconds (default 5.0).
             api_key: Optional Bearer token for Authorization header.
+
+        Raises:
+            ValueError: If URL is invalid or uses unsupported scheme.
         """
         import httpx
+
+        parsed = urlparse(url)
+        if parsed.scheme not in _ALLOWED_URL_SCHEMES:
+            allowed = sorted(_ALLOWED_URL_SCHEMES)
+            msg = f"URL scheme must be one of {allowed}, got: {parsed.scheme!r}"
+            raise ValueError(msg)
+        if not parsed.netloc:
+            raise ValueError(f"Invalid URL: missing host in {url!r}")
+
+        # Strip userinfo (credentials) from URL for defense-in-depth
+        if parsed.username or parsed.password:
+            clean_netloc = parsed.hostname or ""
+            if parsed.port:
+                clean_netloc += f":{parsed.port}"
+            url = f"{parsed.scheme}://{clean_netloc}{parsed.path}"
+            if parsed.query:
+                url += f"?{parsed.query}"
 
         self._url = url
         self._timeout = timeout

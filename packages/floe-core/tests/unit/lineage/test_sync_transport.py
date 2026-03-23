@@ -256,7 +256,7 @@ class TestSyncHttpLineageTransport:
 
         with patch("httpx.Client", return_value=mock_client):
             transport = SyncHttpLineageTransport(url=TEST_URL)
-            with pytest.raises(Exception):
+            with pytest.raises(httpx.TimeoutException):
                 transport.emit(sample_event)
 
     @pytest.mark.requirement("AC-OLC-1")
@@ -383,7 +383,6 @@ class TestSyncConsoleLineageTransport:
         The async ConsoleLineageTransport uses 'async def emit()'. The sync
         version must use plain 'def emit()'.
         """
-        import asyncio
         import inspect
 
         transport = SyncConsoleLineageTransport()

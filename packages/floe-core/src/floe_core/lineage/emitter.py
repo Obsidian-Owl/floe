@@ -14,7 +14,7 @@ from typing import Any
 from uuid import UUID
 
 from floe_core.lineage.events import EventBuilder
-from floe_core.lineage.protocols import LineageTransport
+from floe_core.lineage.protocols import LineageTransport, SyncLineageTransport
 from floe_core.lineage.transport import (
     ConsoleLineageTransport,
     HttpLineageTransport,
@@ -212,7 +212,7 @@ class SyncLineageEmitter:
 
     def __init__(
         self,
-        transport: Any,
+        transport: SyncLineageTransport,
         event_builder: EventBuilder,
         default_namespace: str = "default",
     ) -> None:
@@ -339,7 +339,7 @@ def create_sync_emitter(
         >>> emitter = create_sync_emitter({"type": "console"}, default_namespace="prod")
         >>> run_id = emitter.emit_start("my_job")
     """
-    sync_transport: Any
+    sync_transport: SyncLineageTransport
 
     if transport_config is None or transport_config.get("type") is None:
         sync_transport = SyncNoOpTransport()

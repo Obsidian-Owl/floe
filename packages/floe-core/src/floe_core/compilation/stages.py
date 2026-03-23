@@ -328,8 +328,9 @@ def compile_pipeline(
             if trace_facet is not None:
                 run_facets["traceCorrelation"] = trace_facet
             run_id = emitter.emit_start(job_name=spec.metadata.name, run_facets=run_facets)
-        except Exception:
-            log.warning("lineage_emit_start_failed", exc_info=True)
+        except Exception as _start_err:
+            # CWE-532: log type name only — exc_info may contain credential-bearing URLs
+            log.warning("lineage_emit_start_failed", error=type(_start_err).__name__)
 
         try:
             # Stage 2: VALIDATE - Schema validation and quality provider validation
@@ -592,9 +593,11 @@ def compile_pipeline(
 
             # Emit lineage COMPLETE event (non-blocking)
             try:
-                emitter.emit_complete(run_id, spec.metadata.name)
-            except Exception:
-                log.warning("lineage_emit_complete_failed", exc_info=True)
+                if run_id is not None:
+                    emitter.emit_complete(run_id, spec.metadata.name)
+            except Exception as _complete_err:
+                # CWE-532: log type name only — exc_info may contain credential-bearing URLs
+                log.warning("lineage_emit_complete_failed", error=type(_complete_err).__name__)
 
         except Exception as _exc:
             # Emit lineage FAIL event only when run_id is available (non-blocking)
@@ -605,14 +608,16 @@ def compile_pipeline(
                         spec.metadata.name,
                         error_message=type(_exc).__name__,
                     )
-                except Exception:
-                    log.warning("lineage_emit_fail_failed", exc_info=True)
+                except Exception as _fail_err:
+                    # CWE-532: log type name only — exc_info may contain credential-bearing URLs
+                    log.warning("lineage_emit_fail_failed", error=type(_fail_err).__name__)
             raise
         finally:
             try:
                 emitter.close()
-            except Exception:
-                log.warning("lineage_emitter_close_failed", exc_info=True)
+            except Exception as _close_err:
+                # CWE-532: log type name only — exc_info may contain credential-bearing URLs
+                log.warning("lineage_emitter_close_failed", error=type(_close_err).__name__)
 
     return artifacts
 

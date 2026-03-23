@@ -17,10 +17,19 @@ from floe_core.lineage.catalog_integration import (
     NamespaceStrategy,
     SimpleNamespaceStrategy,
 )
-from floe_core.lineage.emitter import LineageEmitter, create_emitter
+from floe_core.lineage.emitter import (
+    LineageEmitter,
+    SyncLineageEmitter,
+    create_emitter,
+    create_sync_emitter,
+)
 from floe_core.lineage.events import EventBuilder, to_openlineage_event
 from floe_core.lineage.extractors import DbtLineageExtractor
-from floe_core.lineage.protocols import LineageExtractor, LineageTransport
+from floe_core.lineage.protocols import (
+    LineageExtractor,
+    LineageTransport,
+    SyncLineageTransport,
+)
 from floe_core.lineage.types import (
     LineageDataset,
     LineageEvent,
@@ -30,22 +39,25 @@ from floe_core.lineage.types import (
 )
 
 __all__ = [
+    "CatalogDatasetResolver",
+    "CentralizedNamespaceStrategy",
+    "DataMeshNamespaceStrategy",
+    "DbtLineageExtractor",
+    "EventBuilder",
     "LineageDataset",
     "LineageEmitter",
     "LineageEvent",
+    "LineageExtractor",
     "LineageJob",
     "LineageRun",
-    "RunState",
-    "LineageExtractor",
     "LineageTransport",
-    "EventBuilder",
-    "create_emitter",
-    "to_openlineage_event",
-    "DbtLineageExtractor",
-    "NamespaceStrategy",
-    "SimpleNamespaceStrategy",
-    "CentralizedNamespaceStrategy",
-    "DataMeshNamespaceStrategy",
     "NamespaceResolver",
-    "CatalogDatasetResolver",
+    "NamespaceStrategy",
+    "RunState",
+    "SimpleNamespaceStrategy",
+    "SyncLineageEmitter",
+    "SyncLineageTransport",
+    "create_emitter",
+    "create_sync_emitter",
+    "to_openlineage_event",
 ]

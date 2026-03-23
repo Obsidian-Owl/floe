@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import inspect
 from typing import Any
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest

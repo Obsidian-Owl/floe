@@ -51,6 +51,36 @@ class LineageTransport(Protocol):
 
 
 @runtime_checkable
+class SyncLineageTransport(Protocol):
+    """Protocol for synchronous lineage event transport.
+
+    Implementations emit lineage events synchronously using blocking I/O.
+    Used in contexts where an event loop is unavailable (e.g., compilation).
+
+    Example:
+        >>> class SyncHttpTransport:
+        ...     def emit(self, event: LineageEvent) -> None:
+        ...         # Send event via blocking HTTP POST
+        ...         pass
+        ...     def close(self) -> None:
+        ...         # Clean up resources
+        ...         pass
+    """
+
+    def emit(self, event: LineageEvent) -> None:
+        """Emit a lineage event synchronously.
+
+        Args:
+            event: The lineage event to emit.
+        """
+        ...
+
+    def close(self) -> None:
+        """Close the transport and clean up resources."""
+        ...
+
+
+@runtime_checkable
 class LineageExtractor(Protocol):
     """Protocol for lineage extraction.
 
