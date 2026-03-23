@@ -713,6 +713,50 @@ class TestWaitCallableVerifiesUIDChange:
                 "Closure must return True when UID changed and pod is Ready"
             )
 
+    def test_callable_returns_false_when_uid_changed_but_not_ready(self) -> None:
+        """Closure must return False when UID changed but pod is NOT Ready."""
+        helper = _import_helper()
+        captured_callable: list[Any] = []
+
+        def capture_wait(fn: Any, **kwargs: Any) -> bool:
+            captured_callable.append(fn)
+            return True
+
+        with (
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e._get_pod_uid",
+                side_effect=["uid-original", "uid-new"],
+            ),
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e.run_kubectl",
+                return_value=subprocess.CompletedProcess(
+                    args=[], returncode=0, stdout="", stderr=""
+                ),
+            ),
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e.wait_for_condition",
+                side_effect=capture_wait,
+            ),
+        ):
+            helper("app.kubernetes.io/name=minio", "MinIO")
+
+        condition_fn = captured_callable[0]
+
+        # When UID changed but pod is NOT ready, closure should return False
+        with (
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e._get_pod_uid",
+                return_value="uid-different",
+            ),
+            patch(
+                "tests.e2e.test_service_failure_resilience_e2e._check_pod_ready",
+                return_value=False,
+            ),
+        ):
+            assert condition_fn() is False, (
+                "Closure must return False when UID changed but pod is NOT Ready"
+            )
+
 
 # ---------------------------------------------------------------------------
 # BC-1 extension: kubectl delete failure (F-04, F-06)
