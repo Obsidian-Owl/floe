@@ -209,7 +209,8 @@ def assert_pod_recovery(
         timeout=30,
     )
     if result.returncode != 0:
-        raise PodRecoveryError(f"Failed to delete {service_name} pod: {result.stderr}")
+        stderr_snippet = (result.stderr or "")[:500]
+        raise PodRecoveryError(f"Failed to delete {service_name} pod: {stderr_snippet}")
 
     # 3. Wait for new pod with different UID to become Ready
     def _pod_replaced_and_ready() -> bool:

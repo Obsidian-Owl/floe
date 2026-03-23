@@ -161,7 +161,9 @@ class TestServiceFailureResilience:
             namespace=NAMESPACE,
             timeout=30,
         )
-        assert result.returncode == 0, f"Failed to delete Polaris pod: {result.stderr}"
+        assert result.returncode == 0, (
+            f"Failed to delete Polaris pod: {(result.stderr or '')[:500]}"
+        )
 
         # Immediately attempt compilation during the outage window
         try:

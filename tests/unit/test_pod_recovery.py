@@ -118,6 +118,21 @@ class TestRunKubectl:
         assert "-n" not in actual_args, "run_kubectl must omit -n flag when namespace is None"
 
     @pytest.mark.requirement("AC-2.7")
+    def test_namespace_omitted_when_empty_string(self, mock_subprocess: MagicMock) -> None:
+        """Verify -n flag is NOT present when namespace is empty string (BC-2).
+
+        Empty string is falsy in Python, so it should behave like None.
+        """
+        mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+
+        run_kubectl(["get", "pods"], namespace="")
+
+        actual_args: list[str] = mock_subprocess.call_args[0][0]
+        assert "-n" not in actual_args, "run_kubectl must omit -n flag for empty namespace"
+
+    @pytest.mark.requirement("AC-2.7")
     def test_namespace_omitted_by_default(self, mock_subprocess: MagicMock) -> None:
         """Verify namespace defaults to None and -n is omitted (BC-2).
 
@@ -453,6 +468,37 @@ class TestCheckPodReady:
         ns_idx = actual_args.index("-n")
         assert actual_args[ns_idx + 1] == "prod"
 
+    @pytest.mark.requirement("AC-2.7")
+    def test_returns_false_when_mixed_statuses(self, mock_subprocess: MagicMock) -> None:
+        """Verify False when multi-replica pods have mixed Ready statuses.
+
+        kubectl returns space-separated statuses for multiple pods.
+        If any pod is not Ready, the result must be False.
+        """
+        mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="True False True\n",
+            stderr="",
+        )
+
+        result = check_pod_ready(label_selector="app=web", namespace="default")
+
+        assert result is False
+
+    @pytest.mark.requirement("AC-2.7")
+    def test_raises_on_subprocess_timeout(self, mock_subprocess: MagicMock) -> None:
+        """Verify check_pod_ready propagates TimeoutExpired.
+
+        Unlike get_pod_uid which catches TimeoutExpired and returns None,
+        check_pod_ready does not catch it — callers must handle it.
+        This documents the asymmetry.
+        """
+        mock_subprocess.side_effect = subprocess.TimeoutExpired(cmd=["kubectl"], timeout=60)
+
+        with pytest.raises(subprocess.TimeoutExpired):
+            check_pod_ready(label_selector="app=slow", namespace="default")
+
 
 # ---------------------------------------------------------------------------
 # TestAssertPodRecovery
@@ -490,7 +536,6 @@ class TestAssertPodRecovery:
         assert isinstance(result, PodRecoveryResult)
         assert result.original_uid == "old-uid-111"
         assert result.new_uid == "new-uid-222"
-        assert result.recovery_seconds == pytest.approx(result.recovery_seconds, abs=0.1)
         assert result.recovery_seconds >= 0.0
 
     @pytest.mark.requirement("AC-2.7")
@@ -560,8 +605,8 @@ class TestAssertPodRecovery:
             )
 
         error_msg = str(exc_info.value)
-        # Must include stderr context for actionability
-        assert "forbidden" in error_msg.lower() or "delete" in error_msg.lower()
+        # Must include stderr context for actionability (BC-1)
+        assert "forbidden" in error_msg.lower()
 
     @pytest.mark.requirement("AC-2.7")
     def test_raises_on_recovery_timeout(self, recovery_mocks: dict[str, MagicMock]) -> None:
@@ -670,6 +715,9 @@ class TestAssertPodRecovery:
         )
         assert "delete" in kubectl_cmd, f"Expected 'delete' in kubectl args, got: {kubectl_cmd}"
 
+        # get_pod_uid must be called exactly twice (before delete + after recovery)
+        assert recovery_mocks["get_pod_uid"].call_count == 2
+
     @pytest.mark.requirement("AC-2.7")
     def test_invokes_wait_for_condition(self, recovery_mocks: dict[str, MagicMock]) -> None:
         """Verify assert_pod_recovery calls wait_for_condition after delete.
@@ -713,6 +761,10 @@ class TestAssertPodRecovery:
             assert a_call[1].get("namespace") == "custom-ns" or (
                 len(a_call[0]) >= 2 and a_call[0][1] == "custom-ns"
             )
+
+        # run_kubectl (delete) must receive the namespace
+        delete_call = recovery_mocks["run_kubectl"].call_args
+        assert delete_call[1].get("namespace") == "custom-ns"
 
 
 # ---------------------------------------------------------------------------
