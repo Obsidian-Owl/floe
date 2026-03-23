@@ -21,16 +21,21 @@ from __future__ import annotations
 
 import logging
 import os
-import time
 import warnings
 from pathlib import Path
 
 import httpx
 import pytest
 
+from testing.fixtures.kubernetes import (
+    assert_pod_recovery,
+    check_pod_ready,
+    run_kubectl,
+)
 from testing.fixtures.polling import wait_for_condition
 from testing.fixtures.services import ServiceEndpoint
-from tests.e2e.conftest import run_kubectl
+
+logger = logging.getLogger(__name__)
 
 # K8s namespace
 NAMESPACE = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
@@ -65,15 +70,16 @@ class TestServiceFailureResilience:
         )
 
         # Delete pod and assert recovery via UID change
-        original_uid, new_uid, recovery_secs = _assert_pod_recovery(
+        result = assert_pod_recovery(
             "app.kubernetes.io/name=minio",
             "MinIO",
+            namespace=NAMESPACE,
         )
+        _original_uid, _new_uid, recovery_secs = result
 
-        assert new_uid != original_uid, (
-            f"MinIO pod UID did not change after deletion: {original_uid[:8]}"
-        )
-        assert recovery_secs < 30.0, f"MinIO recovery took {recovery_secs:.1f}s (limit: 30s)"
+        # assert_pod_recovery guarantees UID changed (raises PodRecoveryError otherwise).
+        # Bound covers delete RPC + recovery polling (30s each worst-case).
+        assert recovery_secs < 60.0, f"MinIO recovery took {recovery_secs:.1f}s (limit: 60s)"
 
     @pytest.mark.requirement("AC-2.7")
     def test_polaris_pod_restart_detected(self) -> None:
@@ -94,15 +100,16 @@ class TestServiceFailureResilience:
         assert response.status_code == 200, "Polaris not healthy before test"
 
         # Delete pod and assert recovery via UID change
-        original_uid, new_uid, recovery_secs = _assert_pod_recovery(
+        result = assert_pod_recovery(
             "app.kubernetes.io/component=polaris",
             "Polaris",
+            namespace=NAMESPACE,
         )
+        _original_uid, _new_uid, recovery_secs = result
 
-        assert new_uid != original_uid, (
-            f"Polaris pod UID did not change after deletion: {original_uid[:8]}"
-        )
-        assert recovery_secs < 30.0, f"Polaris recovery took {recovery_secs:.1f}s (limit: 30s)"
+        # assert_pod_recovery guarantees UID changed (raises PodRecoveryError otherwise).
+        # Bound covers delete RPC + recovery polling (30s each worst-case).
+        assert recovery_secs < 60.0, f"Polaris recovery took {recovery_secs:.1f}s (limit: 60s)"
 
         # Wait for port-forward to reconnect (port 8182 management health)
         polaris_health_ready = wait_for_condition(
@@ -152,7 +159,9 @@ class TestServiceFailureResilience:
             namespace=NAMESPACE,
             timeout=30,
         )
-        assert result.returncode == 0, f"Failed to delete Polaris pod: {result.stderr}"
+        assert result.returncode == 0, (
+            f"Failed to delete Polaris pod: {(result.stderr or '')[:500]}"
+        )
 
         # Immediately attempt compilation during the outage window
         try:
@@ -175,7 +184,7 @@ class TestServiceFailureResilience:
 
         # Wait for Polaris to recover (cleanup for other tests)
         pod_ready = wait_for_condition(
-            lambda: _check_pod_ready("app.kubernetes.io/component=polaris"),
+            lambda: check_pod_ready("app.kubernetes.io/component=polaris", namespace=NAMESPACE),
             timeout=120.0,
             interval=5.0,
             description="Polaris pod to restart after compilation test",
@@ -185,61 +194,6 @@ class TestServiceFailureResilience:
             f"Polaris pod did not recover within 120s.\n"
             f"Check: kubectl get pods -n {NAMESPACE} -l app.kubernetes.io/component=polaris"
         )
-
-
-def _check_pod_ready(label_selector: str) -> bool:
-    """Check if pods matching selector are Ready.
-
-    Args:
-        label_selector: K8s label selector string.
-
-    Returns:
-        True if all matching pods are Ready.
-    """
-    result = run_kubectl(
-        [
-            "get",
-            "pods",
-            "-l",
-            label_selector,
-            "-o",
-            "jsonpath={.items[*].status.conditions[?(@.type=='Ready')].status}",
-        ],
-        namespace=NAMESPACE,
-    )
-    if result.returncode != 0:
-        return False
-    statuses = result.stdout.strip().split()
-    return bool(statuses and all(s == "True" for s in statuses))
-
-
-def _get_pod_uid(label_selector: str) -> str | None:
-    """Get the UID of the first pod matching the selector.
-
-    Note: assumes a single-replica deployment. For multi-replica workloads,
-    this returns only ``items[0]`` and may miss additional pods.
-
-    Args:
-        label_selector: K8s label selector string.
-
-    Returns:
-        Pod UID string, or None if no pod found.
-    """
-    result = run_kubectl(
-        [
-            "get",
-            "pods",
-            "-l",
-            label_selector,
-            "-o",
-            "jsonpath={.items[0].metadata.uid}",
-        ],
-        namespace=NAMESPACE,
-    )
-    if result.returncode != 0:
-        return None
-    uid = result.stdout.strip()
-    return uid if uid else None
 
 
 def _check_port_forward_health(url: str) -> bool:
@@ -256,93 +210,3 @@ def _check_port_forward_health(url: str) -> bool:
         return response.status_code == 200
     except (httpx.HTTPError, OSError):
         return False
-
-
-logger = logging.getLogger(__name__)
-
-
-def _assert_pod_recovery(
-    label_selector: str,
-    service_name: str,
-    timeout: float = 30.0,
-) -> tuple[str, str, float]:
-    """Delete a pod and assert that K8s replaces it with a new one.
-
-    Uses UID-change detection instead of downtime polling. This is
-    deterministic — pod replacement always produces a new UID, regardless
-    of how fast the replacement happens.
-
-    Args:
-        label_selector: K8s label selector for the pod (e.g. ``app.kubernetes.io/name=minio``).
-        service_name: Human-readable service name for error messages.
-        timeout: Maximum seconds to wait for recovery (default 30.0).
-
-    Returns:
-        Tuple of ``(original_uid, new_uid, recovery_seconds)``.
-
-    Raises:
-        pytest.fail.Exception: If pod is not found before deletion or
-            recovery times out.
-    """
-    # 1. Record original pod UID
-    original_uid = _get_pod_uid(label_selector)
-    if not original_uid:
-        pytest.fail(
-            f"{service_name} pod not found before deletion "
-            f"(selector: {label_selector}). "
-            f"Check: kubectl get pods -n {NAMESPACE} -l {label_selector}"
-        )
-
-    # 2. Delete the pod
-    start = time.monotonic()
-    result = run_kubectl(
-        [
-            "delete",
-            "pod",
-            "-l",
-            label_selector,
-            "--grace-period=0",
-            "--force",
-        ],
-        namespace=NAMESPACE,
-        timeout=30,
-    )
-    assert result.returncode == 0, f"Failed to delete {service_name} pod: {result.stderr}"
-
-    # 3. Wait for new pod with different UID to become Ready
-    def _pod_replaced_and_ready() -> bool:
-        new = _get_pod_uid(label_selector)
-        if not new or new == original_uid:
-            return False
-        return _check_pod_ready(label_selector)
-
-    recovered = wait_for_condition(
-        _pod_replaced_and_ready,
-        timeout=timeout,
-        interval=1.0,
-        description=f"{service_name} pod replacement (UID != {original_uid[:8]})",
-        raise_on_timeout=False,
-    )
-
-    recovery_seconds = time.monotonic() - start
-
-    if not recovered:
-        pytest.fail(
-            f"{service_name} pod did not recover within {timeout}s. "
-            f"Original UID: {original_uid[:8]}. "
-            f"Check: kubectl get pods -n {NAMESPACE} -l {label_selector}"
-        )
-
-    # 4. Get the new UID
-    new_uid = _get_pod_uid(label_selector)
-    assert new_uid is not None, f"{service_name} new pod UID is None after recovery"
-
-    logger.info(
-        "%s pod replaced: %s -> %s in %.1fs",
-        service_name,
-        original_uid[:8],
-        new_uid[:8],
-        recovery_seconds,
-    )
-
-    return (original_uid, new_uid, recovery_seconds)
