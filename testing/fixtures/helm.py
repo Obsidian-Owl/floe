@@ -75,7 +75,8 @@ def recover_stuck_helm_release(
     """Detect and recover from stuck Helm release states.
 
     Checks for pending-upgrade, pending-install, pending-rollback, and failed
-    states and performs rollback to the last known good revision.
+    states. Scans ``helm history`` to find the most recent revision with status
+    "deployed" and rolls back to that revision.
 
     Args:
         release: Helm release name.
@@ -86,11 +87,11 @@ def recover_stuck_helm_release(
             Defaults to the internal ``_run_helm`` helper.
 
     Returns:
-        True if recovery was performed, False if release was healthy or
-        did not exist.
+        True if recovery was performed, False if release was healthy,
+        did not exist, or no deployed revision was found in history.
 
     Raises:
-        RuntimeError: If rollback fails after detecting stuck state.
+        RuntimeError: If helm history or rollback fails after detecting stuck state.
         ValueError: If helm status output is not valid JSON.
     """
     run = helm_runner or _run_helm
