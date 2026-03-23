@@ -22,6 +22,9 @@ from typing import Any
 import httpx
 import pytest
 
+# Re-exported for backwards compatibility — other E2E files import from here.
+from testing.fixtures.kubernetes import run_helm as run_helm
+from testing.fixtures.kubernetes import run_kubectl as run_kubectl
 from testing.fixtures.polling import wait_for_condition
 from testing.fixtures.services import ServiceEndpoint, get_effective_port
 
@@ -127,60 +130,6 @@ def pytest_collection_modifyitems(
         print("=" * 70)
         print("These are ADVISORY warnings. Review and fix as needed.")
         print("=" * 70)
-
-
-def run_kubectl(
-    args: list[str],
-    namespace: str | None = None,
-    timeout: int = 60,
-) -> subprocess.CompletedProcess[str]:
-    """Run kubectl command with optional namespace.
-
-    Shared helper for E2E tests. Uses the real kubectl binary — no mocks.
-
-    Args:
-        args: kubectl arguments (e.g., ["get", "pods"]).
-        namespace: K8s namespace to target. If provided, adds -n flag.
-        timeout: Command timeout in seconds. Defaults to 60.
-
-    Returns:
-        Completed process result with stdout, stderr, and returncode.
-    """
-    cmd = ["kubectl"]
-    if namespace:
-        cmd.extend(["-n", namespace])
-    cmd.extend(args)
-    return subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
-
-
-def run_helm(
-    args: list[str],
-    timeout: int = 900,
-) -> subprocess.CompletedProcess[str]:
-    """Run helm command with timeout.
-
-    Shared helper for E2E tests. Uses the real helm binary — no mocks.
-
-    Args:
-        args: helm arguments (e.g., ["status", "floe-platform"]).
-        timeout: Command timeout in seconds. Defaults to 900.
-
-    Returns:
-        Completed process result with stdout, stderr, and returncode.
-    """
-    return subprocess.run(
-        ["helm"] + args,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
 
 
 @pytest.fixture(scope="session", autouse=True)
