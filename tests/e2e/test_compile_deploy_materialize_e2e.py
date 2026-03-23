@@ -36,11 +36,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-# Dagster's implicit job name for ad-hoc asset materializations.
-# Required in the launchRun GraphQL selector since Dagster 1.12.x.
-# Source: dagster._core.definitions.assets_job.IMPLICIT_ASSET_JOB_NAME
-IMPLICIT_ASSET_JOB_NAME = "__ASSET_JOB"
-
 # Demo product paths relative to project root
 DEMO_PRODUCTS = {
     "customer-360": "demo/customer-360/floe.yaml",
@@ -51,28 +46,26 @@ DEMO_PRODUCTS = {
 
 def _discover_repository_for_asset(
     dagster_url: str,
-    asset_path: list[str],
-) -> tuple[str, str]:
-    """Discover the repository name and location for a given asset.
+    search_term: str,
+) -> tuple[str, str, list[str], str]:
+    """Discover the repository, location, asset path, and job name for an asset.
 
     Queries the Dagster GraphQL API to find which repository and code
-    location host the specified asset. Falls back to the first available
-    repository if the asset-level query fails (e.g., assets not yet
-    materialized), with a warning.
+    location host an asset whose key path contains search_term in any
+    segment. Resolves the job name from jobNames, preferring the exact
+    "__ASSET_JOB" match, then any "__ASSET_JOB*" prefix variant.
 
     Args:
         dagster_url: Base URL of the Dagster webserver.
-        asset_path: Asset key path, e.g. ["stg_crm_customers"].
+        search_term: Term to search for in any segment of asset key paths.
 
     Returns:
-        Tuple of (repositoryName, repositoryLocationName).
+        4-tuple of (repo_name, location_name, asset_key_path, job_name).
 
     Raises:
-        RuntimeError: If no repositories are found in Dagster.
+        pytest.fail: If no asset matching search_term is found, with
+            a diagnostic listing all available asset key paths.
     """
-    import warnings
-
-    # Try to find the exact asset's repository
     query = """
     {
         assetNodes {
@@ -85,65 +78,51 @@ def _discover_repository_for_asset(
                     name
                 }
             }
+            jobNames
         }
     }
     """
-    response = httpx.post(
-        f"{dagster_url}/graphql",
-        json={"query": query},
-        timeout=30.0,
-    )
-    if response.status_code == 200:
-        data = response.json()
-        asset_nodes = data.get("data", {}).get("assetNodes", [])
-        for node in asset_nodes:
-            if node["assetKey"]["path"] == asset_path:
-                repo = node["repository"]
-                return (repo["name"], repo["location"]["name"])
-        # Asset not found in any repository — log available assets for debugging
-        available = [n["assetKey"]["path"] for n in asset_nodes[:10]]
-        warnings.warn(
-            f"Asset {asset_path} not found in assetNodes. "
-            f"Available assets (first 10): {available}. "
-            "Falling back to first available repository.",
-            stacklevel=2,
+    try:
+        response = httpx.post(
+            f"{dagster_url}/graphql",
+            json={"query": query},
+            timeout=30.0,
         )
-    else:
-        warnings.warn(
+    except httpx.HTTPError as exc:
+        pytest.fail(
+            f"assetNodes query raised {type(exc).__name__} while discovering "
+            f"asset '{search_term}'. "
+            "Check that Dagster is reachable and the GraphQL endpoint is up."
+        )
+    if response.status_code != 200:
+        pytest.fail(
             f"assetNodes query returned status {response.status_code}. "
-            "Falling back to repository-level discovery.",
-            stacklevel=2,
+            f"Unable to discover asset '{search_term}'."
         )
 
-    # Fallback: use first available repository
-    repos_query = """
-    {
-        repositoriesOrError {
-            ... on RepositoryConnection {
-                nodes {
-                    name
-                    location {
-                        name
-                    }
-                }
-            }
-        }
-    }
-    """
-    response = httpx.post(
-        f"{dagster_url}/graphql",
-        json={"query": repos_query},
-        timeout=30.0,
-    )
-    if response.status_code == 200:
-        data = response.json()
-        nodes = data.get("data", {}).get("repositoriesOrError", {}).get("nodes", [])
-        if nodes:
-            return (nodes[0]["name"], nodes[0]["location"]["name"])
+    data = response.json()
+    asset_nodes = data.get("data", {}).get("assetNodes", [])
 
-    raise RuntimeError(
-        "No repositories found in Dagster. "
-        "Check that code locations are loaded: helm status floe-platform -n floe-test"
+    for node in asset_nodes:
+        path = node["assetKey"]["path"]
+        if search_term in path:  # exact match against any path segment
+            repo = node["repository"]
+            repo_name: str = repo["name"]
+            location_name: str = repo["location"]["name"]
+            job_names: list[str] = node.get("jobNames", [])
+            # Prefer exact "__ASSET_JOB" match
+            if "__ASSET_JOB" in job_names:
+                job_name: str = "__ASSET_JOB"
+            else:
+                # Pick lowest-numbered "__ASSET_JOB" variant for determinism
+                prefixed = sorted(j for j in job_names if j.startswith("__ASSET_JOB"))
+                job_name = prefixed[0] if prefixed else "__ASSET_JOB"
+            return (repo_name, location_name, path, job_name)
+
+    available = [n["assetKey"]["path"] for n in asset_nodes]
+    pytest.fail(
+        f"Asset matching '{search_term}' not found in Dagster assetNodes. "
+        f"Available asset key paths: {available}"
     )
 
 
@@ -533,8 +512,8 @@ class TestCompileDeployMaterialize:
         """
 
         # Discover repository context for the target asset (AC-16.1)
-        repo_name, location_name = _discover_repository_for_asset(
-            dagster_url, ["stg_crm_customers"]
+        repo_name, location_name, asset_path, job_name = _discover_repository_for_asset(
+            dagster_url, "stg_crm_customers"
         )
 
         variables = {
@@ -542,8 +521,8 @@ class TestCompileDeployMaterialize:
                 "selector": {
                     "repositoryName": repo_name,
                     "repositoryLocationName": location_name,
-                    "pipelineName": IMPLICIT_ASSET_JOB_NAME,
-                    "assetSelection": [{"path": ["stg_crm_customers"]}],
+                    "pipelineName": job_name,
+                    "assetSelection": [{"path": asset_path}],
                 },
                 "mode": "default",
             },

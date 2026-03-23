@@ -290,7 +290,20 @@ class TestObservability(IntegrationTestBase):
         # Jaeger returns {"data": null} when no services exist — coalesce to []
         all_services = all_services_response.json().get("data") or []
 
-        floe_services = [s for s in all_services if "floe" in s.lower() or "dagster" in s.lower()]
+        floe_services = [
+            s
+            for s in all_services
+            if any(
+                term in s.lower()
+                for term in (
+                    "floe",
+                    "dagster",
+                    "customer-360",
+                    "iot-telemetry",
+                    "financial-risk",
+                )
+            )
+        ]
 
         # Query Marquez for REAL jobs
         all_namespaces_response = marquez_client.get("/api/v1/namespaces")
@@ -525,6 +538,7 @@ class TestObservability(IntegrationTestBase):
         handler = logging.StreamHandler(log_buffer)
         handler.setLevel(logging.DEBUG)
         root_logger = logging.getLogger("floe_core")
+        root_logger.setLevel(logging.DEBUG)
         root_logger.addHandler(handler)
 
         try:
@@ -1115,7 +1129,15 @@ class TestObservability(IntegrationTestBase):
                 "Compiled wrong product -- expected customer-360"
             )
 
-            # Poll for traces to appear in Jaeger (OTel exporter needs time to flush)
+            # Flush spans before polling Jaeger — BatchSpanProcessor has
+            # a 5000ms schedule delay that would otherwise cause timeouts.
+            from opentelemetry import trace as otel_trace
+
+            provider = otel_trace.get_tracer_provider()
+            if hasattr(provider, "force_flush"):
+                provider.force_flush(timeout_millis=5000)
+
+            # Poll for traces to appear in Jaeger
             def check_jaeger_traces() -> bool:
                 """Check if Jaeger has traces from customer-360 service."""
                 end_time_us = int(time.time() * 1_000_000)
@@ -1137,7 +1159,7 @@ class TestObservability(IntegrationTestBase):
 
             traces_available = wait_for_condition(
                 check_jaeger_traces,
-                timeout=10.0,
+                timeout=30.0,
                 interval=1.0,
                 description="Jaeger traces to appear",
             )
