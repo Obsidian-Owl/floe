@@ -48,6 +48,12 @@ help: ## Show this help message
 	@echo "  make demo            Deploy platform with all 3 demo data products (PRODUCTS=...)"
 	@echo "  make demo-stop       Stop demo and clean up resources"
 	@echo ""
+	@echo "DevPod (Remote E2E):"
+	@echo "  make devpod-up       Create/start DevPod workspace on Hetzner"
+	@echo "  make devpod-stop     Stop workspace (preserves VM disk)"
+	@echo "  make devpod-ssh      SSH into workspace"
+	@echo "  make devpod-tunnels  Forward service ports via SSH"
+	@echo ""
 	@echo "Agent Memory (Cognee):"
 	@echo "  make cognee-health   Check Cognee Cloud connectivity"
 	@echo "  make cognee-init     Initialize knowledge graph (PROGRESS=1, RESUME=1)"
@@ -508,3 +514,41 @@ cognee-test: cognee-check-env ## Run quality validation tests (VERBOSE=1, THRESH
 	@cd devtools/agent-memory && uv run agent-memory test \
 		$(if $(filter 1,$(VERBOSE)),--verbose,) \
 		$(if $(THRESHOLD),--threshold $(THRESHOLD),)
+
+# =============================================================================
+# DevPod (Remote E2E on Hetzner)
+# =============================================================================
+
+DEVPOD_WORKSPACE ?= floe
+DEVPOD_PROVIDER ?= hetzner
+DEVPOD_DEVCONTAINER ?= .devcontainer/hetzner/devcontainer.json
+
+.PHONY: devpod-check
+devpod-check:
+	@command -v devpod >/dev/null 2>&1 || { \
+		echo "ERROR: devpod CLI not found in PATH" >&2; \
+		echo "  Install: https://devpod.sh/docs/getting-started/install" >&2; \
+		echo "  Add provider: devpod provider add mrsimonemms/devpod-provider-hetzner" >&2; \
+		exit 1; \
+	}
+
+.PHONY: devpod-up
+devpod-up: devpod-check ## Create/start DevPod workspace on Hetzner
+	@echo "Starting DevPod workspace '$(DEVPOD_WORKSPACE)' on $(DEVPOD_PROVIDER)..."
+	devpod up $(DEVPOD_WORKSPACE) \
+		--provider $(DEVPOD_PROVIDER) \
+		--devcontainer-path $(DEVPOD_DEVCONTAINER) \
+		--ide none
+
+.PHONY: devpod-stop
+devpod-stop: devpod-check ## Stop DevPod workspace (preserves VM disk)
+	@echo "Stopping DevPod workspace '$(DEVPOD_WORKSPACE)'..."
+	devpod stop $(DEVPOD_WORKSPACE)
+
+.PHONY: devpod-ssh
+devpod-ssh: devpod-check ## SSH into DevPod workspace
+	devpod ssh $(DEVPOD_WORKSPACE)
+
+.PHONY: devpod-tunnels
+devpod-tunnels: ## Forward service ports from DevPod workspace via SSH
+	@bash scripts/devpod-tunnels.sh
