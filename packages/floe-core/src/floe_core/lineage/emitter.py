@@ -14,11 +14,14 @@ from typing import Any
 from uuid import UUID
 
 from floe_core.lineage.events import EventBuilder
-from floe_core.lineage.protocols import LineageTransport
+from floe_core.lineage.protocols import LineageTransport, SyncLineageTransport
 from floe_core.lineage.transport import (
     ConsoleLineageTransport,
     HttpLineageTransport,
     NoOpLineageTransport,
+    SyncConsoleLineageTransport,
+    SyncHttpLineageTransport,
+    SyncNoOpTransport,
 )
 from floe_core.lineage.types import LineageDataset
 
@@ -187,3 +190,173 @@ def create_emitter(
 
     event_builder = EventBuilder(producer=producer, default_namespace=default_namespace)
     return LineageEmitter(transport, event_builder, default_namespace)
+
+
+class SyncLineageEmitter:
+    """Synchronous lineage emitter for compilation context.
+
+    Combines an EventBuilder (for constructing LineageEvent instances) with
+    a synchronous transport (for delivering them to a backend). Provides
+    synchronous methods for the standard run lifecycle: start, complete, fail.
+
+    Attributes:
+        transport: The transport used for event delivery.
+        event_builder: The builder used for event construction.
+        default_namespace: Default namespace for jobs.
+
+    Example:
+        >>> emitter = SyncLineageEmitter(transport, EventBuilder(), "production")
+        >>> run_id = emitter.emit_start("my_job")
+        >>> emitter.emit_complete(run_id, "my_job")
+    """
+
+    def __init__(
+        self,
+        transport: SyncLineageTransport,
+        event_builder: EventBuilder,
+        default_namespace: str = "default",
+    ) -> None:
+        """Initialize the sync emitter.
+
+        Args:
+            transport: Synchronous transport for delivering lineage events.
+            event_builder: Builder for constructing lineage events.
+            default_namespace: Default namespace for jobs.
+        """
+        self.transport = transport
+        self.event_builder = event_builder
+        self.default_namespace = default_namespace
+
+    def emit_start(
+        self,
+        job_name: str,
+        run_id: UUID | None = None,
+        inputs: list[LineageDataset] | None = None,
+        outputs: list[LineageDataset] | None = None,
+        run_facets: dict[str, Any] | None = None,
+        job_facets: dict[str, Any] | None = None,
+    ) -> UUID:
+        """Emit a START event for a job run.
+
+        Args:
+            job_name: Name of the job.
+            run_id: Unique run identifier (auto-generated if None).
+            inputs: Input datasets for this run.
+            outputs: Output datasets for this run.
+            run_facets: Additional run metadata as OpenLineage facets.
+            job_facets: Additional job metadata as OpenLineage facets.
+
+        Returns:
+            The run_id for this run (generated or provided).
+        """
+        event = self.event_builder.start_run(
+            job_name=job_name,
+            run_id=run_id,
+            inputs=inputs,
+            outputs=outputs,
+            run_facets=run_facets,
+            job_facets=job_facets,
+        )
+        self.transport.emit(event)
+        return event.run.run_id
+
+    def emit_complete(
+        self,
+        run_id: UUID,
+        job_name: str,
+        outputs: list[LineageDataset] | None = None,
+        run_facets: dict[str, Any] | None = None,
+        job_facets: dict[str, Any] | None = None,
+    ) -> None:
+        """Emit a COMPLETE event for a job run.
+
+        Args:
+            run_id: Unique run identifier (must match START event).
+            job_name: Name of the job.
+            outputs: Output datasets for this run.
+            run_facets: Additional run metadata as OpenLineage facets.
+            job_facets: Additional job metadata as OpenLineage facets.
+        """
+        event = self.event_builder.complete_run(
+            run_id=run_id,
+            job_name=job_name,
+            outputs=outputs,
+            run_facets=run_facets,
+            job_facets=job_facets,
+        )
+        self.transport.emit(event)
+
+    def emit_fail(
+        self,
+        run_id: UUID,
+        job_name: str,
+        error_message: str | None = None,
+        run_facets: dict[str, Any] | None = None,
+    ) -> None:
+        """Emit a FAIL event for a job run.
+
+        Args:
+            run_id: Unique run identifier (must match START event).
+            job_name: Name of the job.
+            error_message: Error message to include in ErrorMessageRunFacet.
+            run_facets: Additional run metadata as OpenLineage facets.
+        """
+        event = self.event_builder.fail_run(
+            run_id=run_id,
+            job_name=job_name,
+            error_message=error_message,
+            run_facets=run_facets,
+        )
+        self.transport.emit(event)
+
+    def close(self) -> None:
+        """Close the underlying transport and release resources."""
+        self.transport.close()
+
+
+def create_sync_emitter(
+    transport_config: dict[str, Any] | None = None,
+    default_namespace: str = "default",
+    producer: str = "floe",
+) -> SyncLineageEmitter:
+    """Factory function to create a SyncLineageEmitter from configuration.
+
+    Creates the appropriate synchronous transport based on the config ``type``
+    field, an EventBuilder, and wires them into a SyncLineageEmitter.
+
+    Args:
+        transport_config: Transport configuration dict. Supported types:
+            - ``{"type": "http", "url": "...", "timeout": 5.0, "api_key": "..."}``
+            - ``{"type": "console"}``
+            - ``None`` or ``{"type": None}`` → NoOp transport
+        default_namespace: Default namespace for jobs.
+        producer: Producer identifier for events.
+
+    Returns:
+        Configured SyncLineageEmitter instance.
+
+    Example:
+        >>> emitter = create_sync_emitter({"type": "console"}, default_namespace="prod")
+        >>> run_id = emitter.emit_start("my_job")
+    """
+    sync_transport: SyncLineageTransport
+
+    if transport_config is None or transport_config.get("type") is None:
+        sync_transport = SyncNoOpTransport()
+    elif transport_config["type"] == "http":
+        url = transport_config.get("url")
+        if url is None:
+            msg = "HTTP transport requires a 'url' key in transport_config"
+            raise ValueError(msg)
+        sync_transport = SyncHttpLineageTransport(
+            url=url,
+            timeout=transport_config.get("timeout", 5.0),
+            api_key=transport_config.get("api_key"),
+        )
+    elif transport_config["type"] == "console":
+        sync_transport = SyncConsoleLineageTransport()
+    else:
+        sync_transport = SyncNoOpTransport()
+
+    event_builder = EventBuilder(producer=producer, default_namespace=default_namespace)
+    return SyncLineageEmitter(sync_transport, event_builder, default_namespace)
