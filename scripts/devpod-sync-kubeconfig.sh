@@ -20,6 +20,16 @@ LOCAL_KUBECONFIG="${HOME}/.kube/devpod-floe.config"
 LOCAL_API_PORT="${DEVPOD_K8S_API_PORT:-26443}"
 SSH_TARGET="${WORKSPACE}.devpod"
 
+# Validate inputs contain only safe characters
+if [[ ! "${WORKSPACE}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "[devpod-sync] ERROR: Invalid workspace name: ${WORKSPACE}" >&2
+    exit 1
+fi
+if [[ ! "${LOCAL_API_PORT}" =~ ^[0-9]+$ ]]; then
+    echo "[devpod-sync] ERROR: Invalid port: ${LOCAL_API_PORT}" >&2
+    exit 1
+fi
+
 log() {
     echo "[devpod-sync] $*"
 }
@@ -47,10 +57,17 @@ log "Extracting kubeconfig from workspace '${WORKSPACE}'..."
 REMOTE_CONFIG=$(devpod ssh "${WORKSPACE}" -- cat /home/node/.kube/config 2>/dev/null) || \
     error "Failed to read kubeconfig from workspace. Is the Kind cluster running?"
 
-# Parse the remote API server port
-REMOTE_API_PORT=$(echo "${REMOTE_CONFIG}" | grep -oP 'server: https://127\.0\.0\.1:\K\d+' | head -1) || \
-    REMOTE_API_PORT=$(echo "${REMOTE_CONFIG}" | grep -oP 'server: https://0\.0\.0\.0:\K\d+' | head -1) || \
+# Parse the remote API server port (POSIX-compatible — no grep -P)
+REMOTE_API_PORT=$(echo "${REMOTE_CONFIG}" | sed -nE 's|.*server: https://127\.0\.0\.1:([0-9]+).*|\1|p' | head -1)
+if [[ -z "${REMOTE_API_PORT}" ]]; then
+    REMOTE_API_PORT=$(echo "${REMOTE_CONFIG}" | sed -nE 's|.*server: https://0\.0\.0\.0:([0-9]+).*|\1|p' | head -1)
+fi
+if [[ -z "${REMOTE_API_PORT}" ]]; then
     error "Could not parse K8s API server port from remote kubeconfig"
+fi
+if [[ ! "${REMOTE_API_PORT}" =~ ^[0-9]+$ ]]; then
+    error "Invalid remote API port: ${REMOTE_API_PORT}"
+fi
 
 log "Remote K8s API port: ${REMOTE_API_PORT}"
 
@@ -75,8 +92,8 @@ if pgrep -f "ssh.*-L ${LOCAL_API_PORT}:localhost:${REMOTE_API_PORT}.*${SSH_TARGE
 fi
 
 log "Establishing SSH tunnel: localhost:${LOCAL_API_PORT} → remote:${REMOTE_API_PORT}..."
-ssh -fNL "${LOCAL_API_PORT}:localhost:${REMOTE_API_PORT}" "${SSH_TARGET}" 2>/dev/null || \
-    error "Failed to establish SSH tunnel. Check SSH config for '${SSH_TARGET}'"
+ssh -fNL "${LOCAL_API_PORT}:localhost:${REMOTE_API_PORT}" "${SSH_TARGET}" 2>>"${HOME}/.kube/devpod-ssh.log" || \
+    error "Failed to establish SSH tunnel. Check SSH config for '${SSH_TARGET}' (see ~/.kube/devpod-ssh.log)"
 
 # ─── Validate ────────────────────────────────────────────────────────────────
 

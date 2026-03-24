@@ -14,10 +14,17 @@
 set -euo pipefail
 
 WORKSPACE="${DEVPOD_WORKSPACE:-floe}"
+if [[ ! "${WORKSPACE}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "ERROR: Invalid workspace name: ${WORKSPACE}" >&2
+    exit 1
+fi
 SSH_TARGET="${WORKSPACE}.devpod"
 
 # Port mappings: local_port:remote_port:service_name
-# These match kind-config.yaml extraPortMappings and test-e2e.sh port-forwards
+# Subset of kind-config.yaml extraPortMappings required for E2E tests and demo.
+# Not forwarded (not needed for E2E): Grafana (3001), Prometheus (9090),
+# Marquez Admin (5001), OCI Registry (30500/30501), Keycloak (8082),
+# Infisical (8083), PostgreSQL (5432). Add entries here if tests need them.
 PORTS=(
     "3100:3100:dagster-webserver"
     "8181:8181:polaris-api"
@@ -103,7 +110,7 @@ done
 # ─── Establish tunnels ───────────────────────────────────────────────────────
 
 log "Connecting to ${SSH_TARGET}..."
-ssh "${SSH_ARGS[@]}" "${SSH_TARGET}" 2>/dev/null || {
+ssh "${SSH_ARGS[@]}" "${SSH_TARGET}" 2>>"${HOME}/.kube/devpod-ssh.log" || {
     echo "ERROR: Failed to establish SSH tunnels to ${SSH_TARGET}" >&2
     echo "  Check: ssh ${SSH_TARGET} (DevPod SSH config)" >&2
     echo "  Check: devpod status ${WORKSPACE}" >&2

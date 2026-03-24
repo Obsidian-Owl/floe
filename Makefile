@@ -52,6 +52,7 @@ help: ## Show this help message
 	@echo "  make devpod-up       Create/start DevPod workspace on Hetzner"
 	@echo "  make devpod-stop     Stop workspace (preserves VM disk)"
 	@echo "  make devpod-ssh      SSH into workspace"
+	@echo "  make devpod-sync     Sync kubeconfig from workspace to local"
 	@echo "  make devpod-tunnels  Forward service ports via SSH"
 	@echo ""
 	@echo "Agent Memory (Cognee):"
@@ -548,6 +549,10 @@ devpod-stop: devpod-check ## Stop DevPod workspace (preserves VM disk)
 .PHONY: devpod-ssh
 devpod-ssh: devpod-check ## SSH into DevPod workspace
 	devpod ssh $(DEVPOD_WORKSPACE)
+
+.PHONY: devpod-sync
+devpod-sync: devpod-check ## Sync kubeconfig from DevPod workspace to local
+	@bash scripts/devpod-sync-kubeconfig.sh $(DEVPOD_WORKSPACE)
 
 .PHONY: devpod-tunnels
 devpod-tunnels: ## Forward service ports from DevPod workspace via SSH
