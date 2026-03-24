@@ -28,14 +28,15 @@ if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
     if kubectl cluster-info --context "kind-${CLUSTER_NAME}" >/dev/null 2>&1; then
         log "Cluster is healthy"
 
-        # Check if pods are running
-        POD_COUNT=$(kubectl get pods -n "${NAMESPACE}" --no-headers 2>/dev/null | wc -l | tr -d ' ')
-        if [[ "${POD_COUNT}" -gt 0 ]]; then
-            log "Found ${POD_COUNT} pods in namespace '${NAMESPACE}'"
+        # Check if pods are healthy (Running or Completed only)
+        READY_COUNT=$(kubectl get pods -n "${NAMESPACE}" --no-headers 2>/dev/null \
+            | grep -c " Running \| Completed " || true)
+        if [[ "${READY_COUNT}" -gt 0 ]]; then
+            log "Found ${READY_COUNT} running pods in namespace '${NAMESPACE}'"
             log "Skipping cluster setup — already running"
             exit 0
         else
-            log "No pods found in '${NAMESPACE}' — Helm chart may need deploying"
+            log "No healthy pods found in '${NAMESPACE}' — will re-deploy"
         fi
     else
         log "Cluster exists but is unhealthy — deleting and recreating"

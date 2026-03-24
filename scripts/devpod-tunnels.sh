@@ -91,6 +91,7 @@ fi
 # ─── Build SSH command ───────────────────────────────────────────────────────
 
 SSH_ARGS=(-fN)
+FORWARDED=()
 for MAPPING in "${PORTS[@]}"; do
     LOCAL_PORT="${MAPPING%%:*}"
     REST="${MAPPING#*:}"
@@ -104,8 +105,16 @@ for MAPPING in "${PORTS[@]}"; do
     fi
 
     SSH_ARGS+=(-L "${LOCAL_PORT}:localhost:${REMOTE_PORT}")
+    FORWARDED+=("${MAPPING}")
     log "Forward: localhost:${LOCAL_PORT} → ${SERVICE} (:${REMOTE_PORT})"
 done
+
+# Guard: no tunnels to establish if all ports were skipped
+if [[ ${#FORWARDED[@]} -eq 0 ]]; then
+    log "WARNING: All ports were already in use — no tunnels to establish"
+    log "Run '--kill' then retry, or check existing processes with '--status'"
+    exit 0
+fi
 
 # ─── Establish tunnels ───────────────────────────────────────────────────────
 
@@ -118,8 +127,8 @@ ssh "${SSH_ARGS[@]}" "${SSH_TARGET}" 2>>"${HOME}/.kube/devpod-ssh.log" || {
 }
 
 log ""
-log "All tunnels established. Services available at:"
-for MAPPING in "${PORTS[@]}"; do
+log "${#FORWARDED[@]} of ${#PORTS[@]} tunnels established. Services available at:"
+for MAPPING in "${FORWARDED[@]}"; do
     LOCAL_PORT="${MAPPING%%:*}"
     REST="${MAPPING#*:}"
     SERVICE="${REST#*:}"
