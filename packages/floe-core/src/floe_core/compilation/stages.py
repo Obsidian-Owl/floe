@@ -320,9 +320,7 @@ def compile_pipeline(
         # so TraceCorrelationFacetBuilder can capture the active OTel span context)
         try:
             _lineage_config = _build_lineage_config(manifest)
-            emitter = create_sync_emitter(
-                _lineage_config, default_namespace="floe.compilation"
-            )
+            emitter = create_sync_emitter(_lineage_config, default_namespace="floe.compilation")
         except Exception as _build_err:
             # CWE-532: log type name only — exc_info may contain credential-bearing URLs
             log.warning("lineage_emitter_build_failed", error=type(_build_err).__name__)
