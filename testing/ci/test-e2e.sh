@@ -240,12 +240,44 @@ if kubectl get svc floe-platform-marquez -n "${TEST_NAMESPACE}" &>/dev/null; the
 fi
 
 # Jaeger query service (if deployed)
+# OrbStack can bind port 16686 to a stale container, causing silent failures.
+# We kill any existing listener, establish a fresh port-forward, and health-check.
+JAEGER_QUERY_PORT="${JAEGER_QUERY_PORT:-16686}"
 if kubectl get svc floe-platform-jaeger-query -n "${TEST_NAMESPACE}" &>/dev/null; then
-    if port_already_available 16686; then
-        echo "  Jaeger (16686): already available (NodePort)"
+    # Kill any stale listener on the preferred port
+    lsof -ti :"${JAEGER_QUERY_PORT}" | xargs kill -9 2>/dev/null || true
+    sleep 1  # allow port to be released
+
+    if port_already_available "${JAEGER_QUERY_PORT}"; then
+        echo "  Jaeger (${JAEGER_QUERY_PORT}): already available (NodePort)"
     else
-        kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n "${TEST_NAMESPACE}" &
+        kubectl port-forward svc/floe-platform-jaeger-query "${JAEGER_QUERY_PORT}":16686 -n "${TEST_NAMESPACE}" &
         JAEGER_PF_PID=$!
+        sleep 2  # allow port-forward to establish
+
+        # Health check: verify Jaeger API is responsive
+        if ! curl -sf "http://localhost:${JAEGER_QUERY_PORT}/api/services" >/dev/null 2>&1; then
+            echo "WARNING: Jaeger health check failed on port ${JAEGER_QUERY_PORT}, retrying..." >&2
+            kill "${JAEGER_PF_PID}" 2>/dev/null || true
+            wait "${JAEGER_PF_PID}" 2>/dev/null || true
+            sleep 1
+
+            # Fallback: try alternative port if primary can't be freed
+            if [[ "${JAEGER_QUERY_PORT}" == "16686" ]]; then
+                JAEGER_QUERY_PORT=16687
+                lsof -ti :"${JAEGER_QUERY_PORT}" | xargs kill -9 2>/dev/null || true
+                sleep 1
+            fi
+
+            kubectl port-forward svc/floe-platform-jaeger-query "${JAEGER_QUERY_PORT}":16686 -n "${TEST_NAMESPACE}" &
+            JAEGER_PF_PID=$!
+            sleep 2
+
+            if ! curl -sf "http://localhost:${JAEGER_QUERY_PORT}/api/services" >/dev/null 2>&1; then
+                echo "ERROR: Jaeger health check failed on port ${JAEGER_QUERY_PORT} after retry" >&2
+                # Non-fatal: Jaeger is optional for most tests
+            fi
+        fi
     fi
 fi
 
@@ -271,7 +303,7 @@ else
 fi
 wait_for_port localhost 5432 15
 wait_for_port localhost "${MARQUEZ_HOST_PORT:-5100}" 15 || true  # Marquez API port (optional)
-wait_for_port localhost 16686 15 || true  # Jaeger optional
+wait_for_port localhost "${JAEGER_QUERY_PORT}" 15 || true  # Jaeger optional
 
 echo "Port-forwards established."
 
@@ -421,6 +453,7 @@ uv pip install "pyiceberg[s3fs]==0.11.1" 2>&1 || {
 export DAGSTER_WEBSERVER_PORT="${DAGSTER_HOST_PORT}"
 export DAGSTER_PORT="${DAGSTER_HOST_PORT}"
 export MARQUEZ_PORT="${MARQUEZ_HOST_PORT:-5100}"
+export JAEGER_QUERY_PORT="${JAEGER_QUERY_PORT}"
 
 echo ""
 echo "Running E2E tests..."

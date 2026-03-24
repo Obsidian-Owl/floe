@@ -71,7 +71,7 @@ RUN uv export --frozen --no-dev --no-editable --all-packages --no-emit-workspace
 # =============================================================================
 # Stage 2: BUILD — Install deps + workspace packages from source
 # =============================================================================
-FROM python:3.11-slim@sha256:0b23cfb7425d065008b778022a17b1551c82f8b4866ee5a7a200084b7e2eafbf AS build
+FROM python:3.11-slim@sha256:9358444059ed78e2975ada2c189f1c1a3144a5dab6f35bff8c981afb38946634 AS build
 
 # Build dependencies for C extensions (grpcio, greenlet, pyarrow, duckdb)
 # git: required for pip install from git URLs (pyiceberg pinned commit)
@@ -136,7 +136,7 @@ RUN python -c "import dagster; import floe_core; import dagster_webserver" \
 # =============================================================================
 # Stage 3: RUNTIME — Minimal production image
 # =============================================================================
-FROM python:3.11-slim@sha256:0b23cfb7425d065008b778022a17b1551c82f8b4866ee5a7a200084b7e2eafbf AS runtime
+FROM python:3.11-slim@sha256:9358444059ed78e2975ada2c189f1c1a3144a5dab6f35bff8c981afb38946634 AS runtime
 
 # Copy installed packages from build stage (no build tools, no compilers, no uv)
 COPY --from=build /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
