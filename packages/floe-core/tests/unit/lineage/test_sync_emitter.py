@@ -3,8 +3,6 @@
 Tests the synchronous emitter that coordinates EventBuilder and sync transports,
 plus the factory function for creating sync emitters from configuration.
 
-These tests are RED phase -- SyncLineageEmitter and create_sync_emitter do not
-exist yet. All tests should fail at import.
 """
 
 from __future__ import annotations
@@ -915,3 +913,19 @@ class TestCreateSyncEmitterParametrized:
         )
         assert emitter.default_namespace == namespace
         assert emitter.event_builder.producer == producer
+
+
+class TestCreateSyncEmitterValidation:
+    """Tests for input validation in create_sync_emitter factory."""
+
+    @pytest.mark.requirement("AC-OLC-4")
+    def test_http_without_url_raises_value_error(self) -> None:
+        """HTTP transport config missing 'url' raises ValueError, not KeyError."""
+        with pytest.raises(ValueError, match="HTTP transport requires a 'url' key"):
+            create_sync_emitter({"type": "http"})
+
+    @pytest.mark.requirement("AC-OLC-4")
+    def test_http_with_none_url_raises_value_error(self) -> None:
+        """HTTP transport config with url=None raises ValueError."""
+        with pytest.raises(ValueError, match="HTTP transport requires a 'url' key"):
+            create_sync_emitter({"type": "http", "url": None})

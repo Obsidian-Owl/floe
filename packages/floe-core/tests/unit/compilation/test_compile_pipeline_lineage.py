@@ -4,9 +4,6 @@ Verifies that compile_pipeline() correctly creates a sync lineage emitter
 from manifest config and emits START/COMPLETE/FAIL events at the right
 lifecycle points.
 
-These tests are TDD RED phase -- they will FAIL because compile_pipeline()
-does not yet contain lineage emission code.
-
 Requirements:
     - AC-OLC-5: emit_start() called after LOAD with correct job_name and run_facets
     - AC-OLC-6: emit_complete() called before return with run_id from emit_start()
@@ -845,3 +842,25 @@ class TestCompilePipelineLineageEdgeCases:
         assert config_arg is not None, "transport_config must not be None for enabled lineage"
         assert "url" in config_arg, "Config dict must use 'url' key (not 'endpoint')"
         assert "endpoint" not in config_arg, "Config dict must NOT have 'endpoint' key -- use 'url'"
+
+    @pytest.mark.requirement("AC-OLC-5")
+    def test_emitter_construction_failure_does_not_crash_compilation(
+        self,
+        spec_path: Path,
+        lineage_manifest_path: Path,
+    ) -> None:
+        """If create_sync_emitter() raises, compilation falls back to NoOp emitter.
+
+        Verifies that a bad lineage config (e.g. invalid URL scheme) does not
+        crash compile_pipeline() — lineage must never block compilation.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        with patch(
+            CREATE_SYNC_EMITTER_PATH,
+            side_effect=[ValueError("bad URL scheme"), MagicMock()],
+        ):
+            # Must not raise — falls back to NoOp emitter
+            result = compile_pipeline(spec_path, lineage_manifest_path)
+
+        assert result is not None

@@ -40,7 +40,7 @@ if TYPE_CHECKING:
         CompiledArtifacts,
         ResolvedGovernance,
     )
-    from floe_core.schemas.manifest import GovernanceConfig
+    from floe_core.schemas.manifest import GovernanceConfig, PlatformManifest
 
 logger = structlog.get_logger(__name__)
 
@@ -214,7 +214,7 @@ def _resolve_governance(
     return resolved
 
 
-def _build_lineage_config(manifest: Any) -> dict[str, Any] | None:
+def _build_lineage_config(manifest: PlatformManifest) -> dict[str, Any] | None:
     """Build lineage transport config from manifest observability settings.
 
     Args:
@@ -318,8 +318,15 @@ def compile_pipeline(
 
         # Construct lineage emitter from manifest config (after LOAD, inside pipeline span
         # so TraceCorrelationFacetBuilder can capture the active OTel span context)
-        _lineage_config = _build_lineage_config(manifest)
-        emitter = create_sync_emitter(_lineage_config, default_namespace="floe.compilation")
+        try:
+            _lineage_config = _build_lineage_config(manifest)
+            emitter = create_sync_emitter(
+                _lineage_config, default_namespace="floe.compilation"
+            )
+        except Exception as _build_err:
+            # CWE-532: log type name only — exc_info may contain credential-bearing URLs
+            log.warning("lineage_emitter_build_failed", error=type(_build_err).__name__)
+            emitter = create_sync_emitter(None, default_namespace="floe.compilation")
 
         run_id: UUID | None = None
         try:

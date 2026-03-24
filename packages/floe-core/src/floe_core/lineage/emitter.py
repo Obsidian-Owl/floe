@@ -344,8 +344,12 @@ def create_sync_emitter(
     if transport_config is None or transport_config.get("type") is None:
         sync_transport = SyncNoOpTransport()
     elif transport_config["type"] == "http":
+        url = transport_config.get("url")
+        if url is None:
+            msg = "HTTP transport requires a 'url' key in transport_config"
+            raise ValueError(msg)
         sync_transport = SyncHttpLineageTransport(
-            url=transport_config["url"],
+            url=url,
             timeout=transport_config.get("timeout", 5.0),
             api_key=transport_config.get("api_key"),
         )

@@ -386,11 +386,11 @@ class SyncNoOpTransport:
     loop is unavailable.
     """
 
-    def emit(self, _event: LineageEvent) -> None:
+    def emit(self, event: LineageEvent) -> None:  # noqa: ARG002
         """Discard the event silently.
 
         Args:
-            _event: The lineage event to discard.
+            event: The lineage event to discard.
         """
 
     def close(self) -> None:
@@ -484,13 +484,15 @@ class SyncHttpLineageTransport:
             event: The lineage event to send.
 
         Raises:
-            httpx.HTTPError: If the HTTP request fails.
+            httpx.HTTPStatusError: If the server returns a non-2xx response.
+            httpx.HTTPError: If the HTTP request fails at the network level.
         """
         payload = to_openlineage_event(event)
         headers: dict[str, str] = {}
         if self._api_key is not None:
             headers["Authorization"] = f"Bearer {self._api_key}"
-        self._client.post(self._url, json=payload, headers=headers)
+        response = self._client.post(self._url, json=payload, headers=headers)
+        response.raise_for_status()
 
     def close(self) -> None:
         """Close the underlying httpx.Client, releasing connections."""
