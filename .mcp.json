@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "kubernetes": {
+      "command": "npx",
+      "args": ["-y", "kubernetes-mcp-server@latest"],
+      "env": {
+        "KUBECONFIG": "~/.kube/devpod-floe.config"
+      }
+    }
+  }
+}
