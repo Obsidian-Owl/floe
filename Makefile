@@ -49,6 +49,10 @@ help: ## Show this help message
 	@echo "  make demo-stop       Stop demo and clean up resources"
 	@echo ""
 	@echo "DevPod (Remote E2E):"
+	@echo "  make devpod-setup    One-time Hetzner provider setup from .env"
+	@echo "  make devpod-test     Run E2E tests on Hetzner (full lifecycle)"
+	@echo "  make devpod-delete   Delete DevPod workspace (stops billing)"
+	@echo "  make devpod-status   Show workspace status, tunnels, and cluster health"
 	@echo "  make devpod-up       Create/start DevPod workspace on Hetzner"
 	@echo "  make devpod-stop     Stop workspace (preserves VM disk)"
 	@echo "  make devpod-ssh      SSH into workspace"
@@ -543,6 +547,7 @@ devpod-up: devpod-check ## Create/start DevPod workspace on Hetzner
 
 .PHONY: devpod-stop
 devpod-stop: devpod-check ## Stop DevPod workspace (preserves VM disk)
+	@echo "WARNING: Stopped VMs still incur Hetzner billing. Use 'make devpod-delete' to stop all charges." >&2
 	@echo "Stopping DevPod workspace '$(DEVPOD_WORKSPACE)'..."
 	devpod stop $(DEVPOD_WORKSPACE)
 
@@ -557,3 +562,28 @@ devpod-sync: devpod-check ## Sync kubeconfig from DevPod workspace to local
 .PHONY: devpod-tunnels
 devpod-tunnels: ## Forward service ports from DevPod workspace via SSH
 	@bash scripts/devpod-tunnels.sh
+
+.PHONY: devpod-setup
+devpod-setup: devpod-check ## One-time Hetzner provider setup from .env
+	@bash scripts/devpod-setup.sh
+
+.PHONY: devpod-test
+devpod-test: devpod-check ## Run E2E tests on Hetzner (full lifecycle)
+	@bash scripts/devpod-test.sh
+
+.PHONY: devpod-delete
+devpod-delete: devpod-check ## Delete DevPod workspace (stops billing)
+	@scripts/devpod-tunnels.sh --kill 2>/dev/null || true
+	@echo "Deleting DevPod workspace '$(DEVPOD_WORKSPACE)'..."
+	devpod delete $(DEVPOD_WORKSPACE) --force
+
+.PHONY: devpod-status
+devpod-status: devpod-check ## Show workspace status, tunnels, and cluster health
+	@echo "=== Workspace Status ==="
+	@devpod status $(DEVPOD_WORKSPACE) 2>/dev/null || echo "Workspace '$(DEVPOD_WORKSPACE)' not running"
+	@echo ""
+	@echo "=== Tunnel Status ==="
+	@scripts/devpod-tunnels.sh --status 2>/dev/null || echo "No tunnels active"
+	@echo ""
+	@echo "=== Cluster Health ==="
+	@KUBECONFIG="$${HOME}/.kube/devpod-floe.config" kubectl cluster-info 2>/dev/null || echo "Cluster not reachable"
