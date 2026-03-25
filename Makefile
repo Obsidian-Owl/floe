@@ -354,7 +354,7 @@ demo: ## Deploy demo via DevPod (requires running DevPod workspace)
 	@echo "=== Starting floe Platform Demo (DevPod) ==="
 	@scripts/devpod-ensure-ready.sh
 	@echo "Building demo image inside DevPod..."
-	@devpod ssh $(DEVPOD_WORKSPACE) -- "cd /workspace && make build-demo-image"
+	@devpod ssh "$(DEVPOD_WORKSPACE)" -- "cd /workspace && make build-demo-image"
 	@echo "Updating Helm chart dependencies..."
 	@helm dependency update charts/floe-platform
 	@echo "Deploying Helm chart via tunneled kubectl..."
