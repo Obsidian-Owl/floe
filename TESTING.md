@@ -16,6 +16,7 @@
 - [Requirement Traceability](#requirement-traceability)
 - [Tests FAIL, Never Skip](#tests-fail-never-skip)
 - [K8s Test Infrastructure](#k8s-test-infrastructure)
+- [Remote Test Infrastructure (DevPod + Hetzner)](#remote-test-infrastructure-devpod--hetzner)
 - [Test Infrastructure Quick Reference](#test-infrastructure-quick-reference)
 - [Test Fixtures and Base Classes](#test-fixtures-and-base-classes)
 - [pytest Markers](#pytest-markers)
@@ -323,6 +324,88 @@ Services are deployed via **Helm charts** with test-specific values files:
 | Dagster | Orchestration (webserver, daemon) | `dagster/dagster` |
 
 **Service Discovery**: Tests use K8s DNS (`floe-test-polaris.floe-test.svc.cluster.local`)
+
+---
+
+## Remote Test Infrastructure (DevPod + Hetzner)
+
+Integration, E2E, and demo tests require a Kind cluster with sufficient resources (8 vCPUs, 24GB RAM). For developers without a local machine that can run this, **DevPod with the Hetzner cloud provider** provides a remote development environment with full K8s test capabilities.
+
+### Architecture
+
+```
+Developer Machine (macOS/Linux)
+  └─► DevPod CLI
+        └─► Hetzner Cloud VM (ccx33: 8 vCPU, 32GB RAM, sin region)
+              └─► Devcontainer (Docker-outside-of-Docker)
+                    ├─► Kind Cluster (floe-test)
+                    │     └─► floe-platform Helm chart (all test services)
+                    ├─► Claude Code (agentic debugging + administration)
+                    └─► Full Python environment (uv sync)
+```
+
+### Setup
+
+```bash
+# 1. One-time provider setup (requires DEVPOD_HETZNER_TOKEN in .env)
+./scripts/devpod-setup.sh
+
+# 2. Create and start workspace
+devpod up . --devcontainer-path .devcontainer/hetzner/devcontainer.json
+
+# 3. postStartCommand.sh automatically:
+#    - Creates Kind cluster via testing/k8s/setup-cluster.sh
+#    - Rewrites kubeconfig for Docker-outside-of-Docker networking
+#    - Verifies cluster connectivity
+```
+
+### Docker-outside-of-Docker Networking
+
+The devcontainer uses the `docker-outside-of-docker` feature, which shares the host's Docker socket but **not** its network namespace. Kind maps the API server to `127.0.0.1:<random-port>` on the host, which is unreachable from inside the container.
+
+`postStartCommand.sh` solves this with `fix_kubeconfig_for_dood()`:
+1. Gets the Kind control plane container's IP on the Docker `kind` network
+2. Rewrites the kubeconfig from `https://127.0.0.1:<port>` to `https://<container-ip>:6443`
+
+This runs automatically on workspace start and is idempotent.
+
+### Configuration
+
+| Setting | Default | Env Var | Description |
+|---------|---------|---------|-------------|
+| Machine type | `ccx33` | `DEVPOD_MACHINE_TYPE` | 8 vCPU, 32GB RAM dedicated |
+| Region | `sin` (Singapore) | `DEVPOD_REGION` | Closest to AU for low latency |
+| Workspace name | `floe` | `DEVPOD_WORKSPACE` | DevPod workspace identifier |
+| Cluster name | `floe-test` | `KIND_CLUSTER_NAME` | Kind cluster name |
+| Namespace | `floe-test` | `TEST_NAMESPACE` | K8s test namespace |
+
+### Running Tests Remotely
+
+Once inside the DevPod workspace, tests run identically to local:
+
+```bash
+make test-unit          # Unit tests (no K8s needed)
+make test-e2e           # E2E tests (manages port-forwards automatically)
+make test               # All tests
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `.devcontainer/hetzner/devcontainer.json` | Container config (tools, resources, mounts) |
+| `.devcontainer/hetzner/postStartCommand.sh` | Cluster setup + kubeconfig fix |
+| `.devcontainer/Dockerfile` | Base image (Kind, kubectl, Helm, uv, Claude Code) |
+| `scripts/devpod-setup.sh` | One-time Hetzner provider configuration |
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `kubectl` connection refused | DooD kubeconfig points to `127.0.0.1` | `bash .devcontainer/hetzner/postStartCommand.sh` (re-runs fix) |
+| DevPod SSH timeout | Hetzner TOKEN deprecation warning | Ensure `scripts/devpod-setup.sh` uses `TOKEN` (not `HCLOUD_TOKEN`) |
+| VM auto-stopped | Inactivity timeout (10m default) | Reconnect with `devpod up floe` |
+| Kind cluster unhealthy after suspend | Stale containers | `postStartCommand.sh` detects and recreates automatically |
 
 ---
 
