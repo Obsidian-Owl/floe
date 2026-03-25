@@ -58,6 +58,5 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
   "postCreateCommand": "cd /workspace && uv sync --frozen 2>/dev/null || true",
-  "postStartCommand": "bash /workspace/.devcontainer/hetzner/postStartCommand.sh",
-  "waitFor": "postStartCommand"
+  "postStartCommand": "bash /workspace/.devcontainer/hetzner/postStartCommand.sh"
 }
