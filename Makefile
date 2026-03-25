@@ -124,8 +124,14 @@ test-integration-image: ## Build test runner Docker image
 	@echo "Image built: floe-test-runner:latest"
 
 .PHONY: test-e2e
-test-e2e: ## Run E2E tests (requires Kind cluster + full stack)
-	@echo "Running E2E tests..."
+test-e2e: ## Run E2E tests via DevPod (requires running DevPod workspace)
+	@echo "Running E2E tests (DevPod)..."
+	@scripts/devpod-ensure-ready.sh
+	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config ./testing/ci/test-e2e.sh
+
+.PHONY: test-e2e-local
+test-e2e-local: ## Run E2E tests locally (requires local Kind cluster + full stack)
+	@echo "Running E2E tests (local Kind)..."
 	@./testing/ci/test-e2e.sh
 
 # ============================================================
