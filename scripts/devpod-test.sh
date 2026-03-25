@@ -24,6 +24,10 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 WORKSPACE="${DEVPOD_WORKSPACE:-floe}"
 DEVCONTAINER="${DEVPOD_DEVCONTAINER:-.devcontainer/hetzner/devcontainer.json}"
+if [[ "${DEVCONTAINER}" != .devcontainer/* ]]; then
+    echo "[devpod-test] ERROR: DEVPOD_DEVCONTAINER must be a relative path under .devcontainer/. Got: '${DEVCONTAINER}'" >&2
+    exit 1
+fi
 KUBECONFIG_PATH="${HOME}/.kube/devpod-floe.config"
 HEALTH_TIMEOUT="${DEVPOD_HEALTH_TIMEOUT:-120}"
 NAMESPACE="${TEST_NAMESPACE:-floe-test}"
@@ -73,7 +77,7 @@ cleanup() {
 }
 
 # Set trap BEFORE any devpod operations
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 # ─── Input validation ─────────────────────────────────────────────────────────
 

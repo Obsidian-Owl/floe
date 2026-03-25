@@ -77,6 +77,8 @@ else
     # Note: TOKEN is the option name the provider v1.0.1 actually accepts.
     # HCLOUD_TOKEN is the intended replacement but the provider's option schema
     # hasn't been updated yet. See: https://github.com/mrsimonemms/devpod-provider-hetzner
+    # Suppress trace mode to prevent token leakage in CI logs
+    { set +x; } 2>/dev/null
     devpod provider add "${PROVIDER_REPO}" \
         -o TOKEN="${DEVPOD_HETZNER_TOKEN}" \
         -o MACHINE_TYPE="${MACHINE_TYPE}" \
@@ -91,6 +93,8 @@ fi
 # ─── Converge provider options ────────────────────────────────────────────────
 
 log "Setting provider options (convergent)..."
+# Suppress trace mode to prevent token leakage in CI logs
+{ set +x; } 2>/dev/null
 devpod provider set-options hetzner \
     -o TOKEN="${DEVPOD_HETZNER_TOKEN}" \
     -o MACHINE_TYPE="${MACHINE_TYPE}" \
