@@ -102,7 +102,7 @@ class TestObservabilityRoundTrip:
 
             pytest.fail(
                 f"No compilation traces found in Jaeger after 30s.\n"
-                f"Expected service: 'floe-platform'\n"
+                f"Expected service: 'customer-360'\n"
                 f"Available services: {services}\n"
                 f"OTel Collector may not be forwarding to Jaeger.\n"
                 f"Check: kubectl logs -n floe-test -l app.kubernetes.io/name=otel --tail=20"
