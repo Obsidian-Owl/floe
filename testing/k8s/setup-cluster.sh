@@ -102,6 +102,29 @@ create_cluster() {
 
     # Verify context is set
     kubectl config use-context "kind-${CLUSTER_NAME}"
+
+    # Docker-outside-of-Docker fix: Kind writes 127.0.0.1:<random-port> to
+    # kubeconfig, but in a DooD devcontainer, 127.0.0.1 is the container's
+    # own loopback — not the Docker host. Rewrite to the control plane
+    # container's Docker network IP which IS reachable via the shared network.
+    if docker inspect "${CLUSTER_NAME}-control-plane" >/dev/null 2>&1; then
+        local cp_ip
+        cp_ip=$(docker inspect "${CLUSTER_NAME}-control-plane" \
+            --format '{{(index .NetworkSettings.Networks "kind").IPAddress}}' 2>/dev/null || true)
+        if [[ -n "${cp_ip}" ]]; then
+            local current_server
+            current_server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)
+            if [[ "${current_server}" == https://127.0.0.1:* ]]; then
+                # Check if 127.0.0.1 is actually reachable (it is on native Docker, not in DooD)
+                local api_port
+                api_port=$(echo "${current_server}" | sed -nE 's|https://127.0.0.1:([0-9]+)|\1|p')
+                if ! kubectl --server="https://127.0.0.1:${api_port}" --insecure-skip-tls-verify cluster-info >/dev/null 2>&1; then
+                    kubectl config set-cluster "kind-${CLUSTER_NAME}" --server="https://${cp_ip}:6443" >/dev/null
+                    log_info "DooD: Rewrote kubeconfig to https://${cp_ip}:6443"
+                fi
+            fi
+        fi
+    fi
 }
 
 # Pre-load container images that Helm hooks need (avoids ImagePullBackOff in Kind)

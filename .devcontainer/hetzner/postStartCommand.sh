@@ -11,12 +11,69 @@
 
 set -euo pipefail
 
+# ─── Git safe.directory (DevPod mounts /workspace with different ownership) ──
+git config --global --add safe.directory /workspace 2>/dev/null || true
+
 CLUSTER_NAME="${KIND_CLUSTER_NAME:-floe-test}"
 NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 WORKSPACE_DIR="${WORKSPACE_DIR:-/workspace}"
+DOCKER_TIMEOUT="${DOCKER_TIMEOUT:-120}"
 
 log() {
     echo "[$(date '+%H:%M:%S')] $*"
+}
+
+# ─── Wait for Docker daemon (docker-outside-of-docker feature) ───────────────
+#
+# The docker-outside-of-docker devcontainer feature starts dockerd in the
+# background. It may not be ready when postStartCommand runs. Poll until ready.
+
+log "Waiting for Docker daemon..."
+ELAPSED=0
+while ! docker info >/dev/null 2>&1; do
+    if [[ ${ELAPSED} -ge ${DOCKER_TIMEOUT} ]]; then
+        log "ERROR: Docker daemon not available after ${DOCKER_TIMEOUT}s" >&2
+        exit 1
+    fi
+    sleep 2
+    ELAPSED=$((ELAPSED + 2))
+done
+log "Docker daemon ready (${ELAPSED}s)"
+
+# ─── Connect devcontainer to Kind network ─────────────────────────────────────
+#
+# Docker-outside-of-Docker: this container is on the default bridge network.
+# Kind creates its own "kind" network. Without connecting them, kubectl from
+# this container cannot reach the Kind control plane at its Docker IP.
+# We connect BEFORE cluster creation so setup-cluster.sh's kubectl calls work.
+
+connect_to_kind_network() {
+    # Find our own container ID. In Docker, hostname defaults to the short
+    # container ID (12 hex chars), which docker network connect accepts.
+    # This assumption holds as long as devcontainer.json does not set a
+    # custom hostname via runArgs (ours does not). The cgroup-based
+    # alternative (parsing /proc/self/cgroup) is fragile across cgroup v1/v2
+    # and container runtimes, so we prefer hostname with this documented constraint.
+    local container_id
+    container_id=$(hostname)
+
+    # Check if "kind" network exists
+    if ! docker network inspect kind >/dev/null 2>&1; then
+        log "Kind network does not exist yet — will connect after cluster creation"
+        return 1
+    fi
+
+    # Check if already connected
+    if docker inspect "${container_id}" --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | grep -q '"kind"'; then
+        log "Already connected to kind network"
+        return 0
+    fi
+
+    docker network connect kind "${container_id}" 2>/dev/null || {
+        log "WARNING: Failed to connect to kind network" >&2
+        return 1
+    }
+    log "Connected devcontainer to kind network"
 }
 
 # ─── Fix kubeconfig for Docker-outside-of-Docker ─────────────────────────────
@@ -55,7 +112,8 @@ fix_kubeconfig_for_dood() {
 if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
     log "Kind cluster '${CLUSTER_NAME}' already exists"
 
-    # Fix kubeconfig before health check (may need Docker network IP)
+    # Connect to kind network and fix kubeconfig before health check
+    connect_to_kind_network || true
     fix_kubeconfig_for_dood || true
 
     # Verify cluster is healthy
@@ -91,8 +149,9 @@ else
     exit 1
 fi
 
-# ─── Post-setup kubeconfig fix ────────────────────────────────────────────────
+# ─── Post-setup: connect to Kind network and fix kubeconfig ──────────────────
 
+connect_to_kind_network || true
 fix_kubeconfig_for_dood || true
 
 # Verify final connectivity

@@ -107,7 +107,8 @@ log "  First run takes ~10-15 minutes. Subsequent runs reuse the image."
 
 # Mark before provisioning so cleanup can delete a partially-provisioned VM
 WORKSPACE_CREATED=true
-devpod up "${WORKSPACE}" \
+devpod up "${PROJECT_ROOT}" \
+    --id "${WORKSPACE}" \
     --provider "${PROVIDER}" \
     --devcontainer-path "${DEVCONTAINER}" \
     --ide none \

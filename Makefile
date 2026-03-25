@@ -590,24 +590,25 @@ devpod-check:
 .PHONY: devpod-up
 devpod-up: devpod-check ## Create/start DevPod workspace on Hetzner
 	@echo "Starting DevPod workspace '$(DEVPOD_WORKSPACE)' on $(DEVPOD_PROVIDER)..."
-	devpod up $(DEVPOD_WORKSPACE) \
-		--provider $(DEVPOD_PROVIDER) \
-		--devcontainer-path $(DEVPOD_DEVCONTAINER) \
+	devpod up . \
+		--id "$(DEVPOD_WORKSPACE)" \
+		--provider "$(DEVPOD_PROVIDER)" \
+		--devcontainer-path "$(DEVPOD_DEVCONTAINER)" \
 		--ide none
 
 .PHONY: devpod-stop
 devpod-stop: devpod-check ## Stop DevPod workspace (preserves VM disk)
 	@echo "WARNING: Stopped VMs still incur Hetzner billing. Use 'make devpod-delete' to stop all charges." >&2
 	@echo "Stopping DevPod workspace '$(DEVPOD_WORKSPACE)'..."
-	devpod stop $(DEVPOD_WORKSPACE)
+	devpod stop "$(DEVPOD_WORKSPACE)"
 
 .PHONY: devpod-ssh
 devpod-ssh: devpod-check ## SSH into DevPod workspace
-	devpod ssh $(DEVPOD_WORKSPACE)
+	devpod ssh "$(DEVPOD_WORKSPACE)"
 
 .PHONY: devpod-sync
 devpod-sync: devpod-check ## Sync kubeconfig from DevPod workspace to local
-	@bash scripts/devpod-sync-kubeconfig.sh $(DEVPOD_WORKSPACE)
+	@bash scripts/devpod-sync-kubeconfig.sh "$(DEVPOD_WORKSPACE)"
 
 .PHONY: devpod-tunnels
 devpod-tunnels: ## Forward service ports from DevPod workspace via SSH
@@ -625,7 +626,7 @@ devpod-test: devpod-check ## Run E2E tests on Hetzner (full lifecycle)
 devpod-delete: devpod-check ## Delete DevPod workspace (stops billing)
 	@bash scripts/devpod-tunnels.sh --kill 2>/dev/null || true
 	@echo "Deleting DevPod workspace '$(DEVPOD_WORKSPACE)'..."
-	devpod delete $(DEVPOD_WORKSPACE) --force
+	devpod delete "$(DEVPOD_WORKSPACE)" --force
 
 .PHONY: devpod-status
 devpod-status: devpod-check ## Show workspace status, tunnels, and cluster health
