@@ -63,8 +63,14 @@ class ConcreteOrchestratorPlugin(OrchestratorPlugin):
     def schedule_job(self, job_name: str, cron: str, timezone: str) -> None:
         pass
 
-    def generate_entry_point_code(self, product_name: str, output_dir: str) -> str:
-        _ = product_name, output_dir
+    def generate_entry_point_code(
+        self,
+        product_name: str,
+        output_dir: str,
+        *,
+        lineage_enabled: bool = False,
+    ) -> str:
+        _ = product_name, output_dir, lineage_enabled
         return "mock_definitions.py"
 
 

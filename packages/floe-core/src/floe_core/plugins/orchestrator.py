@@ -396,6 +396,8 @@ class OrchestratorPlugin(PluginMetadata):
         self,
         product_name: str,
         output_dir: str,
+        *,
+        lineage_enabled: bool = False,
     ) -> str:
         """Generate orchestrator-specific entry point code file.
 
@@ -411,6 +413,9 @@ class OrchestratorPlugin(PluginMetadata):
         Args:
             product_name: Name from FloeSpec metadata (e.g., "customer-360").
             output_dir: Directory path where the entry point will be written.
+            lineage_enabled: Whether OpenLineage is enabled in the manifest.
+                When True, the generated entry point should include lineage
+                resource wiring (e.g., LineageResource for Dagster).
 
         Returns:
             Path to the generated entry point file as string.
@@ -419,6 +424,7 @@ class OrchestratorPlugin(PluginMetadata):
             >>> path = plugin.generate_entry_point_code(
             ...     product_name="customer-360",
             ...     output_dir="/path/to/product",
+            ...     lineage_enabled=True,
             ... )
             >>> # For Dagster: returns "/path/to/product/definitions.py"
             >>> # For Airflow: returns "/path/to/product/dag.py"

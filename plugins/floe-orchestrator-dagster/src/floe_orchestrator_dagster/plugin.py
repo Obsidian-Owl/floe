@@ -1094,6 +1094,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         self,
         product_name: str,
         output_dir: str,
+        *,
+        lineage_enabled: bool = False,
     ) -> str:
         """Generate Dagster definitions.py entry point file.
 
@@ -1104,11 +1106,15 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         The generated file:
         - Uses dagster-dbt's @dbt_assets decorator for dbt integration
         - Configures DbtCliResource for dbt operations
+        - Optionally includes LineageResource for OpenLineage emission
         - Exports a `defs` variable for Dagster workspace discovery
 
         Args:
             product_name: Name from FloeSpec metadata (e.g., "customer-360").
             output_dir: Directory path where definitions.py will be written.
+            lineage_enabled: Whether to include LineageResource in the
+                generated definitions. When True, the generated file imports
+                and wires LineageResource for runtime OpenLineage emission.
 
         Returns:
             Path to the generated definitions.py file as string.
@@ -1118,6 +1124,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             >>> path = plugin.generate_entry_point_code(
             ...     product_name="customer-360",
             ...     output_dir="/path/to/product",
+            ...     lineage_enabled=True,
             ... )
             >>> path
             '/path/to/product/definitions.py'
@@ -1134,6 +1141,16 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         if safe_name and not safe_name[0].isalpha():
             safe_name = f"product_{safe_name}"
         safe_name = safe_name.lower()
+
+        # Build conditional lineage sections
+        lineage_import = ""
+        lineage_resource = ""
+        if lineage_enabled:
+            lineage_import = (
+                "\nfrom floe_orchestrator_dagster.resources.lineage "
+                "import create_lineage_resource\n"
+            )
+            lineage_resource = '        "lineage": create_lineage_resource(),\n'
 
         # Template for generated definitions.py
         template = f'''"""Dagster definitions for {product_name} data product.
@@ -1153,7 +1170,7 @@ from pathlib import Path
 
 from dagster import Definitions
 from dagster_dbt import DbtCliResource, dbt_assets
-
+{lineage_import}
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent
 DBT_PROJECT_DIR = PROJECT_DIR
@@ -1182,7 +1199,7 @@ defs = Definitions(
             project_dir=DBT_PROJECT_DIR,
             profiles_dir=DBT_PROJECT_DIR,
         ),
-    }},
+{lineage_resource}    }},
 )
 '''
 
