@@ -15,7 +15,6 @@ from pathlib import Path
 
 from dagster import Definitions
 from dagster_dbt import DbtCliResource, dbt_assets
-
 from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
 
 # Get the path to this data product's dbt project
