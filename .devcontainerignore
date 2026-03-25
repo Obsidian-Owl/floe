@@ -1,0 +1,44 @@
+# Python virtual environments (rebuilt via uv sync in postCreateCommand)
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Git (DevPod handles git separately)
+.git/
+
+# Test/CI artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.gcov
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# DevPod/Demo runtime
+.demo-pids
+
+# Specwright work artifacts (not needed in devcontainer)
+.specwright/work/
+.specwright/worktrees/
+.specwright/learnings/
+
+# Agent state
+.agent/
+
+# Node modules (if any)
+node_modules/

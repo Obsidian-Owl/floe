@@ -40,7 +40,7 @@ fi
 
 # ─── 2. Check workspace is running ───────────────────────────────────────────
 
-if ! devpod status "${WORKSPACE}" 2>/dev/null | grep -qi "running"; then
+if ! devpod status "${WORKSPACE}" 2>&1 | grep -qi "running"; then
     error "DevPod workspace '${WORKSPACE}' is not running.
   Start it with: make devpod-up
   Or run the full lifecycle: make devpod-test"
