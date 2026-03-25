@@ -525,9 +525,8 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 provider.shutdown()
             except Exception as exc:
                 import logging
-                logging.getLogger(__name__).warning(
-                    "TracerProvider shutdown failed: %s", exc
-                )
+
+                logging.getLogger(__name__).warning("TracerProvider shutdown failed: %s", exc)
 
         # Check if Jaeger is deployed - if so, verify span appears there
         jaeger_result = _run_kubectl(
