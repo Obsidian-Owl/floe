@@ -1275,18 +1275,19 @@ class TestMakefileDemoChain:
     """
 
     @pytest.mark.requirement("WU11-AC6")
-    def test_demo_target_depends_on_build_demo_image(self) -> None:
-        """Verify the demo target has build-demo-image as a prerequisite.
+    def test_demo_local_target_depends_on_build_demo_image(self) -> None:
+        """Verify demo-local has build-demo-image as a prerequisite.
 
-        The demo target must depend on build-demo-image so that running
-        'make demo' triggers the full chain: compile -> build -> deploy.
+        The demo-local target preserves the old local Kind chain:
+        compile-demo -> build-demo-image -> demo-local.
+        The DevPod 'demo' target builds via SSH instead.
         """
         content = _read_makefile_content()
-        prereqs = _extract_target_prerequisites(content, "demo")
+        prereqs = _extract_target_prerequisites(content, "demo-local")
         assert "build-demo-image" in prereqs, (
-            f"demo target must depend on build-demo-image. "
+            f"demo-local target must depend on build-demo-image. "
             f"Found prerequisites: {prereqs}. "
-            f"Expected chain: compile-demo -> build-demo-image -> demo"
+            f"Expected chain: compile-demo -> build-demo-image -> demo-local"
         )
 
     @pytest.mark.requirement("WU11-AC6")
@@ -1311,11 +1312,11 @@ class TestMakefileDemoChain:
 
     @pytest.mark.requirement("WU11-AC6")
     def test_full_chain_is_connected(self) -> None:
-        """Verify the complete dependency chain: compile-demo -> build-demo-image -> demo.
+        """Verify the complete dependency chain: compile-demo -> build-demo-image -> demo-local.
 
-        This test verifies the transitive chain is intact. A sloppy
-        implementation might have build-demo-image depend on compile-demo
-        but forget to wire demo -> build-demo-image, breaking the chain.
+        The local Kind chain must remain intact via demo-local.
+        The DevPod 'demo' target builds via SSH and does not use
+        Make prerequisites for the image build step.
         """
         content = _read_makefile_content()
 
@@ -1328,10 +1329,10 @@ class TestMakefileDemoChain:
             f"build-demo-image must depend on compile-demo. Prerequisites: {build_prereqs}"
         )
 
-        # Verify demo -> build-demo-image
-        demo_prereqs = _extract_target_prerequisites(content, "demo")
+        # Verify demo-local -> build-demo-image
+        demo_prereqs = _extract_target_prerequisites(content, "demo-local")
         assert "build-demo-image" in demo_prereqs, (
-            f"demo must depend on build-demo-image. Prerequisites: {demo_prereqs}"
+            f"demo-local must depend on build-demo-image. Prerequisites: {demo_prereqs}"
         )
 
     @pytest.mark.requirement("WU11-AC6")

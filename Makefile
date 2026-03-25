@@ -362,7 +362,10 @@ demo: ## Deploy demo via DevPod (requires running DevPod workspace)
 		--env dev --chart ./charts/floe-platform \
 		--values ./charts/floe-platform/values-demo.yaml
 	@echo "Starting port-forwards..."
-	@rm -f .demo-pids
+	@if [ -f .demo-pids ]; then \
+		kill $$(cat .demo-pids) 2>/dev/null || true; \
+		rm -f .demo-pids; \
+	fi
 	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
 	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
 	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
