@@ -75,9 +75,8 @@ if devpod provider list 2>/dev/null | grep -q "hetzner"; then
     log "Hetzner provider already installed"
 else
     log "Installing Hetzner provider from ${PROVIDER_REPO}..."
-    # Note: TOKEN is the option name the provider v1.0.1 actually accepts.
-    # HCLOUD_TOKEN is the intended replacement but the provider's option schema
-    # hasn't been updated yet. See: https://github.com/mrsimonemms/devpod-provider-hetzner
+    # Provider v1.0.1 warns TOKEN is deprecated but doesn't accept HCLOUD_TOKEN yet.
+    # Use TOKEN until the provider schema is updated.
     # Suppress trace mode to prevent token leakage in CI logs
     { set +x; } 2>/dev/null
     devpod provider add "${PROVIDER_REPO}" \
