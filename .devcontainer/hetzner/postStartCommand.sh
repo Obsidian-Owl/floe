@@ -19,10 +19,44 @@ log() {
     echo "[$(date '+%H:%M:%S')] $*"
 }
 
+# ─── Fix kubeconfig for Docker-outside-of-Docker ─────────────────────────────
+#
+# Kind maps the API server to a random port on the host's loopback
+# (e.g. 127.0.0.1:40017). Inside this devcontainer, 127.0.0.1 refers to the
+# container's own loopback — not the host. We rewrite the kubeconfig to use
+# the Kind control plane container's Docker network IP (e.g. 172.18.0.2:6443),
+# which IS reachable from this container via the shared Docker bridge network.
+
+fix_kubeconfig_for_dood() {
+    local control_plane="${CLUSTER_NAME}-control-plane"
+    if ! docker inspect "${control_plane}" >/dev/null 2>&1; then
+        return 1
+    fi
+
+    local cp_ip
+    cp_ip=$(docker inspect "${control_plane}" \
+        --format '{{(index .NetworkSettings.Networks "kind").IPAddress}}')
+    if [[ -z "${cp_ip}" ]]; then
+        log "WARNING: Could not determine IP for ${control_plane}" >&2
+        return 1
+    fi
+
+    local current_server
+    current_server=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)
+    if [[ "${current_server}" == https://127.0.0.1:* ]]; then
+        local internal_server="https://${cp_ip}:6443"
+        kubectl config set-cluster "kind-${CLUSTER_NAME}" --server="${internal_server}"
+        log "Rewrote kubeconfig: ${current_server} → ${internal_server}"
+    fi
+}
+
 # ─── Check if Kind cluster already exists ────────────────────────────────────
 
 if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
     log "Kind cluster '${CLUSTER_NAME}' already exists"
+
+    # Fix kubeconfig before health check (may need Docker network IP)
+    fix_kubeconfig_for_dood || true
 
     # Verify cluster is healthy
     if kubectl cluster-info --context "kind-${CLUSTER_NAME}" >/dev/null 2>&1; then
@@ -55,4 +89,15 @@ if [[ -f "${WORKSPACE_DIR}/testing/k8s/setup-cluster.sh" ]]; then
 else
     log "ERROR: setup-cluster.sh not found at ${WORKSPACE_DIR}/testing/k8s/setup-cluster.sh" >&2
     exit 1
+fi
+
+# ─── Post-setup kubeconfig fix ────────────────────────────────────────────────
+
+fix_kubeconfig_for_dood || true
+
+# Verify final connectivity
+if kubectl cluster-info --context "kind-${CLUSTER_NAME}" >/dev/null 2>&1; then
+    log "Cluster reachable"
+else
+    log "WARNING: Cluster not reachable after setup — check Docker networking" >&2
 fi

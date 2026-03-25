@@ -436,7 +436,9 @@ class TestDemoMode(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-047")
-    def test_jaeger_traces_for_all_products(self, jaeger_client: httpx.Client) -> None:
+    def test_jaeger_traces_for_all_products(
+        self, jaeger_client: httpx.Client, seed_observability: None
+    ) -> None:
         """Test that Jaeger has registered services from demo product trace emission.
 
         Validates:
