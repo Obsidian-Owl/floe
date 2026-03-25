@@ -477,7 +477,6 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 "Check pod status: kubectl get pods -n floe-test -l app.kubernetes.io/name=otel"
             )
 
-        from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
             OTLPSpanExporter,
         )
@@ -499,10 +498,12 @@ class TestPlatformBootstrap(IntegrationTestBase):
 
         processor = BatchSpanProcessor(exporter)
         provider.add_span_processor(processor)
-        trace.set_tracer_provider(provider)
 
-        # Create and send test span
-        tracer = trace.get_tracer(__name__)
+        # Use standalone provider — do NOT call trace.set_tracer_provider()
+        # because seed_observability already set the global provider.
+        # Setting it again is silently ignored by the OTel SDK, causing
+        # this test's spans to never reach its exporter.
+        tracer = provider.get_tracer(__name__)
         with tracer.start_as_current_span("e2e_test_span") as span:
             span.set_attribute("test.type", "platform_bootstrap")
             span.set_attribute("test.timestamp", int(time.time()))
@@ -519,6 +520,8 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 f"Failed to send span to OTel collector: {e}\n"
                 "Check collector is accessible at localhost:4317"
             )
+        finally:
+            provider.shutdown()
 
         # Check if Jaeger is deployed - if so, verify span appears there
         jaeger_result = _run_kubectl(
