@@ -132,8 +132,12 @@ class TestHelmUpgrade:
             # original test result.
             try:
                 _recover_stuck_release(HELM_RELEASE, NAMESPACE)
-            except Exception:
-                pass  # Recovery is best-effort; original error propagates
+            except Exception as exc:
+                # Recovery is best-effort; log but don't mask the original error
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Post-upgrade release recovery failed: %s", exc
+                )
 
     @pytest.mark.requirement("AC-2.9")
     def test_no_crashloopbackoff_after_upgrade(self) -> None:
