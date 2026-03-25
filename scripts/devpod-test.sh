@@ -62,11 +62,12 @@ cleanup() {
     # Delete workspace to stop billing (best-effort)
     if [[ "${WORKSPACE_CREATED}" == "true" ]]; then
         log "Deleting workspace '${WORKSPACE}' to stop billing..."
-        devpod delete "${WORKSPACE}" --force 2>/dev/null || {
+        if devpod delete "${WORKSPACE}" --force 2>/dev/null; then
+            log "Workspace deleted"
+        else
             error "Failed to delete workspace '${WORKSPACE}'!"
             error "MANUAL ACTION REQUIRED: Run 'devpod delete ${WORKSPACE} --force' or delete the VM in Hetzner Cloud Console."
-        }
-        log "Workspace deleted"
+        fi
     fi
 
     # Propagate the test exit code, not the cleanup exit code
@@ -104,13 +105,13 @@ log "Step 1/5: Provisioning workspace '${WORKSPACE}' on ${PROVIDER}..."
 log "  This provisions a Hetzner VM, builds the container, and deploys the Kind cluster."
 log "  First run takes ~10-15 minutes. Subsequent runs reuse the image."
 
+# Mark before provisioning so cleanup can delete a partially-provisioned VM
+WORKSPACE_CREATED=true
 devpod up "${WORKSPACE}" \
     --provider "${PROVIDER}" \
     --devcontainer-path "${DEVCONTAINER}" \
     --ide none \
     || { error "Failed to provision workspace"; exit 1; }
-
-WORKSPACE_CREATED=true
 log "Workspace provisioned"
 
 # ─── Step 2: Health gate ─────────────────────────────────────────────────────
@@ -126,7 +127,7 @@ INTERVAL=10
 while [[ ${ELAPSED} -lt ${HEALTH_TIMEOUT} ]]; do
     # Count non-healthy pods (not Running and not Completed)
     UNHEALTHY=$(kubectl --kubeconfig="${KUBECONFIG_PATH}" get pods -n "${NAMESPACE}" --no-headers 2>/dev/null \
-        | grep -cv " Running \| Completed " || true)
+        | grep -Ecv " Running | Completed " || true)
     TOTAL=$(kubectl --kubeconfig="${KUBECONFIG_PATH}" get pods -n "${NAMESPACE}" --no-headers 2>/dev/null \
         | wc -l | tr -d ' ' || echo "0")
 

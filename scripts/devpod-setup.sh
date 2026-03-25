@@ -22,12 +22,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Defaults (overridable via .env)
 PROVIDER_REPO="mrsimonemms/devpod-provider-hetzner"
-MACHINE_TYPE="${DEVPOD_MACHINE_TYPE:-ccx33}"
-REGION="${DEVPOD_REGION:-sin}"
-DISK_SIZE="${DEVPOD_DISK_SIZE:-64}"
-DISK_IMAGE="${DEVPOD_DISK_IMAGE:-docker-ce}"
 
 log() {
     echo "[devpod-setup] $*" >&2
@@ -49,6 +44,12 @@ if [[ -f "${ENV_FILE}" ]]; then
 else
     error ".env file not found at ${ENV_FILE}. Copy .env.example to .env and set DEVPOD_HETZNER_TOKEN."
 fi
+
+# Defaults (overridable via .env — evaluated AFTER sourcing)
+MACHINE_TYPE="${DEVPOD_MACHINE_TYPE:-ccx33}"
+REGION="${DEVPOD_REGION:-sin}"
+DISK_SIZE="${DEVPOD_DISK_SIZE:-64}"
+DISK_IMAGE="${DEVPOD_DISK_IMAGE:-docker-ce}"
 
 # ─── Validate inputs ─────────────────────────────────────────────────────────
 

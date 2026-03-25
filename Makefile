@@ -573,7 +573,7 @@ devpod-test: devpod-check ## Run E2E tests on Hetzner (full lifecycle)
 
 .PHONY: devpod-delete
 devpod-delete: devpod-check ## Delete DevPod workspace (stops billing)
-	@scripts/devpod-tunnels.sh --kill 2>/dev/null || true
+	@bash scripts/devpod-tunnels.sh --kill 2>/dev/null || true
 	@echo "Deleting DevPod workspace '$(DEVPOD_WORKSPACE)'..."
 	devpod delete $(DEVPOD_WORKSPACE) --force
 
