@@ -35,7 +35,7 @@ fix_kubeconfig_for_dood() {
 
     local cp_ip
     cp_ip=$(docker inspect "${control_plane}" \
-        --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+        --format '{{(index .NetworkSettings.Networks "kind").IPAddress}}')
     if [[ -z "${cp_ip}" ]]; then
         log "WARNING: Could not determine IP for ${control_plane}" >&2
         return 1
