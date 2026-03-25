@@ -521,7 +521,10 @@ class TestPlatformBootstrap(IntegrationTestBase):
                 "Check collector is accessible at localhost:4317"
             )
         finally:
-            provider.shutdown()
+            try:
+                provider.shutdown()
+            except Exception:
+                pass  # Shutdown is best-effort; don't mask flush errors
 
         # Check if Jaeger is deployed - if so, verify span appears there
         jaeger_result = _run_kubectl(

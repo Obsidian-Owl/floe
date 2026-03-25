@@ -127,8 +127,13 @@ class TestHelmUpgrade:
                 f"Release status after upgrade: {new['info']['status']}"
             )
         finally:
-            # Ensure release is in deployed state for downstream tests
-            _recover_stuck_release(HELM_RELEASE, NAMESPACE)
+            # Ensure release is in deployed state for downstream tests.
+            # Wrap in try/except so recovery failure doesn't mask the
+            # original test result.
+            try:
+                _recover_stuck_release(HELM_RELEASE, NAMESPACE)
+            except Exception:
+                pass  # Recovery is best-effort; original error propagates
 
     @pytest.mark.requirement("AC-2.9")
     def test_no_crashloopbackoff_after_upgrade(self) -> None:
