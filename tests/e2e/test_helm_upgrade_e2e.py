@@ -86,40 +86,49 @@ class TestHelmUpgrade:
         current_revision = current.get("version", 0)
 
         # Upgrade with an annotation change (minimal modification)
-        upgrade_result = run_helm(
-            [
-                "upgrade",
-                HELM_RELEASE,
-                "charts/floe-platform",
-                "-n",
-                NAMESPACE,
-                "-f",
-                "charts/floe-platform/values-test.yaml",
-                "--set",
-                "global.annotations.e2e-test-revision=upgrade-test",
-                "--wait",
-                "--timeout",
-                "5m",
-            ],
-        )
-        assert upgrade_result.returncode == 0, (
-            f"Helm upgrade failed: {upgrade_result.stderr}\n"
-            "Chart may have incompatible values or templates."
-        )
+        # --atomic auto-rollbacks on failure (prevents leaving release in
+        # 'failed' state which cascades to downstream tests).
+        # --timeout 8m allows for the pg-pre-upgrade hook's
+        # activeDeadlineSeconds: 300 plus scheduling latency.
+        try:
+            upgrade_result = run_helm(
+                [
+                    "upgrade",
+                    HELM_RELEASE,
+                    "charts/floe-platform",
+                    "-n",
+                    NAMESPACE,
+                    "-f",
+                    "charts/floe-platform/values-test.yaml",
+                    "--set",
+                    "global.annotations.e2e-test-revision=upgrade-test",
+                    "--wait",
+                    "--atomic",
+                    "--timeout",
+                    "8m",
+                ],
+            )
+            assert upgrade_result.returncode == 0, (
+                f"Helm upgrade failed: {upgrade_result.stderr}\n"
+                "Chart may have incompatible values or templates."
+            )
 
-        # Verify revision bumped
-        new_status = run_helm(
-            ["status", HELM_RELEASE, "-n", NAMESPACE, "-o", "json"],
-        )
-        assert new_status.returncode == 0
-        new = json.loads(new_status.stdout)
-        new_revision = new.get("version", 0)
-        assert new_revision > current_revision, (
-            f"Revision did not bump: {current_revision} → {new_revision}"
-        )
-        assert new["info"]["status"] == "deployed", (
-            f"Release status after upgrade: {new['info']['status']}"
-        )
+            # Verify revision bumped
+            new_status = run_helm(
+                ["status", HELM_RELEASE, "-n", NAMESPACE, "-o", "json"],
+            )
+            assert new_status.returncode == 0
+            new = json.loads(new_status.stdout)
+            new_revision = new.get("version", 0)
+            assert new_revision > current_revision, (
+                f"Revision did not bump: {current_revision} → {new_revision}"
+            )
+            assert new["info"]["status"] == "deployed", (
+                f"Release status after upgrade: {new['info']['status']}"
+            )
+        finally:
+            # Ensure release is in deployed state for downstream tests
+            _recover_stuck_release(HELM_RELEASE, NAMESPACE)
 
     @pytest.mark.requirement("AC-2.9")
     def test_no_crashloopbackoff_after_upgrade(self) -> None:

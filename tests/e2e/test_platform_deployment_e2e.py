@@ -425,7 +425,7 @@ class TestPlatformDeployment:
         assert phases, (
             "No Cube Store pods found. "
             "Ensure cube.cubeStore.enabled=true in values-test.yaml "
-            "and the multi-arch image is available at ghcr.io/obsidian-owl/cube-store"
+            "and the multi-arch image is available at cubejs/cubestore"
         )
         assert "Running" in phases, (
             f"Cube Store pod not running. Phase(s): {phases}. "
