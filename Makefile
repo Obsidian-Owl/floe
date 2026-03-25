@@ -295,7 +295,7 @@ helm-test-infra: ## Verify test infrastructure is healthy
 # Demo Targets
 # ============================================================
 
-.PHONY: compile-demo build-demo-image demo demo-stop
+.PHONY: compile-demo build-demo-image demo demo-local demo-stop
 
 compile-demo: ## Compile dbt models and generate Dagster definitions for all demo products
 	@echo "Compiling dbt models for all demo products..."
@@ -348,8 +348,50 @@ build-demo-image: compile-demo ## Build Dagster demo Docker image and load to Ki
 	@kind load docker-image floe-dagster-demo:latest --name floe-test
 	@echo "Demo image built and loaded to Kind successfully!"
 
-demo: build-demo-image ## Deploy platform and run all 3 demo data products with dashboards
-	@echo "=== Starting floe Platform Demo ==="
+demo: ## Deploy demo via DevPod (requires running DevPod workspace)
+	@echo "=== Starting floe Platform Demo (DevPod) ==="
+	@scripts/devpod-ensure-ready.sh
+	@echo "Building demo image inside DevPod..."
+	@devpod ssh $(DEVPOD_WORKSPACE) -- "cd /workspace && make build-demo-image"
+	@echo "Updating Helm chart dependencies..."
+	@helm dependency update charts/floe-platform
+	@echo "Deploying Helm chart via tunneled kubectl..."
+	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config uv run floe platform deploy \
+		--env dev --chart ./charts/floe-platform \
+		--values ./charts/floe-platform/values-demo.yaml
+	@echo "Starting port-forwards..."
+	@rm -f .demo-pids
+	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-marquez 5100:5000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-otel 4317:4317 4318:4318 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@echo ""
+	@echo "=== Demo Ready ==="
+	@echo "Dagster UI:    http://localhost:3100"
+	@echo "Polaris:       http://localhost:8181"
+	@echo "Marquez:       http://localhost:5100"
+	@echo "Jaeger:        http://localhost:16686"
+	@echo "MinIO Console: http://localhost:9001"
+	@echo "MinIO API:     http://localhost:9000"
+	@echo "OTel gRPC:     http://localhost:4317"
+	@echo "OTel HTTP:     http://localhost:4318"
+	@echo ""
+	@echo "Stop with: make demo-stop"
+
+demo-stop: ## Stop demo port-forwards
+	@if [ -f .demo-pids ]; then \
+		echo "Stopping demo port-forwards..."; \
+		kill $$(cat .demo-pids) 2>/dev/null || true; \
+		rm -f .demo-pids; \
+		echo "Demo port-forwards stopped."; \
+	else \
+		echo "No demo port-forwards running (.demo-pids not found)."; \
+	fi
+
+demo-local: build-demo-image ## Deploy demo locally (requires local Kind cluster)
+	@echo "=== Starting floe Platform Demo (local Kind) ==="
 	@echo "Ensuring Kind cluster is running..."
 	$(MAKE) kind-up
 	@echo "Installing floe-platform Helm chart with demo overrides..."
@@ -362,11 +404,8 @@ demo: build-demo-image ## Deploy platform and run all 3 demo data products with 
 	@echo "Jaeger:        http://localhost:16686"
 	@echo "Grafana:       http://localhost:3001"
 	@echo "MinIO Console: http://localhost:9001"
-
-demo-stop: ## Stop demo and clean up resources
-	@echo "=== Stopping floe Platform Demo ==="
-	@helm uninstall floe-platform -n floe-dev --ignore-not-found
-	@echo "Demo stopped. Run 'make kind-down' to destroy cluster."
+	@echo ""
+	@echo "Stop with: helm uninstall floe-platform -n floe-dev"
 
 # ============================================================
 # Development Helpers
