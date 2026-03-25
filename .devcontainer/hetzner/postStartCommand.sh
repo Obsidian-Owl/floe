@@ -48,7 +48,12 @@ log "Docker daemon ready (${ELAPSED}s)"
 # We connect BEFORE cluster creation so setup-cluster.sh's kubectl calls work.
 
 connect_to_kind_network() {
-    # Find our own container ID
+    # Find our own container ID. In Docker, hostname defaults to the short
+    # container ID (12 hex chars), which docker network connect accepts.
+    # This assumption holds as long as devcontainer.json does not set a
+    # custom hostname via runArgs (ours does not). The cgroup-based
+    # alternative (parsing /proc/self/cgroup) is fragile across cgroup v1/v2
+    # and container runtimes, so we prefer hostname with this documented constraint.
     local container_id
     container_id=$(hostname)
 

@@ -18,7 +18,6 @@ set -euo pipefail
 WORKSPACE="${1:-floe}"
 LOCAL_KUBECONFIG="${HOME}/.kube/devpod-floe.config"
 LOCAL_API_PORT="${DEVPOD_K8S_API_PORT:-26443}"
-SSH_TARGET="${WORKSPACE}.devpod"
 
 # Validate inputs contain only safe characters
 if [[ ! "${WORKSPACE}" =~ ^[a-zA-Z0-9_-]+$ ]]; then

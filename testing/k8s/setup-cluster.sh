@@ -118,7 +118,7 @@ create_cluster() {
                 # Check if 127.0.0.1 is actually reachable (it is on native Docker, not in DooD)
                 local api_port
                 api_port=$(echo "${current_server}" | sed -nE 's|https://127.0.0.1:([0-9]+)|\1|p')
-                if ! curl -sk --connect-timeout 2 "https://127.0.0.1:${api_port}/version" >/dev/null 2>&1; then
+                if ! kubectl --server="https://127.0.0.1:${api_port}" --insecure-skip-tls-verify cluster-info >/dev/null 2>&1; then
                     kubectl config set-cluster "kind-${CLUSTER_NAME}" --server="https://${cp_ip}:6443" >/dev/null
                     log_info "DooD: Rewrote kubeconfig to https://${cp_ip}:6443"
                 fi
