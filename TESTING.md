@@ -125,6 +125,39 @@ tests/
 
 ## Running Tests
 
+### E2E Tests (DevPod — Default)
+
+E2E tests default to running against a DevPod workspace on Hetzner:
+
+```bash
+# E2E tests via DevPod (default — requires running workspace)
+make test-e2e
+
+# E2E tests locally (requires local Kind cluster)
+make test-e2e-local
+```
+
+`make test-e2e` calls `scripts/devpod-ensure-ready.sh` to validate the workspace is running and the K8s API tunnel is established, then runs tests with `KUBECONFIG=~/.kube/devpod-floe.config`. The test script (`testing/ci/test-e2e.sh`) creates its own kubectl port-forwards through the tunneled K8s API — no SSH service tunnels needed.
+
+If you don't have a DevPod workspace, start one first:
+```bash
+make devpod-up     # Create/start workspace on Hetzner
+make test-e2e      # Run E2E tests
+make devpod-stop   # Stop workspace when done (preserves disk)
+```
+
+### Demo (DevPod — Default)
+
+The demo also defaults to DevPod:
+
+```bash
+make demo          # Deploy demo via DevPod, start port-forwards
+make demo-stop     # Kill port-forwards (preserves deployment)
+make demo-local    # Deploy demo locally via Kind (old behavior)
+```
+
+`make demo` builds the demo image inside DevPod, deploys via tunneled kubectl, and starts persistent kubectl port-forwards for all services. Access the Dagster UI at `http://localhost:3100`.
+
 ### Local Development
 
 ```bash
@@ -381,11 +414,19 @@ This runs automatically on workspace start and is idempotent.
 
 ### Running Tests Remotely
 
-Once inside the DevPod workspace, tests run identically to local:
+From your **local machine** (not inside DevPod), the default targets use the remote cluster:
+
+```bash
+make test-e2e           # E2E tests via DevPod (validates workspace, tunnels kubectl)
+make demo               # Deploy demo via DevPod with port-forwards
+make demo-stop          # Stop demo port-forwards
+```
+
+Inside the DevPod workspace (via `make devpod-ssh`), tests run against the local Kind cluster:
 
 ```bash
 make test-unit          # Unit tests (no K8s needed)
-make test-e2e           # E2E tests (manages port-forwards automatically)
+make test-e2e-local     # E2E tests against local Kind
 make test               # All tests
 ```
 
