@@ -89,6 +89,9 @@ pip-delete-this-directory.txt
 target/
 .hypothesis/
 
+# Demo runtime artifacts
+.demo-pids
+
 # Documentation builds
 docs/_build/
 site/
