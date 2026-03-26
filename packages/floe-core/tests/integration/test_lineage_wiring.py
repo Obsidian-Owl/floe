@@ -15,7 +15,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 ENV_VAR_ENDPOINT = "http://override.example.com:5100/api/v1/lineage"
 """OPENLINEAGE_URL env var value used in override tests."""
 
