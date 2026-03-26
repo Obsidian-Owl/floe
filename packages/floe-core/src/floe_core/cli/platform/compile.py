@@ -339,7 +339,8 @@ def _generate_orchestrator_entry_point(
     try:
         plugin_cls = matching[0].load()
         plugin: OrchestratorPlugin = plugin_cls()
-    except Exception as e:
+    except (ImportError, TypeError) as e:
+        logger.exception("Failed to load orchestrator plugin '%s'", orchestrator_type)
         error_exit(
             f"Failed to load orchestrator plugin '{orchestrator_type}': {e}",
             exit_code=ExitCode.COMPILATION_ERROR,

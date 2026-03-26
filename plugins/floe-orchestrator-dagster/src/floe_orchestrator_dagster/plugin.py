@@ -1148,9 +1148,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         if lineage_enabled:
             lineage_import = (
                 "\nfrom floe_orchestrator_dagster.resources.lineage "
-                "import create_lineage_resource\n"
+                "import try_create_lineage_resource\n"
             )
-            lineage_resource = '        "lineage": create_lineage_resource(),\n'
+            lineage_resource = "        **try_create_lineage_resource(None),\n"
 
         # Template for generated definitions.py
         template = f'''"""Dagster definitions for {product_name} data product.
