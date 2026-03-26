@@ -20,6 +20,7 @@ See Also:
 
 from __future__ import annotations
 
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -232,8 +233,11 @@ def _build_lineage_config(manifest: PlatformManifest) -> dict[str, Any] | None:
     if lineage.transport == "http" and lineage.endpoint is None:
         return None
     config: dict[str, Any] = {"type": lineage.transport}
-    if lineage.endpoint is not None:
-        config["url"] = lineage.endpoint
+    # OPENLINEAGE_URL env var overrides manifest endpoint (same pattern as
+    # OTEL_EXPORTER_OTLP_ENDPOINT).  Empty string is treated as absent.
+    url = os.environ.get("OPENLINEAGE_URL", "").strip() or lineage.endpoint
+    if url is not None:
+        config["url"] = url
     return config
 
 
