@@ -59,7 +59,7 @@ cronJobs:
 # =============================================================================
 # Job Defaults (Test Optimized)
 # =============================================================================
-jobDefaults:
+defaults:
   backoffLimit: 1
   activeDeadlineSeconds: 300
   ttlSecondsAfterFinished: 60

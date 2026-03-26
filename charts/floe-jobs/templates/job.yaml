@@ -50,9 +50,23 @@ spec:
           command:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.dbt.args }}
+          {{- if .Values.dbt.args }}
           args:
-            {{- toYaml . | nindent 12 }}
+            {{- toYaml .Values.dbt.args | nindent 12 }}
+          {{- else }}
+          args:
+            - "run"
+            - "--profiles-dir"
+            - {{ .Values.dbt.profilesDir | default "/etc/dbt" | quote }}
+            - "--project-dir"
+            - {{ .Values.dbt.projectDir | default "/dbt" | quote }}
+            {{- if .Values.dbt.target }}
+            - "--target"
+            - {{ .Values.dbt.target | quote }}
+            {{- end }}
+            {{- if .Values.dbt.debug }}
+            - "--debug"
+            {{- end }}
           {{- end }}
           env:
             {{- if include "floe-jobs.polarisEndpoint" . }}
