@@ -214,12 +214,18 @@ class TestObservability(IntegrationTestBase):
         default_jobs_json = default_jobs.json()
         all_jobs: list[dict[str, Any]] = default_jobs_json.get("jobs", [])
 
-        # Also check customer-360 and floe-platform namespaces
-        for ns_name in ("customer-360", "floe-platform"):
+        # Also check customer-360, floe-platform, and floe.compilation namespaces.
+        # floe.compilation is the default namespace used by the SyncLineageEmitter
+        # during compile_pipeline() — compilation-time events land there.
+        for ns_name in ("customer-360", "floe-platform", "floe.compilation"):
             ns_jobs = marquez_client.get(f"/api/v1/namespaces/{ns_name}/jobs")
             if ns_jobs.status_code == 200:
                 ns_jobs_json = ns_jobs.json()
                 all_jobs.extend(ns_jobs_json.get("jobs", []))
+
+        namespaces_checked = (
+            f"default, customer-360, floe-platform, floe.compilation, {test_namespace}"
+        )
 
         # We need REAL OpenLineage events from pipeline execution
         assert len(all_jobs) > 0, (
@@ -227,7 +233,7 @@ class TestObservability(IntegrationTestBase):
             "The platform is not emitting OpenLineage events during pipeline execution.\n"
             "Fix: Configure dbt-openlineage or Dagster OpenLineage integration to emit "
             "RunEvent.START and RunEvent.COMPLETE events.\n"
-            f"Namespaces checked: default, customer-360, floe-platform, {test_namespace}"
+            f"Namespaces checked: {namespaces_checked}"
         )
 
         # Validate jobs are from THIS pipeline (match expected product names).
@@ -528,9 +534,13 @@ class TestObservability(IntegrationTestBase):
         manifest_path = project_root / "demo" / "manifest.yaml"
 
         # Initialize telemetry so structlog is configured with trace context
-        # injection via stdlib LoggerFactory.  In this E2E environment the
-        # OTLP endpoint is set, so a real TracerProvider is created and spans
-        # carry valid (non-zero) trace_ids.
+        # injection via stdlib LoggerFactory.  Set OTEL_EXPORTER_OTLP_ENDPOINT
+        # so a real TracerProvider is created (not NoOp) and spans carry valid
+        # (non-zero) trace_ids that add_trace_context will inject into logs.
+        old_otlp = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        old_insecure = os.environ.get("OTEL_EXPORTER_OTLP_INSECURE")
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
+        os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
         ensure_telemetry_initialized()
 
         # Capture log output during compilation
@@ -547,6 +557,15 @@ class TestObservability(IntegrationTestBase):
         finally:
             root_logger.removeHandler(handler)
             reset_telemetry()
+            # Restore OTel env vars to avoid leaking to other tests
+            for key, old_val in (
+                ("OTEL_EXPORTER_OTLP_ENDPOINT", old_otlp),
+                ("OTEL_EXPORTER_OTLP_INSECURE", old_insecure),
+            ):
+                if old_val is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = old_val
 
         log_output = log_buffer.getvalue()
 
@@ -907,9 +926,15 @@ class TestObservability(IntegrationTestBase):
         # stg_crm_customers, causing LineageResource to emit runtime
         # OpenLineage events to Marquez. Query those events here.
 
-        # Query Marquez for events emitted BY the platform after compilation
-        # Check known namespaces where the platform would emit events
-        namespaces_to_check = ["default", "customer-360", "floe-platform"]
+        # Query Marquez for events emitted BY the platform after compilation.
+        # floe.compilation is the SyncLineageEmitter's default namespace used
+        # during compile_pipeline() — compilation-time events land there.
+        namespaces_to_check = [
+            "default",
+            "customer-360",
+            "floe-platform",
+            "floe.compilation",
+        ]
         all_jobs: list[dict[str, Any]] = []
         all_runs: list[dict[str, Any]] = []
 

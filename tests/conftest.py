@@ -117,10 +117,14 @@ def compiled_artifacts() -> Callable[[Path], Any]:
         # Save env vars before mutation
         old_lineage_url = os.environ.get("OPENLINEAGE_URL")
         old_service_name = os.environ.get("OTEL_SERVICE_NAME")
+        old_otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+        old_otlp_insecure = os.environ.get("OTEL_EXPORTER_OTLP_INSECURE")
 
-        # Set overrides for E2E: port-forwarded Marquez + product service name
+        # Set overrides for E2E: port-forwarded endpoints + product service name
         os.environ["OPENLINEAGE_URL"] = "http://localhost:5100/api/v1/lineage"
         os.environ["OTEL_SERVICE_NAME"] = spec_path.parent.name
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
+        os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
 
         try:
             ensure_telemetry_initialized()
@@ -130,6 +134,8 @@ def compiled_artifacts() -> Callable[[Path], Any]:
             for key, old_val in (
                 ("OPENLINEAGE_URL", old_lineage_url),
                 ("OTEL_SERVICE_NAME", old_service_name),
+                ("OTEL_EXPORTER_OTLP_ENDPOINT", old_otlp_endpoint),
+                ("OTEL_EXPORTER_OTLP_INSECURE", old_otlp_insecure),
             ):
                 if old_val is None:
                     os.environ.pop(key, None)
