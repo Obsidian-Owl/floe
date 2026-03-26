@@ -143,6 +143,9 @@ test-e2e-devpod: ## Run E2E tests inside DevPod (DooD kubeconfig rewrite)
 	KIND_NETWORK="$${KIND_NETWORK:-kind}"; \
 	DOCKER_IP=$$(docker inspect -f "{{(index .NetworkSettings.Networks \"$$KIND_NETWORK\").IPAddress}}" "$$KIND_CONTAINER" 2>/dev/null) || \
 		{ echo "ERROR: Cannot detect Kind control plane IP. Is Kind running?" >&2; exit 1; }; \
+	if ! echo "$$DOCKER_IP" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$$'; then \
+		echo "ERROR: Unexpected IP format from docker inspect: $$DOCKER_IP" >&2; exit 1; \
+	fi; \
 	echo "Kind control plane IP: $$DOCKER_IP"; \
 	TMPCONFIG=$$(mktemp); \
 	trap 'rm -f "$$TMPCONFIG"' EXIT; \
