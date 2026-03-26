@@ -308,11 +308,14 @@ class TestCompilePipelineLineageStart:
         with patch(CREATE_SYNC_EMITTER_PATH, return_value=mock_emitter):
             compile_pipeline(spec_path, lineage_manifest_path)
 
-        mock_emitter.emit_start.assert_called_once()
-        actual_job_name = _get_arg(mock_emitter.emit_start.call_args, 0, "job_name")
-        assert actual_job_name == PRODUCT_NAME, (
-            f"emit_start job_name must be spec.metadata.name ('{PRODUCT_NAME}'), "
-            f"got '{actual_job_name}'"
+        # Pipeline-level emit_start must be called (per-model calls also present)
+        pipeline_start_calls = [
+            c for c in mock_emitter.emit_start.call_args_list
+            if _get_arg(c, 0, "job_name") == PRODUCT_NAME
+        ]
+        assert len(pipeline_start_calls) == 1, (
+            f"emit_start must be called once with job_name='{PRODUCT_NAME}', "
+            f"found {len(pipeline_start_calls)} pipeline-level calls"
         )
 
     @pytest.mark.requirement("AC-OLC-5")
@@ -338,8 +341,13 @@ class TestCompilePipelineLineageStart:
             compile_pipeline(spec_path, lineage_manifest_path)
 
         mock_builder_cls.from_otel_context.assert_called_once()
-        mock_emitter.emit_start.assert_called_once()
-        run_facets = _get_arg(mock_emitter.emit_start.call_args, 4, "run_facets")
+        # Pipeline-level emit_start carries the trace facet
+        pipeline_start_calls = [
+            c for c in mock_emitter.emit_start.call_args_list
+            if _get_arg(c, 0, "job_name") == PRODUCT_NAME
+        ]
+        assert len(pipeline_start_calls) == 1
+        run_facets = _get_arg(pipeline_start_calls[0], 4, "run_facets")
         assert run_facets is not None, "emit_start must be called with run_facets"
         # The trace facet must be present in the run_facets dict under some key
         assert isinstance(run_facets, dict), f"run_facets must be a dict, got {type(run_facets)}"
@@ -369,8 +377,12 @@ class TestCompilePipelineLineageStart:
         with patch(CREATE_SYNC_EMITTER_PATH, return_value=mock_emitter):
             result = compile_pipeline(spec_path, lineage_manifest_path)
 
-        # Verify emit_start was actually attempted (side_effect fired)
-        mock_emitter.emit_start.assert_called_once()
+        # Verify pipeline-level emit_start was attempted (side_effect fired)
+        pipeline_start_calls = [
+            c for c in mock_emitter.emit_start.call_args_list
+            if _get_arg(c, 0, "job_name") == PRODUCT_NAME
+        ]
+        assert len(pipeline_start_calls) == 1
         assert isinstance(result, CompiledArtifacts)
         assert result.metadata.product_name == PRODUCT_NAME
 
@@ -402,8 +414,15 @@ class TestCompilePipelineLineageComplete:
         with patch(CREATE_SYNC_EMITTER_PATH, return_value=mock_emitter):
             compile_pipeline(spec_path, lineage_manifest_path)
 
-        mock_emitter.emit_complete.assert_called_once()
-        actual_run_id = _get_arg(mock_emitter.emit_complete.call_args, 0, "run_id")
+        # Pipeline-level emit_complete must use the run_id from pipeline emit_start
+        pipeline_complete_calls = [
+            c for c in mock_emitter.emit_complete.call_args_list
+            if _get_arg(c, 1, "job_name") == PRODUCT_NAME
+        ]
+        assert len(pipeline_complete_calls) == 1, (
+            f"Expected 1 pipeline-level emit_complete, got {len(pipeline_complete_calls)}"
+        )
+        actual_run_id = _get_arg(pipeline_complete_calls[0], 0, "run_id")
         assert actual_run_id == known_run_id, (
             f"emit_complete must use run_id from emit_start ({known_run_id}), got {actual_run_id}"
         )
@@ -421,9 +440,12 @@ class TestCompilePipelineLineageComplete:
         with patch(CREATE_SYNC_EMITTER_PATH, return_value=mock_emitter):
             compile_pipeline(spec_path, lineage_manifest_path)
 
-        mock_emitter.emit_complete.assert_called_once()
-        actual_job_name = _get_arg(mock_emitter.emit_complete.call_args, 1, "job_name")
-        assert actual_job_name == PRODUCT_NAME
+        # Pipeline-level emit_complete must use pipeline job_name
+        pipeline_complete_calls = [
+            c for c in mock_emitter.emit_complete.call_args_list
+            if _get_arg(c, 1, "job_name") == PRODUCT_NAME
+        ]
+        assert len(pipeline_complete_calls) == 1
 
     @pytest.mark.requirement("AC-OLC-6")
     def test_emit_complete_failure_does_not_block_return(
@@ -440,13 +462,18 @@ class TestCompilePipelineLineageComplete:
         from floe_core.compilation.stages import compile_pipeline
         from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
+        # Make all emit_complete calls raise (both per-model and pipeline)
         mock_emitter.emit_complete.side_effect = ConnectionError("Marquez down")
 
         with patch(CREATE_SYNC_EMITTER_PATH, return_value=mock_emitter):
             result = compile_pipeline(spec_path, lineage_manifest_path)
 
-        # Verify emit_complete was actually attempted (side_effect fired)
-        mock_emitter.emit_complete.assert_called_once()
+        # Verify pipeline-level emit_complete was attempted
+        pipeline_complete_calls = [
+            c for c in mock_emitter.emit_complete.call_args_list
+            if _get_arg(c, 1, "job_name") == PRODUCT_NAME
+        ]
+        assert len(pipeline_complete_calls) == 1
         assert isinstance(result, CompiledArtifacts)
         assert result.metadata.product_name == PRODUCT_NAME
 
@@ -517,9 +544,13 @@ class TestCompilePipelineLineageComplete:
         with patch(CREATE_SYNC_EMITTER_PATH, return_value=mock_emitter):
             compile_pipeline(spec_path, lineage_manifest_path)
 
-        assert call_order == ["emit_start", "emit_complete", "close"], (
-            f"Expected emit lifecycle order [emit_start, emit_complete, close], got {call_order}"
-        )
+        # With per-model emission (1 model in minimal spec), lifecycle is:
+        # pipeline emit_start, per-model emit_start, per-model emit_complete,
+        # pipeline emit_complete, close
+        assert call_order[0] == "emit_start", f"First call must be emit_start, got {call_order}"
+        assert call_order[-1] == "close", f"Last call must be close, got {call_order}"
+        # Pipeline-level emit_complete must appear before close
+        assert "emit_complete" in call_order, f"emit_complete missing from lifecycle: {call_order}"
 
 
 class TestCompilePipelineLineageFail:
@@ -789,9 +820,18 @@ class TestCompilePipelineLineageEdgeCases:
 
         # The factory must be called (even if with None config -> NoOp)
         mock_factory.assert_called_once()
-        # Lifecycle calls still happen (NoOp emitter handles them silently)
-        mock_emitter.emit_start.assert_called_once()
-        mock_emitter.emit_complete.assert_called_once()
+        # Pipeline-level lifecycle calls still happen (NoOp emitter handles them silently)
+        # Per-model calls also present, so filter for pipeline-level
+        pipeline_start_calls = [
+            c for c in mock_emitter.emit_start.call_args_list
+            if _get_arg(c, 0, "job_name") == PRODUCT_NAME
+        ]
+        pipeline_complete_calls = [
+            c for c in mock_emitter.emit_complete.call_args_list
+            if _get_arg(c, 1, "job_name") == PRODUCT_NAME
+        ]
+        assert len(pipeline_start_calls) == 1
+        assert len(pipeline_complete_calls) == 1
         mock_emitter.close.assert_called_once()
 
     @pytest.mark.requirement("AC-OLC-5")
