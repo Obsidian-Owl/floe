@@ -97,6 +97,10 @@ def compiled_artifacts() -> Callable[[Path], Any]:
         OTel spans are emitted during the 6-stage pipeline when
         OTEL_EXPORTER_OTLP_ENDPOINT is set.
 
+        Sets OPENLINEAGE_URL for port-forwarded Marquez access and
+        OTEL_SERVICE_NAME from the spec's parent directory name (e.g.,
+        ``customer-360``) so Jaeger registers the correct service.
+
         Args:
             spec_path: Path to floe.yaml file.
 
@@ -106,10 +110,31 @@ def compiled_artifacts() -> Callable[[Path], Any]:
         Raises:
             CompilationException: If any compilation stage fails.
         """
+        import os
+
         from floe_core.telemetry.initialization import ensure_telemetry_initialized
 
-        ensure_telemetry_initialized()
-        return compile_pipeline(spec_path, manifest_path)
+        # Save env vars before mutation
+        old_lineage_url = os.environ.get("OPENLINEAGE_URL")
+        old_service_name = os.environ.get("OTEL_SERVICE_NAME")
+
+        # Set overrides for E2E: port-forwarded Marquez + product service name
+        os.environ["OPENLINEAGE_URL"] = "http://localhost:5100/api/v1/lineage"
+        os.environ["OTEL_SERVICE_NAME"] = spec_path.parent.name
+
+        try:
+            ensure_telemetry_initialized()
+            return compile_pipeline(spec_path, manifest_path)
+        finally:
+            # Restore env vars to avoid leaking between invocations
+            for key, old_val in (
+                ("OPENLINEAGE_URL", old_lineage_url),
+                ("OTEL_SERVICE_NAME", old_service_name),
+            ):
+                if old_val is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = old_val
 
     return _compile_artifacts
 
