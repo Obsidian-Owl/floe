@@ -136,6 +136,21 @@ test-e2e-local: ## Run E2E tests locally (requires local Kind cluster + full sta
 	@echo "Running E2E tests (local Kind)..."
 	@./testing/ci/test-e2e.sh
 
+.PHONY: test-e2e-devpod
+test-e2e-devpod: ## Run E2E tests inside DevPod (DooD kubeconfig rewrite)
+	@echo "Running E2E tests (inside DevPod)..."
+	@KIND_CONTAINER="$${KIND_CONTAINER:-floe-test-control-plane}"; \
+	KIND_NETWORK="$${KIND_NETWORK:-kind}"; \
+	DOCKER_IP=$$(docker inspect -f "{{(index .NetworkSettings.Networks \"$$KIND_NETWORK\").IPAddress}}" "$$KIND_CONTAINER" 2>/dev/null) || \
+		{ echo "ERROR: Cannot detect Kind control plane IP. Is Kind running?" >&2; exit 1; }; \
+	echo "Kind control plane IP: $$DOCKER_IP"; \
+	TMPCONFIG=$$(mktemp); \
+	trap 'rm -f "$$TMPCONFIG"' EXIT; \
+	sed "s|server: https://127\.0\.0\.1:[0-9]*|server: https://$$DOCKER_IP:6443|" \
+		"$${KUBECONFIG:-$$HOME/.kube/config}" > "$$TMPCONFIG"; \
+	chmod 600 "$$TMPCONFIG"; \
+	KUBECONFIG="$$TMPCONFIG" ./testing/ci/test-e2e.sh
+
 # ============================================================
 # Quality Checks
 # ============================================================
