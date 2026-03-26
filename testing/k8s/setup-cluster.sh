@@ -107,6 +107,21 @@ create_cluster() {
     # kubeconfig, but in a DooD devcontainer, 127.0.0.1 is the container's
     # own loopback — not the Docker host. Rewrite to the control plane
     # container's Docker network IP which IS reachable via the shared network.
+    #
+    # For the rewrite to work, this container must be on the "kind" Docker
+    # network. In DooD (devcontainer running alongside Kind on the same
+    # Docker daemon), we detect our own container ID via hostname and connect
+    # to the kind network before attempting to reach the control plane IP.
+    if [[ "${DEVCONTAINER:-}" == "true" ]] && docker network inspect kind >/dev/null 2>&1; then
+        local self_id
+        self_id=$(hostname)
+        if ! docker inspect "${self_id}" --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | grep -q '"kind"'; then
+            docker network connect kind "${self_id}" 2>/dev/null && \
+                log_info "DooD: Connected devcontainer to kind network" || \
+                log_warn "DooD: Failed to connect to kind network"
+        fi
+    fi
+
     if docker inspect "${CLUSTER_NAME}-control-plane" >/dev/null 2>&1; then
         local cp_ip
         cp_ip=$(docker inspect "${CLUSTER_NAME}-control-plane" \

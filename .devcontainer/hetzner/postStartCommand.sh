@@ -11,6 +11,17 @@
 
 set -euo pipefail
 
+# ─── Strip HOST session env vars injected by devpod agent ────────────────────
+#
+# The devpod inner agent runs postStartCommand with the Hetzner VM's environment
+# injected (DBUS_SESSION_BUS_ADDRESS, XDG_RUNTIME_DIR, etc.). These variables
+# reference host paths that do not exist inside the container. When set,
+# DBUS_SESSION_BUS_ADDRESS can redirect Docker to a non-existent rootless socket,
+# causing `docker info` to fail with "permission denied" despite the socket being
+# present at /var/run/docker.sock. Unset them unconditionally so Docker always
+# uses the default /var/run/docker.sock path.
+unset DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR
+
 # ─── Git safe.directory (DevPod mounts /workspace with different ownership) ──
 git config --global --add safe.directory /workspace 2>/dev/null || true
 
@@ -25,8 +36,15 @@ log() {
 
 # ─── Wait for Docker daemon (docker-outside-of-docker feature) ───────────────
 #
-# The docker-outside-of-docker devcontainer feature starts dockerd in the
-# background. It may not be ready when postStartCommand runs. Poll until ready.
+# The docker-outside-of-docker devcontainer feature mounts the host Docker
+# socket at /var/run/docker-host.sock and runs docker-init.sh to expose it
+# at /var/run/docker.sock (symlink or socat proxy). It also calls groupmod to
+# align the container's docker group GID with the host socket's GID so the
+# non-root remoteUser (node) can access the socket.
+#
+# docker-init.sh requires sudo for groupmod/socat/tee. The Dockerfile grants
+# these via /etc/sudoers.d/node-docker. If the socket is not yet accessible,
+# wait up to DOCKER_TIMEOUT seconds.
 
 log "Waiting for Docker daemon..."
 ELAPSED=0
