@@ -559,6 +559,31 @@ def compile_pipeline(
                     secrets_scanned=post_summary.secrets_scanned,
                 )
 
+            # Per-model lineage emission (non-blocking).
+            # Records model presence in lineage graph during compilation;
+            # execution-time events are emitted by Dagster at runtime.
+            for model in transforms.models:
+                model_job_name = f"model.floe.{model.name}"
+                model_run_id: UUID | None = None
+                try:
+                    model_run_id = emitter.emit_start(job_name=model_job_name)
+                    emitter.emit_complete(model_run_id, model_job_name)
+                except Exception as _model_err:
+                    if model_run_id is not None:
+                        try:
+                            emitter.emit_fail(
+                                model_run_id,
+                                model_job_name,
+                                error_message=type(_model_err).__name__,
+                            )
+                        except Exception:
+                            pass  # Best-effort fail event
+                    log.warning(
+                        "lineage_model_emit_failed",
+                        model=model.name,
+                        error=type(_model_err).__name__,
+                    )
+
             # Stage 6: GENERATE - Build final CompiledArtifacts
             stage_start = time.perf_counter()
             with create_span(
