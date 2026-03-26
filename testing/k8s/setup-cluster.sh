@@ -135,6 +135,11 @@ preload_images() {
     kind load docker-image curlimages/curl:8.5.0 --name "${CLUSTER_NAME}" 2>&1 || {
         log_warn "Failed to load curlimages/curl:8.5.0 into Kind — bootstrap may be slow"
     }
+    # Pre-upgrade hook uses bitnami/kubectl for StatefulSet cleanup (values-test.yaml:196-198)
+    docker pull bitnami/kubectl:1.32 2>&1 || log_warn "Failed to pull bitnami/kubectl:1.32"
+    kind load docker-image bitnami/kubectl:1.32 --name "${CLUSTER_NAME}" 2>&1 || {
+        log_warn "Failed to load bitnami/kubectl:1.32 into Kind — helm upgrade hook may be slow"
+    }
     log_info "Images pre-loaded"
 }
 

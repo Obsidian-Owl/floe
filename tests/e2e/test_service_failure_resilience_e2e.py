@@ -74,6 +74,7 @@ class TestServiceFailureResilience:
             "app.kubernetes.io/name=minio",
             "MinIO",
             namespace=NAMESPACE,
+            timeout=60,
         )
         _original_uid, _new_uid, recovery_secs = result
 
@@ -104,6 +105,7 @@ class TestServiceFailureResilience:
             "app.kubernetes.io/component=polaris",
             "Polaris",
             namespace=NAMESPACE,
+            timeout=60,
         )
         _original_uid, _new_uid, recovery_secs = result
 

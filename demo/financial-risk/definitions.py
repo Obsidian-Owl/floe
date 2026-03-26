@@ -15,6 +15,7 @@ from pathlib import Path
 
 from dagster import Definitions
 from dagster_dbt import DbtCliResource, dbt_assets
+from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
 
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent
@@ -44,5 +45,6 @@ defs = Definitions(
             project_dir=DBT_PROJECT_DIR,
             profiles_dir=DBT_PROJECT_DIR,
         ),
+        **try_create_lineage_resource(None),
     },
 )

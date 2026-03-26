@@ -319,36 +319,45 @@ def _generate_orchestrator_entry_point(
 
     info(f"Loading orchestrator plugin: {orchestrator_type}")
 
-    # Load the appropriate orchestrator plugin
-    # Currently only Dagster is supported
+    # Discover orchestrator plugin via entry points (no hardcoded imports)
+    from importlib.metadata import entry_points
+
     from floe_core.plugins.orchestrator import OrchestratorPlugin
 
-    plugin: OrchestratorPlugin
-    if orchestrator_type == "dagster":
-        try:
-            from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+    eps = entry_points(group="floe.orchestrators")
+    matching = [ep for ep in eps if ep.name == orchestrator_type]
 
-            plugin = DagsterOrchestratorPlugin()
-        except ImportError as e:
-            error_exit(
-                f"Failed to load Dagster orchestrator plugin: {e}. "
-                "Install with: pip install floe-orchestrator-dagster",
-                exit_code=ExitCode.COMPILATION_ERROR,
-            )
-    else:
+    if not matching:
+        available = ", ".join(ep.name for ep in eps) or "(none installed)"
         error_exit(
-            f"Unsupported orchestrator type: {orchestrator_type}. Currently supported: dagster",
+            f"No orchestrator plugin found for type '{orchestrator_type}'. "
+            f"Available: {available}. "
+            f"Install the plugin package (e.g. pip install floe-orchestrator-dagster).",
+            exit_code=ExitCode.COMPILATION_ERROR,
+        )
+
+    try:
+        plugin_cls = matching[0].load()
+        plugin: OrchestratorPlugin = plugin_cls()
+    except (ImportError, TypeError) as e:
+        logger.exception("Failed to load orchestrator plugin '%s'", orchestrator_type)
+        error_exit(
+            f"Failed to load orchestrator plugin '{orchestrator_type}': {e}",
             exit_code=ExitCode.COMPILATION_ERROR,
         )
 
     # Get product name from artifacts metadata
     product_name = artifacts.metadata.product_name
 
+    # Determine if lineage is enabled from artifacts
+    lineage_enabled = artifacts.observability.lineage
+
     # Delegate code generation to the plugin
     # This respects component ownership: plugin owns its code generation
     entry_point_path = plugin.generate_entry_point_code(
         product_name=product_name,
         output_dir=str(output_dir),
+        lineage_enabled=lineage_enabled,
     )
 
     return entry_point_path

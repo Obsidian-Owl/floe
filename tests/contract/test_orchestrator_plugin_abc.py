@@ -392,8 +392,10 @@ class TestOrchestratorPluginInstantiationContract:
                 self,
                 product_name: str,
                 output_dir: str,
+                *,
+                lineage_enabled: bool = False,
             ) -> str:
-                _ = product_name, output_dir
+                _ = product_name, output_dir, lineage_enabled
                 return "mock_definitions.py"
 
         # Should not raise
