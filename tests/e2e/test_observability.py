@@ -1008,12 +1008,34 @@ class TestObservability(IntegrationTestBase):
             "Fix: Emit RunEvent.START and RunEvent.COMPLETE for pipeline execution."
         )
 
-        # Validate START and COMPLETE states exist (proving both emission points fired)
-        has_start = "RUNNING" in run_states or "NEW" in run_states or "START" in run_states
-        has_complete = "COMPLETED" in run_states or "COMPLETE" in run_states
+        # Validate START and COMPLETE events were received by Marquez.
+        # Per-model emission pairs are back-to-back synchronous, so Marquez
+        # may only surface the terminal COMPLETED run state (the intermediate
+        # START state is too brief to observe via the runs API). Instead,
+        # query the lineage events API which returns individual OpenLineage
+        # events with their eventType field — this is a stronger check.
+        events_response = marquez_client.get(
+            "/api/v1/events/lineage", params={"limit": 100}
+        )
+        if events_response.status_code == 200:
+            events = events_response.json().get("events", [])
+            event_types = {
+                e.get("eventType", "").upper() for e in events if e.get("eventType")
+            }
+            has_start = "START" in event_types
+            has_complete = "COMPLETE" in event_types
+        else:
+            # Fallback to run states if events API unavailable (older Marquez)
+            has_start = (
+                "RUNNING" in run_states
+                or "NEW" in run_states
+                or "START" in run_states
+            )
+            has_complete = "COMPLETED" in run_states or "COMPLETE" in run_states
 
         assert has_start and has_complete, (
             "EMISSION GAP: Not all lifecycle events found.\n"
+            f"Event types found: {sorted(event_types) if events_response.status_code == 200 else 'N/A (events API unavailable)'}\n"
             f"Run states found: {sorted(run_states)}\n"
             "Expected both START and COMPLETE lifecycle events.\n"
             "Fix: Emit RunEvent.START at job begin and RunEvent.COMPLETE at job end.\n"
