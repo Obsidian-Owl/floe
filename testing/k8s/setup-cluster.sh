@@ -155,6 +155,32 @@ preload_images() {
     kind load docker-image bitnami/kubectl:1.32.0 --name "${CLUSTER_NAME}" 2>&1 || {
         log_warn "Failed to load bitnami/kubectl:1.32.0 into Kind — helm upgrade hook may be slow"
     }
+    # Build and load the Dagster demo image (required by values-test.yaml).
+    # The dagster webserver and daemon use floe-dagster-demo:latest with
+    # imagePullPolicy: Never, so the image MUST exist in Kind before Helm install.
+    #
+    # We build here (before Helm deploy) to maximise free memory for kind load,
+    # which buffers the entire image. Building after pods are running risks OOM.
+    #
+    # Skip compile-demo: definitions.py files are committed to git. Running dbt
+    # compile requires live Polaris/MinIO which aren't available yet.
+    if [[ -f "${PROJECT_ROOT}/docker/dagster-demo/Dockerfile" ]]; then
+        log_info "Building Dagster demo image..."
+        docker build -f "${PROJECT_ROOT}/docker/dagster-demo/Dockerfile" \
+            --platform linux/amd64 \
+            -t floe-dagster-demo:latest \
+            "${PROJECT_ROOT}" 2>&1 || {
+            log_warn "Dagster demo image build failed — Dagster pods will be in ErrImageNeverPull"
+        }
+
+        if docker image inspect floe-dagster-demo:latest >/dev/null 2>&1; then
+            log_info "Loading Dagster demo image into Kind..."
+            kind load docker-image floe-dagster-demo:latest --name "${CLUSTER_NAME}" 2>&1 || {
+                log_warn "Failed to load floe-dagster-demo into Kind"
+            }
+        fi
+    fi
+
     log_info "Images pre-loaded"
 }
 
@@ -220,14 +246,8 @@ deploy_services_helm() {
 
     log_info "Deploying services via Helm to namespace: ${NAMESPACE}"
 
-    # Build and load the Dagster demo image into Kind (required by values-test.yaml)
-    # The dagster webserver and daemon use floe-dagster-demo:latest with pullPolicy: Never
-    if [[ -f "${PROJECT_ROOT}/docker/dagster-demo/Dockerfile" ]]; then
-        log_info "Building Dagster demo image..."
-        make -C "${PROJECT_ROOT}" build-demo-image 2>&1 || {
-            log_warn "Dagster demo image build failed — Dagster pods will be in ErrImageNeverPull"
-        }
-    fi
+    # NOTE: Dagster demo image is built and loaded in preload_images() — before
+    # Helm deploy — to maximise free memory for kind load and avoid OOM.
 
     # Update Helm dependencies
     log_info "Updating Helm chart dependencies..."
