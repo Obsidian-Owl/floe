@@ -963,14 +963,17 @@ def seed_observability(
         reset_telemetry,
     )
 
-    # Save OTel env vars before mutation so we can restore them in finally.
+    # Save OTel + OpenLineage env vars before mutation so we can restore in finally.
     old_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
     old_insecure = os.environ.get("OTEL_EXPORTER_OTLP_INSECURE")
     old_service = os.environ.get("OTEL_SERVICE_NAME")
+    old_lineage_url = os.environ.get("OPENLINEAGE_URL")
 
     # Standard OTel env vars for Kind cluster (no TLS)
     os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
     os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
+    # OpenLineage endpoint via port-forward (overrides K8s-internal manifest URL)
+    os.environ["OPENLINEAGE_URL"] = "http://localhost:5100/api/v1/lineage"
 
     root = Path(__file__).parent.parent.parent
     manifest_path = root / "demo" / "manifest.yaml"
@@ -1001,6 +1004,7 @@ def seed_observability(
             ("OTEL_EXPORTER_OTLP_ENDPOINT", old_endpoint),
             ("OTEL_EXPORTER_OTLP_INSECURE", old_insecure),
             ("OTEL_SERVICE_NAME", old_service),
+            ("OPENLINEAGE_URL", old_lineage_url),
         ):
             if old_val is None:
                 os.environ.pop(key, None)
