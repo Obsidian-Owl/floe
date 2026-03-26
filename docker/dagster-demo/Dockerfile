@@ -114,13 +114,14 @@ RUN set -e; \
 
 # Install orchestrator Docker extras not in the uv lockfile.
 # dagster-daemon is bundled with core dagster; dagster-k8s uses 0.x versioning
-# and is only needed for K8s job execution (not required in-container).
+# and IS required in-container for K8sRunLauncher to launch materialization jobs.
 # Versions MUST match uv.lock — update these when bumping dagster in pyproject.toml.
 ARG DAGSTER_VERSION=1.12.14
 ARG DAGSTER_POSTGRES_VERSION=0.28.14
 RUN pip install --no-cache-dir \
         "dagster-webserver==${DAGSTER_VERSION}" \
         "dagster-postgres==${DAGSTER_POSTGRES_VERSION}" \
+        "dagster-k8s==${DAGSTER_POSTGRES_VERSION}" \
         "dagster==${DAGSTER_VERSION}" \
         "sqlalchemy>=2.0,<2.1"
 
@@ -131,7 +132,7 @@ RUN pip install --no-cache-dir \
 RUN pip check
 
 # Smoke test: verify core imports resolve and PyIceberg PUT fix present
-RUN python -c "import dagster; import floe_core; import dagster_webserver" \
+RUN python -c "import dagster; import floe_core; import dagster_webserver; import dagster_k8s" \
  && python -c "from pyiceberg.catalog.rest import HttpMethod; assert 'PUT' in HttpMethod.__members__"
 
 # =============================================================================
