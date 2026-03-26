@@ -195,7 +195,7 @@ postgresql:
     enabled: true
     image:
       repository: bitnami/kubectl
-      tag: "1.32"
+      tag: "1.32.0"
   auth:
     username: floe
     password: "floe-test-password-1234"  # pragma: allowlist secret
