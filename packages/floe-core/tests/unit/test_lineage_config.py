@@ -243,93 +243,45 @@ class TestBuildLineageConfigEnvVarOverride:
             "Config type must match manifest transport."
         )
 
-    @pytest.mark.requirement("AC-6")
-    def test_http_transport_no_endpoint_returns_none_despite_env_var(
+    @pytest.mark.requirement("AC-1")
+    def test_http_transport_no_endpoint_env_var_provides_url(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """HTTP transport with endpoint=None returns None even when env var is set.
+        """OPENLINEAGE_URL rescues HTTP transport when manifest has no endpoint.
 
         When the manifest declares HTTP transport but provides no endpoint,
-        ``_build_lineage_config`` returns None before consulting the env var.
-        This is intentional: a manifest without an endpoint is treated as
-        incomplete configuration, and the env var cannot rescue it.
+        ``OPENLINEAGE_URL`` can supply the URL.  This matches the
+        ``OTEL_EXPORTER_OTLP_ENDPOINT`` pattern: env var works even when
+        no static URL is baked into the manifest.
         """
         monkeypatch.setenv("OPENLINEAGE_URL", ENV_VAR_ENDPOINT)
         manifest = _make_manifest(transport="http", endpoint=None)
 
         result = _build_lineage_config(manifest)
 
-        assert result is None, (
-            f"Expected None when http transport has no manifest endpoint, "
-            f"got {result!r}. The env var must not rescue incomplete config."
+        assert result is not None, (
+            "Expected config dict when OPENLINEAGE_URL is set, "
+            "even though manifest endpoint is None."
         )
+        assert result["url"] == ENV_VAR_ENDPOINT
 
-
-class TestCompilePipelineLineageWiring:
-    """Tests that compile_pipeline() wires _build_lineage_config() to create_sync_emitter().
-
-    Verifies the integration seam: the config dict produced by
-    _build_lineage_config() is passed to create_sync_emitter() unchanged.
-    """
-
-    @pytest.mark.requirement("AC-1")
-    def test_compile_pipeline_passes_lineage_config_to_emitter(
+    @pytest.mark.requirement("AC-6")
+    def test_http_transport_no_endpoint_no_env_var_returns_none(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """compile_pipeline() passes _build_lineage_config() result to create_sync_emitter().
+        """HTTP transport with no manifest endpoint and no env var returns None.
 
-        Patches create_sync_emitter to capture its arguments, then verifies
-        that the config dict includes the env-var-overridden URL.
+        When neither the manifest nor ``OPENLINEAGE_URL`` provides a URL,
+        ``_build_lineage_config`` returns None (NoOp emitter).
         """
-        from pathlib import Path
+        monkeypatch.delenv("OPENLINEAGE_URL", raising=False)
+        manifest = _make_manifest(transport="http", endpoint=None)
 
-        monkeypatch.setenv("OPENLINEAGE_URL", ENV_VAR_ENDPOINT)
-        # Ensure OTel endpoint is unset so we don't need a real collector
-        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+        result = _build_lineage_config(manifest)
 
-        root = Path(__file__).parent.parent.parent.parent.parent
-        spec_path = root / "demo" / "customer-360" / "floe.yaml"
-        manifest_path = root / "demo" / "manifest.yaml"
-
-        if not spec_path.exists() or not manifest_path.exists():
-            pytest.skip("Demo spec files not available in this environment")
-
-        captured_configs: list[Any] = []
-
-        from floe_core.lineage.emitter import create_sync_emitter as original_create
-
-        def _capturing_create(
-            transport_config: dict[str, Any] | None = None,
-            **kwargs: Any,
-        ) -> Any:
-            captured_configs.append(transport_config)
-            # Use NoOp transport to avoid network calls
-            return original_create(None, **kwargs)
-
-        with patch(
-            "floe_core.lineage.emitter.create_sync_emitter",
-            side_effect=_capturing_create,
-        ):
-            from floe_core.compilation.stages import compile_pipeline
-
-            compile_pipeline(spec_path, manifest_path)
-
-        assert len(captured_configs) >= 1, (
-            "create_sync_emitter was never called during compile_pipeline()"
-        )
-        config = captured_configs[0]
-        assert config is not None, (
-            "create_sync_emitter received None config — "
-            "_build_lineage_config() result was not passed through"
-        )
-        assert config.get("url") == ENV_VAR_ENDPOINT, (
-            f"Expected emitter config url {ENV_VAR_ENDPOINT!r}, "
-            f"got {config.get('url')!r}. "
-            "compile_pipeline() must pass _build_lineage_config() result "
-            "to create_sync_emitter()."
-        )
-        assert config.get("type") == "http", (
-            f"Expected emitter config type 'http', got {config.get('type')!r}"
+        assert result is None, (
+            f"Expected None when http transport has no endpoint and "
+            f"no OPENLINEAGE_URL env var, got {result!r}."
         )

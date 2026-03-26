@@ -541,7 +541,6 @@ class TestObservability(IntegrationTestBase):
         old_insecure = os.environ.get("OTEL_EXPORTER_OTLP_INSECURE")
         os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
         os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
-        ensure_telemetry_initialized()
 
         # Capture log output during compilation
         log_buffer = io.StringIO()
@@ -552,6 +551,7 @@ class TestObservability(IntegrationTestBase):
         root_logger.addHandler(handler)
 
         try:
+            ensure_telemetry_initialized()
             artifacts = compile_pipeline(spec_path, manifest_path)
             assert artifacts is not None, "Compilation should succeed"
         finally:

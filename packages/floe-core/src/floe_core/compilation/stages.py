@@ -229,13 +229,15 @@ def _build_lineage_config(manifest: PlatformManifest) -> dict[str, Any] | None:
     lineage = manifest.observability.lineage
     if not lineage.enabled:
         return None
-    # HTTP transport requires an endpoint URL; without it, fall back to NoOp
-    if lineage.transport == "http" and lineage.endpoint is None:
-        return None
-    config: dict[str, Any] = {"type": lineage.transport}
     # OPENLINEAGE_URL env var overrides manifest endpoint (same pattern as
     # OTEL_EXPORTER_OTLP_ENDPOINT).  Empty string is treated as absent.
-    url = os.environ.get("OPENLINEAGE_URL", "").strip() or lineage.endpoint
+    env_url = os.environ.get("OPENLINEAGE_URL", "").strip()
+    # HTTP transport requires a URL from either env var or manifest endpoint;
+    # without either, fall back to NoOp.
+    if lineage.transport == "http" and lineage.endpoint is None and not env_url:
+        return None
+    config: dict[str, Any] = {"type": lineage.transport}
+    url = env_url or lineage.endpoint
     if url is not None:
         config["url"] = url
     return config
