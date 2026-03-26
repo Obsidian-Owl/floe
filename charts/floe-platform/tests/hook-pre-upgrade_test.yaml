@@ -69,7 +69,7 @@ tests:
   # -----------------------------------------------------------------
   # AC-4b: Job has activeDeadlineSeconds to prevent hung upgrades
   # -----------------------------------------------------------------
-  - it: should set activeDeadlineSeconds on hook Job
+  - it: should set default activeDeadlineSeconds on hook Job
     set:
       postgresql.enabled: true
       postgresql.preUpgradeCleanup.enabled: true
@@ -80,6 +80,19 @@ tests:
       - equal:
           path: spec.activeDeadlineSeconds
           value: 300
+
+  - it: should allow custom activeDeadlineSeconds via values
+    set:
+      postgresql.enabled: true
+      postgresql.preUpgradeCleanup.enabled: true
+      postgresql.preUpgradeCleanup.activeDeadlineSeconds: 600
+    documentIndex: 3
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 600
 
   # -----------------------------------------------------------------
   # AC-4c: Job has backoffLimit for fast failure

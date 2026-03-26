@@ -193,6 +193,7 @@ postgresql:
     enabled: false
   preUpgradeCleanup:
     enabled: true
+    activeDeadlineSeconds: 600  # Higher for Kind/CI — absorbs scheduling + image pull latency
     image:
       repository: bitnami/kubectl
       tag: "1.32.0"

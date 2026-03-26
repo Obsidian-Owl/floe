@@ -71,7 +71,7 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
     "helm.sh/hook-weight": "-5"
 spec:
-  activeDeadlineSeconds: 300
+  activeDeadlineSeconds: {{ .Values.postgresql.preUpgradeCleanup.activeDeadlineSeconds | default 300 }}
   backoffLimit: 1
   template:
     metadata:
