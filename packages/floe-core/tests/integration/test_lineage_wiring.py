@@ -10,14 +10,12 @@ Requirements: AC-1 (env var override wiring), AC-1/AC-2/AC-3 (per-model emission
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest
-import structlog
 
 ENV_VAR_ENDPOINT = "http://override.example.com:5100/api/v1/lineage"
 """OPENLINEAGE_URL env var value used in override tests."""
@@ -208,8 +206,10 @@ class TestPerModelLineageEmission:
         model_complete_calls = [
             c
             for c in complete_mock.call_args_list
-            if c.kwargs.get("job_name") is not None
-            and str(c.kwargs.get("job_name", "")).startswith(MODEL_JOB_NAME_PREFIX)
+            if (
+                c.kwargs.get("job_name") is not None
+                and str(c.kwargs.get("job_name", "")).startswith(MODEL_JOB_NAME_PREFIX)
+            )
             or (len(c.args) >= 2 and str(c.args[1]).startswith(MODEL_JOB_NAME_PREFIX))
         ]
 
@@ -392,8 +392,12 @@ class TestPerModelLineageEmission:
             result = compile_pipeline(spec_path, manifest_path)
 
         # Compilation must produce a valid result
-        assert result is not None, "compile_pipeline() returned None after model emission failure"
-        assert hasattr(result, "version"), "Result missing version attribute"
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        assert isinstance(result, CompiledArtifacts), (
+            "compile_pipeline() must return CompiledArtifacts after model emission failure"
+        )
+        assert result.metadata.product_name is not None, "Result missing product_name"
 
         # The failing model should have had emit_start attempted
         failing_start_calls = [
@@ -407,9 +411,11 @@ class TestPerModelLineageEmission:
         other_complete_calls = [
             c
             for c in complete_mock.call_args_list
-            if c.kwargs.get("job_name") is not None
-            and str(c.kwargs.get("job_name", "")).startswith(MODEL_JOB_NAME_PREFIX)
-            and str(c.kwargs.get("job_name", "")) != failing_job_name
+            if (
+                c.kwargs.get("job_name") is not None
+                and str(c.kwargs.get("job_name", "")).startswith(MODEL_JOB_NAME_PREFIX)
+                and str(c.kwargs.get("job_name", "")) != failing_job_name
+            )
             or (
                 len(c.args) >= 2
                 and str(c.args[1]).startswith(MODEL_JOB_NAME_PREFIX)
@@ -460,20 +466,9 @@ class TestPerModelLineageEmission:
         ) -> Any:
             return emitter
 
-        log_buffer = io.StringIO()
+        from structlog.testing import capture_logs
 
-        # Configure structlog to write to our buffer so we can inspect output
-        structlog.configure(
-            processors=[
-                structlog.stdlib.add_log_level,
-                structlog.dev.ConsoleRenderer(),
-            ],
-            wrapper_class=structlog.stdlib.BoundLogger,
-            logger_factory=lambda *_args: structlog.PrintLogger(log_buffer),
-            cache_logger_on_first_use=False,
-        )
-
-        try:
+        with capture_logs() as cap_logs:
             with patch(
                 "floe_core.lineage.emitter.create_sync_emitter",
                 side_effect=_factory,
@@ -481,30 +476,30 @@ class TestPerModelLineageEmission:
                 from floe_core.compilation.stages import compile_pipeline
 
                 compile_pipeline(spec_path, manifest_path)
-        finally:
-            # Reset structlog to default configuration
-            structlog.reset_defaults()
 
-        log_output = log_buffer.getvalue()
+        # Find the lineage_model_emit_failed log entries
+        fail_events = [e for e in cap_logs if e.get("event") == "lineage_model_emit_failed"]
 
-        # Must contain the event name
-        assert "lineage_model_emit_failed" in log_output, (
-            "Expected 'lineage_model_emit_failed' in log output "
+        # Must contain the event
+        assert len(fail_events) >= 1, (
+            "Expected 'lineage_model_emit_failed' in captured logs "
             f"when emit_start fails for model {failing_model}. "
-            f"Log output: {log_output[:500]}"
+            f"Captured events: {[e.get('event') for e in cap_logs]}"
         )
         # Must contain model name for debugging
-        assert failing_model in log_output, f"Log output missing model name '{failing_model}'"
+        model_event = [e for e in fail_events if e.get("model") == failing_model]
+        assert len(model_event) >= 1, f"Log missing event for model '{failing_model}'"
         # Must contain exception type name (CWE-532: type only)
-        assert "ConnectionError" in log_output, (
-            "Log output missing exception type 'ConnectionError'"
+        assert model_event[0].get("error") == "ConnectionError", (
+            f"Expected error='ConnectionError', got {model_event[0].get('error')!r}"
         )
         # Must NOT contain the secret URL (CWE-532 violation)
-        assert secret_url not in log_output, (
-            "CWE-532 VIOLATION: Log output contains credential-bearing URL"
+        event_str = str(model_event[0])
+        assert secret_url not in event_str, (
+            "CWE-532 VIOLATION: Log event contains credential-bearing URL"
         )
-        assert "password" not in log_output.lower(), (
-            "CWE-532 VIOLATION: Log output may contain credentials"
+        assert "password" not in event_str.lower(), (
+            "CWE-532 VIOLATION: Log event may contain credentials"
         )
 
     @pytest.mark.requirement("AC-1")

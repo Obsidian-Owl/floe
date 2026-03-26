@@ -310,7 +310,8 @@ class TestCompilePipelineLineageStart:
 
         # Pipeline-level emit_start must be called (per-model calls also present)
         pipeline_start_calls = [
-            c for c in mock_emitter.emit_start.call_args_list
+            c
+            for c in mock_emitter.emit_start.call_args_list
             if _get_arg(c, 0, "job_name") == PRODUCT_NAME
         ]
         assert len(pipeline_start_calls) == 1, (
@@ -343,7 +344,8 @@ class TestCompilePipelineLineageStart:
         mock_builder_cls.from_otel_context.assert_called_once()
         # Pipeline-level emit_start carries the trace facet
         pipeline_start_calls = [
-            c for c in mock_emitter.emit_start.call_args_list
+            c
+            for c in mock_emitter.emit_start.call_args_list
             if _get_arg(c, 0, "job_name") == PRODUCT_NAME
         ]
         assert len(pipeline_start_calls) == 1
@@ -379,7 +381,8 @@ class TestCompilePipelineLineageStart:
 
         # Verify pipeline-level emit_start was attempted (side_effect fired)
         pipeline_start_calls = [
-            c for c in mock_emitter.emit_start.call_args_list
+            c
+            for c in mock_emitter.emit_start.call_args_list
             if _get_arg(c, 0, "job_name") == PRODUCT_NAME
         ]
         assert len(pipeline_start_calls) == 1
@@ -416,7 +419,8 @@ class TestCompilePipelineLineageComplete:
 
         # Pipeline-level emit_complete must use the run_id from pipeline emit_start
         pipeline_complete_calls = [
-            c for c in mock_emitter.emit_complete.call_args_list
+            c
+            for c in mock_emitter.emit_complete.call_args_list
             if _get_arg(c, 1, "job_name") == PRODUCT_NAME
         ]
         assert len(pipeline_complete_calls) == 1, (
@@ -442,7 +446,8 @@ class TestCompilePipelineLineageComplete:
 
         # Pipeline-level emit_complete must use pipeline job_name
         pipeline_complete_calls = [
-            c for c in mock_emitter.emit_complete.call_args_list
+            c
+            for c in mock_emitter.emit_complete.call_args_list
             if _get_arg(c, 1, "job_name") == PRODUCT_NAME
         ]
         assert len(pipeline_complete_calls) == 1
@@ -470,7 +475,8 @@ class TestCompilePipelineLineageComplete:
 
         # Verify pipeline-level emit_complete was attempted
         pipeline_complete_calls = [
-            c for c in mock_emitter.emit_complete.call_args_list
+            c
+            for c in mock_emitter.emit_complete.call_args_list
             if _get_arg(c, 1, "job_name") == PRODUCT_NAME
         ]
         assert len(pipeline_complete_calls) == 1
@@ -549,8 +555,10 @@ class TestCompilePipelineLineageComplete:
         # pipeline emit_complete, close
         assert call_order[0] == "emit_start", f"First call must be emit_start, got {call_order}"
         assert call_order[-1] == "close", f"Last call must be close, got {call_order}"
-        # Pipeline-level emit_complete must appear before close
-        assert "emit_complete" in call_order, f"emit_complete missing from lifecycle: {call_order}"
+        # Pipeline-level emit_complete must be second-to-last (just before close)
+        assert call_order[-2] == "emit_complete", (
+            f"Pipeline emit_complete must be second-to-last (before close), got {call_order}"
+        )
 
 
 class TestCompilePipelineLineageFail:
@@ -823,11 +831,13 @@ class TestCompilePipelineLineageEdgeCases:
         # Pipeline-level lifecycle calls still happen (NoOp emitter handles them silently)
         # Per-model calls also present, so filter for pipeline-level
         pipeline_start_calls = [
-            c for c in mock_emitter.emit_start.call_args_list
+            c
+            for c in mock_emitter.emit_start.call_args_list
             if _get_arg(c, 0, "job_name") == PRODUCT_NAME
         ]
         pipeline_complete_calls = [
-            c for c in mock_emitter.emit_complete.call_args_list
+            c
+            for c in mock_emitter.emit_complete.call_args_list
             if _get_arg(c, 1, "job_name") == PRODUCT_NAME
         ]
         assert len(pipeline_start_calls) == 1
@@ -903,4 +913,7 @@ class TestCompilePipelineLineageEdgeCases:
             # Must not raise — falls back to NoOp emitter
             result = compile_pipeline(spec_path, lineage_manifest_path)
 
-        assert result is not None
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        assert isinstance(result, CompiledArtifacts)
+        assert result.metadata.product_name == PRODUCT_NAME
