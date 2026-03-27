@@ -101,9 +101,9 @@ create_cluster() {
                 log_warn "Kind taint-removal raced API server startup — retrying manually"
                 local retries=0
                 while [[ ${retries} -lt 30 ]]; do
-                    if docker exec --privileged "${cp_container}" \
+                    if docker exec "${cp_container}" \
                         kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes >/dev/null 2>&1; then
-                        docker exec --privileged "${cp_container}" \
+                        docker exec "${cp_container}" \
                             kubectl --kubeconfig=/etc/kubernetes/admin.conf \
                             taint nodes --all node-role.kubernetes.io/control-plane- 2>/dev/null || true
                         log_info "Taint removed manually — cluster recovered"

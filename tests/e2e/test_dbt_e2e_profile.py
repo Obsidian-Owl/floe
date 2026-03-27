@@ -410,7 +410,7 @@ class TestNoHardcodedCredentials:
                         f"S3 access key in '{product}' profile appears hardcoded.\n"
                         f"Field '{key}' = {actual_value!r}\n"
                         f"Expected to match AWS_ACCESS_KEY_ID env var "
-                        f"('{env_access_key}') or use env_var() template."
+                        f"or use env_var() template."
                     )
 
     @pytest.mark.requirement("WU-24-T2")
@@ -443,7 +443,7 @@ class TestNoHardcodedCredentials:
                         f"S3 secret key in '{product}' profile appears hardcoded.\n"
                         f"Field '{key}' = {actual_value!r}\n"
                         f"Expected to match AWS_SECRET_ACCESS_KEY env var "
-                        f"('{env_secret_key}') or use env_var() template."
+                        f"or use env_var() template."
                     )
 
     @pytest.mark.requirement("WU-24-T2")

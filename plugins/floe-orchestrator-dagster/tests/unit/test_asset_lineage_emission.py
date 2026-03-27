@@ -117,6 +117,7 @@ def mock_context(mock_lineage_resource: MagicMock) -> MagicMock:
     context = MagicMock()
     context.resources.lineage = mock_lineage_resource
     context.log = MagicMock()
+    context.run.run_id = str(FAKE_RUN_ID)
     return context
 
 
@@ -733,7 +734,7 @@ class TestExtractAndEmitLineageEvents:
         )
 
     @pytest.mark.requirement(AC_4)
-    def test_extract_receives_run_id_from_emit_start(
+    def test_extract_receives_run_id_from_dagster_context(
         self,
         dagster_plugin: Any,
         sample_transform: TransformConfig,
@@ -741,9 +742,9 @@ class TestExtractAndEmitLineageEvents:
         mock_dbt_resource: MagicMock,
         mock_lineage_resource: MagicMock,
     ) -> None:
-        """Test extract receives the parent_run_id from emit_start."""
-        specific_run_id = uuid4()
-        mock_lineage_resource.emit_start.return_value = specific_run_id
+        """Test extract receives the parent_run_id from Dagster context.run.run_id."""
+        dagster_run_id = uuid4()
+        mock_context.run.run_id = str(dagster_run_id)
 
         with (
             patch(_EXTRACT_FN, return_value=[]) as mock_extract,
@@ -755,8 +756,8 @@ class TestExtractAndEmitLineageEvents:
         actual_parent_run_id = (
             call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs.get("parent_run_id")
         )
-        assert actual_parent_run_id == specific_run_id, (
-            f"extract parent_run_id must be {specific_run_id}, got {actual_parent_run_id}"
+        assert actual_parent_run_id == dagster_run_id, (
+            f"extract parent_run_id must be {dagster_run_id}, got {actual_parent_run_id}"
         )
 
     @pytest.mark.requirement(AC_4)
