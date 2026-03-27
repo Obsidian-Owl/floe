@@ -91,7 +91,36 @@ create_cluster() {
         # Create artifact directory if it doesn't exist
         mkdir -p /tmp/floe-test-artifacts
 
-        kind create cluster --name "${CLUSTER_NAME}" --config "${SCRIPT_DIR}/kind-config.yaml" --wait "${TIMEOUT}s"
+        # Kind's taint-removal step can race the API server in DooD (Docker-
+        # outside-of-Docker) environments where kubelet startup is slower.
+        # Use --retain so the control plane container survives failure, allowing
+        # manual taint removal and cluster recovery without full re-creation.
+        if ! kind create cluster --name "${CLUSTER_NAME}" --config "${SCRIPT_DIR}/kind-config.yaml" --retain --wait "${TIMEOUT}s" 2>&1; then
+            local cp_container="${CLUSTER_NAME}-control-plane"
+            if docker inspect "${cp_container}" >/dev/null 2>&1; then
+                log_warn "Kind taint-removal raced API server startup — retrying manually"
+                local retries=0
+                while [[ ${retries} -lt 30 ]]; do
+                    if docker exec "${cp_container}" \
+                        kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes >/dev/null 2>&1; then
+                        docker exec "${cp_container}" \
+                            kubectl --kubeconfig=/etc/kubernetes/admin.conf \
+                            taint nodes --all node-role.kubernetes.io/control-plane- 2>/dev/null || true
+                        log_info "Taint removed manually — cluster recovered"
+                        break
+                    fi
+                    sleep 2
+                    retries=$((retries + 1))
+                done
+                if [[ ${retries} -ge 30 ]]; then
+                    log_error "API server did not become ready after 60s"
+                    exit 1
+                fi
+            else
+                log_error "Cluster creation failed and no control plane container found"
+                exit 1
+            fi
+        fi
         log_info "Cluster created successfully"
     fi
 
@@ -102,6 +131,18 @@ create_cluster() {
 
     # Verify context is set
     kubectl config use-context "kind-${CLUSTER_NAME}"
+
+    # Docker-outside-of-Docker fix: connect this container to the Kind network
+    # so it can reach the control plane container's Docker IP. Only needed when
+    # running inside a devcontainer (not on bare Docker host).
+    if docker network inspect kind >/dev/null 2>&1; then
+        local my_id
+        my_id=$(hostname)
+        if ! docker inspect "${my_id}" --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | grep -q '"kind"'; then
+            docker network connect kind "${my_id}" 2>/dev/null && \
+                log_info "DooD: Connected container to kind network" || true
+        fi
+    fi
 
     # Docker-outside-of-Docker fix: Kind writes 127.0.0.1:<random-port> to
     # kubeconfig, but in a DooD devcontainer, 127.0.0.1 is the container's
@@ -134,11 +175,6 @@ preload_images() {
     docker pull curlimages/curl:8.5.0 2>&1 || log_warn "Failed to pull curlimages/curl:8.5.0"
     kind load docker-image curlimages/curl:8.5.0 --name "${CLUSTER_NAME}" 2>&1 || {
         log_warn "Failed to load curlimages/curl:8.5.0 into Kind — bootstrap may be slow"
-    }
-    # Pre-upgrade hook uses bitnami/kubectl for StatefulSet cleanup (values-test.yaml:196-198)
-    docker pull bitnami/kubectl:1.32.0 2>&1 || log_warn "Failed to pull bitnami/kubectl:1.32.0"
-    kind load docker-image bitnami/kubectl:1.32.0 --name "${CLUSTER_NAME}" 2>&1 || {
-        log_warn "Failed to load bitnami/kubectl:1.32.0 into Kind — helm upgrade hook may be slow"
     }
     log_info "Images pre-loaded"
 }
