@@ -105,6 +105,17 @@ dagster:
       limits:
         cpu: "1"
         memory: 1536Mi
+  # Run launcher configuration — image MUST match webserver/daemon image
+  # so run pods have access to code locations and dbt project.
+  runLauncher:
+    type: K8sRunLauncher
+    config:
+      k8sRunLauncher:
+        image:
+          repository: floe-dagster-demo
+          tag: latest
+          pullPolicy: Never
+        imagePullPolicy: Never
   # Enable user deployments to allow workspace.yaml to be mounted
   # Even with no actual code locations, this enables the workspace file mount
   dagster-user-deployments:
