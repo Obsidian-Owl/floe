@@ -547,9 +547,9 @@ class TestProfileIsolation:
             f"Demo profile for '{product}' was modified: type is "
             f"'{demo_dev.get('type')}', expected 'duckdb'."
         )
-        assert demo_dev.get("path") == "target/demo.duckdb", (
+        assert demo_dev.get("path") == ":memory:", (
             f"Demo profile for '{product}' was modified: path is "
-            f"'{demo_dev.get('path')}', expected 'target/demo.duckdb'."
+            f"'{demo_dev.get('path')}', expected ':memory:'."
         )
         # Original should NOT have attach (proves it was not overwritten)
         assert "attach" not in demo_dev, (
