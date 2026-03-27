@@ -94,15 +94,33 @@ spec:
             - /bin/sh
             - -c
             - |
+              # POSIX sh — [[ ]] not available in busybox (curlimages/curl)
               set -e
+              TOKEN="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+              CACERT="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+              API="https://kubernetes.default.svc"
               STS_NAME="{{ include "floe-platform.fullname" . }}-postgresql"
               NS="{{ .Release.Namespace }}"
-              if kubectl get statefulset "$STS_NAME" -n "$NS" >/dev/null 2>&1; then
-                echo "Deleting StatefulSet $STS_NAME (orphan pods/PVCs)..."
-                kubectl delete statefulset "$STS_NAME" -n "$NS" --cascade=orphan
-                echo "StatefulSet deleted. Pods and PVCs preserved."
+
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                -H "Authorization: Bearer ${TOKEN}" \
+                --cacert "${CACERT}" \
+                "${API}/apis/apps/v1/namespaces/${NS}/statefulsets/${STS_NAME}")
+
+              if [ "${HTTP_CODE}" = "200" ]; then
+                echo "Deleting StatefulSet ${STS_NAME} (orphan pods/PVCs)..." >&2
+                curl -sSf -X DELETE \
+                  -H "Authorization: Bearer ${TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  --cacert "${CACERT}" \
+                  -d '{"propagationPolicy":"Orphan"}' \
+                  "${API}/apis/apps/v1/namespaces/${NS}/statefulsets/${STS_NAME}"
+                echo "StatefulSet deleted. Pods and PVCs preserved." >&2
+              elif [ "${HTTP_CODE}" = "404" ]; then
+                echo "StatefulSet ${STS_NAME} not found -- no cleanup needed." >&2
               else
-                echo "StatefulSet $STS_NAME not found — no cleanup needed."
+                echo "ERROR: Unexpected HTTP ${HTTP_CODE} checking StatefulSet" >&2
+                exit 1
               fi
           securityContext:
             runAsNonRoot: true

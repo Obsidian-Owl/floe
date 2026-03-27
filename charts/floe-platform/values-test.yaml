@@ -194,8 +194,8 @@ postgresql:
   preUpgradeCleanup:
     enabled: true
     image:
-      repository: bitnami/kubectl
-      tag: "1.32.0"
+      repository: curlimages/curl
+      tag: "8.5.0"
   auth:
     username: floe
     password: "floe-test-password-1234"  # pragma: allowlist secret
