@@ -45,6 +45,11 @@ dagster:
     type: K8sRunLauncher
     config:
       k8sRunLauncher:
+        image:
+          repository: floe-dagster-demo
+          tag: latest
+          pullPolicy: Never
+        imagePullPolicy: Never
         resources:
           requests:
             cpu: 50m
