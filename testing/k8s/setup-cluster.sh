@@ -132,6 +132,18 @@ create_cluster() {
     # Verify context is set
     kubectl config use-context "kind-${CLUSTER_NAME}"
 
+    # Docker-outside-of-Docker fix: connect this container to the Kind network
+    # so it can reach the control plane container's Docker IP. Only needed when
+    # running inside a devcontainer (not on bare Docker host).
+    if docker network inspect kind >/dev/null 2>&1; then
+        local my_id
+        my_id=$(hostname)
+        if ! docker inspect "${my_id}" --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | grep -q '"kind"'; then
+            docker network connect kind "${my_id}" 2>/dev/null && \
+                log_info "DooD: Connected container to kind network" || true
+        fi
+    fi
+
     # Docker-outside-of-Docker fix: Kind writes 127.0.0.1:<random-port> to
     # kubeconfig, but in a DooD devcontainer, 127.0.0.1 is the container's
     # own loopback — not the Docker host. Rewrite to the control plane
