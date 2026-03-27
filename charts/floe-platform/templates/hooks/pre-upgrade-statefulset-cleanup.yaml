@@ -1,10 +1,10 @@
 {{/*
-Pre-upgrade hook: delete PostgreSQL StatefulSet with --cascade=orphan.
+Pre-upgrade hook: delete PostgreSQL StatefulSet with propagationPolicy=Orphan.
 
 StatefulSet volumeClaimTemplates are immutable after creation (K8s limitation,
 KEP-4650 closed). This hook deletes the StatefulSet controller object before
 the upgrade applies, allowing Helm to recreate it with updated fields.
-Pods and PVCs are preserved via --cascade=orphan.
+Pods and PVCs are preserved via propagationPolicy=Orphan.
 
 Gated by: postgresql.enabled AND postgresql.preUpgradeCleanup.enabled
 See: helm/charts#7803, kubernetes/kubernetes#69041
@@ -102,24 +102,22 @@ spec:
               STS_NAME="{{ include "floe-platform.fullname" . }}-postgresql"
               NS="{{ .Release.Namespace }}"
 
+              # Single DELETE eliminates TOCTOU race vs GET-then-DELETE.
+              # 200/202 = deleted, 404 = already gone, else = error.
               HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                -X DELETE \
                 -H "Authorization: Bearer ${TOKEN}" \
+                -H "Content-Type: application/json" \
                 --cacert "${CACERT}" \
+                -d '{"propagationPolicy":"Orphan"}' \
                 "${API}/apis/apps/v1/namespaces/${NS}/statefulsets/${STS_NAME}")
 
-              if [ "${HTTP_CODE}" = "200" ]; then
-                echo "Deleting StatefulSet ${STS_NAME} (orphan pods/PVCs)..." >&2
-                curl -sSf -X DELETE \
-                  -H "Authorization: Bearer ${TOKEN}" \
-                  -H "Content-Type: application/json" \
-                  --cacert "${CACERT}" \
-                  -d '{"propagationPolicy":"Orphan"}' \
-                  "${API}/apis/apps/v1/namespaces/${NS}/statefulsets/${STS_NAME}"
-                echo "StatefulSet deleted. Pods and PVCs preserved." >&2
+              if [ "${HTTP_CODE}" = "200" ] || [ "${HTTP_CODE}" = "202" ]; then
+                echo "StatefulSet ${STS_NAME} deleted (orphan pods/PVCs)." >&2
               elif [ "${HTTP_CODE}" = "404" ]; then
                 echo "StatefulSet ${STS_NAME} not found -- no cleanup needed." >&2
               else
-                echo "ERROR: Unexpected HTTP ${HTTP_CODE} checking StatefulSet" >&2
+                echo "ERROR: Unexpected HTTP ${HTTP_CODE} deleting StatefulSet" >&2
                 exit 1
               fi
           securityContext:
