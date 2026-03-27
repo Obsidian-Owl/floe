@@ -1,0 +1,121 @@
+suite: dbt args construction
+templates:
+  - templates/job.yaml
+tests:
+  # -----------------------------------------------------------------
+  # AC-1: Default values produce correct args
+  # -----------------------------------------------------------------
+  - it: should construct args from default profilesDir and projectDir
+    set:
+      dbt.enabled: true
+      dbt.schedule: ""
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - "run"
+            - "--profiles-dir"
+            - "/etc/dbt"
+            - "--project-dir"
+            - "/dbt"
+
+  # -----------------------------------------------------------------
+  # AC-1: Custom profilesDir and projectDir produce correct args
+  # -----------------------------------------------------------------
+  - it: should use custom profilesDir and projectDir
+    set:
+      dbt.enabled: true
+      dbt.schedule: ""
+      dbt.profilesDir: /custom/profiles
+      dbt.projectDir: /custom/project
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - "run"
+            - "--profiles-dir"
+            - "/custom/profiles"
+            - "--project-dir"
+            - "/custom/project"
+
+  # -----------------------------------------------------------------
+  # AC-2: dbt.args override renders verbatim
+  # -----------------------------------------------------------------
+  - it: should use dbt.args verbatim when set
+    set:
+      dbt.enabled: true
+      dbt.schedule: ""
+      dbt.args:
+        - "run"
+        - "--select"
+        - "my_model"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - "run"
+            - "--select"
+            - "my_model"
+
+  # -----------------------------------------------------------------
+  # AC-1: dbt.target adds --target flag
+  # -----------------------------------------------------------------
+  - it: should add target flag when dbt.target is set
+    set:
+      dbt.enabled: true
+      dbt.schedule: ""
+      dbt.target: prod
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - "run"
+            - "--profiles-dir"
+            - "/etc/dbt"
+            - "--project-dir"
+            - "/dbt"
+            - "--target"
+            - "prod"
+
+  # -----------------------------------------------------------------
+  # AC-1: dbt.debug adds --debug flag
+  # -----------------------------------------------------------------
+  - it: should add debug flag when dbt.debug is true
+    set:
+      dbt.enabled: true
+      dbt.schedule: ""
+      dbt.debug: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - "run"
+            - "--profiles-dir"
+            - "/etc/dbt"
+            - "--project-dir"
+            - "/dbt"
+            - "--debug"
+
+  # -----------------------------------------------------------------
+  # AC-1: target + debug combined
+  # -----------------------------------------------------------------
+  - it: should combine target and debug flags
+    set:
+      dbt.enabled: true
+      dbt.schedule: ""
+      dbt.target: test
+      dbt.debug: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - "run"
+            - "--profiles-dir"
+            - "/etc/dbt"
+            - "--project-dir"
+            - "/dbt"
+            - "--target"
+            - "test"
+            - "--debug"

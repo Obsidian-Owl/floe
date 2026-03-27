@@ -51,7 +51,7 @@ tests:
   # -----------------------------------------------------------------
   # AC-4: Role grants correct permissions
   # -----------------------------------------------------------------
-  - it: should grant get and delete on statefulsets
+  - it: should grant get list watch and delete on statefulsets
     set:
       postgresql.enabled: true
       postgresql.preUpgradeCleanup.enabled: true
@@ -64,7 +64,7 @@ tests:
           content:
             apiGroups: ["apps"]
             resources: ["statefulsets"]
-            verbs: ["get", "delete"]
+            verbs: ["get", "list", "watch", "delete"]
 
   # -----------------------------------------------------------------
   # AC-4b: Job has activeDeadlineSeconds to prevent hung upgrades
