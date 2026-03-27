@@ -91,7 +91,36 @@ create_cluster() {
         # Create artifact directory if it doesn't exist
         mkdir -p /tmp/floe-test-artifacts
 
-        kind create cluster --name "${CLUSTER_NAME}" --config "${SCRIPT_DIR}/kind-config.yaml" --wait "${TIMEOUT}s"
+        # Kind's taint-removal step can race the API server in DooD (Docker-
+        # outside-of-Docker) environments where kubelet startup is slower.
+        # Use --retain so the control plane container survives failure, allowing
+        # manual taint removal and cluster recovery without full re-creation.
+        if ! kind create cluster --name "${CLUSTER_NAME}" --config "${SCRIPT_DIR}/kind-config.yaml" --retain --wait "${TIMEOUT}s" 2>&1; then
+            local cp_container="${CLUSTER_NAME}-control-plane"
+            if docker inspect "${cp_container}" >/dev/null 2>&1; then
+                log_warn "Kind taint-removal raced API server startup — retrying manually"
+                local retries=0
+                while [[ ${retries} -lt 30 ]]; do
+                    if docker exec --privileged "${cp_container}" \
+                        kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes >/dev/null 2>&1; then
+                        docker exec --privileged "${cp_container}" \
+                            kubectl --kubeconfig=/etc/kubernetes/admin.conf \
+                            taint nodes --all node-role.kubernetes.io/control-plane- 2>/dev/null || true
+                        log_info "Taint removed manually — cluster recovered"
+                        break
+                    fi
+                    sleep 2
+                    retries=$((retries + 1))
+                done
+                if [[ ${retries} -ge 30 ]]; then
+                    log_error "API server did not become ready after 60s"
+                    exit 1
+                fi
+            else
+                log_error "Cluster creation failed and no control plane container found"
+                exit 1
+            fi
+        fi
         log_info "Cluster created successfully"
     fi
 
