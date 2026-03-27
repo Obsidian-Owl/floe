@@ -578,9 +578,16 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 raise
 
             # 3. Extract per-model lineage (after dbt returns, before success check — AC-8)
+            # Dual-ID pattern: run_id (from emit_start) tracks the asset-level
+            # OL lifecycle (start/fail/complete). Per-model events use the Dagster
+            # orchestrator run as their parent per OpenLineage ParentRunFacet spec.
             try:
+                dagster_parent_id = UUID(context.run.run_id)
                 events = extract_dbt_model_lineage(
-                    result.project_dir, run_id, model_name, lineage.namespace
+                    result.project_dir,
+                    dagster_parent_id,
+                    model_name,
+                    lineage.namespace,
                 )
                 for event in events:
                     lineage.emit_event(event)
