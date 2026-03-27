@@ -89,7 +89,15 @@ dbt:
 
   # dbt command to run
   command: ["dbt"]
-  args: ["run", "--profiles-dir", "/etc/dbt", "--project-dir", "/dbt"]
+  # Args are constructed from profilesDir/projectDir/target below.
+  # Set dbt.args explicitly to override with custom args (escape hatch).
+  # args: ["run", "--profiles-dir", "/etc/dbt", "--project-dir", "/dbt"]
+
+  # dbt CLI arguments (constructed by template when args is not set)
+  profilesDir: /etc/dbt
+  projectDir: /dbt
+  # target: ""  # Optional: adds --target <value>
+  # debug: false  # Optional: adds --debug flag
 
   # Environment variables
   env: []

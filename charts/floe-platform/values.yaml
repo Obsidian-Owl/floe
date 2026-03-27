@@ -433,6 +433,9 @@ postgresql:
   # Pods and PVCs are preserved; the new StatefulSet adopts them.
   preUpgradeCleanup:
     enabled: false
+    # Job deadline in seconds. Includes pod scheduling + image pull time.
+    # Increase for CI/Kind environments where scheduling is slower.
+    activeDeadlineSeconds: 300
     image:
       repository: bitnami/kubectl
       tag: "1.32.0"
