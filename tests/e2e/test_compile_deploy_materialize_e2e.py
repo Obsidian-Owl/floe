@@ -512,17 +512,20 @@ class TestCompileDeployMaterialize:
         """
 
         # Discover repository context for the target asset (AC-16.1)
-        repo_name, location_name, asset_path, job_name = _discover_repository_for_asset(
+        repo_name, location_name, _asset_path, job_name = _discover_repository_for_asset(
             dagster_url, "stg_crm_customers"
         )
 
+        # Materialize ALL assets in the job (seeds → staging → marts).
+        # Previously used assetSelection to target only stg_crm_customers,
+        # but @dbt_assets maps each dbt node to a separate asset — selecting
+        # only the staging model skips seed dependencies (main_raw schema).
         variables = {
             "executionParams": {
                 "selector": {
                     "repositoryName": repo_name,
                     "repositoryLocationName": location_name,
                     "pipelineName": job_name,
-                    "assetSelection": [{"path": asset_path}],
                 },
                 "mode": "default",
             },

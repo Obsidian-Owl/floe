@@ -786,15 +786,16 @@ def _trigger_lineage_run(
         )
         return
 
-    repo_name, location_name, asset_path, job_name = discovery
+    repo_name, location_name, _asset_path, job_name = discovery
 
+    # Materialize ALL assets in the job (seeds → staging → marts).
+    # Omitting assetSelection ensures dbt seeds run before staging models.
     variables: dict[str, Any] = {
         "executionParams": {
             "selector": {
                 "repositoryName": repo_name,
                 "repositoryLocationName": location_name,
                 "pipelineName": job_name,
-                "assetSelection": [{"path": asset_path}],
             },
             "mode": "default",
         },
