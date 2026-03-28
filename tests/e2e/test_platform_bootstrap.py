@@ -15,6 +15,7 @@ Tests:
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import time
@@ -112,23 +113,35 @@ class TestPlatformBootstrap(IntegrationTestBase):
         """
 
         def check_all_pods_ready() -> bool:
-            """Check if all pods in namespace are Ready."""
+            """Check if all non-completed pods in namespace are Ready.
+
+            Skips pods with phase Succeeded (completed Dagster run pods,
+            etc.) which have Ready=False because the container has exited.
+            """
             result = _run_kubectl(
-                [
-                    "get",
-                    "pods",
-                    "-n",
-                    self.namespace,
-                    "-o",
-                    "jsonpath={.items[*].status.conditions[?(@.type=='Ready')].status}",
-                ]
+                ["get", "pods", "-n", self.namespace, "-o", "json"],
             )
             if result.returncode != 0:
                 return False
-
-            # All Ready conditions should be "True"
-            statuses = result.stdout.strip().split()
-            return bool(statuses and all(s == "True" for s in statuses))
+            try:
+                pods = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                return False
+            items = pods.get("items", [])
+            if not items:
+                return False  # No pods yet — not ready
+            for pod in items:
+                phase = pod.get("status", {}).get("phase", "")
+                if phase == "Succeeded":
+                    continue
+                conditions = pod.get("status", {}).get("conditions", [])
+                ready = next(
+                    (c for c in conditions if c.get("type") == "Ready"),
+                    None,
+                )
+                if not ready or ready.get("status") != "True":
+                    return False
+            return True
 
         # Wait for all pods to be ready
         ready = wait_for_condition(
