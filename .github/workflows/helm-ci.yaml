@@ -436,7 +436,7 @@ jobs:
           helm upgrade --install floe-test charts/floe-platform \
             --namespace floe-test --create-namespace \
             --values charts/floe-platform/values-test.yaml \
-            --atomic --cleanup-on-fail --timeout 10m
+            --rollback-on-failure --cleanup-on-fail --timeout 10m
 
       - name: Run Helm tests
         run: |
