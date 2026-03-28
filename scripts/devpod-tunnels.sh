@@ -90,7 +90,8 @@ fi
 
 # ─── Build SSH command ───────────────────────────────────────────────────────
 
-SSH_ARGS=(-fN)
+# SSH keepalive: probe every 30s, disconnect after 3 missed probes (90s dead).
+SSH_ARGS=(-fN -o ServerAliveInterval=30 -o ServerAliveCountMax=3)
 FORWARDED=()
 for MAPPING in "${PORTS[@]}"; do
     LOCAL_PORT="${MAPPING%%:*}"
