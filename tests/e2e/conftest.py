@@ -1027,9 +1027,7 @@ def seed_observability(
     os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = ServiceEndpoint("otel-collector-grpc").url
     os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
     # OpenLineage endpoint (overrides K8s-internal manifest URL)
-    os.environ["OPENLINEAGE_URL"] = (
-        f"{ServiceEndpoint('marquez').url}/api/v1/lineage"
-    )
+    os.environ["OPENLINEAGE_URL"] = f"{ServiceEndpoint('marquez').url}/api/v1/lineage"
 
     root = Path(__file__).parent.parent.parent
     manifest_path = root / "demo" / "manifest.yaml"
