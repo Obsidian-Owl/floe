@@ -41,19 +41,22 @@ def pytest_configure(config: pytest.Config) -> None:
     # Configure pytest-rerunfailures for E2E infrastructure resilience.
     # Scoped to E2E conftest so unit/contract/integration tests are unaffected.
     # Whitelist approach: only retry unambiguous infrastructure exceptions.
-    if not config.option.reruns:
-        config.option.reruns = 2
-    if not config.option.reruns_delay:
-        config.option.reruns_delay = 5
-    config.option.fail_on_flaky = True
-    if not config.option.only_rerun:
-        config.option.only_rerun = [
-            "ConnectionError",
-            "ConnectError",
-            "TimeoutError",
-            "PollingTimeoutError",
-            "ConnectionRefusedError",
-        ]
+    # Guard with hasattr — plugin may not be installed in all environments.
+    if hasattr(config.option, "reruns"):
+        if not config.option.reruns:
+            config.option.reruns = 2
+        if not config.option.reruns_delay:
+            config.option.reruns_delay = 5
+        if not getattr(config.option, "fail_on_flaky", False):
+            config.option.fail_on_flaky = True
+        if not config.option.only_rerun:
+            config.option.only_rerun = [
+                "ConnectionError",
+                "ConnectError",
+                "TimeoutError",
+                "PollingTimeoutError",
+                "ConnectionRefusedError",
+            ]
 
 
 def pytest_collection_modifyitems(
@@ -159,21 +162,21 @@ def infrastructure_smoke_check() -> None:
     """
     import socket
 
-    services = {
-        "Dagster": int(os.environ.get("DAGSTER_WEBSERVER_PORT", "3100")),
-        "Polaris": 8181,
-        "MinIO": 9000,
+    smoke_endpoints = {
+        "Dagster": ServiceEndpoint("dagster-webserver"),
+        "Polaris": ServiceEndpoint("polaris"),
+        "MinIO": ServiceEndpoint("minio"),
     }
     failures: list[str] = []
-    for name, port in services.items():
+    for name, endpoint in smoke_endpoints.items():
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(5.0)
         try:
-            result = sock.connect_ex(("localhost", port))
+            result = sock.connect_ex((endpoint.host, endpoint.port))
             if result != 0:
-                failures.append(f"{name} (localhost:{port})")
+                failures.append(f"{name} ({endpoint.host}:{endpoint.port})")
         except OSError:
-            failures.append(f"{name} (localhost:{port})")
+            failures.append(f"{name} ({endpoint.host}:{endpoint.port})")
         finally:
             sock.close()
 
