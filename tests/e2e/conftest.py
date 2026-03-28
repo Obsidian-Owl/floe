@@ -32,11 +32,28 @@ logger = logging.getLogger(__name__)
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Register custom markers for E2E tests."""
+    """Register custom markers and E2E-scoped rerun config."""
     config.addinivalue_line(
         "markers",
         "e2e: mark test as end-to-end (requires full platform stack)",
     )
+
+    # Configure pytest-rerunfailures for E2E infrastructure resilience.
+    # Scoped to E2E conftest so unit/contract/integration tests are unaffected.
+    # Whitelist approach: only retry unambiguous infrastructure exceptions.
+    if not config.option.reruns:
+        config.option.reruns = 2
+    if not config.option.reruns_delay:
+        config.option.reruns_delay = 5
+    config.option.fail_on_flaky = True
+    if not config.option.only_rerun:
+        config.option.only_rerun = [
+            "ConnectionError",
+            "ConnectError",
+            "TimeoutError",
+            "PollingTimeoutError",
+            "ConnectionRefusedError",
+        ]
 
 
 def pytest_collection_modifyitems(
