@@ -144,12 +144,13 @@ cleanup_all() {
 
 # Port-forward watchdog: monitors TCP health every 30s and restarts dead forwards.
 # Only monitors ports that were set up via kubectl port-forward (not NodePort).
-# Each entry: "LOCAL_PORT:REMOTE_PORT:SERVICE:PID_VAR"
+# Each entry: "CHECK_PORT|PORT_MAPPINGS|SERVICE|PID_VAR"
+# PORT_MAPPINGS can be multi-port: "8181:8181 8182:8182" for combined forwards.
 WATCHDOG_ENTRIES=()
 
 register_port_forward() {
-    local local_port=$1 remote_port=$2 service=$3 pid_var=$4
-    WATCHDOG_ENTRIES+=("${local_port}:${remote_port}:${service}:${pid_var}")
+    local check_port=$1 port_mappings=$2 service=$3 pid_var=$4
+    WATCHDOG_ENTRIES+=("${check_port}|${port_mappings}|${service}|${pid_var}")
 }
 
 start_port_forward_watchdog() {
@@ -160,26 +161,22 @@ start_port_forward_watchdog() {
         while true; do
             sleep 30
             for entry in "${WATCHDOG_ENTRIES[@]}"; do
-                local_port="${entry%%:*}"
-                rest="${entry#*:}"
-                remote_port="${rest%%:*}"
-                rest="${rest#*:}"
-                service="${rest%%:*}"
-                pid_var="${rest#*:}"
+                IFS='|' read -r check_port port_mappings service pid_var <<< "${entry}"
 
-                # Check TCP connectivity
-                if ! (echo >/dev/tcp/localhost/"${local_port}") 2>/dev/null; then
-                    echo "WATCHDOG: Port ${local_port} (${service}) is dead, restarting..." >&2
+                # Check TCP connectivity on the monitored port
+                if ! (echo >/dev/tcp/localhost/"${check_port}") 2>/dev/null; then
+                    echo "WATCHDOG: Port ${check_port} (${service}) is dead, restarting..." >&2
                     # Kill old process if still running
                     old_pid="${!pid_var:-}"
                     if [[ -n "${old_pid}" ]]; then
                         kill "${old_pid}" 2>/dev/null || true
                         wait "${old_pid}" 2>/dev/null || true
                     fi
-                    # Restart port-forward
-                    kubectl port-forward "svc/${service}" "${local_port}:${remote_port}" -n "${TEST_NAMESPACE}" &
+                    # Restart port-forward (port_mappings may contain multiple mappings)
+                    # shellcheck disable=SC2086
+                    kubectl port-forward "svc/${service}" ${port_mappings} -n "${TEST_NAMESPACE}" &
                     eval "${pid_var}=$!"
-                    echo "WATCHDOG: Restarted ${service} port-forward (PID ${!pid_var}) on port ${local_port}" >&2
+                    echo "WATCHDOG: Restarted ${service} port-forward (PID ${!pid_var}) on ${port_mappings}" >&2
                 fi
             done
         done
@@ -232,7 +229,7 @@ if port_already_available "${DAGSTER_HOST_PORT}"; then
 else
     kubectl port-forward svc/floe-platform-dagster-webserver "${DAGSTER_HOST_PORT}":3000 -n "${TEST_NAMESPACE}" &
     DAGSTER_PF_PID=$!
-    register_port_forward "${DAGSTER_HOST_PORT}" 3000 "floe-platform-dagster-webserver" "DAGSTER_PF_PID"
+    register_port_forward "${DAGSTER_HOST_PORT}" "${DAGSTER_HOST_PORT}:3000" "floe-platform-dagster-webserver" "DAGSTER_PF_PID"
 fi
 
 # Polaris catalog API (8181) + management health (8182)
@@ -242,14 +239,14 @@ if port_already_available 8181; then
     if ! port_already_available 8182; then
         kubectl port-forward svc/floe-platform-polaris 8182:8182 -n "${TEST_NAMESPACE}" &
         POLARIS_PF_PID=$!
-        register_port_forward 8182 8182 "floe-platform-polaris" "POLARIS_PF_PID"
+        register_port_forward 8182 "8182:8182" "floe-platform-polaris" "POLARIS_PF_PID"
     else
         echo "  Polaris mgmt (8182): already available (NodePort)"
     fi
 else
     kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n "${TEST_NAMESPACE}" &
     POLARIS_PF_PID=$!
-    register_port_forward 8181 8181 "floe-platform-polaris" "POLARIS_PF_PID"
+    register_port_forward 8181 "8181:8181 8182:8182" "floe-platform-polaris" "POLARIS_PF_PID"
 fi
 
 # MinIO API (port 9000 -> localhost:9000)
@@ -258,7 +255,7 @@ if port_already_available 9000; then
 else
     kubectl port-forward svc/floe-platform-minio 9000:9000 -n "${TEST_NAMESPACE}" &
     MINIO_API_PF_PID=$!
-    register_port_forward 9000 9000 "floe-platform-minio" "MINIO_API_PF_PID"
+    register_port_forward 9000 "9000:9000" "floe-platform-minio" "MINIO_API_PF_PID"
 fi
 
 # MinIO Console (port 9001 -> localhost:9001)
@@ -267,7 +264,7 @@ if port_already_available 9001; then
 else
     kubectl port-forward svc/floe-platform-minio 9001:9001 -n "${TEST_NAMESPACE}" &
     MINIO_UI_PF_PID=$!
-    register_port_forward 9001 9001 "floe-platform-minio" "MINIO_UI_PF_PID"
+    register_port_forward 9001 "9001:9001" "floe-platform-minio" "MINIO_UI_PF_PID"
 fi
 
 # OTel collector (port 4317 -> localhost:4317)
@@ -276,7 +273,7 @@ if port_already_available 4317; then
 else
     kubectl port-forward svc/floe-platform-otel 4317:4317 -n "${TEST_NAMESPACE}" &
     OTEL_PF_PID=$!
-    register_port_forward 4317 4317 "floe-platform-otel" "OTEL_PF_PID"
+    register_port_forward 4317 "4317:4317" "floe-platform-otel" "OTEL_PF_PID"
 fi
 
 # Marquez lineage service (if deployed)
@@ -288,7 +285,7 @@ if kubectl get svc floe-platform-marquez -n "${TEST_NAMESPACE}" &>/dev/null; the
     else
         kubectl port-forward svc/floe-platform-marquez "${MARQUEZ_HOST_PORT}":5000 -n "${TEST_NAMESPACE}" &
         MARQUEZ_PF_PID=$!
-        register_port_forward "${MARQUEZ_HOST_PORT}" 5000 "floe-platform-marquez" "MARQUEZ_PF_PID"
+        register_port_forward "${MARQUEZ_HOST_PORT}" "${MARQUEZ_HOST_PORT}:5000" "floe-platform-marquez" "MARQUEZ_PF_PID"
     fi
 fi
 
@@ -331,7 +328,7 @@ if kubectl get svc floe-platform-jaeger-query -n "${TEST_NAMESPACE}" &>/dev/null
                 # Non-fatal: Jaeger is optional for most tests
             fi
         fi
-        register_port_forward "${JAEGER_QUERY_PORT}" 16686 "floe-platform-jaeger-query" "JAEGER_PF_PID"
+        register_port_forward "${JAEGER_QUERY_PORT}" "${JAEGER_QUERY_PORT}:16686" "floe-platform-jaeger-query" "JAEGER_PF_PID"
     fi
 fi
 
@@ -341,7 +338,7 @@ if port_already_available 5432; then
 else
     kubectl port-forward svc/floe-platform-postgresql 5432:5432 -n "${TEST_NAMESPACE}" &
     POSTGRES_PF_PID=$!
-    register_port_forward 5432 5432 "floe-platform-postgresql" "POSTGRES_PF_PID"
+    register_port_forward 5432 "5432:5432" "floe-platform-postgresql" "POSTGRES_PF_PID"
 fi
 
 # Wait for ports to be available (either NodePort or port-forward)
