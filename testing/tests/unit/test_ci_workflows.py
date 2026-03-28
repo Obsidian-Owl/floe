@@ -124,8 +124,7 @@ class TestWeeklyWorkflow:
     def test_cube_store_dockerfile_exists(self) -> None:
         """Verify Cube Store Dockerfile exists for build."""
         assert CUBE_STORE_DOCKERFILE.exists(), (
-            f"Dockerfile not found at {CUBE_STORE_DOCKERFILE}. "
-            "Required for Cube Store build."
+            f"Dockerfile not found at {CUBE_STORE_DOCKERFILE}. Required for Cube Store build."
         )
 
     @pytest.mark.requirement("WU2-AC1")
