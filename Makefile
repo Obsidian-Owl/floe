@@ -342,6 +342,13 @@ compile-demo: ## Compile dbt models and generate Dagster definitions for all dem
 	done
 	@echo "All demo products compiled successfully!"
 
+.PHONY: check-manifests
+check-manifests: ## Verify committed dbt manifests are not stale
+	@echo "Checking dbt manifests are up to date..."
+	@git diff --exit-code demo/*/target/manifest.json > /dev/null 2>&1 || \
+		{ echo "ERROR: Committed dbt manifests are stale. Run 'make compile-demo' and commit." >&2; exit 1; }
+	@echo "Manifests are up to date."
+
 # Plugin name exception map: manifest type → package name
 # Default convention: plugins.<category>.type: <name> → floe-<category>-<name>
 # Exception map handles non-standard names (e.g., dbt → floe-dbt-core, not floe-dbt-dbt)

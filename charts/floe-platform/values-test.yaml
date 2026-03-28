@@ -204,6 +204,7 @@ postgresql:
     enabled: false
   preUpgradeCleanup:
     enabled: true
+    activeDeadlineSeconds: 600  # Higher for Kind/CI — absorbs scheduling + image pull latency
     image:
       repository: curlimages/curl
       tag: "8.5.0"
