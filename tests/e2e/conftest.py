@@ -133,6 +133,42 @@ def pytest_collection_modifyitems(
 
 
 @pytest.fixture(scope="session", autouse=True)
+def infrastructure_smoke_check() -> None:
+    """Abort test session if core infrastructure is unreachable.
+
+    Checks TCP connectivity to Dagster, Polaris, and MinIO before any
+    test runs. If infrastructure is dead (e.g. SSH tunnel died), aborts
+    the session with a clear message instead of producing 72+ ERRORs.
+    """
+    import socket
+
+    services = {
+        "Dagster": int(os.environ.get("DAGSTER_WEBSERVER_PORT", "3100")),
+        "Polaris": 8181,
+        "MinIO": 9000,
+    }
+    failures: list[str] = []
+    for name, port in services.items():
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5.0)
+        try:
+            result = sock.connect_ex(("localhost", port))
+            if result != 0:
+                failures.append(f"{name} (localhost:{port})")
+        except OSError:
+            failures.append(f"{name} (localhost:{port})")
+        finally:
+            sock.close()
+
+    if failures:
+        pytest.exit(
+            f"Infrastructure unreachable: {', '.join(failures)}. "
+            "Check SSH tunnels and port-forwards.",
+            returncode=3,
+        )
+
+
+@pytest.fixture(scope="session", autouse=True)
 def helm_release_health() -> None:
     """Check Helm release health before E2E suite starts.
 
