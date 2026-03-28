@@ -231,7 +231,13 @@ skips = [
 # Impact: Not exploitable - floe doesn't parse untrusted protobuf JSON
 # Root cause: Transitive dependency from dagster, dbt, opentelemetry
 # No fix version available yet. Remove when protobuf releases patch.
-ignore_vulnerabilities = ["GHSA-5j53-63w8-8625", "GHSA-7gcm-g887-7qv7"]
+# GHSA-gc5v-m9x4-r6x2: Predictable temp file in requests.utils.extract_zipped_paths()
+# Severity: Moderate (CVSS 4.4/10), local attack vector only
+# Impact: Not exploitable — floe never calls extract_zipped_paths(), only uses
+# requests.get()/Session for HTTP calls. Fix version 2.33.0 is blocked by
+# datacontract-cli which pins requests<2.33 (all versions through 0.11.7).
+# Remove when datacontract-cli releases a version allowing requests>=2.33.
+ignore_vulnerabilities = ["GHSA-5j53-63w8-8625", "GHSA-7gcm-g887-7qv7", "GHSA-gc5v-m9x4-r6x2"]
 
 [tool.coverage.run]
 source = ["packages/floe-core/src"]
