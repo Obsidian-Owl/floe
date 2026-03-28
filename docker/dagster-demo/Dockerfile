@@ -160,10 +160,25 @@ RUN touch /app/demo/customer_360/__init__.py \
           /app/demo/iot_telemetry/__init__.py \
           /app/demo/financial_risk/__init__.py
 
+# Regenerate dbt manifests with container-correct absolute paths.
+# The manifests from the build context were generated in the developer workspace
+# and contain host-absolute paths (e.g. /workspace/demo/customer-360/ or
+# /Users/.../demo/customer-360/). Each dbt node embeds a root_path field that
+# dbt uses to resolve seed file patterns at runtime. Running dbt parse inside
+# the container — after deleting the partial_parse.msgpack cache that carries
+# stale paths — produces a manifest.json with correct /app/demo/... root_path
+# values, preventing "No files found" IO errors during dbt seed/build.
+RUN rm -f /app/demo/customer_360/target/partial_parse.msgpack \
+          /app/demo/iot_telemetry/target/partial_parse.msgpack \
+          /app/demo/financial_risk/target/partial_parse.msgpack \
+ && cd /app/demo/customer_360 && dbt parse --profiles-dir . \
+ && cd /app/demo/iot_telemetry && dbt parse --profiles-dir . \
+ && cd /app/demo/financial_risk && dbt parse --profiles-dir .
+
 # Run as non-root user for reduced attack surface
 RUN useradd --create-home --shell /bin/false dagster \
     && mkdir -p /opt/dagster/dagster_home \
-    && chown -R dagster:dagster /opt/dagster
+    && chown -R dagster:dagster /opt/dagster /app/demo
 USER dagster
 
 ENV DAGSTER_HOME=/opt/dagster/dagster_home

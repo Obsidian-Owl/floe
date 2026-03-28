@@ -1112,7 +1112,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         The generated file:
         - Uses dagster-dbt's @dbt_assets decorator for dbt integration
-        - Configures DbtCliResource for dbt operations
+        - Configures DbtProject for @dbt_assets and DbtCliResource for runtime
         - Optionally includes LineageResource for OpenLineage emission
         - Exports a `defs` variable for Dagster workspace discovery
 
@@ -1176,7 +1176,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from dagster import Definitions
-from dagster_dbt import DbtCliResource, dbt_assets
+from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
 {lineage_import}
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent
@@ -1186,7 +1186,7 @@ MANIFEST_PATH = DBT_PROJECT_DIR / "target" / "manifest.json"
 
 @dbt_assets(
     manifest=MANIFEST_PATH,
-    project=DbtCliResource(project_dir=DBT_PROJECT_DIR),
+    project=DbtProject(project_dir=DBT_PROJECT_DIR, profiles_dir=DBT_PROJECT_DIR),
     name="{safe_name}_dbt_assets",
 )
 def {safe_name}_dbt_assets(context, dbt: DbtCliResource):
