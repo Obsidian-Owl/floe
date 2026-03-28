@@ -1112,7 +1112,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         The generated file:
         - Uses dagster-dbt's @dbt_assets decorator for dbt integration
-        - Configures DbtCliResource for dbt operations
+        - Configures DbtProject for @dbt_assets and DbtCliResource for runtime
         - Optionally includes LineageResource for OpenLineage emission
         - Exports a `defs` variable for Dagster workspace discovery
 
