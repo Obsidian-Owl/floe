@@ -123,8 +123,14 @@ class TestPlatformBootstrap(IntegrationTestBase):
             )
             if result.returncode != 0:
                 return False
-            pods = json.loads(result.stdout)
-            for pod in pods.get("items", []):
+            try:
+                pods = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                return False
+            items = pods.get("items", [])
+            if not items:
+                return False  # No pods yet — not ready
+            for pod in items:
                 phase = pod.get("status", {}).get("phase", "")
                 if phase == "Succeeded":
                     continue
