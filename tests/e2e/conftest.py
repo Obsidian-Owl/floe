@@ -32,11 +32,31 @@ logger = logging.getLogger(__name__)
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Register custom markers for E2E tests."""
+    """Register custom markers and E2E-scoped rerun config."""
     config.addinivalue_line(
         "markers",
         "e2e: mark test as end-to-end (requires full platform stack)",
     )
+
+    # Configure pytest-rerunfailures for E2E infrastructure resilience.
+    # Scoped to E2E conftest so unit/contract/integration tests are unaffected.
+    # Whitelist approach: only retry unambiguous infrastructure exceptions.
+    # Guard with hasattr — plugin may not be installed in all environments.
+    if hasattr(config.option, "reruns"):
+        if not config.option.reruns:
+            config.option.reruns = 2
+        if not config.option.reruns_delay:
+            config.option.reruns_delay = 5
+        if not getattr(config.option, "fail_on_flaky", False):
+            config.option.fail_on_flaky = True
+        if not config.option.only_rerun:
+            config.option.only_rerun = [
+                "ConnectionError",
+                "ConnectError",
+                "TimeoutError",
+                "PollingTimeoutError",
+                "ConnectionRefusedError",
+            ]
 
 
 def pytest_collection_modifyitems(
@@ -130,6 +150,42 @@ def pytest_collection_modifyitems(
         print("=" * 70)
         print("These are ADVISORY warnings. Review and fix as needed.")
         print("=" * 70)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def infrastructure_smoke_check() -> None:
+    """Abort test session if core infrastructure is unreachable.
+
+    Checks TCP connectivity to Dagster, Polaris, and MinIO before any
+    test runs. If infrastructure is dead (e.g. SSH tunnel died), aborts
+    the session with a clear message instead of producing 72+ ERRORs.
+    """
+    import socket
+
+    smoke_endpoints = {
+        "Dagster": ServiceEndpoint("dagster-webserver"),
+        "Polaris": ServiceEndpoint("polaris"),
+        "MinIO": ServiceEndpoint("minio"),
+    }
+    failures: list[str] = []
+    for name, endpoint in smoke_endpoints.items():
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5.0)
+        try:
+            result = sock.connect_ex((endpoint.host, endpoint.port))
+            if result != 0:
+                failures.append(f"{name} ({endpoint.host}:{endpoint.port})")
+        except OSError:
+            failures.append(f"{name} ({endpoint.host}:{endpoint.port})")
+        finally:
+            sock.close()
+
+    if failures:
+        pytest.exit(
+            f"Infrastructure unreachable: {', '.join(failures)}. "
+            "Check SSH tunnels and port-forwards.",
+            returncode=3,
+        )
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -970,10 +1026,11 @@ def seed_observability(
     old_lineage_url = os.environ.get("OPENLINEAGE_URL")
 
     # Standard OTel env vars for Kind cluster (no TLS)
-    os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
+    # Use ServiceEndpoint for host/port resolution (supports both localhost and K8s DNS)
+    os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = ServiceEndpoint("otel-collector-grpc").url
     os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
-    # OpenLineage endpoint via port-forward (overrides K8s-internal manifest URL)
-    os.environ["OPENLINEAGE_URL"] = "http://localhost:5100/api/v1/lineage"
+    # OpenLineage endpoint (overrides K8s-internal manifest URL)
+    os.environ["OPENLINEAGE_URL"] = f"{ServiceEndpoint('marquez').url}/api/v1/lineage"
 
     root = Path(__file__).parent.parent.parent
     manifest_path = root / "demo" / "manifest.yaml"

@@ -125,6 +125,10 @@ wait_for_pod() {
 
 # Cleanup function for port-forwards
 cleanup_port_forwards() {
+    # Kill watchdog and its entire process group (includes restarted port-forwards)
+    if [[ -n "${WATCHDOG_PID:-}" ]]; then
+        kill -- -"${WATCHDOG_PID}" 2>/dev/null || kill "${WATCHDOG_PID}" 2>/dev/null || true
+    fi
     [[ -n "${DAGSTER_PF_PID:-}" ]] && kill "${DAGSTER_PF_PID}" 2>/dev/null || true
     [[ -n "${POLARIS_PF_PID:-}" ]] && kill "${POLARIS_PF_PID}" 2>/dev/null || true
     [[ -n "${MINIO_API_PF_PID:-}" ]] && kill "${MINIO_API_PF_PID}" 2>/dev/null || true
@@ -139,6 +143,57 @@ cleanup_port_forwards() {
 cleanup_all() {
     cleanup_port_forwards
     collect_logs
+}
+
+# Port-forward watchdog: monitors TCP health every 30s and restarts dead forwards.
+# Only monitors ports that were set up via kubectl port-forward (not NodePort).
+# Each entry: "CHECK_PORT|PORT_MAPPINGS|SERVICE|PID_VAR"
+# PORT_MAPPINGS can be multi-port: "8181:8181 8182:8182" for combined forwards.
+WATCHDOG_ENTRIES=()
+
+register_port_forward() {
+    local check_port=$1 port_mappings=$2 service=$3 pid_var=$4
+    WATCHDOG_ENTRIES+=("${check_port}|${port_mappings}|${service}|${pid_var}")
+}
+
+start_port_forward_watchdog() {
+    if [[ ${#WATCHDOG_ENTRIES[@]} -eq 0 ]]; then
+        return
+    fi
+    # NOTE: The watchdog runs in a subshell, so `eval "${pid_var}=$!"` updates
+    # the PID variable within the subshell only — the parent shell's PID vars
+    # become stale after a restart. This is acceptable because:
+    #   1. cleanup_port_forwards kills by stored PID (parent's original PID)
+    #   2. The watchdog's restarted process is a child of the subshell and will
+    #      be cleaned up when the subshell (WATCHDOG_PID) is killed
+    #   3. We kill the watchdog subshell's entire process group on cleanup
+    (
+        while true; do
+            sleep 30
+            for entry in "${WATCHDOG_ENTRIES[@]}"; do
+                IFS='|' read -r check_port port_mappings service pid_var <<< "${entry}"
+
+                # Check TCP connectivity on the monitored port
+                if ! (echo >/dev/tcp/localhost/"${check_port}") 2>/dev/null; then
+                    echo "WATCHDOG: Port ${check_port} (${service}) is dead, restarting..." >&2
+                    # Kill old process if still running
+                    old_pid="${!pid_var:-}"
+                    if [[ -n "${old_pid}" ]]; then
+                        kill "${old_pid}" 2>/dev/null || true
+                        wait "${old_pid}" 2>/dev/null || true
+                    fi
+                    # Restart port-forward (port_mappings may contain multiple mappings)
+                    # shellcheck disable=SC2086
+                    kubectl port-forward "svc/${service}" ${port_mappings} -n "${TEST_NAMESPACE}" &
+                    # Safety: pid_var is always one of our known PID variable names
+                    # (e.g. DAGSTER_PF_PID, POLARIS_PF_PID) — never from external input.
+                    eval "${pid_var}=$!"
+                    echo "WATCHDOG: Restarted ${service} port-forward (PID ${!pid_var}) on ${port_mappings}" >&2
+                fi
+            done
+        done
+    ) &
+    WATCHDOG_PID=$!
 }
 
 # Set up traps: cleanup port-forwards on EXIT, full cleanup on ERR
@@ -186,6 +241,7 @@ if port_already_available "${DAGSTER_HOST_PORT}"; then
 else
     kubectl port-forward svc/floe-platform-dagster-webserver "${DAGSTER_HOST_PORT}":3000 -n "${TEST_NAMESPACE}" &
     DAGSTER_PF_PID=$!
+    register_port_forward "${DAGSTER_HOST_PORT}" "${DAGSTER_HOST_PORT}:3000" "floe-platform-dagster-webserver" "DAGSTER_PF_PID"
 fi
 
 # Polaris catalog API (8181) + management health (8182)
@@ -195,12 +251,14 @@ if port_already_available 8181; then
     if ! port_already_available 8182; then
         kubectl port-forward svc/floe-platform-polaris 8182:8182 -n "${TEST_NAMESPACE}" &
         POLARIS_PF_PID=$!
+        register_port_forward 8182 "8182:8182" "floe-platform-polaris" "POLARIS_PF_PID"
     else
         echo "  Polaris mgmt (8182): already available (NodePort)"
     fi
 else
     kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n "${TEST_NAMESPACE}" &
     POLARIS_PF_PID=$!
+    register_port_forward 8181 "8181:8181 8182:8182" "floe-platform-polaris" "POLARIS_PF_PID"
 fi
 
 # MinIO API (port 9000 -> localhost:9000)
@@ -209,6 +267,7 @@ if port_already_available 9000; then
 else
     kubectl port-forward svc/floe-platform-minio 9000:9000 -n "${TEST_NAMESPACE}" &
     MINIO_API_PF_PID=$!
+    register_port_forward 9000 "9000:9000" "floe-platform-minio" "MINIO_API_PF_PID"
 fi
 
 # MinIO Console (port 9001 -> localhost:9001)
@@ -217,6 +276,7 @@ if port_already_available 9001; then
 else
     kubectl port-forward svc/floe-platform-minio 9001:9001 -n "${TEST_NAMESPACE}" &
     MINIO_UI_PF_PID=$!
+    register_port_forward 9001 "9001:9001" "floe-platform-minio" "MINIO_UI_PF_PID"
 fi
 
 # OTel collector (port 4317 -> localhost:4317)
@@ -225,6 +285,7 @@ if port_already_available 4317; then
 else
     kubectl port-forward svc/floe-platform-otel 4317:4317 -n "${TEST_NAMESPACE}" &
     OTEL_PF_PID=$!
+    register_port_forward 4317 "4317:4317" "floe-platform-otel" "OTEL_PF_PID"
 fi
 
 # Marquez lineage service (if deployed)
@@ -236,6 +297,7 @@ if kubectl get svc floe-platform-marquez -n "${TEST_NAMESPACE}" &>/dev/null; the
     else
         kubectl port-forward svc/floe-platform-marquez "${MARQUEZ_HOST_PORT}":5000 -n "${TEST_NAMESPACE}" &
         MARQUEZ_PF_PID=$!
+        register_port_forward "${MARQUEZ_HOST_PORT}" "${MARQUEZ_HOST_PORT}:5000" "floe-platform-marquez" "MARQUEZ_PF_PID"
     fi
 fi
 
@@ -278,6 +340,12 @@ if kubectl get svc floe-platform-jaeger-query -n "${TEST_NAMESPACE}" &>/dev/null
                 # Non-fatal: Jaeger is optional for most tests
             fi
         fi
+        # Only register watchdog if Jaeger health check ultimately succeeded
+        if curl -sf "http://localhost:${JAEGER_QUERY_PORT}/api/services" >/dev/null 2>&1; then
+            register_port_forward "${JAEGER_QUERY_PORT}" "${JAEGER_QUERY_PORT}:16686" "floe-platform-jaeger-query" "JAEGER_PF_PID"
+        else
+            echo "WARNING: Jaeger watchdog not registered — health check never passed" >&2
+        fi
     fi
 fi
 
@@ -287,6 +355,7 @@ if port_already_available 5432; then
 else
     kubectl port-forward svc/floe-platform-postgresql 5432:5432 -n "${TEST_NAMESPACE}" &
     POSTGRES_PF_PID=$!
+    register_port_forward 5432 "5432:5432" "floe-platform-postgresql" "POSTGRES_PF_PID"
 fi
 
 # Wait for ports to be available (either NodePort or port-forward)
@@ -306,6 +375,10 @@ wait_for_port localhost "${MARQUEZ_HOST_PORT:-5100}" 15 || true  # Marquez API p
 wait_for_port localhost "${JAEGER_QUERY_PORT}" 15 || true  # Jaeger optional
 
 echo "Port-forwards established."
+
+# Start watchdog to monitor and restart dead port-forwards during test execution
+start_port_forward_watchdog
+echo "Port-forward watchdog started (${#WATCHDOG_ENTRIES[@]} ports monitored)"
 
 # Verify MinIO bucket exists before running tests (defense-in-depth)
 # Uses boto3 HeadBucket with credentials — anonymous curl returns 403 for both

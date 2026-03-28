@@ -108,10 +108,14 @@ log "Establishing SSH tunnel: localhost:${LOCAL_API_PORT} → ${TUNNEL_TARGET}:$
 
 # Use devpod ssh for tunneling — it handles SSH config/credentials internally.
 # Run in background with nohup to keep the tunnel alive after script exits.
+# SSH keepalive: devpod ssh uses its own --ssh-keepalive-interval flag
+# (not OpenSSH -o options). Default is 55s; we set 30s for faster detection.
+# stdin redirect: prevent nohup from hanging on stdin.
 nohup devpod ssh "${WORKSPACE}" \
+    --ssh-keepalive-interval 30s \
     -L "${LOCAL_API_PORT}:${TUNNEL_TARGET}:${REMOTE_API_PORT}" \
     --command "sleep infinity" \
-    >>"${HOME}/.kube/devpod-ssh.log" 2>&1 &
+    >>"${HOME}/.kube/devpod-ssh.log" 2>&1 < /dev/null &
 
 TUNNEL_PID=$!
 
