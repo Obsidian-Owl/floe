@@ -69,9 +69,17 @@ dagster:
         cpu: 2000m
         memory: 2Gi
 
-  run_launcher:
+  runLauncher:
+    type: K8sRunLauncher
     config:
       k8sRunLauncher:
+        # REQUIRED: Set image for run worker pods.
+        # Must match your dagsterWebserver/dagsterDaemon image.
+        # image:
+        #   repository: "your-registry/floe-dagster"
+        #   tag: "your-version"
+        #   pullPolicy: Always
+        imagePullPolicy: Always
         resources:
           requests:
             cpu: 500m

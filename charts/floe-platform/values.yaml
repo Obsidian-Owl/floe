@@ -188,6 +188,14 @@ dagster:
     type: K8sRunLauncher
     config:
       k8sRunLauncher:
+        # Image for run worker pods — MUST be set in environment overrides.
+        # Use the same image as dagsterWebserver/dagsterDaemon to ensure
+        # code locations and dbt project are available in run pods.
+        # image:
+        #   repository: ""
+        #   tag: ""
+        #   pullPolicy: Always
+        imagePullPolicy: Always
         envConfigMaps: []
         envSecrets: []
         jobNamespace: ""
@@ -437,8 +445,8 @@ postgresql:
     # Increase for CI/Kind environments where scheduling is slower.
     activeDeadlineSeconds: 300
     image:
-      repository: bitnami/kubectl
-      tag: "1.32.0"
+      repository: curlimages/curl
+      tag: "8.5.0"
 
   # Resource limits
   resources:

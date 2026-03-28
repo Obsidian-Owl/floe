@@ -3,5 +3,5 @@ iot_telemetry:
   outputs:
     dev:
       type: duckdb
-      path: "target/demo.duckdb"
+      path: ":memory:"
       threads: 1

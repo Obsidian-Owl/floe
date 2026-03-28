@@ -181,4 +181,4 @@ tests:
           pattern: "floe-platform-postgresql"
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: "--cascade=orphan"
+          pattern: "propagationPolicy.*Orphan"

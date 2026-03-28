@@ -55,13 +55,19 @@ if ! bash "${SCRIPT_DIR}/devpod-sync-kubeconfig.sh" "${WORKSPACE}"; then
     error "Failed to sync kubeconfig. Check DevPod workspace health."
 fi
 
-# ─── 4. Validate cluster reachable ───────────────────────────────────────────
+# ─── 4. Validate cluster reachable (retry for SSH tunnel startup) ────────────
 
 log "Validating cluster connectivity..."
-if ! kubectl --kubeconfig "${KUBECONFIG_PATH}" cluster-info >/dev/null 2>&1; then
-    error "K8s cluster not reachable via ${KUBECONFIG_PATH}.
-  The SSH tunnel may need a moment. Retry in a few seconds, or check:
-    kubectl --kubeconfig ${KUBECONFIG_PATH} cluster-info"
-fi
+RETRIES=0
+MAX_RETRIES=10
+while ! kubectl --kubeconfig "${KUBECONFIG_PATH}" cluster-info >/dev/null 2>&1; do
+    RETRIES=$((RETRIES + 1))
+    if [[ ${RETRIES} -ge ${MAX_RETRIES} ]]; then
+        error "K8s cluster not reachable via ${KUBECONFIG_PATH} after ${MAX_RETRIES} attempts.
+  Check: kubectl --kubeconfig ${KUBECONFIG_PATH} cluster-info"
+    fi
+    log "Waiting for SSH tunnel... (${RETRIES}/${MAX_RETRIES})"
+    sleep 2
+done
 
 log "SUCCESS: DevPod workspace ready, K8s cluster accessible."

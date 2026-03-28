@@ -410,7 +410,7 @@ class TestNoHardcodedCredentials:
                         f"S3 access key in '{product}' profile appears hardcoded.\n"
                         f"Field '{key}' = {actual_value!r}\n"
                         f"Expected to match AWS_ACCESS_KEY_ID env var "
-                        f"('{env_access_key}') or use env_var() template."
+                        f"or use env_var() template."
                     )
 
     @pytest.mark.requirement("WU-24-T2")
@@ -443,7 +443,7 @@ class TestNoHardcodedCredentials:
                         f"S3 secret key in '{product}' profile appears hardcoded.\n"
                         f"Field '{key}' = {actual_value!r}\n"
                         f"Expected to match AWS_SECRET_ACCESS_KEY env var "
-                        f"('{env_secret_key}') or use env_var() template."
+                        f"or use env_var() template."
                     )
 
     @pytest.mark.requirement("WU-24-T2")
@@ -547,9 +547,9 @@ class TestProfileIsolation:
             f"Demo profile for '{product}' was modified: type is "
             f"'{demo_dev.get('type')}', expected 'duckdb'."
         )
-        assert demo_dev.get("path") == "target/demo.duckdb", (
+        assert demo_dev.get("path") == ":memory:", (
             f"Demo profile for '{product}' was modified: path is "
-            f"'{demo_dev.get('path')}', expected 'target/demo.duckdb'."
+            f"'{demo_dev.get('path')}', expected ':memory:'."
         )
         # Original should NOT have attach (proves it was not overwritten)
         assert "attach" not in demo_dev, (

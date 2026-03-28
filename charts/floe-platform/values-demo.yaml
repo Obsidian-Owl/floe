@@ -79,6 +79,11 @@ dagster:
     type: K8sRunLauncher
     config:
       k8sRunLauncher:
+        image:
+          repository: floe-dagster-demo
+          tag: latest
+          pullPolicy: Never
+        imagePullPolicy: Never
         # Resources for run pods (light for demo)
         resources:
           requests:

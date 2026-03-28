@@ -578,9 +578,16 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 raise
 
             # 3. Extract per-model lineage (after dbt returns, before success check — AC-8)
+            # Dual-ID pattern: run_id (from emit_start) tracks the asset-level
+            # OL lifecycle (start/fail/complete). Per-model events use the Dagster
+            # orchestrator run as their parent per OpenLineage ParentRunFacet spec.
             try:
+                dagster_parent_id = UUID(context.run.run_id)
                 events = extract_dbt_model_lineage(
-                    result.project_dir, run_id, model_name, lineage.namespace
+                    result.project_dir,
+                    dagster_parent_id,
+                    model_name,
+                    lineage.namespace,
                 )
                 for event in events:
                     lineage.emit_event(event)
@@ -1105,7 +1112,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
         The generated file:
         - Uses dagster-dbt's @dbt_assets decorator for dbt integration
-        - Configures DbtCliResource for dbt operations
+        - Configures DbtProject for @dbt_assets and DbtCliResource for runtime
         - Optionally includes LineageResource for OpenLineage emission
         - Exports a `defs` variable for Dagster workspace discovery
 
@@ -1169,7 +1176,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from dagster import Definitions
-from dagster_dbt import DbtCliResource, dbt_assets
+from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
 {lineage_import}
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent
@@ -1179,7 +1186,7 @@ MANIFEST_PATH = DBT_PROJECT_DIR / "target" / "manifest.json"
 
 @dbt_assets(
     manifest=MANIFEST_PATH,
-    project=DbtCliResource(project_dir=DBT_PROJECT_DIR),
+    project=DbtProject(project_dir=DBT_PROJECT_DIR, profiles_dir=DBT_PROJECT_DIR),
     name="{safe_name}_dbt_assets",
 )
 def {safe_name}_dbt_assets(context, dbt: DbtCliResource):

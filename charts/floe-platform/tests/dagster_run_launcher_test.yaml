@@ -1,0 +1,30 @@
+# Dagster K8sRunLauncher image configuration tests
+# Verifies that job_image is rendered in the Dagster instance configmap
+# when runLauncher.config.k8sRunLauncher.image is set.
+suite: dagster run launcher image config
+templates:
+  - charts/dagster/templates/configmap-instance.yaml
+tests:
+  - it: should render job_image when image is configured
+    set:
+      dagster.runLauncher.type: K8sRunLauncher
+      dagster.runLauncher.config.k8sRunLauncher.image.repository: floe-dagster-demo
+      dagster.runLauncher.config.k8sRunLauncher.image.tag: latest
+      dagster.runLauncher.config.k8sRunLauncher.image.pullPolicy: Never
+      dagster.runLauncher.config.k8sRunLauncher.imagePullPolicy: Never
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: 'job_image: "floe-dagster-demo:latest"'
+
+  - it: should not render job_image when image is not configured
+    set:
+      dagster.runLauncher.type: K8sRunLauncher
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - notMatchRegex:
+          path: data["dagster.yaml"]
+          pattern: 'job_image:'
