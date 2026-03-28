@@ -104,6 +104,7 @@ class TestHelmUpgrade:
                     "--set",
                     "global.annotations.e2e-test-revision=upgrade-test",
                     "--rollback-on-failure",
+                    "--wait",
                     "--timeout",
                     "8m",
                 ],

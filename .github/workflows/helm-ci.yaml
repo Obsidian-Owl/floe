@@ -45,7 +45,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
-          version: v3.14.0
+          version: v4.1.3
 
       - name: Add Helm repositories
         run: |
@@ -96,7 +96,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
-          version: v3.14.0
+          version: v4.1.3
 
       - name: Add Helm repositories
         run: |
@@ -168,7 +168,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
-          version: v3.14.0
+          version: v4.1.3
 
       - name: Add Helm repositories
         run: |
@@ -284,7 +284,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
-          version: v3.14.0
+          version: v4.1.3
 
       - name: Add Helm repositories
         run: |
@@ -364,7 +364,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
-          version: v3.14.0
+          version: v4.1.3
 
       - name: Add Helm repositories
         run: |
@@ -379,7 +379,7 @@ jobs:
 
       - name: Install helm-unittest plugin
         run: |
-          helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.8.2
+          helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.0.3 --verify=false
 
       - name: Run chart unit tests
         run: make helm-test-unit
@@ -399,7 +399,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
-          version: v3.14.0
+          version: v4.1.3
 
       - name: Create Kind cluster
         uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1
@@ -419,7 +419,7 @@ jobs:
           helm dependency update charts/floe-platform
 
       - name: Install helm-diff plugin
-        run: helm plugin install https://github.com/databus23/helm-diff --version v3.9.12
+        run: helm plugin install https://github.com/databus23/helm-diff --version v3.15.3 --verify=false
 
       - name: Diff upgrade (informational — exits 2 on fresh cluster, non-zero is expected)
         continue-on-error: true
@@ -436,7 +436,7 @@ jobs:
           helm upgrade --install floe-test charts/floe-platform \
             --namespace floe-test --create-namespace \
             --values charts/floe-platform/values-test.yaml \
-            --rollback-on-failure --cleanup-on-fail --timeout 10m
+            --rollback-on-failure --wait --cleanup-on-fail --timeout 10m
 
       - name: Run Helm tests
         run: |
