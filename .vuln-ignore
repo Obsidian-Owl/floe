@@ -30,5 +30,5 @@ GHSA-5239-wwwm-4pmq
 # Fix: requests>=2.33.0. Blocked by datacontract-cli <2.33 pin. Track upstream.
 GHSA-gc5v-m9x4-r6x2
 
-# cryptography 46.0.5 — fix in 46.0.6, transitive dep
+# cryptography 46.0.5 — fix in 46.0.6, transitive dep. Review by 2026-04-28.
 GHSA-m959-cc7f-wv43
