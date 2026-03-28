@@ -5,7 +5,7 @@ have the correct structure. These are unit tests that parse YAML — no
 external services or Helm CLI required.
 
 Requirements:
-    WU2-AC1: nightly.yml builds multi-arch Cube Store for linux/amd64 and linux/arm64
+    WU2-AC1: weekly.yml builds Cube Store for linux/amd64
     WU2-AC2: values-test.yaml enables Cube Store with overridden image repository
     WU2-AC3: Resource requests fit Kind: API 50m/128Mi, Store 100m/256Mi
     WU2-AC4: StatefulSet supports image override via values
@@ -20,39 +20,39 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-NIGHTLY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "nightly.yml"
+WEEKLY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "weekly.yml"
 CUBE_STORE_DOCKERFILE = REPO_ROOT / "docker" / "cube-store" / "Dockerfile"
 VALUES_TEST = REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
 
 
-class TestNightlyWorkflow:
-    """Structural validation of nightly.yml workflow."""
+class TestWeeklyWorkflow:
+    """Structural validation of weekly.yml workflow."""
 
     @pytest.mark.requirement("WU2-AC1")
-    def test_nightly_workflow_exists(self) -> None:
-        """Verify nightly.yml workflow file exists."""
-        assert NIGHTLY_WORKFLOW.exists(), f"nightly.yml not found at {NIGHTLY_WORKFLOW}"
+    def test_weekly_workflow_exists(self) -> None:
+        """Verify weekly.yml workflow file exists."""
+        assert WEEKLY_WORKFLOW.exists(), f"weekly.yml not found at {WEEKLY_WORKFLOW}"
 
     @pytest.mark.requirement("WU2-AC1")
-    def test_nightly_has_cube_store_build_job(self) -> None:
-        """Verify nightly.yml contains a build-cube-store job.
+    def test_weekly_has_cube_store_build_job(self) -> None:
+        """Verify weekly.yml contains a build-cube-store job.
 
         The job must exist at the top level of the 'jobs' section.
         """
-        workflow = yaml.safe_load(NIGHTLY_WORKFLOW.read_text())
+        workflow = yaml.safe_load(WEEKLY_WORKFLOW.read_text())
         jobs = workflow.get("jobs", {})
         assert "build-cube-store" in jobs, (
             f"Missing 'build-cube-store' job in nightly.yml. Found jobs: {list(jobs.keys())}"
         )
 
     @pytest.mark.requirement("WU2-AC1")
-    def test_cube_store_job_has_multiarch_platforms(self) -> None:
-        """Verify build-cube-store job targets linux/amd64 and linux/arm64.
+    def test_cube_store_job_has_amd64_platform(self) -> None:
+        """Verify build-cube-store job targets linux/amd64.
 
-        The docker/build-push-action step must specify both platforms
-        to produce a multi-arch manifest.
+        Upstream cubejs/cubestore is AMD64-only (no ARM64 manifest),
+        so we only build for linux/amd64.
         """
-        workflow = yaml.safe_load(NIGHTLY_WORKFLOW.read_text())
+        workflow = yaml.safe_load(WEEKLY_WORKFLOW.read_text())
         job = workflow["jobs"]["build-cube-store"]
         steps = job.get("steps", [])
 
@@ -65,7 +65,6 @@ class TestNightlyWorkflow:
 
         platforms = build_step.get("with", {}).get("platforms", "")
         assert "linux/amd64" in platforms, "Missing linux/amd64 platform"
-        assert "linux/arm64" in platforms, "Missing linux/arm64 platform"
 
     @pytest.mark.requirement("WU2-AC1")
     def test_cube_store_job_pushes_to_ghcr(self) -> None:
@@ -73,7 +72,7 @@ class TestNightlyWorkflow:
 
         The image must be pushed to the project's OCI registry, not Docker Hub.
         """
-        workflow = yaml.safe_load(NIGHTLY_WORKFLOW.read_text())
+        workflow = yaml.safe_load(WEEKLY_WORKFLOW.read_text())
         job = workflow["jobs"]["build-cube-store"]
         steps = job.get("steps", [])
 
@@ -92,7 +91,7 @@ class TestNightlyWorkflow:
     @pytest.mark.requirement("WU2-AC1")
     def test_cube_store_job_has_packages_write_permission(self) -> None:
         """Verify build-cube-store has packages:write permission for GHCR push."""
-        workflow = yaml.safe_load(NIGHTLY_WORKFLOW.read_text())
+        workflow = yaml.safe_load(WEEKLY_WORKFLOW.read_text())
         job = workflow["jobs"]["build-cube-store"]
         permissions = job.get("permissions", {})
         assert permissions.get("packages") == "write", (
@@ -104,9 +103,9 @@ class TestNightlyWorkflow:
         """Verify build-push-action has push: true to publish images.
 
         Without push: true, images are built locally but never pushed
-        to GHCR, making the entire multi-arch build pipeline a no-op.
+        to GHCR, making the build pipeline a no-op.
         """
-        workflow = yaml.safe_load(NIGHTLY_WORKFLOW.read_text())
+        workflow = yaml.safe_load(WEEKLY_WORKFLOW.read_text())
         job = workflow["jobs"]["build-cube-store"]
         steps = job.get("steps", [])
 
@@ -123,10 +122,9 @@ class TestNightlyWorkflow:
 
     @pytest.mark.requirement("WU2-AC1")
     def test_cube_store_dockerfile_exists(self) -> None:
-        """Verify Cube Store Dockerfile exists for multi-arch build."""
+        """Verify Cube Store Dockerfile exists for build."""
         assert CUBE_STORE_DOCKERFILE.exists(), (
-            f"Dockerfile not found at {CUBE_STORE_DOCKERFILE}. "
-            "Required for multi-arch Cube Store build."
+            f"Dockerfile not found at {CUBE_STORE_DOCKERFILE}. Required for Cube Store build."
         )
 
     @pytest.mark.requirement("WU2-AC1")
@@ -242,7 +240,7 @@ class TestCubeStoreRollbackPath:
 
         The rollback path (cubeStore.enabled: false) is available via
         values-test.yaml. Cube Store tests now pass reliably with the
-        multi-arch GHCR image, so xfail markers have been removed.
+        GHCR image, so xfail markers have been removed.
         """
         content = self.E2E_DEPLOY_TEST.read_text()
         assert "test_cube_store_pod_running" in content, (

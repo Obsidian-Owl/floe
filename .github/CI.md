@@ -10,12 +10,12 @@ floe uses three GitHub Actions workflows optimized for speed and reliability.
 |---------|----------|----------|-----------|
 | **PR / Push to main** | `ci.yml` | ~3 min | Lint, type check, unit tests, contract tests, security |
 | **Tag v\*.\*.\*** | `release.yml` | ~15 min | Validate, integration tests (K8s), GitHub Release |
-| **2am UTC daily** | `nightly.yml` | ~10 min | Integration tests (K8s), dependency audit |
+| **2am UTC Monday** | `weekly.yml` | ~10 min | Integration tests (K8s), dependency audit |
 
 **Why this split?**
 - PRs get fast feedback (~3 min) for quick iteration
-- Integration tests (requiring K8s cluster) run on releases and nightly
-- Dependency vulnerabilities are caught within 24 hours
+- Integration tests (requiring K8s cluster) run on releases and weekly
+- Dependency vulnerabilities are caught within a week
 
 ---
 
@@ -104,9 +104,9 @@ The release workflow will:
 
 ---
 
-## Nightly Pipeline (`nightly.yml`)
+## Weekly Pipeline (`weekly.yml`)
 
-Scheduled at 2am UTC to catch regressions and vulnerabilities.
+Scheduled at 2am UTC every Monday to catch regressions and vulnerabilities.
 
 ### Jobs
 
@@ -114,13 +114,14 @@ Scheduled at 2am UTC to catch regressions and vulnerabilities.
 |-----|---------|
 | **integration-tests** | Full integration test suite in K8s |
 | **dependency-audit** | pip-audit for CVEs, stale dependency check |
+| **build-cube-store** | Rebuild Cube Store image for supply chain pinning |
 | **notify-failure** | Creates GitHub issue on failure |
 
 ### Manual Trigger
 
 ```bash
-# Run nightly pipeline manually
-gh workflow run nightly.yml
+# Run weekly pipeline manually
+gh workflow run weekly.yml
 ```
 
 ---
@@ -182,9 +183,9 @@ Integration tests run in K8s (Kind cluster). Common issues:
 | Connection refused | Database not initialized | PostgreSQL init script needs time |
 | Test timeout | Service crash loop | Check pod logs with `kubectl logs` |
 
-### Nightly Failure
+### Weekly Failure
 
-If nightly fails, a GitHub issue is created automatically with the `nightly-failure` label. Check the linked workflow run for details.
+If the weekly build fails, a GitHub issue is created automatically with the `weekly-failure` label. Check the linked workflow run for details.
 
 ---
 
@@ -210,7 +211,7 @@ Required checks before merging to `main`:
 |------|---------|
 | `.github/workflows/ci.yml` | PR/push pipeline |
 | `.github/workflows/release.yml` | Release pipeline (on tags) |
-| `.github/workflows/nightly.yml` | Scheduled tests + audit |
+| `.github/workflows/weekly.yml` | Scheduled tests + audit |
 | `.pre-commit-config.yaml` | Local hooks |
 | `testing/k8s/` | Kind cluster + service manifests |
 | `testing/ci/` | CI test runner scripts |

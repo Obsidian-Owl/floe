@@ -1,18 +1,21 @@
-# Nightly Pipeline - Scheduled integration tests and dependency audit
+# Weekly Pipeline - Scheduled integration tests and dependency audit
 #
-# Runs at 2am UTC daily to catch:
+# Runs at 2am UTC every Monday to catch:
 # - Integration test regressions
 # - Dependency vulnerabilities
 # - Stale dependencies
 #
+# Security: workflow_dispatch inputs are trusted (repo collaborators only).
+# All run: blocks use static commands or env vars — no untrusted interpolation.
+#
 # See .github/CI.md for workflow documentation
 
-name: Nightly
+name: Weekly
 
 on:
   schedule:
-    # Run at 2am UTC daily
-    - cron: '0 2 * * *'
+    # Run at 2am UTC every Monday
+    - cron: '0 2 * * 1'
   workflow_dispatch:
     inputs:
       run_integration:
@@ -26,7 +29,7 @@ on:
         default: true
         type: boolean
       run_cube_build:
-        description: 'Build multi-arch Cube Store image'
+        description: 'Build Cube Store image'
         required: false
         default: true
         type: boolean
@@ -76,7 +79,7 @@ jobs:
           ~/.local/bin/dbt --version
 
       - name: Setup Kind cluster and deploy services
-        run: CLUSTER_NAME=floe-nightly ./testing/k8s/setup-cluster.sh
+        run: CLUSTER_NAME=floe-weekly ./testing/k8s/setup-cluster.sh
         env:
           SKIP_MONITORING: "true"
 
@@ -91,7 +94,7 @@ jobs:
 
       - name: Cleanup Kind cluster
         if: always()
-        run: kind delete cluster --name floe-nightly || true
+        run: kind delete cluster --name floe-weekly || true
 
   # ============================================================
   # Dependency Audit
@@ -130,13 +133,12 @@ jobs:
           uv pip list --outdated || true
 
   # ============================================================
-  # Multi-Arch Cube Store Build
+  # Cube Store Build
   # ============================================================
-  # Upstream cubejs/cubestore is AMD64-only. This job builds a
-  # multi-arch image (amd64 + arm64) via QEMU emulation and
-  # pushes to GHCR for use in Kind clusters on Apple Silicon.
+  # Upstream cubejs/cubestore is AMD64-only (no ARM64 manifest).
+  # This job rebuilds and pushes to GHCR for supply chain pinning.
   build-cube-store:
-    name: Build Multi-Arch Cube Store
+    name: Build Cube Store
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'schedule' || inputs.run_cube_build == true }}
     permissions:
@@ -146,9 +148,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
@@ -160,11 +159,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push multi-arch Cube Store
+      - name: Build and push Cube Store
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6
         with:
           context: docker/cube-store
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ghcr.io/obsidian-owl/cube-store:0.36.0,ghcr.io/obsidian-owl/cube-store:latest
           cache-from: type=gha
@@ -198,7 +197,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-              labels: 'nightly-failure',
+              labels: 'weekly-failure',
               per_page: 10
             });
 
@@ -216,8 +215,8 @@ jobs:
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: `Nightly build failed: ${date}`,
-                body: `## Nightly Build Failure\n\n**Date**: ${date}\n**Run**: [#${process.env.GH_RUN_NUMBER}](${runUrl})\n\nPlease investigate the failure and fix any issues.`,
-                labels: ['nightly-failure', 'bug']
+                title: `Weekly build failed: ${date}`,
+                body: `## Weekly Build Failure\n\n**Date**: ${date}\n**Run**: [#${process.env.GH_RUN_NUMBER}](${runUrl})\n\nPlease investigate the failure and fix any issues.`,
+                labels: ['weekly-failure', 'bug']
               });
             }
