@@ -14,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from dagster import Definitions
-from dagster_dbt import DbtCliResource, dbt_assets
+from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
 from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
 
 # Get the path to this data product's dbt project
@@ -25,7 +25,7 @@ MANIFEST_PATH = DBT_PROJECT_DIR / "target" / "manifest.json"
 
 @dbt_assets(
     manifest=MANIFEST_PATH,
-    project=DbtCliResource(project_dir=DBT_PROJECT_DIR),
+    project=DbtProject(project_dir=DBT_PROJECT_DIR, profiles_dir=DBT_PROJECT_DIR),
     name="iot_telemetry_dbt_assets",
 )
 def iot_telemetry_dbt_assets(context, dbt: DbtCliResource):
