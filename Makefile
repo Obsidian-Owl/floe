@@ -365,7 +365,7 @@ build-demo-image: compile-demo ## Build Dagster demo Docker image and load to Ki
 		--platform $(DOCKER_PLATFORM) \
 		-t floe-dagster-demo:latest .
 	@echo "Loading image to Kind cluster..."
-	@kind load docker-image floe-dagster-demo:latest --name floe-test
+	@kind load docker-image floe-dagster-demo:latest --name $${KIND_CLUSTER_NAME:-floe-test}
 	@echo "Demo image built and loaded to Kind successfully!"
 
 demo: ## Deploy demo via DevPod (requires running DevPod workspace)

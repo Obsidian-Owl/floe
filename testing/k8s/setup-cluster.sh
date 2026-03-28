@@ -245,7 +245,7 @@ deploy_services_helm() {
     # The dagster webserver and daemon use floe-dagster-demo:latest with pullPolicy: Never
     if [[ -f "${PROJECT_ROOT}/docker/dagster-demo/Dockerfile" ]]; then
         log_info "Building Dagster demo image..."
-        make -C "${PROJECT_ROOT}" build-demo-image 2>&1 || {
+        KIND_CLUSTER_NAME="${CLUSTER_NAME}" make -C "${PROJECT_ROOT}" build-demo-image 2>&1 || {
             log_warn "Dagster demo image build failed — Dagster pods will be in ErrImageNeverPull"
         }
     fi
