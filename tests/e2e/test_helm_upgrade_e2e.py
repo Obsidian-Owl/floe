@@ -55,6 +55,7 @@ def _recover_stuck_release(release: str, namespace: str) -> None:
 
 
 @pytest.mark.e2e
+@pytest.mark.destructive
 @pytest.mark.requirement("AC-2.9")
 class TestHelmUpgrade:
     """Helm upgrade: rolling update + service continuity.

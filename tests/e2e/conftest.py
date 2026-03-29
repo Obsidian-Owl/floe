@@ -37,6 +37,10 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "e2e: mark test as end-to-end (requires full platform stack)",
     )
+    config.addinivalue_line(
+        "markers",
+        "destructive: mark test as destructive (helm upgrade, pod kill — requires elevated RBAC)",
+    )
 
     # Configure pytest-rerunfailures for E2E infrastructure resilience.
     # Scoped to E2E conftest so unit/contract/integration tests are unaffected.
