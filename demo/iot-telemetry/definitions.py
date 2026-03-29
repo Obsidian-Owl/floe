@@ -11,6 +11,7 @@ Regenerate with:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from dagster import Definitions
@@ -36,6 +37,14 @@ def _load_iceberg_resources() -> dict:
     return try_create_iceberg_resources(
         artifacts.plugins, governance=artifacts.governance,
     )
+
+
+_SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _is_safe_identifier(name: str) -> bool:
+    """Validate a SQL identifier against a safe pattern."""
+    return bool(_SAFE_IDENTIFIER_RE.match(name))
 
 
 def _export_dbt_to_iceberg(context) -> None:
@@ -86,8 +95,13 @@ def _export_dbt_to_iceberg(context) -> None:
         ).fetchall()
 
         for schema_name, table_name in tables_df:
+            if not _is_safe_identifier(schema_name) or not _is_safe_identifier(table_name):
+                context.log.warning(
+                    "Skipping unsafe identifier: %s.%s", schema_name, table_name,
+                )
+                continue
             qualified = f'{schema_name}.{table_name}' if schema_name != 'main' else table_name
-            arrow_table = conn.execute(f'SELECT * FROM "{qualified}"').fetch_arrow_table()
+            arrow_table = conn.execute(f'SELECT * FROM "{qualified}"').fetch_arrow_table()  # nosec B608
             if arrow_table.num_rows == 0:
                 continue
 

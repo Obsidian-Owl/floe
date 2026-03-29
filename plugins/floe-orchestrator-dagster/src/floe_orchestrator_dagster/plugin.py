@@ -1172,7 +1172,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         iceberg_post_build = ""
         if iceberg_enabled:
             iceberg_import = (
-                "\nfrom floe_core.schemas.compiled_artifacts import CompiledArtifacts"
+                "\nimport re"
+                "\n\nfrom floe_core.schemas.compiled_artifacts import CompiledArtifacts"
                 "\nfrom floe_orchestrator_dagster.resources.iceberg "
                 "import try_create_iceberg_resources\n"
             )
@@ -1192,6 +1193,14 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
 
 ARTIFACTS_PATH = PROJECT_DIR / "compiled_artifacts.json"
 DUCKDB_PATH = "/tmp/{safe_name}.duckdb"
+
+
+_SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _is_safe_identifier(name: str) -> bool:
+    """Validate a SQL identifier against a safe pattern."""
+    return bool(_SAFE_IDENTIFIER_RE.match(name))
 
 
 def _load_iceberg_resources() -> dict:
@@ -1252,8 +1261,13 @@ def _export_dbt_to_iceberg(context) -> None:
         ).fetchall()
 
         for schema_name, table_name in tables_df:
+            if not _is_safe_identifier(schema_name) or not _is_safe_identifier(table_name):
+                context.log.warning(
+                    "Skipping unsafe identifier: %%s.%%s", schema_name, table_name,
+                )
+                continue
             qualified = f'{{schema_name}}.{{table_name}}' if schema_name != 'main' else table_name
-            arrow_table = conn.execute(f'SELECT * FROM "{{qualified}}"').fetch_arrow_table()
+            arrow_table = conn.execute(f'SELECT * FROM "{{qualified}}"').fetch_arrow_table()  # nosec B608
             if arrow_table.num_rows == 0:
                 continue
 
