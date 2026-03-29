@@ -15,11 +15,9 @@ from pathlib import Path
 
 from dagster import Definitions
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
-
-from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
-
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
 
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent
