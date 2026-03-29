@@ -1,0 +1,93 @@
+---
+# Job for running destructive E2E tests inside K8s.
+# Only runs tests marked @pytest.mark.destructive (helm upgrade, pod kill).
+# Uses e2e-destructive-runner SA with elevated RBAC.
+# MUST run AFTER the standard E2E Job completes.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: floe-test-e2e-destructive
+  namespace: floe-test
+  labels:
+    app: floe-test-runner
+    test-type: e2e-destructive
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: floe-test-runner
+        test-type: e2e-destructive
+    spec:
+      restartPolicy: Never
+      serviceAccountName: e2e-destructive-runner
+      containers:
+        - name: test-runner
+          image: floe-test-runner:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--tb=short"
+            - "-v"
+            - "--color=yes"
+            - "tests/e2e/"
+            - "-m"
+            - "destructive"
+            - "--junitxml=/artifacts/e2e-destructive-results.xml"
+          env:
+            - name: INTEGRATION_TEST_HOST
+              value: "k8s"
+            - name: POSTGRES_HOST
+              value: postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: floe
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: MINIO_ENDPOINT
+              value: "http://minio:9000"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+            - name: AWS_REGION
+              value: us-east-1
+            - name: POLARIS_URI
+              value: "http://polaris:8181/api/catalog"
+            - name: POLARIS_CREDENTIAL
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-secret
+                  key: POLARIS_CREDENTIAL
+            - name: POLARIS_WAREHOUSE
+              value: "floe-e2e"
+            - name: POLARIS_SCOPE
+              value: "PRINCIPAL_ROLE:ALL"
+            - name: PYTHONPATH
+              value: "/app:/app/testing"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          volumeMounts:
+            - name: artifacts
+              mountPath: /artifacts
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: test-artifacts

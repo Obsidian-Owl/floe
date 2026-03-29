@@ -1,14 +1,15 @@
 #!/bin/bash
-# Integration test runner — executes tests INSIDE K8s Kind cluster
+# Test runner — executes tests INSIDE K8s Kind cluster
 #
 # This script builds a Docker image with all packages and test code,
 # loads it into the Kind cluster, and runs a K8s Job that executes
-# integration tests. Tests run in-cluster where K8s DNS resolves
-# service hostnames natively, eliminating S3 endpoint monkey-patching.
+# tests. Tests run in-cluster where K8s DNS resolves service hostnames
+# natively, eliminating tunnel/port-forward fragility.
 #
 # Usage: ./testing/ci/test-integration.sh [pytest-args...]
 #
 # Environment:
+#   TEST_SUITE          Test suite to run: integration|e2e|e2e-destructive (default: integration)
 #   KUBECONFIG          Path to kubeconfig (default: ~/.kube/config)
 #   TEST_NAMESPACE      K8s namespace for tests (default: floe-test)
 #   WAIT_TIMEOUT        Job completion timeout in seconds (default: 600)
@@ -18,6 +19,7 @@
 set -euo pipefail
 
 # Configuration
+TEST_SUITE="${TEST_SUITE:-integration}"
 KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
 TEST_NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-600}"
@@ -27,11 +29,35 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 IMAGE_NAME="floe-test-runner:latest"
-JOB_NAME="floe-test-integration"
+
+# Select Job name and manifest based on TEST_SUITE
+case "${TEST_SUITE}" in
+    integration)
+        JOB_NAME="floe-test-integration"
+        JOB_MANIFEST="testing/k8s/jobs/test-runner.yaml"
+        TEST_TYPE_LABEL="integration"
+        ;;
+    e2e)
+        JOB_NAME="floe-test-e2e"
+        JOB_MANIFEST="testing/k8s/jobs/test-e2e.yaml"
+        TEST_TYPE_LABEL="e2e"
+        ;;
+    e2e-destructive)
+        JOB_NAME="floe-test-e2e-destructive"
+        JOB_MANIFEST="testing/k8s/jobs/test-e2e-destructive.yaml"
+        TEST_TYPE_LABEL="e2e-destructive"
+        ;;
+    *)
+        echo "ERROR: Unknown TEST_SUITE '${TEST_SUITE}'. Use: integration|e2e|e2e-destructive" >&2
+        exit 1
+        ;;
+esac
 
 cd "${PROJECT_ROOT}"
 
-echo "=== Integration Test Runner (K8s) ==="
+echo "=== Test Runner (K8s In-Cluster) ==="
+echo "Suite: ${TEST_SUITE}"
+echo "Job: ${JOB_NAME}"
 echo "Namespace: ${TEST_NAMESPACE}"
 echo "Kind cluster: ${KIND_CLUSTER_NAME}"
 echo "Timeout: ${WAIT_TIMEOUT}s"
@@ -78,7 +104,22 @@ else
     echo ""
 fi
 
-# 3. Wait for service pods to be ready
+# 3. Apply RBAC and PVC for E2E suites
+if [[ "${TEST_SUITE}" == "e2e" ]]; then
+    echo "Applying E2E RBAC, secrets, and PVC..."
+    kubectl apply -f testing/k8s/rbac/e2e-test-runner.yaml || { echo "ERROR: Failed to apply E2E RBAC" >&2; exit 1; }
+    kubectl apply -f testing/k8s/secrets/polaris-secret.yaml || { echo "ERROR: Failed to apply polaris-secret" >&2; exit 1; }
+    kubectl apply -f testing/k8s/pvc/test-artifacts.yaml || { echo "ERROR: Failed to apply test-artifacts PVC" >&2; exit 1; }
+    echo ""
+elif [[ "${TEST_SUITE}" == "e2e-destructive" ]]; then
+    echo "Applying destructive E2E RBAC, secrets, and PVC..."
+    kubectl apply -f testing/k8s/rbac/e2e-destructive-runner.yaml || { echo "ERROR: Failed to apply destructive RBAC" >&2; exit 1; }
+    kubectl apply -f testing/k8s/secrets/polaris-secret.yaml || { echo "ERROR: Failed to apply polaris-secret" >&2; exit 1; }
+    kubectl apply -f testing/k8s/pvc/test-artifacts.yaml || { echo "ERROR: Failed to apply test-artifacts PVC" >&2; exit 1; }
+    echo ""
+fi
+
+# 4. Wait for service pods to be ready
 echo "Waiting for pods in ${TEST_NAMESPACE} to be ready..."
 if ! kubectl wait --for=condition=ready pods --all -n "${TEST_NAMESPACE}" --timeout=120s 2>/dev/null; then
     echo "WARNING: Some pods may not be ready" >&2
@@ -86,27 +127,27 @@ if ! kubectl wait --for=condition=ready pods --all -n "${TEST_NAMESPACE}" --time
 fi
 echo ""
 
-# 4. Delete any previous test Job (idempotent)
+# 5. Delete any previous test Job (idempotent)
 echo "Cleaning up previous test jobs..."
 kubectl delete job "${JOB_NAME}" -n "${TEST_NAMESPACE}" --ignore-not-found 2>/dev/null
 # Wait for pod cleanup
 sleep 2
 
-# 5. Apply the integration test Job from the manifest
-echo "Creating integration test Job..."
-kubectl apply -f testing/k8s/jobs/test-runner.yaml 2>/dev/null | grep "floe-test-integration" || true
+# 6. Apply the test Job from the manifest
+echo "Creating ${TEST_SUITE} test Job..."
+kubectl apply -f "${JOB_MANIFEST}" 2>/dev/null | grep "${JOB_NAME}" || true
 echo ""
 
-# 6. Wait for test pod to start
+# 7. Wait for test pod to start
 echo "Waiting for test pod to start..."
 for i in $(seq 1 60); do
-    pod_status=$(kubectl get pods -l test-type=integration -n "${TEST_NAMESPACE}" -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "")
+    pod_status=$(kubectl get pods -l "test-type=${TEST_TYPE_LABEL}" -n "${TEST_NAMESPACE}" -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "")
     if [[ "${pod_status}" == "Running" || "${pod_status}" == "Succeeded" || "${pod_status}" == "Failed" ]]; then
         break
     fi
     if [[ $i -eq 60 ]]; then
         echo "ERROR: Test pod did not start within 60s" >&2
-        kubectl get pods -n "${TEST_NAMESPACE}" -l test-type=integration 2>/dev/null
+        kubectl get pods -n "${TEST_NAMESPACE}" -l "test-type=${TEST_TYPE_LABEL}" 2>/dev/null
         exit 1
     fi
     sleep 1
@@ -114,30 +155,63 @@ done
 echo "Test pod is running."
 echo ""
 
-# 7. Stream logs (follows until Job completes)
+# 8. Stream logs (follows until Job completes)
 echo "=== Test Output ==="
 kubectl logs -f "job/${JOB_NAME}" -n "${TEST_NAMESPACE}" --tail=-1 2>/dev/null || true
 echo "=== End Test Output ==="
 echo ""
 
-# 8. Check Job status
+# 9. Extract JUnit XML from PVC (E2E suites only)
+if [[ "${TEST_SUITE}" == "e2e" || "${TEST_SUITE}" == "e2e-destructive" ]]; then
+    echo "Extracting test artifacts from PVC..."
+    # Create helper pod to access PVC
+    kubectl run artifact-extractor \
+        --image=busybox:1.36.1 \
+        --restart=Never \
+        -n "${TEST_NAMESPACE}" \
+        --overrides='{
+            "spec": {
+                "volumes": [{"name": "artifacts", "persistentVolumeClaim": {"claimName": "test-artifacts"}}],
+                "containers": [{"name": "extractor", "image": "busybox:1.36.1", "command": ["sleep", "30"],
+                    "volumeMounts": [{"name": "artifacts", "mountPath": "/artifacts"}]}]
+            }
+        }' 2>/dev/null || echo "WARNING: Failed to create artifact-extractor pod — JUnit XML will be missing" >&2
+
+    # Wait for helper pod
+    kubectl wait --for=condition=ready pod/artifact-extractor -n "${TEST_NAMESPACE}" --timeout=30s 2>/dev/null || true
+
+    # Copy artifacts
+    if [[ "${TEST_SUITE}" == "e2e" ]]; then
+        kubectl cp "${TEST_NAMESPACE}/artifact-extractor:/artifacts/e2e-results.xml" ./e2e-results.xml 2>/dev/null || \
+            echo "WARNING: Could not extract e2e-results.xml" >&2
+    else
+        kubectl cp "${TEST_NAMESPACE}/artifact-extractor:/artifacts/e2e-destructive-results.xml" ./e2e-destructive-results.xml 2>/dev/null || \
+            echo "WARNING: Could not extract e2e-destructive-results.xml" >&2
+    fi
+
+    # Clean up helper pod
+    kubectl delete pod artifact-extractor -n "${TEST_NAMESPACE}" --ignore-not-found 2>/dev/null || true
+    echo ""
+fi
+
+# 10. Check Job status
 echo "Checking Job status..."
 JOB_SUCCEEDED=$(kubectl get job "${JOB_NAME}" -n "${TEST_NAMESPACE}" -o jsonpath='{.status.succeeded}' 2>/dev/null || echo "")
 JOB_FAILED=$(kubectl get job "${JOB_NAME}" -n "${TEST_NAMESPACE}" -o jsonpath='{.status.failed}' 2>/dev/null || echo "")
 
 if [[ "${JOB_SUCCEEDED}" == "1" ]]; then
-    echo "Integration tests PASSED"
+    echo "${TEST_SUITE} tests PASSED"
     exit 0
 elif [[ "${JOB_FAILED}" == "1" ]]; then
-    echo "Integration tests FAILED" >&2
+    echo "${TEST_SUITE} tests FAILED" >&2
     exit 1
 else
     # Wait for job completion with timeout
     if kubectl wait --for=condition=complete "job/${JOB_NAME}" -n "${TEST_NAMESPACE}" --timeout="${WAIT_TIMEOUT}s" 2>/dev/null; then
-        echo "Integration tests PASSED"
+        echo "${TEST_SUITE} tests PASSED"
         exit 0
     else
-        echo "Integration tests FAILED or timed out" >&2
+        echo "${TEST_SUITE} tests FAILED or timed out" >&2
         kubectl get job "${JOB_NAME}" -n "${TEST_NAMESPACE}" -o yaml 2>/dev/null | grep -A5 "status:" || true
         exit 1
     fi

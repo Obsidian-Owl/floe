@@ -26,6 +26,7 @@ import httpx
 import pytest
 
 from testing.fixtures.polling import wait_for_condition
+from testing.fixtures.services import ServiceEndpoint
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -177,7 +178,10 @@ class TestObservabilityRoundTrip:
         from opentelemetry import trace as otel_trace
         from opentelemetry.sdk.trace import TracerProvider as SdkTracerProvider
 
-        otel_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+        otel_endpoint = os.environ.get(
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            ServiceEndpoint("otel-collector-grpc").url,
+        )
         saved_env: dict[str, str | None] = {
             "OTEL_EXPORTER_OTLP_ENDPOINT": os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"),
             "OTEL_EXPORTER_OTLP_INSECURE": os.environ.get("OTEL_EXPORTER_OTLP_INSECURE"),

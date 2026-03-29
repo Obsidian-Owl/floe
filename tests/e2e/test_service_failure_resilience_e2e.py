@@ -42,6 +42,7 @@ NAMESPACE = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
 
 
 @pytest.mark.e2e
+@pytest.mark.destructive
 @pytest.mark.requirement("AC-2.7")
 class TestServiceFailureResilience:
     """Service failure resilience: kill pod → graceful error.
