@@ -1,0 +1,71 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: e2e-test-runner
+  namespace: floe-test
+  labels:
+    app.kubernetes.io/component: testing
+    app.kubernetes.io/part-of: floe-platform
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: e2e-test-runner
+  namespace: floe-test
+  labels:
+    app.kubernetes.io/component: testing
+    app.kubernetes.io/part-of: floe-platform
+rules:
+  # Pod operations (same as dagster Role)
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log", "pods/status"]
+    verbs: ["get", "list", "watch"]
+  # Pod exec (for tests that kubectl exec into pods)
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  # ConfigMaps (same as dagster Role)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+  # Events (same as dagster Role)
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create"]
+  # Jobs (same as dagster Role)
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  # Services (same as dagster Role)
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+  # PVCs (same as dagster Role)
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+  # Secrets read-only (for Helm release state queries)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: e2e-test-runner
+  namespace: floe-test
+  labels:
+    app.kubernetes.io/component: testing
+    app.kubernetes.io/part-of: floe-platform
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: e2e-test-runner
+subjects:
+  - kind: ServiceAccount
+    name: e2e-test-runner
+    namespace: floe-test
