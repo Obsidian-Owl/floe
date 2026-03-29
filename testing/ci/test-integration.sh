@@ -44,7 +44,7 @@ case "${TEST_SUITE}" in
         ;;
     e2e-destructive)
         JOB_NAME="floe-test-e2e-destructive"
-        JOB_MANIFEST="testing/k8s/jobs/test-e2e.yaml"
+        JOB_MANIFEST="testing/k8s/jobs/test-e2e-destructive.yaml"
         TEST_TYPE_LABEL="e2e-destructive"
         ;;
     *)
@@ -107,13 +107,13 @@ fi
 # 3. Apply RBAC and PVC for E2E suites
 if [[ "${TEST_SUITE}" == "e2e" ]]; then
     echo "Applying E2E RBAC and PVC..."
-    kubectl apply -f testing/k8s/rbac/e2e-test-runner.yaml 2>/dev/null || true
-    kubectl apply -f testing/k8s/pvc/test-artifacts.yaml 2>/dev/null || true
+    kubectl apply -f testing/k8s/rbac/e2e-test-runner.yaml || { echo "ERROR: Failed to apply E2E RBAC" >&2; exit 1; }
+    kubectl apply -f testing/k8s/pvc/test-artifacts.yaml || { echo "ERROR: Failed to apply test-artifacts PVC" >&2; exit 1; }
     echo ""
 elif [[ "${TEST_SUITE}" == "e2e-destructive" ]]; then
     echo "Applying destructive E2E RBAC and PVC..."
-    kubectl apply -f testing/k8s/rbac/e2e-destructive-runner.yaml 2>/dev/null || true
-    kubectl apply -f testing/k8s/pvc/test-artifacts.yaml 2>/dev/null || true
+    kubectl apply -f testing/k8s/rbac/e2e-destructive-runner.yaml || { echo "ERROR: Failed to apply destructive RBAC" >&2; exit 1; }
+    kubectl apply -f testing/k8s/pvc/test-artifacts.yaml || { echo "ERROR: Failed to apply test-artifacts PVC" >&2; exit 1; }
     echo ""
 fi
 

@@ -87,6 +87,7 @@ jobs:
         run: ./testing/ci/test-integration.sh
         env:
           TEST_NAMESPACE: floe-test
+          KIND_CLUSTER_NAME: floe-weekly
 
       - name: Collect logs on failure
         if: failure()
@@ -144,6 +145,7 @@ jobs:
         env:
           TEST_SUITE: e2e
           TEST_NAMESPACE: floe-test
+          KIND_CLUSTER_NAME: floe-e2e
           WAIT_TIMEOUT: "1800"
 
       - name: Run destructive E2E tests
@@ -152,6 +154,7 @@ jobs:
         env:
           TEST_SUITE: e2e-destructive
           TEST_NAMESPACE: floe-test
+          KIND_CLUSTER_NAME: floe-e2e
           SKIP_BUILD: "true"
           WAIT_TIMEOUT: "900"
 
