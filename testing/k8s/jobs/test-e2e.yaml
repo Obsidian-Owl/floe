@@ -37,7 +37,7 @@ spec:
             - name: INTEGRATION_TEST_HOST
               value: "k8s"
             - name: POSTGRES_HOST
-              value: postgres
+              value: floe-platform-postgresql
             - name: POSTGRES_PORT
               value: "5432"
             - name: POSTGRES_USER
@@ -45,24 +45,24 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgres-secret
-                  key: POSTGRES_PASSWORD
+                  name: floe-platform-postgresql
+                  key: postgresql-password
             - name: MINIO_ENDPOINT
-              value: "http://minio:9000"
+              value: "http://floe-platform-minio:9000"
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: minio-secret
-                  key: MINIO_ROOT_USER
+                  name: floe-platform-minio
+                  key: root-user
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: minio-secret
-                  key: MINIO_ROOT_PASSWORD
+                  name: floe-platform-minio
+                  key: root-password
             - name: AWS_REGION
               value: us-east-1
             - name: POLARIS_URI
-              value: "http://polaris:8181/api/catalog"
+              value: "http://floe-platform-polaris:8181/api/catalog"
             - name: POLARIS_CREDENTIAL
               valueFrom:
                 secretKeyRef:
@@ -72,6 +72,29 @@ spec:
               value: "floe-e2e"
             - name: POLARIS_SCOPE
               value: "PRINCIPAL_ROLE:ALL"
+            # ServiceEndpoint host overrides (Helm names != short names)
+            - name: POLARIS_HOST
+              value: floe-platform-polaris
+            - name: POLARIS_MANAGEMENT_HOST
+              value: floe-platform-polaris
+            - name: MINIO_HOST
+              value: floe-platform-minio
+            - name: MINIO_CONSOLE_HOST
+              value: floe-platform-minio
+            - name: MARQUEZ_HOST
+              value: floe-platform-marquez
+            - name: DAGSTER_WEBSERVER_HOST
+              value: floe-platform-dagster-webserver
+            - name: JAEGER_QUERY_HOST
+              value: floe-platform-jaeger-query
+            - name: JAEGER_AGENT_HOST
+              value: floe-platform-jaeger-agent
+            - name: JAEGER_COLLECTOR_HOST
+              value: floe-platform-jaeger-collector
+            - name: OTEL_HOST
+              value: floe-platform-otel
+            - name: OTEL_COLLECTOR_GRPC_HOST
+              value: floe-platform-otel
             - name: PYTHONPATH
               value: "/app:/app/testing"
             - name: PYTHONUNBUFFERED
