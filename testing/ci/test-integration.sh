@@ -106,13 +106,15 @@ fi
 
 # 3. Apply RBAC and PVC for E2E suites
 if [[ "${TEST_SUITE}" == "e2e" ]]; then
-    echo "Applying E2E RBAC and PVC..."
+    echo "Applying E2E RBAC, secrets, and PVC..."
     kubectl apply -f testing/k8s/rbac/e2e-test-runner.yaml || { echo "ERROR: Failed to apply E2E RBAC" >&2; exit 1; }
+    kubectl apply -f testing/k8s/secrets/polaris-secret.yaml || { echo "ERROR: Failed to apply polaris-secret" >&2; exit 1; }
     kubectl apply -f testing/k8s/pvc/test-artifacts.yaml || { echo "ERROR: Failed to apply test-artifacts PVC" >&2; exit 1; }
     echo ""
 elif [[ "${TEST_SUITE}" == "e2e-destructive" ]]; then
-    echo "Applying destructive E2E RBAC and PVC..."
+    echo "Applying destructive E2E RBAC, secrets, and PVC..."
     kubectl apply -f testing/k8s/rbac/e2e-destructive-runner.yaml || { echo "ERROR: Failed to apply destructive RBAC" >&2; exit 1; }
+    kubectl apply -f testing/k8s/secrets/polaris-secret.yaml || { echo "ERROR: Failed to apply polaris-secret" >&2; exit 1; }
     kubectl apply -f testing/k8s/pvc/test-artifacts.yaml || { echo "ERROR: Failed to apply test-artifacts PVC" >&2; exit 1; }
     echo ""
 fi
@@ -164,16 +166,16 @@ if [[ "${TEST_SUITE}" == "e2e" || "${TEST_SUITE}" == "e2e-destructive" ]]; then
     echo "Extracting test artifacts from PVC..."
     # Create helper pod to access PVC
     kubectl run artifact-extractor \
-        --image=busybox \
+        --image=busybox:1.36.1 \
         --restart=Never \
         -n "${TEST_NAMESPACE}" \
         --overrides='{
             "spec": {
                 "volumes": [{"name": "artifacts", "persistentVolumeClaim": {"claimName": "test-artifacts"}}],
-                "containers": [{"name": "extractor", "image": "busybox", "command": ["sleep", "30"],
+                "containers": [{"name": "extractor", "image": "busybox:1.36.1", "command": ["sleep", "30"],
                     "volumeMounts": [{"name": "artifacts", "mountPath": "/artifacts"}]}]
             }
-        }' 2>/dev/null || true
+        }' 2>/dev/null || echo "WARNING: Failed to create artifact-extractor pod — JUnit XML will be missing" >&2
 
     # Wait for helper pod
     kubectl wait --for=condition=ready pod/artifact-extractor -n "${TEST_NAMESPACE}" --timeout=30s 2>/dev/null || true

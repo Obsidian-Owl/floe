@@ -8,6 +8,9 @@ metadata:
     app.kubernetes.io/component: testing
     app.kubernetes.io/part-of: floe-platform
 spec:
+  # ReadWriteOnce is sufficient: standard and destructive Jobs run sequentially,
+  # and Kind uses a single-node cluster. For multi-node clusters, use ReadWriteMany
+  # or separate PVCs per Job.
   accessModes:
     - ReadWriteOnce
   resources:

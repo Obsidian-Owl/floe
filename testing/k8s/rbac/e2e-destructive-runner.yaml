@@ -43,15 +43,15 @@ rules:
     resources: ["persistentvolumeclaims"]
     verbs: ["get", "list", "watch"]
   # --- Elevated permissions for destructive tests ---
-  # Secrets CRUD (Helm release state management)
+  # Secrets CRUD — required by TestHelmUpgrade (Helm stores release state in secrets)
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "list", "watch", "create", "update", "delete"]
-  # Deployments (for upgrade tests)
+  # Deployments — required by TestHelmUpgrade (helm upgrade patches deployments)
   - apiGroups: ["apps"]
     resources: ["deployments"]
     verbs: ["get", "list", "patch", "delete"]
-  # StatefulSets (for upgrade tests)
+  # StatefulSets — required by TestHelmUpgrade (helm upgrade patches statefulsets)
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
     verbs: ["get", "list", "patch", "delete"]

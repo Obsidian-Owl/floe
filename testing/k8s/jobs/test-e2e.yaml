@@ -64,7 +64,10 @@ spec:
             - name: POLARIS_URI
               value: "http://polaris:8181/api/catalog"
             - name: POLARIS_CREDENTIAL
-              value: "demo-admin:demo-secret"
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-secret
+                  key: POLARIS_CREDENTIAL
             - name: POLARIS_WAREHOUSE
               value: "floe-e2e"
             - name: POLARIS_SCOPE
