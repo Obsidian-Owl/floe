@@ -26,6 +26,12 @@ RUN KUBECTL_VERSION=$(curl --proto '=https' --tlsv1.2 -fsSL https://dl.k8s.io/re
     && chmod +x kubectl \
     && mv kubectl /usr/local/bin/
 
+# Install Helm 3 CLI (needed by destructive E2E tests that run helm upgrade)
+# hadolint ignore=DL3059
+RUN curl --proto '=https' --tlsv1.2 -fsSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz \
+    | tar xz --strip-components=1 -C /usr/local/bin linux-amd64/helm \
+    && helm version --short
+
 # =============================================================================
 # dbt Fusion CLI - Install from official distribution
 # =============================================================================
