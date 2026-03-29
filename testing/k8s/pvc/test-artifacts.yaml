@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-artifacts
+  namespace: floe-test
+  labels:
+    app.kubernetes.io/component: testing
+    app.kubernetes.io/part-of: floe-platform
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
