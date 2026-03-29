@@ -16,20 +16,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv for fast package management
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# Install uv for fast package management (pinned version for reproducibility)
+COPY --from=ghcr.io/astral-sh/uv:0.11.2 /uv /usr/local/bin/uv
 
-# Install kubectl (enforce HTTPS, TLS 1.2+)
+# Install kubectl (enforce HTTPS, TLS 1.2+, checksum verification)
 # hadolint ignore=DL3059
 RUN KUBECTL_VERSION=$(curl --proto '=https' --tlsv1.2 -fsSL https://dl.k8s.io/release/stable.txt) \
     && curl --proto '=https' --tlsv1.2 -fsSLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+    && curl --proto '=https' --tlsv1.2 -fsSLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256" \
+    && echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check \
+    && rm kubectl.sha256 \
     && chmod +x kubectl \
     && mv kubectl /usr/local/bin/
 
-# Install Helm 3 CLI (needed by destructive E2E tests that run helm upgrade)
+# Install Helm 4 CLI (needed by destructive E2E tests that run helm upgrade)
 # hadolint ignore=DL3059
-RUN curl --proto '=https' --tlsv1.2 -fsSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz \
-    | tar xz --strip-components=1 -C /usr/local/bin linux-amd64/helm \
+RUN curl --proto '=https' --tlsv1.2 -fsSLO https://get.helm.sh/helm-v4.1.3-linux-amd64.tar.gz \
+    && curl --proto '=https' --tlsv1.2 -fsSLO https://get.helm.sh/helm-v4.1.3-linux-amd64.tar.gz.sha256sum \
+    && sha256sum --check helm-v4.1.3-linux-amd64.tar.gz.sha256sum \
+    && tar xz --strip-components=1 -C /usr/local/bin linux-amd64/helm < helm-v4.1.3-linux-amd64.tar.gz \
+    && rm helm-v4.1.3-linux-amd64.tar.gz helm-v4.1.3-linux-amd64.tar.gz.sha256sum \
     && helm version --short
 
 # =============================================================================
@@ -40,8 +46,12 @@ RUN curl --proto '=https' --tlsv1.2 -fsSL https://get.helm.sh/helm-v3.14.0-linux
 #
 # See: https://docs.getdbt.com/docs/fusion/install-fusion-cli
 
+# Download first, then execute (CWE-78 mitigation — no pipe-to-shell)
 # hadolint ignore=DL3059
-RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update \
+RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh -o /tmp/dbt-install.sh \
+    && chmod +x /tmp/dbt-install.sh \
+    && /tmp/dbt-install.sh --update \
+    && rm -f /tmp/dbt-install.sh \
     && ln -sf /root/.local/bin/dbt /usr/local/bin/dbt \
     && dbt --version
 
