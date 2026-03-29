@@ -29,6 +29,7 @@ import pytest
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
+from testing.fixtures.services import ServiceEndpoint
 
 
 class TestObservability(IntegrationTestBase):
@@ -539,7 +540,7 @@ class TestObservability(IntegrationTestBase):
         # (non-zero) trace_ids that add_trace_context will inject into logs.
         old_otlp = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
         old_insecure = os.environ.get("OTEL_EXPORTER_OTLP_INSECURE")
-        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = ServiceEndpoint("otel-collector-grpc").url
         os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
 
         # Capture log output during compilation
@@ -1161,7 +1162,7 @@ class TestObservability(IntegrationTestBase):
         old_insecure = os.environ.get("OTEL_EXPORTER_OTLP_INSECURE")
         old_service = os.environ.get("OTEL_SERVICE_NAME")
 
-        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = ServiceEndpoint("otel-collector-grpc").url
         os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
         os.environ["OTEL_SERVICE_NAME"] = "customer-360"
         try:
