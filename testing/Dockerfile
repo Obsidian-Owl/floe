@@ -47,6 +47,8 @@ RUN curl --proto '=https' --tlsv1.2 -fsSLO https://get.helm.sh/helm-v4.1.3-linux
 # See: https://docs.getdbt.com/docs/fusion/install-fusion-cli
 
 # Download first, then execute (CWE-78 mitigation — no pipe-to-shell)
+# SHELL env var required by dbt Fusion install script (not set in Docker /bin/sh)
+ENV SHELL=/bin/bash
 # hadolint ignore=DL3059
 RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh -o /tmp/dbt-install.sh \
     && chmod +x /tmp/dbt-install.sh \
