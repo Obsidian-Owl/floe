@@ -15,12 +15,98 @@ from pathlib import Path
 
 from dagster import Definitions
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
+
 from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
+
+from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent
 DBT_PROJECT_DIR = PROJECT_DIR
 MANIFEST_PATH = DBT_PROJECT_DIR / "target" / "manifest.json"
+
+ARTIFACTS_PATH = PROJECT_DIR / "compiled_artifacts.json"
+DUCKDB_PATH = "/tmp/financial_risk.duckdb"
+
+
+def _load_iceberg_resources() -> dict:
+    """Load Iceberg resources from compiled_artifacts.json."""
+    if not ARTIFACTS_PATH.exists():
+        return {}
+    artifacts = CompiledArtifacts.model_validate_json(ARTIFACTS_PATH.read_text())
+    return try_create_iceberg_resources(
+        artifacts.plugins, governance=artifacts.governance,
+    )
+
+
+def _export_dbt_to_iceberg(context) -> None:
+    """Export dbt model outputs from DuckDB to Iceberg tables."""
+    import duckdb
+    from pyiceberg.catalog import load_catalog
+
+    if not Path(DUCKDB_PATH).exists():
+        context.log.warning(
+            "DuckDB file not found at %s — skipping Iceberg export", DUCKDB_PATH,
+        )
+        return
+
+    if not ARTIFACTS_PATH.exists():
+        context.log.warning("compiled_artifacts.json not found — skipping Iceberg export")
+        return
+
+    artifacts = CompiledArtifacts.model_validate_json(ARTIFACTS_PATH.read_text())
+    if artifacts.plugins is None or artifacts.plugins.catalog is None:
+        context.log.info("No catalog plugin configured — skipping Iceberg export")
+        return
+
+    catalog_config = artifacts.plugins.catalog.config or {}
+    storage_config = artifacts.plugins.storage.config or {} if artifacts.plugins.storage else {}
+
+    catalog = load_catalog(
+        "polaris",
+        type="rest",
+        uri=catalog_config.get("uri", ""),
+        credential=catalog_config.get("credential", ""),
+        warehouse=catalog_config.get("warehouse", ""),
+        **{f"s3.{k}": v for k, v in storage_config.items()},
+    )
+
+    product_namespace = "financial_risk"
+
+    try:
+        catalog.create_namespace(product_namespace)
+        context.log.info("Created Iceberg namespace: %s", product_namespace)
+    except Exception:
+        pass  # Namespace already exists
+
+    conn = duckdb.connect(DUCKDB_PATH, read_only=True)
+    try:
+        tables_df = conn.execute(
+            "SELECT table_schema, table_name FROM information_schema.tables "
+            "WHERE table_schema NOT IN ('information_schema', 'pg_catalog')"
+        ).fetchall()
+
+        for schema_name, table_name in tables_df:
+            qualified = f'{schema_name}.{table_name}' if schema_name != 'main' else table_name
+            arrow_table = conn.execute(f'SELECT * FROM "{qualified}"').fetch_arrow_table()
+            if arrow_table.num_rows == 0:
+                continue
+
+            iceberg_id = f"{product_namespace}.{table_name}"
+            try:
+                iceberg_table = catalog.load_table(iceberg_id)
+                iceberg_table.overwrite(arrow_table)
+            except Exception:
+                iceberg_table = catalog.create_table(
+                    iceberg_id, schema=arrow_table.schema,
+                )
+                iceberg_table.append(arrow_table)
+            context.log.info(
+                "Exported %s to Iceberg (%d rows)", table_name, arrow_table.num_rows,
+            )
+    finally:
+        conn.close()
 
 
 @dbt_assets(
@@ -36,6 +122,9 @@ def financial_risk_dbt_assets(context, dbt: DbtCliResource):
     """
     yield from dbt.cli(["build"], context=context).stream()
 
+    # Post-build: export dbt output to Iceberg tables
+    _export_dbt_to_iceberg(context)
+
 
 # Create Definitions object for Dagster to discover
 defs = Definitions(
@@ -46,5 +135,6 @@ defs = Definitions(
             profiles_dir=DBT_PROJECT_DIR,
         ),
         **try_create_lineage_resource(None),
+        **_load_iceberg_resources(),
     },
 )

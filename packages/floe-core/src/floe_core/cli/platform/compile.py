@@ -352,12 +352,20 @@ def _generate_orchestrator_entry_point(
     # Determine if lineage is enabled from artifacts
     lineage_enabled = artifacts.observability.lineage
 
+    # Determine if Iceberg storage is configured (catalog + storage plugins)
+    iceberg_enabled = (
+        artifacts.plugins is not None
+        and artifacts.plugins.catalog is not None
+        and artifacts.plugins.storage is not None
+    )
+
     # Delegate code generation to the plugin
     # This respects component ownership: plugin owns its code generation
     entry_point_path = plugin.generate_entry_point_code(
         product_name=product_name,
         output_dir=str(output_dir),
         lineage_enabled=lineage_enabled,
+        iceberg_enabled=iceberg_enabled,
     )
 
     return entry_point_path

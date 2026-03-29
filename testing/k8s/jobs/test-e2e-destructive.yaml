@@ -84,6 +84,8 @@ spec:
               value: floe-platform-minio
             - name: MARQUEZ_HOST
               value: floe-platform-marquez
+            - name: DAGSTER_HOST
+              value: floe-platform-dagster-webserver
             - name: DAGSTER_WEBSERVER_HOST
               value: floe-platform-dagster-webserver
             - name: JAEGER_QUERY_HOST

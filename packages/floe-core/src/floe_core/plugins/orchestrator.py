@@ -398,6 +398,7 @@ class OrchestratorPlugin(PluginMetadata):
         output_dir: str,
         *,
         lineage_enabled: bool = False,
+        iceberg_enabled: bool = False,
     ) -> str:
         """Generate orchestrator-specific entry point code file.
 
@@ -416,6 +417,9 @@ class OrchestratorPlugin(PluginMetadata):
             lineage_enabled: Whether OpenLineage is enabled in the manifest.
                 When True, the generated entry point should include lineage
                 resource wiring (e.g., LineageResource for Dagster).
+            iceberg_enabled: Whether Iceberg storage is configured.
+                When True, the generated entry point should include
+                Iceberg resource wiring and post-build table export.
 
         Returns:
             Path to the generated entry point file as string.
@@ -425,6 +429,7 @@ class OrchestratorPlugin(PluginMetadata):
             ...     product_name="customer-360",
             ...     output_dir="/path/to/product",
             ...     lineage_enabled=True,
+            ...     iceberg_enabled=True,
             ... )
             >>> # For Dagster: returns "/path/to/product/definitions.py"
             >>> # For Airflow: returns "/path/to/product/dag.py"

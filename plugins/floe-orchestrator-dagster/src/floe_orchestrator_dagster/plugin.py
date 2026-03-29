@@ -1103,6 +1103,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         output_dir: str,
         *,
         lineage_enabled: bool = False,
+        iceberg_enabled: bool = False,
     ) -> str:
         """Generate Dagster definitions.py entry point file.
 
@@ -1114,6 +1115,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         - Uses dagster-dbt's @dbt_assets decorator for dbt integration
         - Configures DbtProject for @dbt_assets and DbtCliResource for runtime
         - Optionally includes LineageResource for OpenLineage emission
+        - Optionally includes Iceberg resource wiring and post-build export
         - Exports a `defs` variable for Dagster workspace discovery
 
         Args:
@@ -1122,6 +1124,10 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             lineage_enabled: Whether to include LineageResource in the
                 generated definitions. When True, the generated file imports
                 and wires LineageResource for runtime OpenLineage emission.
+            iceberg_enabled: Whether to include Iceberg resource wiring.
+                When True, the generated file loads compiled_artifacts.json,
+                creates Iceberg resources, and exports dbt output to Iceberg
+                tables after each materialization run.
 
         Returns:
             Path to the generated definitions.py file as string.
@@ -1132,6 +1138,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             ...     product_name="customer-360",
             ...     output_dir="/path/to/product",
             ...     lineage_enabled=True,
+            ...     iceberg_enabled=True,
             ... )
             >>> path
             '/path/to/product/definitions.py'
@@ -1159,6 +1166,114 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             )
             lineage_resource = "        **try_create_lineage_resource(None),\n"
 
+        # Build conditional Iceberg sections
+        iceberg_import = ""
+        iceberg_resource = ""
+        iceberg_post_build = ""
+        if iceberg_enabled:
+            iceberg_import = (
+                "\nfrom floe_core.schemas.compiled_artifacts import CompiledArtifacts"
+                "\nfrom floe_orchestrator_dagster.resources.iceberg "
+                "import try_create_iceberg_resources\n"
+            )
+            iceberg_resource = (
+                "        **_load_iceberg_resources(),\n"
+            )
+            iceberg_post_build = (
+                "\n"
+                "    # Post-build: export dbt output to Iceberg tables\n"
+                "    _export_dbt_to_iceberg(context)\n"
+            )
+
+        # Iceberg helper functions (only included when iceberg_enabled)
+        iceberg_helpers = ""
+        if iceberg_enabled:
+            iceberg_helpers = f'''
+
+ARTIFACTS_PATH = PROJECT_DIR / "compiled_artifacts.json"
+DUCKDB_PATH = "/tmp/{safe_name}.duckdb"
+
+
+def _load_iceberg_resources() -> dict:
+    """Load Iceberg resources from compiled_artifacts.json."""
+    if not ARTIFACTS_PATH.exists():
+        return {{}}
+    artifacts = CompiledArtifacts.model_validate_json(ARTIFACTS_PATH.read_text())
+    return try_create_iceberg_resources(
+        artifacts.plugins, governance=artifacts.governance,
+    )
+
+
+def _export_dbt_to_iceberg(context) -> None:
+    """Export dbt model outputs from DuckDB to Iceberg tables."""
+    import duckdb
+    from pyiceberg.catalog import load_catalog
+
+    if not Path(DUCKDB_PATH).exists():
+        context.log.warning(
+            "DuckDB file not found at %s — skipping Iceberg export", DUCKDB_PATH,
+        )
+        return
+
+    if not ARTIFACTS_PATH.exists():
+        context.log.warning("compiled_artifacts.json not found — skipping Iceberg export")
+        return
+
+    artifacts = CompiledArtifacts.model_validate_json(ARTIFACTS_PATH.read_text())
+    if artifacts.plugins is None or artifacts.plugins.catalog is None:
+        context.log.info("No catalog plugin configured — skipping Iceberg export")
+        return
+
+    catalog_config = artifacts.plugins.catalog.config or {{}}
+    storage_config = artifacts.plugins.storage.config or {{}} if artifacts.plugins.storage else {{}}
+
+    catalog = load_catalog(
+        "polaris",
+        type="rest",
+        uri=catalog_config.get("uri", ""),
+        credential=catalog_config.get("credential", ""),
+        warehouse=catalog_config.get("warehouse", ""),
+        **{{f"s3.{{k}}": v for k, v in storage_config.items()}},
+    )
+
+    product_namespace = "{safe_name}"
+
+    try:
+        catalog.create_namespace(product_namespace)
+        context.log.info("Created Iceberg namespace: %s", product_namespace)
+    except Exception:
+        pass  # Namespace already exists
+
+    conn = duckdb.connect(DUCKDB_PATH, read_only=True)
+    try:
+        tables_df = conn.execute(
+            "SELECT table_schema, table_name FROM information_schema.tables "
+            "WHERE table_schema NOT IN ('information_schema', 'pg_catalog')"
+        ).fetchall()
+
+        for schema_name, table_name in tables_df:
+            qualified = f'{{schema_name}}.{{table_name}}' if schema_name != 'main' else table_name
+            arrow_table = conn.execute(f'SELECT * FROM "{{qualified}}"').fetch_arrow_table()
+            if arrow_table.num_rows == 0:
+                continue
+
+            iceberg_id = f"{{product_namespace}}.{{table_name}}"
+            try:
+                iceberg_table = catalog.load_table(iceberg_id)
+                iceberg_table.overwrite(arrow_table)
+            except Exception:
+                iceberg_table = catalog.create_table(
+                    iceberg_id, schema=arrow_table.schema,
+                )
+                iceberg_table.append(arrow_table)
+            context.log.info(
+                "Exported %%s to Iceberg (%%d rows)", table_name, arrow_table.num_rows,
+            )
+    finally:
+        conn.close()
+
+'''
+
         # Template for generated definitions.py
         template = f'''"""Dagster definitions for {product_name} data product.
 
@@ -1177,12 +1292,12 @@ from pathlib import Path
 
 from dagster import Definitions
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
-{lineage_import}
+{lineage_import}{iceberg_import}
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent
 DBT_PROJECT_DIR = PROJECT_DIR
 MANIFEST_PATH = DBT_PROJECT_DIR / "target" / "manifest.json"
-
+{iceberg_helpers}
 
 @dbt_assets(
     manifest=MANIFEST_PATH,
@@ -1196,7 +1311,7 @@ def {safe_name}_dbt_assets(context, dbt: DbtCliResource):
     to execute all dbt models in this project as Dagster software-defined assets.
     """
     yield from dbt.cli(["build"], context=context).stream()
-
+{iceberg_post_build}
 
 # Create Definitions object for Dagster to discover
 defs = Definitions(
@@ -1206,7 +1321,7 @@ defs = Definitions(
             project_dir=DBT_PROJECT_DIR,
             profiles_dir=DBT_PROJECT_DIR,
         ),
-{lineage_resource}    }},
+{lineage_resource}{iceberg_resource}    }},
 )
 '''
 
@@ -1222,6 +1337,7 @@ defs = Definitions(
                 "product_name": product_name,
                 "safe_name": safe_name,
                 "output_path": str(definitions_file),
+                "iceberg_enabled": iceberg_enabled,
             },
         )
 

@@ -66,6 +66,8 @@ COPY packages/ ./packages/
 COPY plugins/ ./plugins/
 COPY testing/ ./testing/
 COPY tests/ ./tests/
+COPY demo/ ./demo/
+COPY charts/ ./charts/
 
 # Create virtual environment and install dependencies
 RUN uv sync --frozen
