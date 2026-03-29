@@ -97,6 +97,83 @@ jobs:
         run: kind delete cluster --name floe-weekly || true
 
   # ============================================================
+  # E2E Tests (K8s-native with Kind)
+  # ============================================================
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'schedule' || inputs.run_integration == true }}
+    needs: [integration-tests]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f  # v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Install dbt Fusion CLI
+        run: |
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh -o /tmp/dbt-install.sh
+          chmod +x /tmp/dbt-install.sh
+          /tmp/dbt-install.sh --update
+          rm -f /tmp/dbt-install.sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          ~/.local/bin/dbt --version
+
+      - name: Setup Kind cluster and deploy services
+        run: CLUSTER_NAME=floe-e2e ./testing/k8s/setup-cluster.sh
+        env:
+          SKIP_MONITORING: "true"
+
+      - name: Run standard E2E tests
+        run: ./testing/ci/test-integration.sh
+        env:
+          TEST_SUITE: e2e
+          TEST_NAMESPACE: floe-test
+          WAIT_TIMEOUT: "1800"
+
+      - name: Run destructive E2E tests
+        if: success()
+        run: ./testing/ci/test-integration.sh
+        env:
+          TEST_SUITE: e2e-destructive
+          TEST_NAMESPACE: floe-test
+          SKIP_BUILD: "true"
+          WAIT_TIMEOUT: "900"
+
+      - name: Upload JUnit XML
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4
+        with:
+          name: e2e-test-results
+          path: |
+            e2e-results.xml
+            e2e-destructive-results.xml
+          if-no-files-found: warn
+
+      - name: Collect logs on failure
+        if: failure()
+        run: ./testing/ci/collect-logs.sh floe-test
+
+      - name: Cleanup Kind cluster
+        if: always()
+        run: kind delete cluster --name floe-e2e || true
+
+  # ============================================================
   # Dependency Audit
   # ============================================================
   dependency-audit:
@@ -175,7 +252,7 @@ jobs:
   notify-failure:
     name: Notify on Failure
     runs-on: ubuntu-latest
-    needs: [integration-tests, dependency-audit, build-cube-store]
+    needs: [integration-tests, e2e-tests, dependency-audit, build-cube-store]
     if: failure()
     permissions:
       issues: write
