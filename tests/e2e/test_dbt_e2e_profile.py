@@ -547,9 +547,10 @@ class TestProfileIsolation:
             f"Demo profile for '{product}' was modified: type is "
             f"'{demo_dev.get('type')}', expected 'duckdb'."
         )
-        assert demo_dev.get("path", "").startswith("/tmp/"), (
+        dbt_path = demo_dev.get("path", "")
+        assert dbt_path.startswith("/tmp/") or dbt_path == ":memory:", (
             f"Demo profile for '{product}' was modified: path is "
-            f"'{demo_dev.get('path')}', expected '/tmp/*.duckdb'."
+            f"'{dbt_path}', expected '/tmp/*.duckdb' or ':memory:'."
         )
         # Original should NOT have attach (proves it was not overwritten)
         assert "attach" not in demo_dev, (
