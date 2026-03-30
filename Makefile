@@ -20,6 +20,7 @@ help: ## Show this help message
 	@echo "  make test-integration Run integration tests (requires K8s)"
 	@echo "  make test-e2e        Run E2E tests via DevPod (requires running workspace)"
 	@echo "  make test-e2e-local  Run E2E tests locally (requires local Kind cluster)"
+	@echo "  make test-e2e-cluster Run E2E tests in-cluster as K8s Job (no port-forwards)"
 	@echo ""
 	@echo "Cluster Management:"
 	@echo "  make kind-up         Create Kind cluster and deploy services"
@@ -153,6 +154,11 @@ test-e2e-devpod: ## Run E2E tests inside DevPod (DooD kubeconfig rewrite)
 		"$${KUBECONFIG:-$$HOME/.kube/config}" > "$$TMPCONFIG"; \
 	chmod 600 "$$TMPCONFIG"; \
 	KUBECONFIG="$$TMPCONFIG" ./testing/ci/test-e2e.sh
+
+.PHONY: test-e2e-cluster
+test-e2e-cluster: ## Run E2E tests in-cluster as K8s Job (no port-forwards needed)
+	@echo "Running E2E tests in-cluster..."
+	@./testing/ci/test-e2e-cluster.sh
 
 # ============================================================
 # Quality Checks
