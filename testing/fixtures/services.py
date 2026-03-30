@@ -44,7 +44,7 @@ SERVICE_DEFAULT_PORTS: dict[str, int] = {
     "jaeger-query": 16686,
     "otel-collector-grpc": 4317,
     "otel-collector-http": 4318,
-    "marquez": 5100,
+    "marquez": 5000,
     "oci-registry": 5000,
     "oci-registry-auth": 5000,
     "registry": 5000,

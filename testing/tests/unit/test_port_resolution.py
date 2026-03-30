@@ -83,16 +83,12 @@ class TestServiceDefaultPorts:
         assert SERVICE_DEFAULT_PORTS["otel-collector-http"] == 4318
 
     @pytest.mark.requirement("env-resilient-AC-1")
-    def test_marquez_port_is_5100_not_5000(self) -> None:
-        """Test marquez defaults to port 5100, NOT 5000.
+    def test_marquez_port(self) -> None:
+        """Test marquez defaults to port 5000.
 
-        This is a critical correctness check. Port 5000 is used by
-        oci-registry and registry. Marquez historically used 5000 but
-        the spec requires 5100. A sloppy implementation that defaults
-        marquez to 5000 would silently collide with the OCI registry.
+        Matches the Helm chart: service-marquez.yaml defaults to 5000.
         """
-        assert SERVICE_DEFAULT_PORTS["marquez"] == 5100
-        assert SERVICE_DEFAULT_PORTS["marquez"] != 5000
+        assert SERVICE_DEFAULT_PORTS["marquez"] == 5000
 
     @pytest.mark.requirement("env-resilient-AC-1")
     def test_oci_registry_port(self) -> None:
@@ -281,7 +277,7 @@ class TestGetEffectivePortPrecedence:
         assert _get_effective_port("polaris") == 8181
         assert _get_effective_port("minio") == 9000
         assert _get_effective_port("postgres") == 5432
-        assert _get_effective_port("marquez") == 5100
+        assert _get_effective_port("marquez") == 5000
         assert _get_effective_port("jaeger-query") == 16686
 
     @pytest.mark.requirement("env-resilient-AC-2")

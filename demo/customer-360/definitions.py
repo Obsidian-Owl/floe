@@ -11,16 +11,139 @@ Regenerate with:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from typing import Any
 
 from dagster import Definitions
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
+from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
 
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent
 DBT_PROJECT_DIR = PROJECT_DIR
 MANIFEST_PATH = DBT_PROJECT_DIR / "target" / "manifest.json"
+
+ARTIFACTS_PATH = PROJECT_DIR / "compiled_artifacts.json"
+DUCKDB_PATH = "/tmp/customer_360.duckdb"
+
+
+def _load_iceberg_resources() -> dict[str, Any]:
+    """Load Iceberg resources from compiled_artifacts.json.
+
+    Returns empty dict if artifacts not found or catalog/storage not configured.
+    """
+    if not ARTIFACTS_PATH.exists():
+        return {}
+    artifacts = CompiledArtifacts.model_validate_json(ARTIFACTS_PATH.read_text())
+    return try_create_iceberg_resources(
+        artifacts.plugins,
+        governance=artifacts.governance,
+    )
+
+
+_SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _is_safe_identifier(name: str) -> bool:
+    """Validate a SQL identifier against a safe pattern."""
+    return bool(_SAFE_IDENTIFIER_RE.match(name))
+
+
+def _export_dbt_to_iceberg(context: Any) -> None:
+    """Export dbt model outputs from DuckDB to Iceberg tables.
+
+    After dbt build completes, connects to the DuckDB file, discovers
+    all tables, and writes each to Iceberg via the Polaris REST catalog
+    configured in compiled_artifacts.json. Uses PyIceberg directly for
+    table creation and data append.
+    """
+    import duckdb
+    from pyiceberg.catalog import load_catalog
+    from pyiceberg.exceptions import NoSuchTableError
+
+    if not Path(DUCKDB_PATH).exists():
+        context.log.warning(
+            "DuckDB file not found at %s — skipping Iceberg export",
+            DUCKDB_PATH,
+        )
+        return
+
+    if not ARTIFACTS_PATH.exists():
+        context.log.warning("compiled_artifacts.json not found — skipping Iceberg export")
+        return
+
+    artifacts = CompiledArtifacts.model_validate_json(ARTIFACTS_PATH.read_text())
+    if artifacts.plugins is None or artifacts.plugins.catalog is None:
+        context.log.info("No catalog plugin configured — skipping Iceberg export")
+        return
+
+    catalog_config = artifacts.plugins.catalog.config or {}
+    storage_config = artifacts.plugins.storage.config or {} if artifacts.plugins.storage else {}
+
+    catalog = load_catalog(
+        "polaris",
+        type="rest",
+        uri=catalog_config.get("uri", ""),
+        credential=catalog_config.get("credential", ""),
+        warehouse=catalog_config.get("warehouse", ""),
+        **{f"s3.{k}": v for k, v in storage_config.items()},
+    )
+
+    product_namespace = "customer_360"
+
+    # Ensure namespace exists
+    try:
+        catalog.create_namespace(product_namespace)
+        context.log.info("Created Iceberg namespace: %s", product_namespace)
+    except Exception as exc:
+        context.log.debug(
+            "Namespace %s exists or creation failed: %s", product_namespace, type(exc).__name__
+        )
+
+    conn = duckdb.connect(DUCKDB_PATH, read_only=True)
+    try:
+        tables_df = conn.execute(
+            "SELECT table_schema, table_name FROM information_schema.tables "
+            "WHERE table_schema NOT IN ('information_schema', 'pg_catalog')"
+        ).fetchall()
+
+        for schema_name, table_name in tables_df:
+            if not _is_safe_identifier(schema_name) or not _is_safe_identifier(table_name):
+                context.log.warning(
+                    "Skipping unsafe identifier: %s.%s",
+                    schema_name,
+                    table_name,
+                )
+                continue
+            if schema_name != "main":
+                qualified = f'"{schema_name}"."{table_name}"'
+            else:
+                qualified = f'"{table_name}"'
+            query = f"SELECT * FROM {qualified}"  # nosec B608
+            arrow_table = conn.execute(query).fetch_arrow_table()
+            if arrow_table.num_rows == 0:
+                continue
+
+            iceberg_id = f"{product_namespace}.{table_name}"
+            try:
+                iceberg_table = catalog.load_table(iceberg_id)
+                iceberg_table.overwrite(arrow_table)
+            except NoSuchTableError:
+                iceberg_table = catalog.create_table(
+                    iceberg_id,
+                    schema=arrow_table.schema,
+                )
+                iceberg_table.append(arrow_table)
+            context.log.info(
+                "Exported %s to Iceberg (%d rows)",
+                table_name,
+                arrow_table.num_rows,
+            )
+    finally:
+        conn.close()
 
 
 @dbt_assets(
@@ -36,6 +159,9 @@ def customer_360_dbt_assets(context, dbt: DbtCliResource):
     """
     yield from dbt.cli(["build"], context=context).stream()
 
+    # Post-build: export dbt output to Iceberg tables
+    _export_dbt_to_iceberg(context)
+
 
 # Create Definitions object for Dagster to discover
 defs = Definitions(
@@ -46,5 +172,6 @@ defs = Definitions(
             profiles_dir=DBT_PROJECT_DIR,
         ),
         **try_create_lineage_resource(None),
+        **_load_iceberg_resources(),
     },
 )

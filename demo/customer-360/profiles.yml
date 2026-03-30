@@ -3,5 +3,5 @@ customer_360:
   outputs:
     dev:
       type: duckdb
-      path: ":memory:"
+      path: "/tmp/customer_360.duckdb"
       threads: 1
