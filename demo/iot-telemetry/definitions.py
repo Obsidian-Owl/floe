@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 from dagster import Definitions
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
@@ -29,13 +30,14 @@ ARTIFACTS_PATH = PROJECT_DIR / "compiled_artifacts.json"
 DUCKDB_PATH = "/tmp/iot_telemetry.duckdb"
 
 
-def _load_iceberg_resources() -> dict:
+def _load_iceberg_resources() -> dict[str, Any]:
     """Load Iceberg resources from compiled_artifacts.json."""
     if not ARTIFACTS_PATH.exists():
         return {}
     artifacts = CompiledArtifacts.model_validate_json(ARTIFACTS_PATH.read_text())
     return try_create_iceberg_resources(
-        artifacts.plugins, governance=artifacts.governance,
+        artifacts.plugins,
+        governance=artifacts.governance,
     )
 
 
@@ -47,14 +49,16 @@ def _is_safe_identifier(name: str) -> bool:
     return bool(_SAFE_IDENTIFIER_RE.match(name))
 
 
-def _export_dbt_to_iceberg(context) -> None:
+def _export_dbt_to_iceberg(context: Any) -> None:
     """Export dbt model outputs from DuckDB to Iceberg tables."""
     import duckdb
     from pyiceberg.catalog import load_catalog
+    from pyiceberg.exceptions import NoSuchTableError
 
     if not Path(DUCKDB_PATH).exists():
         context.log.warning(
-            "DuckDB file not found at %s — skipping Iceberg export", DUCKDB_PATH,
+            "DuckDB file not found at %s — skipping Iceberg export",
+            DUCKDB_PATH,
         )
         return
 
@@ -84,8 +88,10 @@ def _export_dbt_to_iceberg(context) -> None:
     try:
         catalog.create_namespace(product_namespace)
         context.log.info("Created Iceberg namespace: %s", product_namespace)
-    except Exception:
-        pass  # Namespace already exists
+    except Exception as exc:
+        context.log.debug(
+            "Namespace %s exists or creation failed: %s", product_namespace, type(exc).__name__
+        )
 
     conn = duckdb.connect(DUCKDB_PATH, read_only=True)
     try:
@@ -97,11 +103,16 @@ def _export_dbt_to_iceberg(context) -> None:
         for schema_name, table_name in tables_df:
             if not _is_safe_identifier(schema_name) or not _is_safe_identifier(table_name):
                 context.log.warning(
-                    "Skipping unsafe identifier: %s.%s", schema_name, table_name,
+                    "Skipping unsafe identifier: %s.%s",
+                    schema_name,
+                    table_name,
                 )
                 continue
-            qualified = f'{schema_name}.{table_name}' if schema_name != 'main' else table_name
-            query = f'SELECT * FROM "{qualified}"'  # nosec B608
+            if schema_name != "main":
+                qualified = f'"{schema_name}"."{table_name}"'
+            else:
+                qualified = f'"{table_name}"'
+            query = f"SELECT * FROM {qualified}"  # nosec B608
             arrow_table = conn.execute(query).fetch_arrow_table()
             if arrow_table.num_rows == 0:
                 continue
@@ -110,13 +121,16 @@ def _export_dbt_to_iceberg(context) -> None:
             try:
                 iceberg_table = catalog.load_table(iceberg_id)
                 iceberg_table.overwrite(arrow_table)
-            except Exception:
+            except NoSuchTableError:
                 iceberg_table = catalog.create_table(
-                    iceberg_id, schema=arrow_table.schema,
+                    iceberg_id,
+                    schema=arrow_table.schema,
                 )
                 iceberg_table.append(arrow_table)
             context.log.info(
-                "Exported %s to Iceberg (%d rows)", table_name, arrow_table.num_rows,
+                "Exported %s to Iceberg (%d rows)",
+                table_name,
+                arrow_table.num_rows,
             )
     finally:
         conn.close()

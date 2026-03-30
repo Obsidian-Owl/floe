@@ -1173,13 +1173,12 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         if iceberg_enabled:
             iceberg_import = (
                 "\nimport re"
+                "\nfrom typing import Any"
                 "\n\nfrom floe_core.schemas.compiled_artifacts import CompiledArtifacts"
                 "\nfrom floe_orchestrator_dagster.resources.iceberg "
                 "import try_create_iceberg_resources\n"
             )
-            iceberg_resource = (
-                "        **_load_iceberg_resources(),\n"
-            )
+            iceberg_resource = "        **_load_iceberg_resources(),\n"
             iceberg_post_build = (
                 "\n"
                 "    # Post-build: export dbt output to Iceberg tables\n"
@@ -1203,7 +1202,7 @@ def _is_safe_identifier(name: str) -> bool:
     return bool(_SAFE_IDENTIFIER_RE.match(name))
 
 
-def _load_iceberg_resources() -> dict:
+def _load_iceberg_resources() -> dict[str, Any]:
     """Load Iceberg resources from compiled_artifacts.json."""
     if not ARTIFACTS_PATH.exists():
         return {{}}
@@ -1213,10 +1212,11 @@ def _load_iceberg_resources() -> dict:
     )
 
 
-def _export_dbt_to_iceberg(context) -> None:
+def _export_dbt_to_iceberg(context: Any) -> None:
     """Export dbt model outputs from DuckDB to Iceberg tables."""
     import duckdb
     from pyiceberg.catalog import load_catalog
+    from pyiceberg.exceptions import NoSuchTableError
 
     if not Path(DUCKDB_PATH).exists():
         context.log.warning(
@@ -1250,8 +1250,11 @@ def _export_dbt_to_iceberg(context) -> None:
     try:
         catalog.create_namespace(product_namespace)
         context.log.info("Created Iceberg namespace: %s", product_namespace)
-    except Exception:
-        pass  # Namespace already exists
+    except Exception as exc:
+        context.log.debug(
+            "Namespace %s exists or creation failed: %s",
+            product_namespace, type(exc).__name__,
+        )
 
     conn = duckdb.connect(DUCKDB_PATH, read_only=True)
     try:
@@ -1266,8 +1269,11 @@ def _export_dbt_to_iceberg(context) -> None:
                     "Skipping unsafe identifier: %%s.%%s", schema_name, table_name,
                 )
                 continue
-            qualified = f'{{schema_name}}.{{table_name}}' if schema_name != 'main' else table_name
-            query = f'SELECT * FROM "{{qualified}}"'  # nosec B608
+            if schema_name != 'main':
+                qualified = f'"{{schema_name}}"."{{table_name}}"'
+            else:
+                qualified = f'"{{table_name}}"'
+            query = f'SELECT * FROM {{qualified}}'  # nosec B608
             arrow_table = conn.execute(query).fetch_arrow_table()
             if arrow_table.num_rows == 0:
                 continue
@@ -1276,7 +1282,7 @@ def _export_dbt_to_iceberg(context) -> None:
             try:
                 iceberg_table = catalog.load_table(iceberg_id)
                 iceberg_table.overwrite(arrow_table)
-            except Exception:
+            except NoSuchTableError:
                 iceberg_table = catalog.create_table(
                     iceberg_id, schema=arrow_table.schema,
                 )
