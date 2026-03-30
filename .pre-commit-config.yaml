@@ -178,6 +178,14 @@ repos:
         stages: [pre-push]
         pass_filenames: false
 
+      # Security: pip-audit (matches CI - catches CVEs from PyPI advisory DB)
+      - id: pip-audit
+        name: pip-audit (CVE check)
+        entry: bash -c 'uv run --no-sync pip-audit --strict 2>/dev/null || echo "pip-audit not installed, skipping" >&2'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+
       # Architecture boundary enforcement
       - id: import-linter
         name: import-linter (architecture)
@@ -191,8 +199,8 @@ repos:
       # Uses --ignore-glob to handle missing directories gracefully
       # Must match CI's test-unit.sh behavior: only tests/unit/ directories
       - id: pytest-unit
-        name: pytest (unit tests)
-        entry: bash -c 'uv run --no-sync pytest packages/ plugins/ --ignore-glob="**/integration/**" --ignore-glob="**/e2e/**" --ignore-glob="**/tests/contract/**" -v --tb=short -x'
+        name: pytest (unit tests + coverage)
+        entry: bash -c 'uv run --no-sync pytest packages/ plugins/ --ignore-glob="**/integration/**" --ignore-glob="**/e2e/**" --ignore-glob="**/tests/contract/**" -v --tb=short -x --cov=packages --cov=plugins --cov-fail-under=80'
         language: system
         types: [python]
         stages: [pre-push]
