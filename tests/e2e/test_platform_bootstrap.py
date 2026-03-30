@@ -461,7 +461,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
 
         Validates FR-006 by:
         1. Verifying OTel collector pod is running
-        2. Sending a test span to OTel collector (localhost:4317)
+        2. Sending a test span to OTel collector
         3. If Jaeger is deployed, verify span appears there
 
         Note: Jaeger is optional (jaeger.enabled in values). When Jaeger is
@@ -531,7 +531,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
         except Exception as e:
             pytest.fail(
                 f"Failed to send span to OTel collector: {e}\n"
-                "Check collector is accessible at localhost:4317"
+                "Check collector is accessible via ServiceEndpoint('otel-collector-grpc')"
             )
         finally:
             try:
