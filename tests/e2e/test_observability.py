@@ -165,8 +165,8 @@ class TestObservability(IntegrationTestBase):
             self.check_infrastructure("marquez")
         except Exception:
             pytest.fail(
-                "Marquez not accessible at localhost:5100. "
-                "Run via make test-e2e or: kubectl port-forward svc/marquez 5100:5000 -n floe-test"
+                "Marquez not accessible. "
+                "Run via make test-e2e or: kubectl port-forward svc/marquez 5000 -n floe-test"
             )
 
         # Verify Marquez API responds with namespaces list
@@ -287,8 +287,8 @@ class TestObservability(IntegrationTestBase):
             self.check_infrastructure("marquez")
         except Exception:
             pytest.fail(
-                "Marquez not accessible at localhost:5100. "
-                "Run via make test-e2e or: kubectl port-forward svc/marquez 5100:5000 -n floe-test"
+                "Marquez not accessible. "
+                "Run via make test-e2e or: kubectl port-forward svc/marquez 5000 -n floe-test"
             )
 
         # Query for REAL traces in Jaeger for any floe-related service
@@ -721,8 +721,8 @@ class TestObservability(IntegrationTestBase):
             self.check_infrastructure("marquez")
         except Exception:
             pytest.fail(
-                "Marquez not accessible at localhost:5100. "
-                "Run via make test-e2e or: kubectl port-forward svc/marquez 5100:5000 -n floe-test"
+                "Marquez not accessible. "
+                "Run via make test-e2e or: kubectl port-forward svc/marquez 5000 -n floe-test"
             )
 
         # Create a test namespace
@@ -919,8 +919,8 @@ class TestObservability(IntegrationTestBase):
             self.check_infrastructure("marquez")
         except Exception:
             pytest.fail(
-                "Marquez not accessible at localhost:5100. "
-                "Run via make test-e2e or: kubectl port-forward svc/marquez 5100:5000 -n floe-test"
+                "Marquez not accessible. "
+                "Run via make test-e2e or: kubectl port-forward svc/marquez 5000 -n floe-test"
             )
 
         # seed_observability Phase 2 triggered a Dagster asset run for
