@@ -41,9 +41,11 @@ def sanitize_error_message(msg: str, max_length: int = 500) -> str:
     sanitized = _URL_CREDENTIAL_PATTERN.sub("://<REDACTED>@", msg)
     # Redact key=value patterns for sensitive keys
     sanitized = _SENSITIVE_KEY_PATTERN.sub(
-        lambda m: m.group(0).split("=", 1)[0].split(":", 1)[0] + "=<REDACTED>"
-        if "=" in m.group(0)
-        else m.group(0).split(":", 1)[0] + ": <REDACTED>",
+        lambda m: (
+            m.group(0).split("=", 1)[0].split(":", 1)[0] + "=<REDACTED>"
+            if "=" in m.group(0)
+            else m.group(0).split(":", 1)[0] + ": <REDACTED>"
+        ),
         sanitized,
     )
     return sanitized[:max_length]
