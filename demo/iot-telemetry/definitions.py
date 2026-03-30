@@ -101,7 +101,8 @@ def _export_dbt_to_iceberg(context) -> None:
                 )
                 continue
             qualified = f'{schema_name}.{table_name}' if schema_name != 'main' else table_name
-            arrow_table = conn.execute(f'SELECT * FROM "{qualified}"').fetch_arrow_table()  # nosec B608
+            query = f'SELECT * FROM "{qualified}"'  # nosec B608
+            arrow_table = conn.execute(query).fetch_arrow_table()
             if arrow_table.num_rows == 0:
                 continue
 
