@@ -99,6 +99,9 @@ info "Submitting E2E test Job..."
 kubectl apply -f "${JOB_MANIFEST}" -n "${TEST_NAMESPACE}"
 info "Job '${JOB_NAME}' submitted. Waiting up to ${JOB_TIMEOUT}s for completion..."
 
+# Ensure Job is cleaned up on interrupt (SIGINT, SIGTERM, or script exit after this point)
+trap cleanup_job EXIT
+
 # --- Step 5: Wait for completion ---
 
 # kubectl wait returns non-zero on timeout
