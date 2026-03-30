@@ -97,7 +97,7 @@ def compiled_artifacts() -> Callable[[Path], Any]:
         OTel spans are emitted during the 6-stage pipeline when
         OTEL_EXPORTER_OTLP_ENDPOINT is set.
 
-        Sets OPENLINEAGE_URL for port-forwarded Marquez access and
+        Sets OPENLINEAGE_URL via ServiceEndpoint (K8s DNS or localhost) and
         OTEL_SERVICE_NAME from the spec's parent directory name (e.g.,
         ``customer-360``) so Jaeger registers the correct service.
 
@@ -120,10 +120,20 @@ def compiled_artifacts() -> Callable[[Path], Any]:
         old_otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
         old_otlp_insecure = os.environ.get("OTEL_EXPORTER_OTLP_INSECURE")
 
-        # Set overrides for E2E: port-forwarded endpoints + product service name
-        os.environ["OPENLINEAGE_URL"] = "http://localhost:5100/api/v1/lineage"
+        # Set overrides for E2E: resolved endpoints + product service name
+        # Use ServiceEndpoint for K8s DNS / localhost auto-resolution
+        try:
+            from testing.fixtures.services import ServiceEndpoint
+
+            marquez_url = ServiceEndpoint("marquez").url
+            otel_url = ServiceEndpoint("otel-collector-grpc").url
+        except ImportError:
+            marquez_url = "http://localhost:5100"
+            otel_url = "http://localhost:4317"
+
+        os.environ["OPENLINEAGE_URL"] = f"{marquez_url}/api/v1/lineage"
         os.environ["OTEL_SERVICE_NAME"] = spec_path.parent.name
-        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = otel_url
         os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
 
         try:
