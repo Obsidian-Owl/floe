@@ -68,11 +68,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [[ \"$FILE_PATH\" == *.py ]]; then python -m black --line-length 100 \"$FILE_PATH\" 2>/dev/null || true; fi"
+            "command": "if [[ \"$FILE_PATH\" == *.py ]]; then uv run --no-sync ruff format \"$FILE_PATH\" 2>/dev/null || true; fi"
           },
           {
             "type": "command",
-            "command": "if [[ \"$FILE_PATH\" == *.py ]]; then python -m isort \"$FILE_PATH\" 2>/dev/null || true; fi"
+            "command": "if [[ \"$FILE_PATH\" == *.py ]]; then uv run --no-sync ruff check --fix \"$FILE_PATH\" 2>/dev/null || true; fi"
           },
           {
             "type": "command",
