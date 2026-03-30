@@ -127,7 +127,13 @@ def compiled_artifacts() -> Callable[[Path], Any]:
 
             marquez_url = ServiceEndpoint("marquez").url
             otel_url = ServiceEndpoint("otel-collector-grpc").url
-        except ImportError:
+        except (ImportError, AttributeError):
+            import warnings
+
+            warnings.warn(
+                "ServiceEndpoint not available, falling back to localhost endpoints",
+                stacklevel=2,
+            )
             marquez_url = "http://localhost:5100"
             otel_url = "http://localhost:4317"
 

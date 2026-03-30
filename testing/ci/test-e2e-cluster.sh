@@ -4,7 +4,7 @@
 # This eliminates host-to-cluster connectivity issues (port-forwards, SSH tunnels)
 # by running tests where the services are.
 #
-# Usage: ./testing/ci/test-e2e-cluster.sh [-- pytest-args...]
+# Usage: ./testing/ci/test-e2e-cluster.sh
 #
 # Environment:
 #   KUBECONFIG          Path to kubeconfig (default: ~/.kube/config)
@@ -38,6 +38,9 @@ cleanup_job() {
     info "Cleaning up Job ${JOB_NAME}..."
     kubectl delete job "${JOB_NAME}" -n "${TEST_NAMESPACE}" --ignore-not-found 2>/dev/null || true
 }
+
+# Ensure Job is cleaned up on interrupt or exit (idempotent via --ignore-not-found)
+trap cleanup_job EXIT
 
 # --- Pre-flight checks ---
 
@@ -99,9 +102,6 @@ info "Submitting E2E test Job..."
 kubectl apply -f "${JOB_MANIFEST}" -n "${TEST_NAMESPACE}"
 info "Job '${JOB_NAME}' submitted. Waiting up to ${JOB_TIMEOUT}s for completion..."
 
-# Ensure Job is cleaned up on interrupt (SIGINT, SIGTERM, or script exit after this point)
-trap cleanup_job EXIT
-
 # --- Step 5: Wait for completion ---
 
 # kubectl wait returns non-zero on timeout
@@ -150,19 +150,16 @@ fi
 case "${JOB_STATUS}" in
     complete)
         info "E2E tests PASSED"
-        cleanup_job
         exit 0
         ;;
     failed)
         error "E2E tests FAILED"
         error "Full output: ${ARTIFACTS_DIR}/e2e-output.log"
-        cleanup_job
         exit 1
         ;;
     timeout)
         error "E2E tests TIMED OUT after ${JOB_TIMEOUT}s"
-        error "Job may still be running. Cleaning up..."
-        cleanup_job
+        error "Job may still be running."
         exit 2
         ;;
 esac
