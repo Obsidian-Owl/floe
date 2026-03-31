@@ -70,15 +70,9 @@ class TestPluginSystem(IntegrationTestBase):
     # Logger instance for test observability
     logger: ClassVar[logging.Logger] = logging.getLogger(__name__)
 
-    # Plugin types configured via manifest sections, not discovered via entry points.
-    # STORAGE is a manifest config section (manifest.storage) that defines S3/GCS/Azure
-    # connection details. It's NOT a plugin that needs registry discovery — the storage
-    # backend is configured at the infrastructure level, not swapped via entry points.
-    CONFIG_ONLY_TYPES: ClassVar[frozenset[PluginType]] = frozenset(
-        {
-            PluginType.STORAGE,
-        }
-    )
+    # All plugin types are now discoverable via entry points.
+    # STORAGE was previously config-only but now has floe-storage-s3 plugin.
+    CONFIG_ONLY_TYPES: ClassVar[frozenset[PluginType]] = frozenset()
 
     # Map PluginType enum members to their ABC classes
     # Using Any to satisfy mypy --strict with abstract base classes
@@ -136,28 +130,25 @@ class TestPluginSystem(IntegrationTestBase):
         assert not missing_types, (
             f"PLUGIN GAP: Missing implementations for {len(missing_types)} plugin types: "
             f"{', '.join(missing_types)}.\n"
-            "Every discoverable plugin type must have at least one registered "
-            "implementation. Config-only types (STORAGE) are validated separately."
+            "Every plugin type must have at least one registered implementation."
         )
 
         # Log discovered plugin counts for observability
         for plugin_type in PluginType:
             plugin_names = all_plugins.get(plugin_type, [])
-            label = " [config-only]" if plugin_type in self.CONFIG_ONLY_TYPES else ""
             self.logger.info(
-                f"Plugin discovery: {plugin_type.name}{label} - "
+                f"Plugin discovery: {plugin_type.name} - "
                 f"{len(plugin_names)} plugins: {plugin_names}"
             )
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-050")
     def test_storage_config_via_manifest(self) -> None:
-        """Test that STORAGE config flows through manifest, not plugin registry.
+        """Test that STORAGE config flows through manifest and plugin is discoverable.
 
-        STORAGE is a CONFIG_ONLY plugin type — it's configured via the
-        manifest.storage section (S3/GCS/Azure connection details), not
-        discovered via entry points. This test validates that the compilation
-        pipeline resolves storage config into CompiledArtifacts.
+        Validates both that the compilation pipeline resolves storage config
+        from manifest.storage AND that the S3 storage plugin is discoverable
+        via the plugin registry entry point.
         """
         from floe_core.compilation.stages import compile_pipeline
 
@@ -170,12 +161,18 @@ class TestPluginSystem(IntegrationTestBase):
         # Storage config should be resolved from manifest.storage section
         assert artifacts.plugins is not None, "CompiledArtifacts must have plugins section"
         assert artifacts.plugins.storage is not None, (
-            "Storage config must be resolved from manifest.storage section.\n"
-            "STORAGE is a config-only plugin type — manifest.storage defines the "
-            "object storage backend (S3, GCS, Azure) at the infrastructure level."
+            "Storage config must be resolved from manifest.storage section."
         )
         assert artifacts.plugins.storage.type == "s3", (
             f"Expected storage type 's3' from demo manifest, got '{artifacts.plugins.storage.type}'"
+        )
+
+        # Verify the S3 storage plugin is also discoverable via registry
+        registry = get_registry()
+        registry.discover_all()
+        storage_plugin = registry.get(PluginType.STORAGE, "s3")
+        assert storage_plugin.name == "s3", (
+            "S3 storage plugin must be discoverable via registry entry point"
         )
 
         self.logger.info(f"Storage config validated: type={artifacts.plugins.storage.type}")
