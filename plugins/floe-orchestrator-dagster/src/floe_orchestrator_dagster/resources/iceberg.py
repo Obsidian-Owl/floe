@@ -98,9 +98,15 @@ def create_iceberg_resources(
     )
     catalog_plugin = registry.get(PluginType.CATALOG, catalog_ref.type)
 
-    # Configure catalog plugin if config provided
+    # Configure catalog plugin if config provided, then re-instantiate
+    # with validated config (the cached instance may have MagicMock config
+    # from PluginLoader discovery — see loader.py:171)
     if catalog_ref.config:
-        registry.configure(PluginType.CATALOG, catalog_ref.type, catalog_ref.config)
+        validated_config = registry.configure(
+            PluginType.CATALOG, catalog_ref.type, catalog_ref.config
+        )
+        if validated_config is not None:
+            catalog_plugin = type(catalog_plugin)(config=validated_config)
 
     # T109: Load StoragePlugin via registry
     logger.info(
@@ -109,9 +115,13 @@ def create_iceberg_resources(
     )
     storage_plugin = registry.get(PluginType.STORAGE, storage_ref.type)
 
-    # Configure storage plugin if config provided
+    # Configure storage plugin if config provided, then re-instantiate
     if storage_ref.config:
-        registry.configure(PluginType.STORAGE, storage_ref.type, storage_ref.config)
+        validated_config = registry.configure(
+            PluginType.STORAGE, storage_ref.type, storage_ref.config
+        )
+        if validated_config is not None:
+            storage_plugin = type(storage_plugin)(config=validated_config)
 
     # T110: Instantiate IcebergTableManager with loaded plugins
     logger.info(
