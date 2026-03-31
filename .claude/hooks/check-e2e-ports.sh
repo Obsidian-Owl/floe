@@ -30,7 +30,7 @@ declare -A PORTS=(
 
 MISSING=()
 for SVC in "${!PORTS[@]}"; do
-  if ! nc -z localhost "${PORTS[$SVC]}" 2>/dev/null; then
+  if ! nc -z 127.0.0.1 "${PORTS[$SVC]}" 2>/dev/null; then
     MISSING+=("$SVC:${PORTS[$SVC]}")
   fi
 done
