@@ -21,6 +21,38 @@ STUCK_STATES = ("pending-upgrade", "pending-install", "pending-rollback", "faile
 DEFAULT_ROLLBACK_TIMEOUT = "5m"
 
 
+def get_helm_upgrade_flags() -> list[str]:
+    """Return Helm upgrade flags appropriate for the installed version.
+
+    Helm v4+: ["--rollback-on-failure", "--wait"]
+    Helm v3:  ["--atomic"] (implies --wait)
+
+    Falls back to v3 flags on detection failure (safer/more compatible).
+
+    Returns:
+        List of flag strings for helm upgrade.
+    """
+    try:
+        result = subprocess.run(
+            ["helm", "version", "--short"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode == 0:
+            version_str = result.stdout.strip()
+            # Output like "v4.1.3+g..." or "v3.14.0+g..."
+            if version_str.startswith("v"):
+                major = int(version_str[1:].split(".")[0])
+                if major >= 4:
+                    return ["--rollback-on-failure", "--wait"]
+    except (subprocess.TimeoutExpired, ValueError, IndexError):
+        pass
+    # Default to v3 flags (--atomic implies --wait)
+    return ["--atomic"]
+
+
 def _run_helm(args: list[str], timeout: int = 900) -> subprocess.CompletedProcess[str]:
     """Run helm command with timeout.
 
