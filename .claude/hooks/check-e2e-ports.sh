@@ -16,19 +16,21 @@ if echo "$CMD" | grep -qE 'make\s+test-e2e'; then
   exit 0
 fi
 
-# Required ports: Polaris, Dagster, MinIO, Jaeger, Marquez
+# Required ports: Polaris, Dagster, MinIO, Jaeger, Marquez, OTel
+# Source of truth: scripts/devpod-tunnels.sh
 declare -A PORTS=(
   [Polaris]=8181
   [Polaris-mgmt]=8182
-  [Dagster]=3000
+  [Dagster]=3100
   [MinIO]=9000
   [Jaeger]=16686
-  [Marquez]=5000
+  [Marquez]=5100
+  [OTel-gRPC]=4317
 )
 
 MISSING=()
 for SVC in "${!PORTS[@]}"; do
-  if ! nc -z localhost "${PORTS[$SVC]}" 2>/dev/null; then
+  if ! nc -z 127.0.0.1 "${PORTS[$SVC]}" 2>/dev/null; then
     MISSING+=("$SVC:${PORTS[$SVC]}")
   fi
 done

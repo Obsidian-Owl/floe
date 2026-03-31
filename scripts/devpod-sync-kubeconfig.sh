@@ -89,7 +89,7 @@ log "Remote K8s API: ${TUNNEL_TARGET}:${REMOTE_API_PORT}"
 mkdir -p "$(dirname "${LOCAL_KUBECONFIG}")"
 
 echo "${REMOTE_CONFIG}" | \
-    sed -E "s|server: https://[^:]+:[0-9]+|server: https://localhost:${LOCAL_API_PORT}|g" \
+    sed -E "s|server: https://[^:]+:[0-9]+|server: https://127.0.0.1:${LOCAL_API_PORT}|g" \
     > "${LOCAL_KUBECONFIG}"
 
 chmod 600 "${LOCAL_KUBECONFIG}"

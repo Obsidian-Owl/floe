@@ -29,3 +29,8 @@ GHSA-5239-wwwm-4pmq
 # requests 2.32.5 — GHSA-gc5v-m9x4-r6x2 (not exploitable, extract_zipped_paths unused)
 # Fix: requests>=2.33.0. Blocked by datacontract-cli <2.33 pin. Track upstream.
 GHSA-gc5v-m9x4-r6x2
+
+# cryptography 46.0.5 — GHSA-m959-cc7f-wv43, fix in 46.0.6. Transitive via pyiceberg.
+# floe-identity-keycloak already pins >=46.0.6; will resolve on next lockfile regen.
+# Review by 2026-04-14.
+GHSA-m959-cc7f-wv43

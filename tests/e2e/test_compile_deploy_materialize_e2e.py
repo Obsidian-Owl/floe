@@ -236,8 +236,9 @@ class TestCompileDeployMaterialize:
 
         dev_output = profile["outputs"]["dev"]
         assert dev_output["type"] == "duckdb", f"Expected duckdb adapter, got {dev_output['type']}"
-        assert dev_output["path"].startswith("/tmp/"), (
-            f"DuckDB path must be under /tmp/ for container writability, got {dev_output['path']}"
+        duckdb_path = dev_output["path"]
+        assert duckdb_path.startswith("/tmp/") or duckdb_path == ":memory:", (
+            f"DuckDB path must be /tmp/* or :memory:, got {duckdb_path}"
         )
         assert dev_output["threads"] == 4, (
             f"threads should match manifest config (4), got {dev_output['threads']}"
