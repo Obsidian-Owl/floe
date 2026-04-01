@@ -1174,7 +1174,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             iceberg_import = (
                 "\nimport re"
                 "\nfrom typing import Any"
-                "\n\nfrom floe_core.schemas.compiled_artifacts import CompiledArtifacts"
+                "\n\nfrom floe_core.plugin_registry import get_registry"
+                "\nfrom floe_core.plugin_types import PluginType"
+                "\nfrom floe_core.schemas.compiled_artifacts import CompiledArtifacts"
                 "\nfrom floe_orchestrator_dagster.resources.iceberg "
                 "import try_create_iceberg_resources\n"
             )
@@ -1215,7 +1217,6 @@ def _load_iceberg_resources() -> dict[str, Any]:
 def _export_dbt_to_iceberg(context: Any) -> None:
     """Export dbt model outputs from DuckDB to Iceberg tables."""
     import duckdb
-    from pyiceberg.catalog import load_catalog
     from pyiceberg.exceptions import NoSuchTableError
 
     if not Path(DUCKDB_PATH).exists():
@@ -1236,14 +1237,14 @@ def _export_dbt_to_iceberg(context: Any) -> None:
     catalog_config = artifacts.plugins.catalog.config or {{}}
     storage_config = artifacts.plugins.storage.config or {{}} if artifacts.plugins.storage else {{}}
 
-    catalog = load_catalog(
-        "polaris",
-        type="rest",
-        uri=catalog_config.get("uri", ""),
-        credential=catalog_config.get("credential", ""),
-        warehouse=catalog_config.get("warehouse", ""),
-        **{{f"s3.{{k}}": v for k, v in storage_config.items()}},
-    )
+    registry = get_registry()
+    catalog_type = artifacts.plugins.catalog.type
+    catalog_plugin = registry.get(PluginType.CATALOG, catalog_type)
+    validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config)
+    if validated_config is not None:
+        catalog_plugin = type(catalog_plugin)(config=validated_config)
+    s3_config = {{f"s3.{{k}}": v for k, v in storage_config.items()}}
+    catalog = catalog_plugin.connect(config=s3_config)
 
     product_namespace = "{safe_name}"
 
