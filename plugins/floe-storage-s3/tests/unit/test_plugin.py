@@ -5,7 +5,6 @@ Tests AC-1 (plugin structure and discoverability) and AC-2 (config validation).
 
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -13,7 +12,6 @@ from pydantic import SecretStr, ValidationError
 
 from floe_storage_s3.config import S3StorageConfig
 from floe_storage_s3.plugin import S3StoragePlugin
-
 
 # ---------------------------------------------------------------------------
 # AC-1: S3StoragePlugin exists and implements StoragePlugin ABC
@@ -47,6 +45,18 @@ class TestPluginMetadata:
         """Plugin must have a description."""
         plugin = S3StoragePlugin()
         assert len(plugin.description) > 0
+
+    @pytest.mark.requirement("AC-5")
+    def test_tracer_name_is_dot_separated(self) -> None:
+        """tracer_name must return 'floe.storage.s3' (dot-separated convention)."""
+        plugin = S3StoragePlugin()
+        assert plugin.tracer_name == "floe.storage.s3"
+
+    @pytest.mark.requirement("AC-5")
+    def test_tracer_name_is_not_none(self) -> None:
+        """tracer_name must not be None (base class default)."""
+        plugin = S3StoragePlugin()
+        assert plugin.tracer_name is not None
 
     @pytest.mark.requirement("AC-1")
     def test_get_config_schema_returns_s3_config(self) -> None:
@@ -214,7 +224,9 @@ class TestStoragePluginMethods:
     @pytest.mark.requirement("AC-1")
     def test_get_pyiceberg_fileio(self, configured_plugin: S3StoragePlugin) -> None:
         """get_pyiceberg_fileio must return a FileIO-compatible object."""
-        with patch.dict("os.environ", {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}):
+        with patch.dict(
+            "os.environ", {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}
+        ):
             fileio = configured_plugin.get_pyiceberg_fileio()
         assert hasattr(fileio, "new_input")
         assert hasattr(fileio, "new_output")

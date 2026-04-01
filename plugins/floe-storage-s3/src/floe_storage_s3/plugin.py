@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
 NOT_CONFIGURED_MSG = "S3StoragePlugin not configured — instantiate with config parameter"
+TRACER_NAME = "floe.storage.s3"
 
 
 class S3StoragePlugin(StoragePlugin):
@@ -114,6 +115,15 @@ class S3StoragePlugin(StoragePlugin):
             Human-readable description of the plugin.
         """
         return "S3-compatible object storage plugin for Iceberg data"
+
+    @property
+    def tracer_name(self) -> str:
+        """Return the OTel tracer name for this plugin.
+
+        Returns:
+            Dot-separated tracer name following project convention.
+        """
+        return TRACER_NAME
 
     # =========================================================================
     # Configuration methods
