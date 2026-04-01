@@ -1176,30 +1176,29 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 "from pathlib import Path",
                 "from typing import Any",
             ]
-            thirdparty_imports.extend([
-                "from floe_core.plugin_registry import get_registry",
-                "from floe_core.plugin_types import PluginType",
-                "from floe_core.schemas.compiled_artifacts import CompiledArtifacts",
-                "from floe_orchestrator_dagster.resources.iceberg "
-                "import try_create_iceberg_resources",
-            ])
-        if lineage_enabled:
-            thirdparty_imports.append(
-                "from floe_orchestrator_dagster.resources.lineage "
-                "import try_create_lineage_resource"
+            thirdparty_imports.extend(
+                [
+                    "from floe_core.plugin_registry import get_registry",
+                    "from floe_core.plugin_types import PluginType",
+                    "from floe_core.schemas.compiled_artifacts import CompiledArtifacts",
+                    "from floe_orchestrator_dagster.resources.iceberg "
+                    "import try_create_iceberg_resources",
+                ]
             )
-
             iceberg_resource = "        **_load_iceberg_resources(),\n"
             iceberg_post_build = (
                 "\n"
                 "    # Post-build: export dbt output to Iceberg tables\n"
                 "    _export_dbt_to_iceberg(context)\n"
             )
+        if lineage_enabled:
+            thirdparty_imports.append(
+                "from floe_orchestrator_dagster.resources.lineage "
+                "import try_create_lineage_resource"
+            )
 
         thirdparty_imports.sort()
-        imports_block = (
-            "\n".join(stdlib_imports) + "\n\n" + "\n".join(thirdparty_imports)
-        )
+        imports_block = "\n".join(stdlib_imports) + "\n\n" + "\n".join(thirdparty_imports)
 
         # Iceberg helper functions (only included when iceberg_enabled)
         iceberg_helpers = ""
@@ -1255,8 +1254,13 @@ def _export_dbt_to_iceberg(context: Any) -> None:
     catalog_type = artifacts.plugins.catalog.type
     catalog_plugin = registry.get(PluginType.CATALOG, catalog_type)
     validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config)
-    if validated_config is not None:
-        catalog_plugin = type(catalog_plugin)(config=validated_config)
+    if validated_config is None:
+        context.log.warning(
+            "Catalog plugin config for %s could not be validated — skipping Iceberg export",
+            catalog_type,
+        )
+        return
+    catalog_plugin = type(catalog_plugin)(config=validated_config)
     s3_config = {{f"s3.{{k}}": v for k, v in storage_config.items()}}
     catalog = catalog_plugin.connect(config=s3_config)
 

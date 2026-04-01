@@ -332,6 +332,79 @@ class TestGeneratedCodePassesS3ConfigToConnect:
         )
 
 
+class TestGeneratedCodeWiring:
+    """Verify that Iceberg helpers are wired into Definitions and post-build hook.
+
+    These tests catch the indentation bug where iceberg_resource and
+    iceberg_post_build were gated on lineage_enabled instead of iceberg_enabled.
+    """
+
+    @pytest.mark.requirement("AC-1")
+    def test_iceberg_resource_wired_into_definitions(
+        self, generated_code_with_iceberg: str
+    ) -> None:
+        """Generated Definitions must include _load_iceberg_resources() call."""
+        assert "_load_iceberg_resources()" in generated_code_with_iceberg, (
+            "Generated Definitions must wire _load_iceberg_resources()."
+        )
+
+    @pytest.mark.requirement("AC-1")
+    def test_iceberg_post_build_called_after_dbt(self, generated_code_with_iceberg: str) -> None:
+        """Generated dbt_assets must call _export_dbt_to_iceberg(context)."""
+        assert "_export_dbt_to_iceberg(context)" in generated_code_with_iceberg, (
+            "Generated dbt_assets must call _export_dbt_to_iceberg(context)."
+        )
+
+    @pytest.mark.requirement("AC-1")
+    def test_iceberg_wiring_without_lineage(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Iceberg wiring must work when lineage is disabled."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = dagster_plugin.generate_entry_point_code(
+                product_name=PRODUCT_NAME,
+                output_dir=tmpdir,
+                iceberg_enabled=True,
+                lineage_enabled=False,
+            )
+            from pathlib import Path
+
+            code = Path(output_path).read_text()
+
+        assert "_load_iceberg_resources()" in code, (
+            "Iceberg resources must be wired even when lineage is disabled."
+        )
+        assert "_export_dbt_to_iceberg(context)" in code, (
+            "Iceberg post-build must be called even when lineage is disabled."
+        )
+        assert "try_create_lineage_resource" not in code, (
+            "Lineage import must not appear when lineage is disabled."
+        )
+
+    @pytest.mark.requirement("AC-1")
+    def test_no_iceberg_wiring_when_disabled(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """When iceberg is disabled, no Iceberg wiring must appear."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = dagster_plugin.generate_entry_point_code(
+                product_name=PRODUCT_NAME,
+                output_dir=tmpdir,
+                iceberg_enabled=False,
+                lineage_enabled=True,
+            )
+            from pathlib import Path
+
+            code = Path(output_path).read_text()
+
+        assert "_load_iceberg_resources" not in code, (
+            "Iceberg resources must not be wired when iceberg is disabled."
+        )
+        assert "_export_dbt_to_iceberg" not in code, (
+            "Iceberg post-build must not appear when iceberg is disabled."
+        )
+
+
 class TestGeneratedCodeWithIcebergDisabled:
     """Verify that iceberg-disabled mode does NOT include plugin registry imports.
 

@@ -53,10 +53,12 @@ class TestPluginMetadata:
         assert plugin.tracer_name == "floe.storage.s3"
 
     @pytest.mark.requirement("AC-5")
-    def test_tracer_name_is_not_none(self) -> None:
-        """tracer_name must not be None (base class default)."""
+    def test_tracer_name_follows_convention(self) -> None:
+        """tracer_name must follow floe.<category>.<name> convention."""
         plugin = S3StoragePlugin()
-        assert plugin.tracer_name is not None
+        parts = plugin.tracer_name.split(".")
+        assert len(parts) == 3, f"Expected 3 dot-separated parts, got {parts}"
+        assert parts[0] == "floe", f"Tracer name must start with 'floe', got '{parts[0]}'"
 
     @pytest.mark.requirement("AC-1")
     def test_get_config_schema_returns_s3_config(self) -> None:
@@ -223,14 +225,14 @@ class TestStoragePluginMethods:
 
     @pytest.mark.requirement("AC-1")
     def test_get_pyiceberg_fileio(self, configured_plugin: S3StoragePlugin) -> None:
-        """get_pyiceberg_fileio must return a FileIO-compatible object."""
+        """get_pyiceberg_fileio must return a FsspecFileIO instance."""
+        from pyiceberg.io.fsspec import FsspecFileIO
+
         with patch.dict(
             "os.environ", {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "test"}
         ):
             fileio = configured_plugin.get_pyiceberg_fileio()
-        assert hasattr(fileio, "new_input")
-        assert hasattr(fileio, "new_output")
-        assert hasattr(fileio, "delete")
+        assert isinstance(fileio, FsspecFileIO)
 
 
 class TestUnconfiguredPlugin:
