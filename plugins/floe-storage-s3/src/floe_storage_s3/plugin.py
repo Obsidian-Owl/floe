@@ -214,7 +214,7 @@ class S3StoragePlugin(StoragePlugin):
         return {
             "s3_region": config.region,
             "s3_access_key_id": '{{ env_var("AWS_ACCESS_KEY_ID") }}',
-            "s3_secret_access_key": '{{ env_var("AWS_SECRET_ACCESS_KEY") }}',
+            "s3_secret_access_key": '{{ env_var("AWS_SECRET_ACCESS_KEY") }}',  # nosec B105 — Jinja template for dbt, not a hardcoded secret
             "s3_endpoint": config.endpoint,
             "s3_path_style_access": config.path_style_access,
         }

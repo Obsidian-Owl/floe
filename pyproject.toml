@@ -215,6 +215,7 @@ skips = [
     "B404",  # Allow subprocess import (needed for git operations)
     "B603",  # Allow subprocess without shell=True (intentionally safe)
     "B607",  # Allow partial executable paths (git, dbt - known tools)
+    "B608",  # Allow SQL in code generator template (identifiers validated via regex)
     "B105",  # Allow token username constant (not a real secret)
     "B106",  # Allow empty credential defaults (populated at runtime)
 ]
