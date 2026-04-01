@@ -11,37 +11,29 @@ Regenerate with:
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
-from typing import Any
 
 from dagster import Definitions
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
+
+from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
+
+import re
+from typing import Any
+
+from floe_core.plugin_registry import get_registry
+from floe_core.plugin_types import PluginType
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
-from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
 
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent
 DBT_PROJECT_DIR = PROJECT_DIR
 MANIFEST_PATH = DBT_PROJECT_DIR / "target" / "manifest.json"
 
+
 ARTIFACTS_PATH = PROJECT_DIR / "compiled_artifacts.json"
 DUCKDB_PATH = "/tmp/customer_360.duckdb"
-
-
-def _load_iceberg_resources() -> dict[str, Any]:
-    """Load Iceberg resources from compiled_artifacts.json.
-
-    Returns empty dict if artifacts not found or catalog/storage not configured.
-    """
-    if not ARTIFACTS_PATH.exists():
-        return {}
-    artifacts = CompiledArtifacts.model_validate_json(ARTIFACTS_PATH.read_text())
-    return try_create_iceberg_resources(
-        artifacts.plugins,
-        governance=artifacts.governance,
-    )
 
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -52,22 +44,24 @@ def _is_safe_identifier(name: str) -> bool:
     return bool(_SAFE_IDENTIFIER_RE.match(name))
 
 
-def _export_dbt_to_iceberg(context: Any) -> None:
-    """Export dbt model outputs from DuckDB to Iceberg tables.
+def _load_iceberg_resources() -> dict[str, Any]:
+    """Load Iceberg resources from compiled_artifacts.json."""
+    if not ARTIFACTS_PATH.exists():
+        return {}
+    artifacts = CompiledArtifacts.model_validate_json(ARTIFACTS_PATH.read_text())
+    return try_create_iceberg_resources(
+        artifacts.plugins, governance=artifacts.governance,
+    )
 
-    After dbt build completes, connects to the DuckDB file, discovers
-    all tables, and writes each to Iceberg via the Polaris REST catalog
-    configured in compiled_artifacts.json. Uses PyIceberg directly for
-    table creation and data append.
-    """
+
+def _export_dbt_to_iceberg(context: Any) -> None:
+    """Export dbt model outputs from DuckDB to Iceberg tables."""
     import duckdb
-    from pyiceberg.catalog import load_catalog
     from pyiceberg.exceptions import NoSuchTableError
 
     if not Path(DUCKDB_PATH).exists():
         context.log.warning(
-            "DuckDB file not found at %s — skipping Iceberg export",
-            DUCKDB_PATH,
+            "DuckDB file not found at %s — skipping Iceberg export", DUCKDB_PATH,
         )
         return
 
@@ -83,24 +77,24 @@ def _export_dbt_to_iceberg(context: Any) -> None:
     catalog_config = artifacts.plugins.catalog.config or {}
     storage_config = artifacts.plugins.storage.config or {} if artifacts.plugins.storage else {}
 
-    catalog = load_catalog(
-        "polaris",
-        type="rest",
-        uri=catalog_config.get("uri", ""),
-        credential=catalog_config.get("credential", ""),
-        warehouse=catalog_config.get("warehouse", ""),
-        **{f"s3.{k}": v for k, v in storage_config.items()},
-    )
+    registry = get_registry()
+    catalog_type = artifacts.plugins.catalog.type
+    catalog_plugin = registry.get(PluginType.CATALOG, catalog_type)
+    validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config)
+    if validated_config is not None:
+        catalog_plugin = type(catalog_plugin)(config=validated_config)
+    s3_config = {f"s3.{k}": v for k, v in storage_config.items()}
+    catalog = catalog_plugin.connect(config=s3_config)
 
     product_namespace = "customer_360"
 
-    # Ensure namespace exists
     try:
         catalog.create_namespace(product_namespace)
         context.log.info("Created Iceberg namespace: %s", product_namespace)
     except Exception as exc:
         context.log.debug(
-            "Namespace %s exists or creation failed: %s", product_namespace, type(exc).__name__
+            "Namespace %s exists or creation failed: %s",
+            product_namespace, type(exc).__name__,
         )
 
     conn = duckdb.connect(DUCKDB_PATH, read_only=True)
@@ -113,16 +107,14 @@ def _export_dbt_to_iceberg(context: Any) -> None:
         for schema_name, table_name in tables_df:
             if not _is_safe_identifier(schema_name) or not _is_safe_identifier(table_name):
                 context.log.warning(
-                    "Skipping unsafe identifier: %s.%s",
-                    schema_name,
-                    table_name,
+                    "Skipping unsafe identifier: %%s.%%s", schema_name, table_name,
                 )
                 continue
-            if schema_name != "main":
+            if schema_name != 'main':
                 qualified = f'"{schema_name}"."{table_name}"'
             else:
                 qualified = f'"{table_name}"'
-            query = f"SELECT * FROM {qualified}"  # nosec B608
+            query = f'SELECT * FROM {qualified}'  # nosec B608
             arrow_table = conn.execute(query).fetch_arrow_table()
             if arrow_table.num_rows == 0:
                 continue
@@ -133,17 +125,15 @@ def _export_dbt_to_iceberg(context: Any) -> None:
                 iceberg_table.overwrite(arrow_table)
             except NoSuchTableError:
                 iceberg_table = catalog.create_table(
-                    iceberg_id,
-                    schema=arrow_table.schema,
+                    iceberg_id, schema=arrow_table.schema,
                 )
                 iceberg_table.append(arrow_table)
             context.log.info(
-                "Exported %s to Iceberg (%d rows)",
-                table_name,
-                arrow_table.num_rows,
+                "Exported %%s to Iceberg (%%d rows)", table_name, arrow_table.num_rows,
             )
     finally:
         conn.close()
+
 
 
 @dbt_assets(
