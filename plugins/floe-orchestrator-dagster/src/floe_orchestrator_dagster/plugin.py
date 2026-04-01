@@ -1157,26 +1157,33 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         safe_name = safe_name.lower()
 
         # Build conditional lineage sections
-        lineage_import = ""
         lineage_resource = ""
         if lineage_enabled:
-            lineage_import = (
-                "\nfrom floe_orchestrator_dagster.resources.lineage "
-                "import try_create_lineage_resource\n"
-            )
             lineage_resource = "        **try_create_lineage_resource(None),\n"
 
-        # Build conditional Iceberg sections
-        iceberg_import = ""
+        # Build import blocks — stdlib and third-party must be separate groups
+        stdlib_imports = ["from pathlib import Path"]
+        thirdparty_imports = [
+            "from dagster import Definitions",
+            "from dagster_dbt import DbtCliResource, DbtProject, dbt_assets",
+        ]
+
         iceberg_resource = ""
         iceberg_post_build = ""
         if iceberg_enabled:
-            iceberg_import = (
-                "\nimport re"
-                "\nfrom typing import Any"
-                "\n\nfrom floe_core.schemas.compiled_artifacts import CompiledArtifacts"
-                "\nfrom floe_orchestrator_dagster.resources.iceberg "
-                "import try_create_iceberg_resources\n"
+            stdlib_imports = [
+                "import re",
+                "from pathlib import Path",
+                "from typing import Any",
+            ]
+            thirdparty_imports.extend(
+                [
+                    "from floe_core.plugin_registry import get_registry",
+                    "from floe_core.plugin_types import PluginType",
+                    "from floe_core.schemas.compiled_artifacts import CompiledArtifacts",
+                    "from floe_orchestrator_dagster.resources.iceberg "
+                    "import try_create_iceberg_resources",
+                ]
             )
             iceberg_resource = "        **_load_iceberg_resources(),\n"
             iceberg_post_build = (
@@ -1184,6 +1191,14 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 "    # Post-build: export dbt output to Iceberg tables\n"
                 "    _export_dbt_to_iceberg(context)\n"
             )
+        if lineage_enabled:
+            thirdparty_imports.append(
+                "from floe_orchestrator_dagster.resources.lineage "
+                "import try_create_lineage_resource"
+            )
+
+        thirdparty_imports.sort()
+        imports_block = "\n".join(stdlib_imports) + "\n\n" + "\n".join(thirdparty_imports)
 
         # Iceberg helper functions (only included when iceberg_enabled)
         iceberg_helpers = ""
@@ -1215,7 +1230,6 @@ def _load_iceberg_resources() -> dict[str, Any]:
 def _export_dbt_to_iceberg(context: Any) -> None:
     """Export dbt model outputs from DuckDB to Iceberg tables."""
     import duckdb
-    from pyiceberg.catalog import load_catalog
     from pyiceberg.exceptions import NoSuchTableError
 
     if not Path(DUCKDB_PATH).exists():
@@ -1236,14 +1250,19 @@ def _export_dbt_to_iceberg(context: Any) -> None:
     catalog_config = artifacts.plugins.catalog.config or {{}}
     storage_config = artifacts.plugins.storage.config or {{}} if artifacts.plugins.storage else {{}}
 
-    catalog = load_catalog(
-        "polaris",
-        type="rest",
-        uri=catalog_config.get("uri", ""),
-        credential=catalog_config.get("credential", ""),
-        warehouse=catalog_config.get("warehouse", ""),
-        **{{f"s3.{{k}}": v for k, v in storage_config.items()}},
-    )
+    registry = get_registry()
+    catalog_type = artifacts.plugins.catalog.type
+    catalog_plugin = registry.get(PluginType.CATALOG, catalog_type)
+    validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config)
+    if validated_config is None:
+        context.log.warning(
+            "Catalog plugin config for %s could not be validated — skipping Iceberg export",
+            catalog_type,
+        )
+        return
+    catalog_plugin = type(catalog_plugin)(config=validated_config)
+    s3_config = {{f"s3.{{k}}": v for k, v in storage_config.items()}}
+    catalog = catalog_plugin.connect(config=s3_config)
 
     product_namespace = "{safe_name}"
 
@@ -1266,7 +1285,7 @@ def _export_dbt_to_iceberg(context: Any) -> None:
         for schema_name, table_name in tables_df:
             if not _is_safe_identifier(schema_name) or not _is_safe_identifier(table_name):
                 context.log.warning(
-                    "Skipping unsafe identifier: %%s.%%s", schema_name, table_name,
+                    "Skipping unsafe identifier: %s.%s", schema_name, table_name,
                 )
                 continue
             if schema_name != 'main':
@@ -1288,7 +1307,7 @@ def _export_dbt_to_iceberg(context: Any) -> None:
                 )
                 iceberg_table.append(arrow_table)
             context.log.info(
-                "Exported %%s to Iceberg (%%d rows)", table_name, arrow_table.num_rows,
+                "Exported %s to Iceberg (%d rows)", table_name, arrow_table.num_rows,
             )
     finally:
         conn.close()
@@ -1309,11 +1328,8 @@ Regenerate with:
 
 from __future__ import annotations
 
-from pathlib import Path
+{imports_block}
 
-from dagster import Definitions
-from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
-{lineage_import}{iceberg_import}
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent
 DBT_PROJECT_DIR = PROJECT_DIR

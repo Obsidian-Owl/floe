@@ -17,6 +17,8 @@ from typing import Any
 
 from dagster import Definitions
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
+from floe_core.plugin_registry import get_registry
+from floe_core.plugin_types import PluginType
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
@@ -26,8 +28,17 @@ PROJECT_DIR = Path(__file__).parent
 DBT_PROJECT_DIR = PROJECT_DIR
 MANIFEST_PATH = DBT_PROJECT_DIR / "target" / "manifest.json"
 
+
 ARTIFACTS_PATH = PROJECT_DIR / "compiled_artifacts.json"
 DUCKDB_PATH = "/tmp/iot_telemetry.duckdb"
+
+
+_SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _is_safe_identifier(name: str) -> bool:
+    """Validate a SQL identifier against a safe pattern."""
+    return bool(_SAFE_IDENTIFIER_RE.match(name))
 
 
 def _load_iceberg_resources() -> dict[str, Any]:
@@ -41,18 +52,9 @@ def _load_iceberg_resources() -> dict[str, Any]:
     )
 
 
-_SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-
-
-def _is_safe_identifier(name: str) -> bool:
-    """Validate a SQL identifier against a safe pattern."""
-    return bool(_SAFE_IDENTIFIER_RE.match(name))
-
-
 def _export_dbt_to_iceberg(context: Any) -> None:
     """Export dbt model outputs from DuckDB to Iceberg tables."""
     import duckdb
-    from pyiceberg.catalog import load_catalog
     from pyiceberg.exceptions import NoSuchTableError
 
     if not Path(DUCKDB_PATH).exists():
@@ -74,14 +76,19 @@ def _export_dbt_to_iceberg(context: Any) -> None:
     catalog_config = artifacts.plugins.catalog.config or {}
     storage_config = artifacts.plugins.storage.config or {} if artifacts.plugins.storage else {}
 
-    catalog = load_catalog(
-        "polaris",
-        type="rest",
-        uri=catalog_config.get("uri", ""),
-        credential=catalog_config.get("credential", ""),
-        warehouse=catalog_config.get("warehouse", ""),
-        **{f"s3.{k}": v for k, v in storage_config.items()},
-    )
+    registry = get_registry()
+    catalog_type = artifacts.plugins.catalog.type
+    catalog_plugin = registry.get(PluginType.CATALOG, catalog_type)
+    validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config)
+    if validated_config is None:
+        context.log.warning(
+            "Catalog plugin config for %s could not be validated — skipping Iceberg export",
+            catalog_type,
+        )
+        return
+    catalog_plugin = type(catalog_plugin)(config=validated_config)
+    s3_config = {f"s3.{k}": v for k, v in storage_config.items()}
+    catalog = catalog_plugin.connect(config=s3_config)
 
     product_namespace = "iot_telemetry"
 
@@ -90,7 +97,9 @@ def _export_dbt_to_iceberg(context: Any) -> None:
         context.log.info("Created Iceberg namespace: %s", product_namespace)
     except Exception as exc:
         context.log.debug(
-            "Namespace %s exists or creation failed: %s", product_namespace, type(exc).__name__
+            "Namespace %s exists or creation failed: %s",
+            product_namespace,
+            type(exc).__name__,
         )
 
     conn = duckdb.connect(DUCKDB_PATH, read_only=True)
