@@ -1796,6 +1796,27 @@ requires-dist = [
 ]
 
 [[package]]
+name = "floe-storage-s3"
+version = "0.1.0"
+source = { editable = "plugins/floe-storage-s3" }
+dependencies = [
+    { name = "floe-core" },
+    { name = "pydantic" },
+    { name = "pyiceberg" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
+    { name = "pydantic", specifier = ">=2.0,<3.0" },
+    { name = "pyiceberg", specifier = ">=0.11.1" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3" },
+]
+
+[[package]]
 name = "floe-telemetry-console"
 version = "0.1.0"
 source = { editable = "plugins/floe-telemetry-console" }
@@ -1865,6 +1886,7 @@ dependencies = [
     { name = "floe-secrets-infisical" },
     { name = "floe-secrets-k8s" },
     { name = "floe-semantic-cube" },
+    { name = "floe-storage-s3" },
     { name = "floe-telemetry-console" },
     { name = "floe-telemetry-jaeger" },
     { name = "import-linter" },
@@ -1924,6 +1946,7 @@ requires-dist = [
     { name = "floe-secrets-infisical", editable = "plugins/floe-secrets-infisical" },
     { name = "floe-secrets-k8s", editable = "plugins/floe-secrets-k8s" },
     { name = "floe-semantic-cube", editable = "plugins/floe-semantic-cube" },
+    { name = "floe-storage-s3", editable = "plugins/floe-storage-s3" },
     { name = "floe-telemetry-console", editable = "plugins/floe-telemetry-console" },
     { name = "floe-telemetry-jaeger", editable = "plugins/floe-telemetry-jaeger" },
     { name = "import-linter", specifier = ">=2.0" },
