@@ -11,20 +11,17 @@ Regenerate with:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from typing import Any
 
 from dagster import Definitions
 from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
-
-from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
-
-import re
-from typing import Any
-
 from floe_core.plugin_registry import get_registry
 from floe_core.plugin_types import PluginType
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
 
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent

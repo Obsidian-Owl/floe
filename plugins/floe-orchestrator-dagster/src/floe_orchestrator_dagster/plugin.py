@@ -1157,35 +1157,49 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         safe_name = safe_name.lower()
 
         # Build conditional lineage sections
-        lineage_import = ""
         lineage_resource = ""
         if lineage_enabled:
-            lineage_import = (
-                "\nfrom floe_orchestrator_dagster.resources.lineage "
-                "import try_create_lineage_resource\n"
-            )
             lineage_resource = "        **try_create_lineage_resource(None),\n"
 
-        # Build conditional Iceberg sections
-        iceberg_import = ""
+        # Build import blocks — stdlib and third-party must be separate groups
+        stdlib_imports = ["from pathlib import Path"]
+        thirdparty_imports = [
+            "from dagster import Definitions",
+            "from dagster_dbt import DbtCliResource, DbtProject, dbt_assets",
+        ]
+
         iceberg_resource = ""
         iceberg_post_build = ""
         if iceberg_enabled:
-            iceberg_import = (
-                "\nimport re"
-                "\nfrom typing import Any"
-                "\n\nfrom floe_core.plugin_registry import get_registry"
-                "\nfrom floe_core.plugin_types import PluginType"
-                "\nfrom floe_core.schemas.compiled_artifacts import CompiledArtifacts"
-                "\nfrom floe_orchestrator_dagster.resources.iceberg "
-                "import try_create_iceberg_resources\n"
+            stdlib_imports = [
+                "import re",
+                "from pathlib import Path",
+                "from typing import Any",
+            ]
+            thirdparty_imports.extend([
+                "from floe_core.plugin_registry import get_registry",
+                "from floe_core.plugin_types import PluginType",
+                "from floe_core.schemas.compiled_artifacts import CompiledArtifacts",
+                "from floe_orchestrator_dagster.resources.iceberg "
+                "import try_create_iceberg_resources",
+            ])
+        if lineage_enabled:
+            thirdparty_imports.append(
+                "from floe_orchestrator_dagster.resources.lineage "
+                "import try_create_lineage_resource"
             )
+
             iceberg_resource = "        **_load_iceberg_resources(),\n"
             iceberg_post_build = (
                 "\n"
                 "    # Post-build: export dbt output to Iceberg tables\n"
                 "    _export_dbt_to_iceberg(context)\n"
             )
+
+        thirdparty_imports.sort()
+        imports_block = (
+            "\n".join(stdlib_imports) + "\n\n" + "\n".join(thirdparty_imports)
+        )
 
         # Iceberg helper functions (only included when iceberg_enabled)
         iceberg_helpers = ""
@@ -1310,11 +1324,8 @@ Regenerate with:
 
 from __future__ import annotations
 
-from pathlib import Path
+{imports_block}
 
-from dagster import Definitions
-from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
-{lineage_import}{iceberg_import}
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent
 DBT_PROJECT_DIR = PROJECT_DIR
