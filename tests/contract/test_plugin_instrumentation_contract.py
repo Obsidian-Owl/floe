@@ -32,8 +32,8 @@ _EXCLUDED_GROUPS: frozenset[str] = frozenset(
 _TRACER_NAME_PATTERN = re.compile(r"^floe\.[a-z]+\.[a-z][a-z0-9_]*$")
 
 # Expected counts
-_EXPECTED_TOTAL_PLUGINS = 21
-_EXPECTED_INSTRUMENTED_PLUGINS = 19
+_EXPECTED_TOTAL_PLUGINS = 22
+_EXPECTED_INSTRUMENTED_PLUGINS = 20
 
 
 @pytest.mark.requirement("FR-022")
