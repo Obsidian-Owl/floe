@@ -1267,7 +1267,7 @@ def _export_dbt_to_iceberg(context: Any) -> None:
         for schema_name, table_name in tables_df:
             if not _is_safe_identifier(schema_name) or not _is_safe_identifier(table_name):
                 context.log.warning(
-                    "Skipping unsafe identifier: %%s.%%s", schema_name, table_name,
+                    "Skipping unsafe identifier: %s.%s", schema_name, table_name,
                 )
                 continue
             if schema_name != 'main':
@@ -1289,7 +1289,7 @@ def _export_dbt_to_iceberg(context: Any) -> None:
                 )
                 iceberg_table.append(arrow_table)
             context.log.info(
-                "Exported %%s to Iceberg (%%d rows)", table_name, arrow_table.num_rows,
+                "Exported %s to Iceberg (%d rows)", table_name, arrow_table.num_rows,
             )
     finally:
         conn.close()
