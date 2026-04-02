@@ -13,9 +13,10 @@
 #   DEVPOD_HETZNER_TOKEN  - Hetzner Cloud API token (read + write)
 #
 # Optional .env variables:
-#   DEVPOD_WORKSPACE      - Workspace name (default: floe)
-#   DEVPOD_MACHINE_TYPE   - Hetzner machine type (default: ccx33)
-#   DEVPOD_REGION         - Hetzner region (default: sin)
+#   DEVPOD_WORKSPACE            - Workspace name (default: floe)
+#   DEVPOD_MACHINE_TYPE         - Hetzner machine type (default: ccx33)
+#   DEVPOD_REGION               - Hetzner region (default: sin)
+#   DEVPOD_INACTIVITY_TIMEOUT   - VM auto-delete timeout (default: 120m)
 
 set -euo pipefail
 
@@ -50,6 +51,7 @@ MACHINE_TYPE="${DEVPOD_MACHINE_TYPE:-ccx33}"
 REGION="${DEVPOD_REGION:-sin}"
 DISK_SIZE="${DEVPOD_DISK_SIZE:-64}"
 DISK_IMAGE="${DEVPOD_DISK_IMAGE:-docker-ce}"
+INACTIVITY_TIMEOUT="${DEVPOD_INACTIVITY_TIMEOUT:-120m}"
 
 # ─── Validate inputs ─────────────────────────────────────────────────────────
 
@@ -75,8 +77,8 @@ if devpod provider list 2>/dev/null | grep -q "hetzner"; then
     log "Hetzner provider already installed"
 else
     log "Installing Hetzner provider from ${PROVIDER_REPO}..."
-    # Provider v1.0.1 warns TOKEN is deprecated but doesn't accept HCLOUD_TOKEN yet.
-    # Use TOKEN until the provider schema is updated.
+    # Provider v1.0.1 schema requires TOKEN (not HCLOUD_TOKEN). The deprecation
+    # warning comes from the hcloud SDK, not the provider option schema.
     # Suppress trace mode to prevent token leakage in CI logs
     { set +x; } 2>/dev/null
     devpod provider add "${PROVIDER_REPO}" \
@@ -85,6 +87,7 @@ else
         -o REGION="${REGION}" \
         -o DISK_SIZE="${DISK_SIZE}" \
         -o DISK_IMAGE="${DISK_IMAGE}" \
+        -o INACTIVITY_TIMEOUT="${INACTIVITY_TIMEOUT}" \
         || error "Failed to add Hetzner provider"
     log "Provider installed and configured"
     exit 0
@@ -101,7 +104,8 @@ devpod provider set-options hetzner \
     -o REGION="${REGION}" \
     -o DISK_SIZE="${DISK_SIZE}" \
     -o DISK_IMAGE="${DISK_IMAGE}" \
+    -o INACTIVITY_TIMEOUT="${INACTIVITY_TIMEOUT}" \
     || error "Failed to set provider options"
 
-log "Provider configured: MACHINE_TYPE=${MACHINE_TYPE}, REGION=${REGION}, DISK_SIZE=${DISK_SIZE}"
+log "Provider configured: MACHINE_TYPE=${MACHINE_TYPE}, REGION=${REGION}, DISK_SIZE=${DISK_SIZE}, INACTIVITY_TIMEOUT=${INACTIVITY_TIMEOUT}"
 log "Setup complete"
