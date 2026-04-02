@@ -87,9 +87,8 @@ class TestHelmUpgrade:
         current_revision = current.get("version", 0)
 
         # Upgrade with an annotation change (minimal modification)
-        # --rollback-on-failure auto-rollbacks on failure (prevents leaving
-        # release in 'failed' state which cascades to downstream tests).
-        # Replaces deprecated --atomic (removed in Helm v4).
+        # --atomic auto-rollbacks on failure (prevents leaving release in
+        # 'failed' state which cascades to downstream tests).
         # --timeout 8m allows for the pg-pre-upgrade hook's
         # activeDeadlineSeconds: 300 plus scheduling latency.
         try:
@@ -104,8 +103,7 @@ class TestHelmUpgrade:
                     "charts/floe-platform/values-test.yaml",
                     "--set",
                     "global.annotations.e2e-test-revision=upgrade-test",
-                    "--rollback-on-failure",
-                    "--wait",
+                    "--atomic",
                     "--timeout",
                     "8m",
                 ],

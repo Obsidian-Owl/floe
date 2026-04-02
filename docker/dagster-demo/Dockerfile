@@ -55,7 +55,7 @@ COPY plugins/floe-telemetry-console/pyproject.toml plugins/floe-telemetry-consol
 COPY plugins/floe-telemetry-jaeger/pyproject.toml plugins/floe-telemetry-jaeger/pyproject.toml
 
 # Target plugin list — overridden by Makefile via --build-arg
-ARG FLOE_PLUGINS="floe-core floe-orchestrator-dagster floe-compute-duckdb floe-dbt-core floe-lineage-marquez floe-iceberg floe-storage-s3"
+ARG FLOE_PLUGINS="floe-core floe-catalog-polaris floe-orchestrator-dagster floe-compute-duckdb floe-dbt-core floe-lineage-marquez floe-iceberg floe-storage-s3"
 
 # Export transitive closure of all workspace packages with SHA256 hashes.
 # --frozen: fail if lockfile is stale (no re-resolution)
@@ -103,7 +103,7 @@ COPY plugins/floe-storage-s3 /build/plugins/floe-storage-s3
 # Install workspace packages from source (deps already installed above).
 # Uses FLOE_PLUGINS ARG to dynamically install only the target packages.
 # Re-declare ARG — Docker does not propagate ARGs across stages.
-ARG FLOE_PLUGINS="floe-core floe-orchestrator-dagster floe-compute-duckdb floe-dbt-core floe-lineage-marquez floe-iceberg floe-storage-s3"
+ARG FLOE_PLUGINS="floe-core floe-catalog-polaris floe-orchestrator-dagster floe-compute-duckdb floe-dbt-core floe-lineage-marquez floe-iceberg floe-storage-s3"
 # shellcheck disable=SC2086
 RUN set -e; \
     for pkg in $FLOE_PLUGINS; do \
