@@ -45,7 +45,7 @@ plugins:
     type: polaris
     config:
       uri: http://floe-platform-polaris:8181/api/catalog
-      warehouse: floe-demo
+      warehouse: floe-e2e
       # Demo credentials for local development only
       # Production: use polaris.auth.existingSecret with K8s secrets
       oauth2:
