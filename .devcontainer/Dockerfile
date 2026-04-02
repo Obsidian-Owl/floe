@@ -51,8 +51,7 @@ RUN mkdir /commandhistory \
 ENV DEVCONTAINER=true
 
 # Create workspace and config directories
-RUN mkdir -p /workspace /home/node/.claude /home/node/.kube && \
-  chown -R node:node /workspace /home/node/.claude /home/node/.kube
+RUN mkdir -p /workspace /root/.claude /root/.kube
 
 WORKDIR /workspace
 
@@ -86,19 +85,10 @@ RUN ARCH=$(dpkg --print-architecture) && \
   rm -rf "linux-${ARCH}" "helm-v${HELM_VERSION}-linux-${ARCH}.tar.gz"
 
 # ============================================================
-# Sudoers — firewall + K8s tooling (passwordless)
+# Firewall init script
 # ============================================================
 COPY init-firewall.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/init-firewall.sh && \
-  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
-  chmod 0440 /etc/sudoers.d/node-firewall && \
-  echo "node ALL=(root) NOPASSWD: /usr/local/share/docker-init.sh, /usr/sbin/dockerd, /usr/bin/dockerd, /usr/sbin/groupmod, /usr/bin/socat, /usr/bin/tee, /bin/rm" > /etc/sudoers.d/node-docker && \
-  chmod 0440 /etc/sudoers.d/node-docker
-
-# ============================================================
-# Switch to non-root user
-# ============================================================
-USER node
+RUN chmod +x /usr/local/bin/init-firewall.sh
 
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 ENV PATH=$PATH:/usr/local/share/npm-global/bin
@@ -111,7 +101,7 @@ ENV VISUAL=nano
 # ============================================================
 ARG UV_VERSION=0.7.2
 RUN curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh
-ENV PATH="/home/node/.local/bin:$PATH"
+ENV PATH="/root/.local/bin:$PATH"
 
 # ============================================================
 # Zsh + Oh My Zsh
@@ -128,7 +118,7 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
   -a "export HISTSIZE=10000" \
   -a "export SAVEHIST=10000" \
   -a "setopt APPEND_HISTORY SHARE_HISTORY INC_APPEND_HISTORY HIST_IGNORE_DUPS" \
-  -a 'export PATH="/home/node/.local/bin:$PATH"' \
+  -a 'export PATH="/root/.local/bin:$PATH"' \
   -x
 
 # ============================================================
