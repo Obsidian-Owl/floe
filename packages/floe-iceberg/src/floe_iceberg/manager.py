@@ -201,16 +201,14 @@ class IcebergTableManager:
         """
         self._log.debug("connecting_to_catalog")
 
-        # Use config override if provided, otherwise use minimal defaults
-        # for testing compatibility (e.g., in-memory catalog for unit tests)
+        # Use config override if provided, otherwise pass empty dict to let
+        # the CatalogPlugin use its own configured connection settings.
+        # Note: Previously defaulted to {"uri": "memory://", "warehouse": "default"}
+        # which overrode the plugin's real URI — a production-breaking bug.
         if self._config.catalog_connection_config is not None:
             connect_config: dict[str, Any] = dict(self._config.catalog_connection_config)
         else:
-            # Default config for testing - production should configure via plugins
-            connect_config = {
-                "uri": "memory://",
-                "warehouse": "default",
-            }
+            connect_config = {}
 
         catalog = self._catalog_plugin.connect(connect_config)
 
