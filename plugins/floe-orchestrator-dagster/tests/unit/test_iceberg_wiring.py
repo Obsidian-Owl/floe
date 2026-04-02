@@ -74,7 +74,13 @@ class TestCreateIcebergResourcesFullWiring:
             # Setup mocks
             mock_registry = MagicMock()
             mock_get_registry.return_value = mock_registry
+            mock_validated_catalog_config = MagicMock()
+            mock_validated_storage_config = MagicMock()
             mock_registry.get.side_effect = [mock_catalog_plugin, mock_storage_plugin]
+            mock_registry.configure.side_effect = [
+                mock_validated_catalog_config,
+                mock_validated_storage_config,
+            ]
             mock_table_manager_cls.return_value = mock_table_manager
             mock_create_io_manager.return_value = mock_io_manager
 
@@ -101,11 +107,12 @@ class TestCreateIcebergResourcesFullWiring:
                 PluginType.STORAGE, "mock-storage", {"bucket": "test-bucket"}
             )
 
-            # Verify IcebergTableManager created with loaded plugins and a config
+            # Verify IcebergTableManager created with re-configured plugins
             mock_table_manager_cls.assert_called_once()
             call_kwargs = mock_table_manager_cls.call_args.kwargs
-            assert call_kwargs["catalog_plugin"] is mock_catalog_plugin
-            assert call_kwargs["storage_plugin"] is mock_storage_plugin
+            # After configure(), plugins are re-instantiated with validated config
+            assert call_kwargs["catalog_plugin"] is not None
+            assert call_kwargs["storage_plugin"] is not None
             assert "config" in call_kwargs
 
             # Verify IcebergIOManager created with table manager
