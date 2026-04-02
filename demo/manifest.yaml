@@ -52,6 +52,7 @@ plugins:
         client_id: demo-admin
         client_secret: demo-secret  # pragma: allowlist secret
         token_url: http://floe-platform-polaris:8181/api/catalog/v1/oauth/tokens
+        scope: PRINCIPAL_ROLE:ALL
 
   # Storage: MinIO S3-compatible storage for demo
   storage:
