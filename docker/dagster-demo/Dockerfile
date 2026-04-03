@@ -50,6 +50,7 @@ COPY plugins/floe-rbac-k8s/pyproject.toml plugins/floe-rbac-k8s/pyproject.toml
 COPY plugins/floe-secrets-infisical/pyproject.toml plugins/floe-secrets-infisical/pyproject.toml
 COPY plugins/floe-secrets-k8s/pyproject.toml plugins/floe-secrets-k8s/pyproject.toml
 COPY plugins/floe-semantic-cube/pyproject.toml plugins/floe-semantic-cube/pyproject.toml
+COPY plugins/floe-storage-s3/pyproject.toml plugins/floe-storage-s3/pyproject.toml
 COPY plugins/floe-telemetry-console/pyproject.toml plugins/floe-telemetry-console/pyproject.toml
 COPY plugins/floe-telemetry-jaeger/pyproject.toml plugins/floe-telemetry-jaeger/pyproject.toml
 
@@ -97,6 +98,7 @@ COPY plugins/floe-compute-duckdb /build/plugins/floe-compute-duckdb
 COPY plugins/floe-dbt-core /build/plugins/floe-dbt-core
 COPY plugins/floe-lineage-marquez /build/plugins/floe-lineage-marquez
 COPY packages/floe-iceberg /build/packages/floe-iceberg
+COPY plugins/floe-storage-s3 /build/plugins/floe-storage-s3
 
 # Install workspace packages from source (deps already installed above).
 # Uses FLOE_PLUGINS ARG to dynamically install only the target packages.
