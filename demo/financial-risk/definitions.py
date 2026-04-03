@@ -11,6 +11,7 @@ Regenerate with:
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Any
@@ -21,12 +22,56 @@ from floe_core.plugin_registry import get_registry
 from floe_core.plugin_types import PluginType
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
-from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
+from floe_orchestrator_dagster.resources.lineage import NoOpLineageResource
 
 # Get the path to this data product's dbt project
 PROJECT_DIR = Path(__file__).parent
 DBT_PROJECT_DIR = PROJECT_DIR
 MANIFEST_PATH = DBT_PROJECT_DIR / "target" / "manifest.json"
+
+
+_LINEAGE_RESOURCE: Any = None
+
+
+def _load_lineage_resource() -> Any:
+    """Load lineage resource from compiled_artifacts.json (lazy).
+
+    Returns a real LineageResource when observability.lineage is enabled
+    and a Marquez endpoint is configured. Falls back to NoOpLineageResource
+    on any error or missing configuration.
+    """
+    if not ARTIFACTS_PATH.exists():
+        return NoOpLineageResource()
+    try:
+        artifacts = CompiledArtifacts.model_validate_json(ARTIFACTS_PATH.read_text())
+        obs = artifacts.observability
+        if obs is None or not obs.lineage:
+            return NoOpLineageResource()
+        endpoint = getattr(obs, "lineage_endpoint", None)
+        transport = getattr(obs, "lineage_transport", "http")
+        if not endpoint:
+            return NoOpLineageResource()
+        namespace = getattr(obs, "lineage_namespace", "default") or "default"
+        from floe_core.lineage.emitter import create_emitter
+        from floe_orchestrator_dagster.resources.lineage import LineageResource
+
+        transport_config = {"type": transport, "url": endpoint}
+        emitter = create_emitter(transport_config, namespace)
+        return LineageResource(emitter=emitter)
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "lineage_resource_load_failed",
+            exc_info=True,
+        )
+        return NoOpLineageResource()
+
+
+def _get_lineage_resource() -> Any:
+    """Return the cached lineage resource, creating it on first call."""
+    global _LINEAGE_RESOURCE
+    if _LINEAGE_RESOURCE is None:
+        _LINEAGE_RESOURCE = _load_lineage_resource()
+    return _LINEAGE_RESOURCE
 
 
 ARTIFACTS_PATH = PROJECT_DIR / "compiled_artifacts.json"
@@ -158,6 +203,8 @@ def financial_risk_dbt_assets(context, dbt: DbtCliResource):
     """
     yield from dbt.cli(["build"], context=context).stream()
 
+    lineage = _get_lineage_resource()  # noqa: F841
+
     # Post-build: export dbt output to Iceberg tables
     _export_dbt_to_iceberg(context)
 
@@ -170,7 +217,6 @@ defs = Definitions(
             project_dir=DBT_PROJECT_DIR,
             profiles_dir=DBT_PROJECT_DIR,
         ),
-        **try_create_lineage_resource(None),
         **_load_iceberg_resources(),
     },
 )

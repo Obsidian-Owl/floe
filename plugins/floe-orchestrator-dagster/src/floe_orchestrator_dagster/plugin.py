@@ -1157,9 +1157,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         safe_name = safe_name.lower()
 
         # Build conditional lineage sections
-        lineage_resource = ""
+        lineage_body = ""
         if lineage_enabled:
-            lineage_resource = "        **try_create_lineage_resource(None),\n"
+            lineage_body = "\n    lineage = _get_lineage_resource()  # noqa: F841\n"
 
         # Build import blocks — stdlib and third-party must be separate groups
         stdlib_imports = ["from pathlib import Path"]
@@ -1192,13 +1192,75 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 "    _export_dbt_to_iceberg(context)\n"
             )
         if lineage_enabled:
+            if "import logging" not in stdlib_imports:
+                stdlib_imports.insert(0, "import logging")
+            if "from typing import Any" not in stdlib_imports:
+                stdlib_imports.append("from typing import Any")
+            thirdparty_imports.append(
+                "from floe_core.schemas.compiled_artifacts import CompiledArtifacts"
+            )
             thirdparty_imports.append(
                 "from floe_orchestrator_dagster.resources.lineage "
-                "import try_create_lineage_resource"
+                "import NoOpLineageResource"
             )
 
+        # Deduplicate imports (e.g. CompiledArtifacts needed by both iceberg and lineage)
+        stdlib_imports = list(dict.fromkeys(stdlib_imports))
+        thirdparty_imports = list(dict.fromkeys(thirdparty_imports))
         thirdparty_imports.sort()
         imports_block = "\n".join(stdlib_imports) + "\n\n" + "\n".join(thirdparty_imports)
+
+        # Lineage helper functions (only included when lineage_enabled)
+        lineage_helpers = ""
+        if lineage_enabled:
+            artifacts_path_line = ""
+            if not iceberg_enabled:
+                # Iceberg already defines ARTIFACTS_PATH; only add if lineage-only
+                artifacts_path_line = '\nARTIFACTS_PATH = PROJECT_DIR / "compiled_artifacts.json"\n'
+            lineage_helpers = f'''{artifacts_path_line}
+
+_LINEAGE_RESOURCE: Any = None
+
+
+def _load_lineage_resource() -> Any:
+    """Load lineage resource from compiled_artifacts.json (lazy).
+
+    Returns a real LineageResource when observability.lineage is enabled
+    and a Marquez endpoint is configured. Falls back to NoOpLineageResource
+    on any error or missing configuration.
+    """
+    if not ARTIFACTS_PATH.exists():
+        return NoOpLineageResource()
+    try:
+        artifacts = CompiledArtifacts.model_validate_json(ARTIFACTS_PATH.read_text())
+        obs = artifacts.observability
+        if obs is None or not obs.lineage:
+            return NoOpLineageResource()
+        endpoint = getattr(obs, "lineage_endpoint", None)
+        transport = getattr(obs, "lineage_transport", "http")
+        if not endpoint:
+            return NoOpLineageResource()
+        namespace = getattr(obs, "lineage_namespace", "default") or "default"
+        from floe_core.lineage.emitter import create_emitter
+        from floe_orchestrator_dagster.resources.lineage import LineageResource
+        transport_config = {{"type": transport, "url": endpoint}}
+        emitter = create_emitter(transport_config, namespace)
+        return LineageResource(emitter=emitter)
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "lineage_resource_load_failed", exc_info=True,
+        )
+        return NoOpLineageResource()
+
+
+def _get_lineage_resource() -> Any:
+    """Return the cached lineage resource, creating it on first call."""
+    global _LINEAGE_RESOURCE
+    if _LINEAGE_RESOURCE is None:
+        _LINEAGE_RESOURCE = _load_lineage_resource()
+    return _LINEAGE_RESOURCE
+
+'''
 
         # Iceberg helper functions (only included when iceberg_enabled)
         iceberg_helpers = ""
@@ -1334,7 +1396,7 @@ from __future__ import annotations
 PROJECT_DIR = Path(__file__).parent
 DBT_PROJECT_DIR = PROJECT_DIR
 MANIFEST_PATH = DBT_PROJECT_DIR / "target" / "manifest.json"
-{iceberg_helpers}
+{lineage_helpers}{iceberg_helpers}
 
 @dbt_assets(
     manifest=MANIFEST_PATH,
@@ -1348,7 +1410,7 @@ def {safe_name}_dbt_assets(context, dbt: DbtCliResource):
     to execute all dbt models in this project as Dagster software-defined assets.
     """
     yield from dbt.cli(["build"], context=context).stream()
-{iceberg_post_build}
+{lineage_body}{iceberg_post_build}
 
 # Create Definitions object for Dagster to discover
 defs = Definitions(
@@ -1358,7 +1420,7 @@ defs = Definitions(
             project_dir=DBT_PROJECT_DIR,
             profiles_dir=DBT_PROJECT_DIR,
         ),
-{lineage_resource}{iceberg_resource}    }},
+{iceberg_resource}    }},
 )
 '''
 
