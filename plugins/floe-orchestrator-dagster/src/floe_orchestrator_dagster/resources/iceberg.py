@@ -204,7 +204,7 @@ def try_create_iceberg_resources(
         logger.exception(
             "Failed to create Iceberg resources — this will prevent Iceberg IO from working"
         )
-        raise
+        return {}
 
 
 __all__ = [
