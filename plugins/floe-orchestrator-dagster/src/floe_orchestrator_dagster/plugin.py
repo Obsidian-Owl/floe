@@ -1200,8 +1200,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 "from floe_core.schemas.compiled_artifacts import CompiledArtifacts"
             )
             thirdparty_imports.append(
-                "from floe_orchestrator_dagster.resources.lineage "
-                "import NoOpLineageResource"
+                "from floe_orchestrator_dagster.resources.lineage import NoOpLineageResource"
             )
 
         # Deduplicate imports (e.g. CompiledArtifacts needed by both iceberg and lineage)
