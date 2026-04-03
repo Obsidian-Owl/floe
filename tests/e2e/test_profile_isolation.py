@@ -120,49 +120,49 @@ class TestRunDbtProfilesDir:
     def test_uses_generated_profiles_when_dir_exists(
         self,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """run_dbt() passes generated_profiles/<product> as --profiles-dir
         when that directory exists on disk."""
+        import dbt_utils
         from dbt_utils import run_dbt
 
         # Create a fake project dir whose .name matches the generated dir
         project_dir = tmp_path / "customer-360"
         project_dir.mkdir()
 
-        # Create the generated profiles directory where run_dbt() looks
-        e2e_dir = Path(__file__).parent / "generated_profiles" / "customer-360"
-        e2e_dir.mkdir(parents=True, exist_ok=True)
-        (e2e_dir / "profiles.yml").write_text("customer_360:\n  target: e2e\n")
+        # Create the generated profiles directory under tmp_path (not source tree)
+        gen_dir = tmp_path / "generated_profiles" / "customer-360"
+        gen_dir.mkdir(parents=True)
+        (gen_dir / "profiles.yml").write_text("customer_360:\n  target: e2e\n")
 
-        try:
-            with patch("dbt_utils.subprocess.run") as mock_run:
-                mock_run.return_value = subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="", stderr=""
-                )
-                run_dbt(["debug"], project_dir)
+        # Redirect run_dbt()'s Path(__file__).parent to tmp_path
+        monkeypatch.setattr(dbt_utils, "__file__", str(tmp_path / "dbt_utils.py"))
 
-                mock_run.assert_called_once()
-                call_args: list[str] = mock_run.call_args[0][0]
+        with patch("dbt_utils.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="", stderr=""
+            )
+            run_dbt(["debug"], project_dir)
 
-                # Find the --profiles-dir value in the subprocess args
-                profiles_dir_idx = call_args.index("--profiles-dir")
-                profiles_dir_value = call_args[profiles_dir_idx + 1]
+            mock_run.assert_called_once()
+            call_args: list[str] = mock_run.call_args[0][0]
 
-                # Must point to generated_profiles, NOT project_dir
-                assert "generated_profiles" in profiles_dir_value, (
-                    f"Expected generated_profiles in --profiles-dir, got: {profiles_dir_value}"
-                )
-                assert profiles_dir_value.endswith("customer-360"), (
-                    f"--profiles-dir should end with product name, got: {profiles_dir_value}"
-                )
-                # Must NOT be the project_dir itself
-                assert profiles_dir_value != str(project_dir), (
-                    "run_dbt() should use generated_profiles, not project_dir"
-                )
-        finally:
-            # Clean up so we don't leave artifacts in the source tree
-            if e2e_dir.exists():
-                shutil.rmtree(e2e_dir)
+            # Find the --profiles-dir value in the subprocess args
+            profiles_dir_idx = call_args.index("--profiles-dir")
+            profiles_dir_value = call_args[profiles_dir_idx + 1]
+
+            # Must point to generated_profiles, NOT project_dir
+            assert "generated_profiles" in profiles_dir_value, (
+                f"Expected generated_profiles in --profiles-dir, got: {profiles_dir_value}"
+            )
+            assert profiles_dir_value.endswith("customer-360"), (
+                f"--profiles-dir should end with product name, got: {profiles_dir_value}"
+            )
+            # Must NOT be the project_dir itself
+            assert profiles_dir_value != str(project_dir), (
+                "run_dbt() should use generated_profiles, not project_dir"
+            )
 
     def test_falls_back_to_project_dir_when_no_generated_profiles(
         self,
@@ -223,51 +223,54 @@ class TestRunDbtProfilesDir:
     def test_project_dir_always_passed_separately(
         self,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """--project-dir is always the original project_dir, even when
         --profiles-dir points elsewhere."""
+        import dbt_utils
         from dbt_utils import run_dbt
 
         project_dir = tmp_path / "customer-360"
         project_dir.mkdir()
 
-        # Create generated profiles to trigger the override path
-        e2e_dir = Path(__file__).parent / "generated_profiles" / "customer-360"
-        e2e_dir.mkdir(parents=True, exist_ok=True)
-        (e2e_dir / "profiles.yml").write_text("customer_360:\n  target: e2e\n")
+        # Create generated profiles under tmp_path (not source tree)
+        gen_dir = tmp_path / "generated_profiles" / "customer-360"
+        gen_dir.mkdir(parents=True)
+        (gen_dir / "profiles.yml").write_text("customer_360:\n  target: e2e\n")
 
-        try:
-            with patch("dbt_utils.subprocess.run") as mock_run:
-                mock_run.return_value = subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="", stderr=""
-                )
-                run_dbt(["debug"], project_dir)
+        # Redirect run_dbt()'s Path(__file__).parent to tmp_path
+        monkeypatch.setattr(dbt_utils, "__file__", str(tmp_path / "dbt_utils.py"))
 
-                call_args: list[str] = mock_run.call_args[0][0]
+        with patch("dbt_utils.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="", stderr=""
+            )
+            run_dbt(["debug"], project_dir)
 
-                # --project-dir must be the original project_dir
-                project_dir_idx = call_args.index("--project-dir")
-                project_dir_value = call_args[project_dir_idx + 1]
-                assert project_dir_value == str(project_dir), (
-                    f"--project-dir should be {project_dir}, got: {project_dir_value}"
-                )
+            call_args: list[str] = mock_run.call_args[0][0]
 
-                # --profiles-dir must be different from --project-dir
-                profiles_dir_idx = call_args.index("--profiles-dir")
-                profiles_dir_value = call_args[profiles_dir_idx + 1]
-                assert profiles_dir_value != project_dir_value, (
-                    "--profiles-dir and --project-dir should differ when generated profiles exist"
-                )
-        finally:
-            if e2e_dir.exists():
-                shutil.rmtree(e2e_dir)
+            # --project-dir must be the original project_dir
+            project_dir_idx = call_args.index("--project-dir")
+            project_dir_value = call_args[project_dir_idx + 1]
+            assert project_dir_value == str(project_dir), (
+                f"--project-dir should be {project_dir}, got: {project_dir_value}"
+            )
+
+            # --profiles-dir must be different from --project-dir
+            profiles_dir_idx = call_args.index("--profiles-dir")
+            profiles_dir_value = call_args[profiles_dir_idx + 1]
+            assert profiles_dir_value != project_dir_value, (
+                "--profiles-dir and --project-dir should differ when generated profiles exist"
+            )
 
     def test_run_dbt_uses_product_name_from_project_dir(
         self,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """run_dbt() derives the generated_profiles subdirectory name from
         project_dir.name, not from any other source."""
+        import dbt_utils
         from dbt_utils import run_dbt
 
         # Use a distinctive product name
@@ -275,28 +278,28 @@ class TestRunDbtProfilesDir:
         project_dir = tmp_path / product_name
         project_dir.mkdir()
 
-        e2e_dir = Path(__file__).parent / "generated_profiles" / product_name
-        e2e_dir.mkdir(parents=True, exist_ok=True)
-        (e2e_dir / "profiles.yml").write_text("iot_telemetry:\n  target: e2e\n")
+        # Create generated profiles under tmp_path (not source tree)
+        gen_dir = tmp_path / "generated_profiles" / product_name
+        gen_dir.mkdir(parents=True)
+        (gen_dir / "profiles.yml").write_text("iot_telemetry:\n  target: e2e\n")
 
-        try:
-            with patch("dbt_utils.subprocess.run") as mock_run:
-                mock_run.return_value = subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="", stderr=""
-                )
-                run_dbt(["debug"], project_dir)
+        # Redirect run_dbt()'s Path(__file__).parent to tmp_path
+        monkeypatch.setattr(dbt_utils, "__file__", str(tmp_path / "dbt_utils.py"))
 
-                call_args: list[str] = mock_run.call_args[0][0]
-                profiles_dir_idx = call_args.index("--profiles-dir")
-                profiles_dir_value = call_args[profiles_dir_idx + 1]
+        with patch("dbt_utils.subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="", stderr=""
+            )
+            run_dbt(["debug"], project_dir)
 
-                # The path must contain the exact product name
-                assert profiles_dir_value.endswith(product_name), (
-                    f"Expected path to end with {product_name!r}, got: {profiles_dir_value}"
-                )
-        finally:
-            if e2e_dir.exists():
-                shutil.rmtree(e2e_dir)
+            call_args: list[str] = mock_run.call_args[0][0]
+            profiles_dir_idx = call_args.index("--profiles-dir")
+            profiles_dir_value = call_args[profiles_dir_idx + 1]
+
+            # The path must contain the exact product name
+            assert profiles_dir_value.endswith(product_name), (
+                f"Expected path to end with {product_name!r}, got: {profiles_dir_value}"
+            )
 
 
 # ---------------------------------------------------------------------------
