@@ -88,13 +88,35 @@ class PolarisCatalogPlugin(CatalogPlugin):
         self._catalog: PyIcebergCatalog | None = None
 
     @property
-    def config(self) -> PolarisCatalogConfig:
+    def config(self) -> PolarisCatalogConfig | None:
         """Return the plugin configuration.
 
         Returns:
-            The PolarisCatalogConfig instance used to configure this plugin.
+            The PolarisCatalogConfig instance used to configure this plugin,
+            or None if not yet configured.
         """
-        return self._config
+        cfg = self._config
+        if cfg is None:
+            return None
+        return cfg  # type: ignore[return-value]
+
+    def _require_config(self) -> PolarisCatalogConfig:
+        """Return config or raise PluginConfigurationError if unconfigured.
+
+        Returns:
+            The validated PolarisCatalogConfig.
+
+        Raises:
+            PluginConfigurationError: If plugin has not been configured.
+        """
+        if self._config is None:
+            from floe_core.plugin_errors import PluginConfigurationError
+
+            raise PluginConfigurationError(
+                "polaris",
+                [{"field": "_config", "message": "Plugin 'polaris' not configured"}],
+            )
+        return self._config  # type: ignore[return-value]
 
     # =========================================================================
     # PluginMetadata abstract properties
@@ -221,40 +243,34 @@ class PolarisCatalogPlugin(CatalogPlugin):
             >>> catalog = plugin.connect({})
             >>> namespaces = catalog.list_namespaces()
         """
-        if self._config is None:
-            from floe_core.plugin_errors import PluginConfigurationError
-
-            raise PluginConfigurationError(
-                "polaris",
-                [{"field": "_config", "message": "Plugin 'polaris' not configured"}],
-            )
+        cfg = self._require_config()
 
         tracer = get_tracer()
         with catalog_span(
             tracer,
             "connect",
             catalog_name="polaris",
-            catalog_uri=self._config.uri,
-            warehouse=self._config.warehouse,
+            catalog_uri=cfg.uri,
+            warehouse=cfg.warehouse,
         ) as span:
             log = logger.bind(
-                uri=self._config.uri,
-                warehouse=self._config.warehouse,
+                uri=cfg.uri,
+                warehouse=cfg.warehouse,
             )
             log.info("connecting_to_polaris_catalog")
 
             try:
                 # Build OAuth2 credential string in format expected by PyIceberg
                 # PyIceberg accepts "client_id:client_secret" format
-                client_id = self._config.oauth2.client_id
-                client_secret = self._config.oauth2.client_secret.get_secret_value()
+                client_id = cfg.oauth2.client_id
+                client_secret = cfg.oauth2.client_secret.get_secret_value()
                 credential = f"{client_id}:{client_secret}"
 
                 # Build catalog configuration
                 catalog_config: dict[str, Any] = {
                     "type": "rest",
-                    "uri": self._config.uri,
-                    "warehouse": self._config.warehouse,
+                    "uri": cfg.uri,
+                    "warehouse": cfg.warehouse,
                     "credential": credential,
                     # Enable automatic token refresh
                     "token-refresh-enabled": "true",
@@ -262,19 +278,19 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
                 # Add OAuth2 token URL if different from default catalog endpoint
                 # PyIceberg defaults to {uri}/v1/oauth/tokens if not specified
-                token_url = self._config.oauth2.token_url
+                token_url = cfg.oauth2.token_url
                 if token_url:
                     catalog_config["oauth2-server-uri"] = token_url
 
                 # Add scope if configured
-                scope = config.get("scope", self._config.oauth2.scope)
+                scope = config.get("scope", cfg.oauth2.scope)
                 if scope:
                     catalog_config["scope"] = scope
 
                 # Add X-Iceberg-Access-Delegation header for credential vending
                 # When enabled, Polaris returns vended credentials in table load response
                 # See: https://iceberg.apache.org/docs/latest/rest-catalog/#credential-vending
-                if self._config.credential_vending_enabled:
+                if cfg.credential_vending_enabled:
                     catalog_config["header.X-Iceberg-Access-Delegation"] = "vended-credentials"
 
                 # Merge any additional configuration from the config argument
@@ -293,7 +309,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 # Using "polaris" as the catalog name for identification
                 load_with_retry = with_retry(
                     load_catalog,
-                    max_retries=self._config.max_retries,
+                    max_retries=cfg.max_retries,
                 )
                 self._catalog = load_with_retry("polaris", **catalog_config)
 
@@ -308,7 +324,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 log.error("polaris_catalog_connection_failed", error=str(e))
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=self._config.uri,
+                    catalog_uri=cfg.uri,
                     operation="connect",
                 ) from e
 
@@ -347,25 +363,26 @@ class PolarisCatalogPlugin(CatalogPlugin):
             >>> plugin.create_namespace("bronze", {"location": "s3://bucket/bronze"})
             >>> plugin.create_namespace("domain.product.silver")
         """
+        cfg = self._require_config()
         tracer = get_tracer()
         with catalog_span(
             tracer,
             "create_namespace",
             catalog_name="polaris",
-            catalog_uri=self._config.uri,
-            warehouse=self._config.warehouse,
+            catalog_uri=cfg.uri,
+            warehouse=cfg.warehouse,
             namespace=namespace,
         ) as span:
             log = logger.bind(
                 namespace=namespace,
-                uri=self._config.uri,
+                uri=cfg.uri,
             )
             log.info("creating_namespace")
 
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=self._config.uri,
+                        catalog_uri=cfg.uri,
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -383,7 +400,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 log.error("create_namespace_failed", error=str(e))
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=self._config.uri,
+                    catalog_uri=cfg.uri,
                     operation="create_namespace",
                 ) from e
 
@@ -419,26 +436,27 @@ class PolarisCatalogPlugin(CatalogPlugin):
             >>> plugin.list_namespaces(parent="silver")
             ['silver.customers', 'silver.orders']
         """
+        cfg = self._require_config()
         tracer = get_tracer()
         extra_attrs = {"parent_namespace": parent} if parent else None
         with catalog_span(
             tracer,
             "list_namespaces",
             catalog_name="polaris",
-            catalog_uri=self._config.uri,
-            warehouse=self._config.warehouse,
+            catalog_uri=cfg.uri,
+            warehouse=cfg.warehouse,
             extra_attributes=extra_attrs,
         ) as span:
             log = logger.bind(
                 parent=parent,
-                uri=self._config.uri,
+                uri=cfg.uri,
             )
             log.info("listing_namespaces")
 
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=self._config.uri,
+                        catalog_uri=cfg.uri,
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -464,7 +482,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 log.error("list_namespaces_failed", error=str(e))
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=self._config.uri,
+                    catalog_uri=cfg.uri,
                     operation="list_namespaces",
                 ) from e
 
@@ -494,25 +512,26 @@ class PolarisCatalogPlugin(CatalogPlugin):
             >>> plugin.delete_namespace("bronze")
             >>> plugin.delete_namespace("domain.product.silver")
         """
+        cfg = self._require_config()
         tracer = get_tracer()
         with catalog_span(
             tracer,
             "delete_namespace",
             catalog_name="polaris",
-            catalog_uri=self._config.uri,
-            warehouse=self._config.warehouse,
+            catalog_uri=cfg.uri,
+            warehouse=cfg.warehouse,
             namespace=namespace,
         ) as span:
             log = logger.bind(
                 namespace=namespace,
-                uri=self._config.uri,
+                uri=cfg.uri,
             )
             log.info("deleting_namespace")
 
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=self._config.uri,
+                        catalog_uri=cfg.uri,
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -527,7 +546,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 log.error("delete_namespace_failed", error=str(e))
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=self._config.uri,
+                    catalog_uri=cfg.uri,
                     operation="delete_namespace",
                 ) from e
 
@@ -567,25 +586,26 @@ class PolarisCatalogPlugin(CatalogPlugin):
             >>> schema = {"type": "struct", "fields": [...]}
             >>> plugin.create_table("bronze.customers", schema)
         """
+        cfg = self._require_config()
         tracer = get_tracer()
         with catalog_span(
             tracer,
             "create_table",
             catalog_name="polaris",
-            catalog_uri=self._config.uri,
-            warehouse=self._config.warehouse,
+            catalog_uri=cfg.uri,
+            warehouse=cfg.warehouse,
             table_full_name=identifier,
         ) as span:
             log = logger.bind(
                 table=identifier,
-                uri=self._config.uri,
+                uri=cfg.uri,
             )
             log.info("creating_table")
 
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=self._config.uri,
+                        catalog_uri=cfg.uri,
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -607,7 +627,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 log.error("create_table_failed", error=str(e))
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=self._config.uri,
+                    catalog_uri=cfg.uri,
                     operation="create_table",
                 ) from e
 
@@ -637,25 +657,26 @@ class PolarisCatalogPlugin(CatalogPlugin):
             >>> plugin.list_tables("bronze")
             ['bronze.customers', 'bronze.orders', 'bronze.products']
         """
+        cfg = self._require_config()
         tracer = get_tracer()
         with catalog_span(
             tracer,
             "list_tables",
             catalog_name="polaris",
-            catalog_uri=self._config.uri,
-            warehouse=self._config.warehouse,
+            catalog_uri=cfg.uri,
+            warehouse=cfg.warehouse,
             namespace=namespace,
         ) as span:
             log = logger.bind(
                 namespace=namespace,
-                uri=self._config.uri,
+                uri=cfg.uri,
             )
             log.info("listing_tables")
 
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=self._config.uri,
+                        catalog_uri=cfg.uri,
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -675,7 +696,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 log.error("list_tables_failed", error=str(e))
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=self._config.uri,
+                    catalog_uri=cfg.uri,
                     operation="list_tables",
                 ) from e
 
@@ -704,26 +725,27 @@ class PolarisCatalogPlugin(CatalogPlugin):
             >>> plugin.drop_table("staging.temp_table")
             >>> plugin.drop_table("staging.old_data", purge=True)  # Also delete files
         """
+        cfg = self._require_config()
         tracer = get_tracer()
         with catalog_span(
             tracer,
             "drop_table",
             catalog_name="polaris",
-            catalog_uri=self._config.uri,
-            warehouse=self._config.warehouse,
+            catalog_uri=cfg.uri,
+            warehouse=cfg.warehouse,
             table_full_name=identifier,
         ) as span:
             log = logger.bind(
                 table=identifier,
                 purge=purge,
-                uri=self._config.uri,
+                uri=cfg.uri,
             )
             log.info("dropping_table")
 
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=self._config.uri,
+                        catalog_uri=cfg.uri,
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -740,7 +762,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 log.error("drop_table_failed", error=str(e))
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=self._config.uri,
+                    catalog_uri=cfg.uri,
                     operation="drop_table",
                 ) from e
 
@@ -791,13 +813,14 @@ class PolarisCatalogPlugin(CatalogPlugin):
             >>> creds["access_key"]
             'ASIA...'
         """
+        cfg = self._require_config()
         tracer = get_tracer()
         with catalog_span(
             tracer,
             "vend_credentials",
             catalog_name="polaris",
-            catalog_uri=self._config.uri,
-            warehouse=self._config.warehouse,
+            catalog_uri=cfg.uri,
+            warehouse=cfg.warehouse,
             table_full_name=table_path,
             extra_attributes={
                 # OTel semantic conventions
@@ -810,11 +833,11 @@ class PolarisCatalogPlugin(CatalogPlugin):
             log = logger.bind(
                 table=table_path,
                 operations=operations,
-                uri=self._config.uri,
+                uri=cfg.uri,
             )
 
             # Check if credential vending is enabled
-            if not self._config.credential_vending_enabled:
+            if not cfg.credential_vending_enabled:
                 log.warning("credential_vending_disabled")
                 raise NotSupportedError(
                     operation="vend_credentials",
@@ -830,7 +853,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
             try:
                 if self._catalog is None:
                     raise CatalogUnavailableError(
-                        catalog_uri=self._config.uri,
+                        catalog_uri=cfg.uri,
                         cause=ValueError("Catalog not connected. Call connect() first."),
                     )
 
@@ -860,7 +883,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 log.error("vend_credentials_failed", error=str(e))
                 raise map_pyiceberg_error(
                     e,
-                    catalog_uri=self._config.uri,
+                    catalog_uri=cfg.uri,
                     operation="vend_credentials",
                 ) from e
 
@@ -1016,7 +1039,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
             tracer,
             "health_check",
             catalog_name="polaris",
-            warehouse=self._config.warehouse,
+            warehouse=self._require_config().warehouse,
         ) as span:
             try:
                 # Execute probe with timeout handling

@@ -19,9 +19,10 @@ def test_polaris_connect_raises_when_unconfigured() -> None:
     """
     from unittest.mock import MagicMock
 
+    from floe_catalog_polaris.config import PolarisCatalogConfig
     from floe_catalog_polaris.plugin import PolarisCatalogPlugin
 
-    config = MagicMock()
+    config = MagicMock(spec=PolarisCatalogConfig)
     plugin = PolarisCatalogPlugin(config=config)
     # Reset config to simulate unconfigured state
     plugin.configure(None)
@@ -39,9 +40,10 @@ def test_polaris_connect_error_includes_plugin_name() -> None:
     """
     from unittest.mock import MagicMock
 
+    from floe_catalog_polaris.config import PolarisCatalogConfig
     from floe_catalog_polaris.plugin import PolarisCatalogPlugin
 
-    config = MagicMock()
+    config = MagicMock(spec=PolarisCatalogConfig)
     plugin = PolarisCatalogPlugin(config=config)
     plugin.configure(None)
 
@@ -90,9 +92,10 @@ def test_polaris_connect_after_configure_none_raises() -> None:
     """
     from unittest.mock import MagicMock
 
+    from floe_catalog_polaris.config import PolarisCatalogConfig
     from floe_catalog_polaris.plugin import PolarisCatalogPlugin
 
-    config = MagicMock()
+    config = MagicMock(spec=PolarisCatalogConfig)
     plugin = PolarisCatalogPlugin(config=config)
     assert plugin.is_configured is True
 
