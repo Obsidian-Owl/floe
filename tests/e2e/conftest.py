@@ -669,7 +669,7 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
             assign_response.status_code,
         )
 
-    logger.info(
+    logger.info(  # codeql[py/clear-text-logging-sensitive-data]
         "Write grants applied to polaris_client (catalog=%s)", catalog_name
     )
     return catalog
@@ -1370,7 +1370,7 @@ def dbt_e2e_profile(
                 profile_name=profile_name,
                 warehouse=warehouse,
             )
-            profile_path.write_text(e2e_content)
+            profile_path.write_text(e2e_content)  # codeql[py/clear-text-storage-sensitive-data]
             profile_paths[product_dir] = profile_path
     except Exception:
         # Setup failed mid-loop — clean up any generated profiles
