@@ -158,19 +158,18 @@ class PluginLoader:
         plugin_class = entry_point.load()
 
         # Instantiate the plugin
-        # Try without arguments first, then with a mock config if needed
+        # Try without arguments first, then with None config if needed.
+        # Plugins that require config in __init__ will receive None here;
+        # real config is injected later via registry.configure().
         try:
             plugin: PluginMetadata = plugin_class()
         except TypeError as e:
             # Some plugins require config in __init__
-            # For testing/discovery purposes, try with mock config
             if "missing" in str(e) and "config" in str(e):
-                from unittest.mock import MagicMock
-
                 try:
-                    plugin = plugin_class(config=MagicMock())
+                    plugin = plugin_class(config=None)  # type: ignore[arg-type]
                 except Exception:
-                    # If mock config doesn't work, re-raise original error
+                    # If None config doesn't work, re-raise original error
                     raise e from None
             else:
                 raise

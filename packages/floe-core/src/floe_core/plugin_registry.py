@@ -327,6 +327,12 @@ class PluginRegistry:
 
         self._configs[key] = validated_config
 
+        # Push validated config to the plugin instance so that plugin
+        # methods (e.g. connect()) use real config instead of the
+        # placeholder None set during lazy loading.
+        if hasattr(plugin, "_config"):
+            plugin._config = validated_config
+
         logger.debug(
             "configure.success",
             plugin_type=plugin_type.name,
