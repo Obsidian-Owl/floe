@@ -212,6 +212,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
             A PyIceberg-compatible Catalog instance.
 
         Raises:
+            PluginConfigurationError: If plugin is not configured.
             ConnectionError: If unable to connect to the catalog.
             AuthenticationError: If OAuth2 credentials are invalid.
 
@@ -220,6 +221,14 @@ class PolarisCatalogPlugin(CatalogPlugin):
             >>> catalog = plugin.connect({})
             >>> namespaces = catalog.list_namespaces()
         """
+        if self._config is None:
+            from floe_core.plugin_errors import PluginConfigurationError
+
+            raise PluginConfigurationError(
+                "polaris",
+                [{"field": "_config", "message": "Plugin 'polaris' not configured"}],
+            )
+
         tracer = get_tracer()
         with catalog_span(
             tracer,

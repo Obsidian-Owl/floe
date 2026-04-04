@@ -240,13 +240,15 @@ class TestUnconfiguredPlugin:
 
     @pytest.mark.requirement("AC-1")
     def test_methods_raise_without_config(self) -> None:
-        """All StoragePlugin methods must raise RuntimeError when unconfigured."""
+        """All StoragePlugin methods must raise PluginConfigurationError when unconfigured."""
+        from floe_core.plugin_errors import PluginConfigurationError
+
         plugin = S3StoragePlugin()
-        with pytest.raises(RuntimeError, match="not configured"):
+        with pytest.raises(PluginConfigurationError, match="not configured"):
             plugin.get_warehouse_uri("test")
-        with pytest.raises(RuntimeError, match="not configured"):
+        with pytest.raises(PluginConfigurationError, match="not configured"):
             plugin.get_dbt_profile_config()
-        with pytest.raises(RuntimeError, match="not configured"):
+        with pytest.raises(PluginConfigurationError, match="not configured"):
             plugin.get_dagster_io_manager_config()
-        with pytest.raises(RuntimeError, match="not configured"):
+        with pytest.raises(PluginConfigurationError, match="not configured"):
             plugin.get_pyiceberg_fileio()

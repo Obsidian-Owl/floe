@@ -192,7 +192,8 @@ def try_create_iceberg_resources(
         )
     except Exception:
         logger.exception(
-            "Failed to create Iceberg resources — this will prevent Iceberg IO from working"
+            "Failed to create Iceberg resources — catalog and storage ARE configured"
+            " but resource creation failed; re-raising"
         )
         raise
 
