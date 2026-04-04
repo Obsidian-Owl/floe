@@ -1131,6 +1131,57 @@ class TestPluginRegistryConfiguration:
         assert config.host == "localhost"
         assert config.port == 5433
 
+    @pytest.mark.requirement("ARC-001")
+    def test_configure_pushes_config_to_plugin(
+        self,
+        reset_registry: None,
+    ) -> None:
+        """Test registry.configure() calls plugin.configure() to push config.
+
+        AC-2: Registry MUST use plugin.configure() instead of reflection.
+        The plugin instance should have is_configured == True and _config set
+        after registry.configure() completes.
+        """
+        from pydantic import BaseModel
+
+        class PushTestConfig(BaseModel):
+            host: str
+            port: int = 5432
+
+        class PushTestPlugin(PluginMetadata):
+            @property
+            def name(self) -> str:
+                return "push-test"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+            def get_config_schema(self) -> type[BaseModel]:
+                return PushTestConfig
+
+        registry = PluginRegistry()
+        plugin = PushTestPlugin()
+        registry.register(PluginType.COMPUTE, plugin)
+
+        # Before configure: plugin should not have config
+        assert plugin.is_configured is False
+
+        registry.configure(
+            PluginType.COMPUTE,
+            "push-test",
+            {"host": "example.com"},
+        )
+
+        # After configure: plugin should have config pushed via configure()
+        assert plugin.is_configured is True
+        assert plugin._config is not None
+        assert plugin._config.host == "example.com"  # type: ignore[union-attr]
+
     @pytest.mark.requirement("FR-008")
     def test_configure_applies_defaults(
         self,

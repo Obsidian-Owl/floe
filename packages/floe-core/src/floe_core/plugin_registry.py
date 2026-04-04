@@ -327,6 +327,11 @@ class PluginRegistry:
 
         self._configs[key] = validated_config
 
+        # Push validated config to the plugin instance via the ABC method.
+        # This replaces the previous reflection-based pattern
+        # (hasattr + direct _config mutation).
+        plugin.configure(validated_config)
+
         logger.debug(
             "configure.success",
             plugin_type=plugin_type.name,
