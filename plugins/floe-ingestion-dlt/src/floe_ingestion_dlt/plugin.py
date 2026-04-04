@@ -102,6 +102,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
 
     def __init__(self) -> None:
         """Initialize plugin state."""
+        super().__init__()
         self._started: bool = False
         self._dlt_version: str | None = None
 

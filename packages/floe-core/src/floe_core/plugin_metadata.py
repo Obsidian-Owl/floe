@@ -115,6 +115,30 @@ class PluginMetadata(ABC):
         ...         return "DuckDB compute plugin for floe"
     """
 
+    def __init__(self) -> None:
+        """Initialize plugin in unconfigured state.
+
+        Sets ``_config`` to ``None``. Subclasses that define ``__init__``
+        MUST call ``super().__init__()`` as their first statement.
+        """
+        self._config: BaseModel | None = None
+
+    def configure(self, config: BaseModel | None) -> None:
+        """Accept validated configuration.
+
+        Called by the registry after config validation.  Subclasses may
+        override for custom config handling.
+
+        Args:
+            config: Validated Pydantic model, or None to clear config.
+        """
+        self._config = config
+
+    @property
+    def is_configured(self) -> bool:
+        """Whether this plugin has received configuration."""
+        return self._config is not None
+
     @property
     @abstractmethod
     def name(self) -> str:

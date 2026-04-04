@@ -46,6 +46,7 @@ class WebhookAlertPlugin(AlertChannelPlugin):
             webhook_url: Target URL for POST requests (required).
             timeout_seconds: HTTP request timeout in seconds (default 10).
         """
+        super().__init__()
         self._webhook_url = webhook_url
         self._timeout_seconds = timeout_seconds
         self._log = logger.bind(component="webhook_alert")

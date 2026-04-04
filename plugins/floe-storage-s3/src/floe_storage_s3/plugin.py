@@ -61,6 +61,7 @@ class S3StoragePlugin(StoragePlugin):
             config: Configuration for S3 storage. When None, the plugin
                 is in an unconfigured state (methods will raise RuntimeError).
         """
+        super().__init__()
         self._config = config
 
     def _require_config(self) -> S3StorageConfig:
@@ -70,10 +71,15 @@ class S3StoragePlugin(StoragePlugin):
             The validated S3StorageConfig.
 
         Raises:
-            RuntimeError: If plugin was instantiated without config.
+            PluginConfigurationError: If plugin is not configured.
         """
         if self._config is None:
-            raise RuntimeError(NOT_CONFIGURED_MSG)
+            from floe_core.plugin_errors import PluginConfigurationError
+
+            raise PluginConfigurationError(
+                "s3",
+                [{"field": "_config", "message": "Plugin 's3' not configured"}],
+            )
         return self._config
 
     # =========================================================================

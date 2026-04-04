@@ -40,6 +40,7 @@ class SlackAlertPlugin(AlertChannelPlugin):
         webhook_url: str = "",
         timeout_seconds: float = 10.0,
     ) -> None:
+        super().__init__()
         self._webhook_url = webhook_url
         self._timeout_seconds = timeout_seconds
         self._log = logger.bind(component="slack_alert")
