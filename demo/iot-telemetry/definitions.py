@@ -54,14 +54,12 @@ def _load_lineage_resource() -> Any:
         namespace = getattr(obs, "lineage_namespace", "default") or "default"
         from floe_core.lineage.emitter import create_emitter
         from floe_orchestrator_dagster.resources.lineage import LineageResource
-
         transport_config = {"type": transport, "url": endpoint}
         emitter = create_emitter(transport_config, namespace)
         return LineageResource(emitter=emitter)
     except Exception:
         logging.getLogger(__name__).warning(
-            "lineage_resource_load_failed",
-            exc_info=True,
+            "lineage_resource_load_failed", exc_info=True,
         )
         return NoOpLineageResource()
 
@@ -72,6 +70,7 @@ def _get_lineage_resource() -> Any:
     if _LINEAGE_RESOURCE is None:
         _LINEAGE_RESOURCE = _load_lineage_resource()
     return _LINEAGE_RESOURCE
+
 
 
 ARTIFACTS_PATH = PROJECT_DIR / "compiled_artifacts.json"
@@ -92,8 +91,7 @@ def _load_iceberg_resources() -> dict[str, Any]:
         return {}
     artifacts = CompiledArtifacts.model_validate_json(ARTIFACTS_PATH.read_text())
     return try_create_iceberg_resources(
-        artifacts.plugins,
-        governance=artifacts.governance,
+        artifacts.plugins, governance=artifacts.governance,
     )
 
 
@@ -104,8 +102,7 @@ def _export_dbt_to_iceberg(context: Any) -> None:
 
     if not Path(DUCKDB_PATH).exists():
         context.log.warning(
-            "DuckDB file not found at %s — skipping Iceberg export",
-            DUCKDB_PATH,
+            "DuckDB file not found at %s — skipping Iceberg export", DUCKDB_PATH,
         )
         return
 
@@ -143,8 +140,7 @@ def _export_dbt_to_iceberg(context: Any) -> None:
     except Exception as exc:
         context.log.debug(
             "Namespace %s exists or creation failed: %s",
-            product_namespace,
-            type(exc).__name__,
+            product_namespace, type(exc).__name__,
         )
 
     conn = duckdb.connect(DUCKDB_PATH, read_only=True)
@@ -157,16 +153,14 @@ def _export_dbt_to_iceberg(context: Any) -> None:
         for schema_name, table_name in tables_df:
             if not _is_safe_identifier(schema_name) or not _is_safe_identifier(table_name):
                 context.log.warning(
-                    "Skipping unsafe identifier: %s.%s",
-                    schema_name,
-                    table_name,
+                    "Skipping unsafe identifier: %s.%s", schema_name, table_name,
                 )
                 continue
-            if schema_name != "main":
+            if schema_name != 'main':
                 qualified = f'"{schema_name}"."{table_name}"'
             else:
                 qualified = f'"{table_name}"'
-            query = f"SELECT * FROM {qualified}"  # nosec B608
+            query = f'SELECT * FROM {qualified}'  # nosec B608
             arrow_table = conn.execute(query).fetch_arrow_table()
             if arrow_table.num_rows == 0:
                 continue
@@ -177,17 +171,15 @@ def _export_dbt_to_iceberg(context: Any) -> None:
                 iceberg_table.overwrite(arrow_table)
             except NoSuchTableError:
                 iceberg_table = catalog.create_table(
-                    iceberg_id,
-                    schema=arrow_table.schema,
+                    iceberg_id, schema=arrow_table.schema,
                 )
                 iceberg_table.append(arrow_table)
             context.log.info(
-                "Exported %s to Iceberg (%d rows)",
-                table_name,
-                arrow_table.num_rows,
+                "Exported %s to Iceberg (%d rows)", table_name, arrow_table.num_rows,
             )
     finally:
         conn.close()
+
 
 
 @dbt_assets(
