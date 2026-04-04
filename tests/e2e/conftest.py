@@ -15,12 +15,14 @@ import re
 import shutil
 import subprocess
 import uuid
+import warnings
 from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+import yaml
 
 # Re-exported for backwards compatibility — other E2E files import from here.
 from testing.fixtures.kubernetes import run_helm as run_helm
@@ -29,6 +31,57 @@ from testing.fixtures.polling import wait_for_condition
 from testing.fixtures.services import ServiceEndpoint, get_effective_port
 
 logger = logging.getLogger(__name__)
+
+
+def _read_manifest_config(manifest_path: Path | None = None) -> dict[str, str]:
+    """Read Polaris credentials and warehouse from the demo manifest.yaml.
+
+    Extracts ``plugins.catalog.config`` fields so that test fixtures do not
+    carry hardcoded defaults that diverge from the canonical platform config.
+
+    Args:
+        manifest_path: Explicit path to manifest.yaml.  Defaults to
+            ``<repo-root>/demo/manifest.yaml``.
+
+    Returns:
+        Dict with keys ``client_id``, ``client_secret``, ``scope``, and
+        ``warehouse``.  Falls back to hardcoded demo values with a warning
+        when the manifest file cannot be found.
+    """
+    _default_scope = "PRINCIPAL_ROLE:ALL"
+    _fallback: dict[str, str] = {
+        "client_id": "demo-admin",
+        "client_secret": "demo-secret",  # pragma: allowlist secret
+        "scope": _default_scope,
+        "warehouse": "floe-e2e",
+    }
+
+    if manifest_path is None:
+        manifest_path = Path(__file__).resolve().parents[2] / "demo" / "manifest.yaml"
+
+    if not manifest_path.exists():
+        warnings.warn(
+            f"Manifest not found at {manifest_path}; using hardcoded fallback values "
+            "for Polaris credentials and warehouse.",
+            stacklevel=2,
+        )
+        return _fallback
+
+    raw: dict[str, Any] = yaml.safe_load(manifest_path.read_text())
+    catalog_cfg: dict[str, Any] = raw.get("plugins", {}).get("catalog", {}).get("config", {})
+    oauth2: dict[str, Any] = catalog_cfg.get("oauth2", {})
+
+    return {
+        "client_id": str(oauth2.get("client_id", _fallback["client_id"])),
+        "client_secret": str(
+            oauth2.get("client_secret", _fallback["client_secret"])
+        ),  # pragma: allowlist secret
+        "scope": str(catalog_cfg.get("scope", oauth2.get("scope", _fallback["scope"]))),
+        "warehouse": str(catalog_cfg.get("warehouse", _fallback["warehouse"])),
+    }
+
+
+_manifest_cfg: dict[str, str] = _read_manifest_config()
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -473,7 +526,9 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
 
     # Load catalog with REST configuration
     # Demo credentials for local testing only - production uses K8s secrets
-    default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
+    default_cred = (
+        f"{_manifest_cfg['client_id']}:{_manifest_cfg['client_secret']}"  # pragma: allowlist secret
+    )
     minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
     catalog = pyiceberg_catalog.load_catalog(
         "polaris",
@@ -481,8 +536,8 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
             "type": "rest",
             "uri": f"{polaris_url}/api/catalog",
             "credential": os.environ.get("POLARIS_CREDENTIAL", default_cred),
-            "scope": "PRINCIPAL_ROLE:ALL",
-            "warehouse": os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"),
+            "scope": _manifest_cfg["scope"],
+            "warehouse": os.environ.get("POLARIS_WAREHOUSE", _manifest_cfg["warehouse"]),
             "s3.endpoint": minio_url,
             # MinIO credentials for local testing - production uses IAM/IRSA
             "s3.access-key-id": os.environ.get(  # pragma: allowlist secret
@@ -510,7 +565,7 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
             "grant_type": "client_credentials",
             "client_id": client_id,
             "client_secret": client_secret,
-            "scope": "PRINCIPAL_ROLE:ALL",
+            "scope": _manifest_cfg["scope"],
         },
         timeout=10.0,
     )
@@ -528,7 +583,7 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
             "Cannot apply write grants without a valid token."
         )
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    catalog_name = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
+    catalog_name = os.environ.get("POLARIS_WAREHOUSE", _manifest_cfg["warehouse"])
     if not re.fullmatch(r"[a-zA-Z0-9_-]+", catalog_name):
         pytest.fail(f"POLARIS_WAREHOUSE contains unsafe characters: {catalog_name!r}")
     principal_role = os.environ.get("POLARIS_PRINCIPAL_ROLE", "floe-pipeline")
@@ -1145,7 +1200,7 @@ def _build_dbt_iceberg_profile(
         "            CLIENT_ID: \"{{ env_var('FLOE_E2E_POLARIS_CLIENT_ID') }}\"\n"
         "            CLIENT_SECRET: \"{{ env_var('FLOE_E2E_POLARIS_CLIENT_SECRET') }}\"\n"
         "            OAUTH2_SERVER_URI: \"{{ env_var('FLOE_E2E_POLARIS_OAUTH2_URI') }}\"\n"
-        f"            OAUTH2_SCOPE: PRINCIPAL_ROLE:ALL\n"
+        f"            OAUTH2_SCOPE: {_manifest_cfg['scope']}\n"
         f"            OAUTH2_GRANT_TYPE: client_credentials\n"
         f"            ACCESS_DELEGATION_MODE: none\n"
         f"      secrets:\n"
@@ -1187,7 +1242,9 @@ def dbt_e2e_profile(
     # so credentials are resolved at runtime, never written to disk.
     polaris_url = os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
     minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
-    default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
+    default_cred = (
+        f"{_manifest_cfg['client_id']}:{_manifest_cfg['client_secret']}"  # pragma: allowlist secret
+    )
     cred = os.environ.get("POLARIS_CREDENTIAL", default_cred)
     parts = cred.split(":", 1)
     if len(parts) != 2:
@@ -1196,7 +1253,7 @@ def dbt_e2e_profile(
             f"got a value with {len(cred)} characters and no ':' separator"
         )
     client_id, client_secret = parts
-    warehouse = os.environ.get("POLARIS_WAREHOUSE", "floe-e2e")
+    warehouse = os.environ.get("POLARIS_WAREHOUSE", _manifest_cfg["warehouse"])
 
     # Derive computed values
     s3_use_ssl = minio_url.startswith("https://")
