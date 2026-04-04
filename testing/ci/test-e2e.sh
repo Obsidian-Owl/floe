@@ -29,6 +29,9 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 cd "${PROJECT_ROOT}"
 
+# Extract config from manifest.yaml — sets MANIFEST_BUCKET, MANIFEST_REGION, etc.
+eval "$(python3 "${SCRIPT_DIR}/extract-manifest-config.py" "${PROJECT_ROOT}/demo/manifest.yaml")"
+
 # Validate namespace format (K8s DNS label: lowercase alphanumeric + hyphens)
 if [[ ! "${TEST_NAMESPACE}" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
     echo "ERROR: Invalid namespace format: '${TEST_NAMESPACE}'" >&2
@@ -385,7 +388,7 @@ echo "Port-forward watchdog started (${#WATCHDOG_ENTRIES[@]} ports monitored)"
 # existing and non-existing buckets, making it useless for detection.
 # The bucket should exist from defaultBuckets server startup, but we retry
 # to handle the window between MinIO TCP-ready and API-ready.
-MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
+MINIO_BUCKET="${MINIO_BUCKET:-${MANIFEST_BUCKET}}"
 MINIO_URL="${MINIO_URL:-http://localhost:9000}"
 
 # Fail fast on missing credentials — don't waste retry time on config errors
@@ -413,8 +416,8 @@ while true; do
 done
 
 # Verify Polaris catalog exists (defense-in-depth for bootstrap job failures)
-POLARIS_CATALOG="${POLARIS_CATALOG:-floe-e2e}"
-POLARIS_CLIENT_ID="${POLARIS_CLIENT_ID:-demo-admin}"
+POLARIS_CATALOG="${POLARIS_CATALOG:-${MANIFEST_WAREHOUSE}}"
+POLARIS_CLIENT_ID="${POLARIS_CLIENT_ID:-${MANIFEST_OAUTH_CLIENT_ID}}"
 POLARIS_CLIENT_SECRET="${POLARIS_CLIENT_SECRET:-demo-secret}"
 
 # Validate catalog name to prevent URL injection
@@ -457,6 +460,8 @@ import json, os, sys
 MINIO_ENDPOINT = 'http://floe-platform-minio:9000'
 minio_user = os.environ.get('MINIO_USER', '')
 minio_pass = os.environ.get('MINIO_PASS', '')
+manifest_region = os.environ.get('MANIFEST_REGION', 'us-east-1')
+manifest_path_style = os.environ.get('MANIFEST_PATH_STYLE_ACCESS', 'true')
 payload = {
     'catalog': {
         'name': sys.argv[1],
@@ -464,23 +469,23 @@ payload = {
         'properties': {
             'default-base-location': f's3://{sys.argv[2]}',
             's3.endpoint': MINIO_ENDPOINT,
-            's3.path-style-access': 'true',
+            's3.path-style-access': manifest_path_style,
             's3.access-key-id': minio_user,
             's3.secret-access-key': minio_pass,
-            's3.region': 'us-east-1',
+            's3.region': manifest_region,
             'table-default.s3.endpoint': MINIO_ENDPOINT,
-            'table-default.s3.path-style-access': 'true',
+            'table-default.s3.path-style-access': manifest_path_style,
             'table-default.s3.access-key-id': minio_user,
             'table-default.s3.secret-access-key': minio_pass,
-            'table-default.s3.region': 'us-east-1',
+            'table-default.s3.region': manifest_region,
         },
         'storageConfigInfo': {
             'storageType': 'S3',
             'allowedLocations': [f's3://{sys.argv[2]}'],
             'endpoint': MINIO_ENDPOINT,
             'endpointInternal': MINIO_ENDPOINT,
-            'pathStyleAccess': True,
-            'region': 'us-east-1',
+            'pathStyleAccess': manifest_path_style == 'true',
+            'region': manifest_region,
             'stsUnavailable': True,
         },
     }
