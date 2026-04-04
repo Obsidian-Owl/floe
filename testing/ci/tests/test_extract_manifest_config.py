@@ -326,7 +326,7 @@ class TestExtractConfigMissingFile:
 
     def test_error_directory_instead_of_file(self, tmp_path: Path) -> None:
         """Script must not silently accept a directory as input."""
-        with pytest.raises((SystemExit, FileNotFoundError, IsADirectoryError, ValueError)):
+        with pytest.raises((SystemExit, FileNotFoundError, ValueError)):
             extract_config(tmp_path)
 
 

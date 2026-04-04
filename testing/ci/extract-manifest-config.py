@@ -19,11 +19,11 @@ def extract_config(manifest_path: Path) -> dict[str, str]:
         Dict mapping env var name to string value.
 
     Raises:
-        SystemExit: If the file is missing or required sections are absent.
-        IsADirectoryError: If path is a directory.
+        SystemExit: If the file is missing, is a directory, or required
+            sections are absent.
     """
     if manifest_path.is_dir():
-        raise IsADirectoryError(f"{manifest_path} is a directory, not a file")
+        raise SystemExit(f"{manifest_path} is a directory, not a file")
 
     if not manifest_path.exists():
         print(f"Error: manifest file not found: {manifest_path}", file=sys.stderr)
@@ -44,11 +44,7 @@ def extract_config(manifest_path: Path) -> dict[str, str]:
     catalog_config: dict[str, Any] = plugins["catalog"]["config"]
     oauth2: dict[str, Any] = catalog_config["oauth2"]
 
-    path_style_raw = storage_config["path_style_access"]
-    if isinstance(path_style_raw, bool):
-        path_style = str(path_style_raw).lower()
-    else:
-        path_style = str(path_style_raw).lower()
+    path_style = str(storage_config["path_style_access"]).lower()
 
     return {
         "MANIFEST_BUCKET": str(storage_config["bucket"]),
@@ -116,7 +112,7 @@ def main() -> None:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    print(format_exports(config), end="")
+    print(format_exports(config), end="")  # noqa: T201
 
 
 if __name__ == "__main__":
