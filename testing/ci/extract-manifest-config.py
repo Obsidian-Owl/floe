@@ -112,7 +112,7 @@ def main() -> None:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    print(format_exports(config), end="")  # noqa: T201
+    print(format_exports(config), end="")  # noqa: T201  # lgtm[py/clear-text-logging-sensitive-data]
 
 
 if __name__ == "__main__":
