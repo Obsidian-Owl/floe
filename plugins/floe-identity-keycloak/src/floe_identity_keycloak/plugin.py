@@ -93,6 +93,7 @@ class KeycloakIdentityPlugin(IdentityPlugin):
         Args:
             config: Keycloak configuration.
         """
+        super().__init__()
         self._config = config
         self._client: httpx.Client | None = None
         self._token_validator: TokenValidator | None = None

@@ -43,6 +43,7 @@ class EmailAlertPlugin(AlertChannelPlugin):
         use_tls: bool = True,
         timeout_seconds: float = 30.0,
     ) -> None:
+        super().__init__()
         self._smtp_host = smtp_host
         self._smtp_port = smtp_port
         self._from_address = from_address

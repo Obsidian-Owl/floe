@@ -34,6 +34,7 @@ class AlertmanagerPlugin(AlertChannelPlugin):
         api_url: str = "",
         timeout_seconds: float = 10.0,
     ) -> None:
+        super().__init__()
         self._api_url = api_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._log = logger.bind(component="alertmanager_alert")

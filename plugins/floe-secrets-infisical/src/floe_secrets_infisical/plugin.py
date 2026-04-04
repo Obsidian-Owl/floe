@@ -126,6 +126,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         Args:
             config: Plugin configuration with Universal Auth credentials.
         """
+        super().__init__()
         self._config = config
         self._client: Any = None
         self._authenticated = False

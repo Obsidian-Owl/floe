@@ -83,6 +83,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
         Args:
             config: Configuration for connecting to Polaris catalog.
         """
+        super().__init__()
         self._config = config
         self._catalog: PyIcebergCatalog | None = None
 

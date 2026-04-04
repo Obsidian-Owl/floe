@@ -64,7 +64,9 @@ class K8sSecretsPlugin(SecretsPlugin):
         Args:
             config: Plugin configuration. Uses defaults if None.
         """
-        self.config = config or K8sSecretsConfig()
+        super().__init__()
+        self._config = config or K8sSecretsConfig()
+        self.config = self._config
         self._client: Any = None
         self._api: Any = None
         self._audit_logger = AuditLogger()

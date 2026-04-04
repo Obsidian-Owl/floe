@@ -61,6 +61,7 @@ class S3StoragePlugin(StoragePlugin):
             config: Configuration for S3 storage. When None, the plugin
                 is in an unconfigured state (methods will raise RuntimeError).
         """
+        super().__init__()
         self._config = config
 
     def _require_config(self) -> S3StorageConfig:

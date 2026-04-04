@@ -67,6 +67,7 @@ class CubeSemanticPlugin(SemanticLayerPlugin):
     """
 
     def __init__(self, config: CubeSemanticConfig) -> None:
+        super().__init__()
         self._config = config
         self._client: httpx.Client | None = None
         self._started: bool = False
