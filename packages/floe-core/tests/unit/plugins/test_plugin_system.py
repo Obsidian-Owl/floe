@@ -1,7 +1,10 @@
-"""End-to-end tests for plugin system architecture.
+"""Unit tests for plugin system architecture.
 
 This test validates the plugin system's ability to discover, load, swap, and
 validate plugins across all 14 plugin types in the floe platform.
+
+No external infrastructure required — all tests run in-process against
+the plugin registry and ABC interfaces.
 
 Requirements Covered:
 - FR-050: Plugin type discovery via entry points
@@ -11,9 +14,6 @@ Requirements Covered:
 - FR-054: Compile-time compatibility validation
 - FR-055: Plugin health checks
 - FR-056: ABC backwards compatibility
-
-Per testing standards: Tests FAIL when infrastructure is unavailable.
-No pytest.skip() - see .claude/rules/testing-standards.md
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
+
 from floe_core.plugin_metadata import HealthState, PluginMetadata
 from floe_core.plugin_registry import PluginRegistry, get_registry
 from floe_core.plugin_types import PluginType
@@ -46,11 +47,25 @@ from floe_core.plugins import (
 from floe_core.plugins.alert_channel import AlertChannelPlugin
 from floe_core.plugins.rbac import RBACPlugin
 
-from testing.base_classes.integration_test_base import IntegrationTestBase
+
+# Repository root for demo project path resolution — anchor on .git
+# to avoid breakage if this file is ever moved to a different depth.
+def _find_repo_root() -> Path:
+    """Walk up from this file to find the directory containing .git."""
+    current = Path(__file__).resolve().parent
+    while current != current.parent:
+        if (current / ".git").exists():
+            return current
+        current = current.parent
+    msg = "Cannot find repository root (.git) from " + str(Path(__file__))
+    raise RuntimeError(msg)
 
 
-class TestPluginSystem(IntegrationTestBase):
-    """E2E tests for the plugin system architecture.
+_REPO_ROOT = _find_repo_root()
+
+
+class TestPluginSystem:
+    """Unit tests for the plugin system architecture.
 
     These tests validate the complete plugin system functionality:
     1. Discovery of all 14 plugin types via Python entry points
@@ -61,11 +76,8 @@ class TestPluginSystem(IntegrationTestBase):
     6. Plugin health checks
     7. ABC backwards compatibility validation
 
-    Requires platform plugin implementations installed.
+    Runs entirely in-process — no external services required.
     """
-
-    # No external services required - plugin system tests run on host
-    required_services: ClassVar[list[str]] = []
 
     # Logger instance for test observability
     logger: ClassVar[logging.Logger] = logging.getLogger(__name__)
@@ -99,7 +111,6 @@ class TestPluginSystem(IntegrationTestBase):
         PluginType.ALERT_CHANNEL: AlertChannelPlugin,
     }
 
-    @pytest.mark.e2e
     @pytest.mark.requirement("FR-050")
     def test_all_plugin_types_discoverable(self) -> None:
         """Test that all discoverable plugin types have registered entry points.
@@ -149,7 +160,6 @@ class TestPluginSystem(IntegrationTestBase):
                 f"{len(plugin_names)} plugins: {plugin_names}"
             )
 
-    @pytest.mark.e2e
     @pytest.mark.requirement("FR-050")
     def test_storage_config_via_manifest(self) -> None:
         """Test that STORAGE config flows through manifest, not plugin registry.
@@ -161,7 +171,7 @@ class TestPluginSystem(IntegrationTestBase):
         """
         from floe_core.compilation.stages import compile_pipeline
 
-        project_root = Path(__file__).parent.parent.parent
+        project_root = _REPO_ROOT
         spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
         manifest_path = project_root / "demo" / "manifest.yaml"
 
@@ -180,7 +190,6 @@ class TestPluginSystem(IntegrationTestBase):
 
         self.logger.info(f"Storage config validated: type={artifacts.plugins.storage.type}")
 
-    @pytest.mark.e2e
     @pytest.mark.requirement("FR-051")
     def test_abc_compliance(self) -> None:
         """Test that all plugins implement their ABC interface correctly.
@@ -278,7 +287,6 @@ class TestPluginSystem(IntegrationTestBase):
             f"  - {item}" for item in non_compliant
         )
 
-    @pytest.mark.e2e
     @pytest.mark.requirement("FR-052")
     def test_plugin_swap_via_config(self) -> None:
         """Test that swapping compute plugins produces different compilation output.
@@ -289,7 +297,6 @@ class TestPluginSystem(IntegrationTestBase):
 
         WILL FAIL if compilation doesn't respect plugin configuration.
         """
-        from pathlib import Path
 
         from floe_core.compilation.stages import compile_pipeline
 
@@ -303,7 +310,7 @@ class TestPluginSystem(IntegrationTestBase):
             f"Need at least 1 compute plugin for swap test, found {len(compute_plugins)}"
         )
 
-        project_root = Path(__file__).parent.parent.parent
+        project_root = _REPO_ROOT
         spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
         manifest_path = project_root / "demo" / "manifest.yaml"
 
@@ -347,7 +354,6 @@ class TestPluginSystem(IntegrationTestBase):
                 f"{profile_types}. Plugin swap should produce functionally different configs."
             )
 
-    @pytest.mark.e2e
     @pytest.mark.requirement("FR-055")
     def test_plugin_health_checks(self) -> None:
         """Test that all discovered plugins provide health checks.
@@ -379,14 +385,18 @@ class TestPluginSystem(IntegrationTestBase):
                     # Call health check with explicit timeout.
                     # Plugins may not have been started (no startup() call),
                     # so we provide a timeout to avoid accessing uninitialised config.
+                    # 10s timeout: some plugins (e.g. great_expectations)
+                    # import ~200 modules on first load, taking 6-7s on
+                    # CI runners with cold caches.
+                    health_timeout = 10.0
                     start = time.monotonic()
-                    health_status = plugin.health_check(timeout=5.0)
+                    health_status = plugin.health_check(timeout=health_timeout)
                     elapsed = time.monotonic() - start
 
                     # Verify health checks complete promptly (not hung)
-                    assert elapsed < 5.0, (
+                    assert elapsed < health_timeout, (
                         f"{plugin_type.name}:{plugin_name} health check took {elapsed:.1f}s "
-                        "(must complete within 5 seconds)"
+                        f"(must complete within {health_timeout:.0f} seconds)"
                     )
 
                     # Verify return type
@@ -417,7 +427,6 @@ class TestPluginSystem(IntegrationTestBase):
             f"  - {item}" for item in health_check_failures
         )
 
-    @pytest.mark.e2e
     @pytest.mark.requirement("FR-054")
     def test_plugin_compatibility_at_compile_time(self) -> None:
         """Test that incompatible plugin versions are rejected at compile time.
@@ -456,7 +465,6 @@ class TestPluginSystem(IntegrationTestBase):
 
         self.logger.info("Compile-time compatibility check passed")
 
-    @pytest.mark.e2e
     @pytest.mark.requirement("FR-053")
     def test_third_party_plugin_discovery(self) -> None:
         """Test that custom third-party plugins are discoverable.
@@ -523,7 +531,6 @@ class ThirdPartyTestPlugin(PluginMetadata):
                 # Clean up sys.path
                 sys.path.remove(str(plugin_dir.parent))
 
-    @pytest.mark.e2e
     @pytest.mark.requirement("FR-056")
     def test_plugin_abc_backwards_compat(self) -> None:
         """Test that plugin ABCs maintain backwards compatibility.
@@ -614,7 +621,6 @@ class ThirdPartyTestPlugin(PluginMetadata):
             + "\n\nRemoving abstract methods is a MAJOR version breaking change."
         )
 
-    @pytest.mark.e2e
     @pytest.mark.requirement("FR-051")
     def test_all_plugin_types_have_abc(self) -> None:
         """Test that every PluginType enum has a corresponding ABC class.
@@ -663,7 +669,6 @@ class ThirdPartyTestPlugin(PluginMetadata):
                 f"(base={len(required_base_methods)}, domain={len(domain_methods)})"
             )
 
-    @pytest.mark.e2e
     @pytest.mark.requirement("FR-052")
     def test_plugin_swap_actual_execution(self) -> None:
         """Test that swapping compute plugins produces functionally different configs.

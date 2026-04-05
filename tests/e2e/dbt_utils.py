@@ -96,6 +96,14 @@ def _purge_iceberg_namespace(namespace: str) -> None:
                 logger.info("Dropped stale Iceberg table %s", fqn)
             except Exception:
                 logger.warning("Could not drop table %s (may not exist)", fqn)
+        # Drop the namespace itself so dbt starts completely fresh.
+        # DuckDB's Iceberg extension cannot DROP TABLE CASCADE, so stale
+        # namespace metadata causes "Not implemented" errors on re-run.
+        try:
+            catalog.drop_namespace(namespace)
+            logger.info("Dropped namespace %s", namespace)
+        except Exception:
+            logger.debug("Could not drop namespace %s (may not exist)", namespace)
     except Exception as exc:
         logger.debug("Namespace purge skipped for %s: %s", namespace, exc)
 
