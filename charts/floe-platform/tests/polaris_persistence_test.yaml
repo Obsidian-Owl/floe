@@ -1,0 +1,113 @@
+# Tests for Polaris PostgreSQL persistence (relational-jdbc)
+# Validates AC-1 through AC-6 of the polaris-persistence work unit.
+suite: polaris persistence
+templates:
+  - templates/configmap-polaris.yaml
+  - templates/deployment-polaris.yaml
+  - templates/job-polaris-bootstrap.yaml
+tests:
+  # --- AC-2: Configmap includes conditional JDBC properties ---
+  - it: should include JDBC persistence properties when persistence.type is relational-jdbc
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "http://minio:9000"
+    template: templates/configmap-polaris.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: "polaris\\.persistence\\.type=relational-jdbc"
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.db-kind=postgresql"
+
+  # --- AC-6: In-memory mode backward-compatible ---
+  - it: should NOT include JDBC properties when persistence.type is not set
+    set:
+      polaris.enabled: true
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "http://minio:9000"
+    template: templates/configmap-polaris.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - notMatchRegex:
+          path: data["application.properties"]
+          pattern: "polaris\\.persistence\\.type"
+      - notMatchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.db-kind"
+
+  - it: should NOT include JDBC properties when persistence.type is explicitly in-memory
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: in-memory
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "http://minio:9000"
+    template: templates/configmap-polaris.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - notMatchRegex:
+          path: data["application.properties"]
+          pattern: "polaris\\.persistence\\.type"
+      - notMatchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.db-kind"
+
+  # --- AC-1: Polaris env vars for JDBC credentials ---
+  - it: should render JDBC env vars in deployment when polaris.env is set
+    set:
+      polaris.enabled: true
+      polaris.env:
+        - name: QUARKUS_DATASOURCE_JDBC_URL
+          value: "jdbc:postgresql://floe-platform-postgresql:5432/polaris"
+        - name: QUARKUS_DATASOURCE_USERNAME
+          value: "polaris"
+        - name: QUARKUS_DATASOURCE_PASSWORD
+          value: "polaris"
+    template: templates/deployment-polaris.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUARKUS_DATASOURCE_JDBC_URL
+            value: "jdbc:postgresql://floe-platform-postgresql:5432/polaris"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUARKUS_DATASOURCE_USERNAME
+            value: "polaris"
+          any: true
+
+  # --- AC-5: Bootstrap Job remains functional ---
+  - it: should render bootstrap Job with JDBC persistence configured
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.bootstrap.catalogName: "floe-e2e"
+      polaris.bootstrap.defaultBaseLocation: "s3://floe-iceberg"
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - isKind:
+          of: Job
+
+  # --- AC-2: JDBC properties include all required Quarkus keys ---
+  - it: should include quarkus.datasource.jdbc.url property when JDBC persistence enabled
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.persistence.jdbc.url: "jdbc:postgresql://pg:5432/polaris"
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "http://minio:9000"
+    template: templates/configmap-polaris.yaml
+    asserts:
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.jdbc\\.url=jdbc:postgresql://pg:5432/polaris"
