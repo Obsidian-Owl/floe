@@ -47,8 +47,21 @@ from floe_core.plugins import (
 from floe_core.plugins.alert_channel import AlertChannelPlugin
 from floe_core.plugins.rbac import RBACPlugin
 
-# Repository root for demo project path resolution
-_REPO_ROOT = Path(__file__).resolve().parents[5]
+
+# Repository root for demo project path resolution — anchor on .git
+# to avoid breakage if this file is ever moved to a different depth.
+def _find_repo_root() -> Path:
+    """Walk up from this file to find the directory containing .git."""
+    current = Path(__file__).resolve().parent
+    while current != current.parent:
+        if (current / ".git").exists():
+            return current
+        current = current.parent
+    msg = "Cannot find repository root (.git) from " + str(Path(__file__))
+    raise RuntimeError(msg)
+
+
+_REPO_ROOT = _find_repo_root()
 
 
 class TestPluginSystem:
@@ -372,14 +385,18 @@ class TestPluginSystem:
                     # Call health check with explicit timeout.
                     # Plugins may not have been started (no startup() call),
                     # so we provide a timeout to avoid accessing uninitialised config.
+                    # 10s timeout: some plugins (e.g. great_expectations)
+                    # import ~200 modules on first load, taking 6-7s on
+                    # CI runners with cold caches.
+                    health_timeout = 10.0
                     start = time.monotonic()
-                    health_status = plugin.health_check(timeout=5.0)
+                    health_status = plugin.health_check(timeout=health_timeout)
                     elapsed = time.monotonic() - start
 
                     # Verify health checks complete promptly (not hung)
-                    assert elapsed < 5.0, (
+                    assert elapsed < health_timeout, (
                         f"{plugin_type.name}:{plugin_name} health check took {elapsed:.1f}s "
-                        "(must complete within 5 seconds)"
+                        f"(must complete within {health_timeout:.0f} seconds)"
                     )
 
                     # Verify return type

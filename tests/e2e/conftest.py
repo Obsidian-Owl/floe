@@ -8,7 +8,6 @@ All E2E tests require the full platform stack running in K8s (Kind cluster).
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import logging
 import os
@@ -1436,14 +1435,13 @@ def dbt_pipeline_result(
     product: str = request.param
     project_dir = project_root / "demo" / product
 
-    # Module-unique namespace suffix prevents cross-module pollution.
-    # Derived from module name so it's deterministic per module but unique
-    # across modules.
-    module_suffix = hashlib.md5(  # noqa: S324
-        request.module.__name__.encode()
-    ).hexdigest()[:6]
-    namespace_raw = f"{product.replace('-', '_')}_raw_{module_suffix}"
-    namespace_models = f"{product.replace('-', '_')}_{module_suffix}"
+    # Namespace names must match what dbt actually writes to.  The dbt
+    # profile sets ``schema: {profile_name}`` and dbt_project.yml adds
+    # ``+schema: raw`` for seeds.  run_dbt() also purges these same
+    # names before seed/run, so cleanup here uses the same derivation.
+    product_name = product.replace("-", "_")
+    namespace_raw = f"{product_name}_raw"
+    namespace_models = product_name
 
     try:
         # Purge stale data from any prior run (P36: cleanup at setup)

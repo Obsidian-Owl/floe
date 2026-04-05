@@ -192,22 +192,6 @@ def _function_has_try_finally(func: ast.FunctionDef) -> bool:
     return False
 
 
-def _function_references_name(func: ast.FunctionDef, name: str) -> bool:
-    """Check if a function body references a name (variable or call).
-
-    Args:
-        func: Function AST node.
-        name: Name to search for (e.g., "uuid", "hashlib").
-
-    Returns:
-        True if the name appears anywhere in the function body.
-    """
-    source = ast.get_source_segment(_CONFTEST_PATH.read_text(), func)
-    if source is None:
-        return False
-    return name in source
-
-
 def _finally_calls_function(func: ast.FunctionDef, callee_name: str) -> bool:
     """Check if the finally block of a try/finally calls a specific function.
 
@@ -347,32 +331,31 @@ class TestDbtPipelineResultFixtureStructure:
         )
 
     @pytest.mark.requirement("AC-1")
-    def test_fixture_uses_namespace_suffix(self) -> None:
-        """dbt_pipeline_result must generate a unique namespace suffix.
+    def test_fixture_derives_namespace_from_product(self) -> None:
+        """dbt_pipeline_result must derive namespace names from the product.
 
-        A unique suffix (via uuid, hash, or similar) prevents cross-module
-        pollution when multiple test modules use the fixture concurrently
-        or sequentially. Without it, modules share a namespace and corrupt
-        each other's data.
+        Namespace names must match what dbt actually writes to — the
+        profile's ``schema: {profile_name}`` and ``+schema: raw`` for
+        seeds.  The fixture must use ``_purge_iceberg_namespace`` with
+        these derived names so cleanup targets real namespaces.
         """
         tree = _parse_conftest()
         func = _find_function_def(tree, "dbt_pipeline_result")
         assert func is not None, (
             "Function 'dbt_pipeline_result' not found -- cannot check namespace."
         )
-        # Check for common uniqueness patterns: uuid, hash, random, hex
-        has_uuid = _function_references_name(func, "uuid")
-        has_hash = _function_references_name(func, "hash")
-        has_random = _function_references_name(func, "random")
-        has_hex = _function_references_name(func, "hex(")
-        has_unique_id = _function_references_name(func, "unique_id")
-        has_suffix = _function_references_name(func, "suffix")
+        source = ast.get_source_segment(_CONFTEST_PATH.read_text(), func)
+        assert source is not None, "Cannot extract source for dbt_pipeline_result"
 
-        assert any([has_uuid, has_hash, has_random, has_hex, has_unique_id, has_suffix]), (
-            "dbt_pipeline_result does not appear to generate a unique namespace "
-            "suffix. Expected references to uuid, hash, random, or similar "
-            "uniqueness mechanism. Without this, test modules will collide on "
-            "shared namespace names."
+        # Fixture must derive namespace from product name
+        assert "product" in source or "product_name" in source, (
+            "dbt_pipeline_result does not reference 'product' or 'product_name' "
+            "— namespace derivation must be based on the dbt product."
+        )
+        # Fixture must call _purge_iceberg_namespace for cleanup
+        assert "_purge_iceberg_namespace" in source, (
+            "dbt_pipeline_result does not call _purge_iceberg_namespace — "
+            "Iceberg namespaces must be cleaned up to prevent resource leaks."
         )
 
 
