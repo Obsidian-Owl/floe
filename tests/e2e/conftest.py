@@ -8,6 +8,7 @@ All E2E tests require the full platform stack running in K8s (Kind cluster).
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import logging
 import os
@@ -1401,3 +1402,66 @@ def dbt_e2e_profile(
             os.environ.pop(var_name, None)
         else:
             os.environ[var_name] = prior_value
+
+
+@pytest.fixture(scope="module")
+def dbt_pipeline_result(
+    request: pytest.FixtureRequest,
+    project_root: Path,
+    dbt_e2e_profile: dict[str, Path],
+) -> Generator[tuple[str, Path], None, None]:
+    """Run dbt seed + dbt run once per product per test module.
+
+    Module-scoped fixture that executes the full dbt pipeline (seed then run)
+    for a single demo product.  Read-only tests share this fixture to avoid
+    redundant dbt invocations.  Mutating tests should use function-scoped
+    fixtures with their own throwaway namespace instead.
+
+    Parametrize via ``indirect=True``::
+
+        @pytest.mark.parametrize("dbt_pipeline_result", ALL_PRODUCTS, indirect=True)
+        class TestReadOnlyPipeline:
+            def test_something(self, dbt_pipeline_result): ...
+
+    Args:
+        request: pytest fixture request (carries the product name via ``param``).
+        project_root: Repository root path.
+        dbt_e2e_profile: Session-scoped dbt profile fixture (must run first).
+
+    Yields:
+        Tuple of ``(product, project_dir)`` for the parametrized product.
+    """
+    from dbt_utils import _purge_iceberg_namespace, run_dbt
+
+    product: str = request.param
+    project_dir = project_root / "demo" / product
+
+    # Module-unique namespace suffix prevents cross-module pollution.
+    # Derived from module name so it's deterministic per module but unique
+    # across modules.
+    module_suffix = hashlib.md5(  # noqa: S324
+        request.module.__name__.encode()
+    ).hexdigest()[:6]
+    namespace_raw = f"{product.replace('-', '_')}_raw_{module_suffix}"
+    namespace_models = f"{product.replace('-', '_')}_{module_suffix}"
+
+    try:
+        # Purge stale data from any prior run (P36: cleanup at setup)
+        _purge_iceberg_namespace(namespace_raw)
+        _purge_iceberg_namespace(namespace_models)
+
+        # Run dbt seed to load reference data
+        seed_result = run_dbt(["seed"], project_dir)
+        if seed_result.returncode != 0:
+            pytest.fail(f"dbt seed failed for {product}:\n{seed_result.stderr[-500:]}")
+
+        # Run dbt models
+        run_result = run_dbt(["run"], project_dir)
+        if run_result.returncode != 0:
+            pytest.fail(f"dbt run failed for {product}:\n{run_result.stderr[-500:]}")
+
+        yield (product, project_dir)
+    finally:
+        # Clean up Iceberg namespaces to prevent resource leaks
+        _purge_iceberg_namespace(namespace_raw)
+        _purge_iceberg_namespace(namespace_models)
