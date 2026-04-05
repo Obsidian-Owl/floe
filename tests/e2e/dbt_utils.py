@@ -10,8 +10,12 @@ from __future__ import annotations
 import logging
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+
+import httpx
 
 from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
 from testing.fixtures.services import ServiceEndpoint
@@ -73,12 +77,48 @@ def _get_polaris_catalog() -> Any:
         return None
 
 
-def _purge_iceberg_namespace(namespace: str) -> None:
-    """Drop all Iceberg tables in a namespace via PyIceberg.
+def _delete_s3_objects(
+    client: httpx.Client,
+    endpoint: str,
+    bucket: str,
+    keys: list[str],
+) -> None:
+    """Delete a batch of S3 objects via the S3 DeleteObjects API.
 
-    DuckDB's Iceberg extension does not support ``DROP TABLE CASCADE``,
-    which dbt emits for ``--full-refresh`` and ``materialized='table'``
-    re-runs.  We drop tables individually via PyIceberg before dbt runs.
+    Args:
+        client: An active httpx.Client instance (with auth configured).
+        endpoint: MinIO/S3 base URL (e.g. ``http://localhost:9000``).
+        bucket: S3 bucket name.
+        keys: List of object keys to delete.
+    """
+    if not keys:
+        return
+
+    objects_xml = "".join(f"<Object><Key>{k}</Key></Object>" for k in keys)
+    body = (
+        f'<?xml version="1.0" encoding="UTF-8"?><Delete><Quiet>true</Quiet>{objects_xml}</Delete>'
+    )
+    url = f"{endpoint.rstrip('/')}/{bucket}"
+    try:
+        resp = client.post(url, params={"delete": ""}, content=body.encode())
+        if resp.status_code not in (200, 204):
+            logger.warning(
+                "S3 DeleteObjects returned %s for bucket %s",
+                resp.status_code,
+                bucket,
+            )
+    except Exception as exc:
+        logger.warning("S3 DeleteObjects failed for bucket %s: %s", bucket, type(exc).__name__)
+
+
+def _purge_iceberg_namespace(namespace: str) -> None:
+    """Purge all Iceberg tables in a namespace and delete their S3 data.
+
+    Uses ``purge_table`` (which removes both catalog metadata and data files)
+    then performs an explicit S3 object sweep via the MinIO-compatible
+    ListObjectsV2 + DeleteObjects APIs.  This ensures stale Parquet files
+    cannot interfere with subsequent dbt runs that use DuckDB's Iceberg
+    extension, which does not support ``DROP TABLE CASCADE``.
 
     Silently does nothing if the catalog is unreachable or the namespace
     doesn't exist — dbt will create everything from scratch.
@@ -90,15 +130,73 @@ def _purge_iceberg_namespace(namespace: str) -> None:
     if catalog is None:
         return
 
+    # Collect S3 config from environment (same defaults as _get_polaris_catalog).
+    import os
+
+    s3_endpoint = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
+    access_key = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")  # pragma: allowlist secret
+    secret_key = os.environ.get(
+        "AWS_SECRET_ACCESS_KEY", "minioadmin123"
+    )  # pragma: allowlist secret
+
     try:
         tables = catalog.list_tables(namespace)
         for table_id in tables:
             fqn = f"{table_id[0]}.{table_id[1]}"
+            # Step 1: purge via catalog (removes metadata + signals data removal)
             try:
-                catalog.drop_table(fqn)
-                logger.info("Dropped stale Iceberg table %s", fqn)
-            except Exception:
-                logger.warning("Could not drop table %s (may not exist)", fqn)
+                catalog.purge_table(fqn)
+                logger.info("Purged Iceberg table %s", fqn)
+            except Exception as exc:
+                logger.warning("Could not purge table %s: %s", fqn, type(exc).__name__)
+
+            # Step 2: sweep S3 objects under the table's data prefix via httpx.
+            # We use IsTruncated/ContinuationToken for paginated listing.
+            try:
+                table = catalog.load_table(fqn)
+                location: str = table.metadata.location  # e.g. s3://warehouse/ns1/t1
+                parsed = urlparse(location)
+                bucket: str = parsed.netloc
+                prefix: str = parsed.path.lstrip("/")
+
+                list_url = f"{s3_endpoint.rstrip('/')}/{bucket}"
+                params: dict[str, str] = {
+                    "list-type": "2",
+                    "prefix": prefix,
+                }
+
+                with httpx.Client(auth=httpx.BasicAuth(access_key, secret_key)) as client:
+                    while True:
+                        resp = client.get(list_url, params=params)
+                        root = ET.fromstring(resp.text)
+                        # Collect keys from <Contents><Key>…</Key></Contents>
+                        keys = [el.text or "" for el in root.iter("Key") if el.text]
+                        if keys:
+                            _delete_s3_objects(client, s3_endpoint, bucket, keys)
+
+                        # Pagination: check IsTruncated / NextContinuationToken
+                        is_truncated_el = root.find("IsTruncated")
+                        is_truncated = (
+                            is_truncated_el is not None
+                            and (is_truncated_el.text or "").lower() == "true"
+                        )
+                        if not is_truncated:
+                            break
+                        token_el = root.find("NextContinuationToken")
+                        continuation_token = token_el.text if token_el is not None else None
+                        if not continuation_token:
+                            break
+                        params = {
+                            "list-type": "2",
+                            "prefix": prefix,
+                            "continuation-token": continuation_token,
+                        }
+                        logger.debug("S3 listing page continues with ContinuationToken for %s", fqn)
+
+                logger.info("Deleted S3 objects under %s", location)
+            except Exception as exc:
+                logger.warning("S3 cleanup failed for table %s: %s", fqn, type(exc).__name__)
+
         # Drop the namespace itself so dbt starts completely fresh.
         # DuckDB's Iceberg extension cannot DROP TABLE CASCADE, so stale
         # namespace metadata causes "Not implemented" errors on re-run.
