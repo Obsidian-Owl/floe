@@ -190,42 +190,30 @@ class TestDataPipeline(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-023")
-    @pytest.mark.parametrize("product", ALL_PRODUCTS)
+    @pytest.mark.parametrize("dbt_pipeline_result", ALL_PRODUCTS, indirect=True)
     def test_dbt_seed_loads_data(
         self,
-        product: str,
+        dbt_pipeline_result: tuple[str, Path],
         e2e_namespace: str,
         polaris_client: Any,
-        project_root: Path,
-        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test dbt seed loads CSV data into Iceberg tables via Polaris.
 
         Requires Polaris/Iceberg: Validates seed data lands in Iceberg tables.
 
         Validates:
-        - dbt seed command executes successfully
+        - dbt seed command executes successfully (via fixture)
         - Seed tables are created in Iceberg catalog (``_raw`` namespace)
         - Tables contain exact expected row counts from seed CSVs
 
         Args:
-            product: Demo product to test.
+            dbt_pipeline_result: Shared fixture providing (product, project_dir).
             e2e_namespace: Unique namespace for test isolation.
             polaris_client: PyIceberg REST catalog fixture.
-            project_root: Repository root path.
-            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
-        self.check_infrastructure("dagster")
+        product, _project_dir = dbt_pipeline_result
         self.check_infrastructure("polaris")
         self.check_infrastructure("minio")
-
-        project_dir = self._get_demo_project_path(project_root, product)
-        target_dir = project_dir / "target"
-        target_dir.mkdir(exist_ok=True)
-
-        # Run dbt seed
-        result = run_dbt(["seed"], project_dir)
-        assert result.returncode == 0, f"dbt seed should succeed for {product}"
 
         # Seeds use +schema: raw → namespace is {profile_name}_raw
         seed_namespace = product.replace("-", "_") + "_raw"
@@ -249,13 +237,11 @@ class TestDataPipeline(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-020")
-    @pytest.mark.parametrize("product", ALL_PRODUCTS)
+    @pytest.mark.parametrize("dbt_pipeline_result", ALL_PRODUCTS, indirect=True)
     def test_pipeline_execution_order(
         self,
-        product: str,
+        dbt_pipeline_result: tuple[str, Path],
         e2e_namespace: str,
-        project_root: Path,
-        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test pipeline executes models in correct dependency order.
 
@@ -265,30 +251,10 @@ class TestDataPipeline(IntegrationTestBase):
         - run_results.json records correct execution sequence
 
         Args:
-            product: Demo product to test.
+            dbt_pipeline_result: Shared fixture providing (product, project_dir).
             e2e_namespace: Unique namespace for test isolation.
-            project_root: Repository root path.
-            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
-        # Check infrastructure availability
-        self.check_infrastructure("dagster")
-        self.check_infrastructure("polaris")
-
-        project_dir = self._get_demo_project_path(project_root, product)
-
-        # Ensure target directory exists
-        target_dir = project_dir / "target"
-        target_dir.mkdir(exist_ok=True)
-
-        # First run dbt seed to load data
-        seed_result = run_dbt(["seed"], project_dir)
-        assert seed_result.returncode == 0, (
-            f"dbt seed failed for {product}:\n{seed_result.stderr[-500:]}"
-        )
-
-        # Run dbt models
-        result = run_dbt(["run"], project_dir)
-        assert result.returncode == 0, f"dbt run failed for {product}:\n{result.stderr[-500:]}"
+        product, project_dir = dbt_pipeline_result
 
         # Parse run_results.json to verify execution order
         run_results_path = project_dir / "target" / "run_results.json"
@@ -345,12 +311,12 @@ class TestDataPipeline(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-021")
+    @pytest.mark.parametrize("dbt_pipeline_result", ["customer-360"], indirect=True)
     def test_medallion_layers(
         self,
+        dbt_pipeline_result: tuple[str, Path],
         e2e_namespace: str,
         polaris_client: Any,
-        project_root: Path,
-        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test medallion architecture transforms produce correct output in Iceberg.
 
@@ -361,21 +327,13 @@ class TestDataPipeline(IntegrationTestBase):
         - All data lands in Iceberg tables via Polaris catalog
 
         Args:
+            dbt_pipeline_result: Shared fixture providing (product, project_dir).
             e2e_namespace: Unique namespace for test isolation.
             polaris_client: PyIceberg REST catalog fixture.
-            project_root: Repository root path.
-            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
+        _product, _project_dir = dbt_pipeline_result
         self.check_infrastructure("polaris")
         self.check_infrastructure("minio")
-
-        project_dir = self._get_demo_project_path(project_root)
-        target_dir = project_dir / "target"
-        target_dir.mkdir(exist_ok=True)
-
-        # Run full pipeline: seed + run
-        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
-        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
         namespace = "customer_360"
         available_tables = self._list_iceberg_tables(polaris_client, namespace)
@@ -427,12 +385,12 @@ class TestDataPipeline(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-022")
+    @pytest.mark.parametrize("dbt_pipeline_result", ["customer-360"], indirect=True)
     def test_iceberg_tables_created(
         self,
+        dbt_pipeline_result: tuple[str, Path],
         e2e_namespace: str,
         polaris_client: Any,
-        project_root: Path,
-        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test Iceberg tables created with correct schemas and row counts.
 
@@ -443,21 +401,13 @@ class TestDataPipeline(IntegrationTestBase):
         - All expected tables present in Iceberg format
 
         Args:
+            dbt_pipeline_result: Shared fixture providing (product, project_dir).
             e2e_namespace: Unique namespace for test isolation.
             polaris_client: PyIceberg REST catalog fixture.
-            project_root: Repository root path.
-            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
+        _product, _project_dir = dbt_pipeline_result
         self.check_infrastructure("polaris")
         self.check_infrastructure("minio")
-
-        project_dir = self._get_demo_project_path(project_root)
-        target_dir = project_dir / "target"
-        target_dir.mkdir(exist_ok=True)
-
-        # Run pipeline
-        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
-        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
         # Seeds land in {profile_name}_raw due to +schema: raw
         seed_namespace = "customer_360_raw"
@@ -510,13 +460,11 @@ class TestDataPipeline(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-024")
-    @pytest.mark.parametrize("product", ALL_PRODUCTS)
+    @pytest.mark.parametrize("dbt_pipeline_result", ALL_PRODUCTS, indirect=True)
     def test_dbt_tests_pass(
         self,
-        product: str,
+        dbt_pipeline_result: tuple[str, Path],
         e2e_namespace: str,
-        project_root: Path,
-        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test dbt schema and data tests pass after pipeline execution.
 
@@ -527,23 +475,11 @@ class TestDataPipeline(IntegrationTestBase):
         - run_results.json records test results
 
         Args:
-            product: Demo product to test.
+            dbt_pipeline_result: Shared fixture providing (product, project_dir).
             e2e_namespace: Unique namespace for test isolation.
-            project_root: Repository root path.
-            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
-        # Check infrastructure availability
+        product, project_dir = dbt_pipeline_result
         self.check_infrastructure("polaris")
-
-        project_dir = self._get_demo_project_path(project_root, product)
-
-        # Ensure target directory exists
-        target_dir = project_dir / "target"
-        target_dir.mkdir(exist_ok=True)
-
-        # Run pipeline first
-        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
-        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
 
         # Run dbt tests
         result = run_dbt(["test"], project_dir)
@@ -630,13 +566,11 @@ class TestDataPipeline(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-026")
-    @pytest.mark.parametrize("product", ALL_PRODUCTS)
+    @pytest.mark.parametrize("dbt_pipeline_result", ALL_PRODUCTS, indirect=True)
     def test_data_quality_checks(
         self,
-        product: str,
+        dbt_pipeline_result: tuple[str, Path],
         e2e_namespace: str,
-        project_root: Path,
-        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test dbt data quality checks execute correctly.
 
@@ -646,23 +580,12 @@ class TestDataPipeline(IntegrationTestBase):
         - Quality check results are recorded in run_results.json
 
         Args:
-            product: Demo product to test.
+            dbt_pipeline_result: Shared fixture providing (product, project_dir).
             e2e_namespace: Unique namespace for test isolation.
-            project_root: Repository root path.
-            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
-        # Check infrastructure availability
+        product, project_dir = dbt_pipeline_result
         self.check_infrastructure("polaris")
 
-        project_dir = self._get_demo_project_path(project_root, product)
-
-        # Ensure target directory exists
-        target_dir = project_dir / "target"
-        target_dir.mkdir(exist_ok=True)
-
-        # Run pipeline and tests
-        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
-        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
         result = run_dbt(["test"], project_dir)
 
         assert result.returncode == 0, f"Quality checks should pass for {product}"
@@ -1010,32 +933,30 @@ class TestDataPipeline(IntegrationTestBase):
 
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-031")
+    @pytest.mark.parametrize("dbt_pipeline_result", ["customer-360"], indirect=True)
     def test_data_retention_enforcement(
         self,
+        dbt_pipeline_result: tuple[str, Path],
         e2e_namespace: str,
         polaris_client: Any,
         project_root: Path,
-        dbt_e2e_profile: dict[str, Path],
     ) -> None:
         """Test data retention cleanup configuration and enforcement.
 
         Validates:
         - Retention configuration exists in floe.yaml or dbt macros
-        - Pipeline executes and tables contain data
+        - Pipeline executes and tables contain data (via fixture)
         - Retention mechanism is defined (even if not yet enforced at runtime)
 
         Args:
+            dbt_pipeline_result: Shared fixture providing (product, project_dir).
             e2e_namespace: Unique namespace for test isolation.
             polaris_client: PyIceberg REST catalog fixture.
             project_root: Repository root path.
-            dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
+        _product, project_dir = dbt_pipeline_result
         self.check_infrastructure("polaris")
         self.check_infrastructure("minio")
-
-        project_dir = self._get_demo_project_path(project_root)
-        target_dir = project_dir / "target"
-        target_dir.mkdir(exist_ok=True)
 
         # Test 1: Verify retention configuration exists in floe.yaml
         floe_yaml_path = project_dir / "floe.yaml"
@@ -1083,10 +1004,7 @@ class TestDataPipeline(IntegrationTestBase):
             "  - Retention macro in dbt macros/ directory"
         )
 
-        # Test 3: Run pipeline and verify tables exist
-        assert run_dbt(["seed"], project_dir).returncode == 0, "dbt seed failed"
-        assert run_dbt(["run"], project_dir).returncode == 0, "dbt run failed"
-
+        # Test 3: Verify tables exist (pipeline run handled by fixture)
         # Verify data exists (retention should preserve recent data)
         namespace = "customer_360"
         table_name = "stg_transactions"
