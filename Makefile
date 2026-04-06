@@ -18,9 +18,9 @@ help: ## Show this help message
 	@echo "  make test            Run all tests (unit + integration)"
 	@echo "  make test-unit       Run unit tests only (fast, no K8s)"
 	@echo "  make test-integration Run integration tests (requires K8s)"
-	@echo "  make test-e2e        Run E2E tests via DevPod (requires running workspace)"
-	@echo "  make test-e2e-local  Run E2E tests locally (requires local Kind cluster)"
-	@echo "  make test-e2e-cluster Run E2E tests in-cluster as K8s Job (no port-forwards)"
+	@echo "  make test-e2e        Run E2E tests in-cluster (auto-detects Kind/DevPod)"
+	@echo "  make test-e2e-full   Run standard + destructive E2E suites sequentially"
+	@echo "  make test-e2e-host   Run E2E tests via host port-forwards (legacy)"
 	@echo ""
 	@echo "Cluster Management:"
 	@echo "  make kind-up         Create Kind cluster and deploy services"
@@ -127,38 +127,19 @@ test-integration-image: ## Build test runner Docker image
 	@echo "Image built: floe-test-runner:latest"
 
 .PHONY: test-e2e
-test-e2e: ## Run E2E tests via DevPod (requires running DevPod workspace)
-	@echo "Running E2E tests (DevPod)..."
-	@scripts/devpod-ensure-ready.sh
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config ./testing/ci/test-e2e.sh
-
-.PHONY: test-e2e-local
-test-e2e-local: ## Run E2E tests locally (requires local Kind cluster + full stack)
-	@echo "Running E2E tests (local Kind)..."
-	@./testing/ci/test-e2e.sh
-
-.PHONY: test-e2e-devpod
-test-e2e-devpod: ## Run E2E tests inside DevPod (DooD kubeconfig rewrite)
-	@echo "Running E2E tests (inside DevPod)..."
-	@KIND_CONTAINER="$${KIND_CONTAINER:-floe-test-control-plane}"; \
-	KIND_NETWORK="$${KIND_NETWORK:-kind}"; \
-	DOCKER_IP=$$(docker inspect -f "{{(index .NetworkSettings.Networks \"$$KIND_NETWORK\").IPAddress}}" "$$KIND_CONTAINER" 2>/dev/null) || \
-		{ echo "ERROR: Cannot detect Kind control plane IP. Is Kind running?" >&2; exit 1; }; \
-	if ! echo "$$DOCKER_IP" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$$'; then \
-		echo "ERROR: Unexpected IP format from docker inspect: $$DOCKER_IP" >&2; exit 1; \
-	fi; \
-	echo "Kind control plane IP: $$DOCKER_IP"; \
-	TMPCONFIG=$$(mktemp); \
-	trap 'rm -f "$$TMPCONFIG"' EXIT; \
-	sed "s|server: https://127\.0\.0\.1:[0-9]*|server: https://$$DOCKER_IP:6443|" \
-		"$${KUBECONFIG:-$$HOME/.kube/config}" > "$$TMPCONFIG"; \
-	chmod 600 "$$TMPCONFIG"; \
-	KUBECONFIG="$$TMPCONFIG" ./testing/ci/test-e2e.sh
-
-.PHONY: test-e2e-cluster
-test-e2e-cluster: ## Run E2E tests in-cluster as K8s Job (no port-forwards needed)
+test-e2e: ## Run E2E tests in-cluster as K8s Job (auto-detects Kind/DevPod)
 	@echo "Running E2E tests in-cluster..."
 	@./testing/ci/test-e2e-cluster.sh
+
+.PHONY: test-e2e-full
+test-e2e-full: ## Run standard + destructive E2E suites sequentially
+	@echo "Running full E2E test suite..."
+	@./testing/ci/test-e2e-full.sh
+
+.PHONY: test-e2e-host
+test-e2e-host: ## Run E2E tests via host port-forwards (legacy, requires running services)
+	@echo "Running E2E tests (host port-forwards)..."
+	@./testing/ci/test-e2e.sh
 
 # ============================================================
 # Quality Checks
