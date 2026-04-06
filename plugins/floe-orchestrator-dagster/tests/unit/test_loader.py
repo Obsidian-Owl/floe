@@ -228,8 +228,7 @@ def test_definitions_has_dbt_resource(project_dir: Path) -> None:
 
     resources = result.resources or {}
     assert "dbt" in resources, (
-        f"'dbt' resource missing from Definitions.resources. "
-        f"Present keys: {list(resources.keys())}"
+        f"'dbt' resource missing from Definitions.resources. Present keys: {list(resources.keys())}"
     )
 
 
@@ -662,9 +661,7 @@ def test_dbt_assets_uses_trace_correlation_facet(project_dir: Path) -> None:
             run_facets = call_kwargs.args[1] if len(call_kwargs.args) > 1 else {}
             assert "traceCorrelation" in (run_facets or {})
         else:
-            pytest.fail(
-                "emit_start was called without run_facets containing traceCorrelation"
-            )
+            pytest.fail("emit_start was called without run_facets containing traceCorrelation")
 
 
 @pytest.mark.requirement("AC-5")

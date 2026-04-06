@@ -66,9 +66,7 @@ def test_returns_definitions_from_real_artifacts(
 def test_has_dbt_resource(demo_definitions: Definitions) -> None:
     """Definitions from real artifacts contains a 'dbt' resource."""
     resources = demo_definitions.resources or {}
-    assert "dbt" in resources, (
-        f"'dbt' resource missing. Present keys: {list(resources.keys())}"
-    )
+    assert "dbt" in resources, f"'dbt' resource missing. Present keys: {list(resources.keys())}"
 
 
 @pytest.mark.requirement("AC-1")
@@ -106,8 +104,7 @@ def test_resources_are_deferred(demo_definitions: Definitions) -> None:
 
 
 @pytest.mark.requirement("AC-2")
-def test_no_exception_during_load(
-) -> None:
+def test_no_exception_during_load() -> None:
     """Loading definitions must not raise ConnectionError or TimeoutError.
 
     The loader should complete without attempting network connections,

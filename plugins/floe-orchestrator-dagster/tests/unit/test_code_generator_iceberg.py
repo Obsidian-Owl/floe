@@ -89,9 +89,7 @@ class TestThinLoaderImport:
     ) -> None:
         """Generated code contains the correct import statement for the loader."""
         code = _generate_code(dagster_plugin)
-        assert (
-            "from floe_orchestrator_dagster.loader import load_product_definitions" in code
-        ), (
+        assert "from floe_orchestrator_dagster.loader import load_product_definitions" in code, (
             "Generated code must import load_product_definitions from "
             "floe_orchestrator_dagster.loader. "
             f"Actual code:\n{code}"
@@ -103,9 +101,9 @@ class TestThinLoaderImport:
     ) -> None:
         """Import is present regardless of iceberg_enabled flag."""
         code = _generate_code(dagster_plugin, iceberg_enabled=True)
-        assert (
-            "from floe_orchestrator_dagster.loader import load_product_definitions" in code
-        ), "Import must be present even when iceberg_enabled=True."
+        assert "from floe_orchestrator_dagster.loader import load_product_definitions" in code, (
+            "Import must be present even when iceberg_enabled=True."
+        )
 
     @pytest.mark.requirement("AC-7")
     def test_import_present_with_lineage_enabled(
@@ -113,9 +111,9 @@ class TestThinLoaderImport:
     ) -> None:
         """Import is present regardless of lineage_enabled flag."""
         code = _generate_code(dagster_plugin, lineage_enabled=True)
-        assert (
-            "from floe_orchestrator_dagster.loader import load_product_definitions" in code
-        ), "Import must be present even when lineage_enabled=True."
+        assert "from floe_orchestrator_dagster.loader import load_product_definitions" in code, (
+            "Import must be present even when lineage_enabled=True."
+        )
 
 
 class TestThinLoaderDefsCall:
@@ -128,20 +126,14 @@ class TestThinLoaderDefsCall:
         """Generated code assigns defs = load_product_definitions(product_name, ...)."""
         code = _generate_code(dagster_plugin)
         expected = f'defs = load_product_definitions("{PRODUCT_NAME}", PROJECT_DIR)'
-        assert expected in code, (
-            f"Generated code must contain:\n  {expected}\n"
-            f"Actual code:\n{code}"
-        )
+        assert expected in code, f"Generated code must contain:\n  {expected}\nActual code:\n{code}"
 
     @pytest.mark.requirement("AC-7")
-    def test_project_dir_defined(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_project_dir_defined(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Generated code defines PROJECT_DIR = Path(__file__).parent."""
         code = _generate_code(dagster_plugin)
         assert "PROJECT_DIR = Path(__file__).parent" in code, (
-            "Generated code must define PROJECT_DIR = Path(__file__).parent. "
-            f"Actual code:\n{code}"
+            f"Generated code must define PROJECT_DIR = Path(__file__).parent. Actual code:\n{code}"
         )
 
 
@@ -157,46 +149,36 @@ class TestProductNameInterpolation:
         code = _generate_code(dagster_plugin, product_name=name)
         expected = f'defs = load_product_definitions("{name}", PROJECT_DIR)'
         assert expected in code, (
-            f"Product name '{name}' not interpolated into defs call. "
-            f"Actual code:\n{code}"
+            f"Product name '{name}' not interpolated into defs call. Actual code:\n{code}"
         )
 
     @pytest.mark.requirement("AC-8")
-    def test_product_name_with_underscores(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_product_name_with_underscores(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Product name with underscores is interpolated correctly."""
         name = "my_data_product"
         code = _generate_code(dagster_plugin, product_name=name)
         expected = f'defs = load_product_definitions("{name}", PROJECT_DIR)'
         assert expected in code, (
-            f"Product name '{name}' not interpolated correctly. "
-            f"Actual code:\n{code}"
+            f"Product name '{name}' not interpolated correctly. Actual code:\n{code}"
         )
 
     @pytest.mark.requirement("AC-8")
-    def test_product_name_in_docstring(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_product_name_in_docstring(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Product name appears in the module docstring."""
         name = "analytics-pipeline"
         code = _generate_code(dagster_plugin, product_name=name)
         assert name in code.split('"""')[1] if '"""' in code else name in code[:200], (
-            f"Product name '{name}' should appear in the module docstring. "
-            f"Actual code:\n{code}"
+            f"Product name '{name}' should appear in the module docstring. Actual code:\n{code}"
         )
 
     @pytest.mark.requirement("AC-8")
-    def test_product_name_with_dots(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_product_name_with_dots(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Product name containing dots is passed through literally."""
         name = "org.team.pipeline"
         code = _generate_code(dagster_plugin, product_name=name)
         expected = f'defs = load_product_definitions("{name}", PROJECT_DIR)'
         assert expected in code, (
-            f"Product name with dots '{name}' not interpolated correctly. "
-            f"Actual code:\n{code}"
+            f"Product name with dots '{name}' not interpolated correctly. Actual code:\n{code}"
         )
 
     @pytest.mark.requirement("AC-8")
@@ -275,9 +257,7 @@ class TestOldPatternsAbsent:
         old_pattern: str,
     ) -> None:
         """Old template symbol must not appear with both flags enabled."""
-        code = _generate_code(
-            dagster_plugin, iceberg_enabled=True, lineage_enabled=True
-        )
+        code = _generate_code(dagster_plugin, iceberg_enabled=True, lineage_enabled=True)
         assert old_pattern not in code, (
             f"Old pattern '{old_pattern}' must NOT appear in generated code "
             f"with both iceberg and lineage enabled. "
@@ -289,9 +269,7 @@ class TestGeneratedCodeBrevity:
     """AC-7: Generated file must be <= 20 lines."""
 
     @pytest.mark.requirement("AC-7")
-    def test_line_count_default_flags(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_line_count_default_flags(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Generated code must be <= 20 lines with default flags."""
         code = _generate_code(dagster_plugin)
         line_count = len(code.strip().splitlines())
@@ -302,9 +280,7 @@ class TestGeneratedCodeBrevity:
         )
 
     @pytest.mark.requirement("AC-7")
-    def test_line_count_iceberg_enabled(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_line_count_iceberg_enabled(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Line count unchanged when iceberg_enabled=True (loader handles it)."""
         code_default = _generate_code(dagster_plugin)
         code_iceberg = _generate_code(dagster_plugin, iceberg_enabled=True)
@@ -320,9 +296,7 @@ class TestGeneratedCodeBrevity:
         )
 
     @pytest.mark.requirement("AC-7")
-    def test_line_count_lineage_enabled(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_line_count_lineage_enabled(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Line count unchanged when lineage_enabled=True (loader handles it)."""
         code_default = _generate_code(dagster_plugin)
         code_lineage = _generate_code(dagster_plugin, lineage_enabled=True)
@@ -397,9 +371,7 @@ class TestGeneratedCodeStructure:
     """AC-7/AC-8: Verify structural properties of the generated thin loader."""
 
     @pytest.mark.requirement("AC-7")
-    def test_contains_future_annotations(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_contains_future_annotations(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Generated code includes from __future__ import annotations."""
         code = _generate_code(dagster_plugin)
         assert "from __future__ import annotations" in code, (
@@ -407,25 +379,19 @@ class TestGeneratedCodeStructure:
         )
 
     @pytest.mark.requirement("AC-7")
-    def test_contains_do_not_edit_warning(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_contains_do_not_edit_warning(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Generated code includes a DO NOT EDIT warning."""
         code = _generate_code(dagster_plugin)
         assert "DO NOT EDIT" in code.upper(), (
-            "Generated code must include a 'DO NOT EDIT' warning. "
-            f"Actual code:\n{code}"
+            f"Generated code must include a 'DO NOT EDIT' warning. Actual code:\n{code}"
         )
 
     @pytest.mark.requirement("AC-7")
-    def test_imports_path(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_imports_path(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Generated code imports Path from pathlib."""
         code = _generate_code(dagster_plugin)
         assert "from pathlib import Path" in code, (
-            "Generated code must import Path from pathlib. "
-            f"Actual code:\n{code}"
+            f"Generated code must import Path from pathlib. Actual code:\n{code}"
         )
 
     @pytest.mark.requirement("AC-8")
@@ -437,15 +403,10 @@ class TestGeneratedCodeStructure:
         try:
             compile(code, "<generated>", "exec")
         except SyntaxError as exc:
-            pytest.fail(
-                f"Generated code is not valid Python: {exc}\n"
-                f"Code:\n{code}"
-            )
+            pytest.fail(f"Generated code is not valid Python: {exc}\nCode:\n{code}")
 
     @pytest.mark.requirement("AC-8")
-    def test_defs_is_module_level_variable(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_defs_is_module_level_variable(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """defs assignment is at module level, not inside a function or class."""
         code = _generate_code(dagster_plugin)
         for line in code.splitlines():
@@ -453,8 +414,7 @@ class TestGeneratedCodeStructure:
             if stripped.startswith("defs = load_product_definitions("):
                 # The line must be at column 0 (no indentation)
                 assert line == stripped, (
-                    f"defs assignment must be at module level (no indentation). "
-                    f"Found: '{line}'"
+                    f"defs assignment must be at module level (no indentation). Found: '{line}'"
                 )
                 break
         else:
@@ -498,9 +458,7 @@ class TestGeneratedCodeExactContent:
 
     @pytest.mark.requirement("AC-7")
     @pytest.mark.requirement("AC-8")
-    def test_exact_functional_lines(
-        self, dagster_plugin: DagsterOrchestratorPlugin
-    ) -> None:
+    def test_exact_functional_lines(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
         """Non-comment, non-blank lines match the expected thin loader exactly.
 
         We strip the docstring and blank lines to focus on the functional code.
@@ -534,7 +492,7 @@ class TestGeneratedCodeExactContent:
             "from __future__ import annotations",
             "from pathlib import Path",
             "from floe_orchestrator_dagster.loader import load_product_definitions",
-            'PROJECT_DIR = Path(__file__).parent',
+            "PROJECT_DIR = Path(__file__).parent",
             'defs = load_product_definitions("my-product", PROJECT_DIR)',
         ]
 

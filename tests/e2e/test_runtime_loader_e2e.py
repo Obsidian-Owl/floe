@@ -45,8 +45,7 @@ def dagster_url() -> str:
         resp.raise_for_status()
     except (httpx.ConnectError, httpx.TimeoutException) as exc:
         pytest.fail(
-            f"Dagster webserver not reachable at {url}: {exc}\n"
-            "Start infrastructure: make test-e2e"
+            f"Dagster webserver not reachable at {url}: {exc}\nStart infrastructure: make test-e2e"
         )
     return url
 
@@ -82,15 +81,11 @@ def test_dagster_discovers_code_location(dagster_url: str) -> None:
     workspace = data.get("data", {}).get("workspaceOrError", {})
     entries = workspace.get("locationEntries", [])
     assert len(entries) >= 1, (
-        f"Expected at least 1 code location, got {len(entries)}. "
-        "Is the demo product deployed?"
+        f"Expected at least 1 code location, got {len(entries)}. Is the demo product deployed?"
     )
 
     loaded = [e for e in entries if e.get("loadStatus") == "LOADED"]
-    assert len(loaded) >= 1, (
-        f"No code locations in LOADED status. "
-        f"Entries: {entries}"
-    )
+    assert len(loaded) >= 1, f"No code locations in LOADED status. Entries: {entries}"
 
 
 @pytest.mark.requirement("AC-1")
@@ -121,8 +116,7 @@ def test_dagster_discovers_assets(dagster_url: str) -> None:
 
     asset_nodes = data.get("data", {}).get("assetNodes", [])
     assert len(asset_nodes) >= 1, (
-        "Expected at least 1 asset from the thin definitions.py loader, "
-        f"got {len(asset_nodes)}"
+        f"Expected at least 1 asset from the thin definitions.py loader, got {len(asset_nodes)}"
     )
 
 
@@ -147,9 +141,7 @@ def test_thin_definitions_are_deployed() -> None:
             "Still using the old 187-line template?"
         )
         lines = content.strip().splitlines()
-        assert len(lines) <= 20, (
-            f"{product}/definitions.py has {len(lines)} lines, expected <= 20"
-        )
+        assert len(lines) <= 20, f"{product}/definitions.py has {len(lines)} lines, expected <= 20"
 
         # Verify old patterns are absent
         forbidden = ["_export_dbt_to_iceberg", "_load_iceberg_resources", "get_registry"]
