@@ -160,15 +160,14 @@ def test_create_ingestion_resources_configures_plugin() -> None:
         assert resources["ingestion"] == mock_plugin
 
 
-@pytest.mark.requirement("4F-FR-063")
-def test_try_create_ingestion_resources_handles_plugin_loading_error() -> None:
-    """Test try_create_ingestion_resources returns empty dict on plugin loading error.
+@pytest.mark.requirement("AC-4")
+def test_try_create_ingestion_resources_reraises_on_configured_but_broken() -> None:
+    """Test try_create_ingestion_resources re-raises when ingestion IS configured but fails.
 
-    FR-063: Graceful degradation — when ingestion plugin loading fails,
-    the function logs the error and returns an empty dict instead of
-    propagating the exception.
+    AC-4: When ingestion IS configured but create_ingestion_resources() raises,
+    the exception MUST propagate — no swallowing. This matches iceberg/semantic
+    factory behavior.
     """
-    # Create ResolvedPlugins with ingestion plugin
     plugins = ResolvedPlugins(
         compute=PluginRef(type="duckdb", version="1.0.0", config=None),
         orchestrator=PluginRef(type="dagster", version="1.0.0", config=None),
@@ -178,12 +177,10 @@ def test_try_create_ingestion_resources_handles_plugin_loading_error() -> None:
         semantic=None,
     )
 
-    # Patch the registry to raise an error
     with patch("floe_core.plugin_registry.get_registry") as mock_get_registry:
         mock_registry = MagicMock()
-        mock_registry.get.side_effect = RuntimeError("Plugin not found")
+        mock_registry.get.side_effect = RuntimeError("connection refused")
         mock_get_registry.return_value = mock_registry
 
-        # Should return empty dict (graceful degradation)
-        resources = try_create_ingestion_resources(plugins)
-        assert resources == {}
+        with pytest.raises(RuntimeError, match="connection refused"):
+            try_create_ingestion_resources(plugins)
