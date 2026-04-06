@@ -1,14 +1,12 @@
-"""Unit tests for Iceberg export code generation in generate_entry_point_code().
+"""Unit tests for thin loader pattern in generate_entry_point_code().
 
-These tests verify that the generated _export_dbt_to_iceberg() function uses
-the plugin registry system instead of calling load_catalog() directly, and
-that no hardcoded credential parameters leak into generated code.
+These tests verify that generate_entry_point_code() emits a thin ~17-line
+shim that delegates to load_product_definitions(), rather than the old
+187-line inline template with registry imports, Iceberg export, etc.
 
 Requirements Covered:
-- AC-1: Generated code uses plugin system (registry.get/configure/connect)
-- AC-2: Generated code passes S3 config to connect() via config parameter
-- AC-3: Generated code imports get_registry and PluginType
-- AC-4: Generated code does not contain hardcoded credential parameters
+- AC-7: generate_entry_point_code() emits thin loader pattern
+- AC-8: Tests verify the thin pattern, not the old 187-line template
 
 Test Type Rationale:
     All tests are unit tests. generate_entry_point_code() is a pure code
@@ -19,6 +17,7 @@ Test Type Rationale:
 from __future__ import annotations
 
 import tempfile
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -30,404 +29,519 @@ if TYPE_CHECKING:
 PRODUCT_NAME = "test-product"
 """Shared product name for all tests in this module."""
 
+# Old patterns that MUST NOT appear in generated code.
+# Each is a specific symbol from the old 187-line template.
+OLD_PATTERNS_FORBIDDEN: list[str] = [
+    "_export_dbt_to_iceberg",
+    "_load_iceberg_resources",
+    "get_registry",
+    "CompiledArtifacts",
+    "DbtProject",
+    "DbtCliResource",
+    "dbt_assets",
+    "PluginType",
+    "load_catalog",
+    "pyiceberg",
+    "client_id",
+    "client_secret",
+    "token_url",
+    "credential=",
+    "scope=",
+    "try_create_lineage_resource",
+]
+"""Symbols from the old 187-line template that must never appear."""
 
-@pytest.fixture
-def generated_code_with_iceberg(
-    dagster_plugin: DagsterOrchestratorPlugin,
+
+def _generate_code(
+    plugin: DagsterOrchestratorPlugin,
+    product_name: str = PRODUCT_NAME,
+    *,
+    iceberg_enabled: bool = False,
+    lineage_enabled: bool = False,
 ) -> str:
-    """Generate definitions.py code with iceberg_enabled=True.
+    """Generate definitions.py and return its content as a string.
 
-    Returns the full generated file content as a string.
+    Args:
+        plugin: DagsterOrchestratorPlugin instance.
+        product_name: Product name for interpolation.
+        iceberg_enabled: Whether Iceberg export is enabled.
+        lineage_enabled: Whether lineage is enabled.
+
+    Returns:
+        The full generated file content.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
-        output_path = dagster_plugin.generate_entry_point_code(
-            product_name=PRODUCT_NAME,
+        output_path = plugin.generate_entry_point_code(
+            product_name=product_name,
             output_dir=tmpdir,
-            iceberg_enabled=True,
+            iceberg_enabled=iceberg_enabled,
+            lineage_enabled=lineage_enabled,
         )
-        from pathlib import Path
-
         return Path(output_path).read_text()
 
 
-def _extract_export_function(generated_code: str) -> str:
-    """Extract the _export_dbt_to_iceberg function body from generated code.
+class TestThinLoaderImport:
+    """AC-7: Generated code must import load_product_definitions."""
 
-    Returns the text from 'def _export_dbt_to_iceberg' to the next
-    top-level definition or end of file.
-
-    Raises:
-        AssertionError: If the function is not found in the generated code.
-    """
-    marker = "def _export_dbt_to_iceberg("
-    start = generated_code.find(marker)
-    assert start != -1, (
-        f"_export_dbt_to_iceberg function not found in generated code. "
-        f"Generated code starts with: {generated_code[:200]}"
-    )
-    # Find the end: next top-level def/class or end of string
-    rest = generated_code[start:]
-    lines = rest.split("\n")
-    func_lines = [lines[0]]
-    for line in lines[1:]:
-        # A non-indented, non-empty line that starts a new definition
-        if (
-            line
-            and not line[0].isspace()
-            and (line.startswith("def ") or line.startswith("class ") or line.startswith("@"))
-        ):
-            break
-        func_lines.append(line)
-    return "\n".join(func_lines)
-
-
-class TestGeneratedCodeUsesPluginConnect:
-    """AC-1: Generated _export_dbt_to_iceberg MUST use plugin system.
-
-    The generated function must use get_registry(), registry.get(),
-    registry.configure(), and plugin.connect() instead of load_catalog().
-    """
-
-    @pytest.mark.requirement("AC-1")
-    def test_generated_code_contains_get_registry_call(
-        self, generated_code_with_iceberg: str
+    @pytest.mark.requirement("AC-7")
+    def test_imports_load_product_definitions(
+        self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
-        """Generated _export_dbt_to_iceberg calls get_registry()."""
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        assert "get_registry()" in func_body, (
-            "Generated _export_dbt_to_iceberg must call get_registry(). "
-            f"Function body:\n{func_body}"
-        )
-
-    @pytest.mark.requirement("AC-1")
-    def test_generated_code_contains_registry_get(self, generated_code_with_iceberg: str) -> None:
-        """Generated _export_dbt_to_iceberg calls registry.get()."""
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        assert "registry.get(" in func_body, (
-            "Generated _export_dbt_to_iceberg must call registry.get(). "
-            f"Function body:\n{func_body}"
-        )
-
-    @pytest.mark.requirement("AC-1")
-    def test_generated_code_contains_registry_configure(
-        self, generated_code_with_iceberg: str
-    ) -> None:
-        """Generated _export_dbt_to_iceberg calls registry.configure()."""
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        assert "registry.configure(" in func_body, (
-            "Generated _export_dbt_to_iceberg must call registry.configure(). "
-            f"Function body:\n{func_body}"
-        )
-
-    @pytest.mark.requirement("AC-1")
-    def test_generated_code_contains_plugin_connect(self, generated_code_with_iceberg: str) -> None:
-        """Generated _export_dbt_to_iceberg calls plugin.connect().
-
-        Note: must not false-match on duckdb.connect() which is unrelated.
-        We look for 'plugin.connect(' or a variable name like
-        'catalog_plugin.connect(' that indicates the catalog plugin system.
-        """
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        # Exclude duckdb.connect which is unrelated
-        has_plugin_connect = (
-            "plugin.connect(" in func_body or "catalog_plugin.connect(" in func_body
-        )
-        assert has_plugin_connect, (
-            "Generated _export_dbt_to_iceberg must call plugin.connect() "
-            "or catalog_plugin.connect(). duckdb.connect() does not count. "
-            f"Function body:\n{func_body}"
-        )
-
-    @pytest.mark.requirement("AC-1")
-    def test_generated_code_does_not_call_load_catalog(
-        self, generated_code_with_iceberg: str
-    ) -> None:
-        """Generated _export_dbt_to_iceberg must NOT call load_catalog() directly."""
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        assert "load_catalog(" not in func_body, (
-            "Generated _export_dbt_to_iceberg must NOT call load_catalog() directly. "
-            "It should use the plugin registry system instead. "
-            f"Function body:\n{func_body}"
-        )
-
-    @pytest.mark.requirement("AC-1")
-    def test_generated_code_does_not_import_load_catalog(
-        self, generated_code_with_iceberg: str
-    ) -> None:
-        """Generated code must NOT import load_catalog when using plugin system."""
-        # Check the import section (everything before the first function def)
-        first_def = generated_code_with_iceberg.find("\ndef ")
-        if first_def == -1:
-            first_def = len(generated_code_with_iceberg)
-        import_section = generated_code_with_iceberg[:first_def]
-        assert "load_catalog" not in import_section, (
-            "Generated code must NOT import load_catalog. "
-            "The plugin system replaces direct catalog access. "
-            f"Import section:\n{import_section}"
-        )
-
-
-class TestGeneratedCodeNoHardcodedCredentials:
-    """AC-4: Generated code must NOT contain credential parameters.
-
-    The generated _export_dbt_to_iceberg must not reference credential,
-    client_id, client_secret, token_url, or scope parameter construction.
-    """
-
-    @pytest.mark.requirement("AC-4")
-    def test_no_credential_parameter(self, generated_code_with_iceberg: str) -> None:
-        """Generated _export_dbt_to_iceberg must not contain credential= parameter."""
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        assert "credential=" not in func_body, (
-            "Generated code must not contain 'credential=' parameter. "
-            "Credentials should be managed by the plugin system. "
-            f"Function body:\n{func_body}"
-        )
-
-    @pytest.mark.requirement("AC-4")
-    def test_no_client_id_reference(self, generated_code_with_iceberg: str) -> None:
-        """Generated _export_dbt_to_iceberg must not reference client_id."""
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        assert "client_id" not in func_body, (
-            f"Generated code must not contain 'client_id'. Function body:\n{func_body}"
-        )
-
-    @pytest.mark.requirement("AC-4")
-    def test_no_client_secret_reference(self, generated_code_with_iceberg: str) -> None:
-        """Generated _export_dbt_to_iceberg must not reference client_secret."""
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        assert "client_secret" not in func_body, (
-            f"Generated code must not contain 'client_secret'. Function body:\n{func_body}"
-        )
-
-    @pytest.mark.requirement("AC-4")
-    def test_no_token_url_reference(self, generated_code_with_iceberg: str) -> None:
-        """Generated _export_dbt_to_iceberg must not reference token_url."""
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        assert "token_url" not in func_body, (
-            f"Generated code must not contain 'token_url'. Function body:\n{func_body}"
-        )
-
-    @pytest.mark.requirement("AC-4")
-    def test_no_scope_parameter(self, generated_code_with_iceberg: str) -> None:
-        """Generated _export_dbt_to_iceberg must not contain scope= parameter."""
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        # Check for scope= as a parameter, not just substring "scope" in any context
-        # The word "scope" might appear in comments, but "scope=" as kwarg is the bug
-        assert "scope=" not in func_body, (
-            f"Generated code must not contain 'scope=' parameter. Function body:\n{func_body}"
-        )
-
-
-class TestGeneratedCodeImportsPluginRegistry:
-    """AC-3: Generated code must import get_registry and PluginType."""
-
-    @pytest.mark.requirement("AC-3")
-    def test_imports_get_registry(self, generated_code_with_iceberg: str) -> None:
-        """Generated code imports get_registry from floe_core.plugin_registry."""
-        assert "get_registry" in generated_code_with_iceberg, (
-            "Generated code must import get_registry. "
-            f"Code starts with:\n{generated_code_with_iceberg[:500]}"
-        )
-        # Verify it's an actual import statement, not just a function call
+        """Generated code contains the correct import statement for the loader."""
+        code = _generate_code(dagster_plugin)
         assert (
-            "from floe_core.plugin_registry import get_registry" in generated_code_with_iceberg
+            "from floe_orchestrator_dagster.loader import load_product_definitions" in code
         ), (
-            "Generated code must have 'from floe_core.plugin_registry "
-            "import get_registry'. "
-            f"Code starts with:\n{generated_code_with_iceberg[:500]}"
+            "Generated code must import load_product_definitions from "
+            "floe_orchestrator_dagster.loader. "
+            f"Actual code:\n{code}"
         )
 
-    @pytest.mark.requirement("AC-3")
-    def test_imports_plugin_type(self, generated_code_with_iceberg: str) -> None:
-        """Generated code imports PluginType from floe_core.plugin_types."""
-        assert "PluginType" in generated_code_with_iceberg, (
-            "Generated code must import PluginType. "
-            f"Code starts with:\n{generated_code_with_iceberg[:500]}"
-        )
-        assert "from floe_core.plugin_types import PluginType" in generated_code_with_iceberg, (
-            "Generated code must have 'from floe_core.plugin_types "
-            "import PluginType'. "
-            f"Code starts with:\n{generated_code_with_iceberg[:500]}"
-        )
-
-    @pytest.mark.requirement("AC-3")
-    def test_does_not_import_pyiceberg_catalog(self, generated_code_with_iceberg: str) -> None:
-        """Generated code must NOT import from pyiceberg.catalog directly.
-
-        The plugin system abstracts away the catalog implementation.
-        """
-        # The import 'from pyiceberg.catalog import load_catalog' should
-        # no longer be present in the generated code's function body.
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        assert "from pyiceberg.catalog import load_catalog" not in func_body, (
-            "Generated _export_dbt_to_iceberg must not import load_catalog "
-            "from pyiceberg. Use the plugin registry instead. "
-            f"Function body:\n{func_body}"
-        )
-
-
-class TestGeneratedCodePassesS3ConfigToConnect:
-    """AC-2: Generated code passes S3 config to plugin connect() via config param."""
-
-    @pytest.mark.requirement("AC-2")
-    def test_connect_receives_config_parameter(self, generated_code_with_iceberg: str) -> None:
-        """Generated connect() call includes a config= parameter."""
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        assert "connect(config=" in func_body or ".connect(config=" in func_body, (
-            "Generated code must pass config= parameter to plugin.connect(). "
-            f"Function body:\n{func_body}"
-        )
-
-    @pytest.mark.requirement("AC-2")
-    def test_s3_prefixed_keys_in_connect_config(self, generated_code_with_iceberg: str) -> None:
-        """Generated connect() config contains S3-prefixed keys (s3.endpoint etc).
-
-        The storage config must be passed with s3. prefixed keys like
-        s3.endpoint, s3.access-key-id, etc. Critically, these keys must
-        be part of the config passed to connect(), NOT to load_catalog().
-        """
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        # The S3 prefix keys must exist AND load_catalog must NOT exist.
-        # If load_catalog is present, the S3 keys are going to the wrong place.
-        has_s3_prefix_construction = (
-            '"s3.' in func_body
-            or "'s3." in func_body
-            or 'f"s3.' in func_body
-            or "f's3." in func_body
-            or "s3.{" in func_body
-        )
-        assert has_s3_prefix_construction, (
-            "Generated code must construct S3-prefixed keys (e.g. 's3.endpoint') "
-            "for the config parameter passed to connect(). "
-            f"Function body:\n{func_body}"
-        )
-        # S3 keys must go to connect(), not load_catalog()
-        assert "load_catalog(" not in func_body, (
-            "S3-prefixed keys are present but routed to load_catalog() instead "
-            "of connect(). The plugin system must handle catalog connection. "
-            f"Function body:\n{func_body}"
-        )
-
-    @pytest.mark.requirement("AC-2")
-    def test_storage_config_used_in_connect_not_load_catalog(
-        self, generated_code_with_iceberg: str
+    @pytest.mark.requirement("AC-7")
+    def test_import_present_with_iceberg_enabled(
+        self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
-        """Storage config dict unpacking goes to connect(), not load_catalog().
+        """Import is present regardless of iceberg_enabled flag."""
+        code = _generate_code(dagster_plugin, iceberg_enabled=True)
+        assert (
+            "from floe_orchestrator_dagster.loader import load_product_definitions" in code
+        ), "Import must be present even when iceberg_enabled=True."
 
-        This ensures the S3 config is routed through the plugin system.
+    @pytest.mark.requirement("AC-7")
+    def test_import_present_with_lineage_enabled(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Import is present regardless of lineage_enabled flag."""
+        code = _generate_code(dagster_plugin, lineage_enabled=True)
+        assert (
+            "from floe_orchestrator_dagster.loader import load_product_definitions" in code
+        ), "Import must be present even when lineage_enabled=True."
+
+
+class TestThinLoaderDefsCall:
+    """AC-7: Generated code must call load_product_definitions with correct args."""
+
+    @pytest.mark.requirement("AC-7")
+    def test_defs_assignment_with_product_name(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Generated code assigns defs = load_product_definitions(product_name, ...)."""
+        code = _generate_code(dagster_plugin)
+        expected = f'defs = load_product_definitions("{PRODUCT_NAME}", PROJECT_DIR)'
+        assert expected in code, (
+            f"Generated code must contain:\n  {expected}\n"
+            f"Actual code:\n{code}"
+        )
+
+    @pytest.mark.requirement("AC-7")
+    def test_project_dir_defined(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Generated code defines PROJECT_DIR = Path(__file__).parent."""
+        code = _generate_code(dagster_plugin)
+        assert "PROJECT_DIR = Path(__file__).parent" in code, (
+            "Generated code must define PROJECT_DIR = Path(__file__).parent. "
+            f"Actual code:\n{code}"
+        )
+
+
+class TestProductNameInterpolation:
+    """AC-7/AC-8: product_name is correctly interpolated into the generated code."""
+
+    @pytest.mark.requirement("AC-8")
+    def test_simple_product_name_interpolated(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """A simple product name appears in the defs= call."""
+        name = "my-pipeline"
+        code = _generate_code(dagster_plugin, product_name=name)
+        expected = f'defs = load_product_definitions("{name}", PROJECT_DIR)'
+        assert expected in code, (
+            f"Product name '{name}' not interpolated into defs call. "
+            f"Actual code:\n{code}"
+        )
+
+    @pytest.mark.requirement("AC-8")
+    def test_product_name_with_underscores(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Product name with underscores is interpolated correctly."""
+        name = "my_data_product"
+        code = _generate_code(dagster_plugin, product_name=name)
+        expected = f'defs = load_product_definitions("{name}", PROJECT_DIR)'
+        assert expected in code, (
+            f"Product name '{name}' not interpolated correctly. "
+            f"Actual code:\n{code}"
+        )
+
+    @pytest.mark.requirement("AC-8")
+    def test_product_name_in_docstring(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Product name appears in the module docstring."""
+        name = "analytics-pipeline"
+        code = _generate_code(dagster_plugin, product_name=name)
+        assert name in code.split('"""')[1] if '"""' in code else name in code[:200], (
+            f"Product name '{name}' should appear in the module docstring. "
+            f"Actual code:\n{code}"
+        )
+
+    @pytest.mark.requirement("AC-8")
+    def test_product_name_with_dots(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Product name containing dots is passed through literally."""
+        name = "org.team.pipeline"
+        code = _generate_code(dagster_plugin, product_name=name)
+        expected = f'defs = load_product_definitions("{name}", PROJECT_DIR)'
+        assert expected in code, (
+            f"Product name with dots '{name}' not interpolated correctly. "
+            f"Actual code:\n{code}"
+        )
+
+    @pytest.mark.requirement("AC-8")
+    def test_different_product_names_produce_different_code(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Two different product names produce different generated code.
+
+        Guards against hardcoded product name in the template.
         """
-        func_body = _extract_export_function(generated_code_with_iceberg)
-        # Current buggy code has: **{f"s3.{k}": v for k, v in storage_config.items()}
-        # as kwargs to load_catalog(). After fix, this pattern should be in
-        # the config dict passed to connect().
-        # Verify load_catalog is gone (AC-1 overlap, but specifically about S3 routing)
-        assert "load_catalog(" not in func_body, (
-            "S3 storage config must be passed to connect(), not load_catalog(). "
-            f"Function body:\n{func_body}"
+        code_a = _generate_code(dagster_plugin, product_name="alpha-product")
+        code_b = _generate_code(dagster_plugin, product_name="beta-product")
+        assert code_a != code_b, (
+            "Different product names must produce different generated code. "
+            "This suggests the product name is hardcoded in the template."
         )
-        # Verify connect() is present with config
-        assert ".connect(" in func_body, (
-            f"connect() call must be present to receive S3 config. Function body:\n{func_body}"
+        assert "alpha-product" in code_a
+        assert "beta-product" in code_b
+        assert "alpha-product" not in code_b
+        assert "beta-product" not in code_a
+
+
+class TestOldPatternsAbsent:
+    """AC-7/AC-8: Old 187-line template patterns must NOT appear in generated code."""
+
+    @pytest.mark.requirement("AC-7")
+    @pytest.mark.parametrize("old_pattern", OLD_PATTERNS_FORBIDDEN)
+    def test_old_pattern_absent_default_flags(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        old_pattern: str,
+    ) -> None:
+        """Old template symbol must not appear in generated code (default flags)."""
+        code = _generate_code(dagster_plugin)
+        assert old_pattern not in code, (
+            f"Old pattern '{old_pattern}' must NOT appear in generated code. "
+            f"The thin loader pattern replaces all inline logic. "
+            f"Actual code:\n{code}"
+        )
+
+    @pytest.mark.requirement("AC-7")
+    @pytest.mark.parametrize("old_pattern", OLD_PATTERNS_FORBIDDEN)
+    def test_old_pattern_absent_iceberg_enabled(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        old_pattern: str,
+    ) -> None:
+        """Old template symbol must not appear even when iceberg_enabled=True."""
+        code = _generate_code(dagster_plugin, iceberg_enabled=True)
+        assert old_pattern not in code, (
+            f"Old pattern '{old_pattern}' must NOT appear in generated code "
+            f"even when iceberg_enabled=True. The loader handles everything. "
+            f"Actual code:\n{code}"
+        )
+
+    @pytest.mark.requirement("AC-7")
+    @pytest.mark.parametrize("old_pattern", OLD_PATTERNS_FORBIDDEN)
+    def test_old_pattern_absent_lineage_enabled(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        old_pattern: str,
+    ) -> None:
+        """Old template symbol must not appear even when lineage_enabled=True."""
+        code = _generate_code(dagster_plugin, lineage_enabled=True)
+        assert old_pattern not in code, (
+            f"Old pattern '{old_pattern}' must NOT appear in generated code "
+            f"even when lineage_enabled=True. The loader handles everything. "
+            f"Actual code:\n{code}"
+        )
+
+    @pytest.mark.requirement("AC-7")
+    @pytest.mark.parametrize("old_pattern", OLD_PATTERNS_FORBIDDEN)
+    def test_old_pattern_absent_both_enabled(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        old_pattern: str,
+    ) -> None:
+        """Old template symbol must not appear with both flags enabled."""
+        code = _generate_code(
+            dagster_plugin, iceberg_enabled=True, lineage_enabled=True
+        )
+        assert old_pattern not in code, (
+            f"Old pattern '{old_pattern}' must NOT appear in generated code "
+            f"with both iceberg and lineage enabled. "
+            f"Actual code:\n{code}"
         )
 
 
-class TestGeneratedCodeWiring:
-    """Verify that Iceberg helpers are wired into Definitions and post-build hook.
+class TestGeneratedCodeBrevity:
+    """AC-7: Generated file must be <= 20 lines."""
 
-    These tests catch the indentation bug where iceberg_resource and
-    iceberg_post_build were gated on lineage_enabled instead of iceberg_enabled.
+    @pytest.mark.requirement("AC-7")
+    def test_line_count_default_flags(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Generated code must be <= 20 lines with default flags."""
+        code = _generate_code(dagster_plugin)
+        line_count = len(code.strip().splitlines())
+        assert line_count <= 20, (
+            f"Generated code must be <= 20 lines, got {line_count}. "
+            f"The thin loader pattern should produce ~17 lines. "
+            f"Actual code:\n{code}"
+        )
+
+    @pytest.mark.requirement("AC-7")
+    def test_line_count_iceberg_enabled(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Line count unchanged when iceberg_enabled=True (loader handles it)."""
+        code_default = _generate_code(dagster_plugin)
+        code_iceberg = _generate_code(dagster_plugin, iceberg_enabled=True)
+        lines_default = len(code_default.strip().splitlines())
+        lines_iceberg = len(code_iceberg.strip().splitlines())
+        assert lines_iceberg <= 20, (
+            f"Generated code with iceberg_enabled must be <= 20 lines, got {lines_iceberg}."
+        )
+        assert lines_default == lines_iceberg, (
+            f"iceberg_enabled should not change the generated code length. "
+            f"Default: {lines_default} lines, Iceberg: {lines_iceberg} lines. "
+            f"The loader handles all feature flags at runtime."
+        )
+
+    @pytest.mark.requirement("AC-7")
+    def test_line_count_lineage_enabled(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Line count unchanged when lineage_enabled=True (loader handles it)."""
+        code_default = _generate_code(dagster_plugin)
+        code_lineage = _generate_code(dagster_plugin, lineage_enabled=True)
+        lines_default = len(code_default.strip().splitlines())
+        lines_lineage = len(code_lineage.strip().splitlines())
+        assert lines_lineage <= 20, (
+            f"Generated code with lineage_enabled must be <= 20 lines, got {lines_lineage}."
+        )
+        assert lines_default == lines_lineage, (
+            f"lineage_enabled should not change the generated code length. "
+            f"Default: {lines_default} lines, Lineage: {lines_lineage} lines."
+        )
+
+
+class TestFlagIndependence:
+    """AC-7: iceberg_enabled and lineage_enabled have no effect on generated code.
+
+    The thin loader pattern means the generated shim is identical regardless
+    of feature flags. The loader reads compiled_artifacts.json at runtime.
     """
 
-    @pytest.mark.requirement("AC-1")
-    def test_iceberg_resource_wired_into_definitions(
-        self, generated_code_with_iceberg: str
-    ) -> None:
-        """Generated Definitions must include _load_iceberg_resources() call."""
-        assert "_load_iceberg_resources()" in generated_code_with_iceberg, (
-            "Generated Definitions must wire _load_iceberg_resources()."
-        )
-
-    @pytest.mark.requirement("AC-1")
-    def test_iceberg_post_build_called_after_dbt(self, generated_code_with_iceberg: str) -> None:
-        """Generated dbt_assets must call _export_dbt_to_iceberg(context)."""
-        assert "_export_dbt_to_iceberg(context)" in generated_code_with_iceberg, (
-            "Generated dbt_assets must call _export_dbt_to_iceberg(context)."
-        )
-
-    @pytest.mark.requirement("AC-1")
-    def test_iceberg_wiring_without_lineage(
+    @pytest.mark.requirement("AC-7")
+    def test_iceberg_flag_produces_identical_code(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
-        """Iceberg wiring must work when lineage is disabled."""
+        """Generated code is identical with iceberg_enabled True vs False."""
+        code_off = _generate_code(dagster_plugin, iceberg_enabled=False)
+        code_on = _generate_code(dagster_plugin, iceberg_enabled=True)
+        assert code_off == code_on, (
+            "iceberg_enabled flag must not change generated code. "
+            "The loader handles feature flags at runtime.\n"
+            f"--- iceberg=False ---\n{code_off}\n"
+            f"--- iceberg=True ---\n{code_on}"
+        )
+
+    @pytest.mark.requirement("AC-7")
+    def test_lineage_flag_produces_identical_code(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Generated code is identical with lineage_enabled True vs False."""
+        code_off = _generate_code(dagster_plugin, lineage_enabled=False)
+        code_on = _generate_code(dagster_plugin, lineage_enabled=True)
+        assert code_off == code_on, (
+            "lineage_enabled flag must not change generated code. "
+            "The loader handles feature flags at runtime.\n"
+            f"--- lineage=False ---\n{code_off}\n"
+            f"--- lineage=True ---\n{code_on}"
+        )
+
+    @pytest.mark.requirement("AC-7")
+    def test_all_flag_combos_produce_identical_code(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """All four combinations of flags produce identical generated code."""
+        codes: list[str] = []
+        for iceberg in (False, True):
+            for lineage in (False, True):
+                codes.append(
+                    _generate_code(
+                        dagster_plugin,
+                        iceberg_enabled=iceberg,
+                        lineage_enabled=lineage,
+                    )
+                )
+        assert len(set(codes)) == 1, (
+            "All four flag combinations must produce identical generated code. "
+            f"Got {len(set(codes))} distinct outputs."
+        )
+
+
+class TestGeneratedCodeStructure:
+    """AC-7/AC-8: Verify structural properties of the generated thin loader."""
+
+    @pytest.mark.requirement("AC-7")
+    def test_contains_future_annotations(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Generated code includes from __future__ import annotations."""
+        code = _generate_code(dagster_plugin)
+        assert "from __future__ import annotations" in code, (
+            "Generated code must include 'from __future__ import annotations'."
+        )
+
+    @pytest.mark.requirement("AC-7")
+    def test_contains_do_not_edit_warning(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Generated code includes a DO NOT EDIT warning."""
+        code = _generate_code(dagster_plugin)
+        assert "DO NOT EDIT" in code.upper(), (
+            "Generated code must include a 'DO NOT EDIT' warning. "
+            f"Actual code:\n{code}"
+        )
+
+    @pytest.mark.requirement("AC-7")
+    def test_imports_path(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Generated code imports Path from pathlib."""
+        code = _generate_code(dagster_plugin)
+        assert "from pathlib import Path" in code, (
+            "Generated code must import Path from pathlib. "
+            f"Actual code:\n{code}"
+        )
+
+    @pytest.mark.requirement("AC-8")
+    def test_generated_file_is_valid_python(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Generated code compiles as valid Python (syntax check)."""
+        code = _generate_code(dagster_plugin)
+        try:
+            compile(code, "<generated>", "exec")
+        except SyntaxError as exc:
+            pytest.fail(
+                f"Generated code is not valid Python: {exc}\n"
+                f"Code:\n{code}"
+            )
+
+    @pytest.mark.requirement("AC-8")
+    def test_defs_is_module_level_variable(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """defs assignment is at module level, not inside a function or class."""
+        code = _generate_code(dagster_plugin)
+        for line in code.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("defs = load_product_definitions("):
+                # The line must be at column 0 (no indentation)
+                assert line == stripped, (
+                    f"defs assignment must be at module level (no indentation). "
+                    f"Found: '{line}'"
+                )
+                break
+        else:
+            pytest.fail(
+                "No 'defs = load_product_definitions(...)' line found at module level. "
+                f"Actual code:\n{code}"
+            )
+
+    @pytest.mark.requirement("AC-7")
+    def test_output_file_named_definitions_py(
+        self, dagster_plugin: DagsterOrchestratorPlugin
+    ) -> None:
+        """Generated file is named definitions.py."""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = dagster_plugin.generate_entry_point_code(
                 product_name=PRODUCT_NAME,
                 output_dir=tmpdir,
-                iceberg_enabled=True,
-                lineage_enabled=False,
             )
-            from pathlib import Path
+            assert Path(output_path).name == "definitions.py", (
+                f"Generated file must be named definitions.py, got {Path(output_path).name}"
+            )
 
-            code = Path(output_path).read_text()
-
-        assert "_load_iceberg_resources()" in code, (
-            "Iceberg resources must be wired even when lineage is disabled."
-        )
-        assert "_export_dbt_to_iceberg(context)" in code, (
-            "Iceberg post-build must be called even when lineage is disabled."
-        )
-        assert "try_create_lineage_resource" not in code, (
-            "Lineage import must not appear when lineage is disabled."
-        )
-
-    @pytest.mark.requirement("AC-1")
-    def test_no_iceberg_wiring_when_disabled(
+    @pytest.mark.requirement("AC-7")
+    def test_contains_regenerate_instructions(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
-        """When iceberg is disabled, no Iceberg wiring must appear."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = dagster_plugin.generate_entry_point_code(
-                product_name=PRODUCT_NAME,
-                output_dir=tmpdir,
-                iceberg_enabled=False,
-                lineage_enabled=True,
-            )
-            from pathlib import Path
-
-            code = Path(output_path).read_text()
-
-        assert "_load_iceberg_resources" not in code, (
-            "Iceberg resources must not be wired when iceberg is disabled."
-        )
-        assert "_export_dbt_to_iceberg" not in code, (
-            "Iceberg post-build must not appear when iceberg is disabled."
+        """Generated code includes regeneration instructions mentioning floe compile."""
+        code = _generate_code(dagster_plugin)
+        assert "floe" in code.lower() and "compile" in code.lower(), (
+            "Generated code should include regeneration instructions "
+            "mentioning 'floe compile'. "
+            f"Actual code:\n{code}"
         )
 
 
-class TestGeneratedCodeWithIcebergDisabled:
-    """Verify that iceberg-disabled mode does NOT include plugin registry imports.
+class TestGeneratedCodeExactContent:
+    """AC-7/AC-8: Verify the generated code matches the expected thin loader exactly.
 
-    This prevents regressions where plugin imports bleed into non-iceberg builds.
+    This is the strongest test -- it catches any deviation from the spec template.
     """
 
-    @pytest.mark.requirement("AC-3")
-    def test_no_plugin_imports_when_iceberg_disabled(
+    @pytest.mark.requirement("AC-7")
+    @pytest.mark.requirement("AC-8")
+    def test_exact_functional_lines(
         self, dagster_plugin: DagsterOrchestratorPlugin
     ) -> None:
-        """When iceberg_enabled=False, no plugin registry imports appear."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = dagster_plugin.generate_entry_point_code(
-                product_name=PRODUCT_NAME,
-                output_dir=tmpdir,
-                iceberg_enabled=False,
-            )
-            from pathlib import Path
+        """Non-comment, non-blank lines match the expected thin loader exactly.
 
-            code = Path(output_path).read_text()
+        We strip the docstring and blank lines to focus on the functional code.
+        This catches any extra imports, assignments, or function calls.
+        """
+        code = _generate_code(dagster_plugin, product_name="my-product")
+        # Extract non-blank, non-docstring lines
+        lines = code.strip().splitlines()
 
-        assert "get_registry" not in code, "get_registry should not appear when iceberg is disabled"
-        assert "PluginType" not in code, "PluginType should not appear when iceberg is disabled"
-        assert "_export_dbt_to_iceberg" not in code, (
-            "_export_dbt_to_iceberg should not appear when iceberg is disabled"
+        # Filter to functional lines (not blank, not inside docstring, not comments)
+        functional_lines: list[str] = []
+        in_docstring = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('"""') or stripped.startswith("'''"):
+                if in_docstring:
+                    in_docstring = False
+                    continue
+                # Single-line docstring
+                if stripped.count('"""') >= 2 or stripped.count("'''") >= 2:
+                    continue
+                in_docstring = True
+                continue
+            if in_docstring:
+                continue
+            if not stripped or stripped.startswith("#"):
+                continue
+            functional_lines.append(stripped)
+
+        expected_functional = [
+            "from __future__ import annotations",
+            "from pathlib import Path",
+            "from floe_orchestrator_dagster.loader import load_product_definitions",
+            'PROJECT_DIR = Path(__file__).parent',
+            'defs = load_product_definitions("my-product", PROJECT_DIR)',
+        ]
+
+        assert functional_lines == expected_functional, (
+            "Functional lines do not match expected thin loader.\n"
+            "Expected:\n"
+            + "\n".join(f"  {line}" for line in expected_functional)
+            + "\nActual:\n"
+            + "\n".join(f"  {line}" for line in functional_lines)
         )
