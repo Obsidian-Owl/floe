@@ -179,17 +179,17 @@ POD_NAME=$(kubectl get pods -n "${TEST_NAMESPACE}" \
     -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null || true)
 
 if [[ -n "${POD_NAME}" ]]; then
-    # Extract logs
+    # Extract logs (use TEST_SUITE in filename to avoid overwriting between suites)
     kubectl logs "${POD_NAME}" -n "${TEST_NAMESPACE}" \
-        > "${ARTIFACTS_DIR}/e2e-output.log" 2>/dev/null || true
+        > "${ARTIFACTS_DIR}/${TEST_SUITE}-output.log" 2>/dev/null || true
 
     # Extract JUnit XML if available
     kubectl cp "${TEST_NAMESPACE}/${POD_NAME}:/artifacts/e2e-results.xml" \
-        "${ARTIFACTS_DIR}/e2e-results.xml" 2>/dev/null || true
+        "${ARTIFACTS_DIR}/${TEST_SUITE}-results.xml" 2>/dev/null || true
 
     # Show last 30 lines of output
     info "--- Test output (last 30 lines) ---"
-    tail -30 "${ARTIFACTS_DIR}/e2e-output.log" 2>/dev/null || true
+    tail -30 "${ARTIFACTS_DIR}/${TEST_SUITE}-output.log" 2>/dev/null || true
     info "--- End test output ---"
 else
     error "No pod found for Job '${JOB_NAME}'"

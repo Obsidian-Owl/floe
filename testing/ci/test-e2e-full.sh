@@ -55,6 +55,7 @@ for i in $(seq 1 30); do
     fi
     if [[ $i -eq 30 ]]; then
         error "Standard test pods did not terminate within 30s"
+        exit 1
     fi
     sleep 1
 done
