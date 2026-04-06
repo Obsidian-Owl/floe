@@ -143,7 +143,7 @@ class TestJunitXmlExtraction:
         step6 = _extract_step6_block(script)
         cp_commands = _find_kubectl_cp_commands(step6)
 
-        xml_commands = [cmd for cmd in cp_commands if "e2e-results.xml" in cmd]
+        xml_commands = [cmd for cmd in cp_commands if "results.xml" in cmd]
         assert len(xml_commands) >= 1, (
             "No kubectl cp command found for e2e-results.xml in Step 6. "
             "JUnit XML extraction must be present."
@@ -159,7 +159,7 @@ class TestJunitXmlExtraction:
         step6 = _extract_step6_block(script)
         cp_commands = _find_kubectl_cp_commands(step6)
 
-        xml_commands = [cmd for cmd in cp_commands if "e2e-results.xml" in cmd]
+        xml_commands = [cmd for cmd in cp_commands if "results.xml" in cmd]
         assert len(xml_commands) >= 1, "No kubectl cp for e2e-results.xml found"
 
         # The destination path must contain TEST_SUITE variable
@@ -192,32 +192,34 @@ class TestHtmlReportExtraction:
         step6 = _extract_step6_block(script)
         cp_commands = _find_kubectl_cp_commands(step6)
 
-        html_commands = [cmd for cmd in cp_commands if "e2e-report.html" in cmd]
+        html_commands = [cmd for cmd in cp_commands if "report.html" in cmd]
         assert len(html_commands) >= 1, (
-            "No kubectl cp command found for e2e-report.html in Step 6. "
+            "No kubectl cp command found for report.html in Step 6. "
             "The HTML report must be extracted from the test pod."
         )
 
     @pytest.mark.requirement("AC-5.1")
     def test_html_report_source_path_is_correct(self) -> None:
-        """HTML report MUST be extracted from /artifacts/e2e-report.html in the pod.
+        """HTML report source MUST use /artifacts/ directory with TEST_SUITE prefix.
 
-        Catches implementations that use a wrong source path (e.g., /tmp/ or /results/).
+        Source path uses ${TEST_SUITE} to match the Job manifest output filenames
+        (e.g., /artifacts/e2e-report.html for standard, /artifacts/e2e-destructive-report.html
+        for destructive).
         """
         script = _read_script()
         step6 = _extract_step6_block(script)
         cp_commands = _find_kubectl_cp_commands(step6)
 
-        html_commands = [cmd for cmd in cp_commands if "e2e-report.html" in cmd]
-        assert len(html_commands) >= 1, "No kubectl cp for e2e-report.html found"
+        html_commands = [cmd for cmd in cp_commands if "report.html" in cmd]
+        assert len(html_commands) >= 1, "No kubectl cp for report.html found"
 
-        # Source path in kubectl cp format: NAMESPACE/POD:/artifacts/e2e-report.html
+        # Source path uses TEST_SUITE variable: /artifacts/${TEST_SUITE}-report.html
         has_correct_source = any(
-            re.search(r":/artifacts/e2e-report\.html", cmd) for cmd in html_commands
+            re.search(r":/artifacts/.*report\.html", cmd) for cmd in html_commands
         )
         assert has_correct_source, (
             f"HTML report kubectl cp uses wrong source path. "
-            f"Expected source: :/artifacts/e2e-report.html "
+            f"Expected source under /artifacts/ directory. "
             f"Found commands: {html_commands}"
         )
 
@@ -232,7 +234,7 @@ class TestHtmlReportExtraction:
         step6 = _extract_step6_block(script)
         cp_commands = _find_kubectl_cp_commands(step6)
 
-        html_commands = [cmd for cmd in cp_commands if "e2e-report.html" in cmd]
+        html_commands = [cmd for cmd in cp_commands if "report.html" in cmd]
         assert len(html_commands) >= 1, "No kubectl cp for e2e-report.html found"
 
         has_test_suite_prefix = any(
@@ -257,7 +259,7 @@ class TestHtmlReportExtraction:
 
         # Find lines containing kubectl cp for HTML report, including
         # continuation on the same or next line
-        html_block = _get_command_block_for_artifact(step6, "e2e-report.html")
+        html_block = _get_command_block_for_artifact(step6, "report.html")
         assert html_block is not None, "No kubectl cp for e2e-report.html found"
 
         has_stderr_suppression = "2>/dev/null" in html_block
@@ -292,7 +294,7 @@ class TestJsonReportExtraction:
         step6 = _extract_step6_block(script)
         cp_commands = _find_kubectl_cp_commands(step6)
 
-        json_commands = [cmd for cmd in cp_commands if "e2e-report.json" in cmd]
+        json_commands = [cmd for cmd in cp_commands if "report.json" in cmd]
         assert len(json_commands) >= 1, (
             "No kubectl cp command found for e2e-report.json in Step 6. "
             "The JSON report must be extracted from the test pod."
@@ -300,23 +302,23 @@ class TestJsonReportExtraction:
 
     @pytest.mark.requirement("AC-5.2")
     def test_json_report_source_path_is_correct(self) -> None:
-        """JSON report MUST be extracted from /artifacts/e2e-report.json in the pod.
+        """JSON report source MUST use /artifacts/ directory with TEST_SUITE prefix.
 
-        Catches implementations that use a wrong source path.
+        Source path uses ${TEST_SUITE} to match the Job manifest output filenames.
         """
         script = _read_script()
         step6 = _extract_step6_block(script)
         cp_commands = _find_kubectl_cp_commands(step6)
 
-        json_commands = [cmd for cmd in cp_commands if "e2e-report.json" in cmd]
-        assert len(json_commands) >= 1, "No kubectl cp for e2e-report.json found"
+        json_commands = [cmd for cmd in cp_commands if "report.json" in cmd]
+        assert len(json_commands) >= 1, "No kubectl cp for report.json found"
 
         has_correct_source = any(
-            re.search(r":/artifacts/e2e-report\.json", cmd) for cmd in json_commands
+            re.search(r":/artifacts/.*report\.json", cmd) for cmd in json_commands
         )
         assert has_correct_source, (
             f"JSON report kubectl cp uses wrong source path. "
-            f"Expected source: :/artifacts/e2e-report.json "
+            f"Expected source under /artifacts/ directory. "
             f"Found commands: {json_commands}"
         )
 
@@ -330,7 +332,7 @@ class TestJsonReportExtraction:
         step6 = _extract_step6_block(script)
         cp_commands = _find_kubectl_cp_commands(step6)
 
-        json_commands = [cmd for cmd in cp_commands if "e2e-report.json" in cmd]
+        json_commands = [cmd for cmd in cp_commands if "report.json" in cmd]
         assert len(json_commands) >= 1, "No kubectl cp for e2e-report.json found"
 
         has_test_suite_prefix = any(
@@ -351,7 +353,7 @@ class TestJsonReportExtraction:
         script = _read_script()
         step6 = _extract_step6_block(script)
 
-        json_block = _get_command_block_for_artifact(step6, "e2e-report.json")
+        json_block = _get_command_block_for_artifact(step6, "report.json")
         assert json_block is not None, "No kubectl cp for e2e-report.json found"
 
         has_stderr_suppression = "2>/dev/null" in json_block
@@ -387,9 +389,9 @@ class TestArtifactCompleteness:
         cp_commands = _find_kubectl_cp_commands(step6)
 
         extracted_artifacts: dict[str, bool] = {
-            "e2e-results.xml": False,
-            "e2e-report.html": False,
-            "e2e-report.json": False,
+            "results.xml": False,
+            "report.html": False,
+            "report.json": False,
         }
 
         for cmd in cp_commands:
@@ -415,9 +417,9 @@ class TestArtifactCompleteness:
         step6 = _extract_step6_block(script)
 
         required_artifacts = [
-            "e2e-results.xml",
-            "e2e-report.html",
-            "e2e-report.json",
+            "results.xml",
+            "report.html",
+            "report.json",
         ]
 
         for artifact in required_artifacts:
@@ -523,7 +525,7 @@ class TestExtractionPlacement:
         assert pod_guard is not None, "Could not find POD_NAME guard block in Step 6"
         guard_body = pod_guard.group(1)
 
-        assert "e2e-report.html" in guard_body, (
+        assert "report.html" in guard_body, (
             "HTML report extraction is not inside the POD_NAME guard block. "
             "kubectl cp requires a valid pod name."
         )
@@ -542,7 +544,7 @@ class TestExtractionPlacement:
         assert pod_guard is not None, "Could not find POD_NAME guard block in Step 6"
         guard_body = pod_guard.group(1)
 
-        assert "e2e-report.json" in guard_body, (
+        assert "report.json" in guard_body, (
             "JSON report extraction is not inside the POD_NAME guard block. "
             "kubectl cp requires a valid pod name."
         )

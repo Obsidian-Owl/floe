@@ -215,16 +215,16 @@ if [[ -n "${POD_NAME}" ]]; then
     kubectl logs "${POD_NAME}" -n "${TEST_NAMESPACE}" \
         > "${ARTIFACTS_DIR}/${TEST_SUITE}-output.log" 2>/dev/null || true
 
-    # Extract JUnit XML if available
-    kubectl cp "${TEST_NAMESPACE}/${POD_NAME}:/artifacts/e2e-results.xml" \
+    # Extract JUnit XML if available (source uses TEST_SUITE prefix to match Job manifest)
+    kubectl cp "${TEST_NAMESPACE}/${POD_NAME}:/artifacts/${TEST_SUITE}-results.xml" \
         "${ARTIFACTS_DIR}/${TEST_SUITE}-results.xml" 2>/dev/null || true
 
     # Extract HTML report if available
-    kubectl cp "${TEST_NAMESPACE}/${POD_NAME}:/artifacts/e2e-report.html" \
+    kubectl cp "${TEST_NAMESPACE}/${POD_NAME}:/artifacts/${TEST_SUITE}-report.html" \
         "${ARTIFACTS_DIR}/${TEST_SUITE}-report.html" 2>/dev/null || true
 
     # Extract JSON report if available
-    kubectl cp "${TEST_NAMESPACE}/${POD_NAME}:/artifacts/e2e-report.json" \
+    kubectl cp "${TEST_NAMESPACE}/${POD_NAME}:/artifacts/${TEST_SUITE}-report.json" \
         "${ARTIFACTS_DIR}/${TEST_SUITE}-report.json" 2>/dev/null || true
 
     # Show last 30 lines of output
