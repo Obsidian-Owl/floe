@@ -409,6 +409,7 @@ def try_create_lineage_resource(
         lineage_backend = plugins.lineage_backend
 
     if lineage_backend is None:
+        logger.warning("lineage_not_configured")
         noop = NoOpLineageResource()
 
         def _noop_fn(_init_context: Any) -> Any:
@@ -416,4 +417,8 @@ def try_create_lineage_resource(
 
         return {"lineage": ResourceDefinition(resource_fn=_noop_fn)}
 
-    return create_lineage_resource(lineage_backend)
+    try:
+        return create_lineage_resource(lineage_backend)
+    except Exception:
+        logger.exception("lineage_creation_failed")
+        raise

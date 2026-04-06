@@ -114,11 +114,11 @@ def try_create_semantic_resources(
         >>> # Returns {"semantic_layer": CubeSemanticPlugin} if available
     """
     if plugins is None:
-        logger.debug("No plugins configured, skipping semantic layer resource creation")
+        logger.warning("semantic_not_configured")
         return {}
 
     if plugins.semantic is None:
-        logger.debug("No semantic layer plugin configured, skipping resource creation")
+        logger.warning("semantic_not_configured")
         return {}
 
     try:
@@ -126,10 +126,7 @@ def try_create_semantic_resources(
             semantic_ref=plugins.semantic,
         )
     except Exception:
-        logger.exception(
-            "Failed to create semantic layer resources"
-            " — this will prevent semantic layer sync from working"
-        )
+        logger.exception("semantic_creation_failed")
         raise
 
 

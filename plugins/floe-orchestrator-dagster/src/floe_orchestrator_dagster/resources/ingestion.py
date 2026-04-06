@@ -111,11 +111,11 @@ def try_create_ingestion_resources(
         AC-4: Re-raise on configured-but-broken (no exception swallowing)
     """
     if plugins is None:
-        logger.debug("No plugins configured, skipping ingestion resource creation")
+        logger.warning("ingestion_not_configured")
         return {}
 
     if plugins.ingestion is None:
-        logger.debug("No ingestion plugin configured, skipping resource creation")
+        logger.warning("ingestion_not_configured")
         return {}
 
     try:

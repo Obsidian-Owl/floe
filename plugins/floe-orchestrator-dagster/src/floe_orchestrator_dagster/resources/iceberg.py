@@ -173,15 +173,15 @@ def try_create_iceberg_resources(
         >>> # Returns {"iceberg": IcebergIOManager} if both are available
     """
     if plugins is None:
-        logger.debug("No plugins configured, skipping Iceberg resource creation")
+        logger.warning("iceberg_not_configured")
         return {}
 
     if plugins.catalog is None:
-        logger.debug("No catalog plugin configured, skipping Iceberg resource creation")
+        logger.warning("iceberg_not_configured")
         return {}
 
     if plugins.storage is None:
-        logger.debug("No storage plugin configured, skipping Iceberg resource creation")
+        logger.warning("iceberg_not_configured")
         return {}
 
     try:
@@ -191,10 +191,7 @@ def try_create_iceberg_resources(
             governance=governance,
         )
     except Exception:
-        logger.exception(
-            "Failed to create Iceberg resources — catalog and storage ARE configured"
-            " but resource creation failed; re-raising"
-        )
+        logger.exception("iceberg_creation_failed")
         raise
 
 
