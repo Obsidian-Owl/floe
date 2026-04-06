@@ -30,6 +30,11 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 IMAGE_NAME="floe-test-runner:latest"
 ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts"
 
+# --- Utility functions (must be defined before first use) ---
+
+info() { echo "[INFO] $*"; }
+error() { echo "[ERROR] $*" >&2; }
+
 # Select Job name and manifest based on TEST_SUITE
 case "${TEST_SUITE}" in
     e2e)
@@ -47,11 +52,6 @@ case "${TEST_SUITE}" in
 esac
 
 cd "${PROJECT_ROOT}"
-
-# --- Utility functions ---
-
-info() { echo "[INFO] $*"; }
-error() { echo "[ERROR] $*" >&2; }
 cleanup_job() {
     info "Cleaning up Job ${JOB_NAME}..."
     kubectl delete job "${JOB_NAME}" -n "${TEST_NAMESPACE}" --ignore-not-found 2>/dev/null || true

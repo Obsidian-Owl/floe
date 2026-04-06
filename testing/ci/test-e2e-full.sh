@@ -71,7 +71,7 @@ else
     info "=== Phase 2: Destructive E2E Tests ==="
 
     # Use SKIP_BUILD=true since the image was already built in Phase 1
-    if SKIP_BUILD=true TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
+    if SKIP_BUILD=true IMAGE_LOAD_METHOD=skip TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
         info "Destructive E2E tests PASSED"
         DESTRUCTIVE_EXIT=0
     else
