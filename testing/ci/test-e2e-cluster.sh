@@ -12,6 +12,7 @@
 #   JOB_TIMEOUT         Job completion timeout in seconds (default: 3600)
 #   KIND_CLUSTER        Kind cluster name (default: floe)
 #   SKIP_BUILD          Skip image build if set to "true" (default: false)
+#   IMAGE_LOAD_METHOD   How to load image: auto|kind|devpod|skip (default: auto)
 
 set -euo pipefail
 
@@ -21,6 +22,7 @@ TEST_NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 JOB_TIMEOUT="${JOB_TIMEOUT:-3600}"
 KIND_CLUSTER="${KIND_CLUSTER:-floe}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
+IMAGE_LOAD_METHOD="${IMAGE_LOAD_METHOD:-auto}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 JOB_NAME="floe-test-e2e"
@@ -39,23 +41,53 @@ cleanup_job() {
     kubectl delete job "${JOB_NAME}" -n "${TEST_NAMESPACE}" --ignore-not-found 2>/dev/null || true
 }
 
+# load_image <image-name>
+# Loads a Docker image into the target environment according to IMAGE_LOAD_METHOD.
+load_image() {
+    local image="$1"
+    local method="${IMAGE_LOAD_METHOD}"
+
+    if [[ "${method}" == "skip" ]]; then
+        info "Skipping image load (IMAGE_LOAD_METHOD=skip)"
+        return 0
+    fi
+
+    if [[ "${method}" == "kind" ]]; then
+        info "Loading image into Kind cluster '${KIND_CLUSTER}' (IMAGE_LOAD_METHOD=kind)..."
+        kind load docker-image "${image}" --name "${KIND_CLUSTER}"
+        return 0
+    fi
+
+    if [[ "${method}" == "devpod" ]]; then
+        info "Loading image into DevPod workspace via docker save pipe..."
+        docker save "${image}" | ssh devpod docker load
+        return 0
+    fi
+
+    # auto: detect environment
+    if command -v kind &>/dev/null && kind get clusters 2>/dev/null | grep -q "^${KIND_CLUSTER}$"; then
+        info "Loading image into Kind cluster '${KIND_CLUSTER}'..."
+        kind load docker-image "${image}" --name "${KIND_CLUSTER}"
+        return 0
+    fi
+
+    if [[ -n "${DEVPOD_WORKSPACE:-}" ]]; then
+        info "Loading image into DevPod workspace via docker save pipe..."
+        docker save "${image}" | ssh devpod docker load
+        return 0
+    fi
+
+    error "No Kind cluster '${KIND_CLUSTER}' or DevPod workspace detected. Run 'make kind-up' or start DevPod."
+    exit 1
+}
+
 # Ensure Job is cleaned up on interrupt or exit (idempotent via --ignore-not-found)
 trap cleanup_job EXIT
 
 # --- Pre-flight checks ---
 
-if ! command -v kind &>/dev/null; then
-    error "kind CLI not found. Install: https://kind.sigs.k8s.io/docs/user/quick-start/"
-    exit 1
-fi
-
 if ! command -v kubectl &>/dev/null; then
     error "kubectl not found."
-    exit 1
-fi
-
-if ! kind get clusters 2>/dev/null | grep -q "^${KIND_CLUSTER}$"; then
-    error "Kind cluster '${KIND_CLUSTER}' not found. Create it first."
     exit 1
 fi
 
@@ -66,13 +98,15 @@ fi
 
 # --- Step 1: Build test runner image ---
 
-if [[ "${SKIP_BUILD}" != "true" ]]; then
+if [[ "${IMAGE_LOAD_METHOD}" == "skip" ]]; then
+    info "Skipping image build and load (IMAGE_LOAD_METHOD=skip)"
+elif [[ "${SKIP_BUILD}" != "true" ]]; then
     info "Building test runner image..."
     docker build -t "${IMAGE_NAME}" -f testing/Dockerfile . 2>&1 | tail -5
-    info "Loading image into Kind cluster '${KIND_CLUSTER}'..."
-    kind load docker-image "${IMAGE_NAME}" --name "${KIND_CLUSTER}"
+    load_image "${IMAGE_NAME}"
 else
     info "Skipping image build (SKIP_BUILD=true)"
+    load_image "${IMAGE_NAME}"
 fi
 
 # --- Step 2: Delete previous Job (idempotent) ---

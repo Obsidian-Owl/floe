@@ -54,6 +54,7 @@ RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh -o /tmp/dbt-i
     && chmod +x /tmp/dbt-install.sh \
     && /tmp/dbt-install.sh --update \
     && rm -f /tmp/dbt-install.sh \
+    && chmod -R a+rX /root/.local/bin/ \
     && ln -sf /root/.local/bin/dbt /usr/local/bin/dbt \
     && dbt --version
 
