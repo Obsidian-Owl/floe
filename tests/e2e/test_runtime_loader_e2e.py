@@ -133,7 +133,7 @@ def test_thin_definitions_are_deployed() -> None:
     Reads the demo definitions.py files and confirms they use
     load_product_definitions (not the old 187-line template).
     """
-    demo_dir = Path(__file__).resolve().parents[1] / "demo"
+    demo_dir = Path(__file__).resolve().parents[2] / "demo"
     products = ["customer-360", "financial-risk", "iot-telemetry"]
 
     for product in products:
