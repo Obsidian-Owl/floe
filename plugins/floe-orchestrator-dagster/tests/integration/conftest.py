@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any
 
 import pyarrow as pa
 import pytest
+from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
 from testing.fixtures.polaris import (
     PolarisConfig,
     create_polaris_catalog,
@@ -242,14 +243,15 @@ class IntegrationMinIOStoragePlugin:
     def __init__(
         self,
         endpoint: str = "http://localhost:9000",
-        access_key: str = "minioadmin",
-        secret_key: str = "minioadmin123",
+        access_key: str | None = None,
+        secret_key: str | None = None,
         bucket: str = "floe-warehouse",
     ) -> None:
         """Initialize with MinIO config."""
+        _default_access, _default_secret = get_minio_credentials()
         self._endpoint = endpoint
-        self._access_key = access_key
-        self._secret_key = secret_key
+        self._access_key = access_key if access_key is not None else _default_access
+        self._secret_key = secret_key if secret_key is not None else _default_secret
         self._bucket = bucket
 
     def get_pyiceberg_fileio(self) -> FileIO:
@@ -315,10 +317,12 @@ def polaris_config() -> PolarisConfig:
     host = get_effective_host("polaris", "floe-test")
     uri = f"http://{host}:8181/api/catalog"
 
+    _polaris_id, _polaris_secret = get_polaris_credentials()
+    _default_cred = f"{_polaris_id}:{_polaris_secret}"  # pragma: allowlist secret
     return PolarisConfig(
         uri=uri,
         warehouse=os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"),
-        credential=os.environ.get("POLARIS_CREDENTIAL", "demo-admin:demo-secret"),
+        credential=os.environ.get("POLARIS_CREDENTIAL", _default_cred),
         scope=os.environ.get("POLARIS_SCOPE", "PRINCIPAL_ROLE:ALL"),
     )
 
@@ -346,10 +350,11 @@ def integration_storage_plugin() -> IntegrationMinIOStoragePlugin:
     host = get_effective_host("minio", "floe-test")
     endpoint = f"http://{host}:9000"
 
+    _minio_access, _minio_secret = get_minio_credentials()
     return IntegrationMinIOStoragePlugin(
         endpoint=endpoint,
-        access_key=os.environ.get("MINIO_ACCESS_KEY", "minioadmin"),
-        secret_key=os.environ.get("MINIO_SECRET_KEY", "minioadmin123"),
+        access_key=os.environ.get("MINIO_ACCESS_KEY", _minio_access),
+        secret_key=os.environ.get("MINIO_SECRET_KEY", _minio_secret),
         bucket=os.environ.get("MINIO_BUCKET", "floe-warehouse"),
     )
 
@@ -383,6 +388,7 @@ def real_table_manager(
         polaris_config.uri.replace("/api/catalog", "") + "/api/catalog/v1/oauth/tokens"
     )
     minio_host = get_effective_host("minio", "floe-test")
+    _real_tm_minio_access, _real_tm_minio_secret = get_minio_credentials()
 
     return IcebergTableManager(
         catalog_plugin=integration_catalog_plugin,
@@ -395,8 +401,8 @@ def real_table_manager(
                 "scope": polaris_config.scope,
                 "oauth2-server-uri": oauth2_server_uri,
                 "s3.endpoint": f"http://{minio_host}:9000",
-                "s3.access-key-id": os.environ.get("MINIO_ACCESS_KEY", "minioadmin"),
-                "s3.secret-access-key": os.environ.get("MINIO_SECRET_KEY", "minioadmin123"),
+                "s3.access-key-id": os.environ.get("MINIO_ACCESS_KEY", _real_tm_minio_access),
+                "s3.secret-access-key": os.environ.get("MINIO_SECRET_KEY", _real_tm_minio_secret),
                 "s3.region": "us-east-1",
                 "s3.path-style-access": "true",
             },

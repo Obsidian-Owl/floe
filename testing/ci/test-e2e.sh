@@ -10,8 +10,8 @@
 #   E2E_TIMEOUT         E2E test timeout in seconds (default: 600)
 #   COLLECT_LOGS        Collect logs on failure: true/false (default: true)
 #   DAGSTER_HOST_PORT   Dagster localhost port (default: 3100)
-#   MINIO_USER          MinIO admin username (default: minioadmin)
-#   MINIO_PASS          MinIO admin password (default: minioadmin123)
+#   MINIO_USER          MinIO admin username (from env or AWS_ACCESS_KEY_ID)
+#   MINIO_PASS          MinIO admin password (from env or AWS_SECRET_ACCESS_KEY)
 
 set -euo pipefail
 
@@ -22,10 +22,22 @@ E2E_TIMEOUT="${E2E_TIMEOUT:-600}"
 COLLECT_LOGS="${COLLECT_LOGS:-true}"
 # Export credentials as env vars so child processes (ensure-bucket.py)
 # can read them without exposing via process arguments.
-export MINIO_USER="${MINIO_USER:-minioadmin}"
-export MINIO_PASS="${MINIO_PASS:-minioadmin123}"
+export MINIO_USER="${MINIO_USER:-${AWS_ACCESS_KEY_ID:-}}"
+export MINIO_PASS="${MINIO_PASS:-${AWS_SECRET_ACCESS_KEY:-}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Validate MinIO credentials are available
+if [[ -z "${MINIO_USER}" ]]; then
+    echo "ERROR: MINIO_USER not set and AWS_ACCESS_KEY_ID not available" >&2
+    echo "Set AWS_ACCESS_KEY_ID or MINIO_USER before running E2E tests" >&2
+    exit 1
+fi
+if [[ -z "${MINIO_PASS}" ]]; then
+    echo "ERROR: MINIO_PASS not set and AWS_SECRET_ACCESS_KEY not available" >&2
+    echo "Set AWS_SECRET_ACCESS_KEY or MINIO_PASS before running E2E tests" >&2
+    exit 1
+fi
 
 cd "${PROJECT_ROOT}"
 
@@ -418,7 +430,7 @@ done
 # Verify Polaris catalog exists (defense-in-depth for bootstrap job failures)
 POLARIS_CATALOG="${POLARIS_CATALOG:-${MANIFEST_WAREHOUSE}}"
 POLARIS_CLIENT_ID="${POLARIS_CLIENT_ID:-${MANIFEST_OAUTH_CLIENT_ID}}"
-POLARIS_CLIENT_SECRET="${POLARIS_CLIENT_SECRET:-demo-secret}"
+POLARIS_CLIENT_SECRET="${POLARIS_CLIENT_SECRET:-}"
 
 # Validate catalog name to prevent URL injection
 if [[ ! "${POLARIS_CATALOG}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
