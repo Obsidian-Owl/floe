@@ -10,6 +10,7 @@ consistent behavior:
 from __future__ import annotations
 
 import logging
+from contextlib import ExitStack
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -129,15 +130,11 @@ def test_factory_reraises_on_configured_but_broken(
     if hasattr(mod_obj, "get_registry"):
         patch_targets.append(f"{module_path}.get_registry")
 
-    patches = [patch(t, return_value=mock_registry) for t in patch_targets]
-    for p in patches:
-        p.start()
-    try:
+    with ExitStack() as stack:
+        for t in patch_targets:
+            stack.enter_context(patch(t, return_value=mock_registry))
         with pytest.raises(ConnectionError, match="connection refused"):
             factory_fn(plugins)
-    finally:
-        for p in patches:
-            p.stop()
 
 
 @pytest.mark.requirement("AC-2")

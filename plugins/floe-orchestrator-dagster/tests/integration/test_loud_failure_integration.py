@@ -24,8 +24,20 @@ from dagster import Definitions, ResourceDefinition
 
 from floe_orchestrator_dagster.loader import load_product_definitions
 
+
+def _find_project_root() -> Path:
+    """Walk up from this file to find the repo root via .git directory."""
+    p = Path(__file__).resolve()
+    while p != p.parent:
+        if (p / ".git").exists():
+            return p
+        p = p.parent
+    msg = "Could not find project root (no .git directory found)"
+    raise FileNotFoundError(msg)
+
+
 # Path to the customer-360 demo project with real artifacts
-DEMO_DIR = Path(__file__).resolve().parents[4] / "demo" / "customer-360"
+DEMO_DIR = _find_project_root() / "demo" / "customer-360"
 PRODUCT_NAME = "customer-360"
 
 
@@ -108,12 +120,8 @@ def test_iceberg_resource_raises_when_polaris_unreachable(tmp_path: Path) -> Non
     # Invoke the resource_fn — it should raise because the catalog plugin
     # will try to connect to unreachable Polaris
     mock_init_context = MagicMock()
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(Exception, match=r"(?i)unreachable|connection|catalog|polaris|iceberg"):
         iceberg_resource.resource_fn(mock_init_context)
-
-    # Verify the error is meaningful (not a generic "None" or empty error)
-    error_msg = str(exc_info.value)
-    assert len(error_msg) > 0, "Exception message should not be empty"
 
 
 @pytest.mark.requirement("AC-5")

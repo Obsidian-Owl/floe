@@ -394,13 +394,19 @@ def try_create_lineage_resource(
     When ``lineage_backend`` is set, delegates to :func:`create_lineage_resource`.
 
     Unlike the iceberg counterpart this function NEVER returns an empty dict —
-    it always returns ``{"lineage": <resource>}``.
+    it always returns ``{"lineage": <resource>}`` when unconfigured.  If
+    lineage IS configured but :func:`create_lineage_resource` fails, the
+    exception is re-raised (loud failure).
 
     Args:
         plugins: Resolved plugin configuration, or ``None``.
 
     Returns:
-        ``{"lineage": ResourceDefinition}`` in all cases.
+        ``{"lineage": ResourceDefinition}`` when unconfigured or successful.
+
+    Raises:
+        Exception: If lineage IS configured but :func:`create_lineage_resource`
+            fails.
     """
     from dagster import ResourceDefinition
 
