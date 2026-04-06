@@ -10,6 +10,7 @@ Requirements:
 
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 
@@ -19,6 +20,8 @@ from pyiceberg.types import LongType, NestedField, StringType
 
 from floe_catalog_polaris.config import PolarisCatalogConfig
 from floe_catalog_polaris.plugin import PolarisCatalogPlugin
+
+logger = logging.getLogger(__name__)
 
 
 def _get_minio_endpoint() -> str:
@@ -80,11 +83,11 @@ def test_client_s3_endpoint_survives_table_load(
         try:
             catalog.drop_table(table_name)  # type: ignore[union-attr]
         except Exception:
-            pass
+            logger.warning("cleanup_drop_table_failed", exc_info=True)
         try:
             catalog.drop_namespace(namespace)  # type: ignore[union-attr]
         except Exception:
-            pass
+            logger.warning("cleanup_drop_namespace_failed", exc_info=True)
 
 
 @pytest.mark.integration
