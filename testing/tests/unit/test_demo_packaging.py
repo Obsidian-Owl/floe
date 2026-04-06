@@ -1988,9 +1988,10 @@ class TestGeneratedDefinitions:
 
     AC-11.8 requires that demo product definitions.py files are generated
     by ``floe compile --generate-definitions``, not hand-written. Generated
-    files must have an AUTO-GENERATED marker, use @dbt_assets with
-    DbtCliResource, export a ``defs`` attribute, and NOT import unused
-    modules that only appear in hand-written versions.
+    files must have an AUTO-GENERATED marker, use the thin loader shim
+    pattern (importing ``load_product_definitions`` from the runtime loader),
+    export a ``defs`` attribute, and NOT import unused modules that only
+    appear in hand-written versions.
     """
 
     @pytest.mark.requirement("WU11-AC8")
@@ -2031,48 +2032,59 @@ class TestGeneratedDefinitions:
     @pytest.mark.requirement("WU11-AC8")
     @pytest.mark.parametrize("product_dir", _DEMO_PRODUCT_DIRS, ids=_DEMO_PRODUCT_DIRS)
     def test_definitions_exports_defs_variable(self, product_dir: str) -> None:
-        """Verify definitions.py exports a defs variable with Definitions.
+        """Verify definitions.py exports a defs variable via load_product_definitions.
 
-        The generated code must contain 'defs = Definitions(' so that
-        Dagster can import it as the entry point. A file that defines
-        assets without exposing them via defs would be non-functional.
+        The generated thin shim must contain 'defs = load_product_definitions('
+        so that Dagster can import it as the entry point. The runtime loader
+        returns a Definitions object wired with dbt assets, lineage, and resources.
         """
         definitions_path = REPO_ROOT / "demo" / product_dir / "definitions.py"
         content = definitions_path.read_text()
-        assert "defs = Definitions(" in content, (
+        assert "defs = load_product_definitions(" in content, (
             f"definitions.py for '{product_dir}' must export a 'defs' variable "
-            f"using 'defs = Definitions('. This is the Dagster entry point."
+            f"using 'defs = load_product_definitions('. This is the thin loader shim pattern."
         )
 
     @pytest.mark.requirement("WU11-AC8")
     @pytest.mark.parametrize("product_dir", _DEMO_PRODUCT_DIRS, ids=_DEMO_PRODUCT_DIRS)
-    def test_definitions_uses_dbt_assets_decorator(self, product_dir: str) -> None:
-        """Verify definitions.py uses the @dbt_assets decorator.
+    def test_definitions_imports_loader(self, product_dir: str) -> None:
+        """Verify definitions.py imports load_product_definitions from the runtime loader.
 
-        The generated code must use dagster-dbt's @dbt_assets decorator
-        to define dbt-backed assets. Without this decorator, dbt models
-        would not be materialized as Dagster assets.
+        The generated thin shim must import load_product_definitions from
+        floe_orchestrator_dagster.loader. The @dbt_assets decorator and
+        DbtCliResource are now wired inside the runtime loader, not in
+        the generated definitions.py.
         """
         definitions_path = REPO_ROOT / "demo" / product_dir / "definitions.py"
         content = definitions_path.read_text()
-        assert "@dbt_assets(" in content, (
-            f"definitions.py for '{product_dir}' must use the '@dbt_assets(' "
-            f"decorator from dagster-dbt."
+        assert "from floe_orchestrator_dagster.loader import load_product_definitions" in content, (
+            f"definitions.py for '{product_dir}' must import 'load_product_definitions' "
+            f"from 'floe_orchestrator_dagster.loader'."
         )
 
     @pytest.mark.requirement("WU11-AC8")
     @pytest.mark.parametrize("product_dir", _DEMO_PRODUCT_DIRS, ids=_DEMO_PRODUCT_DIRS)
-    def test_definitions_uses_dbt_cli_resource(self, product_dir: str) -> None:
-        """Verify definitions.py references DbtCliResource.
+    def test_definitions_is_thin_shim(self, product_dir: str) -> None:
+        """Verify definitions.py is a thin loader shim (≤20 lines).
 
-        The generated code must use DbtCliResource for dbt execution.
-        This is the dagster-dbt resource that wraps dbt CLI invocations.
+        The generated thin shim delegates all wiring to the runtime loader.
+        It should contain only imports, a PROJECT_DIR constant, and the
+        load_product_definitions call — no inline @dbt_assets, DbtCliResource,
+        or Definitions construction.
         """
         definitions_path = REPO_ROOT / "demo" / product_dir / "definitions.py"
         content = definitions_path.read_text()
-        assert "DbtCliResource" in content, (
-            f"definitions.py for '{product_dir}' must use 'DbtCliResource' from dagster-dbt."
+        lines = content.strip().splitlines()
+        assert len(lines) <= 20, (
+            f"definitions.py for '{product_dir}' has {len(lines)} lines, expected ≤20. "
+            f"Thin loader shims should delegate to load_product_definitions()."
         )
+        # Old inline patterns must be absent
+        for forbidden in ["@dbt_assets(", "DbtCliResource", "_export_dbt_to_iceberg"]:
+            assert forbidden not in content, (
+                f"definitions.py for '{product_dir}' still contains '{forbidden}'. "
+                f"Not using the thin loader pattern."
+            )
 
     @pytest.mark.requirement("WU11-AC8")
     @pytest.mark.parametrize("product_dir", _DEMO_PRODUCT_DIRS, ids=_DEMO_PRODUCT_DIRS)
@@ -2084,7 +2096,7 @@ class TestGeneratedDefinitions:
         decorator. These are leftovers from hand-written code and indicate the
         file was not generated by the compiler.
 
-        The generated version only imports: Definitions, DbtCliResource, dbt_assets, Path.
+        The thin loader shim only imports: Path and load_product_definitions.
         """
         definitions_path = REPO_ROOT / "demo" / product_dir / "definitions.py"
         content = definitions_path.read_text()
@@ -2122,8 +2134,8 @@ class TestGeneratedDefinitions:
             f"definitions.py for '{product_dir}' imports modules that should not "
             f"appear in generated code. These are hand-written leftovers:\n"
             + "\n".join(found_forbidden)
-            + "\n\nGenerated definitions.py should only import: "
-            "Definitions, DbtCliResource, dbt_assets, Path."
+            + "\n\nThin loader shim should only import: "
+            "Path and load_product_definitions."
         )
 
     @pytest.mark.requirement("WU11-AC8")
