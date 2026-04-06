@@ -794,7 +794,7 @@ class TestTryCreateIcebergResourcesEdgeCases:
 
             # Verify error was logged before raising
             assert any(
-                "Failed to create Iceberg resources" in record.message for record in caplog.records
+                "iceberg_creation_failed" in record.message for record in caplog.records
             )
 
     @pytest.mark.requirement("004d-FR-118")
