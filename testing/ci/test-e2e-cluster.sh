@@ -13,6 +13,7 @@
 #   KIND_CLUSTER        Kind cluster name (default: floe)
 #   SKIP_BUILD          Skip image build if set to "true" (default: false)
 #   IMAGE_LOAD_METHOD   How to load image: auto|kind|devpod|skip (default: auto)
+#   TEST_SUITE          Test suite to run: e2e|e2e-destructive (default: e2e)
 
 set -euo pipefail
 
@@ -23,12 +24,27 @@ JOB_TIMEOUT="${JOB_TIMEOUT:-3600}"
 KIND_CLUSTER="${KIND_CLUSTER:-floe}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
 IMAGE_LOAD_METHOD="${IMAGE_LOAD_METHOD:-auto}"
+TEST_SUITE="${TEST_SUITE:-e2e}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-JOB_NAME="floe-test-e2e"
-JOB_MANIFEST="testing/k8s/jobs/test-e2e.yaml"
 IMAGE_NAME="floe-test-runner:latest"
 ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts"
+
+# Select Job name and manifest based on TEST_SUITE
+case "${TEST_SUITE}" in
+    e2e)
+        JOB_NAME="floe-test-e2e"
+        JOB_MANIFEST="testing/k8s/jobs/test-e2e.yaml"
+        ;;
+    e2e-destructive)
+        JOB_NAME="floe-test-e2e-destructive"
+        JOB_MANIFEST="testing/k8s/jobs/test-e2e-destructive.yaml"
+        ;;
+    *)
+        error "Unknown TEST_SUITE '${TEST_SUITE}'. Use: e2e|e2e-destructive"
+        exit 1
+        ;;
+esac
 
 cd "${PROJECT_ROOT}"
 
