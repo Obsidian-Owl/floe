@@ -34,6 +34,11 @@ spec:
             - "-m"
             - "destructive"
             - "--junitxml=/artifacts/e2e-destructive-results.xml"
+            - "--html=/artifacts/e2e-destructive-report.html"
+            - "--self-contained-html"
+            - "--json-report"
+            - "--json-report-file=/artifacts/e2e-destructive-report.json"
+            - "--log-cli-level=INFO"
           env:
             - name: INTEGRATION_TEST_HOST
               value: "k8s"
@@ -98,6 +103,11 @@ spec:
               value: floe-platform-otel
             - name: OTEL_COLLECTOR_GRPC_HOST
               value: floe-platform-otel
+            # OTel trace emission (AC-2) — fail-open by SDK spec
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://floe-platform-otel:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "floe-test-runner"
             - name: PYTHONPATH
               value: "/app:/app/testing"
             - name: PYTHONUNBUFFERED
