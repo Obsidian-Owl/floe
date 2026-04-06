@@ -90,33 +90,32 @@ def create_ingestion_resources(
 def try_create_ingestion_resources(
     plugins: ResolvedPlugins | None,
 ) -> dict[str, Any]:
-    """Attempt to create ingestion resources, returning empty dict on failure.
+    """Create ingestion resources, returning empty dict when unconfigured.
 
-    This is the safe entry point called by create_definitions(). It handles
-    the case where the ingestion plugin is not configured (it's optional
-    in CompiledArtifacts) and catches plugin loading errors gracefully.
+    Returns empty dict when ingestion is not configured. Re-raises exceptions
+    when ingestion IS configured but initialization fails (consistent with
+    iceberg/semantic/lineage factory behavior).
 
     Args:
         plugins: Resolved plugin selections from CompiledArtifacts.
             May be None if no plugins are configured.
 
     Returns:
-        Dictionary with "ingestion" key if successful, empty dict otherwise.
+        Dictionary with "ingestion" key if successful, empty dict if unconfigured.
 
-    Example:
-        >>> resources = try_create_ingestion_resources(artifacts.plugins)
-        >>> # Returns {} if ingestion not configured
-        >>> # Returns {"ingestion": DltIngestionPlugin} if available
+    Raises:
+        Exception: If ingestion IS configured but initialization fails.
 
     Requirements:
         FR-063: Graceful degradation when ingestion is not configured
+        AC-4: Re-raise on configured-but-broken (no exception swallowing)
     """
     if plugins is None:
-        logger.debug("No plugins configured, skipping ingestion resource creation")
+        logger.warning("ingestion_not_configured")
         return {}
 
     if plugins.ingestion is None:
-        logger.debug("No ingestion plugin configured, skipping resource creation")
+        logger.warning("ingestion_not_configured")
         return {}
 
     try:
@@ -124,10 +123,8 @@ def try_create_ingestion_resources(
             ingestion_ref=plugins.ingestion,
         )
     except Exception:
-        logger.exception(
-            "Failed to create ingestion resources — ingestion pipelines will not be available"
-        )
-        return {}
+        logger.exception("ingestion_creation_failed")
+        raise
 
 
 __all__ = [

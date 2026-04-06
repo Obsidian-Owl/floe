@@ -95,18 +95,22 @@ def create_semantic_resources(
 def try_create_semantic_resources(
     plugins: ResolvedPlugins | None,
 ) -> dict[str, Any]:
-    """Attempt to create semantic layer resources, returning empty dict on failure.
+    """Create semantic layer resources, returning empty dict when unconfigured.
 
-    This is the safe entry point called by create_definitions(). It handles
-    the case where the semantic layer plugin is not configured (it's optional
-    in CompiledArtifacts) and catches plugin loading errors gracefully.
+    Returns empty dict when semantic is not configured.  Re-raises exceptions
+    when semantic IS configured but initialization fails (consistent with
+    iceberg/ingestion/lineage factory behavior).
 
     Args:
         plugins: Resolved plugin selections from CompiledArtifacts.
             May be None if no plugins are configured.
 
     Returns:
-        Dictionary with "semantic_layer" key if successful, empty dict otherwise.
+        Dictionary with ``"semantic_layer"`` key if successful, empty dict
+        if unconfigured.
+
+    Raises:
+        Exception: If semantic IS configured but initialization fails.
 
     Example:
         >>> resources = try_create_semantic_resources(artifacts.plugins)
@@ -114,11 +118,11 @@ def try_create_semantic_resources(
         >>> # Returns {"semantic_layer": CubeSemanticPlugin} if available
     """
     if plugins is None:
-        logger.debug("No plugins configured, skipping semantic layer resource creation")
+        logger.warning("semantic_not_configured")
         return {}
 
     if plugins.semantic is None:
-        logger.debug("No semantic layer plugin configured, skipping resource creation")
+        logger.warning("semantic_not_configured")
         return {}
 
     try:
@@ -126,10 +130,7 @@ def try_create_semantic_resources(
             semantic_ref=plugins.semantic,
         )
     except Exception:
-        logger.exception(
-            "Failed to create semantic layer resources"
-            " — this will prevent semantic layer sync from working"
-        )
+        logger.exception("semantic_creation_failed")
         raise
 
 
