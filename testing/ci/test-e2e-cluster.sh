@@ -14,6 +14,7 @@
 #   SKIP_BUILD          Skip image build if set to "true" (default: false)
 #   IMAGE_LOAD_METHOD   How to load image: auto|kind|devpod|skip (default: auto)
 #   TEST_SUITE          Test suite to run: e2e|e2e-destructive (default: e2e)
+#   LOG_TAIL_LINES      Lines to capture per pod on failure (default: 100)
 
 set -euo pipefail
 
