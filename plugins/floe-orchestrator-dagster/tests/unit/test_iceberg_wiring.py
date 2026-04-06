@@ -793,9 +793,7 @@ class TestTryCreateIcebergResourcesEdgeCases:
                     try_create_iceberg_resources(plugins=plugins)
 
             # Verify error was logged before raising
-            assert any(
-                "iceberg_creation_failed" in record.message for record in caplog.records
-            )
+            assert any("iceberg_creation_failed" in record.message for record in caplog.records)
 
     @pytest.mark.requirement("004d-FR-118")
     def test_exception_during_table_manager_creation_propagates(self) -> None:
