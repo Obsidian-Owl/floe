@@ -22,7 +22,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -343,7 +343,7 @@ def test_no_connections_during_import(project_dir: Path) -> None:
         patch(
             _ICEBERG_FACTORY,
             return_value={},
-        ) as mock_iceberg,
+        ),
         patch(
             _LINEAGE_FACTORY,
             return_value={"lineage": ResourceDefinition.hardcoded_resource(MagicMock())},
@@ -491,7 +491,7 @@ def test_dbt_assets_calls_emit_start_before_build(project_dir: Path) -> None:
     mock_dbt.cli.return_value.stream.return_value = mock_stream
 
     # Execute the asset function
-    result = list(asset_fn(context))
+    list(asset_fn(context))
 
     # emit_start must have been called
     lineage.emit_start.assert_called_once()

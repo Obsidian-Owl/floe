@@ -84,8 +84,8 @@ def load_product_definitions(
             trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
             if trace_facet is not None:
                 run_facets["traceCorrelation"] = trace_facet
-        except Exception:
-            pass  # trace facet failure is non-blocking
+        except Exception as _trace_exc:
+            context.log.debug("Trace facet creation failed: %s", _trace_exc)
         try:
             run_id = lineage.emit_start(product_name, run_facets=run_facets or None)
         except Exception:
@@ -97,8 +97,8 @@ def load_product_definitions(
         except Exception as exc:
             try:
                 lineage.emit_fail(run_id, product_name, error_message=type(exc).__name__)
-            except Exception:
-                pass  # emit_fail failure must not swallow dbt error
+            except Exception as _fail_exc:
+                context.log.debug("emit_fail failed: %s", _fail_exc)
             raise
 
         # 3. Export to Iceberg (only if catalog configured and dbt succeeded)
@@ -108,8 +108,8 @@ def load_product_definitions(
         # 4. Emit COMPLETE
         try:
             lineage.emit_complete(run_id, product_name)
-        except Exception:
-            pass
+        except Exception as _complete_exc:
+            context.log.debug("emit_complete failed: %s", _complete_exc)
 
     _project_dir_str = str(project_dir)
     _plugins = artifacts.plugins

@@ -57,7 +57,7 @@ def export_dbt_to_iceberg(
         return
 
     catalog_config = artifacts.plugins.catalog.config or {}
-    storage_config = artifacts.plugins.storage.config or {} if artifacts.plugins.storage else {}
+    storage_config = (artifacts.plugins.storage.config or {}) if artifacts.plugins.storage else {}
 
     registry = _plugin_registry_module.get_registry()
     catalog_type = artifacts.plugins.catalog.type
@@ -79,11 +79,15 @@ def export_dbt_to_iceberg(
         catalog.create_namespace(product_namespace)
         context.log.info("Created Iceberg namespace: %s", product_namespace)
     except Exception as exc:
-        context.log.debug(
-            "Namespace %s exists or creation failed: %s",
-            product_namespace,
-            type(exc).__name__,
-        )
+        exc_name = type(exc).__name__
+        if "AlreadyExists" in exc_name or "already exists" in str(exc).lower():
+            context.log.debug("Namespace %s already exists", product_namespace)
+        else:
+            context.log.warning(
+                "Namespace %s creation failed: %s",
+                product_namespace,
+                exc_name,
+            )
 
     conn = duckdb.connect(duckdb_path, read_only=True)
     try:
