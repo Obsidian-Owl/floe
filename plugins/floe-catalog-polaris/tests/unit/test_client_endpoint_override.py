@@ -76,6 +76,7 @@ def test_client_endpoint_overrides_server_endpoint() -> None:
 
     assert result is mock_table
     assert mock_table.io.properties["s3.endpoint"] == client_ep
+    plugin._catalog.load_table.assert_called_once_with("bronze.customers")
 
 
 @pytest.mark.requirement("AC-5")
@@ -89,6 +90,7 @@ def test_client_endpoint_preserved_when_server_matches() -> None:
 
     assert result is mock_table
     assert mock_table.io.properties["s3.endpoint"] == endpoint
+    plugin._catalog.load_table.assert_called_once_with("bronze.customers")
 
 
 @pytest.mark.requirement("AC-5")
@@ -108,6 +110,7 @@ def test_no_client_endpoint_leaves_server_endpoint_unchanged() -> None:
     plugin.load_table_with_client_endpoint("bronze.customers")
 
     assert mock_table.io.properties["s3.endpoint"] == server_ep
+    mock_catalog.load_table.assert_called_once_with("bronze.customers")
 
 
 @pytest.mark.requirement("AC-5")

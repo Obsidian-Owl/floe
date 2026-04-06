@@ -53,6 +53,7 @@ from floe_catalog_polaris.tracing import (
 if TYPE_CHECKING:
     from pydantic import BaseModel
     from pyiceberg.catalog import Catalog as PyIcebergCatalog
+    from pyiceberg.table import Table
 
 logger = structlog.get_logger(__name__)
 
@@ -339,7 +340,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 log.error("polaris_catalog_connection_failed", error=str(e))
                 raise
 
-    def load_table_with_client_endpoint(self, identifier: str) -> Any:
+    def load_table_with_client_endpoint(self, identifier: str) -> Table:
         """Load a table and re-apply client-side s3.endpoint to its FileIO.
 
         PyIceberg's ``_fetch_config`` merges server-provided ``table-default.*``
@@ -347,6 +348,12 @@ class PolarisCatalogPlugin(CatalogPlugin):
         S3 endpoint config.  This method loads the table normally, then patches
         the ``FileIO.properties`` to restore the client endpoint that was
         passed to :meth:`connect`.
+
+        .. note::
+            Call this method instead of ``catalog.load_table()`` directly.
+            PyIceberg lazily initialises its S3 filesystem on first I/O
+            (``_fs_cache``); if any I/O has already occurred on the table,
+            the cache is warm and patching properties has no effect.
 
         Args:
             identifier: Fully qualified table identifier (e.g. "bronze.customers").
@@ -361,7 +368,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
             msg = "No catalog connection — call connect() first"
             raise CatalogUnavailableError(msg)
 
-        table = self._catalog.load_table(identifier)  # type: ignore[union-attr]
+        table = self._catalog.load_table(identifier)
 
         if self._client_s3_endpoint and hasattr(table, "io"):
             io_props = getattr(table.io, "properties", None)
