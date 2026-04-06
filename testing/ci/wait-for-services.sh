@@ -12,10 +12,10 @@
 #   POLARIS_CATALOG_NAME  Catalog name to verify (default: floe-e2e)
 #   MINIO_URL             MinIO API URL (default: http://localhost:9000)
 #   MINIO_BUCKET          Expected bucket name (default: floe-iceberg)
-#   POLARIS_CLIENT_ID     OAuth client ID (default: demo-admin)
-#   POLARIS_CLIENT_SECRET OAuth client secret (default: demo-secret)
-#   MINIO_USER            MinIO admin username (default: minioadmin)
-#   MINIO_PASS            MinIO admin password (default: minioadmin123)
+#   POLARIS_CLIENT_ID     OAuth client ID (default: from MANIFEST_OAUTH_CLIENT_ID)
+#   POLARIS_CLIENT_SECRET OAuth client secret (required — no hardcoded default)
+#   MINIO_USER            MinIO admin username (from env or AWS_ACCESS_KEY_ID)
+#   MINIO_PASS            MinIO admin password (from env or AWS_SECRET_ACCESS_KEY)
 
 set -euo pipefail
 
@@ -27,8 +27,8 @@ POLARIS_URL="${POLARIS_URL:-http://localhost:8181}"
 POLARIS_CATALOG_NAME="${POLARIS_CATALOG_NAME:-floe-e2e}"
 # Export credentials as env vars so child processes (ensure-bucket.py)
 # can read them without exposing via process arguments.
-export MINIO_USER="${MINIO_USER:-minioadmin}"
-export MINIO_PASS="${MINIO_PASS:-minioadmin123}"
+export MINIO_USER="${MINIO_USER:-${AWS_ACCESS_KEY_ID:-}}"
+export MINIO_PASS="${MINIO_PASS:-${AWS_SECRET_ACCESS_KEY:-}}"
 
 # Source Polaris auth helper
 # shellcheck source=testing/ci/polaris-auth.sh

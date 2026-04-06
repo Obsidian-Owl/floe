@@ -9,8 +9,8 @@
 #   TOKEN=$(get_polaris_token "http://localhost:8181")
 #
 # Environment:
-#   POLARIS_CLIENT_ID     Client ID (default: demo-admin)
-#   POLARIS_CLIENT_SECRET Client secret (default: demo-secret)
+#   POLARIS_CLIENT_ID     Client ID (default: from MANIFEST_OAUTH_CLIENT_ID)
+#   POLARIS_CLIENT_SECRET Client secret (required — no hardcoded default)
 
 # Acquire an OAuth2 bearer token from the Polaris catalog API.
 #
@@ -25,8 +25,17 @@
 #   0 on success, 1 on failure.
 get_polaris_token() {
     local polaris_url="${1:?Usage: get_polaris_token <polaris_url>}"
-    local client_id="${POLARIS_CLIENT_ID:-demo-admin}"
-    local client_secret="${POLARIS_CLIENT_SECRET:-demo-secret}"
+    local client_id="${POLARIS_CLIENT_ID:-${MANIFEST_OAUTH_CLIENT_ID:-}}"
+    local client_secret="${POLARIS_CLIENT_SECRET:-}"
+
+    if [[ -z "$client_id" ]]; then
+        echo "ERROR: POLARIS_CLIENT_ID not set (source extract-manifest-config.py first)" >&2
+        return 1
+    fi
+    if [[ -z "$client_secret" ]]; then
+        echo "ERROR: POLARIS_CLIENT_SECRET not set" >&2
+        return 1
+    fi
 
     local token
     # Pipe credentials via stdin (-d @-) to avoid exposing them in
