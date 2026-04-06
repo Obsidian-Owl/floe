@@ -214,12 +214,7 @@ spec:
                     "s3.path-style-access": "true",
                     "s3.access-key-id": "$S3_ACCESS_KEY",
                     "s3.secret-access-key": "$S3_SECRET_KEY",
-                    "s3.region": "{{ .Values.polaris.storage.s3.region | default "us-east-1" }}",
-                    "table-default.s3.endpoint": "{{ .Values.polaris.storage.s3.endpoint }}",
-                    "table-default.s3.path-style-access": "true",
-                    "table-default.s3.access-key-id": "$S3_ACCESS_KEY",
-                    "table-default.s3.secret-access-key": "$S3_SECRET_KEY",
-                    "table-default.s3.region": "{{ .Values.polaris.storage.s3.region | default "us-east-1" }}"
+                    "s3.region": "{{ .Values.polaris.storage.s3.region | default "us-east-1" }}"
                   },
                   "storageConfigInfo": {
                     "storageType": "S3",
