@@ -40,6 +40,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Protocol
 
 import pytest
+from testing.fixtures.credentials import get_minio_credentials
 from testing.fixtures.polaris import (
     PolarisConfig,
     create_polaris_catalog,
@@ -276,14 +277,15 @@ class IntegrationMinIOStoragePlugin:
     def __init__(
         self,
         endpoint: str = "http://localhost:9000",
-        access_key: str = "minioadmin",
-        secret_key: str = "minioadmin123",
+        access_key: str | None = None,
+        secret_key: str | None = None,
         bucket: str = "floe-warehouse",
     ) -> None:
         """Initialize with MinIO config."""
+        _default_access, _default_secret = get_minio_credentials()
         self._endpoint = endpoint
-        self._access_key = access_key
-        self._secret_key = secret_key
+        self._access_key = access_key if access_key is not None else _default_access
+        self._secret_key = secret_key if secret_key is not None else _default_secret
         self._bucket = bucket
 
     def get_pyiceberg_fileio(self) -> FileIO:
@@ -409,10 +411,11 @@ def integration_storage_plugin() -> IntegrationMinIOStoragePlugin:
     host = get_effective_host("minio", "floe-test")
     endpoint = f"http://{host}:9000"
 
+    _minio_access, _minio_secret = get_minio_credentials()
     return IntegrationMinIOStoragePlugin(
         endpoint=endpoint,
-        access_key=os.environ.get("MINIO_ACCESS_KEY", "minioadmin"),
-        secret_key=os.environ.get("MINIO_SECRET_KEY", "minioadmin123"),
+        access_key=os.environ.get("MINIO_ACCESS_KEY", _minio_access),
+        secret_key=os.environ.get("MINIO_SECRET_KEY", _minio_secret),
         bucket=os.environ.get("MINIO_BUCKET", "floe-warehouse"),
     )
 

@@ -23,6 +23,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from testing.fixtures.credentials import get_minio_credentials
+
 if TYPE_CHECKING:
     from minio import Minio
 
@@ -42,12 +44,8 @@ class MinIOConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     endpoint: str = Field(default_factory=lambda: os.environ.get("MINIO_ENDPOINT", "minio:9000"))
-    access_key: str = Field(
-        default_factory=lambda: os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
-    )
-    secret_key: SecretStr = Field(
-        default_factory=lambda: SecretStr(os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"))
-    )
+    access_key: str = Field(default_factory=lambda: get_minio_credentials()[0])
+    secret_key: SecretStr = Field(default_factory=lambda: SecretStr(get_minio_credentials()[1]))
     secure: bool = Field(default=False)
     region: str = Field(default_factory=lambda: os.environ.get("AWS_REGION", "us-east-1"))
     namespace: str = Field(default="floe-test")

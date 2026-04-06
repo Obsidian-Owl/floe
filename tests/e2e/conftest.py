@@ -25,6 +25,7 @@ import pytest
 import yaml
 
 # Re-exported for backwards compatibility — other E2E files import from here.
+from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
 from testing.fixtures.kubernetes import run_helm as run_helm
 from testing.fixtures.kubernetes import run_kubectl as run_kubectl
 from testing.fixtures.polling import wait_for_condition
@@ -52,9 +53,10 @@ def _read_manifest_config(manifest_path: Path | None = None) -> dict[str, str]:
         when the manifest file cannot be found.
     """
     _default_scope = "PRINCIPAL_ROLE:ALL"
+    _polaris_id, _polaris_secret = get_polaris_credentials()
     _fallback: dict[str, str] = {
-        "client_id": "demo-admin",
-        "client_secret": "demo-secret",  # pragma: allowlist secret
+        "client_id": _polaris_id,
+        "client_secret": _polaris_secret,  # pragma: allowlist secret
         "scope": _default_scope,
         "warehouse": "floe-e2e",
     }
@@ -540,6 +542,7 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     # Load catalog with REST configuration
     # Demo credentials for local testing only - production uses K8s secrets
     minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
+    _minio_access, _minio_secret = get_minio_credentials()
     catalog = pyiceberg_catalog.load_catalog(
         "polaris",
         **{
@@ -551,10 +554,10 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
             "s3.endpoint": minio_url,
             # MinIO credentials for local testing - production uses IAM/IRSA
             "s3.access-key-id": os.environ.get(  # pragma: allowlist secret
-                "AWS_ACCESS_KEY_ID", "minioadmin"
+                "AWS_ACCESS_KEY_ID", _minio_access
             ),
             "s3.secret-access-key": os.environ.get(  # pragma: allowlist secret
-                "AWS_SECRET_ACCESS_KEY", "minioadmin123"
+                "AWS_SECRET_ACCESS_KEY", _minio_secret
             ),
             "s3.region": os.environ.get("AWS_REGION", "us-east-1"),
             "s3.path-style-access": "true",
@@ -1287,9 +1290,10 @@ def dbt_e2e_profile(
         "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
         "AWS_REGION": os.environ.get("AWS_REGION"),
     }
-    os.environ.setdefault("AWS_ACCESS_KEY_ID", "minioadmin")
+    _aws_minio_access, _aws_minio_secret = get_minio_credentials()
+    os.environ.setdefault("AWS_ACCESS_KEY_ID", _aws_minio_access)
     os.environ.setdefault(  # pragma: allowlist secret
-        "AWS_SECRET_ACCESS_KEY", "minioadmin123"
+        "AWS_SECRET_ACCESS_KEY", _aws_minio_secret
     )
     os.environ.setdefault("AWS_REGION", "us-east-1")
 

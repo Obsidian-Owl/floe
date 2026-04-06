@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from floe_core.plugins.ingestion import IngestionConfig, IngestionResult
+from testing.fixtures.credentials import get_minio_credentials
 
 from floe_ingestion_dlt.errors import PipelineConfigurationError
 from floe_ingestion_dlt.plugin import DltIngestionPlugin
@@ -454,12 +455,13 @@ class TestGetDestinationConfig:
         parameters are mapped to output dict.
         """
         plugin = DltIngestionPlugin()
+        _expected_access, _expected_secret = get_minio_credentials()
         catalog_config = {
             "uri": "http://polaris:8181/api/catalog",
             "warehouse": "floe_warehouse",
             "s3_endpoint": "http://minio:9000",
-            "s3_access_key": "minioadmin",
-            "s3_secret_key": "minioadmin",  # pragma: allowlist secret
+            "s3_access_key": _expected_access,
+            "s3_secret_key": _expected_secret,  # pragma: allowlist secret
             "s3_region": "us-east-1",
         }
 
@@ -468,8 +470,8 @@ class TestGetDestinationConfig:
         assert result["destination"] == "iceberg"
         assert result["catalog_type"] == "rest"
         assert result["s3_endpoint"] == "http://minio:9000"
-        assert result["s3_access_key"] == "minioadmin"
-        assert result["s3_secret_key"] == "minioadmin"  # pragma: allowlist secret
+        assert result["s3_access_key"] == _expected_access
+        assert result["s3_secret_key"] == _expected_secret  # pragma: allowlist secret
         assert result["s3_region"] == "us-east-1"
 
     @pytest.mark.requirement("4F-FR-019")

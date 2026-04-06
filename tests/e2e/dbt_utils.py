@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
 from testing.fixtures.services import ServiceEndpoint
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,9 @@ def _get_polaris_catalog() -> Any:
         return None
 
     polaris_url = os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
-    default_cred = "demo-admin:demo-secret"  # pragma: allowlist secret
+    _polaris_id, _polaris_secret = get_polaris_credentials()
+    default_cred = f"{_polaris_id}:{_polaris_secret}"  # pragma: allowlist secret
+    _minio_access, _minio_secret = get_minio_credentials()
 
     try:
         catalog = pyiceberg_catalog.load_catalog(
@@ -53,10 +56,10 @@ def _get_polaris_catalog() -> Any:
                 "warehouse": os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"),
                 "s3.endpoint": os.environ.get("MINIO_URL", ServiceEndpoint("minio").url),
                 "s3.access-key-id": os.environ.get(  # pragma: allowlist secret
-                    "AWS_ACCESS_KEY_ID", "minioadmin"
+                    "AWS_ACCESS_KEY_ID", _minio_access
                 ),
                 "s3.secret-access-key": os.environ.get(  # pragma: allowlist secret
-                    "AWS_SECRET_ACCESS_KEY", "minioadmin123"
+                    "AWS_SECRET_ACCESS_KEY", _minio_secret
                 ),
                 "s3.region": os.environ.get("AWS_REGION", "us-east-1"),
                 "s3.path-style-access": "true",
