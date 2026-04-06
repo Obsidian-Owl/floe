@@ -28,7 +28,7 @@ _DEFAULT_POLARIS_CLIENT_ID = "demo-admin"
 _DEFAULT_POLARIS_CLIENT_SECRET = "demo-secret"  # pragma: allowlist secret  # noqa: S105
 _DEFAULT_POLARIS_ENDPOINT = "http://floe-platform-polaris:8181/api/catalog"
 _DEFAULT_MINIO_ACCESS_KEY = "minioadmin"
-_DEFAULT_MINIO_SECRET_KEY = "minioadmin"  # pragma: allowlist secret  # noqa: S105
+_DEFAULT_MINIO_SECRET_KEY = "minioadmin123"  # pragma: allowlist secret  # noqa: S105
 
 
 def _default_manifest_path() -> Path:
@@ -79,11 +79,11 @@ def _env_or_none(name: str) -> str | None:
     return value
 
 
-def get_minio_credentials(manifest_path: Path | None = None) -> tuple[str, str]:
+def get_minio_credentials(manifest_path: Path | None = None) -> tuple[str, str]:  # noqa: ARG001
     """Return (access_key, secret_key) for MinIO.
 
     Priority: env vars ``AWS_ACCESS_KEY_ID`` / ``AWS_SECRET_ACCESS_KEY``,
-    then hardcoded MinIO defaults (``minioadmin`` / ``minioadmin``).
+    then hardcoded MinIO defaults (``minioadmin`` / ``minioadmin123``).
 
     MinIO credentials are not stored in the manifest — the manifest only
     has the storage endpoint/bucket/region. The ``manifest_path`` parameter

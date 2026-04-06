@@ -29,7 +29,7 @@ MANIFEST_POLARIS_CLIENT_ID = "demo-admin"
 MANIFEST_POLARIS_CLIENT_SECRET = "demo-secret"  # pragma: allowlist secret
 MANIFEST_POLARIS_URI = "http://floe-platform-polaris:8181/api/catalog"
 MINIO_DEFAULT_ACCESS_KEY = "minioadmin"
-MINIO_DEFAULT_SECRET_KEY = "minioadmin"  # pragma: allowlist secret
+MINIO_DEFAULT_SECRET_KEY = "minioadmin123"  # pragma: allowlist secret
 
 
 # ---------------------------------------------------------------------------

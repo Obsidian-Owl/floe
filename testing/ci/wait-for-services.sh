@@ -30,6 +30,18 @@ POLARIS_CATALOG_NAME="${POLARIS_CATALOG_NAME:-floe-e2e}"
 export MINIO_USER="${MINIO_USER:-${AWS_ACCESS_KEY_ID:-}}"
 export MINIO_PASS="${MINIO_PASS:-${AWS_SECRET_ACCESS_KEY:-}}"
 
+# Validate MinIO credentials are available
+if [[ -z "${MINIO_USER}" ]]; then
+    echo "ERROR: MINIO_USER not set and AWS_ACCESS_KEY_ID not available" >&2
+    echo "Set AWS_ACCESS_KEY_ID or MINIO_USER before running" >&2
+    exit 1
+fi
+if [[ -z "${MINIO_PASS}" ]]; then
+    echo "ERROR: MINIO_PASS not set and AWS_SECRET_ACCESS_KEY not available" >&2
+    echo "Set AWS_SECRET_ACCESS_KEY or MINIO_PASS before running" >&2
+    exit 1
+fi
+
 # Source Polaris auth helper
 # shellcheck source=testing/ci/polaris-auth.sh
 source "$SCRIPT_DIR/polaris-auth.sh"

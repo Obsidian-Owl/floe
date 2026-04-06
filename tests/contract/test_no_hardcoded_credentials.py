@@ -58,9 +58,6 @@ EXCLUDED_FILES: frozenset[str] = frozenset(
         "tests/e2e/test_platform_bootstrap.py",
         # This test file itself (contains patterns as string literals)
         "tests/contract/test_no_hardcoded_credentials.py",
-        # Integration conftest files with credentials in module docstrings
-        "plugins/floe-orchestrator-dagster/tests/integration/conftest.py",
-        "packages/floe-iceberg/tests/integration/conftest.py",
     }
 )
 """Files excluded from scanning (credentials module, test expectations)."""
@@ -138,10 +135,31 @@ Violation = tuple[str, int, str, str]
 """(relative_path, line_number, line_content, matched_pattern)."""
 
 
+def _check_docstring_delimiters(line: str) -> tuple[str, int]:
+    """Check if a line contains triple-quote delimiters.
+
+    Handles both ``\"\"\"`` and ``'''`` delimiters.
+
+    Args:
+        line: A single line of source code.
+
+    Returns:
+        Tuple of (delimiter, count). Count is the number of times the
+        delimiter appears. If no triple-quote found, returns ("", 0).
+    """
+    stripped = line.strip()
+    for delim in ('"""', "'''"):
+        count = stripped.count(delim)
+        if count > 0:
+            return (delim, count)
+    return ("", 0)
+
+
 def scan_file_for_credentials(path: Path) -> list[Violation]:
     """Scan a single Python file for hardcoded credential patterns.
 
-    Skips comment-only lines and lines containing the bandit pragma
+    Skips comment-only lines, lines inside docstrings (triple-quoted
+    strings), and lines containing the bandit pragma
     ``pragma: allowlist secret``.
 
     Args:
@@ -158,7 +176,30 @@ def scan_file_for_credentials(path: Path) -> list[Violation]:
     except (OSError, UnicodeDecodeError):
         return violations
 
+    in_docstring = False
+    docstring_delimiter = ""
+
     for line_no, line in enumerate(lines, start=1):
+        # Track docstring boundaries
+        delim, count = _check_docstring_delimiters(line)
+        if count > 0:
+            if count >= 2:
+                # Opens and closes on same line (e.g. """single-line docstring""")
+                # Skip this line but don't change state
+                continue
+            # Single delimiter — toggles state
+            if not in_docstring:
+                in_docstring = True
+                docstring_delimiter = delim
+                continue
+            elif delim == docstring_delimiter:
+                in_docstring = False
+                continue
+
+        # Skip lines inside docstrings
+        if in_docstring:
+            continue
+
         # Skip comment-only lines
         if _is_comment_line(line):
             continue
@@ -334,6 +375,30 @@ class TestScannerDetection:
         )
         violations = scan_file_for_credentials(safe_file)
         assert violations == [], f"Comments should not be flagged, but got: {violations}"
+
+    @pytest.mark.requirement("AC-6")
+    def test_scanner_ignores_docstrings(self, tmp_path: Path) -> None:
+        """Verify scanner does NOT flag credentials inside triple-quoted docstrings."""
+        safe_file = tmp_path / "safe_test.py"
+        safe_file.write_text(
+            textwrap.dedent('''\
+                """Module docstring with minioadmin and demo-secret defaults."""
+
+                def func():
+                    """This function uses demo-admin credentials."""
+                    pass
+
+                class Foo:
+                    """
+                    Multiline docstring mentioning minioadmin
+                    and demo-secret for documentation purposes.
+                    """
+                    pass
+            '''),
+            encoding="utf-8",
+        )
+        violations = scan_file_for_credentials(safe_file)
+        assert violations == [], f"Docstring content should not be flagged, but got: {violations}"
 
     @pytest.mark.requirement("AC-6")
     def test_scanner_ignores_pragma_allowlist(self, tmp_path: Path) -> None:

@@ -27,6 +27,18 @@ export MINIO_PASS="${MINIO_PASS:-${AWS_SECRET_ACCESS_KEY:-}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+# Validate MinIO credentials are available
+if [[ -z "${MINIO_USER}" ]]; then
+    echo "ERROR: MINIO_USER not set and AWS_ACCESS_KEY_ID not available" >&2
+    echo "Set AWS_ACCESS_KEY_ID or MINIO_USER before running E2E tests" >&2
+    exit 1
+fi
+if [[ -z "${MINIO_PASS}" ]]; then
+    echo "ERROR: MINIO_PASS not set and AWS_SECRET_ACCESS_KEY not available" >&2
+    echo "Set AWS_SECRET_ACCESS_KEY or MINIO_PASS before running E2E tests" >&2
+    exit 1
+fi
+
 cd "${PROJECT_ROOT}"
 
 # Extract config from manifest.yaml — sets MANIFEST_BUCKET, MANIFEST_REGION, etc.
