@@ -29,11 +29,43 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 IMAGE_NAME="floe-test-runner:latest"
 ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts"
+LOG_TAIL_LINES="${LOG_TAIL_LINES:-100}"
 
 # --- Utility functions (must be defined before first use) ---
 
 info() { echo "[INFO] $*"; }
 error() { echo "[ERROR] $*" >&2; }
+
+# extract_pod_logs — collect pod logs and K8s events on failure for debugging
+extract_pod_logs() {
+    mkdir -p "${ARTIFACTS_DIR}/pod-logs"
+
+    info "Collecting pod logs from namespace ${TEST_NAMESPACE}..."
+
+    # Collect logs from all pods in the test namespace
+    local pod_names
+    pod_names=$(kubectl get pods -n "${TEST_NAMESPACE}" \
+        --no-headers -o custom-columns=":metadata.name" 2>/dev/null || true)
+
+    local collected=0
+    for pod in ${pod_names}; do
+        if timeout 10 kubectl logs "${pod}" -n "${TEST_NAMESPACE}" \
+            --tail="${LOG_TAIL_LINES}" \
+            > "${ARTIFACTS_DIR}/pod-logs/${pod}.log" 2>/dev/null; then
+            collected=$((collected + 1))
+        else
+            error "Warning: failed to extract logs for pod ${pod} (may have terminated)"
+            continue
+        fi
+    done
+
+    # Capture K8s events sorted by timestamp
+    kubectl get events --sort-by='.lastTimestamp' -n "${TEST_NAMESPACE}" \
+        > "${ARTIFACTS_DIR}/pod-logs/events.txt" 2>/dev/null || true
+
+    info "Pod log extraction complete: ${collected} pod(s) collected"
+    info "Pod logs saved to: ${ARTIFACTS_DIR}/pod-logs/"
+}
 
 # Select Job name and manifest based on TEST_SUITE
 case "${TEST_SUITE}" in
@@ -203,11 +235,13 @@ case "${JOB_STATUS}" in
         exit 0
         ;;
     failed)
+        extract_pod_logs
         error "E2E tests FAILED"
         error "Full output: ${ARTIFACTS_DIR}/${TEST_SUITE}-output.log"
         exit 1
         ;;
     timeout)
+        extract_pod_logs
         error "E2E tests TIMED OUT after ${JOB_TIMEOUT}s"
         error "Job may still be running."
         exit 2
