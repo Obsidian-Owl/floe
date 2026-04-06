@@ -204,7 +204,7 @@ case "${JOB_STATUS}" in
         ;;
     failed)
         error "E2E tests FAILED"
-        error "Full output: ${ARTIFACTS_DIR}/e2e-output.log"
+        error "Full output: ${ARTIFACTS_DIR}/${TEST_SUITE}-output.log"
         exit 1
         ;;
     timeout)
