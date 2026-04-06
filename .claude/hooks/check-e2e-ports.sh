@@ -16,6 +16,11 @@ if echo "$CMD" | grep -qE 'make\s+test-e2e'; then
   exit 0
 fi
 
+# In-cluster execution: port-forwards are not needed
+if [[ "${INTEGRATION_TEST_HOST:-}" == "k8s" ]]; then
+  exit 0
+fi
+
 # Required ports: Polaris, Dagster, MinIO, Jaeger, Marquez, OTel
 # Source of truth: scripts/devpod-tunnels.sh
 declare -A PORTS=(
@@ -37,7 +42,7 @@ done
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
   echo "BLOCKED: E2E port-forwards missing for: ${MISSING[*]}" >&2
-  echo "Use 'make test-e2e' which manages port-forwards automatically." >&2
+  echo "Use 'make test-e2e' (in-cluster, no port-forwards needed) or 'make test-e2e-host' (with port-forwards)." >&2
   exit 2
 fi
 

@@ -12,6 +12,8 @@
 #   JOB_TIMEOUT         Job completion timeout in seconds (default: 3600)
 #   KIND_CLUSTER        Kind cluster name (default: floe)
 #   SKIP_BUILD          Skip image build if set to "true" (default: false)
+#   IMAGE_LOAD_METHOD   How to load image: auto|kind|devpod|skip (default: auto)
+#   TEST_SUITE          Test suite to run: e2e|e2e-destructive (default: e2e)
 
 set -euo pipefail
 
@@ -21,22 +23,78 @@ TEST_NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 JOB_TIMEOUT="${JOB_TIMEOUT:-3600}"
 KIND_CLUSTER="${KIND_CLUSTER:-floe}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
+IMAGE_LOAD_METHOD="${IMAGE_LOAD_METHOD:-auto}"
+TEST_SUITE="${TEST_SUITE:-e2e}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-JOB_NAME="floe-test-e2e"
-JOB_MANIFEST="testing/k8s/jobs/test-e2e.yaml"
 IMAGE_NAME="floe-test-runner:latest"
 ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts"
 
-cd "${PROJECT_ROOT}"
-
-# --- Utility functions ---
+# --- Utility functions (must be defined before first use) ---
 
 info() { echo "[INFO] $*"; }
 error() { echo "[ERROR] $*" >&2; }
+
+# Select Job name and manifest based on TEST_SUITE
+case "${TEST_SUITE}" in
+    e2e)
+        JOB_NAME="floe-test-e2e"
+        JOB_MANIFEST="testing/k8s/jobs/test-e2e.yaml"
+        ;;
+    e2e-destructive)
+        JOB_NAME="floe-test-e2e-destructive"
+        JOB_MANIFEST="testing/k8s/jobs/test-e2e-destructive.yaml"
+        ;;
+    *)
+        error "Unknown TEST_SUITE '${TEST_SUITE}'. Use: e2e|e2e-destructive"
+        exit 1
+        ;;
+esac
+
+cd "${PROJECT_ROOT}"
 cleanup_job() {
     info "Cleaning up Job ${JOB_NAME}..."
     kubectl delete job "${JOB_NAME}" -n "${TEST_NAMESPACE}" --ignore-not-found 2>/dev/null || true
+}
+
+# load_image <image-name>
+# Loads a Docker image into the target environment according to IMAGE_LOAD_METHOD.
+load_image() {
+    local image="$1"
+    local method="${IMAGE_LOAD_METHOD}"
+
+    if [[ "${method}" == "skip" ]]; then
+        info "Skipping image load (IMAGE_LOAD_METHOD=skip)"
+        return 0
+    fi
+
+    if [[ "${method}" == "kind" ]]; then
+        info "Loading image into Kind cluster '${KIND_CLUSTER}' (IMAGE_LOAD_METHOD=kind)..."
+        kind load docker-image "${image}" --name "${KIND_CLUSTER}"
+        return 0
+    fi
+
+    if [[ "${method}" == "devpod" ]]; then
+        info "Loading image into DevPod workspace via docker save pipe..."
+        docker save "${image}" | ssh devpod docker load
+        return 0
+    fi
+
+    # auto: detect environment
+    if command -v kind &>/dev/null && kind get clusters 2>/dev/null | grep -q "^${KIND_CLUSTER}$"; then
+        info "Loading image into Kind cluster '${KIND_CLUSTER}'..."
+        kind load docker-image "${image}" --name "${KIND_CLUSTER}"
+        return 0
+    fi
+
+    if [[ -n "${DEVPOD_WORKSPACE:-}" ]]; then
+        info "Loading image into DevPod workspace via docker save pipe..."
+        docker save "${image}" | ssh devpod docker load
+        return 0
+    fi
+
+    error "No Kind cluster '${KIND_CLUSTER}' or DevPod workspace detected. Run 'make kind-up' or start DevPod."
+    exit 1
 }
 
 # Ensure Job is cleaned up on interrupt or exit (idempotent via --ignore-not-found)
@@ -44,18 +102,8 @@ trap cleanup_job EXIT
 
 # --- Pre-flight checks ---
 
-if ! command -v kind &>/dev/null; then
-    error "kind CLI not found. Install: https://kind.sigs.k8s.io/docs/user/quick-start/"
-    exit 1
-fi
-
 if ! command -v kubectl &>/dev/null; then
     error "kubectl not found."
-    exit 1
-fi
-
-if ! kind get clusters 2>/dev/null | grep -q "^${KIND_CLUSTER}$"; then
-    error "Kind cluster '${KIND_CLUSTER}' not found. Create it first."
     exit 1
 fi
 
@@ -66,13 +114,15 @@ fi
 
 # --- Step 1: Build test runner image ---
 
-if [[ "${SKIP_BUILD}" != "true" ]]; then
+if [[ "${IMAGE_LOAD_METHOD}" == "skip" ]]; then
+    info "Skipping image build and load (IMAGE_LOAD_METHOD=skip)"
+elif [[ "${SKIP_BUILD}" != "true" ]]; then
     info "Building test runner image..."
     docker build -t "${IMAGE_NAME}" -f testing/Dockerfile . 2>&1 | tail -5
-    info "Loading image into Kind cluster '${KIND_CLUSTER}'..."
-    kind load docker-image "${IMAGE_NAME}" --name "${KIND_CLUSTER}"
+    load_image "${IMAGE_NAME}"
 else
     info "Skipping image build (SKIP_BUILD=true)"
+    load_image "${IMAGE_NAME}"
 fi
 
 # --- Step 2: Delete previous Job (idempotent) ---
@@ -129,17 +179,17 @@ POD_NAME=$(kubectl get pods -n "${TEST_NAMESPACE}" \
     -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null || true)
 
 if [[ -n "${POD_NAME}" ]]; then
-    # Extract logs
+    # Extract logs (use TEST_SUITE in filename to avoid overwriting between suites)
     kubectl logs "${POD_NAME}" -n "${TEST_NAMESPACE}" \
-        > "${ARTIFACTS_DIR}/e2e-output.log" 2>/dev/null || true
+        > "${ARTIFACTS_DIR}/${TEST_SUITE}-output.log" 2>/dev/null || true
 
     # Extract JUnit XML if available
     kubectl cp "${TEST_NAMESPACE}/${POD_NAME}:/artifacts/e2e-results.xml" \
-        "${ARTIFACTS_DIR}/e2e-results.xml" 2>/dev/null || true
+        "${ARTIFACTS_DIR}/${TEST_SUITE}-results.xml" 2>/dev/null || true
 
     # Show last 30 lines of output
     info "--- Test output (last 30 lines) ---"
-    tail -30 "${ARTIFACTS_DIR}/e2e-output.log" 2>/dev/null || true
+    tail -30 "${ARTIFACTS_DIR}/${TEST_SUITE}-output.log" 2>/dev/null || true
     info "--- End test output ---"
 else
     error "No pod found for Job '${JOB_NAME}'"
@@ -154,7 +204,7 @@ case "${JOB_STATUS}" in
         ;;
     failed)
         error "E2E tests FAILED"
-        error "Full output: ${ARTIFACTS_DIR}/e2e-output.log"
+        error "Full output: ${ARTIFACTS_DIR}/${TEST_SUITE}-output.log"
         exit 1
         ;;
     timeout)
