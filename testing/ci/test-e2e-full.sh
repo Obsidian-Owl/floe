@@ -16,8 +16,10 @@
 set -euo pipefail
 
 FORCE_DESTRUCTIVE="${FORCE_DESTRUCTIVE:-false}"
-TEST_NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./common.sh
+source "${SCRIPT_DIR}/common.sh"
+TEST_NAMESPACE="${TEST_NAMESPACE:-${FLOE_NAMESPACE}}"
 
 info() { echo "[INFO] $*"; }
 error() { echo "[ERROR] $*" >&2; }

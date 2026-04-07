@@ -20,6 +20,8 @@ COVERAGE_REPORT="${COVERAGE_REPORT:-xml}"
 PYTHON_VERSION="${PYTHON_VERSION:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck source=./common.sh
+source "${SCRIPT_DIR}/common.sh"
 
 # Coverage file name (optionally include Python version)
 if [[ -n "${PYTHON_VERSION}" ]]; then

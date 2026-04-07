@@ -28,8 +28,6 @@ source "${SCRIPT_DIR}/common.sh"
 KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
 TEST_NAMESPACE="${FLOE_NAMESPACE}"
 JOB_TIMEOUT="${JOB_TIMEOUT:-3600}"
-# KIND_CLUSTER alias preserved for legacy call sites; canonical is FLOE_KIND_CLUSTER.
-KIND_CLUSTER="${FLOE_KIND_CLUSTER}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
 IMAGE_LOAD_METHOD="${IMAGE_LOAD_METHOD:-auto}"
 TEST_SUITE="${TEST_SUITE:-e2e}"
@@ -122,8 +120,8 @@ load_image() {
     fi
 
     if [[ "${method}" == "kind" ]]; then
-        info "Loading image into Kind cluster '${KIND_CLUSTER}' (IMAGE_LOAD_METHOD=kind)..."
-        kind load docker-image "${image}" --name "${KIND_CLUSTER}"
+        info "Loading image into Kind cluster '${FLOE_KIND_CLUSTER}' (IMAGE_LOAD_METHOD=kind)..."
+        kind load docker-image "${image}" --name "${FLOE_KIND_CLUSTER}"
         return 0
     fi
 
@@ -134,9 +132,9 @@ load_image() {
     fi
 
     # auto: detect environment
-    if command -v kind &>/dev/null && kind get clusters 2>/dev/null | grep -q "^${KIND_CLUSTER}$"; then
-        info "Loading image into Kind cluster '${KIND_CLUSTER}'..."
-        kind load docker-image "${image}" --name "${KIND_CLUSTER}"
+    if command -v kind &>/dev/null && kind get clusters 2>/dev/null | grep -q "^${FLOE_KIND_CLUSTER}$"; then
+        info "Loading image into Kind cluster '${FLOE_KIND_CLUSTER}'..."
+        kind load docker-image "${image}" --name "${FLOE_KIND_CLUSTER}"
         return 0
     fi
 
@@ -146,7 +144,7 @@ load_image() {
         return 0
     fi
 
-    error "No Kind cluster '${KIND_CLUSTER}' or DevPod workspace detected. Run 'make kind-up' or start DevPod."
+    error "No Kind cluster '${FLOE_KIND_CLUSTER}' or DevPod workspace detected. Run 'make kind-up' or start DevPod."
     exit 1
 }
 
