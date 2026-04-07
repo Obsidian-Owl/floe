@@ -193,24 +193,38 @@ helm-template: ## Render Helm templates (ENV=dev|staging|prod)
 	fi
 	@echo "Templates rendered to .helm-output/"
 
+# =============================================================================
+# Containerized Helm validation tools (security-hardening AC-5/6/7)
+# Images pinned inline in each recipe — do NOT use :latest.
+# To bump versions: update helm-validate, helm-security, helm-test-unit
+# recipes below. Pinned images live in the recipe body (not Make variables)
+# so the structural test can find them without Make expansion.
+# =============================================================================
+
 .PHONY: helm-validate
-helm-validate: ## Validate rendered manifests against K8s 1.28 schema
-	@echo "Validating Helm templates with kubeconform..."
+helm-validate: ## Validate rendered manifests against K8s 1.28 schema (containerized kubeconform)
+	@echo "Validating Helm templates with containerized kubeconform (ghcr.io/yannh/kubeconform:v0.6.7)..."
 	@echo "  Validating with values.yaml (production defaults)..."
-	@helm template floe-platform charts/floe-platform --values charts/floe-platform/values.yaml | kubeconform --strict --kubernetes-version 1.28.0 --ignore-missing-schemas -summary
+	@helm template floe-platform charts/floe-platform --values charts/floe-platform/values.yaml | \
+		docker run --rm -i ghcr.io/yannh/kubeconform:v0.6.7 \
+			--strict --kubernetes-version 1.28.0 --ignore-missing-schemas -summary
 	@echo "  Validating with values-test.yaml (test overrides)..."
-	@helm template floe-platform charts/floe-platform --values charts/floe-platform/values-test.yaml | kubeconform --strict --kubernetes-version 1.28.0 --ignore-missing-schemas -summary
+	@helm template floe-platform charts/floe-platform --values charts/floe-platform/values-test.yaml | \
+		docker run --rm -i ghcr.io/yannh/kubeconform:v0.6.7 \
+			--strict --kubernetes-version 1.28.0 --ignore-missing-schemas -summary
 	@echo "Helm template validation passed!"
 
+.PHONY: helm-security
+helm-security: ## Scan rendered manifests with containerized kubesec
+	@echo "Scanning Helm templates with containerized kubesec (kubesec/kubesec:v2.14.1)..."
+	@helm template floe-platform charts/floe-platform --values charts/floe-platform/values.yaml | \
+		docker run --rm -i kubesec/kubesec:v2.14.1 scan /dev/stdin
+	@echo "kubesec scan complete."
+
 .PHONY: helm-test-unit
-helm-test-unit: helm-deps ## Run helm-unittest chart template tests
-	@if ! helm plugin list | grep -q unittest; then \
-		echo "ERROR: helm-unittest plugin not installed."; \
-		echo "Install: helm plugin install https://github.com/helm-unittest/helm-unittest"; \
-		exit 1; \
-	fi
-	@echo "Running helm-unittest for floe-platform..."
-	@helm unittest charts/floe-platform
+helm-test-unit: helm-deps ## Run helm-unittest chart template tests (containerized)
+	@echo "Running containerized helm-unittest (helmunittest/helm-unittest:3.19.0-1.0.3)..."
+	@docker run --rm --user $$(id -u):$$(id -g) -v $(PWD)/charts:/apps helmunittest/helm-unittest:3.19.0-1.0.3 floe-platform
 	@echo "Helm unit tests passed!"
 
 .PHONY: helm-test

@@ -50,6 +50,33 @@ namespace:
 fullnameOverride: floe-platform
 
 # =============================================================================
+# Security Context Anchors (PSS Restricted)
+# =============================================================================
+# YAML anchors define pod-level and container-level security contexts once and
+# propagate them to every subchart below (Dagster, Jaeger, OTel collector, MinIO)
+# AND to floe's own templates (Polaris, PostgreSQL). This guarantees a single
+# source of truth for PSS restricted hardening fields.
+#
+# These anchors MUST remain at the top of this file — YAML anchors are resolved
+# in file order and must be defined before any reference (*alias).
+securityContexts:
+  podDefaults: &podSecurityContextPSS
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containerDefaults: &containerSecurityContextPSS
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 1000
+    capabilities:
+      drop:
+        - ALL
+
+# =============================================================================
 # Cluster Mapping (Multi-Environment Support)
 # =============================================================================
 # Maps logical environments to physical cluster/namespace configurations.
@@ -119,6 +146,9 @@ dagster:
       repository: "docker.io/dagster/dagster-celery-k8s"
       tag: ""  # Uses chart appVersion by default
       pullPolicy: IfNotPresent
+    # Security contexts — propagated from top-level anchors (PSS restricted)
+    podSecurityContext: *podSecurityContextPSS
+    securityContext: *containerSecurityContextPSS
     resources:
       requests:
         cpu: 100m
@@ -152,6 +182,9 @@ dagster:
       repository: "docker.io/dagster/dagster-celery-k8s"
       tag: ""
       pullPolicy: IfNotPresent
+    # Security contexts — propagated from top-level anchors (PSS restricted)
+    podSecurityContext: *podSecurityContextPSS
+    securityContext: *containerSecurityContextPSS
     resources:
       requests:
         cpu: 100m
@@ -196,6 +229,14 @@ dagster:
         #   tag: ""
         #   pullPolicy: Always
         imagePullPolicy: Always
+        # Security contexts for launched run pods — the Dagster subchart routes
+        # pod/container security for run pods through runK8sConfig (raw K8s).
+        # Both anchors are PSS-restricted and sourced from the top of this file.
+        runK8sConfig:
+          podSpecConfig:
+            securityContext: *podSecurityContextPSS
+          containerConfig:
+            securityContext: *containerSecurityContextPSS
         envConfigMaps: []
         envSecrets: []
         jobNamespace: ""
@@ -404,6 +445,10 @@ otel:
       servicePort: 8888
       protocol: TCP
 
+  # Pod Security Standards hardening (AC-2)
+  podSecurityContext: *podSecurityContextPSS
+  securityContext: *containerSecurityContextPSS
+
 # =============================================================================
 # PostgreSQL Configuration (Metadata Store)
 # =============================================================================
@@ -523,6 +568,19 @@ minio:
       api: 9000
       console: 9001
 
+  # Pod Security Standards hardening (AC-3) — Bitnami toggle schema
+  # Bitnami charts use `enabled:` alongside the actual fields; cannot use
+  # the shared PSS anchor verbatim. capabilities.drop is not supported by
+  # the Bitnami containerSecurityContext schema (documented known gap).
+  podSecurityContext:
+    enabled: true
+    fsGroup: 1000
+  containerSecurityContext:
+    enabled: true
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+
 # =============================================================================
 # Jaeger Configuration (Distributed Tracing - Observability)
 # =============================================================================
@@ -548,6 +606,24 @@ jaeger:
       limits:
         cpu: 500m
         memory: 512Mi
+    # Pod Security Standards hardening (AC-2)
+    # Jaeger's upstream image is built for UID 10001 — MUST preserve, not
+    # override with the shared PSS anchor's runAsUser: 1000.
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 10001
+      runAsGroup: 10001
+      fsGroup: 10001
+      seccompProfile:
+        type: RuntimeDefault
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 10001
+      capabilities:
+        drop:
+          - ALL
 
   # Collector configuration
   collector:
@@ -663,23 +739,12 @@ podSecurityStandards:
   audit: true
 
 # Pod-level security context (applied to all containers in a pod)
-podSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
-  runAsGroup: 1000
-  fsGroup: 1000
-  seccompProfile:
-    type: RuntimeDefault
+# Sourced from the top-of-file anchor so floe's own templates (Polaris,
+# PostgreSQL) stay in sync with the subchart propagations above.
+podSecurityContext: *podSecurityContextPSS
 
 # Container-level security context (applied to individual containers)
-containerSecurityContext:
-  allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: true
-  runAsNonRoot: true
-  runAsUser: 1000
-  capabilities:
-    drop:
-      - ALL
+containerSecurityContext: *containerSecurityContextPSS
 
 # =============================================================================
 # Network Policies

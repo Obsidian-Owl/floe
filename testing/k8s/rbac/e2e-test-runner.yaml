@@ -48,10 +48,12 @@ rules:
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
     verbs: ["get", "list", "watch"]
-  # Secrets read-only (for Helm release state queries)
+  # Secrets read-only — least privilege (security-hardening AC-8).
+  # Only `get` is needed for Helm release state queries; `list`/`watch`
+  # would expose every secret in the namespace and are NOT required.
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

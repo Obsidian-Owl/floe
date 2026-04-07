@@ -43,10 +43,39 @@ rules:
     resources: ["persistentvolumeclaims"]
     verbs: ["get", "list", "watch"]
   # --- Elevated permissions for destructive tests ---
-  # Secrets CRUD — required by TestHelmUpgrade (Helm stores release state in secrets)
+  # Secrets access split by verb to enforce least privilege
+  # (security-hardening AC-9).
+  #
+  # Read path: get/list/watch over ALL secrets — Helm needs to list
+  # release secrets by label selector (`owner=helm`), which requires
+  # unscoped `list`. This is acceptable for the destructive runner
+  # only; the standard runner has `get`-only per AC-8.
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "delete"]
+    verbs: ["get", "list", "watch"]
+  # Create path: K8s RBAC does NOT support `resourceNames` with
+  # `create` (the name is not known at admission time). Create is
+  # therefore unscoped here — documented limitation per AC-9.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  # Mutate path: update/delete are SCOPED to Helm 3 release secrets
+  # (prefix `sh.helm.release.v1.`). This prevents the runner from
+  # tampering with unrelated secrets in the namespace.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames:
+      - "sh.helm.release.v1.floe.v1"
+      - "sh.helm.release.v1.floe.v2"
+      - "sh.helm.release.v1.floe.v3"
+      - "sh.helm.release.v1.floe.v4"
+      - "sh.helm.release.v1.floe.v5"
+      - "sh.helm.release.v1.floe-test.v1"
+      - "sh.helm.release.v1.floe-test.v2"
+      - "sh.helm.release.v1.floe-test.v3"
+      - "sh.helm.release.v1.floe-test.v4"
+      - "sh.helm.release.v1.floe-test.v5"
+    verbs: ["update", "delete"]
   # Deployments — required by TestHelmUpgrade (helm upgrade patches deployments)
   - apiGroups: ["apps"]
     resources: ["deployments"]
