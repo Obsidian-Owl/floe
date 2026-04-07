@@ -181,9 +181,7 @@ def test_test_jobs_reference_only_chart_rendered_identifiers(
     rendered_names = {_name(d) for d in tests_enabled_render if _name(d)}
 
     test_jobs: list[dict[str, Any]] = [
-        d
-        for d in tests_enabled_render
-        if _kind(d) == "Job" and _labels(d).get("test-type")
+        d for d in tests_enabled_render if _kind(d) == "Job" and _labels(d).get("test-type")
     ]
     assert test_jobs, (
         "AC-1 violation: chart rendered no test Jobs with `test-type` label "
@@ -205,22 +203,14 @@ def test_test_jobs_reference_only_chart_rendered_identifiers(
                     entry: dict[str, Any] = cast("dict[str, Any]", entry_any)
                     value_from = entry.get("valueFrom") or {}
                     if isinstance(value_from, dict):
-                        secret_ref = cast("dict[str, Any]", value_from).get(
-                            "secretKeyRef"
-                        ) or {}
+                        secret_ref = cast("dict[str, Any]", value_from).get("secretKeyRef") or {}
                         if isinstance(secret_ref, dict):
-                            ref_name = cast("dict[str, Any]", secret_ref).get(
-                                "name"
-                            )
+                            ref_name = cast("dict[str, Any]", secret_ref).get("name")
                             if isinstance(ref_name, str) and ref_name:
                                 referenced.add(ref_name)
-                        config_ref = cast("dict[str, Any]", value_from).get(
-                            "configMapKeyRef"
-                        ) or {}
+                        config_ref = cast("dict[str, Any]", value_from).get("configMapKeyRef") or {}
                         if isinstance(config_ref, dict):
-                            ref_name = cast("dict[str, Any]", config_ref).get(
-                                "name"
-                            )
+                            ref_name = cast("dict[str, Any]", config_ref).get("name")
                             if isinstance(ref_name, str) and ref_name:
                                 referenced.add(ref_name)
             env_from_list = container.get("envFrom") or []
@@ -431,8 +421,7 @@ def test_test_runner_rbac_rendered_from_chart(
         f"AC-4 violation: no test-runner Role rendered. Have: {sorted(role_names)}"
     )
     assert any("test-runner" in r for r in rb_names), (
-        f"AC-4 violation: no test-runner RoleBinding rendered. Have: "
-        f"{sorted(rb_names)}"
+        f"AC-4 violation: no test-runner RoleBinding rendered. Have: {sorted(rb_names)}"
     )
 
     # AC-8 carry-forward: standard runner Role must not include list/watch on secrets.
@@ -553,8 +542,7 @@ def test_no_kind_cluster_legacy_assignments_outside_common_sh() -> None:
                 offenders.append(f"{script.relative_to(REPO_ROOT)}:{lineno}: {line.strip()}")
     assert not offenders, (
         "AC-5 violation: legacy KIND_CLUSTER / KIND_CLUSTER_NAME assignment "
-        "outside common.sh. Use FLOE_KIND_CLUSTER. Offenders:\n"
-        + "\n".join(offenders)
+        "outside common.sh. Use FLOE_KIND_CLUSTER. Offenders:\n" + "\n".join(offenders)
     )
 
 
@@ -651,9 +639,7 @@ def test_values_test_pins_fullname_override() -> None:
     coordinated migration, not a casual edit.
     """
     parsed = yaml.safe_load(VALUES_TEST.read_text())
-    assert isinstance(parsed, dict), (
-        f"AC-9 violation: {VALUES_TEST} did not parse to a mapping."
-    )
+    assert isinstance(parsed, dict), f"AC-9 violation: {VALUES_TEST} did not parse to a mapping."
     override = cast("dict[str, Any]", parsed).get("fullnameOverride")
     assert override == "floe-platform", (
         f"AC-9 violation: values-test.yaml fullnameOverride must be "

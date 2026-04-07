@@ -81,9 +81,7 @@ def _render_role(template: str) -> dict[str, Any]:
         doc: dict[str, Any] = cast("dict[str, Any]", doc_any)
         if doc.get("kind") == "Role":
             roles.append(doc)
-    assert len(roles) == 1, (
-        f"Expected exactly one Role in rendered {template}, found {len(roles)}"
-    )
+    assert len(roles) == 1, f"Expected exactly one Role in rendered {template}, found {len(roles)}"
     return roles[0]
 
 

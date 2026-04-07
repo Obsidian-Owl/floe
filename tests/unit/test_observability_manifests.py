@@ -107,9 +107,7 @@ def _render_job_manifest(template: str) -> dict[str, Any]:
         doc: dict[str, Any] = cast("dict[str, Any]", doc_any)
         if doc.get("kind") == "Job":
             jobs.append(doc)
-    assert len(jobs) == 1, (
-        f"Expected exactly one Job in rendered {template}, found {len(jobs)}"
-    )
+    assert len(jobs) == 1, f"Expected exactly one Job in rendered {template}, found {len(jobs)}"
     return jobs[0]
 
 
