@@ -35,15 +35,10 @@ def test_audit_md_documents_marquez_root_user_gap() -> None:
         ("Mitigation", "mitigation statement"),
     ]
 
-    missing = [
-        (marker, desc)
-        for marker, desc in required_markers
-        if marker not in text
-    ]
+    missing = [(marker, desc) for marker, desc in required_markers if marker not in text]
     assert not missing, (
         "AC-10 violation: AUDIT.md Marquez gap entry is missing required "
-        "elements:\n"
-        + "\n".join(f"  - '{m}' ({d})" for m, d in missing)
+        "elements:\n" + "\n".join(f"  - '{m}' ({d})" for m, d in missing)
     )
 
 

@@ -17,12 +17,7 @@ from typing import Any, cast
 import pytest
 import yaml
 
-VALUES_FILE = (
-    Path(__file__).resolve().parents[2]
-    / "charts"
-    / "floe-platform"
-    / "values.yaml"
-)
+VALUES_FILE = Path(__file__).resolve().parents[2] / "charts" / "floe-platform" / "values.yaml"
 
 # Jaeger's upstream image is built for UID 10001. We must preserve it, not
 # override with the PSS default of 1000.
@@ -107,8 +102,7 @@ def test_otel_collector_has_container_security_context() -> None:
     )
     caps: Any = ctr_ctx_d.get("capabilities")
     assert isinstance(caps, dict), (
-        f"AC-2 violation: otel.securityContext.capabilities must be a mapping "
-        f"(got {caps!r})"
+        f"AC-2 violation: otel.securityContext.capabilities must be a mapping (got {caps!r})"
     )
     caps_d: dict[str, Any] = cast("dict[str, Any]", caps)
     drop: Any = caps_d.get("drop")
@@ -134,12 +128,8 @@ def test_jaeger_preserves_uid_10001() -> None:
     pod_ctx = _walk(values, ["jaeger", "allInOne", "podSecurityContext"])
     ctr_ctx = _walk(values, ["jaeger", "allInOne", "securityContext"])
 
-    assert pod_ctx != "__MISSING__", (
-        "AC-2 violation: missing 'jaeger.allInOne.podSecurityContext'"
-    )
-    assert ctr_ctx != "__MISSING__", (
-        "AC-2 violation: missing 'jaeger.allInOne.securityContext'"
-    )
+    assert pod_ctx != "__MISSING__", "AC-2 violation: missing 'jaeger.allInOne.podSecurityContext'"
+    assert ctr_ctx != "__MISSING__", "AC-2 violation: missing 'jaeger.allInOne.securityContext'"
 
     pod_d: dict[str, Any] = cast("dict[str, Any]", pod_ctx)
     ctr_d: dict[str, Any] = cast("dict[str, Any]", ctr_ctx)
@@ -183,12 +173,9 @@ def test_minio_pod_security_context_enabled_and_hardened() -> None:
     """
     values = _load_values()
     pod_ctx = _walk(values, ["minio", "podSecurityContext"])
-    assert pod_ctx != "__MISSING__", (
-        "AC-3 violation: missing 'minio.podSecurityContext'"
-    )
+    assert pod_ctx != "__MISSING__", "AC-3 violation: missing 'minio.podSecurityContext'"
     assert isinstance(pod_ctx, dict), (
-        f"AC-3 violation: minio.podSecurityContext must be a mapping "
-        f"(got {pod_ctx!r})"
+        f"AC-3 violation: minio.podSecurityContext must be a mapping (got {pod_ctx!r})"
     )
     pod_d: dict[str, Any] = cast("dict[str, Any]", pod_ctx)
     assert pod_d.get("enabled") is True, (
@@ -206,12 +193,9 @@ def test_minio_container_security_context_enabled_and_hardened() -> None:
     """MinIO Bitnami container context MUST set enabled=true and PSS fields."""
     values = _load_values()
     ctr_ctx = _walk(values, ["minio", "containerSecurityContext"])
-    assert ctr_ctx != "__MISSING__", (
-        "AC-3 violation: missing 'minio.containerSecurityContext'"
-    )
+    assert ctr_ctx != "__MISSING__", "AC-3 violation: missing 'minio.containerSecurityContext'"
     assert isinstance(ctr_ctx, dict), (
-        f"AC-3 violation: minio.containerSecurityContext must be a mapping "
-        f"(got {ctr_ctx!r})"
+        f"AC-3 violation: minio.containerSecurityContext must be a mapping (got {ctr_ctx!r})"
     )
     ctr_d: dict[str, Any] = cast("dict[str, Any]", ctr_ctx)
     assert ctr_d.get("enabled") is True, (

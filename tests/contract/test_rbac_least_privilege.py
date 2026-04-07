@@ -26,9 +26,7 @@ from typing import Any, cast
 import pytest
 import yaml
 
-RBAC_DIR = (
-    Path(__file__).resolve().parents[2] / "testing" / "k8s" / "rbac"
-)
+RBAC_DIR = Path(__file__).resolve().parents[2] / "testing" / "k8s" / "rbac"
 STANDARD_RUNNER_FILE = RBAC_DIR / "e2e-test-runner.yaml"
 DESTRUCTIVE_RUNNER_FILE = RBAC_DIR / "e2e-destructive-runner.yaml"
 
@@ -47,9 +45,7 @@ def _load_role(path: Path) -> dict[str, Any]:
         doc: dict[str, Any] = cast("dict[str, Any]", doc_any)
         if doc.get("kind") == "Role":
             roles.append(doc)
-    assert len(roles) == 1, (
-        f"Expected exactly one Role in {path.name}, found {len(roles)}"
-    )
+    assert len(roles) == 1, f"Expected exactly one Role in {path.name}, found {len(roles)}"
     return roles[0]
 
 
@@ -65,9 +61,7 @@ def _secrets_rules(role: dict[str, Any]) -> list[dict[str, Any]]:
         rule: dict[str, Any] = cast("dict[str, Any]", rule_any)
         api_groups_any: Any = rule.get("apiGroups") or []
         resources_any: Any = rule.get("resources") or []
-        if not isinstance(api_groups_any, list) or not isinstance(
-            resources_any, list
-        ):
+        if not isinstance(api_groups_any, list) or not isinstance(resources_any, list):
             continue
         api_groups: list[Any] = cast("list[Any]", api_groups_any)
         resources: list[Any] = cast("list[Any]", resources_any)
@@ -107,9 +101,7 @@ def test_standard_runner_secrets_rule_still_allows_get() -> None:
     """Standard runner MUST retain `get` on secrets (Helm state queries)."""
     role = _load_role(STANDARD_RUNNER_FILE)
     rules = _secrets_rules(role)
-    has_get = any(
-        "get" in cast("list[Any]", (r.get("verbs") or [])) for r in rules
-    )
+    has_get = any("get" in cast("list[Any]", (r.get("verbs") or [])) for r in rules)
     assert has_get, (
         "AC-8 violation: standard runner must retain `get` on secrets so "
         "Helm release state queries still work"
@@ -132,9 +124,7 @@ def test_destructive_runner_update_delete_scoped_by_resource_names() -> None:
     """
     role = _load_role(DESTRUCTIVE_RUNNER_FILE)
     rules = _secrets_rules(role)
-    assert rules, (
-        "AC-9 violation: destructive runner Role has no secrets rule at all"
-    )
+    assert rules, "AC-9 violation: destructive runner Role has no secrets rule at all"
 
     mutating_verbs = {"update", "delete"}
     mutating_rules: list[dict[str, Any]] = []
@@ -143,9 +133,7 @@ def test_destructive_runner_update_delete_scoped_by_resource_names() -> None:
         if not isinstance(verbs_any, list):
             continue
         verbs_list: list[Any] = cast("list[Any]", verbs_any)
-        verbs_set: set[str] = {
-            v for v in verbs_list if isinstance(v, str)
-        }
+        verbs_set: set[str] = {v for v in verbs_list if isinstance(v, str)}
         if verbs_set & mutating_verbs:
             mutating_rules.append(rule)
 
@@ -164,8 +152,7 @@ def test_destructive_runner_update_delete_scoped_by_resource_names() -> None:
         # At least one entry must reference the Helm release prefix (either
         # as a literal `sh.helm.release.v1.*` or a wildcard name).
         has_helm_scope = any(
-            isinstance(n, str) and HELM_RELEASE_PREFIX in n
-            for n in resource_names
+            isinstance(n, str) and HELM_RELEASE_PREFIX in n for n in resource_names
         )
         assert has_helm_scope, (
             f"AC-9 violation: secrets mutation rule resourceNames must "
@@ -188,9 +175,7 @@ def test_destructive_runner_does_not_grant_unscoped_mutation() -> None:
         if not isinstance(verbs_any, list):
             continue
         verbs_list: list[Any] = cast("list[Any]", verbs_any)
-        verbs_set: set[str] = {
-            v for v in verbs_list if isinstance(v, str)
-        }
+        verbs_set: set[str] = {v for v in verbs_list if isinstance(v, str)}
         if verbs_set & {"update", "delete"}:
             names_any: Any = rule.get("resourceNames")
             assert isinstance(names_any, list) and names_any, (

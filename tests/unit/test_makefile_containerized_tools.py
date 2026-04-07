@@ -51,18 +51,14 @@ def _read_target_body(target: str) -> str:
 def _assert_pinned_docker_image(body: str, image: str, target: str) -> None:
     """Assert the body runs `docker run` with a pinned (non-latest) image."""
     assert "docker run" in body, (
-        f"Target '{target}' must invoke `docker run` to containerize the tool, "
-        f"body:\n{body}"
+        f"Target '{target}' must invoke `docker run` to containerize the tool, body:\n{body}"
     )
-    assert image in body, (
-        f"Target '{target}' must reference image '{image}', body:\n{body}"
-    )
+    assert image in body, f"Target '{target}' must reference image '{image}', body:\n{body}"
     # Find the image reference and ensure it has a pinned tag.
     # Pattern: <image>:<tag> where tag is not empty and not 'latest'.
     matches = re.findall(rf"{re.escape(image)}:(\S+)", body)
     assert matches, (
-        f"Target '{target}' must reference '{image}:<tag>' with a pinned tag, "
-        f"body:\n{body}"
+        f"Target '{target}' must reference '{image}:<tag>' with a pinned tag, body:\n{body}"
     )
     for tag in matches:
         assert tag != "latest", (
@@ -76,9 +72,7 @@ def test_helm_validate_uses_containerized_kubeconform() -> None:
     """`make helm-validate` MUST run kubeconform via a pinned Docker image."""
     body = _read_target_body("helm-validate")
     assert body, "helm-validate target not found in Makefile"
-    _assert_pinned_docker_image(
-        body, "ghcr.io/yannh/kubeconform", "helm-validate"
-    )
+    _assert_pinned_docker_image(body, "ghcr.io/yannh/kubeconform", "helm-validate")
 
 
 @pytest.mark.requirement("security-hardening-AC-6")
@@ -86,8 +80,7 @@ def test_helm_security_uses_containerized_kubesec() -> None:
     """`make helm-security` MUST run kubesec via a pinned Docker image."""
     body = _read_target_body("helm-security")
     assert body, (
-        "helm-security target not found in Makefile — AC-6 requires a "
-        "containerized kubesec target"
+        "helm-security target not found in Makefile — AC-6 requires a containerized kubesec target"
     )
     _assert_pinned_docker_image(body, "kubesec/kubesec", "helm-security")
 
@@ -101,9 +94,7 @@ def test_helm_test_unit_uses_containerized_helm_unittest() -> None:
     """
     body = _read_target_body("helm-test-unit")
     assert body, "helm-test-unit target not found in Makefile"
-    _assert_pinned_docker_image(
-        body, "helmunittest/helm-unittest", "helm-test-unit"
-    )
+    _assert_pinned_docker_image(body, "helmunittest/helm-unittest", "helm-test-unit")
     # Must not require the host-installed helm plugin.
     assert "helm plugin list" not in body, (
         "helm-test-unit must not require host helm-unittest plugin — AC-7 "
@@ -125,6 +116,4 @@ def test_containerized_targets_do_not_use_latest_tag() -> None:
         body = _read_target_body(target)
         if not body:
             continue  # individual tests will flag missing targets
-        assert not _LATEST_RE.search(body), (
-            f"Target '{target}' uses ':latest' tag — must be pinned"
-        )
+        assert not _LATEST_RE.search(body), f"Target '{target}' uses ':latest' tag — must be pinned"

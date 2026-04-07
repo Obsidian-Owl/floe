@@ -73,8 +73,7 @@ def rendered_manifests() -> list[dict[str, Any]]:
         )
         if result.returncode != 0:
             pytest.fail(
-                "helm dependency build failed:\n"
-                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+                f"helm dependency build failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
             )
 
     result = subprocess.run(
@@ -85,8 +84,7 @@ def rendered_manifests() -> list[dict[str, Any]]:
     )
     if result.returncode != 0:
         pytest.fail(
-            "helm template rendering failed:\n"
-            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            f"helm template rendering failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
 
     docs: list[dict[str, Any]] = []
@@ -142,9 +140,7 @@ def _pod_specs(
         template_any: Any = spec.get("template") or {}
         if not isinstance(template_any, dict):
             continue
-        pod_spec_any: Any = (
-            cast("dict[str, Any]", template_any).get("spec") or {}
-        )
+        pod_spec_any: Any = cast("dict[str, Any]", template_any).get("spec") or {}
         if not isinstance(pod_spec_any, dict):
             continue
         pod_spec: dict[str, Any] = cast("dict[str, Any]", pod_spec_any)
@@ -199,14 +195,11 @@ def test_helm_rendered_containers_forbid_privilege_escalation(
                     continue
                 ctr: dict[str, Any] = cast("dict[str, Any]", ctr_any)
                 ctr_name_any: Any = ctr.get("name", f"[{idx}]")
-                ctr_name: str = (
-                    ctr_name_any if isinstance(ctr_name_any, str) else f"[{idx}]"
-                )
+                ctr_name: str = ctr_name_any if isinstance(ctr_name_any, str) else f"[{idx}]"
                 sec_ctx_any: Any = ctr.get("securityContext")
                 if not isinstance(sec_ctx_any, dict):
                     violations.append(
-                        f"{kind}/{name} {field}/{ctr_name}: "
-                        f"missing container securityContext"
+                        f"{kind}/{name} {field}/{ctr_name}: missing container securityContext"
                     )
                     continue
                 sec_ctx: dict[str, Any] = cast("dict[str, Any]", sec_ctx_any)
