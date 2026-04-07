@@ -109,9 +109,6 @@ def _find_kubectl_cp_commands(text: str) -> list[str]:
                 current.append(stripped)
                 logical_lines.append(" ".join(current))
                 current = []
-        # Also capture non-continued kubectl cp lines
-        elif re.search(r"kubectl\s+cp\b", stripped) and not current:
-            logical_lines.append(stripped)
 
     # If there's a dangling continuation, include it
     if current:

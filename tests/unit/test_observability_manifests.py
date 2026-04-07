@@ -140,6 +140,13 @@ class TestStandardJobReportFlags:
         assert _STANDARD_JSON_REPORT in args, (
             f"Standard Job args must include '{_STANDARD_JSON_REPORT}'. Current args: {args}"
         )
+        # pytest-json-report requires the bare --json-report enable flag
+        # alongside --json-report-file; without it the plugin stays inactive
+        # and no JSON artifact is produced.
+        assert "--json-report" in args, (
+            "Standard Job args must include '--json-report' to enable the plugin. "
+            f"Current args: {args}"
+        )
 
     @pytest.mark.requirement("AC-1")
     def test_standard_job_html_report_path_is_exact(self) -> None:
@@ -207,6 +214,13 @@ class TestDestructiveJobReportFlags:
 
         assert _DESTRUCTIVE_JSON_REPORT in args, (
             f"Destructive Job args must include '{_DESTRUCTIVE_JSON_REPORT}'. Current args: {args}"
+        )
+        # pytest-json-report requires the bare --json-report enable flag
+        # alongside --json-report-file; without it the plugin stays inactive
+        # and no JSON artifact is produced.
+        assert "--json-report" in args, (
+            "Destructive Job args must include '--json-report' to enable the plugin. "
+            f"Current args: {args}"
         )
 
     @pytest.mark.requirement("AC-1")

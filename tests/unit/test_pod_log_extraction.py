@@ -433,7 +433,7 @@ class TestConditionalInvocation:
             # If no case statement, look for a guard that prevents calling
             # on success — the function must still not appear unconditionally
             # Count occurrences outside of function definitions
-            calls_outside_func = []
+            calls_outside_func: list[str] = []
             in_func = False
             brace_depth = 0
             for line in script.splitlines():
@@ -450,10 +450,10 @@ class TestConditionalInvocation:
                         in_func = False
                         brace_depth = 0
                 elif "extract_pod_logs" in stripped and not stripped.startswith("#"):
-                    calls_outside_func.append(stripped)  # type: ignore[arg-type]
+                    calls_outside_func.append(stripped)
 
             # All calls must be inside a failure-conditional block
-            assert len(calls_outside_func) > 0, (  # type: ignore[arg-type]
+            assert len(calls_outside_func) > 0, (
                 "extract_pod_logs is never called outside its definition. "
                 "It must be invoked (conditionally) on failure."
             )

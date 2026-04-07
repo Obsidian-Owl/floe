@@ -43,6 +43,19 @@ extract_pod_logs() {
 
     info "Collecting pod logs from namespace ${TEST_NAMESPACE}..."
 
+    # Resolve timeout binary: prefer GNU timeout, fall back to gtimeout (macOS
+    # coreutils), or run unguarded if neither is present. macOS ships without
+    # GNU timeout by default; without this fallback the `if` branch would be
+    # False for every pod and logs would silently be skipped.
+    local timeout_bin=""
+    if command -v timeout >/dev/null 2>&1; then
+        timeout_bin="timeout 10"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        timeout_bin="gtimeout 10"
+    else
+        error "Warning: neither 'timeout' nor 'gtimeout' found; pod log extraction will run without per-pod timeout"
+    fi
+
     # Collect logs from all pods in the test namespace
     local pod_names
     pod_names=$(kubectl get pods -n "${TEST_NAMESPACE}" \
@@ -50,7 +63,7 @@ extract_pod_logs() {
 
     local collected=0
     for pod in ${pod_names}; do
-        if timeout 10 kubectl logs "${pod}" -n "${TEST_NAMESPACE}" \
+        if ${timeout_bin} kubectl logs "${pod}" -n "${TEST_NAMESPACE}" \
             --tail="${LOG_TAIL_LINES}" \
             > "${ARTIFACTS_DIR}/pod-logs/${pod}.log" 2>/dev/null; then
             collected=$((collected + 1))
