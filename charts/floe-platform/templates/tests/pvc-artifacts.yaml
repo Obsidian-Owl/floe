@@ -1,0 +1,26 @@
+{{/*
+PVC for test artifacts (junit xml, html report, json report).
+
+Rendered only when .Values.tests.enabled AND .Values.tests.artifacts.enabled
+are both true. Consumed by job-e2e.yaml and job-e2e-destructive.yaml.
+*/}}
+{{- if and .Values.tests.enabled .Values.tests.artifacts.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.tests.artifacts.pvcName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test-artifacts
+    test-type: artifacts
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.tests.artifacts.storageSize }}
+  {{- with .Values.tests.artifacts.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}

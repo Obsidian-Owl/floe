@@ -983,3 +983,33 @@ contractMonitor:
 
   # Tolerations
   tolerations: {}
+
+# =============================================================================
+# Test Infrastructure (opt-in)
+# =============================================================================
+# Render test Jobs and RBAC from the chart only when tests.enabled=true.
+# Default off — production installs never deploy test runners.
+#
+# Used by `helm template -s templates/tests/<file>` via testing/ci/common.sh
+# for ephemeral test runs (never via `helm install`).
+tests:
+  enabled: false
+  # Image for the test-runner container (built locally, loaded into Kind).
+  image:
+    repository: floe-test-runner
+    tag: latest
+    pullPolicy: IfNotPresent
+  # PVC for artifacts (junit xml, html report, json report).
+  artifacts:
+    enabled: true
+    pvcName: test-artifacts
+    storageSize: 1Gi
+    storageClass: ""
+  # Resource requests/limits for test pods.
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi

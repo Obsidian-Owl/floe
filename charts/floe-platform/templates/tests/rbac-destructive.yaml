@@ -1,0 +1,105 @@
+{{/*
+Destructive test runner ServiceAccount + Role + RoleBinding.
+
+Elevated RBAC for tests that mutate platform state (helm upgrade, pod kill).
+Includes get/list/watch on secrets (needed by Helm release listing), plus
+scoped update/delete on Helm release secrets and deployments/statefulsets
+for helm upgrade tests.
+
+Only rendered when .Values.tests.enabled is true.
+*/}}
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "floe-platform.testRunnerDestructive.saName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test-runner
+    test-type: e2e-destructive
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "floe-platform.testRunnerDestructive.saName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test-runner
+    test-type: e2e-destructive
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log", "pods/status"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+  # Secrets: split by verb for least privilege (security-hardening AC-9).
+  # Read path: list/watch required for Helm release enumeration.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+  # Create: unscoped — K8s RBAC does not support resourceNames with create.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  # Mutate: scoped to Helm 3 release secrets for the test release.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames:
+      - "sh.helm.release.v1.floe.v1"
+      - "sh.helm.release.v1.floe.v2"
+      - "sh.helm.release.v1.floe.v3"
+      - "sh.helm.release.v1.floe.v4"
+      - "sh.helm.release.v1.floe.v5"
+      - "sh.helm.release.v1.floe-test.v1"
+      - "sh.helm.release.v1.floe-test.v2"
+      - "sh.helm.release.v1.floe-test.v3"
+      - "sh.helm.release.v1.floe-test.v4"
+      - "sh.helm.release.v1.floe-test.v5"
+    verbs: ["update", "delete"]
+  # Deployments/statefulsets patched by helm upgrade tests.
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "floe-platform.testRunnerDestructive.saName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test-runner
+    test-type: e2e-destructive
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "floe-platform.testRunnerDestructive.saName" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "floe-platform.testRunnerDestructive.saName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

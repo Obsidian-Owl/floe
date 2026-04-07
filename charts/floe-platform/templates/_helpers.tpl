@@ -202,6 +202,58 @@ Marquez component name.
 {{- end }}
 
 {{/*
+Dagster webserver service name.
+*/}}
+{{- define "floe-platform.dagster.webserverName" -}}
+{{- printf "%s-dagster-webserver" (include "floe-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+MinIO component name.
+*/}}
+{{- define "floe-platform.minio.fullname" -}}
+{{- printf "%s-minio" (include "floe-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+MinIO secret name (used for root-user/root-password keys).
+*/}}
+{{- define "floe-platform.minio.secretName" -}}
+{{- if .Values.minio.auth.existingSecret }}
+{{- .Values.minio.auth.existingSecret }}
+{{- else }}
+{{- include "floe-platform.minio.fullname" . }}
+{{- end }}
+{{- end }}
+
+{{/*
+Standard (non-destructive) test runner ServiceAccount name.
+Used by test Jobs in templates/tests/ for e2e and integration test suites.
+*/}}
+{{- define "floe-platform.testRunner.saName" -}}
+{{- printf "%s-test-runner" (include "floe-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Destructive test runner ServiceAccount name.
+Used by test Jobs that mutate platform state (helm upgrade, pod delete).
+Has elevated RBAC compared to the standard runner.
+*/}}
+{{- define "floe-platform.testRunnerDestructive.saName" -}}
+{{- printf "%s-test-runner-destructive" (include "floe-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Canonical Polaris warehouse/catalog name.
+Single source of truth for the warehouse identifier used by both the
+Polaris bootstrap Job (as catalog name) and test Jobs (as POLARIS_WAREHOUSE).
+Reads .Values.polaris.bootstrap.catalogName — do NOT duplicate this elsewhere.
+*/}}
+{{- define "floe-platform.polaris.warehouse" -}}
+{{- required "polaris.bootstrap.catalogName is required when tests.enabled=true" .Values.polaris.bootstrap.catalogName }}
+{{- end }}
+
+{{/*
 Common annotations for all resources.
 */}}
 {{- define "floe-platform.annotations" -}}
