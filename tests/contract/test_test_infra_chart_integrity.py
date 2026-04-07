@@ -204,15 +204,37 @@ def test_test_jobs_reference_only_chart_rendered_identifiers(
                         continue
                     entry: dict[str, Any] = cast("dict[str, Any]", entry_any)
                     value_from = entry.get("valueFrom") or {}
-                    if not isinstance(value_from, dict):
+                    if isinstance(value_from, dict):
+                        secret_ref = cast("dict[str, Any]", value_from).get(
+                            "secretKeyRef"
+                        ) or {}
+                        if isinstance(secret_ref, dict):
+                            ref_name = cast("dict[str, Any]", secret_ref).get(
+                                "name"
+                            )
+                            if isinstance(ref_name, str) and ref_name:
+                                referenced.add(ref_name)
+                        config_ref = cast("dict[str, Any]", value_from).get(
+                            "configMapKeyRef"
+                        ) or {}
+                        if isinstance(config_ref, dict):
+                            ref_name = cast("dict[str, Any]", config_ref).get(
+                                "name"
+                            )
+                            if isinstance(ref_name, str) and ref_name:
+                                referenced.add(ref_name)
+            env_from_list = container.get("envFrom") or []
+            if isinstance(env_from_list, list):
+                for entry_any in cast("list[Any]", env_from_list):
+                    if not isinstance(entry_any, dict):
                         continue
-                    secret_ref = cast("dict[str, Any]", value_from).get(
-                        "secretKeyRef"
-                    ) or {}
-                    if isinstance(secret_ref, dict):
-                        ref_name = cast("dict[str, Any]", secret_ref).get("name")
-                        if isinstance(ref_name, str) and ref_name:
-                            referenced.add(ref_name)
+                    entry_d: dict[str, Any] = cast("dict[str, Any]", entry_any)
+                    for ref_key in ("secretRef", "configMapRef"):
+                        ref = entry_d.get(ref_key) or {}
+                        if isinstance(ref, dict):
+                            ref_name = cast("dict[str, Any]", ref).get("name")
+                            if isinstance(ref_name, str) and ref_name:
+                                referenced.add(ref_name)
 
     # External references (e.g. third-party operator-managed secrets like
     # the bitnami postgres / minio secrets) are produced by subcharts. Those
