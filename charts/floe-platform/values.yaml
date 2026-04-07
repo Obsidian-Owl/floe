@@ -445,6 +445,10 @@ otel:
       servicePort: 8888
       protocol: TCP
 
+  # Pod Security Standards hardening (AC-2)
+  podSecurityContext: *podSecurityContextPSS
+  securityContext: *containerSecurityContextPSS
+
 # =============================================================================
 # PostgreSQL Configuration (Metadata Store)
 # =============================================================================
@@ -564,6 +568,19 @@ minio:
       api: 9000
       console: 9001
 
+  # Pod Security Standards hardening (AC-3) — Bitnami toggle schema
+  # Bitnami charts use `enabled:` alongside the actual fields; cannot use
+  # the shared PSS anchor verbatim. capabilities.drop is not supported by
+  # the Bitnami containerSecurityContext schema (documented known gap).
+  podSecurityContext:
+    enabled: true
+    fsGroup: 1000
+  containerSecurityContext:
+    enabled: true
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+
 # =============================================================================
 # Jaeger Configuration (Distributed Tracing - Observability)
 # =============================================================================
@@ -589,6 +606,24 @@ jaeger:
       limits:
         cpu: 500m
         memory: 512Mi
+    # Pod Security Standards hardening (AC-2)
+    # Jaeger's upstream image is built for UID 10001 — MUST preserve, not
+    # override with the shared PSS anchor's runAsUser: 1000.
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 10001
+      runAsGroup: 10001
+      fsGroup: 10001
+      seccompProfile:
+        type: RuntimeDefault
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 10001
+      capabilities:
+        drop:
+          - ALL
 
   # Collector configuration
   collector:
