@@ -9,46 +9,54 @@
 # Usage: ./testing/ci/test-integration.sh [pytest-args...]
 #
 # Environment:
-#   TEST_SUITE          Test suite to run: integration|e2e|e2e-destructive (default: integration)
+#   TEST_SUITE          Test suite to run: e2e|e2e-destructive (default: e2e)
 #   KUBECONFIG          Path to kubeconfig (default: ~/.kube/config)
-#   TEST_NAMESPACE      K8s namespace for tests (default: floe-test)
 #   WAIT_TIMEOUT        Job completion timeout in seconds (default: 600)
-#   KIND_CLUSTER_NAME   Kind cluster name (default: floe)
 #   SKIP_BUILD          Set to "true" to skip Docker build (use existing image)
+#
+# Identifiers (release name, namespace, Kind cluster, chart dir, values file)
+# come from testing/ci/common.sh — override via FLOE_* env vars there.
 
 set -euo pipefail
 
-# Configuration
-TEST_SUITE="${TEST_SUITE:-integration}"
-KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
-TEST_NAMESPACE="${TEST_NAMESPACE:-floe-test}"
-WAIT_TIMEOUT="${WAIT_TIMEOUT:-600}"
-KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-floe}"
-SKIP_BUILD="${SKIP_BUILD:-false}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck source=./common.sh
+source "${SCRIPT_DIR}/common.sh"
+
+# Configuration
+TEST_SUITE="${TEST_SUITE:-e2e}"
+KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
+# Legacy alias for callers that still pass TEST_NAMESPACE — prefer FLOE_NAMESPACE
+TEST_NAMESPACE="${FLOE_NAMESPACE}"
+WAIT_TIMEOUT="${WAIT_TIMEOUT:-600}"
+SKIP_BUILD="${SKIP_BUILD:-false}"
 
 IMAGE_NAME="floe-test-runner:latest"
 
-# Select Job name and manifest based on TEST_SUITE
+# Select Job name and chart-rendered template based on TEST_SUITE.
+# Integration suite has been retired — the chart renders only e2e and
+# e2e-destructive Jobs. Legacy TEST_SUITE=integration is rejected rather
+# than silently aliased so callers update their invocations.
 case "${TEST_SUITE}" in
-    integration)
-        JOB_NAME="floe-test-integration"
-        JOB_MANIFEST="testing/k8s/jobs/test-runner.yaml"
-        TEST_TYPE_LABEL="integration"
-        ;;
     e2e)
         JOB_NAME="floe-test-e2e"
-        JOB_MANIFEST="testing/k8s/jobs/test-e2e.yaml"
+        JOB_TEMPLATE="tests/job-e2e.yaml"
+        RBAC_TEMPLATE="tests/rbac-standard.yaml"
         TEST_TYPE_LABEL="e2e"
         ;;
     e2e-destructive)
         JOB_NAME="floe-test-e2e-destructive"
-        JOB_MANIFEST="testing/k8s/jobs/test-e2e-destructive.yaml"
+        JOB_TEMPLATE="tests/job-e2e-destructive.yaml"
+        RBAC_TEMPLATE="tests/rbac-destructive.yaml"
         TEST_TYPE_LABEL="e2e-destructive"
         ;;
+    integration)
+        echo "ERROR: TEST_SUITE=integration has been retired. Use TEST_SUITE=e2e." >&2
+        exit 1
+        ;;
     *)
-        echo "ERROR: Unknown TEST_SUITE '${TEST_SUITE}'. Use: integration|e2e|e2e-destructive" >&2
+        echo "ERROR: Unknown TEST_SUITE '${TEST_SUITE}'. Use: e2e|e2e-destructive" >&2
         exit 1
         ;;
 esac
@@ -59,33 +67,22 @@ echo "=== Test Runner (K8s In-Cluster) ==="
 echo "Suite: ${TEST_SUITE}"
 echo "Job: ${JOB_NAME}"
 echo "Namespace: ${TEST_NAMESPACE}"
-echo "Kind cluster: ${KIND_CLUSTER_NAME}"
+echo "Kind cluster: ${FLOE_KIND_CLUSTER}"
 echo "Timeout: ${WAIT_TIMEOUT}s"
 echo ""
 
 # Check prerequisites
-if ! command -v kubectl &> /dev/null; then
-    echo "ERROR: kubectl is not installed or not in PATH" >&2
-    exit 1
-fi
-
 if ! command -v kind &> /dev/null; then
     echo "ERROR: kind is not installed or not in PATH" >&2
     exit 1
 fi
 
-if ! kubectl cluster-info &> /dev/null; then
-    echo "ERROR: Cannot connect to Kubernetes cluster" >&2
-    echo "Ensure Kind cluster is running: make kind-up" >&2
+if ! command -v helm &> /dev/null; then
+    echo "ERROR: helm is not installed or not in PATH" >&2
     exit 1
 fi
 
-# Check namespace exists
-if ! kubectl get namespace "${TEST_NAMESPACE}" &> /dev/null; then
-    echo "WARNING: Namespace ${TEST_NAMESPACE} does not exist" >&2
-    echo "Creating namespace..." >&2
-    kubectl create namespace "${TEST_NAMESPACE}"
-fi
+floe_require_cluster
 
 # 1. Build Docker image
 if [[ "${SKIP_BUILD}" != "true" ]]; then
@@ -95,8 +92,8 @@ if [[ "${SKIP_BUILD}" != "true" ]]; then
     echo ""
 
     # 2. Load into Kind cluster
-    echo "Loading image into Kind cluster '${KIND_CLUSTER_NAME}'..."
-    kind load docker-image "${IMAGE_NAME}" --name "${KIND_CLUSTER_NAME}"
+    echo "Loading image into Kind cluster '${FLOE_KIND_CLUSTER}'..."
+    kind load docker-image "${IMAGE_NAME}" --name "${FLOE_KIND_CLUSTER}"
     echo "Image loaded."
     echo ""
 else
@@ -104,20 +101,15 @@ else
     echo ""
 fi
 
-# 3. Apply RBAC and PVC for E2E suites
-if [[ "${TEST_SUITE}" == "e2e" ]]; then
-    echo "Applying E2E RBAC, secrets, and PVC..."
-    kubectl apply -f testing/k8s/rbac/e2e-test-runner.yaml || { echo "ERROR: Failed to apply E2E RBAC" >&2; exit 1; }
-    kubectl apply -f testing/k8s/secrets/polaris-secret.yaml || { echo "ERROR: Failed to apply polaris-secret" >&2; exit 1; }
-    kubectl apply -f testing/k8s/pvc/test-artifacts.yaml || { echo "ERROR: Failed to apply test-artifacts PVC" >&2; exit 1; }
-    echo ""
-elif [[ "${TEST_SUITE}" == "e2e-destructive" ]]; then
-    echo "Applying destructive E2E RBAC, secrets, and PVC..."
-    kubectl apply -f testing/k8s/rbac/e2e-destructive-runner.yaml || { echo "ERROR: Failed to apply destructive RBAC" >&2; exit 1; }
-    kubectl apply -f testing/k8s/secrets/polaris-secret.yaml || { echo "ERROR: Failed to apply polaris-secret" >&2; exit 1; }
-    kubectl apply -f testing/k8s/pvc/test-artifacts.yaml || { echo "ERROR: Failed to apply test-artifacts PVC" >&2; exit 1; }
-    echo ""
-fi
+# 3. Apply RBAC and PVC for the selected suite — rendered from the chart.
+# Every identifier (ServiceAccount name, Role name, PVC name) flows from
+# _helpers.tpl, so this script contains no literal `floe-platform-*` strings.
+echo "Rendering and applying ${TEST_SUITE} RBAC and PVC from chart..."
+floe_render_test_job "${RBAC_TEMPLATE}" | kubectl apply -f - \
+    || { echo "ERROR: Failed to apply ${TEST_SUITE} RBAC" >&2; exit 1; }
+floe_render_test_job "tests/pvc-artifacts.yaml" | kubectl apply -f - \
+    || { echo "ERROR: Failed to apply test-artifacts PVC" >&2; exit 1; }
+echo ""
 
 # 4. Wait for service pods to be ready
 echo "Waiting for pods in ${TEST_NAMESPACE} to be ready..."
@@ -133,9 +125,9 @@ kubectl delete job "${JOB_NAME}" -n "${TEST_NAMESPACE}" --ignore-not-found 2>/de
 # Wait for pod cleanup
 sleep 2
 
-# 6. Apply the test Job from the manifest
-echo "Creating ${TEST_SUITE} test Job..."
-kubectl apply -f "${JOB_MANIFEST}" 2>/dev/null | grep "${JOB_NAME}" || true
+# 6. Render and apply the test Job from the chart
+echo "Creating ${TEST_SUITE} test Job from chart..."
+floe_render_test_job "${JOB_TEMPLATE}" | kubectl apply -f - 2>/dev/null | grep "${JOB_NAME}" || true
 echo ""
 
 # 7. Wait for test pod to start
