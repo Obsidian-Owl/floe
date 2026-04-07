@@ -14,6 +14,7 @@
 #   SKIP_BUILD          Skip image build if set to "true" (default: false)
 #   IMAGE_LOAD_METHOD   How to load image: auto|kind|devpod|skip (default: auto)
 #   TEST_SUITE          Test suite to run: e2e|e2e-destructive (default: e2e)
+#   LOG_TAIL_LINES      Lines to capture per pod on failure (default: 100)
 
 set -euo pipefail
 
@@ -29,11 +30,56 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 IMAGE_NAME="floe-test-runner:latest"
 ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts"
+LOG_TAIL_LINES="${LOG_TAIL_LINES:-100}"
 
 # --- Utility functions (must be defined before first use) ---
 
 info() { echo "[INFO] $*"; }
 error() { echo "[ERROR] $*" >&2; }
+
+# extract_pod_logs — collect pod logs and K8s events on failure for debugging
+extract_pod_logs() {
+    mkdir -p "${ARTIFACTS_DIR}/pod-logs"
+
+    info "Collecting pod logs from namespace ${TEST_NAMESPACE}..."
+
+    # Resolve timeout binary: prefer GNU timeout, fall back to gtimeout (macOS
+    # coreutils), or run unguarded if neither is present. macOS ships without
+    # GNU timeout by default; without this fallback the `if` branch would be
+    # False for every pod and logs would silently be skipped.
+    local timeout_bin=""
+    if command -v timeout >/dev/null 2>&1; then
+        timeout_bin="timeout 10"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        timeout_bin="gtimeout 10"
+    else
+        error "Warning: neither 'timeout' nor 'gtimeout' found; pod log extraction will run without per-pod timeout"
+    fi
+
+    # Collect logs from all pods in the test namespace
+    local pod_names
+    pod_names=$(kubectl get pods -n "${TEST_NAMESPACE}" \
+        --no-headers -o custom-columns=":metadata.name" 2>/dev/null || true)
+
+    local collected=0
+    for pod in ${pod_names}; do
+        if ${timeout_bin} kubectl logs "${pod}" -n "${TEST_NAMESPACE}" \
+            --tail="${LOG_TAIL_LINES}" \
+            > "${ARTIFACTS_DIR}/pod-logs/${pod}.log" 2>/dev/null; then
+            collected=$((collected + 1))
+        else
+            error "Warning: failed to extract logs for pod ${pod} (may have terminated)"
+            continue
+        fi
+    done
+
+    # Capture K8s events sorted by timestamp
+    kubectl get events --sort-by='.lastTimestamp' -n "${TEST_NAMESPACE}" \
+        > "${ARTIFACTS_DIR}/pod-logs/events.txt" 2>/dev/null || true
+
+    info "Pod log extraction complete: ${collected} pod(s) collected"
+    info "Pod logs saved to: ${ARTIFACTS_DIR}/pod-logs/"
+}
 
 # Select Job name and manifest based on TEST_SUITE
 case "${TEST_SUITE}" in
@@ -183,9 +229,17 @@ if [[ -n "${POD_NAME}" ]]; then
     kubectl logs "${POD_NAME}" -n "${TEST_NAMESPACE}" \
         > "${ARTIFACTS_DIR}/${TEST_SUITE}-output.log" 2>/dev/null || true
 
-    # Extract JUnit XML if available
-    kubectl cp "${TEST_NAMESPACE}/${POD_NAME}:/artifacts/e2e-results.xml" \
+    # Extract JUnit XML if available (source uses TEST_SUITE prefix to match Job manifest)
+    kubectl cp "${TEST_NAMESPACE}/${POD_NAME}:/artifacts/${TEST_SUITE}-results.xml" \
         "${ARTIFACTS_DIR}/${TEST_SUITE}-results.xml" 2>/dev/null || true
+
+    # Extract HTML report if available
+    kubectl cp "${TEST_NAMESPACE}/${POD_NAME}:/artifacts/${TEST_SUITE}-report.html" \
+        "${ARTIFACTS_DIR}/${TEST_SUITE}-report.html" 2>/dev/null || true
+
+    # Extract JSON report if available
+    kubectl cp "${TEST_NAMESPACE}/${POD_NAME}:/artifacts/${TEST_SUITE}-report.json" \
+        "${ARTIFACTS_DIR}/${TEST_SUITE}-report.json" 2>/dev/null || true
 
     # Show last 30 lines of output
     info "--- Test output (last 30 lines) ---"
@@ -203,11 +257,13 @@ case "${JOB_STATUS}" in
         exit 0
         ;;
     failed)
+        extract_pod_logs
         error "E2E tests FAILED"
         error "Full output: ${ARTIFACTS_DIR}/${TEST_SUITE}-output.log"
         exit 1
         ;;
     timeout)
+        extract_pod_logs
         error "E2E tests TIMED OUT after ${JOB_TIMEOUT}s"
         error "Job may still be running."
         exit 2
