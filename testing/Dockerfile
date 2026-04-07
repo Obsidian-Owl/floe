@@ -1,6 +1,6 @@
 # Test runner image for floe K8s-native integration tests
 # Build: docker build -t floe-test-runner:latest -f testing/Dockerfile .
-# Run: kubectl apply -f testing/k8s/jobs/test-runner.yaml
+# Run: testing/ci/test-e2e-cluster.sh (renders Job from charts/floe-platform)
 #
 # This image contains:
 # - Python 3.11 with uv package manager

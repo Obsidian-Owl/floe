@@ -114,7 +114,7 @@ spec:
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: "http://{{ $otel }}:4317"
             - name: OTEL_SERVICE_NAME
-              value: "floe-test-runner-destructive"
+              value: "floe-test-runner"
             - name: PYTHONPATH
               value: "/app:/app/testing"
             - name: PYTHONUNBUFFERED

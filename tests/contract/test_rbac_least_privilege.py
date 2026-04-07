@@ -1,8 +1,9 @@
 """Contract test: test-runner Role RBAC follows least-privilege (AC-8, AC-9).
 
-The standard and destructive E2E test runner Roles live in
-`testing/k8s/rbac/`. This test parses them as multi-document YAML and
-asserts the secrets rules are scoped correctly:
+The standard and destructive E2E test runner Roles are now rendered from
+the Helm chart at `charts/floe-platform/templates/tests/rbac-*.yaml`.
+This test renders those templates with `tests.enabled=true`, parses the
+multi-document YAML, and asserts the secrets rules are scoped correctly:
 
 AC-8 (standard runner):
     - Secrets rule must NOT include `list` or `watch` verbs — only `get`
@@ -13,31 +14,66 @@ AC-9 (destructive runner):
       constraint restricting access to Helm release secret patterns
       (prefix `sh.helm.release.v1.`). K8s does not support
       `resourceNames` with `create`, so `create` may remain unscoped;
-      this is documented in the Role file.
+      this is documented in the Role template.
 
-The test fails if either constraint is relaxed in future edits.
+The test fails if either constraint is relaxed in future edits. Because
+the source of truth is the chart template, chart-level regressions are
+caught here too.
 """
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 import yaml
 
-RBAC_DIR = Path(__file__).resolve().parents[2] / "testing" / "k8s" / "rbac"
-STANDARD_RUNNER_FILE = RBAC_DIR / "e2e-test-runner.yaml"
-DESTRUCTIVE_RUNNER_FILE = RBAC_DIR / "e2e-destructive-runner.yaml"
+CHART_DIR = Path(__file__).resolve().parents[2] / "charts" / "floe-platform"
+STANDARD_TEMPLATE = "templates/tests/rbac-standard.yaml"
+DESTRUCTIVE_TEMPLATE = "templates/tests/rbac-destructive.yaml"
 
 # Helm 3 stores release state in secrets with this name prefix.
 HELM_RELEASE_PREFIX = "sh.helm.release.v1."
 
 
-def _load_role(path: Path) -> dict[str, Any]:
-    """Load a multi-document YAML file and return the single Role document."""
-    assert path.exists(), f"RBAC file missing: {path}"
-    docs = list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
+def _render_role(template: str) -> dict[str, Any]:
+    """Render a single RBAC template from the chart and return the Role doc.
+
+    Uses `helm template -s` with `tests.enabled=true` so the chart-gated
+    test resources are emitted. Fails fast if helm is missing or the
+    template renders no Role.
+    """
+    if shutil.which("helm") is None:
+        pytest.fail(
+            "helm CLI not available on PATH — required to render test RBAC "
+            "for least-privilege contract verification."
+        )
+
+    result = subprocess.run(
+        [
+            "helm",
+            "template",
+            "floe-platform",
+            str(CHART_DIR),
+            "--set",
+            "tests.enabled=true",
+            "-s",
+            template,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.fail(
+            f"helm template rendering failed for {template}:\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+    docs = list(yaml.safe_load_all(result.stdout))
     roles: list[dict[str, Any]] = []
     for doc_any in docs:
         if not isinstance(doc_any, dict):
@@ -45,7 +81,9 @@ def _load_role(path: Path) -> dict[str, Any]:
         doc: dict[str, Any] = cast("dict[str, Any]", doc_any)
         if doc.get("kind") == "Role":
             roles.append(doc)
-    assert len(roles) == 1, f"Expected exactly one Role in {path.name}, found {len(roles)}"
+    assert len(roles) == 1, (
+        f"Expected exactly one Role in rendered {template}, found {len(roles)}"
+    )
     return roles[0]
 
 
@@ -78,7 +116,7 @@ def _secrets_rules(role: dict[str, Any]) -> list[dict[str, Any]]:
 @pytest.mark.requirement("security-hardening-AC-8")
 def test_standard_runner_secrets_rule_forbids_list_and_watch() -> None:
     """Standard runner Role MUST NOT have `list` or `watch` on secrets."""
-    role = _load_role(STANDARD_RUNNER_FILE)
+    role = _render_role(STANDARD_TEMPLATE)
     rules = _secrets_rules(role)
     assert rules, (
         "AC-8 violation: standard runner Role has no secrets rule at all — "
@@ -99,7 +137,7 @@ def test_standard_runner_secrets_rule_forbids_list_and_watch() -> None:
 @pytest.mark.requirement("security-hardening-AC-8")
 def test_standard_runner_secrets_rule_still_allows_get() -> None:
     """Standard runner MUST retain `get` on secrets (Helm state queries)."""
-    role = _load_role(STANDARD_RUNNER_FILE)
+    role = _render_role(STANDARD_TEMPLATE)
     rules = _secrets_rules(role)
     has_get = any("get" in cast("list[Any]", (r.get("verbs") or [])) for r in rules)
     assert has_get, (
@@ -122,7 +160,7 @@ def test_destructive_runner_update_delete_scoped_by_resource_names() -> None:
     `delete` on secrets MUST carry a `resourceNames` constraint that
     includes a Helm release secret pattern.
     """
-    role = _load_role(DESTRUCTIVE_RUNNER_FILE)
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
     rules = _secrets_rules(role)
     assert rules, "AC-9 violation: destructive runner Role has no secrets rule at all"
 
@@ -168,7 +206,7 @@ def test_destructive_runner_does_not_grant_unscoped_mutation() -> None:
     This catches the regression where someone re-adds a broad rule like
     `verbs: [get, list, watch, create, update, delete]` without resourceNames.
     """
-    role = _load_role(DESTRUCTIVE_RUNNER_FILE)
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
     rules = _secrets_rules(role)
     for rule in rules:
         verbs_any: Any = rule.get("verbs") or []
