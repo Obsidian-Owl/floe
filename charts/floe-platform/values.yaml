@@ -1005,6 +1005,14 @@ tests:
     pvcName: test-artifacts
     storageSize: 1Gi
     storageClass: ""
+  # Destructive E2E runner settings. The destructive Role scopes secrets
+  # update/delete to Helm release secrets by resourceName. helmRevisionWindow
+  # is the number of consecutive `sh.helm.release.v1.{{ .Release.Name }}.vN`
+  # secrets to pre-authorize (v1..vN). Raise if a test run executes more
+  # than `helmRevisionWindow` consecutive `helm upgrade` calls on the same
+  # release before cleanup.
+  destructive:
+    helmRevisionWindow: 20
   # Resource requests/limits for test pods.
   resources:
     requests:

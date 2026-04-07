@@ -121,11 +121,15 @@ spec:
               value: "1"
           resources:
             {{- toYaml .Values.tests.resources | nindent 12 }}
+          {{- if .Values.tests.artifacts.enabled }}
           volumeMounts:
             - name: artifacts
               mountPath: /artifacts
+          {{- end }}
+      {{- if .Values.tests.artifacts.enabled }}
       volumes:
         - name: artifacts
           persistentVolumeClaim:
             claimName: {{ .Values.tests.artifacts.pvcName }}
+      {{- end }}
 {{- end }}

@@ -63,19 +63,14 @@ rules:
     resources: ["secrets"]
     verbs: ["create"]
   # Mutate: scoped to Helm 3 release secrets for the test release.
+  # Release name tracked via {{ .Release.Name }} so this RBAC stays in
+  # lockstep with the chart install — no more hardcoded aliases.
   - apiGroups: [""]
     resources: ["secrets"]
     resourceNames:
-      - "sh.helm.release.v1.floe.v1"
-      - "sh.helm.release.v1.floe.v2"
-      - "sh.helm.release.v1.floe.v3"
-      - "sh.helm.release.v1.floe.v4"
-      - "sh.helm.release.v1.floe.v5"
-      - "sh.helm.release.v1.floe-test.v1"
-      - "sh.helm.release.v1.floe-test.v2"
-      - "sh.helm.release.v1.floe-test.v3"
-      - "sh.helm.release.v1.floe-test.v4"
-      - "sh.helm.release.v1.floe-test.v5"
+      {{- range $i, $_ := until (int (.Values.tests.destructive.helmRevisionWindow | default 20)) }}
+      - "sh.helm.release.v1.{{ $.Release.Name }}.v{{ add $i 1 }}"
+      {{- end }}
     verbs: ["update", "delete"]
   # Deployments/statefulsets patched by helm upgrade tests.
   - apiGroups: ["apps"]
