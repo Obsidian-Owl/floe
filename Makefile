@@ -223,8 +223,8 @@ helm-security: ## Scan rendered manifests with containerized kubesec
 
 .PHONY: helm-test-unit
 helm-test-unit: helm-deps ## Run helm-unittest chart template tests (containerized)
-	@echo "Running containerized helm-unittest (helmunittest/helm-unittest:3.16.1)..."
-	@docker run --rm -v $(PWD)/charts:/apps helmunittest/helm-unittest:3.16.1 floe-platform
+	@echo "Running containerized helm-unittest (helmunittest/helm-unittest:3.19.0-1.0.3)..."
+	@docker run --rm -v $(PWD)/charts:/apps helmunittest/helm-unittest:3.19.0-1.0.3 floe-platform
 	@echo "Helm unit tests passed!"
 
 .PHONY: helm-test

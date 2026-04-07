@@ -62,19 +62,21 @@ def rendered_manifests() -> list[dict[str, Any]]:
             "security-context contract verification."
         )
 
-    charts_subdir = CHART_DIR / "charts"
-    if not charts_subdir.exists() or not any(charts_subdir.iterdir()):
-        # Attempt to build dependencies on demand.
-        result = subprocess.run(
-            ["helm", "dependency", "build", str(CHART_DIR)],
-            capture_output=True,
-            text=True,
-            check=False,
+    # Always run `helm dependency update` — it's idempotent, adds any missing
+    # remote repos, and refreshes the dependency archives. `helm dependency
+    # build` is insufficient because the `charts/` subdir may already contain
+    # a local subchart (e.g. cube/) so a "non-empty" existence check would
+    # incorrectly skip fetching the remote dependency tarballs.
+    result = subprocess.run(
+        ["helm", "dependency", "update", str(CHART_DIR)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.fail(
+            f"helm dependency update failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
-        if result.returncode != 0:
-            pytest.fail(
-                f"helm dependency build failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
-            )
 
     result = subprocess.run(
         ["helm", "template", "sec-test", str(CHART_DIR)],
