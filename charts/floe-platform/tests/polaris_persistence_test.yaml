@@ -1,5 +1,9 @@
 # Tests for Polaris PostgreSQL persistence (relational-jdbc)
 # Validates AC-1 through AC-6 of the polaris-persistence work unit.
+# Canonical credential path: polaris.persistence.jdbc.* — the chart template
+# renders these as quarkus.datasource.* properties in application.properties.
+# (Decision D-4 revised in salvage-branch-wrap-up: polaris.env[QUARKUS_DATASOURCE_*]
+# was the duplicate escape hatch and is no longer used in values-test.yaml.)
 suite: polaris persistence
 templates:
   - templates/configmap-polaris.yaml
@@ -58,31 +62,33 @@ tests:
           path: data["application.properties"]
           pattern: "quarkus\\.datasource\\.db-kind"
 
-  # --- AC-1: Polaris env vars for JDBC credentials ---
-  - it: should render JDBC env vars in deployment when polaris.env is set
+  # --- AC-1 (revised): JDBC credentials rendered via configmap, not env vars ---
+  # Previously this case asserted polaris.env[QUARKUS_DATASOURCE_*] on the
+  # deployment, but D-4 was revised: the chart template renders credentials
+  # into application.properties via persistence.jdbc.* — polaris.env was the
+  # duplicate escape hatch. This case now locks in the chart-native path.
+  - it: should render JDBC properties in configmap when persistence.type=relational-jdbc
     set:
       polaris.enabled: true
-      polaris.env:
-        - name: QUARKUS_DATASOURCE_JDBC_URL
-          value: "jdbc:postgresql://floe-platform-postgresql:5432/polaris"
-        - name: QUARKUS_DATASOURCE_USERNAME
-          value: "polaris"
-        - name: QUARKUS_DATASOURCE_PASSWORD
-          value: "polaris"
-    template: templates/deployment-polaris.yaml
+      polaris.persistence.type: relational-jdbc
+      polaris.persistence.jdbc.url: "jdbc:postgresql://floe-platform-postgresql:5432/polaris"
+      polaris.persistence.jdbc.username: "polaris"
+      polaris.persistence.jdbc.password: "polaris-test-pw"  # pragma: allowlist secret
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "http://minio:9000"
+    template: templates/configmap-polaris.yaml
     asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: QUARKUS_DATASOURCE_JDBC_URL
-            value: "jdbc:postgresql://floe-platform-postgresql:5432/polaris"
-          any: true
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: QUARKUS_DATASOURCE_USERNAME
-            value: "polaris"
-          any: true
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.jdbc\\.url=jdbc:postgresql://floe-platform-postgresql:5432/polaris"
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.username=polaris"
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.password=polaris-test-pw"
 
   # --- AC-5: Bootstrap Job remains functional ---
   - it: should render bootstrap Job with JDBC persistence configured
