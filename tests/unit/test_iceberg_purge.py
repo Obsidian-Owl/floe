@@ -27,8 +27,11 @@ import pytest
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 _DBT_UTILS_PATH = _REPO_ROOT / "tests" / "e2e" / "dbt_utils.py"
+# Fail-fast guard — if the path is wrong, collection fails immediately instead
+# of silently swallowing FileNotFoundError downstream (AC-2 fail-fast guard).
+assert _DBT_UTILS_PATH.exists(), f"dbt_utils.py not found at {_DBT_UTILS_PATH}"
 
 # ---------------------------------------------------------------------------
 # Helpers: load the module under test
