@@ -206,8 +206,7 @@ def test_destructive_runner_update_delete_scoped_by_resource_names() -> None:
         # suite's worth of consecutive `helm upgrade` calls before
         # cleanup. Raising the floor requires conscious review.
         helm_scoped_names = [
-            n for n in resource_names
-            if isinstance(n, str) and HELM_RELEASE_PREFIX in n
+            n for n in resource_names if isinstance(n, str) and HELM_RELEASE_PREFIX in n
         ]
         assert len(helm_scoped_names) >= 10, (
             f"AC-9 regression guard: destructive runner authorizes only "
