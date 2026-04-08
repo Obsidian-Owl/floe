@@ -50,6 +50,7 @@ COPY plugins/floe-rbac-k8s/pyproject.toml plugins/floe-rbac-k8s/pyproject.toml
 COPY plugins/floe-secrets-infisical/pyproject.toml plugins/floe-secrets-infisical/pyproject.toml
 COPY plugins/floe-secrets-k8s/pyproject.toml plugins/floe-secrets-k8s/pyproject.toml
 COPY plugins/floe-semantic-cube/pyproject.toml plugins/floe-semantic-cube/pyproject.toml
+COPY plugins/floe-storage-s3/pyproject.toml plugins/floe-storage-s3/pyproject.toml
 COPY plugins/floe-telemetry-console/pyproject.toml plugins/floe-telemetry-console/pyproject.toml
 COPY plugins/floe-telemetry-jaeger/pyproject.toml plugins/floe-telemetry-jaeger/pyproject.toml
 

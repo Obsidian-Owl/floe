@@ -52,9 +52,12 @@ def _is_marquez(name: str) -> bool:
 def rendered_manifests() -> list[dict[str, Any]]:
     """Render charts/floe-platform via `helm template` and parse to docs.
 
-    Requires `helm` on PATH. The chart dependencies must already be built
-    (`helm dependency update` or `helm dep build`). Sessions typically have
-    the Chart.lock refreshed by earlier tests or manual runs.
+    Requires `helm` on PATH AND chart dependencies pre-built. The contract
+    tier (`tests/contract/`) is documented in `.claude/rules/test-organization.md`
+    as fast/offline schema validation — this fixture deliberately does NOT
+    run `helm dependency update`, which would couple every test run to
+    network availability and upstream registry uptime. Pre-build deps via
+    `make test` (or in the Kind test image) before running this suite.
     """
     if shutil.which("helm") is None:
         pytest.fail(
@@ -62,20 +65,14 @@ def rendered_manifests() -> list[dict[str, Any]]:
             "security-context contract verification."
         )
 
-    # Always run `helm dependency update` — it's idempotent, adds any missing
-    # remote repos, and refreshes the dependency archives. `helm dependency
-    # build` is insufficient because the `charts/` subdir may already contain
-    # a local subchart (e.g. cube/) so a "non-empty" existence check would
-    # incorrectly skip fetching the remote dependency tarballs.
-    result = subprocess.run(
-        ["helm", "dependency", "update", str(CHART_DIR)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
+    chart_lock = CHART_DIR / "Chart.lock"
+    charts_dir = CHART_DIR / "charts"
+    if not chart_lock.exists() or not charts_dir.exists():
         pytest.fail(
-            f"helm dependency update failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+            f"Chart dependencies not built: {chart_lock} or {charts_dir} missing.\n"
+            f"Contract tests must run offline — pre-build deps with:\n"
+            f"  helm dependency update {CHART_DIR}\n"
+            f"or run `make test` which handles this automatically."
         )
 
     result = subprocess.run(
@@ -243,6 +240,17 @@ def test_marquez_exclusion_is_explicit(
         if _is_marquez(name):
             marquez_pods.append(f"{kind_any}/{name}")
 
-    # This assertion is informational — never fails. Use `-s` to see output.
-    # If Marquez count grows unexpectedly, sw-verify will flag it in review.
-    assert isinstance(marquez_pods, list)
+    # Every excluded pod must legitimately match a Marquez marker — guards
+    # against a future refactor of `_is_marquez` accidentally excluding
+    # unrelated workloads.
+    for entry in marquez_pods:
+        assert any(m in entry.lower() for m in MARQUEZ_NAME_MARKERS), (
+            f"Non-Marquez pod excluded from security-context checks: {entry}"
+        )
+    # Bound the size. Marquez today renders 1 workload (the API deployment).
+    # If this grows to >2 a subchart was added or the exclusion widened —
+    # either way, AUDIT.md needs an update before this cap is raised.
+    assert len(marquez_pods) <= 2, (
+        f"Unexpected Marquez workload count ({len(marquez_pods)}): {marquez_pods}. "
+        "Update AUDIT.md and the size cap if this is intentional."
+    )

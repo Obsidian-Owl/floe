@@ -38,10 +38,11 @@ def _read_target_body(target: str) -> str:
             if re.match(rf"^{re.escape(target)}\s*:", line):
                 in_target = True
             continue
-        # End of recipe: blank line followed by next target, or a new
-        # top-level target/.PHONY declaration.
-        if line.strip() == "":
-            break
+        # End of recipe: next top-level target or `.PHONY` declaration.
+        # DO NOT terminate on blank lines — blank continuation lines are
+        # common inside chained recipes (e.g. `helm template | docker run …`)
+        # and terminating early silently truncates the body, causing the
+        # pin-enforcement checks below to pass against an incomplete recipe.
         if line.startswith(".PHONY") or re.match(r"^[a-zA-Z0-9_.-]+\s*:", line):
             break
         body.append(line)
