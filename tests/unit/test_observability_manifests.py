@@ -1,12 +1,14 @@
 """Structural tests: Job manifests include observability flags and env vars.
 
-Validates that ``test-e2e.yaml`` and ``test-e2e-destructive.yaml`` Job
-manifests pass the correct ``--html``, ``--json-report-file``, and
-``--log-cli-level`` flags, and set the required ``OTEL_EXPORTER_OTLP_ENDPOINT``
-and ``OTEL_SERVICE_NAME`` environment variables.
+Validates that the e2e and e2e-destructive Job templates rendered from the
+``charts/floe-platform`` Helm chart pass the correct ``--html``,
+``--json-report-file``, and ``--log-cli-level`` flags, and set the required
+``OTEL_EXPORTER_OTLP_ENDPOINT`` and ``OTEL_SERVICE_NAME`` environment variables.
 
-These are source-parsing tests: they read the actual YAML files and assert
-on specific arg/env entries.  They run in <1s with no infrastructure.
+The chart is the single source of truth for test infrastructure, so these
+tests render the templates directly via ``helm template -s`` rather than
+reading raw YAML files. This makes chart-level regressions detectable here
+in addition to the contract tier.
 
 Requirements Covered:
     - AC-1: HTML and JSON report output flags in Job args
@@ -16,8 +18,10 @@ Requirements Covered:
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import yaml
@@ -27,9 +31,9 @@ import yaml
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-_JOBS_DIR = _REPO_ROOT / "testing" / "k8s" / "jobs"
-_STANDARD_JOB = _JOBS_DIR / "test-e2e.yaml"
-_DESTRUCTIVE_JOB = _JOBS_DIR / "test-e2e-destructive.yaml"
+_CHART_DIR = _REPO_ROOT / "charts" / "floe-platform"
+_STANDARD_TEMPLATE = "templates/tests/job-e2e.yaml"
+_DESTRUCTIVE_TEMPLATE = "templates/tests/job-e2e-destructive.yaml"
 
 # Expected report file paths (AC-1)
 _STANDARD_HTML_REPORT = "--html=/artifacts/e2e-report.html"
@@ -52,21 +56,59 @@ _LOG_CLI_LEVEL_FLAG = "--log-cli-level=INFO"
 # ---------------------------------------------------------------------------
 
 
-def _load_job_manifest(path: Path) -> dict[str, Any]:
-    """Load and parse a K8s Job YAML manifest.
+def _render_job_manifest(template: str) -> dict[str, Any]:
+    """Render a Job template from the chart and return the parsed Job doc.
+
+    Uses ``helm template -s`` with ``tests.enabled=true`` so the chart-gated
+    test resources are emitted. Fails fast if helm is missing or the template
+    renders no Job. The release name is fixed to ``floe-platform`` so the
+    rendered service hostnames (``floe-platform-otel`` etc.) match what the
+    callers of this test infrastructure deploy in CI.
 
     Args:
-        path: Absolute path to the YAML manifest file.
+        template: Chart-relative template path, e.g.
+            ``templates/tests/job-e2e.yaml``.
 
     Returns:
-        Parsed YAML content as a dictionary.
-
-    Raises:
-        FileNotFoundError: If the manifest file does not exist.
+        Parsed Job manifest as a dictionary.
     """
-    content = path.read_text()
-    parsed: dict[str, Any] = yaml.safe_load(content)
-    return parsed
+    if shutil.which("helm") is None:
+        pytest.fail(
+            "helm CLI not available on PATH — required to render test Job "
+            "templates for observability manifest verification."
+        )
+
+    result = subprocess.run(
+        [
+            "helm",
+            "template",
+            "floe-platform",
+            str(_CHART_DIR),
+            "--set",
+            "tests.enabled=true",
+            "-s",
+            template,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.fail(
+            f"helm template rendering failed for {template}:\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+    docs = list(yaml.safe_load_all(result.stdout))
+    jobs: list[dict[str, Any]] = []
+    for doc_any in docs:
+        if not isinstance(doc_any, dict):
+            continue
+        doc: dict[str, Any] = cast("dict[str, Any]", doc_any)
+        if doc.get("kind") == "Job":
+            jobs.append(doc)
+    assert len(jobs) == 1, f"Expected exactly one Job in rendered {template}, found {len(jobs)}"
+    return jobs[0]
 
 
 def _get_container_args(manifest: dict[str, Any]) -> list[str]:
@@ -120,7 +162,7 @@ class TestStandardJobReportFlags:
         Without this flag, pytest-html will not generate the HTML report
         artifact for the standard E2E test run.
         """
-        manifest = _load_job_manifest(_STANDARD_JOB)
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         args = _get_container_args(manifest)
 
         assert _STANDARD_HTML_REPORT in args, (
@@ -134,7 +176,7 @@ class TestStandardJobReportFlags:
         Without this flag, pytest-json-report will not generate the JSON
         report artifact for the standard E2E test run.
         """
-        manifest = _load_job_manifest(_STANDARD_JOB)
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         args = _get_container_args(manifest)
 
         assert _STANDARD_JSON_REPORT in args, (
@@ -155,7 +197,7 @@ class TestStandardJobReportFlags:
         A sloppy implementation might use a generic name like 'report.html'
         or accidentally use the destructive prefix. This test catches that.
         """
-        manifest = _load_job_manifest(_STANDARD_JOB)
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         args = _get_container_args(manifest)
 
         html_args = [a for a in args if a.startswith("--html=")]
@@ -173,7 +215,7 @@ class TestStandardJobReportFlags:
         Prevents using a wrong filename like 'results.json' or the
         destructive variant.
         """
-        manifest = _load_job_manifest(_STANDARD_JOB)
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         args = _get_container_args(manifest)
 
         json_args = [a for a in args if a.startswith("--json-report-file=")]
@@ -195,7 +237,7 @@ class TestDestructiveJobReportFlags:
         The destructive job must use a distinct filename to avoid
         overwriting the standard report.
         """
-        manifest = _load_job_manifest(_DESTRUCTIVE_JOB)
+        manifest = _render_job_manifest(_DESTRUCTIVE_TEMPLATE)
         args = _get_container_args(manifest)
 
         assert _DESTRUCTIVE_HTML_REPORT in args, (
@@ -209,7 +251,7 @@ class TestDestructiveJobReportFlags:
         The destructive job must use a distinct filename to avoid
         overwriting the standard JSON report.
         """
-        manifest = _load_job_manifest(_DESTRUCTIVE_JOB)
+        manifest = _render_job_manifest(_DESTRUCTIVE_TEMPLATE)
         args = _get_container_args(manifest)
 
         assert _DESTRUCTIVE_JSON_REPORT in args, (
@@ -230,7 +272,7 @@ class TestDestructiveJobReportFlags:
         Catches swapped filenames (standard path in destructive job) or
         wrong prefixes.
         """
-        manifest = _load_job_manifest(_DESTRUCTIVE_JOB)
+        manifest = _render_job_manifest(_DESTRUCTIVE_TEMPLATE)
         args = _get_container_args(manifest)
 
         html_args = [a for a in args if a.startswith("--html=")]
@@ -247,7 +289,7 @@ class TestDestructiveJobReportFlags:
 
         Catches wrong filenames or missing 'destructive' prefix.
         """
-        manifest = _load_job_manifest(_DESTRUCTIVE_JOB)
+        manifest = _render_job_manifest(_DESTRUCTIVE_TEMPLATE)
         args = _get_container_args(manifest)
 
         json_args = [a for a in args if a.startswith("--json-report-file=")]
@@ -269,8 +311,8 @@ class TestReportFilenameDistinctness:
         If both jobs write to the same path, the second job overwrites
         the first job's report.
         """
-        std_manifest = _load_job_manifest(_STANDARD_JOB)
-        dest_manifest = _load_job_manifest(_DESTRUCTIVE_JOB)
+        std_manifest = _render_job_manifest(_STANDARD_TEMPLATE)
+        dest_manifest = _render_job_manifest(_DESTRUCTIVE_TEMPLATE)
 
         std_args = _get_container_args(std_manifest)
         dest_args = _get_container_args(dest_manifest)
@@ -291,8 +333,8 @@ class TestReportFilenameDistinctness:
 
         Same rationale as HTML: overwrite prevention.
         """
-        std_manifest = _load_job_manifest(_STANDARD_JOB)
-        dest_manifest = _load_job_manifest(_DESTRUCTIVE_JOB)
+        std_manifest = _render_job_manifest(_STANDARD_TEMPLATE)
+        dest_manifest = _render_job_manifest(_DESTRUCTIVE_TEMPLATE)
 
         std_args = _get_container_args(std_manifest)
         dest_args = _get_container_args(dest_manifest)
@@ -323,7 +365,7 @@ class TestStandardJobOtelEnvVars:
         This is the standard OpenTelemetry env var that SDK auto-configures
         exporters with. Without it, traces/metrics go nowhere.
         """
-        manifest = _load_job_manifest(_STANDARD_JOB)
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         env_vars = _get_env_vars(manifest)
 
         assert _OTEL_ENDPOINT_NAME in env_vars, (
@@ -338,7 +380,7 @@ class TestStandardJobOtelEnvVars:
         The value must be exactly 'http://floe-platform-otel:4317' -- the
         gRPC endpoint of the in-cluster OTel collector.
         """
-        manifest = _load_job_manifest(_STANDARD_JOB)
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         env_vars = _get_env_vars(manifest)
 
         actual = env_vars.get(_OTEL_ENDPOINT_NAME)
@@ -353,7 +395,7 @@ class TestStandardJobOtelEnvVars:
         This identifies the test runner in traces, making it easy to
         filter test-runner spans in Jaeger/Grafana.
         """
-        manifest = _load_job_manifest(_STANDARD_JOB)
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         env_vars = _get_env_vars(manifest)
 
         assert _OTEL_SERVICE_NAME in env_vars, (
@@ -367,7 +409,7 @@ class TestStandardJobOtelEnvVars:
 
         The exact value matters for trace filtering and dashboards.
         """
-        manifest = _load_job_manifest(_STANDARD_JOB)
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         env_vars = _get_env_vars(manifest)
 
         actual = env_vars.get(_OTEL_SERVICE_NAME)
@@ -385,7 +427,7 @@ class TestDestructiveJobOtelEnvVars:
 
         Same requirement as the standard job -- both need OTel export.
         """
-        manifest = _load_job_manifest(_DESTRUCTIVE_JOB)
+        manifest = _render_job_manifest(_DESTRUCTIVE_TEMPLATE)
         env_vars = _get_env_vars(manifest)
 
         assert _OTEL_ENDPOINT_NAME in env_vars, (
@@ -399,7 +441,7 @@ class TestDestructiveJobOtelEnvVars:
 
         Must be the same endpoint as the standard job.
         """
-        manifest = _load_job_manifest(_DESTRUCTIVE_JOB)
+        manifest = _render_job_manifest(_DESTRUCTIVE_TEMPLATE)
         env_vars = _get_env_vars(manifest)
 
         actual = env_vars.get(_OTEL_ENDPOINT_NAME)
@@ -413,7 +455,7 @@ class TestDestructiveJobOtelEnvVars:
 
         Both jobs identify as the same service for unified trace querying.
         """
-        manifest = _load_job_manifest(_DESTRUCTIVE_JOB)
+        manifest = _render_job_manifest(_DESTRUCTIVE_TEMPLATE)
         env_vars = _get_env_vars(manifest)
 
         assert _OTEL_SERVICE_NAME in env_vars, (
@@ -427,7 +469,7 @@ class TestDestructiveJobOtelEnvVars:
 
         Must match the standard job's service name.
         """
-        manifest = _load_job_manifest(_DESTRUCTIVE_JOB)
+        manifest = _render_job_manifest(_DESTRUCTIVE_TEMPLATE)
         env_vars = _get_env_vars(manifest)
 
         actual = env_vars.get(_OTEL_SERVICE_NAME)
@@ -451,7 +493,7 @@ class TestOtelEnvVarNotConfusedWithOtelHost:
         OTEL_HOST alone does not satisfy AC-2. The standard OTel SDK
         env var is required.
         """
-        manifest = _load_job_manifest(_STANDARD_JOB)
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         env_vars = _get_env_vars(manifest)
 
         assert "OTEL_HOST" in env_vars, "OTEL_HOST should still be present (not removed)"
@@ -468,7 +510,7 @@ class TestOtelEnvVarNotConfusedWithOtelHost:
         A bare hostname like 'floe-platform-otel' won't work -- the OTel
         SDK needs a full URL with protocol and port.
         """
-        manifest = _load_job_manifest(_STANDARD_JOB)
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         env_vars = _get_env_vars(manifest)
 
         value = env_vars.get(_OTEL_ENDPOINT_NAME, "")
@@ -495,7 +537,7 @@ class TestStandardJobLogCliLevel:
         Without this flag, pytest suppresses live log output, making it
         impossible to observe test progress in real time via kubectl logs.
         """
-        manifest = _load_job_manifest(_STANDARD_JOB)
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         args = _get_container_args(manifest)
 
         assert _LOG_CLI_LEVEL_FLAG in args, (
@@ -509,7 +551,7 @@ class TestStandardJobLogCliLevel:
         DEBUG is too noisy for CI; WARNING misses important progress info.
         INFO is the correct level per AC-4.
         """
-        manifest = _load_job_manifest(_STANDARD_JOB)
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         args = _get_container_args(manifest)
 
         log_args = [a for a in args if a.startswith("--log-cli-level=")]
@@ -530,7 +572,7 @@ class TestDestructiveJobLogCliLevel:
 
         Same requirement as the standard job -- both need live logging.
         """
-        manifest = _load_job_manifest(_DESTRUCTIVE_JOB)
+        manifest = _render_job_manifest(_DESTRUCTIVE_TEMPLATE)
         args = _get_container_args(manifest)
 
         assert _LOG_CLI_LEVEL_FLAG in args, (
@@ -540,7 +582,7 @@ class TestDestructiveJobLogCliLevel:
     @pytest.mark.requirement("AC-4")
     def test_destructive_job_log_level_is_info_not_debug(self) -> None:
         """Destructive Job log level must be INFO, not DEBUG or WARNING."""
-        manifest = _load_job_manifest(_DESTRUCTIVE_JOB)
+        manifest = _render_job_manifest(_DESTRUCTIVE_TEMPLATE)
         args = _get_container_args(manifest)
 
         log_args = [a for a in args if a.startswith("--log-cli-level=")]

@@ -8,26 +8,29 @@
 #
 # Environment:
 #   KUBECONFIG          Path to kubeconfig (default: ~/.kube/config)
-#   TEST_NAMESPACE      K8s namespace for tests (default: floe-test)
 #   JOB_TIMEOUT         Job completion timeout in seconds (default: 3600)
-#   KIND_CLUSTER        Kind cluster name (default: floe)
 #   SKIP_BUILD          Skip image build if set to "true" (default: false)
 #   IMAGE_LOAD_METHOD   How to load image: auto|kind|devpod|skip (default: auto)
 #   TEST_SUITE          Test suite to run: e2e|e2e-destructive (default: e2e)
 #   LOG_TAIL_LINES      Lines to capture per pod on failure (default: 100)
+#
+# Identifiers (release name, namespace, Kind cluster, chart dir, values file)
+# come from testing/ci/common.sh — override via FLOE_* env vars there.
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck source=./common.sh
+source "${SCRIPT_DIR}/common.sh"
+
 # Configuration
 KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
-TEST_NAMESPACE="${TEST_NAMESPACE:-floe-test}"
+TEST_NAMESPACE="${FLOE_NAMESPACE}"
 JOB_TIMEOUT="${JOB_TIMEOUT:-3600}"
-KIND_CLUSTER="${KIND_CLUSTER:-floe}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
 IMAGE_LOAD_METHOD="${IMAGE_LOAD_METHOD:-auto}"
 TEST_SUITE="${TEST_SUITE:-e2e}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 IMAGE_NAME="floe-test-runner:latest"
 ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts"
 LOG_TAIL_LINES="${LOG_TAIL_LINES:-100}"
@@ -81,15 +84,17 @@ extract_pod_logs() {
     info "Pod logs saved to: ${ARTIFACTS_DIR}/pod-logs/"
 }
 
-# Select Job name and manifest based on TEST_SUITE
+# Select Job name and chart-rendered template based on TEST_SUITE
 case "${TEST_SUITE}" in
     e2e)
         JOB_NAME="floe-test-e2e"
-        JOB_MANIFEST="testing/k8s/jobs/test-e2e.yaml"
+        JOB_TEMPLATE="tests/job-e2e.yaml"
+        RBAC_TEMPLATE="tests/rbac-standard.yaml"
         ;;
     e2e-destructive)
         JOB_NAME="floe-test-e2e-destructive"
-        JOB_MANIFEST="testing/k8s/jobs/test-e2e-destructive.yaml"
+        JOB_TEMPLATE="tests/job-e2e-destructive.yaml"
+        RBAC_TEMPLATE="tests/rbac-destructive.yaml"
         ;;
     *)
         error "Unknown TEST_SUITE '${TEST_SUITE}'. Use: e2e|e2e-destructive"
@@ -115,8 +120,8 @@ load_image() {
     fi
 
     if [[ "${method}" == "kind" ]]; then
-        info "Loading image into Kind cluster '${KIND_CLUSTER}' (IMAGE_LOAD_METHOD=kind)..."
-        kind load docker-image "${image}" --name "${KIND_CLUSTER}"
+        info "Loading image into Kind cluster '${FLOE_KIND_CLUSTER}' (IMAGE_LOAD_METHOD=kind)..."
+        kind load docker-image "${image}" --name "${FLOE_KIND_CLUSTER}"
         return 0
     fi
 
@@ -127,9 +132,9 @@ load_image() {
     fi
 
     # auto: detect environment
-    if command -v kind &>/dev/null && kind get clusters 2>/dev/null | grep -q "^${KIND_CLUSTER}$"; then
-        info "Loading image into Kind cluster '${KIND_CLUSTER}'..."
-        kind load docker-image "${image}" --name "${KIND_CLUSTER}"
+    if command -v kind &>/dev/null && kind get clusters 2>/dev/null | grep -q "^${FLOE_KIND_CLUSTER}$"; then
+        info "Loading image into Kind cluster '${FLOE_KIND_CLUSTER}'..."
+        kind load docker-image "${image}" --name "${FLOE_KIND_CLUSTER}"
         return 0
     fi
 
@@ -139,7 +144,7 @@ load_image() {
         return 0
     fi
 
-    error "No Kind cluster '${KIND_CLUSTER}' or DevPod workspace detected. Run 'make kind-up' or start DevPod."
+    error "No Kind cluster '${FLOE_KIND_CLUSTER}' or DevPod workspace detected. Run 'make kind-up' or start DevPod."
     exit 1
 }
 
@@ -148,15 +153,12 @@ trap cleanup_job EXIT
 
 # --- Pre-flight checks ---
 
-if ! command -v kubectl &>/dev/null; then
-    error "kubectl not found."
+if ! command -v helm &>/dev/null; then
+    error "helm not found."
     exit 1
 fi
 
-if ! kubectl get namespace "${TEST_NAMESPACE}" &>/dev/null; then
-    error "Namespace '${TEST_NAMESPACE}' not found. Deploy the platform first."
-    exit 1
-fi
+floe_require_cluster
 
 # --- Step 1: Build test runner image ---
 
@@ -175,27 +177,20 @@ fi
 
 cleanup_job
 
-# --- Step 3: Ensure PVC exists ---
+# --- Step 3: Render and apply RBAC + PVC + Job from the chart ---
+# All identifiers flow from _helpers.tpl via floe_render_test_job — no
+# manifest paths, no raw YAML heredocs, no hardcoded resource names.
 
-if ! kubectl get pvc test-artifacts -n "${TEST_NAMESPACE}" &>/dev/null; then
-    info "Creating test-artifacts PVC..."
-    kubectl apply -n "${TEST_NAMESPACE}" -f - <<'EOFPVC'
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: test-artifacts
-spec:
-  accessModes: [ReadWriteOnce]
-  resources:
-    requests:
-      storage: 1Gi
-EOFPVC
-fi
+info "Applying ${TEST_SUITE} RBAC from chart..."
+floe_render_test_job "${RBAC_TEMPLATE}" | kubectl apply -f -
+
+info "Applying test-artifacts PVC from chart..."
+floe_render_test_job "tests/pvc-artifacts.yaml" | kubectl apply -f -
 
 # --- Step 4: Submit Job ---
 
-info "Submitting E2E test Job..."
-kubectl apply -f "${JOB_MANIFEST}" -n "${TEST_NAMESPACE}"
+info "Submitting ${TEST_SUITE} test Job from chart..."
+floe_render_test_job "${JOB_TEMPLATE}" | kubectl apply -f -
 info "Job '${JOB_NAME}' submitted. Waiting up to ${JOB_TIMEOUT}s for completion..."
 
 # --- Step 5: Wait for completion ---
