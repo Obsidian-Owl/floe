@@ -395,3 +395,28 @@ cube:
         memory: 1Gi
     persistence:
       enabled: false  # No persistent storage needed in CI
+
+# =============================================================================
+# Test Infrastructure
+# =============================================================================
+# Enabled in test environments. Render via
+#   helm template floe-platform charts/floe-platform -f charts/floe-platform/values-test.yaml \
+#     --set tests.enabled=true -s templates/tests/job-e2e.yaml | kubectl apply -f -
+tests:
+  enabled: true
+  image:
+    repository: floe-test-runner
+    tag: latest
+    pullPolicy: IfNotPresent
+  artifacts:
+    enabled: true
+    pvcName: test-artifacts
+    storageSize: 1Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi

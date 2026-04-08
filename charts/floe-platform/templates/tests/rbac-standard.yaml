@@ -1,0 +1,77 @@
+{{/*
+Standard test runner ServiceAccount + Role + RoleBinding.
+
+Security-hardening AC-8: Role has `get` on secrets but NOT `list`/`watch`.
+List/watch over secrets would expose every secret in the namespace; only
+`get` is needed for Helm release state queries.
+
+Only rendered when .Values.tests.enabled is true.
+*/}}
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "floe-platform.testRunner.saName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test-runner
+    test-type: e2e
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "floe-platform.testRunner.saName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test-runner
+    test-type: e2e
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log", "pods/status"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+  # security-hardening AC-8: `get` only on secrets — no list/watch.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "floe-platform.testRunner.saName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test-runner
+    test-type: e2e
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "floe-platform.testRunner.saName" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "floe-platform.testRunner.saName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
