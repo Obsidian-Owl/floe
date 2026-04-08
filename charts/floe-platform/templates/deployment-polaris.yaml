@@ -61,7 +61,7 @@ spec:
             - name: POLARIS_BOOTSTRAP_CREDENTIALS
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
                   key: bootstrap-credentials
             - name: JAVA_OPTS_APPEND
               value: >-
@@ -77,12 +77,12 @@ spec:
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
                   key: aws-access-key-id
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
                   key: aws-secret-access-key
             - name: AWS_REGION
               value: {{ .Values.polaris.storage.s3.region | quote }}
