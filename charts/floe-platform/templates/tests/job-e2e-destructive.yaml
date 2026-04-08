@@ -1,135 +1,19 @@
 {{/*
 Destructive E2E test runner Job.
 
-Same invariant as job-e2e.yaml: every identifier resolved via helper.
-Runs only tests marked @pytest.mark.destructive. Uses the elevated
-destructive runner ServiceAccount (see rbac-destructive.yaml).
+Thin wrapper around the shared `floe-platform.testJob` template in
+_test-job.tpl. Runs only tests marked @pytest.mark.destructive. Uses the
+elevated destructive runner ServiceAccount (see rbac-destructive.yaml).
 
 MUST run AFTER the standard E2E Job completes — these tests mutate
 platform state and can leave it in a dirty state on failure.
 */}}
 {{- if .Values.tests.enabled }}
-{{- $fullname := include "floe-platform.fullname" . }}
-{{- $polaris := include "floe-platform.polaris.fullname" . }}
-{{- $minio := include "floe-platform.minio.fullname" . }}
-{{- $postgres := include "floe-platform.postgresql.host" . }}
-{{- $dagsterWeb := include "floe-platform.dagster.webserverName" . }}
-{{- $marquez := include "floe-platform.marquez.fullname" . }}
-{{- $otel := include "floe-platform.otel.fullname" . }}
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: floe-test-e2e-destructive
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "floe-platform.labels" . | nindent 4 }}
-    app.kubernetes.io/component: test-runner
-    test-type: e2e-destructive
-spec:
-  backoffLimit: 0
-  ttlSecondsAfterFinished: 3600
-  template:
-    metadata:
-      labels:
-        {{- include "floe-platform.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: test-runner
-        test-type: e2e-destructive
-    spec:
-      restartPolicy: Never
-      serviceAccountName: {{ include "floe-platform.testRunnerDestructive.saName" . }}
-      containers:
-        - name: test-runner
-          image: "{{ .Values.tests.image.repository }}:{{ .Values.tests.image.tag }}"
-          imagePullPolicy: {{ .Values.tests.image.pullPolicy }}
-          args:
-            - "--tb=short"
-            - "-v"
-            - "--color=yes"
-            - "tests/e2e/"
-            - "-m"
-            - "destructive"
-            - "--junitxml=/artifacts/e2e-destructive-results.xml"
-            - "--html=/artifacts/e2e-destructive-report.html"
-            - "--self-contained-html"
-            - "--json-report"
-            - "--json-report-file=/artifacts/e2e-destructive-report.json"
-            - "--log-cli-level=INFO"
-          env:
-            - name: INTEGRATION_TEST_HOST
-              value: "k8s"
-            - name: POSTGRES_HOST
-              value: {{ $postgres | quote }}
-            - name: POSTGRES_PORT
-              value: {{ include "floe-platform.postgresql.port" . | quote }}
-            - name: POSTGRES_USER
-              value: floe
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "floe-platform.postgresql.secretName" . }}
-                  key: postgresql-password
-            - name: MINIO_ENDPOINT
-              value: "http://{{ $minio }}:9000"
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "floe-platform.minio.secretName" . }}
-                  key: root-user
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "floe-platform.minio.secretName" . }}
-                  key: root-password
-            - name: AWS_REGION
-              value: us-east-1
-            - name: POLARIS_URI
-              value: "http://{{ $polaris }}:{{ .Values.polaris.service.port | default 8181 }}/api/catalog"
-            - name: POLARIS_CREDENTIAL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" $polaris) }}
-                  key: POLARIS_CREDENTIAL
-            - name: POLARIS_WAREHOUSE
-              value: {{ include "floe-platform.polaris.warehouse" . | quote }}
-            - name: POLARIS_SCOPE
-              value: "PRINCIPAL_ROLE:ALL"
-            - name: POLARIS_HOST
-              value: {{ $polaris | quote }}
-            - name: POLARIS_MANAGEMENT_HOST
-              value: {{ $polaris | quote }}
-            - name: MINIO_HOST
-              value: {{ $minio | quote }}
-            - name: MINIO_CONSOLE_HOST
-              value: {{ $minio | quote }}
-            - name: MARQUEZ_HOST
-              value: {{ $marquez | quote }}
-            - name: DAGSTER_HOST
-              value: {{ $dagsterWeb | quote }}
-            - name: DAGSTER_WEBSERVER_HOST
-              value: {{ $dagsterWeb | quote }}
-            - name: OTEL_HOST
-              value: {{ $otel | quote }}
-            - name: OTEL_COLLECTOR_GRPC_HOST
-              value: {{ $otel | quote }}
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://{{ $otel }}:4317"
-            - name: OTEL_SERVICE_NAME
-              value: "floe-test-runner"
-            - name: PYTHONPATH
-              value: "/app:/app/testing"
-            - name: PYTHONUNBUFFERED
-              value: "1"
-          resources:
-            {{- toYaml .Values.tests.resources | nindent 12 }}
-          {{- if .Values.tests.artifacts.enabled }}
-          volumeMounts:
-            - name: artifacts
-              mountPath: /artifacts
-          {{- end }}
-      {{- if .Values.tests.artifacts.enabled }}
-      volumes:
-        - name: artifacts
-          persistentVolumeClaim:
-            claimName: {{ .Values.tests.artifacts.pvcName }}
-      {{- end }}
+{{- include "floe-platform.testJob" (dict
+    "context" .
+    "suite" "e2e-destructive"
+    "pytestMarker" "destructive"
+    "serviceAccount" (include "floe-platform.testRunnerDestructive.saName" .)
+    "artifactPrefix" "e2e-destructive"
+    ) }}
 {{- end }}
