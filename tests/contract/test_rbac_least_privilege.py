@@ -195,6 +195,26 @@ def test_destructive_runner_update_delete_scoped_by_resource_names() -> None:
             f"include a Helm release prefix '{HELM_RELEASE_PREFIX}*' "
             f"entry; got {resource_names!r}"
         )
+        # Revision-window regression guard. The range loop in
+        # templates/tests/rbac-destructive.yaml expands
+        # `tests.destructive.helmRevisionWindow` (default 20) into a
+        # literal list of `sh.helm.release.v1.<release>.vN` names. If
+        # somebody lowers that default to a tiny number (or the range
+        # loop accidentally collapses), destructive E2E tests will fail
+        # with an opaque RBAC 403 on the Nth helm upgrade. A minimum
+        # window of 10 gives enough headroom for any realistic test
+        # suite's worth of consecutive `helm upgrade` calls before
+        # cleanup. Raising the floor requires conscious review.
+        helm_scoped_names = [
+            n for n in resource_names if isinstance(n, str) and HELM_RELEASE_PREFIX in n
+        ]
+        assert len(helm_scoped_names) >= 10, (
+            f"AC-9 regression guard: destructive runner authorizes only "
+            f"{len(helm_scoped_names)} Helm release revisions — minimum is 10 "
+            f"to cover realistic helm-upgrade test sequences. If this is "
+            f"intentional, raise tests.destructive.helmRevisionWindow in "
+            f"values.yaml and update this assertion together."
+        )
 
 
 @pytest.mark.requirement("security-hardening-AC-9")

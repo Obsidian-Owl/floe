@@ -229,6 +229,27 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4  # v4
+        with:
+          version: v4.1.3
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add dagster https://dagster-io.github.io/helm
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
+
+      - name: Update chart dependencies
+        # Pre-build chart dependencies so helm-rendering contract tests
+        # (test_helm_security_contexts, test_rbac_least_privilege,
+        # test_test_infra_chart_integrity) can run offline per
+        # .claude/rules/test-organization.md.
+        run: |
+          helm dependency update charts/floe-platform
+          helm dependency update charts/floe-jobs
+
       - name: Run contract tests
         run: |
           # Run both root-level and package-level contract tests
