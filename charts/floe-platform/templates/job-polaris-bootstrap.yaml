@@ -111,26 +111,34 @@ spec:
               drop:
                 - ALL
           env:
+            # POLARIS_CATALOG_NAME is the canonical runtime source for the
+            # catalog/warehouse identifier. Both the shell script below and
+            # the contract test (AC-3) read from this env var — never from
+            # a hardcoded literal or a regex-scanned shell body. Sourced
+            # from .Values.polaris.bootstrap.catalogName via the warehouse
+            # helper so every consumer lands on the same key.
+            - name: POLARIS_CATALOG_NAME
+              value: {{ include "floe-platform.polaris.warehouse" . | quote }}
             - name: POLARIS_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
                   key: client-id
             - name: POLARIS_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
                   key: client-secret
             {{- if .Values.polaris.storage.s3.enabled }}
             - name: S3_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
                   key: aws-access-key-id
             - name: S3_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.polaris.auth.existingSecret | default (printf "%s-credentials" (include "floe-platform.polaris.fullname" .)) }}
+                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
                   key: aws-secret-access-key
             {{- end }}
           command:
@@ -150,6 +158,18 @@ spec:
                 log "ERROR: POLARIS_CLIENT_SECRET is not set or empty" >&2
                 exit 42
               fi
+              if [ -z "$POLARIS_CATALOG_NAME" ]; then
+                log "ERROR: POLARIS_CATALOG_NAME is not set or empty" >&2
+                exit 42
+              fi
+              # Validate catalog name — same character class as grant validation
+              # below. Rejects shell metacharacters and whitespace.
+              case "$POLARIS_CATALOG_NAME" in
+                *[!a-zA-Z0-9_-]*)
+                  log "ERROR: POLARIS_CATALOG_NAME contains invalid characters: $POLARIS_CATALOG_NAME" >&2
+                  exit 42
+                  ;;
+              esac
 
               POLARIS_URL="http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.port | default 8181 }}"
               {{- $totalSteps := 3 }}
@@ -200,13 +220,17 @@ spec:
               {{- end }}
 
               {{- $step = add $step 1 }}
-              log "Step {{ $step }}/{{ $totalSteps }}: Creating catalog '{{ .Values.polaris.bootstrap.catalogName }}'..."
+              log "Step {{ $step }}/{{ $totalSteps }}: Creating catalog '$POLARIS_CATALOG_NAME'..."
               {{- if .Values.polaris.storage.s3.enabled }}
-              # Build catalog JSON with S3 credentials from environment
+              # Build catalog JSON with S3 credentials from environment.
+              # Unquoted heredoc (<<EOJSON) expands shell variables — the
+              # catalog name comes from $POLARIS_CATALOG_NAME (env), not
+              # a template literal, so the contract test walker can verify
+              # the single source of truth via the K8s API surface.
               CATALOG_JSON=$(cat <<EOJSON
               {
                 "catalog": {
-                  "name": "{{ .Values.polaris.bootstrap.catalogName }}",
+                  "name": "$POLARIS_CATALOG_NAME",
                   "type": "INTERNAL",
                   "properties": {
                     "default-base-location": "{{ .Values.polaris.bootstrap.defaultBaseLocation }}",
@@ -230,9 +254,12 @@ spec:
               EOJSON
               )
               {{- else }}
-              CATALOG_JSON='{
+              # Unquoted heredoc so $POLARIS_CATALOG_NAME expands (single
+              # source of truth via env var, not template literal).
+              CATALOG_JSON=$(cat <<EOJSON
+              {
                 "catalog": {
-                  "name": "{{ .Values.polaris.bootstrap.catalogName }}",
+                  "name": "$POLARIS_CATALOG_NAME",
                   "type": "INTERNAL",
                   "properties": {
                     "default-base-location": "{{ .Values.polaris.bootstrap.defaultBaseLocation }}"
@@ -242,7 +269,9 @@ spec:
                     "allowedLocations": {{ .Values.polaris.bootstrap.allowedLocations | toJson }}
                   }
                 }
-              }'
+              }
+              EOJSON
+              )
               {{- end }}
 
               HTTP_CODE=$(printf '%s' "$CATALOG_JSON" | curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
@@ -252,9 +281,9 @@ spec:
                 -d @-)
 
               if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
-                log "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' created successfully"
+                log "Catalog '$POLARIS_CATALOG_NAME' created successfully"
               elif [ "$HTTP_CODE" = "409" ]; then
-                log "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' already exists (HTTP 409) - OK"
+                log "Catalog '$POLARIS_CATALOG_NAME' already exists (HTTP 409) - OK"
               else
                 log "ERROR: Failed to create catalog (HTTP $HTTP_CODE)" >&2
                 head -5 /tmp/response.txt >&2
@@ -263,10 +292,10 @@ spec:
 
               # Verify catalog exists via management API
               {{- $step = add $step 1 }}
-              log "Step {{ $step }}/{{ $totalSteps }}: Verifying catalog '{{ .Values.polaris.bootstrap.catalogName }}' via management API..."
+              log "Step {{ $step }}/{{ $totalSteps }}: Verifying catalog '$POLARIS_CATALOG_NAME' via management API..."
               VERIFY_CODE=$(curl -s -o /tmp/verify.txt -w '%{http_code}' \
                 -H "Authorization: Bearer $TOKEN" \
-                "$POLARIS_URL/api/management/v1/catalogs/{{ .Values.polaris.bootstrap.catalogName }}")
+                "$POLARIS_URL/api/management/v1/catalogs/$POLARIS_CATALOG_NAME")
 
               if [ "$VERIFY_CODE" != "200" ]; then
                 log "ERROR: Catalog verification failed (HTTP $VERIFY_CODE)" >&2
@@ -280,12 +309,15 @@ spec:
                 head -5 /tmp/verify.txt >&2
                 exit 1
               fi
-              log "Catalog '{{ .Values.polaris.bootstrap.catalogName }}' verified successfully"
+              log "Catalog '$POLARIS_CATALOG_NAME' verified successfully"
 
               {{- if .Values.polaris.bootstrap.grants.enabled }}
               # Create catalog role (idempotent — 201 created, 409 already exists)
+              # CATALOG_NAME aliases POLARIS_CATALOG_NAME for downstream grant
+              # steps so the validation loop and URL interpolations read the
+              # same canonical env var.
               CATALOG_ROLE="{{ .Values.polaris.bootstrap.grants.catalogRole }}"
-              CATALOG_NAME="{{ .Values.polaris.bootstrap.catalogName }}"
+              CATALOG_NAME="$POLARIS_CATALOG_NAME"
               PRINCIPAL_ROLE="{{ .Values.polaris.bootstrap.grants.principalRole }}"
               BOOTSTRAP_PRINCIPAL="{{ .Values.polaris.bootstrap.grants.bootstrapPrincipal }}"
 

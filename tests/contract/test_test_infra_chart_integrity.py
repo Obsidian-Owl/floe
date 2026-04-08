@@ -40,6 +40,15 @@ from typing import Any, cast
 import pytest
 import yaml
 
+# Regex for extracting `floe-platform-*` identifier tokens out of env var
+# string values (e.g. POLARIS_URI="http://floe-platform-polaris:8181/..."
+# should extract "floe-platform-polaris"). Used by AC-1 to catch hardcoded
+# hostnames that don't match any rendered resource. Trailing dots/colons
+# are excluded by the character class. Matches DNS label tokens of the
+# form `floe-platform-<component>[-<suffix>…]`.
+_FULLNAME_PREFIX = "floe-platform-"
+_ENV_VALUE_IDENT_PATTERN = re.compile(r"floe-platform-[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]")
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CHART_DIR = REPO_ROOT / "charts" / "floe-platform"
 VALUES_TEST = CHART_DIR / "values-test.yaml"
@@ -172,11 +181,19 @@ def test_test_jobs_reference_only_chart_rendered_identifiers(
     """Every name a test Job references must be produced by the chart.
 
     Walks every rendered Job whose `test-type` label is set, collects the
-    `serviceAccountName`, every `secretRef.name`, and every
-    `secretKeyRef.name`. Asserts each identifier is the metadata.name of
-    another resource produced by the same render. Catches the regression
-    where someone hardcodes a Service or Secret name that doesn't actually
-    exist in the deployed release.
+    `serviceAccountName`, every `secretRef.name`, every `secretKeyRef.name`,
+    AND every `floe-platform-*` identifier token extracted from `env[*].value`
+    strings (e.g. POLARIS_URI="http://floe-platform-polaris:8181/..." yields
+    "floe-platform-polaris"). Asserts each identifier is the metadata.name
+    of another resource produced by the same render. Catches two regression
+    classes:
+
+    1. Hardcoded Service/Secret name in a `secretRef` that doesn't resolve.
+    2. Hardcoded hostname literal in a plain-value env var (e.g. someone
+       writes `POSTGRES_HOST: "floe-platform-postgres-wrong"` instead of
+       calling the helper). Without the env-value walker, that literal
+       lands in a live Job and manifests as a runtime DNS failure days
+       later in CI — this test catches it at render time.
     """
     rendered_names = {_name(d) for d in tests_enabled_render if _name(d)}
 
@@ -189,6 +206,10 @@ def test_test_jobs_reference_only_chart_rendered_identifiers(
     )
 
     referenced: set[str] = set()
+    # Separate set for env-value-extracted tokens so the failure message
+    # can point at the actual offender instead of saying "something in
+    # env values".
+    env_value_tokens: list[tuple[str, str, str]] = []  # (job, env_name, token)
     for job in test_jobs:
         pod = _pod_spec(job)
         sa = pod.get("serviceAccountName")
@@ -213,6 +234,17 @@ def test_test_jobs_reference_only_chart_rendered_identifiers(
                             ref_name = cast("dict[str, Any]", config_ref).get("name")
                             if isinstance(ref_name, str) and ref_name:
                                 referenced.add(ref_name)
+                    # Scan plain-value strings for embedded `floe-platform-*`
+                    # identifiers. Must run even when valueFrom is set (no
+                    # `elif`) because a single env entry can only have one
+                    # of value/valueFrom, but readers mustn't conflate
+                    # them — belt and braces.
+                    value = entry.get("value")
+                    env_name = entry.get("name")
+                    if isinstance(value, str) and isinstance(env_name, str):
+                        for match in _ENV_VALUE_IDENT_PATTERN.finditer(value):
+                            token = match.group(0)
+                            env_value_tokens.append((_name(job), env_name, token))
             env_from_list = container.get("envFrom") or []
             if isinstance(env_from_list, list):
                 for entry_any in cast("list[Any]", env_from_list):
@@ -225,6 +257,21 @@ def test_test_jobs_reference_only_chart_rendered_identifiers(
                             ref_name = cast("dict[str, Any]", ref).get("name")
                             if isinstance(ref_name, str) and ref_name:
                                 referenced.add(ref_name)
+        # Volumes: walk `persistentVolumeClaim.claimName` so a future
+        # hardcoded PVC name (bypassing `$context.Values.tests.artifacts.pvcName`)
+        # fails at render time instead of at Job-scheduling time when
+        # kubelet can't mount a non-existent PVC.
+        volumes = pod.get("volumes") or []
+        if isinstance(volumes, list):
+            for vol_any in cast("list[Any]", volumes):
+                if not isinstance(vol_any, dict):
+                    continue
+                vol: dict[str, Any] = cast("dict[str, Any]", vol_any)
+                pvc = vol.get("persistentVolumeClaim") or {}
+                if isinstance(pvc, dict):
+                    claim_name = cast("dict[str, Any]", pvc).get("claimName")
+                    if isinstance(claim_name, str) and claim_name:
+                        referenced.add(claim_name)
 
     # External references (e.g. third-party operator-managed secrets like
     # the bitnami postgres / minio secrets) are produced by subcharts. Those
@@ -236,6 +283,22 @@ def test_test_jobs_reference_only_chart_rendered_identifiers(
         f"the chart render: {missing}. Either the chart helper is wrong, "
         f"or someone hardcoded a name. Rendered names: "
         f"{sorted(rendered_names)[:10]}…"
+    )
+
+    # Validate env-value-extracted tokens against the same rendered-names
+    # set. A token that isn't a rendered metadata.name is a hardcoded
+    # hostname — drift in disguise.
+    unresolved_tokens: list[str] = [
+        f"{job}: env {env_name}={token}"
+        for job, env_name, token in env_value_tokens
+        if token not in rendered_names
+    ]
+    assert not unresolved_tokens, (
+        f"AC-1 violation: test Jobs have `floe-platform-*` literals in "
+        f"env[*].value that do NOT resolve to any rendered resource "
+        f"(prefix {_FULLNAME_PREFIX!r}). These are hardcoded hostnames — "
+        f"use a chart helper instead. Offenders:\n"
+        + "\n".join(f"  - {line}" for line in unresolved_tokens)
     )
 
 
@@ -330,14 +393,18 @@ def test_warehouse_name_single_source_of_truth(
 
 
 def _extract_bootstrap_catalog_names(docs: list[dict[str, Any]]) -> set[str]:
-    """Find the catalog name(s) the polaris-bootstrap Job creates.
+    """Read the catalog name from the bootstrap Job's POLARIS_CATALOG_NAME env var.
 
-    The bootstrap Job embeds the catalog name in a shell script in the
-    container `command`. We grep that script for the `"name": "..."` line
-    inside the catalog JSON payload — robust to script-format tweaks as
-    long as the JSON object retains a `"name"` field.
+    The bootstrap Job declares a POLARIS_CATALOG_NAME env var sourced from
+    the `floe-platform.polaris.warehouse` helper. The shell script reads
+    this env var, never a template literal. That makes the K8s API surface
+    the single source of truth — no regex-scanning shell bodies, no
+    first-match-wins brittleness.
+
+    A missing POLARIS_CATALOG_NAME env var on the bootstrap Job is itself
+    a contract violation: the caller is expected to fail AC-3 with an
+    actionable error instead of silently returning an empty set.
     """
-    pattern = re.compile(r'"name"\s*:\s*"([^"]+)"')
     names: set[str] = set()
     for doc in docs:
         if _kind(doc) != "Job":
@@ -345,21 +412,18 @@ def _extract_bootstrap_catalog_names(docs: list[dict[str, Any]]) -> set[str]:
         if "polaris-bootstrap" not in _name(doc):
             continue
         for container in _containers(_pod_spec(doc)):
-            cmd = container.get("command") or []
-            args = container.get("args") or []
-            blobs: list[str] = []
-            for blob in (*cmd, *args) if isinstance(cmd, list) and isinstance(args, list) else []:
-                if isinstance(blob, str):
-                    blobs.append(blob)
-            for blob in blobs:
-                # The bootstrap script wraps the catalog payload in a JSON
-                # object whose first `"name"` field is the catalog name.
-                # We pick the first match per blob to avoid catalog-role
-                # name collisions.
-                match = pattern.search(blob)
-                if match:
-                    names.add(match.group(1))
-                    break
+            env_list = container.get("env") or []
+            if not isinstance(env_list, list):
+                continue
+            for entry_any in cast("list[Any]", env_list):
+                if not isinstance(entry_any, dict):
+                    continue
+                entry: dict[str, Any] = cast("dict[str, Any]", entry_any)
+                if entry.get("name") != "POLARIS_CATALOG_NAME":
+                    continue
+                value = entry.get("value")
+                if isinstance(value, str) and value:
+                    names.add(value)
     return names
 
 

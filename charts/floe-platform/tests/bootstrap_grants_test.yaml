@@ -283,10 +283,17 @@ tests:
         - CATALOG_MANAGE_CONTENT
       polaris.auth.bootstrapCredentials.clientSecret: test-secret
     asserts:
-      # CATALOG_NAME shell var is set from Go template value
+      # POLARIS_CATALOG_NAME env var carries the Go template value (env[0])
+      - equal:
+          path: spec.template.spec.containers[0].env[0].name
+          value: POLARIS_CATALOG_NAME
+      - equal:
+          path: spec.template.spec.containers[0].env[0].value
+          value: my-special-catalog
+      # Shell script aliases CATALOG_NAME from the env var
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: 'CATALOG_NAME="my-special-catalog"'
+          pattern: 'CATALOG_NAME="\$POLARIS_CATALOG_NAME"'
 
   # --- Input validation ---
   - it: should validate grant variable names against shell metacharacters

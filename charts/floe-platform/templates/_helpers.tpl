@@ -227,6 +227,21 @@ MinIO secret name (used for root-user/root-password keys).
 {{- end }}
 
 {{/*
+Polaris credentials secret name.
+Single source of truth for the Secret holding client-id, client-secret,
+POLARIS_CREDENTIAL, aws-access-key-id, and aws-secret-access-key. Used
+by the polaris bootstrap Job and every test Job. Do NOT inline the
+`%s-credentials` printf expression elsewhere — call this helper.
+*/}}
+{{- define "floe-platform.polaris.credentialSecretName" -}}
+{{- if .Values.polaris.auth.existingSecret }}
+{{- .Values.polaris.auth.existingSecret }}
+{{- else }}
+{{- printf "%s-credentials" (include "floe-platform.polaris.fullname" .) }}
+{{- end }}
+{{- end }}
+
+{{/*
 Standard (non-destructive) test runner ServiceAccount name.
 Used by test Jobs in templates/tests/ for e2e and integration test suites.
 */}}
@@ -250,7 +265,7 @@ Polaris bootstrap Job (as catalog name) and test Jobs (as POLARIS_WAREHOUSE).
 Reads .Values.polaris.bootstrap.catalogName — do NOT duplicate this elsewhere.
 */}}
 {{- define "floe-platform.polaris.warehouse" -}}
-{{- required "polaris.bootstrap.catalogName is required when tests.enabled=true" .Values.polaris.bootstrap.catalogName }}
+{{- required "polaris.bootstrap.catalogName is required — set .Values.polaris.bootstrap.catalogName" .Values.polaris.bootstrap.catalogName }}
 {{- end }}
 
 {{/*
