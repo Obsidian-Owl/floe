@@ -121,7 +121,7 @@ class TestIcebergPurgeE2E(IntegrationTestBase):
         access_key, secret_key = get_minio_credentials()
         minio_host = get_effective_host("minio")
         minio_port = get_effective_port("minio", default=9000)
-        s3_endpoint = os.environ.get("MINIO_URL", f"http://{minio_host}:{minio_port}")
+        s3_endpoint = os.environ.get("MINIO_ENDPOINT", f"http://{minio_host}:{minio_port}")
 
         s3_client = boto3.client(
             "s3",
