@@ -8,6 +8,7 @@ that occurs when test modules explicitly import from conftest.py
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -32,8 +33,6 @@ def _get_polaris_catalog() -> Any:
     Returns:
         PyIceberg catalog instance, or None if unavailable.
     """
-    import os
-
     if "catalog" in _catalog_cache:
         return _catalog_cache["catalog"]
 
@@ -43,7 +42,7 @@ def _get_polaris_catalog() -> Any:
         _catalog_cache["catalog"] = None
         return None
 
-    polaris_url = os.environ.get("POLARIS_URI", ServiceEndpoint("polaris").url)
+    polaris_url = os.environ.get("POLARIS_URI", f"{ServiceEndpoint('polaris').url}/api/catalog")
     _polaris_id, _polaris_secret = get_polaris_credentials()
     default_cred = f"{_polaris_id}:{_polaris_secret}"  # pragma: allowlist secret
     _minio_access, _minio_secret = get_minio_credentials()
@@ -53,7 +52,7 @@ def _get_polaris_catalog() -> Any:
             "polaris",
             **{
                 "type": "rest",
-                "uri": f"{polaris_url}/api/catalog",
+                "uri": polaris_url,
                 "credential": os.environ.get("POLARIS_CREDENTIAL", default_cred),
                 "scope": "PRINCIPAL_ROLE:ALL",
                 "warehouse": os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"),
@@ -123,8 +122,6 @@ def _purge_iceberg_namespace(namespace: str) -> None:
         return
 
     # Collect S3 config from environment (same defaults as _get_polaris_catalog).
-    import os
-
     s3_endpoint = os.environ.get("MINIO_ENDPOINT", ServiceEndpoint("minio").url)
     access_key, secret_key = get_minio_credentials()
 

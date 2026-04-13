@@ -50,6 +50,7 @@ class TestPolarisJdbcDurability(IntegrationTestBase):
             8. Assert namespace present, table loadable, UUID matches, row present
         """
         self.check_infrastructure("polaris")
+        self.check_infrastructure("postgres")
 
         # Step 1-2: Create namespace and table with unique UUID suffix
         uid = uuid.uuid4().hex[:12]
@@ -100,7 +101,7 @@ class TestPolarisJdbcDurability(IntegrationTestBase):
 
         polaris_deploy = os.environ.get("POLARIS_HOST", "polaris")
         if not all(c.isalnum() or c == "-" for c in polaris_deploy):
-            pytest.fail(f"POLARIS_HOST contains invalid characters: {polaris_deploy!r}")
+            pytest.fail("POLARIS_HOST env var contains characters outside [a-zA-Z0-9-]")
         deploy_ref = f"deployment/{polaris_deploy}"
 
         restart_result = subprocess.run(
@@ -186,7 +187,7 @@ class TestPolarisJdbcDurability(IntegrationTestBase):
 
         # Cleanup (best-effort)
         try:
-            fresh_catalog.drop_table(fqn)
+            fresh_catalog.purge_table(fqn)
             fresh_catalog.drop_namespace(ns_name)
         except Exception as exc:
             # Non-fatal — test already passed; cleanup is courtesy

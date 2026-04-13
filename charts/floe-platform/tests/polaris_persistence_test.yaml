@@ -8,6 +8,7 @@ suite: polaris persistence
 templates:
   - templates/configmap-polaris.yaml
   - templates/deployment-polaris.yaml
+  - templates/secret-polaris.yaml
   - templates/job-polaris-bootstrap.yaml
 tests:
   # --- AC-2: Configmap includes conditional JDBC properties ---
@@ -62,12 +63,10 @@ tests:
           path: data["application.properties"]
           pattern: "quarkus\\.datasource\\.db-kind"
 
-  # --- AC-1 (revised): JDBC credentials rendered via configmap, not env vars ---
-  # Previously this case asserted polaris.env[QUARKUS_DATASOURCE_*] on the
-  # deployment, but D-4 was revised: the chart template renders credentials
-  # into application.properties via persistence.jdbc.* — polaris.env was the
-  # duplicate escape hatch. This case now locks in the chart-native path.
-  - it: should render JDBC properties in configmap when persistence.type=relational-jdbc
+  # --- AC-1 (revised): JDBC URL/username in configmap, password in Secret ---
+  # Password moved from ConfigMap to Secret (CWE-312 review feedback).
+  # The deployment injects QUARKUS_DATASOURCE_PASSWORD via secretKeyRef.
+  - it: should render JDBC url and username in configmap but NOT password
     set:
       polaris.enabled: true
       polaris.persistence.type: relational-jdbc
@@ -86,9 +85,9 @@ tests:
       - matchRegex:
           path: data["application.properties"]
           pattern: "quarkus\\.datasource\\.username=polaris"
-      - matchRegex:
+      - notMatchRegex:
           path: data["application.properties"]
-          pattern: "quarkus\\.datasource\\.password=polaris-test-pw"
+          pattern: "quarkus\\.datasource\\.password"
 
   # --- AC-5: Bootstrap Job remains functional ---
   - it: should render bootstrap Job with JDBC persistence configured
