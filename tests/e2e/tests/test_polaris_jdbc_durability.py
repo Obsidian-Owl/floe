@@ -99,6 +99,8 @@ class TestPolarisJdbcDurability(IntegrationTestBase):
         import os
 
         polaris_deploy = os.environ.get("POLARIS_HOST", "polaris")
+        if not all(c.isalnum() or c == "-" for c in polaris_deploy):
+            pytest.fail(f"POLARIS_HOST contains invalid characters: {polaris_deploy!r}")
         deploy_ref = f"deployment/{polaris_deploy}"
 
         restart_result = subprocess.run(
@@ -162,12 +164,11 @@ class TestPolarisJdbcDurability(IntegrationTestBase):
 
         # Step 8: Assertions
         existing_namespaces = [
-            ns[0] if isinstance(ns, tuple) else ns
-            for ns in fresh_catalog.list_namespaces()
+            ns[0] if isinstance(ns, tuple) else ns for ns in fresh_catalog.list_namespaces()
         ]
         assert ns_name in existing_namespaces, (
             f"Namespace {ns_name!r} missing after restart — JDBC persistence "
-            f"did not survive. Observed: {existing_namespaces}"
+            f"did not survive. Found {len(existing_namespaces)} namespaces."
         )
 
         loaded = fresh_catalog.load_table(fqn)

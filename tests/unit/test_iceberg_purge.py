@@ -306,13 +306,12 @@ class TestS3Pagination:
 
         # Must have called delete_objects for each page with contents
         assert mock_s3.delete_objects.call_count == 2, (
-            f"Expected 2 delete_objects calls (one per page), got {mock_s3.delete_objects.call_count}"
+            "Expected 2 delete_objects calls (one per page), "
+            f"got {mock_s3.delete_objects.call_count}"
         )
 
         # Verify the paginator was used with correct bucket/prefix
-        mock_paginator.paginate.assert_called_once_with(
-            Bucket="warehouse", Prefix="ns1/big_table"
-        )
+        mock_paginator.paginate.assert_called_once_with(Bucket="warehouse", Prefix="ns1/big_table")
 
     @pytest.mark.requirement("AC-3")
     def test_source_uses_boto3_paginator(self) -> None:
