@@ -182,7 +182,7 @@ polaris:
   # JDBC persistence — survives pod restarts (Decision D-4, revised)
   # Canonical path: polaris.persistence.jdbc.* — the chart template renders
   # these as quarkus.datasource.* properties in configmap-polaris.yaml.
-  # DO NOT re-add polaris.env[QUARKUS_DATASOURCE_*] entries — they were the
+  # DO NOT re-add polaris.env with quarkus datasource entries — they were the
   # duplicate escape hatch and caused silent drift (salvage-wrap-up AC-3).
   persistence:
     type: relational-jdbc
