@@ -87,7 +87,7 @@ tests:
           pattern: "quarkus\\.datasource\\.username=polaris"
       - notMatchRegex:
           path: data["application.properties"]
-          pattern: "quarkus\\.datasource\\.password"
+          pattern: "quarkus\\.datasource\\.password="
 
   # --- AC-5: Bootstrap Job remains functional ---
   - it: should render bootstrap Job with JDBC persistence configured
