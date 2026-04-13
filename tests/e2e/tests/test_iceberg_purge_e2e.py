@@ -22,11 +22,10 @@ from __future__ import annotations
 
 import importlib.util
 import uuid
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import urlparse
 
-import httpx
+import boto3
 import pyarrow as pa
 import pytest
 
@@ -124,35 +123,20 @@ class TestIcebergPurgeE2E(IntegrationTestBase):
         minio_port = get_effective_port("minio", default=9000)
         s3_endpoint = os.environ.get("MINIO_URL", f"http://{minio_host}:{minio_port}")
 
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=s3_endpoint,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        )
+
         def _list_object_count(target_prefix: str) -> int:
-            """Count S3 objects under a prefix via ListObjectsV2."""
+            """Count S3 objects under a prefix via boto3 ListObjectsV2."""
+            paginator = s3_client.get_paginator("list_objects_v2")
             count = 0
-            continuation_token: str | None = None
-            with httpx.Client(auth=httpx.BasicAuth(access_key, secret_key)) as client:
-                while True:
-                    params: dict[str, str] = {
-                        "list-type": "2",
-                        "prefix": target_prefix,
-                    }
-                    if continuation_token:
-                        params["continuation-token"] = continuation_token
-                    resp = client.get(f"{s3_endpoint.rstrip('/')}/{bucket}", params=params)
-                    assert resp.status_code == 200, (
-                        f"S3 ListObjectsV2 failed: HTTP {resp.status_code}"
-                    )
-                    root = ET.fromstring(resp.text)
-                    count += sum(1 for el in root.iter("Key") if el.text)
-                    is_truncated_el = root.find("IsTruncated")
-                    is_truncated = (
-                        is_truncated_el is not None
-                        and (is_truncated_el.text or "").lower() == "true"
-                    )
-                    if not is_truncated:
-                        break
-                    token_el = root.find("NextContinuationToken")
-                    continuation_token = token_el.text if token_el is not None else None
-                    if not continuation_token:
-                        break
+            for page in paginator.paginate(Bucket=bucket, Prefix=target_prefix):
+                count += page.get("KeyCount", 0)
             return count
 
         before_count = _list_object_count(prefix)

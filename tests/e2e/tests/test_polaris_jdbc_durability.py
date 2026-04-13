@@ -33,7 +33,7 @@ from testing.fixtures.polling import wait_for_condition
 class TestPolarisJdbcDurability(IntegrationTestBase):
     """E2E: Polaris JDBC state survives pod restart (salvage-wrap-up AC-4)."""
 
-    required_services = ["polaris", "minio", "postgresql"]
+    required_services = ["polaris", "minio", "postgres"]
 
     @pytest.mark.requirement("salvage-wrap-up-AC-4")
     def test_unique_namespace_and_table_survive_polaris_restart(self) -> None:
@@ -94,12 +94,19 @@ class TestPolarisJdbcDurability(IntegrationTestBase):
         )
 
         # Step 5: Rollout restart
+        # Resolve the Polaris deployment name from POLARIS_HOST env var
+        # (set by the Helm chart Job template to the release-prefixed name).
+        import os
+
+        polaris_deploy = os.environ.get("POLARIS_HOST", "polaris")
+        deploy_ref = f"deployment/{polaris_deploy}"
+
         restart_result = subprocess.run(
             [
                 "kubectl",
                 "rollout",
                 "restart",
-                "deployment/polaris",
+                deploy_ref,
                 "-n",
                 self.namespace,
             ],
@@ -116,7 +123,7 @@ class TestPolarisJdbcDurability(IntegrationTestBase):
                 "kubectl",
                 "rollout",
                 "status",
-                "deployment/polaris",
+                deploy_ref,
                 "-n",
                 self.namespace,
                 "--timeout=180s",

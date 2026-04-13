@@ -45,7 +45,8 @@ _DESTRUCTIVE_JSON_REPORT = "--json-report-file=/artifacts/e2e-destructive-report
 _OTEL_ENDPOINT_NAME = "OTEL_EXPORTER_OTLP_ENDPOINT"
 _OTEL_ENDPOINT_VALUE = "http://floe-platform-otel:4317"
 _OTEL_SERVICE_NAME = "OTEL_SERVICE_NAME"
-_OTEL_SERVICE_VALUE = "floe-test-runner"
+_OTEL_SERVICE_VALUE_E2E = "floe-test-runner-e2e"
+_OTEL_SERVICE_VALUE_DESTRUCTIVE = "floe-test-runner-e2e-destructive"
 
 # Expected log flag (AC-4)
 _LOG_CLI_LEVEL_FLAG = "--log-cli-level=INFO"
@@ -413,8 +414,8 @@ class TestStandardJobOtelEnvVars:
         env_vars = _get_env_vars(manifest)
 
         actual = env_vars.get(_OTEL_SERVICE_NAME)
-        assert actual == _OTEL_SERVICE_VALUE, (
-            f"'{_OTEL_SERVICE_NAME}' must be '{_OTEL_SERVICE_VALUE}', got '{actual}'"
+        assert actual == _OTEL_SERVICE_VALUE_E2E, (
+            f"'{_OTEL_SERVICE_NAME}' must be '{_OTEL_SERVICE_VALUE_E2E}', got '{actual}'"
         )
 
 
@@ -473,8 +474,8 @@ class TestDestructiveJobOtelEnvVars:
         env_vars = _get_env_vars(manifest)
 
         actual = env_vars.get(_OTEL_SERVICE_NAME)
-        assert actual == _OTEL_SERVICE_VALUE, (
-            f"'{_OTEL_SERVICE_NAME}' must be '{_OTEL_SERVICE_VALUE}', got '{actual}'"
+        assert actual == _OTEL_SERVICE_VALUE_DESTRUCTIVE, (
+            f"'{_OTEL_SERVICE_NAME}' must be '{_OTEL_SERVICE_VALUE_DESTRUCTIVE}', got '{actual}'"
         )
 
 

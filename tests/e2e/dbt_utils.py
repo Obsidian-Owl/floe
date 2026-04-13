@@ -10,12 +10,11 @@ from __future__ import annotations
 import logging
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
+import boto3
 
 from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
 from testing.fixtures.services import ServiceEndpoint
@@ -77,38 +76,31 @@ def _get_polaris_catalog() -> Any:
         return None
 
 
-def _delete_s3_objects(
-    client: httpx.Client,
-    endpoint: str,
+def _delete_s3_prefix(
+    s3_client: Any,
     bucket: str,
-    keys: list[str],
-) -> None:
-    """Delete a batch of S3 objects via the S3 DeleteObjects API.
+    prefix: str,
+) -> int:
+    """Delete all S3 objects under a prefix via boto3.
 
     Args:
-        client: An active httpx.Client instance (with auth configured).
-        endpoint: MinIO/S3 base URL (e.g. ``http://localhost:9000``).
+        s3_client: A boto3 S3 client instance.
         bucket: S3 bucket name.
-        keys: List of object keys to delete.
-    """
-    if not keys:
-        return
+        prefix: Object key prefix to delete under.
 
-    objects_xml = "".join(f"<Object><Key>{k}</Key></Object>" for k in keys)
-    body = (
-        f'<?xml version="1.0" encoding="UTF-8"?><Delete><Quiet>true</Quiet>{objects_xml}</Delete>'
-    )
-    url = f"{endpoint.rstrip('/')}/{bucket}"
-    try:
-        resp = client.post(url, params={"delete": ""}, content=body.encode())
-        if resp.status_code not in (200, 204):
-            logger.warning(
-                "S3 DeleteObjects returned %s for bucket %s",
-                resp.status_code,
-                bucket,
-            )
-    except Exception as exc:
-        logger.warning("S3 DeleteObjects failed for bucket %s: %s", bucket, type(exc).__name__)
+    Returns:
+        Number of objects deleted.
+    """
+    deleted = 0
+    paginator = s3_client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        contents = page.get("Contents", [])
+        if not contents:
+            continue
+        objects = [{"Key": obj["Key"]} for obj in contents]
+        s3_client.delete_objects(Bucket=bucket, Delete={"Objects": objects, "Quiet": True})
+        deleted += len(objects)
+    return deleted
 
 
 def _purge_iceberg_namespace(namespace: str) -> None:
@@ -143,59 +135,41 @@ def _purge_iceberg_namespace(namespace: str) -> None:
         tables = catalog.list_tables(namespace)
         for table_id in tables:
             fqn = f"{table_id[0]}.{table_id[1]}"
-            # Step 1: purge via catalog (removes metadata + signals data removal)
+
+            # Step 1: read table location BEFORE purge (purge removes metadata).
+            location: str | None = None
+            try:
+                table = catalog.load_table(fqn)
+                location = table.metadata.location  # e.g. s3://warehouse/ns1/t1
+            except Exception as exc:
+                logger.warning("Could not load table %s for S3 location: %s", fqn, type(exc).__name__)
+
+            # Step 2: purge via catalog (removes metadata + signals data removal)
             try:
                 catalog.purge_table(fqn)
                 logger.info("Purged Iceberg table %s", fqn)
             except Exception as exc:
                 logger.warning("Could not purge table %s: %s", fqn, type(exc).__name__)
 
-            # Step 2: sweep S3 objects under the table's data prefix via httpx.
-            # We use IsTruncated/ContinuationToken for paginated listing.
-            try:
-                table = catalog.load_table(fqn)
-                location: str = table.metadata.location  # e.g. s3://warehouse/ns1/t1
-                parsed = urlparse(location)
-                bucket: str = parsed.netloc
-                prefix: str = parsed.path.lstrip("/")
+            # Step 3: sweep S3 objects under the table's data prefix via boto3.
+            # boto3 handles AWS Signature V4 required by MinIO.
+            if location is not None:
+                try:
+                    parsed = urlparse(location)
+                    bucket: str = parsed.netloc
+                    prefix: str = parsed.path.lstrip("/")
 
-                list_url = f"{s3_endpoint.rstrip('/')}/{bucket}"
-                params: dict[str, str] = {
-                    "list-type": "2",
-                    "prefix": prefix,
-                }
-
-                with httpx.Client(auth=httpx.BasicAuth(access_key, secret_key)) as client:
-                    while True:
-                        resp = client.get(list_url, params=params)
-                        root = ET.fromstring(resp.text)
-                        # Collect keys from <Contents><Key>…</Key></Contents>
-                        keys = [el.text or "" for el in root.iter("Key") if el.text]
-                        if keys:
-                            _delete_s3_objects(client, s3_endpoint, bucket, keys)
-
-                        # Pagination: check IsTruncated / NextContinuationToken
-                        is_truncated_el = root.find("IsTruncated")
-                        is_truncated = (
-                            is_truncated_el is not None
-                            and (is_truncated_el.text or "").lower() == "true"
-                        )
-                        if not is_truncated:
-                            break
-                        token_el = root.find("NextContinuationToken")
-                        continuation_token = token_el.text if token_el is not None else None
-                        if not continuation_token:
-                            break
-                        params = {
-                            "list-type": "2",
-                            "prefix": prefix,
-                            "continuation-token": continuation_token,
-                        }
-                        logger.debug("S3 listing page continues with ContinuationToken for %s", fqn)
-
-                logger.info("Deleted S3 objects under %s", location)
-            except Exception as exc:
-                logger.warning("S3 cleanup failed for table %s: %s", fqn, type(exc).__name__)
+                    s3_client = boto3.client(
+                        "s3",
+                        endpoint_url=s3_endpoint,
+                        aws_access_key_id=access_key,
+                        aws_secret_access_key=secret_key,
+                        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+                    )
+                    deleted = _delete_s3_prefix(s3_client, bucket, prefix)
+                    logger.info("Deleted %d S3 objects under %s", deleted, location)
+                except Exception as exc:
+                    logger.warning("S3 cleanup failed for table %s: %s", fqn, type(exc).__name__)
 
         # Drop the namespace itself so dbt starts completely fresh.
         # DuckDB's Iceberg extension cannot DROP TABLE CASCADE, so stale

@@ -335,7 +335,7 @@ polaris:
   bootstrap:
     enabled: false
     backoffLimit: 5
-    catalogName: "floe"
+    catalogName: "floe-e2e"
     defaultBaseLocation: "s3://floe-iceberg"
     allowedLocations:
       - "s3://floe-iceberg"

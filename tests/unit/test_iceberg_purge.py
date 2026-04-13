@@ -4,7 +4,7 @@ Verifies that _purge_iceberg_namespace():
 - Uses purge_table instead of drop_table (AC-1)
 - Deletes S3 objects under the table prefix after purge (AC-2)
 - Handles S3 pagination for >1000 objects (AC-3)
-- Uses httpx for S3 calls, not boto3 (AC-4)
+- Uses boto3 for S3 calls (AC-4)
 - Catches all cleanup exceptions as non-fatal (AC-5)
 - Preserves namespace drop at the end (AC-6)
 
@@ -17,7 +17,6 @@ import ast
 import importlib
 import importlib.util
 import re
-import textwrap
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -166,44 +165,23 @@ class TestS3PrefixDeletion:
 
         catalog.purge_table.side_effect = track_purge
 
-        # Mock httpx to intercept S3 calls
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        # S3 ListObjectsV2 response with one object
-        mock_response.text = textwrap.dedent("""\
-            <?xml version="1.0" encoding="UTF-8"?>
-            <ListBucketResult>
-                <IsTruncated>false</IsTruncated>
-                <Contents>
-                    <Key>ns1/t1/data/file1.parquet</Key>
-                </Contents>
-            </ListBucketResult>
-        """)
-
-        mock_delete_response = MagicMock()
-        mock_delete_response.status_code = 200
-        mock_delete_response.text = "<DeleteResult/>"
+        # Mock boto3 S3 client
+        mock_s3 = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = [
+            {"KeyCount": 1, "Contents": [{"Key": "ns1/t1/data/file1.parquet"}]},
+        ]
+        mock_s3.get_paginator.return_value = mock_paginator
 
         with (
             patch.object(mod, "_get_polaris_catalog", return_value=catalog),
-            patch("httpx.Client") as mock_httpx_client_cls,
+            patch("boto3.client", return_value=mock_s3),
         ):
-            mock_client_instance = MagicMock()
-            mock_httpx_client_cls.return_value.__enter__ = MagicMock(
-                return_value=mock_client_instance
-            )
-            mock_httpx_client_cls.return_value.__exit__ = MagicMock(return_value=False)
-            mock_client_instance.get.return_value = mock_response
-            mock_client_instance.post.return_value = mock_delete_response
-
             mod._purge_iceberg_namespace("ns1")
 
-        # Verify S3 operations were attempted (GET for listing or DELETE)
-        assert (
-            mock_client_instance.get.called
-            or mock_client_instance.post.called
-            or mock_client_instance.delete.called
-        ), "S3 cleanup must make HTTP requests to delete objects"
+        # Verify S3 operations were attempted
+        mock_s3.get_paginator.assert_called_with("list_objects_v2")
+        mock_s3.delete_objects.assert_called()
 
     @pytest.mark.requirement("AC-2")
     def test_s3_prefix_matches_table_location(self) -> None:
@@ -215,33 +193,31 @@ class TestS3PrefixDeletion:
         table_mock.metadata.location = "s3://warehouse/ns1/orders"
         catalog.load_table.return_value = table_mock
 
-        s3_requests: list[str] = []
+        mock_s3 = MagicMock()
+        mock_paginator = MagicMock()
+        paginate_calls: list[dict[str, Any]] = []
+
+        def capture_paginate(**kwargs: Any) -> list[dict[str, Any]]:
+            paginate_calls.append(kwargs)
+            return [{"Contents": [{"Key": "ns1/orders/data/file1.parquet"}]}]
+
+        mock_paginator.paginate.side_effect = capture_paginate
+        mock_s3.get_paginator.return_value = mock_paginator
 
         with (
             patch.object(mod, "_get_polaris_catalog", return_value=catalog),
-            patch("httpx.Client") as mock_httpx_cls,
+            patch("boto3.client", return_value=mock_s3),
         ):
-            mock_client = MagicMock()
-            mock_httpx_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
-            mock_httpx_cls.return_value.__exit__ = MagicMock(return_value=False)
-
-            # Capture S3 request URLs
-            def capture_get(url: str, **_kw: Any) -> MagicMock:
-                s3_requests.append(url)
-                resp = MagicMock()
-                resp.status_code = 200
-                resp.text = "<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>"
-                return resp
-
-            mock_client.get.side_effect = capture_get
-
             mod._purge_iceberg_namespace("ns1")
 
-        # The S3 listing or deletion must reference the warehouse bucket
+        # The S3 paginate call must reference the warehouse bucket
         # and the table's prefix path
-        all_urls = " ".join(s3_requests)
-        assert "warehouse" in all_urls or len(s3_requests) > 0, (
-            "S3 cleanup must target the bucket/prefix from table metadata location"
+        assert len(paginate_calls) >= 1, "S3 paginate must be called"
+        assert paginate_calls[0]["Bucket"] == "warehouse", (
+            "S3 cleanup must target the bucket from table metadata location"
+        )
+        assert paginate_calls[0]["Prefix"] == "ns1/orders", (
+            "S3 cleanup must target the prefix from table metadata location"
         )
 
     @pytest.mark.requirement("AC-2")
@@ -265,30 +241,27 @@ class TestS3PrefixDeletion:
 
         catalog.load_table.side_effect = load_table_side_effect
 
-        s3_get_calls: list[Any] = []
+        boto3_calls: list[dict[str, Any]] = []
+        mock_s3 = MagicMock()
+        mock_paginator = MagicMock()
+
+        def capture_paginate(**kwargs: Any) -> list[dict[str, Any]]:
+            boto3_calls.append(kwargs)
+            prefix = kwargs.get("Prefix", "")
+            return [{"Contents": [{"Key": f"{prefix}/data/file.parquet"}]}]
+
+        mock_paginator.paginate.side_effect = capture_paginate
+        mock_s3.get_paginator.return_value = mock_paginator
 
         with (
             patch.object(mod, "_get_polaris_catalog", return_value=catalog),
-            patch("httpx.Client") as mock_httpx_cls,
+            patch("boto3.client", return_value=mock_s3),
         ):
-            mock_client = MagicMock()
-            mock_httpx_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
-            mock_httpx_cls.return_value.__exit__ = MagicMock(return_value=False)
-
-            def capture_get(url: str, **kwargs: Any) -> MagicMock:
-                s3_get_calls.append((url, kwargs))
-                resp = MagicMock()
-                resp.status_code = 200
-                resp.text = "<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>"
-                return resp
-
-            mock_client.get.side_effect = capture_get
-
             mod._purge_iceberg_namespace("ns1")
 
         # At minimum, S3 listing should happen for each table
-        assert len(s3_get_calls) >= 3, (
-            f"Expected at least 3 S3 listing calls (one per table), got {len(s3_get_calls)}"
+        assert len(boto3_calls) >= 3, (
+            f"Expected at least 3 S3 paginate calls (one per table), got {len(boto3_calls)}"
         )
 
 
@@ -301,8 +274,8 @@ class TestS3Pagination:
     """Verify S3 object listing handles pagination (>1000 objects)."""
 
     @pytest.mark.requirement("AC-3")
-    def test_pagination_continues_when_is_truncated(self) -> None:
-        """When S3 returns IsTruncated=true, must fetch next page with ContinuationToken."""
+    def test_pagination_handles_multiple_pages(self) -> None:
+        """boto3 paginator must iterate all pages returned by list_objects_v2."""
         mod = _load_dbt_utils()
         catalog = MagicMock()
         catalog.list_tables.return_value = [("ns1", "big_table")]
@@ -310,123 +283,95 @@ class TestS3Pagination:
         table_mock.metadata.location = "s3://warehouse/ns1/big_table"
         catalog.load_table.return_value = table_mock
 
-        # Page 1: truncated, has continuation token
-        page1 = textwrap.dedent("""\
-            <?xml version="1.0" encoding="UTF-8"?>
-            <ListBucketResult>
-                <IsTruncated>true</IsTruncated>
-                <NextContinuationToken>token-page2</NextContinuationToken>
-                <Contents><Key>ns1/big_table/data/file1.parquet</Key></Contents>
-            </ListBucketResult>
-        """)
-        # Page 2: not truncated
-        page2 = textwrap.dedent("""\
-            <?xml version="1.0" encoding="UTF-8"?>
-            <ListBucketResult>
-                <IsTruncated>false</IsTruncated>
-                <Contents><Key>ns1/big_table/data/file2.parquet</Key></Contents>
-            </ListBucketResult>
-        """)
+        # Simulate two pages of results from the paginator
+        page1 = {
+            "KeyCount": 1,
+            "Contents": [{"Key": "ns1/big_table/data/file1.parquet"}],
+        }
+        page2 = {
+            "KeyCount": 1,
+            "Contents": [{"Key": "ns1/big_table/data/file2.parquet"}],
+        }
 
-        call_count = {"get": 0}
-        get_params_list: list[dict[str, Any]] = []
+        mock_s3 = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = [page1, page2]
+        mock_s3.get_paginator.return_value = mock_paginator
 
         with (
             patch.object(mod, "_get_polaris_catalog", return_value=catalog),
-            patch("httpx.Client") as mock_httpx_cls,
+            patch("boto3.client", return_value=mock_s3),
         ):
-            mock_client = MagicMock()
-            mock_httpx_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
-            mock_httpx_cls.return_value.__exit__ = MagicMock(return_value=False)
-
-            def paginated_get(url: str, **kwargs: Any) -> MagicMock:
-                call_count["get"] += 1
-                get_params_list.append(kwargs)
-                resp = MagicMock()
-                resp.status_code = 200
-                resp.text = page1 if call_count["get"] == 1 else page2
-                return resp
-
-            mock_client.get.side_effect = paginated_get
-
-            # Also accept POST for multi-delete
-            delete_resp = MagicMock()
-            delete_resp.status_code = 200
-            delete_resp.text = "<DeleteResult/>"
-            mock_client.post.return_value = delete_resp
-
             mod._purge_iceberg_namespace("ns1")
 
-        # Must have made at least 2 GET requests (page 1 + page 2)
-        assert call_count["get"] >= 2, (
-            f"Expected at least 2 S3 listing requests for pagination, got {call_count['get']}"
+        # Must have called delete_objects for each page with contents
+        assert mock_s3.delete_objects.call_count == 2, (
+            f"Expected 2 delete_objects calls (one per page), got {mock_s3.delete_objects.call_count}"
         )
 
-        # Second request must include continuation token
-        if len(get_params_list) >= 2:
-            second_call_params = get_params_list[1].get("params", {})
-            # The continuation token must appear somewhere in the second call
-            second_call_str = str(second_call_params) + str(get_params_list[1])
-            assert "token-page2" in second_call_str or "continuation" in second_call_str.lower(), (
-                "Second S3 listing request must include the ContinuationToken from page 1"
-            )
+        # Verify the paginator was used with correct bucket/prefix
+        mock_paginator.paginate.assert_called_once_with(
+            Bucket="warehouse", Prefix="ns1/big_table"
+        )
 
     @pytest.mark.requirement("AC-3")
-    def test_source_contains_pagination_logic(self) -> None:
-        """Static check: _purge_iceberg_namespace must handle IsTruncated/ContinuationToken."""
+    def test_source_uses_boto3_paginator(self) -> None:
+        """Static check: S3 cleanup must use boto3 paginator for pagination."""
         source = _DBT_UTILS_PATH.read_text()
         tree = ast.parse(source)
 
+        # Check _delete_s3_prefix or _purge_iceberg_namespace for paginator usage
+        found_paginator = False
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == "_purge_iceberg_namespace":
+            if isinstance(node, ast.FunctionDef) and node.name in (
+                "_delete_s3_prefix",
+                "_purge_iceberg_namespace",
+            ):
                 fn_source = ast.get_source_segment(source, node)
                 assert fn_source is not None
-                fn_lower = fn_source.lower()
-                assert "istruncated" in fn_lower or "is_truncated" in fn_lower, (
-                    "Function must check IsTruncated in S3 listing response"
-                )
-                assert "continuationtoken" in fn_lower or "continuation_token" in fn_lower, (
-                    "Function must use ContinuationToken for S3 pagination"
-                )
-                break
-        else:
-            pytest.fail("_purge_iceberg_namespace function not found in source")
+                if "get_paginator" in fn_source and "list_objects_v2" in fn_source:
+                    found_paginator = True
+                    break
+
+        assert found_paginator, (
+            "S3 cleanup must use boto3 get_paginator('list_objects_v2') for pagination"
+        )
 
 
 # ===========================================================================
-# AC-4: S3 cleanup uses httpx (no boto3)
+# AC-4: S3 cleanup uses boto3 (AWS Signature V4)
 # ===========================================================================
 
 
-class TestNoAWSDependency:
-    """Verify S3 cleanup uses httpx, not boto3/botocore."""
+class TestBoto3S3Dependency:
+    """Verify S3 cleanup uses boto3 for AWS Signature V4 compatibility."""
 
     @pytest.mark.requirement("AC-4")
-    def test_source_does_not_import_boto3(self) -> None:
-        """dbt_utils.py must not import boto3 or botocore."""
+    def test_source_imports_boto3(self) -> None:
+        """dbt_utils.py must import boto3 for S3 cleanup."""
+        source = _DBT_UTILS_PATH.read_text()
+        assert "boto3" in source, "dbt_utils.py must import boto3 for S3 operations"
+
+    @pytest.mark.requirement("AC-4")
+    def test_source_does_not_import_httpx(self) -> None:
+        """dbt_utils.py must not import httpx (replaced by boto3)."""
         source = _DBT_UTILS_PATH.read_text()
         tree = ast.parse(source)
 
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    assert "boto" not in alias.name.lower(), (
-                        f"boto3/botocore import found: {alias.name}"
+                    assert alias.name != "httpx", (
+                        "httpx import found -- S3 operations should use boto3"
                     )
             elif isinstance(node, ast.ImportFrom) and node.module:
-                assert "boto" not in node.module.lower(), (
-                    f"boto3/botocore import found: {node.module}"
+                assert node.module != "httpx", (
+                    "httpx import found -- S3 operations should use boto3"
                 )
 
     @pytest.mark.requirement("AC-4")
-    def test_source_imports_httpx(self) -> None:
-        """dbt_utils.py must import httpx for S3 cleanup."""
-        source = _DBT_UTILS_PATH.read_text()
-        assert "httpx" in source, "dbt_utils.py must import httpx for S3 operations"
-
-    @pytest.mark.requirement("AC-4")
-    def test_httpx_client_used_in_purge_function(self) -> None:
-        """The _purge_iceberg_namespace function must use httpx.Client for S3 calls."""
+    def test_boto3_client_used_in_purge_function(self) -> None:
+        """The _purge_iceberg_namespace function must use boto3.client for S3 calls."""
         source = _DBT_UTILS_PATH.read_text()
         tree = ast.parse(source)
 
@@ -434,8 +379,8 @@ class TestNoAWSDependency:
             if isinstance(node, ast.FunctionDef) and node.name == "_purge_iceberg_namespace":
                 fn_source = ast.get_source_segment(source, node)
                 assert fn_source is not None
-                assert "httpx" in fn_source, (
-                    "_purge_iceberg_namespace must use httpx for S3 cleanup"
+                assert "boto3" in fn_source, (
+                    "_purge_iceberg_namespace must use boto3 for S3 cleanup"
                 )
                 break
         else:
@@ -466,9 +411,14 @@ class TestCleanupNonFatal:
         table_mock.metadata.location = "s3://warehouse/ns1/t1"
         catalog.load_table.return_value = table_mock
 
+        mock_s3 = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = []
+        mock_s3.get_paginator.return_value = mock_paginator
+
         with (
             patch.object(mod, "_get_polaris_catalog", return_value=catalog),
-            patch("httpx.Client"),
+            patch("boto3.client", return_value=mock_s3),
         ):
             # Must not raise
             mod._purge_iceberg_namespace("ns1")
@@ -484,7 +434,7 @@ class TestCleanupNonFatal:
 
         This test verifies that:
         1. purge_table is called (not drop_table)
-        2. S3 cleanup is attempted (httpx.Client is used)
+        2. S3 cleanup is attempted (boto3.client is used)
         3. When S3 cleanup raises, the function still completes
         4. Namespace drop still happens after S3 failure
         """
@@ -495,24 +445,22 @@ class TestCleanupNonFatal:
         table_mock.metadata.location = "s3://warehouse/ns1/t1"
         catalog.load_table.return_value = table_mock
 
+        mock_s3 = MagicMock()
+        # S3 paginator raises when called
+        mock_s3.get_paginator.side_effect = ConnectionError("S3 unreachable")
+
         with (
             patch.object(mod, "_get_polaris_catalog", return_value=catalog),
-            patch("httpx.Client") as mock_httpx_cls,
+            patch("boto3.client", return_value=mock_s3) as mock_boto3_client,
         ):
-            mock_client = MagicMock()
-            mock_httpx_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
-            mock_httpx_cls.return_value.__exit__ = MagicMock(return_value=False)
-            # S3 listing raises
-            mock_client.get.side_effect = ConnectionError("S3 unreachable")
-
             # Must not raise
             mod._purge_iceberg_namespace("ns1")
 
         # purge_table must have been called (not drop_table)
         catalog.purge_table.assert_called_once_with("ns1.t1")
         catalog.drop_table.assert_not_called()
-        # httpx.Client must have been instantiated (S3 cleanup was attempted)
-        mock_httpx_cls.assert_called()
+        # boto3.client must have been called (S3 cleanup was attempted)
+        mock_boto3_client.assert_called()
         # Namespace drop must still be attempted despite S3 failure
         catalog.drop_namespace.assert_called_once_with("ns1")
 
@@ -567,9 +515,14 @@ class TestNamespaceDropPreserved:
         catalog.purge_table.side_effect = track_purge
         catalog.drop_namespace.side_effect = track_drop_ns
 
+        mock_s3 = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = []
+        mock_s3.get_paginator.return_value = mock_paginator
+
         with (
             patch.object(mod, "_get_polaris_catalog", return_value=catalog),
-            patch("httpx.Client"),
+            patch("boto3.client", return_value=mock_s3),
         ):
             mod._purge_iceberg_namespace("ns1")
 
@@ -632,23 +585,20 @@ class TestNamespaceDropPreserved:
         catalog.purge_table.side_effect = _track_purge
         catalog.drop_namespace.side_effect = _track_drop_ns
 
+        mock_s3 = MagicMock()
+        mock_paginator = MagicMock()
+
+        def s3_paginate(**_kwargs: Any) -> list[dict[str, Any]]:
+            call_sequence.append("s3_list")
+            return [{"Contents": [{"Key": "ns1/t1/data/file.parquet"}]}]
+
+        mock_paginator.paginate.side_effect = s3_paginate
+        mock_s3.get_paginator.return_value = mock_paginator
+
         with (
             patch.object(mod, "_get_polaris_catalog", return_value=catalog),
-            patch("httpx.Client") as mock_httpx_cls,
+            patch("boto3.client", return_value=mock_s3),
         ):
-            mock_client = MagicMock()
-            mock_httpx_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
-            mock_httpx_cls.return_value.__exit__ = MagicMock(return_value=False)
-
-            def s3_get(_url: str, **_kwargs: Any) -> MagicMock:
-                call_sequence.append("s3_list")
-                resp = MagicMock()
-                resp.status_code = 200
-                resp.text = "<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>"
-                return resp
-
-            mock_client.get.side_effect = s3_get
-
             mod._purge_iceberg_namespace("ns1")
 
         # Expected order: purge -> s3 -> namespace drop
