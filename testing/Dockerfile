@@ -87,8 +87,8 @@ ENV PYTHONPATH=/app:/app/testing
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Default test command — use .venv/bin/pytest directly to avoid uv sync
-# writes that fail with readOnlyRootFilesystem: true in K8s
+# Default test command — invoke pytest directly from the venv to avoid
+# uv sync writes that fail under readOnlyRootFilesystem in K8s pods
 ENTRYPOINT ["/app/.venv/bin/pytest"]
 CMD ["--tb=short", "-v"]
 
