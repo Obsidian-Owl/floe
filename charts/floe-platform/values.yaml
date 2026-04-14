@@ -174,6 +174,37 @@ dagster:
         value: "floe-platform"
     envSecrets: []
     envConfigMaps: []
+    # Writable emptyDir volumes for readOnlyRootFilesystem compatibility.
+    # Dagster creates these directories at startup; without them pods crash
+    # with OSError: [Errno 30] Read-only file system.
+    volumes:
+      - name: dagster-writable
+        emptyDir: {}
+    volumeMounts:
+      - name: dagster-writable
+        mountPath: /opt/dagster/dagster_home/.telemetry
+        subPath: telemetry
+      - name: dagster-writable
+        mountPath: /opt/dagster/dagster_home/logs
+        subPath: logs
+      - name: dagster-writable
+        mountPath: /opt/dagster/dagster_home/.logs_queue
+        subPath: logs_queue
+      - name: dagster-writable
+        mountPath: /opt/dagster/dagster_home/history
+        subPath: history
+      - name: dagster-writable
+        mountPath: /opt/dagster/dagster_home/schedules
+        subPath: schedules
+      - name: dagster-writable
+        mountPath: /opt/dagster/dagster_home/storage
+        subPath: storage
+      - name: dagster-writable
+        mountPath: /tmp
+        subPath: tmp
+      - name: dagster-writable
+        mountPath: /home/dagster/.dagster
+        subPath: home-dagster
 
   # Dagster daemon configuration
   dagsterDaemon:
@@ -200,6 +231,35 @@ dagster:
         value: "floe-platform"
     envSecrets: []
     envConfigMaps: []
+    # Writable emptyDir volumes — same as dagsterWebserver (see comment above)
+    volumes:
+      - name: dagster-writable
+        emptyDir: {}
+    volumeMounts:
+      - name: dagster-writable
+        mountPath: /opt/dagster/dagster_home/.telemetry
+        subPath: telemetry
+      - name: dagster-writable
+        mountPath: /opt/dagster/dagster_home/logs
+        subPath: logs
+      - name: dagster-writable
+        mountPath: /opt/dagster/dagster_home/.logs_queue
+        subPath: logs_queue
+      - name: dagster-writable
+        mountPath: /opt/dagster/dagster_home/history
+        subPath: history
+      - name: dagster-writable
+        mountPath: /opt/dagster/dagster_home/schedules
+        subPath: schedules
+      - name: dagster-writable
+        mountPath: /opt/dagster/dagster_home/storage
+        subPath: storage
+      - name: dagster-writable
+        mountPath: /tmp
+        subPath: tmp
+      - name: dagster-writable
+        mountPath: /home/dagster/.dagster
+        subPath: home-dagster
 
   # PostgreSQL configuration for Dagster
   # Disable subchart's PostgreSQL - we use parent chart's PostgreSQL
