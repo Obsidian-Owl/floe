@@ -46,6 +46,7 @@ Fields:
 {{- $dagsterWeb := include "floe-platform.dagster.webserverName" $context }}
 {{- $marquez := include "floe-platform.marquez.fullname" $context }}
 {{- $otel := include "floe-platform.otel.fullname" $context }}
+{{- $jaegerQuery := include "floe-platform.jaeger.queryName" $context }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -73,12 +74,14 @@ spec:
         - name: test-runner
           image: "{{ $context.Values.tests.image.repository }}:{{ $context.Values.tests.image.tag }}"
           imagePullPolicy: {{ $context.Values.tests.image.pullPolicy }}
+          # pytest writes .pyc caches, html reports, and json-report files
+          # to /app during execution — readOnlyRootFilesystem is not practical.
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop:
               - ALL
-            readOnlyRootFilesystem: true
+            readOnlyRootFilesystem: false
             runAsNonRoot: true
             runAsUser: 1000
           args:
@@ -147,6 +150,10 @@ spec:
               value: {{ $dagsterWeb | quote }}
             - name: DAGSTER_WEBSERVER_HOST
               value: {{ $dagsterWeb | quote }}
+            - name: JAEGER_QUERY_HOST
+              value: {{ $jaegerQuery | quote }}
+            - name: JAEGER_URL
+              value: "http://{{ $jaegerQuery }}:16686"
             - name: OTEL_HOST
               value: {{ $otel | quote }}
             - name: OTEL_COLLECTOR_GRPC_HOST
@@ -164,16 +171,12 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            - name: uv-cache
-              mountPath: /home/floe/.cache/uv
             {{- if $context.Values.tests.artifacts.enabled }}
             - name: artifacts
               mountPath: /artifacts
             {{- end }}
       volumes:
         - name: tmp
-          emptyDir: {}
-        - name: uv-cache
           emptyDir: {}
         {{- if $context.Values.tests.artifacts.enabled }}
         - name: artifacts
