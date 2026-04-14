@@ -116,6 +116,19 @@ dagster:
           tag: latest
           pullPolicy: Never
         imagePullPolicy: Never
+        # Run pods execute dbt which writes to /app/demo/*/target/ and other
+        # project directories. readOnlyRootFilesystem is not practical for
+        # ephemeral run pods — too many write paths to enumerate with subPath.
+        runK8sConfig:
+          containerConfig:
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: false
+              runAsNonRoot: true
+              runAsUser: 1000
+              capabilities:
+                drop:
+                  - ALL
   # Enable user deployments to allow workspace.yaml to be mounted
   # Even with no actual code locations, this enables the workspace file mount
   dagster-user-deployments:

@@ -87,13 +87,14 @@ ENV PYTHONPATH=/app:/app/testing
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Default test command
-ENTRYPOINT ["uv", "run", "pytest"]
+# Default test command — use .venv/bin/pytest directly to avoid uv sync
+# writes that fail with readOnlyRootFilesystem: true in K8s
+ENTRYPOINT ["/app/.venv/bin/pytest"]
 CMD ["--tb=short", "-v"]
 
 # Health check (verify pytest is available)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD uv run python -c "import pytest; print(pytest.__version__)"
+    CMD /app/.venv/bin/python -c "import pytest; print(pytest.__version__)"
 
 # Labels
 LABEL org.opencontainers.image.title="floe-test-runner"

@@ -46,6 +46,7 @@ Fields:
 {{- $dagsterWeb := include "floe-platform.dagster.webserverName" $context }}
 {{- $marquez := include "floe-platform.marquez.fullname" $context }}
 {{- $otel := include "floe-platform.otel.fullname" $context }}
+{{- $jaegerQuery := printf "%s-jaeger-query" (include "floe-platform.fullname" $context) }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -78,9 +79,10 @@ spec:
             capabilities:
               drop:
               - ALL
-            readOnlyRootFilesystem: true
+            readOnlyRootFilesystem: false
             runAsNonRoot: true
             runAsUser: 1000
+          command: ["/app/.venv/bin/pytest"]
           args:
             - "--tb=short"
             - "-v"
@@ -147,6 +149,10 @@ spec:
               value: {{ $dagsterWeb | quote }}
             - name: DAGSTER_WEBSERVER_HOST
               value: {{ $dagsterWeb | quote }}
+            - name: JAEGER_QUERY_HOST
+              value: {{ $jaegerQuery | quote }}
+            - name: JAEGER_URL
+              value: "http://{{ $jaegerQuery }}:16686"
             - name: OTEL_HOST
               value: {{ $otel | quote }}
             - name: OTEL_COLLECTOR_GRPC_HOST
