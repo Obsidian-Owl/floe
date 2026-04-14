@@ -1,0 +1,118 @@
+# Tests for Polaris PostgreSQL persistence (relational-jdbc)
+# Validates AC-1 through AC-6 of the polaris-persistence work unit.
+# Canonical credential path: polaris.persistence.jdbc.* — the chart template
+# renders these as quarkus.datasource.* properties in application.properties.
+# (Decision D-4 revised in salvage-branch-wrap-up: polaris.env[QUARKUS_DATASOURCE_*]
+# was the duplicate escape hatch and is no longer used in values-test.yaml.)
+suite: polaris persistence
+templates:
+  - templates/configmap-polaris.yaml
+  - templates/deployment-polaris.yaml
+  - templates/secret-polaris.yaml
+  - templates/job-polaris-bootstrap.yaml
+tests:
+  # --- AC-2: Configmap includes conditional JDBC properties ---
+  - it: should include JDBC persistence properties when persistence.type is relational-jdbc
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "http://minio:9000"
+    template: templates/configmap-polaris.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: "polaris\\.persistence\\.type=relational-jdbc"
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.db-kind=postgresql"
+
+  # --- AC-6: In-memory mode backward-compatible ---
+  - it: should NOT include JDBC properties when persistence.type is not set
+    set:
+      polaris.enabled: true
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "http://minio:9000"
+    template: templates/configmap-polaris.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - notMatchRegex:
+          path: data["application.properties"]
+          pattern: "polaris\\.persistence\\.type"
+      - notMatchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.db-kind"
+
+  - it: should NOT include JDBC properties when persistence.type is explicitly in-memory
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: in-memory
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "http://minio:9000"
+    template: templates/configmap-polaris.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - notMatchRegex:
+          path: data["application.properties"]
+          pattern: "polaris\\.persistence\\.type"
+      - notMatchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.db-kind"
+
+  # --- AC-1 (revised): JDBC URL/username in configmap, password in Secret ---
+  # Password moved from ConfigMap to Secret (CWE-312 review feedback).
+  # The deployment injects QUARKUS_DATASOURCE_PASSWORD via secretKeyRef.
+  - it: should render JDBC url and username in configmap but NOT password
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.persistence.jdbc.url: "jdbc:postgresql://floe-platform-postgresql:5432/polaris"
+      polaris.persistence.jdbc.username: "polaris"
+      polaris.persistence.jdbc.password: "polaris-test-pw"  # pragma: allowlist secret
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "http://minio:9000"
+    template: templates/configmap-polaris.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.jdbc\\.url=jdbc:postgresql://floe-platform-postgresql:5432/polaris"
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.username=polaris"
+      - notMatchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.password="
+
+  # --- AC-5: Bootstrap Job remains functional ---
+  - it: should render bootstrap Job with JDBC persistence configured
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.bootstrap.catalogName: "floe-e2e"
+      polaris.bootstrap.defaultBaseLocation: "s3://floe-iceberg"
+    template: templates/job-polaris-bootstrap.yaml
+    asserts:
+      - isKind:
+          of: Job
+
+  # --- AC-2: JDBC properties include all required Quarkus keys ---
+  - it: should include quarkus.datasource.jdbc.url property when JDBC persistence enabled
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.persistence.jdbc.url: "jdbc:postgresql://pg:5432/polaris"
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "http://minio:9000"
+    template: templates/configmap-polaris.yaml
+    asserts:
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: "quarkus\\.datasource\\.jdbc\\.url=jdbc:postgresql://pg:5432/polaris"

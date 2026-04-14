@@ -179,6 +179,17 @@ polaris:
     nodePort: 30181
     managementPort: 8182
     managementNodePort: 30182
+  # JDBC persistence — survives pod restarts (Decision D-4, revised)
+  # Canonical path: polaris.persistence.jdbc.* — the chart template renders
+  # these as quarkus.datasource.* properties in configmap-polaris.yaml.
+  # DO NOT re-add polaris.env with quarkus datasource entries — they were the
+  # duplicate escape hatch and caused silent drift (salvage-wrap-up AC-3).
+  persistence:
+    type: relational-jdbc
+    jdbc:
+      url: "jdbc:postgresql://floe-platform-postgresql:5432/polaris"
+      username: "floe"
+      password: "floe-test-password-1234"  # pragma: allowlist secret
   # Adjusted probes for test environment (slower startup)
   livenessProbe:
     httpGet:
@@ -201,7 +212,8 @@ polaris:
 postgresql:
   enabled: true
   persistence:
-    enabled: false
+    enabled: true
+    size: 1Gi
   preUpgradeCleanup:
     enabled: true
     activeDeadlineSeconds: 600  # Higher for Kind/CI — absorbs scheduling + image pull latency
@@ -213,6 +225,15 @@ postgresql:
     password: "floe-test-password-1234"  # pragma: allowlist secret
     database: floe
   primary:
+    initdb:
+      scripts:
+        init-databases.sql: |
+          CREATE DATABASE dagster;
+          CREATE DATABASE marquez;
+          CREATE DATABASE polaris;
+          GRANT ALL PRIVILEGES ON DATABASE dagster TO floe;
+          GRANT ALL PRIVILEGES ON DATABASE marquez TO floe;
+          GRANT ALL PRIVILEGES ON DATABASE polaris TO floe;
     resources:
       requests:
         cpu: 100m

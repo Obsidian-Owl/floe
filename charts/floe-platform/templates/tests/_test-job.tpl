@@ -74,7 +74,13 @@ spec:
           image: "{{ $context.Values.tests.image.repository }}:{{ $context.Values.tests.image.tag }}"
           imagePullPolicy: {{ $context.Values.tests.image.pullPolicy }}
           securityContext:
-            {{- include "floe-platform.containerSecurityContext" $context | nindent 12 }}
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
           args:
             - "--tb=short"
             - "-v"
@@ -155,15 +161,23 @@ spec:
               value: "1"
           resources:
             {{- toYaml $context.Values.tests.resources | nindent 12 }}
-          {{- if $context.Values.tests.artifacts.enabled }}
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: uv-cache
+              mountPath: /home/floe/.cache/uv
+            {{- if $context.Values.tests.artifacts.enabled }}
             - name: artifacts
               mountPath: /artifacts
-          {{- end }}
-      {{- if $context.Values.tests.artifacts.enabled }}
+            {{- end }}
       volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: uv-cache
+          emptyDir: {}
+        {{- if $context.Values.tests.artifacts.enabled }}
         - name: artifacts
           persistentVolumeClaim:
             claimName: {{ $context.Values.tests.artifacts.pvcName }}
-      {{- end }}
+        {{- end }}
 {{- end }}

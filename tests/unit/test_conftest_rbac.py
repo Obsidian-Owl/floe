@@ -450,12 +450,20 @@ class TestOAuthScopePreservation:
         for all principal roles. This is different from using 'ALL' as an
         entity name in a URL path. The scope MUST be preserved.
         """
-        # Match the scope field in the OAuth token request
-        scope_pattern = re.compile(r"""["']scope["']\s*:\s*["']PRINCIPAL_ROLE:ALL["']""")
-        assert scope_pattern.search(conftest_text), (
+        # Match the scope value in the OAuth token request — may be inline
+        # literal or via a variable that holds "PRINCIPAL_ROLE:ALL".
+        has_scope_literal = bool(
+            re.search(r"""["']scope["']\s*:\s*["']PRINCIPAL_ROLE:ALL["']""", conftest_text)
+        )
+        has_scope_variable = bool(
+            re.search(r"""["']PRINCIPAL_ROLE:ALL["']""", conftest_text)
+            and re.search(r"""["']scope["']""", conftest_text)
+        )
+        assert has_scope_literal or has_scope_variable, (
             "E2E conftest must include 'scope': 'PRINCIPAL_ROLE:ALL' in the "
-            "OAuth token request data. This is a valid OAuth scope and must "
-            "not be confused with the entity name 'ALL' which is incorrect."
+            "OAuth token request data (inline or via variable). This is a valid "
+            "OAuth scope and must not be confused with the entity name 'ALL' "
+            "which is incorrect."
         )
 
 

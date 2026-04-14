@@ -27,4 +27,21 @@ data:
     # Note: AWS credentials provided via AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY env vars
     # from secret-polaris.yaml (secretKeyRef) - not stored in ConfigMap for security
     {{- end }}
+
+    {{- if and .Values.polaris.persistence (eq (.Values.polaris.persistence.type | default "in-memory") "relational-jdbc") }}
+    # JDBC persistence — Polaris stores catalog metadata in PostgreSQL
+    polaris.persistence.type=relational-jdbc
+    quarkus.datasource.db-kind=postgresql
+    {{- with .Values.polaris.persistence.jdbc }}
+    {{- if .url }}
+    quarkus.datasource.jdbc.url={{ .url }}
+    {{- end }}
+    {{- if .username }}
+    quarkus.datasource.username={{ .username }}
+    {{- end }}
+    # Note: quarkus.datasource.password provided via QUARKUS_DATASOURCE_PASSWORD
+    # env var from secret-polaris.yaml (secretKeyRef) — not stored in ConfigMap
+    # for security (same pattern as S3 credentials above).
+    {{- end }}
+    {{- end }}
 {{- end }}

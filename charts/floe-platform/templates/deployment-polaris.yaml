@@ -73,6 +73,13 @@ spec:
                      in the catalog, which flows through AwsCredentialsStorageIntegration
                      to S3FileIO's s3.path-style-access property.
                      Requires SKIP_CREDENTIAL_SUBSCOPING_INDIRECTION=false. */}}
+            {{- if and .Values.polaris.persistence (eq (.Values.polaris.persistence.type | default "in-memory") "relational-jdbc") }}
+            - name: QUARKUS_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
+                  key: jdbc-password
+            {{- end }}
             {{- if .Values.polaris.storage.s3.enabled }}
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
