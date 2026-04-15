@@ -102,6 +102,28 @@ Examples:
     help="Generate Dagster definitions.py file alongside CompiledArtifacts. "
     "The generated file can be used as a Dagster code location entry point.",
 )
+@click.option(
+    "--output-format",
+    type=click.Choice(["json", "yaml", "configmap"], case_sensitive=False),
+    default="json",
+    show_default=True,
+    help="Output format for CompiledArtifacts. "
+    "'configmap' wraps values in a Kubernetes ConfigMap YAML.",
+)
+@click.option(
+    "--configmap-name",
+    type=str,
+    default="floe-compiled-values",
+    show_default=True,
+    help="ConfigMap metadata.name (only used with --output-format=configmap).",
+)
+@click.option(
+    "--namespace",
+    type=str,
+    default=None,
+    help="ConfigMap metadata.namespace (only used with --output-format=configmap). "
+    "Omitted from output when not provided.",
+)
 def compile_command(
     spec: Path | None,
     manifest: Path | None,
@@ -111,6 +133,9 @@ def compile_command(
     skip_contracts: bool,
     drift_detection: bool,
     generate_definitions: bool,
+    output_format: str,
+    configmap_name: str,
+    namespace: str | None,
 ) -> None:
     """Compile FloeSpec and Manifest into CompiledArtifacts.
 
@@ -127,7 +152,20 @@ def compile_command(
         skip_contracts: Skip data contract validation if True.
         drift_detection: Enable schema drift detection if True.
         generate_definitions: Generate Dagster definitions.py if True.
+        output_format: Output format for CompiledArtifacts (json, yaml, configmap).
+        configmap_name: ConfigMap metadata.name for configmap format.
+        namespace: ConfigMap metadata.namespace for configmap format.
     """
+    # Warn if --configmap-name used without --output-format=configmap
+    if configmap_name != "floe-compiled-values" and output_format != "configmap":
+        info("--configmap-name is only used with --output-format=configmap")
+
+    # Compute default output path based on format when user didn't specify --output
+    if output == Path("target/compiled_artifacts.json"):
+        if output_format == "configmap":
+            output = Path("target/floe-compiled-values.yaml")
+        elif output_format == "yaml":
+            output = Path("target/compiled_artifacts.yaml")
     # Validate required inputs
     if spec is None:
         error_exit(
@@ -171,7 +209,18 @@ def compile_command(
         artifacts = compile_pipeline(spec, manifest)
 
         # Step 4: Save CompiledArtifacts to output path (FR-011)
-        artifacts.to_json_file(output)
+        if output_format == "configmap":
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(
+                artifacts.to_configmap_yaml(
+                    name=configmap_name,
+                    namespace=namespace,
+                )
+            )
+        elif output_format == "yaml":
+            artifacts.to_yaml_file(output)
+        else:
+            artifacts.to_json_file(output)
         success(f"CompiledArtifacts written to: {output}")
 
         # Step 5: Export enforcement report if requested (FR-012, FR-013, T020)

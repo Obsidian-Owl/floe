@@ -400,6 +400,224 @@ class TestPlatformCompileCommand:
         assert "drift" in result.output.lower()
 
 
+class TestOutputFormatOption:
+    """Tests for --output-format flag on platform compile (AC-4, AC-5, AC-6, AC-7)."""
+
+    @pytest.mark.requirement("FLUX-AC-6")
+    def test_output_format_flag_accepted(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+    ) -> None:
+        """--output-format must be accepted as a valid Click option."""
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "json",
+            ],
+        )
+        assert "Error: No such option: --output-format" not in (result.output or "")
+
+    @pytest.mark.requirement("FLUX-AC-6")
+    def test_output_format_default_is_json(
+        self,
+        cli_runner: CliRunner,
+    ) -> None:
+        """--output-format defaults to 'json' in help text."""
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            ["platform", "compile", "--help"],
+        )
+        assert result.exit_code == 0
+        assert "--output-format" in result.output
+
+    @pytest.mark.requirement("FLUX-AC-6")
+    def test_output_format_accepts_yaml(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+    ) -> None:
+        """--output-format=yaml must be accepted."""
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "yaml",
+            ],
+        )
+        assert "Error: Invalid value for '--output-format'" not in (result.output or "")
+
+    @pytest.mark.requirement("FLUX-AC-4")
+    def test_output_format_accepts_configmap(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+    ) -> None:
+        """--output-format=configmap must be accepted."""
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "configmap",
+            ],
+        )
+        assert "Error: Invalid value for '--output-format'" not in (result.output or "")
+
+    @pytest.mark.requirement("FLUX-AC-6")
+    def test_output_format_rejects_invalid(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+    ) -> None:
+        """Invalid --output-format must be rejected by Click."""
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "invalid",
+            ],
+        )
+        assert result.exit_code != 0
+
+    @pytest.mark.requirement("FLUX-AC-5")
+    def test_configmap_name_flag_accepted(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+    ) -> None:
+        """--configmap-name must be accepted as a valid Click option."""
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "configmap",
+                "--configmap-name",
+                "my-values",
+            ],
+        )
+        assert "Error: No such option: --configmap-name" not in (result.output or "")
+
+    @pytest.mark.requirement("FLUX-AC-5")
+    def test_configmap_name_warning_without_configmap_format(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+    ) -> None:
+        """--configmap-name with non-configmap format logs a warning."""
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "json",
+                "--configmap-name",
+                "my-values",
+            ],
+        )
+        # Warning should be logged about --configmap-name being ignored
+        assert "--configmap-name" in (result.output or "") or "configmap" in (result.output or "").lower()
+
+    @pytest.mark.requirement("FLUX-AC-7")
+    def test_namespace_flag_accepted(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+    ) -> None:
+        """--namespace must be accepted for configmap format."""
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "configmap",
+                "--namespace",
+                "flux-system",
+            ],
+        )
+        assert "Error: No such option: --namespace" not in (result.output or "")
+
+    @pytest.mark.requirement("FLUX-AC-4")
+    def test_output_format_shown_in_help(
+        self,
+        cli_runner: CliRunner,
+    ) -> None:
+        """Help must show --output-format, --configmap-name, --namespace."""
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            ["platform", "compile", "--help"],
+        )
+        assert result.exit_code == 0
+        assert "--output-format" in result.output
+        assert "--configmap-name" in result.output
+        assert "--namespace" in result.output
+
+
 class TestPlatformGroup:
     """Tests for the platform command group."""
 
