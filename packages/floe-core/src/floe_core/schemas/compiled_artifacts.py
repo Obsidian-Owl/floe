@@ -739,6 +739,74 @@ class CompiledArtifacts(BaseModel):
             encoding="utf-8",
         )
 
+    def to_configmap_yaml(
+        self,
+        name: str = "floe-compiled-values",
+        namespace: str | None = None,
+    ) -> str:
+        """Render CompiledArtifacts as a Kubernetes ConfigMap YAML string.
+
+        The compiled values are embedded under ``data.values.yaml`` as a
+        YAML block scalar (``|``), preserving newlines and indentation.
+        The embedded content is semantically equivalent to ``to_yaml_file()``
+        output.
+
+        Args:
+            name: ConfigMap metadata.name (default: ``floe-compiled-values``).
+            namespace: ConfigMap metadata.namespace.  Omitted from output
+                when ``None``.
+
+        Returns:
+            A string containing valid Kubernetes ConfigMap YAML.
+
+        Example:
+            >>> artifacts = CompiledArtifacts(...)
+            >>> print(artifacts.to_configmap_yaml(namespace="flux-system"))
+
+        See Also:
+            - to_yaml_file: Write artifacts to a plain YAML file
+        """
+        import yaml
+
+        data = self.model_dump(mode="json", by_alias=True)
+        values_content = yaml.safe_dump(
+            data, default_flow_style=False, allow_unicode=True
+        )
+
+        metadata: dict[str, Any] = {"name": name}
+        if namespace is not None:
+            metadata["namespace"] = namespace
+
+        configmap: dict[str, Any] = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": metadata,
+            "data": {"values.yaml": values_content},
+        }
+
+        # Use a custom dumper that renders multi-line strings as block
+        # scalars (|) so the embedded YAML stays human-readable.
+        class _BlockDumper(yaml.SafeDumper):
+            pass
+
+        def _str_representer(
+            dumper: yaml.SafeDumper, data: str
+        ) -> yaml.ScalarNode:
+            if "\n" in data:
+                return dumper.represent_scalar(
+                    "tag:yaml.org,2002:str", data, style="|"
+                )
+            return dumper.represent_scalar("tag:yaml.org,2002:str", data)
+
+        _BlockDumper.add_representer(str, _str_representer)
+
+        return yaml.dump(
+            configmap,
+            Dumper=_BlockDumper,
+            default_flow_style=False,
+            allow_unicode=True,
+        )
+
     @classmethod
     def from_json_file(cls, path: Path) -> CompiledArtifacts:
         """Load CompiledArtifacts from a JSON file.

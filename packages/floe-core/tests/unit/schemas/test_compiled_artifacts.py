@@ -1155,3 +1155,174 @@ class TestGovernanceBackwardCompatibility:
         assert restored.governance.data_retention_days == 365
         assert restored.governance.default_ttl_hours is None
         assert restored.governance.snapshot_keep_last is None
+
+
+# ==============================================================================
+# ConfigMap YAML Output (AC-9: to_configmap_yaml)
+# ==============================================================================
+
+
+class TestConfigMapYaml:
+    """Tests for to_configmap_yaml method on CompiledArtifacts.
+
+    AC-9: CompiledArtifacts.to_configmap_yaml() returns a string containing
+    valid Kubernetes ConfigMap YAML with embedded compiled values.
+
+    Requirements: FLUX-AC-9
+    """
+
+    @pytest.fixture
+    def artifacts(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> CompiledArtifacts:
+        """Create a CompiledArtifacts instance for ConfigMap tests."""
+        return CompiledArtifacts(
+            version=COMPILED_ARTIFACTS_VERSION,
+            metadata=sample_compilation_metadata,
+            identity=sample_product_identity,
+            mode="simple",
+            observability=sample_observability_config,
+            dbt_profiles={"default": {"target": "dev", "outputs": {}}},
+        )
+
+    @pytest.mark.requirement("FLUX-AC-9")
+    def test_configmap_yaml_returns_string(
+        self, artifacts: CompiledArtifacts
+    ) -> None:
+        """to_configmap_yaml must return a string."""
+        result = artifacts.to_configmap_yaml()
+        assert isinstance(result, str)
+
+    @pytest.mark.requirement("FLUX-AC-9")
+    def test_configmap_yaml_is_valid_yaml(
+        self, artifacts: CompiledArtifacts
+    ) -> None:
+        """to_configmap_yaml output must be parseable as valid YAML."""
+        import yaml
+
+        result = artifacts.to_configmap_yaml()
+        parsed = yaml.safe_load(result)
+        assert isinstance(parsed, dict)
+
+    @pytest.mark.requirement("FLUX-AC-9")
+    def test_configmap_yaml_has_correct_api_version(
+        self, artifacts: CompiledArtifacts
+    ) -> None:
+        """ConfigMap must have apiVersion: v1."""
+        import yaml
+
+        result = artifacts.to_configmap_yaml()
+        parsed = yaml.safe_load(result)
+        assert parsed["apiVersion"] == "v1"
+
+    @pytest.mark.requirement("FLUX-AC-9")
+    def test_configmap_yaml_has_correct_kind(
+        self, artifacts: CompiledArtifacts
+    ) -> None:
+        """ConfigMap must have kind: ConfigMap."""
+        import yaml
+
+        result = artifacts.to_configmap_yaml()
+        parsed = yaml.safe_load(result)
+        assert parsed["kind"] == "ConfigMap"
+
+    @pytest.mark.requirement("FLUX-AC-9")
+    def test_configmap_yaml_default_name(
+        self, artifacts: CompiledArtifacts
+    ) -> None:
+        """metadata.name defaults to 'floe-compiled-values'."""
+        import yaml
+
+        result = artifacts.to_configmap_yaml()
+        parsed = yaml.safe_load(result)
+        assert parsed["metadata"]["name"] == "floe-compiled-values"
+
+    @pytest.mark.requirement("FLUX-AC-9")
+    def test_configmap_yaml_custom_name(
+        self, artifacts: CompiledArtifacts
+    ) -> None:
+        """metadata.name can be overridden via name parameter."""
+        import yaml
+
+        result = artifacts.to_configmap_yaml(name="my-values")
+        parsed = yaml.safe_load(result)
+        assert parsed["metadata"]["name"] == "my-values"
+
+    @pytest.mark.requirement("FLUX-AC-9")
+    def test_configmap_yaml_no_namespace_by_default(
+        self, artifacts: CompiledArtifacts
+    ) -> None:
+        """metadata.namespace must be absent when namespace is None."""
+        import yaml
+
+        result = artifacts.to_configmap_yaml()
+        parsed = yaml.safe_load(result)
+        assert "namespace" not in parsed["metadata"]
+
+    @pytest.mark.requirement("FLUX-AC-9")
+    def test_configmap_yaml_with_namespace(
+        self, artifacts: CompiledArtifacts
+    ) -> None:
+        """metadata.namespace is included when namespace is provided."""
+        import yaml
+
+        result = artifacts.to_configmap_yaml(namespace="flux-system")
+        parsed = yaml.safe_load(result)
+        assert parsed["metadata"]["namespace"] == "flux-system"
+
+    @pytest.mark.requirement("FLUX-AC-9")
+    def test_configmap_yaml_has_data_values_key(
+        self, artifacts: CompiledArtifacts
+    ) -> None:
+        """ConfigMap must have data.values.yaml containing embedded YAML."""
+        import yaml
+
+        result = artifacts.to_configmap_yaml()
+        parsed = yaml.safe_load(result)
+        assert "data" in parsed
+        assert "values.yaml" in parsed["data"]
+
+    @pytest.mark.requirement("FLUX-AC-9")
+    def test_configmap_yaml_embedded_values_are_valid_yaml(
+        self, artifacts: CompiledArtifacts
+    ) -> None:
+        """The embedded values.yaml content must itself be valid YAML."""
+        import yaml
+
+        result = artifacts.to_configmap_yaml()
+        parsed = yaml.safe_load(result)
+        embedded = yaml.safe_load(parsed["data"]["values.yaml"])
+        assert isinstance(embedded, dict)
+
+    @pytest.mark.requirement("FLUX-AC-9")
+    def test_configmap_yaml_embedded_values_match_yaml_output(
+        self, artifacts: CompiledArtifacts
+    ) -> None:
+        """Embedded values must be semantically equivalent to to_yaml_file output."""
+        import yaml
+        from pathlib import Path
+        import tempfile
+
+        result = artifacts.to_configmap_yaml()
+        parsed = yaml.safe_load(result)
+        embedded = yaml.safe_load(parsed["data"]["values.yaml"])
+
+        # Compare with to_yaml_file output
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yaml_path = Path(tmpdir) / "artifacts.yaml"
+            artifacts.to_yaml_file(yaml_path)
+            direct_output = yaml.safe_load(yaml_path.read_text())
+
+        assert embedded == direct_output
+
+    @pytest.mark.requirement("FLUX-AC-9")
+    def test_configmap_yaml_uses_block_scalar(
+        self, artifacts: CompiledArtifacts
+    ) -> None:
+        """The values.yaml content must use YAML block scalar (|) style."""
+        result = artifacts.to_configmap_yaml()
+        # The raw output should contain a block scalar indicator
+        assert "values.yaml: |" in result or "values.yaml: |\n" in result
