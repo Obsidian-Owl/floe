@@ -11,8 +11,12 @@ Used by:
 from __future__ import annotations
 
 import json
+import logging
+import shutil
 import subprocess
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Helm release states that indicate a stuck release requiring recovery
 STUCK_STATES = ("pending-upgrade", "pending-install", "pending-rollback", "failed")
@@ -106,6 +110,30 @@ def recover_stuck_helm_release(
 
     if release_status not in STUCK_STATES:
         return False
+
+    # Flux delegation: try flux reconcile before falling back to Helm rollback
+    flux_check = subprocess.run(
+        ["kubectl", "get", "helmrelease", release, "-n", namespace],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if flux_check.returncode == 0 and shutil.which("flux") is not None:
+        reconcile_result = subprocess.run(
+            ["flux", "reconcile", "helmrelease", release, "-n", namespace],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if reconcile_result.returncode == 0:
+            return True
+        logger.warning(
+            "flux reconcile helmrelease failed: cmd=%s returncode=%d stderr=%s",
+            ["flux", "reconcile", "helmrelease", release, "-n", namespace],
+            reconcile_result.returncode,
+            reconcile_result.stderr,
+        )
+    # Fall through to existing Helm rollback logic below...
 
     current_revision = current.get("version", 1)
     if not isinstance(current_revision, int):
