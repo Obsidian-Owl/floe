@@ -259,9 +259,113 @@ def infrastructure_smoke_check() -> None:
             returncode=3,
         )
 
+    _check_flux_controllers()
+
+
+def _recover_suspended_flux() -> None:
+    """Recover HelmReleases left suspended by a prior crashed test run.
+
+    Iterates over the platform HelmReleases and checks whether each one was
+    left in a suspended state (spec.suspend == true). This can happen when a
+    previous E2E test run crashed mid-test while Flux reconciliation was
+    temporarily suspended.
+
+    If a release is found suspended, issues ``flux resume helmrelease`` to
+    restore normal reconciliation before the new test suite starts.
+
+    No-op when:
+    - kubectl is not available or returns non-zero (no Flux CRDs installed).
+    - spec.suspend is not exactly "true" (not suspended).
+    """
+    ns = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
+    for name in ["floe-platform", "floe-jobs-test"]:
+        # Query suspend status: kubectl get helmrelease <name> -n <ns> -o jsonpath='{.spec.suspend}'
+        result = subprocess.run(
+            ["kubectl", "get", "helmrelease", name, "-n", ns, "-o", "jsonpath={.spec.suspend}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            continue
+        if result.stdout.strip() == "true":
+            logger.warning(
+                "HelmRelease %s is suspended (likely from a prior crashed run) — "
+                "running flux resume helmrelease to restore reconciliation",
+                name,
+            )
+            # Resume: flux resume helmrelease <name> -n <ns>
+            resume_result = subprocess.run(
+                ["flux", "resume", "helmrelease", name, "-n", ns],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if resume_result.returncode != 0:
+                logger.warning(
+                    "flux resume helmrelease %s failed: returncode=%d stderr=%s",
+                    name,
+                    resume_result.returncode,
+                    resume_result.stderr,
+                )
+
+
+def _check_flux_controllers() -> None:
+    """Verify Flux source-controller and helm-controller pods are Running.
+
+    Runs kubectl get namespace flux-system to detect whether Flux is installed.
+    If the namespace does not exist, logs an INFO message and returns — Flux is
+    optional. If the namespace exists, checks that each controller pod is in
+    Running phase and calls pytest.fail() with a descriptive message if not.
+
+    This is called from infrastructure_smoke_check so it only runs when the
+    platform is otherwise reachable.
+    """
+    ns_check = subprocess.run(
+        ["kubectl", "get", "namespace", "flux-system"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if ns_check.returncode != 0:
+        logger.info("Flux not installed — controller check skipped (flux-system namespace absent)")
+        return
+
+    for controller in ["source-controller", "helm-controller"]:
+        pod_check = subprocess.run(
+            [
+                "kubectl",
+                "get",
+                "pods",
+                "-n",
+                "flux-system",
+                "-l",
+                f"app.kubernetes.io/component={controller}",
+                "-o",
+                "jsonpath={.items[0].status.phase}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        status = pod_check.stdout.strip()
+        if status != "Running":
+            pytest.fail(f"Flux controller {controller} is not Running (status: {status})")
+
 
 @pytest.fixture(scope="session", autouse=True)
-def helm_release_health() -> None:
+def _recover_suspended_flux_session() -> None:
+    """Session-scoped autouse fixture: calls _recover_suspended_flux() once per session.
+
+    Delegates to the plain _recover_suspended_flux() function so that the
+    implementation can be imported and tested directly without pytest fixture
+    machinery interfering.
+    """
+    _recover_suspended_flux()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def helm_release_health(_recover_suspended_flux_session: None) -> None:
     """Check Helm release health before E2E suite starts.
 
     Detects stuck Helm releases (pending-upgrade, pending-install, failed)

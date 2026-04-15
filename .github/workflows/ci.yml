@@ -165,6 +165,7 @@ jobs:
   unit-tests:
     name: Unit Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: lint-typecheck
     strategy:
       fail-fast: true
