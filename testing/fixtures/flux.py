@@ -138,15 +138,15 @@ def resume_helmrelease(name: str, namespace: str) -> bool:
     return True
 
 
-def flux_suspended(request: pytest.FixtureRequest) -> None:
-    """Suspend a Flux HelmRelease for the test module and resume on teardown.
+def _flux_suspended_impl(request: pytest.FixtureRequest) -> None:
+    """Implementation of flux_suspended — callable directly in unit tests.
 
     Reads the release name from the ``FLOE_RELEASE_NAME`` environment variable
     (default: ``floe-platform``) and the namespace from ``FLOE_E2E_NAMESPACE``
     (default: ``floe-test``).
 
     If the release is not Flux-managed (``is_flux_managed`` returns False),
-    the fixture returns immediately without suspending or registering a
+    the function returns immediately without suspending or registering a
     finalizer. Likewise, if ``suspend_helmrelease`` returns False (flux CLI
     missing or command failed), no finalizer is registered because there is
     nothing to resume.
@@ -169,3 +169,20 @@ def flux_suspended(request: pytest.FixtureRequest) -> None:
 
     request.addfinalizer(lambda: resume_helmrelease(name, namespace))
     return None
+
+
+@pytest.fixture(scope="module")
+def flux_suspended(request: pytest.FixtureRequest) -> None:
+    """Suspend a Flux HelmRelease for the test module and resume on teardown.
+
+    Pytest fixture wrapper around ``_flux_suspended_impl``. The split allows
+    unit tests to call the implementation directly (pytest 9 blocks direct
+    calls to ``@pytest.fixture``-decorated functions).
+
+    Args:
+        request: pytest FixtureRequest providing addfinalizer.
+
+    Returns:
+        None. Side effects only.
+    """
+    _flux_suspended_impl(request)

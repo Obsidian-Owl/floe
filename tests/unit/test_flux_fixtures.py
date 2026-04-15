@@ -770,7 +770,7 @@ class TestFluxSuspendedFixture:
         When is_flux_managed returns True and suspend succeeds, the fixture
         must invoke suspend_helmrelease with the release name and namespace.
         """
-        from testing.fixtures.flux import flux_suspended
+        from testing.fixtures.flux import _flux_suspended_impl
 
         with (
             patch(f"{_MODULE_PATH}.is_flux_managed", return_value=True) as mock_managed,
@@ -778,7 +778,7 @@ class TestFluxSuspendedFixture:
             patch(f"{_MODULE_PATH}.resume_helmrelease", return_value=True),
             patch.dict("os.environ", {"FLOE_RELEASE_NAME": _DEFAULT_RELEASE_NAME}, clear=False),
         ):
-            flux_suspended(mock_request)
+            _flux_suspended_impl(mock_request)
 
             mock_managed.assert_called_once()
             mock_suspend.assert_called_once()
@@ -800,14 +800,14 @@ class TestFluxSuspendedFixture:
         The finalizer must be registered so that resume_helmrelease is
         called during test teardown, even if the test fails.
         """
-        from testing.fixtures.flux import flux_suspended
+        from testing.fixtures.flux import _flux_suspended_impl
 
         with (
             patch(f"{_MODULE_PATH}.is_flux_managed", return_value=True),
             patch(f"{_MODULE_PATH}.suspend_helmrelease", return_value=True),
             patch(f"{_MODULE_PATH}.resume_helmrelease", return_value=True),
         ):
-            flux_suspended(mock_request)
+            _flux_suspended_impl(mock_request)
 
             mock_request.addfinalizer.assert_called_once()
 
@@ -821,14 +821,14 @@ class TestFluxSuspendedFixture:
         After the fixture registers the finalizer, calling it must
         invoke resume_helmrelease to re-enable Flux reconciliation.
         """
-        from testing.fixtures.flux import flux_suspended
+        from testing.fixtures.flux import _flux_suspended_impl
 
         with (
             patch(f"{_MODULE_PATH}.is_flux_managed", return_value=True),
             patch(f"{_MODULE_PATH}.suspend_helmrelease", return_value=True),
             patch(f"{_MODULE_PATH}.resume_helmrelease", return_value=True) as mock_resume,
         ):
-            flux_suspended(mock_request)
+            _flux_suspended_impl(mock_request)
 
             # Extract the registered finalizer and call it
             finalizer_fn = mock_request.addfinalizer.call_args[0][0]
@@ -848,7 +848,7 @@ class TestFluxSuspendedFixture:
         A sloppy implementation might hardcode the release name rather
         than using the same name that was suspended.
         """
-        from testing.fixtures.flux import flux_suspended
+        from testing.fixtures.flux import _flux_suspended_impl
 
         custom_release = "my-custom-release"
 
@@ -858,7 +858,7 @@ class TestFluxSuspendedFixture:
             patch(f"{_MODULE_PATH}.resume_helmrelease", return_value=True) as mock_resume,
             patch.dict("os.environ", {"FLOE_RELEASE_NAME": custom_release}, clear=False),
         ):
-            flux_suspended(mock_request)
+            _flux_suspended_impl(mock_request)
 
             finalizer_fn = mock_request.addfinalizer.call_args[0][0]
             finalizer_fn()
@@ -880,13 +880,13 @@ class TestFluxSuspendedFixture:
         When is_flux_managed returns False (CRD not installed or release
         not found), the fixture must return without calling suspend.
         """
-        from testing.fixtures.flux import flux_suspended
+        from testing.fixtures.flux import _flux_suspended_impl
 
         with (
             patch(f"{_MODULE_PATH}.is_flux_managed", return_value=False),
             patch(f"{_MODULE_PATH}.suspend_helmrelease") as mock_suspend,
         ):
-            flux_suspended(mock_request)
+            _flux_suspended_impl(mock_request)
 
             mock_suspend.assert_not_called()
 
@@ -901,10 +901,10 @@ class TestFluxSuspendedFixture:
         Registering a finalizer that calls resume on a non-Flux release
         would produce confusing warning logs.
         """
-        from testing.fixtures.flux import flux_suspended
+        from testing.fixtures.flux import _flux_suspended_impl
 
         with patch(f"{_MODULE_PATH}.is_flux_managed", return_value=False):
-            flux_suspended(mock_request)
+            _flux_suspended_impl(mock_request)
 
             mock_request.addfinalizer.assert_not_called()
 
@@ -919,13 +919,13 @@ class TestFluxSuspendedFixture:
         The fixture should handle this gracefully -- no finalizer needed
         since nothing was actually suspended.
         """
-        from testing.fixtures.flux import flux_suspended
+        from testing.fixtures.flux import _flux_suspended_impl
 
         with (
             patch(f"{_MODULE_PATH}.is_flux_managed", return_value=True),
             patch(f"{_MODULE_PATH}.suspend_helmrelease", return_value=False),
         ):
-            flux_suspended(mock_request)
+            _flux_suspended_impl(mock_request)
 
             # No finalizer because suspension was not actually performed
             mock_request.addfinalizer.assert_not_called()
@@ -939,7 +939,7 @@ class TestFluxSuspendedFixture:
 
         The release name must come from os.environ.get("FLOE_RELEASE_NAME", "floe-platform").
         """
-        from testing.fixtures.flux import flux_suspended
+        from testing.fixtures.flux import _flux_suspended_impl
 
         custom_name = "custom-platform-release"
 
@@ -949,7 +949,7 @@ class TestFluxSuspendedFixture:
             patch(f"{_MODULE_PATH}.resume_helmrelease", return_value=True),
             patch.dict("os.environ", {"FLOE_RELEASE_NAME": custom_name}, clear=False),
         ):
-            flux_suspended(mock_request)
+            _flux_suspended_impl(mock_request)
 
             # is_flux_managed must have been called with the custom release name
             managed_args = mock_managed.call_args[0]
@@ -968,7 +968,7 @@ class TestFluxSuspendedFixture:
         When the environment variable is absent, the fixture must use
         the default release name.
         """
-        from testing.fixtures.flux import flux_suspended
+        from testing.fixtures.flux import _flux_suspended_impl
 
         with (
             patch(f"{_MODULE_PATH}.is_flux_managed", return_value=True) as mock_managed,
@@ -976,7 +976,7 @@ class TestFluxSuspendedFixture:
             patch(f"{_MODULE_PATH}.resume_helmrelease", return_value=True),
             patch.dict("os.environ", {}, clear=True),
         ):
-            flux_suspended(mock_request)
+            _flux_suspended_impl(mock_request)
 
             managed_args = mock_managed.call_args[0]
             assert "floe-platform" in managed_args, (
@@ -994,14 +994,14 @@ class TestFluxSuspendedFixture:
         The fixture provides no value to tests; its purpose is the
         side effects (suspend + resume).
         """
-        from testing.fixtures.flux import flux_suspended
+        from testing.fixtures.flux import _flux_suspended_impl
 
         with (
             patch(f"{_MODULE_PATH}.is_flux_managed", return_value=True),
             patch(f"{_MODULE_PATH}.suspend_helmrelease", return_value=True),
             patch(f"{_MODULE_PATH}.resume_helmrelease", return_value=True),
         ):
-            result = flux_suspended(mock_request)
+            result = _flux_suspended_impl(mock_request)
 
             assert result is None, (
                 f"flux_suspended must return None, got {type(result).__name__}: {result}"
@@ -1130,14 +1130,14 @@ class TestMutationResistance:
         finalizer, or register a finalizer that calls suspend instead
         of resume.
         """
-        from testing.fixtures.flux import flux_suspended
+        from testing.fixtures.flux import _flux_suspended_impl
 
         with (
             patch(f"{_MODULE_PATH}.is_flux_managed", return_value=True),
             patch(f"{_MODULE_PATH}.suspend_helmrelease", return_value=True) as mock_suspend,
             patch(f"{_MODULE_PATH}.resume_helmrelease", return_value=True) as mock_resume,
         ):
-            flux_suspended(mock_request)
+            _flux_suspended_impl(mock_request)
 
             # Suspend was called during setup
             mock_suspend.assert_called_once()

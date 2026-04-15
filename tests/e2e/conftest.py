@@ -295,12 +295,19 @@ def _recover_suspended_flux() -> None:
                 name,
             )
             # Resume: flux resume helmrelease <name> -n <ns>
-            subprocess.run(
+            resume_result = subprocess.run(
                 ["flux", "resume", "helmrelease", name, "-n", ns],
                 capture_output=True,
                 text=True,
                 check=False,
             )
+            if resume_result.returncode != 0:
+                logger.warning(
+                    "flux resume helmrelease %s failed: returncode=%d stderr=%s",
+                    name,
+                    resume_result.returncode,
+                    resume_result.stderr,
+                )
 
 
 def _check_flux_controllers() -> None:
