@@ -30,6 +30,20 @@ CLUSTER_NAME="${CLUSTER_NAME:-floe-test}"
 NAMESPACE="floe-test"
 TIMEOUT="${TIMEOUT:-300}"
 
+# Source shared constants (FLUX_VERSION, FLOE_RELEASE_NAME, etc.)
+# shellcheck source=../ci/common.sh
+source "${SCRIPT_DIR}/../ci/common.sh"
+
+# Parse command line arguments
+for arg in "$@"; do
+    case "${arg}" in
+        --no-flux)
+            FLOE_NO_FLUX=1
+            ;;
+    esac
+done
+: "${FLOE_NO_FLUX:=0}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -70,6 +84,30 @@ check_prerequisites() {
     if ! docker info &> /dev/null; then
         log_error "Docker daemon is not running"
         exit 1
+    fi
+
+    # jq is required for pre-Flux cleanup (helm status JSON parsing).
+    # Skipped when services are disabled — jq is only needed for service deployment.
+    if [[ "${SKIP_SERVICES:-false}" != "true" ]]; then
+        if ! command -v jq &> /dev/null; then
+            log_error "jq is not installed. Install: brew install jq (macOS) or apt install jq (Linux)"
+            exit 1
+        fi
+    fi
+
+    # Flux CLI check — skipped when --no-flux is set or services are skipped
+    if [[ "${FLOE_NO_FLUX}" != "1" && "${SKIP_SERVICES:-false}" != "true" ]]; then
+        if ! command -v flux &> /dev/null; then
+            log_error "flux CLI not found. Install: curl -s https://fluxcd.io/install.sh | sudo bash"
+            exit 1
+        fi
+
+        # Verify flux version matches FLUX_VERSION (warning only)
+        local flux_ver
+        flux_ver=$(flux --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+        if [[ -n "${flux_ver}" && "${flux_ver}" != "${FLUX_VERSION}" ]]; then
+            log_warn "flux CLI version ${flux_ver} does not match FLUX_VERSION=${FLUX_VERSION}"
+        fi
     fi
 }
 
@@ -226,6 +264,17 @@ deploy_monitoring_stack() {
     log_info "  Prometheus: http://localhost:9090"
 }
 
+# Build and load the Dagster demo image into Kind (required by values-test.yaml).
+# Both Helm and Flux paths need this — Dagster pods use pullPolicy: Never.
+build_demo_image() {
+    if [[ -f "${PROJECT_ROOT}/docker/dagster-demo/Dockerfile" ]]; then
+        log_info "Building Dagster demo image..."
+        KIND_CLUSTER_NAME="${CLUSTER_NAME}" make -C "${PROJECT_ROOT}" build-demo-image 2>&1 || {
+            log_warn "Dagster demo image build failed — Dagster pods will be in ErrImageNeverPull"
+        }
+    fi
+}
+
 # Deploy services via Helm charts
 deploy_services_helm() {
     if [[ "${SKIP_SERVICES:-false}" == "true" ]]; then
@@ -240,15 +289,6 @@ deploy_services_helm() {
     fi
 
     log_info "Deploying services via Helm to namespace: ${NAMESPACE}"
-
-    # Build and load the Dagster demo image into Kind (required by values-test.yaml)
-    # The dagster webserver and daemon use floe-dagster-demo:latest with pullPolicy: Never
-    if [[ -f "${PROJECT_ROOT}/docker/dagster-demo/Dockerfile" ]]; then
-        log_info "Building Dagster demo image..."
-        KIND_CLUSTER_NAME="${CLUSTER_NAME}" make -C "${PROJECT_ROOT}" build-demo-image 2>&1 || {
-            log_warn "Dagster demo image build failed — Dagster pods will be in ErrImageNeverPull"
-        }
-    fi
 
     # Update Helm dependencies
     log_info "Updating Helm chart dependencies..."
@@ -313,6 +353,120 @@ install_pyiceberg_fix() {
     }
 }
 
+# ---------------------------------------------------------------------------
+# Flux GitOps deployment path
+# ---------------------------------------------------------------------------
+
+# Pre-Flux cleanup: remove stuck Helm releases before Flux takes over.
+# Skipped when Flux is already managing the cluster (flux-system namespace exists).
+pre_flux_cleanup() {
+    # If Flux is already installed, its own remediation handles stuck releases.
+    if kubectl get namespace flux-system &>/dev/null; then
+        log_info "Flux already installed — skipping pre-Flux cleanup (Flux remediation handles stuck releases)"
+        return
+    fi
+
+    log_info "Checking for stuck Helm releases..."
+
+    local releases=("${FLOE_RELEASE_NAME}" "floe-jobs-test")
+    for release in "${releases[@]}"; do
+        local release_status
+        local helm_output
+        if helm_output=$(helm status "${release}" -n "${NAMESPACE}" --output json 2>&1); then
+            # helm succeeded — parse status with jq
+            release_status=$(echo "${helm_output}" | jq -r '.info.status // "unknown"') || {
+                log_error "Failed to parse helm status JSON for release ${release}"
+                exit 1
+            }
+        else
+            # helm failed — distinguish "not found" from unexpected errors
+            if echo "${helm_output}" | grep -qi "not found"; then
+                release_status="not-found"
+            else
+                log_error "helm status failed for release ${release}: ${helm_output}"
+                exit 1
+            fi
+        fi
+
+        case "${release_status}" in
+            failed|pending-upgrade|pending-install|pending-rollback)
+                log_warn "Release ${release} is in '${release_status}' state — uninstalling"
+                helm uninstall "${release}" -n "${NAMESPACE}" --wait --timeout=300s || {
+                    log_error "Failed to uninstall stuck release ${release}"
+                    exit 1
+                }
+                ;;
+            deployed|superseded)
+                log_info "Release ${release} is in '${release_status}' state — no cleanup needed"
+                ;;
+            not-found)
+                log_info "No existing release '${release}' found — clean install"
+                ;;
+        esac
+    done
+}
+
+# Install Flux controllers (source-controller + helm-controller only)
+install_flux() {
+    log_info "Installing Flux controllers..."
+
+    if ! flux install --version="v${FLUX_VERSION}" --components="source-controller,helm-controller" 2>&1; then
+        log_error "Flux installation failed"
+        kubectl get pods -n flux-system 2>/dev/null || true
+        log_error "Flux installation failed. Check cluster resources and network connectivity." >&2
+        exit 1
+    fi
+
+    # Wait for controllers to be Ready (not just Running — containers must pass readiness probes)
+    log_info "Waiting for Flux controllers to be ready..."
+    if ! kubectl wait --for=condition=Ready pod \
+        -l app.kubernetes.io/component=source-controller \
+        -n flux-system --timeout=120s 2>&1; then
+        log_error "source-controller did not reach Ready within 120s" >&2
+        kubectl get pods -n flux-system 2>/dev/null >&2 || true
+        exit 1
+    fi
+    if ! kubectl wait --for=condition=Ready pod \
+        -l app.kubernetes.io/component=helm-controller \
+        -n flux-system --timeout=120s 2>&1; then
+        log_error "helm-controller did not reach Ready within 120s" >&2
+        kubectl get pods -n flux-system 2>/dev/null >&2 || true
+        exit 1
+    fi
+    log_info "Flux controllers are ready"
+}
+
+# Deploy via Flux: apply CRDs and wait for HelmRelease readiness
+deploy_via_flux() {
+    # Ensure target namespace exists (direct Helm path uses --create-namespace,
+    # but kubectl apply of namespaced CRDs requires the namespace to pre-exist)
+    kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+
+    log_info "Applying Flux HelmRelease CRDs..."
+
+    kubectl apply -f "${PROJECT_ROOT}/charts/floe-platform/flux/"
+
+    log_info "Waiting for floe-platform HelmRelease to be ready (up to 15m)..."
+    if ! kubectl wait helmrelease/floe-platform -n "${NAMESPACE}" \
+        --for=condition=Ready --timeout=900s 2>&1; then
+        log_error "floe-platform HelmRelease did not reach Ready state"
+        flux get helmrelease -n "${NAMESPACE}" 2>/dev/null >&2 || true
+        kubectl get events --sort-by='.lastTimestamp' -n "${NAMESPACE}" 2>/dev/null | tail -10 >&2 || true
+        exit 1
+    fi
+
+    log_info "Waiting for floe-jobs-test HelmRelease to be ready (up to 10m)..."
+    if ! kubectl wait helmrelease/floe-jobs-test -n "${NAMESPACE}" \
+        --for=condition=Ready --timeout=600s 2>&1; then
+        log_error "floe-jobs-test HelmRelease did not reach Ready state"
+        flux get helmrelease -n "${NAMESPACE}" 2>/dev/null >&2 || true
+        kubectl get events --sort-by='.lastTimestamp' -n "${NAMESPACE}" 2>/dev/null | tail -10 >&2 || true
+        exit 1
+    fi
+
+    log_info "Flux-managed releases are ready"
+}
+
 # Print cluster info
 print_info() {
     log_info "Cluster is ready!"
@@ -355,8 +509,29 @@ main() {
     create_cluster
     preload_images
     deploy_metrics_server
-    deploy_services_helm
-    wait_for_services_helm
+
+    if [[ "${SKIP_SERVICES:-false}" == "true" ]]; then
+        log_info "Skipping service deployment (SKIP_SERVICES=true)"
+    else
+        # Pre-Flux cleanup: remove stuck Helm releases (skips when Flux already installed)
+        pre_flux_cleanup
+
+        # Demo image is needed by both paths (Dagster uses pullPolicy: Never)
+        build_demo_image
+
+        if [[ "${FLOE_NO_FLUX}" == "1" ]]; then
+            log_info "FLOE_NO_FLUX=1 — using direct Helm deployment path"
+            deploy_services_helm
+            wait_for_services_helm
+        else
+            log_info "Using Flux GitOps deployment path"
+            install_flux
+            deploy_via_flux
+            # No wait_for_services_helm here — HelmRelease Ready condition is the
+            # authoritative readiness signal for Flux-managed releases.
+        fi
+    fi
+
     deploy_monitoring_stack
     install_pyiceberg_fix
     print_info
