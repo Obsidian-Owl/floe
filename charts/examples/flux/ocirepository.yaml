@@ -1,0 +1,41 @@
+# Flux OCIRepository for floe-platform chart
+#
+# This resource tells Flux where to find the floe-platform Helm chart
+# in the OCI registry.  The HelmRelease references this via sourceRef.
+#
+# Prerequisites:
+#   1. Flux v2 installed with source-controller
+#   2. Chart published to the OCI registry (see .github/workflows/helm-release.yaml)
+#   3. Cosign signatures published alongside the chart artifact
+#
+# Usage:
+#   1. Apply: kubectl apply -f ocirepository.yaml
+#   2. Verify: flux get sources oci
+#
+# Requirements:
+# - 9b-FR-072: Flux OCIRepository with Cosign verification
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: floe-platform
+  namespace: flux-system
+spec:
+  # OCI registry URL for the chart
+  url: oci://ghcr.io/floe-platform/charts/floe-platform
+
+  # Poll interval — how often Flux checks for new chart versions
+  interval: 5m
+
+  # SemVer range for version selection.
+  # The -0 suffix includes pre-release versions (e.g., 1.0.0-rc.1).
+  # Remove -0 in production to pin to stable releases only.
+  ref:
+    semver: ">=1.0.0-0"
+
+  # Cosign keyless verification — validates chart integrity using
+  # Sigstore's Fulcio (identity) and Rekor (transparency log).
+  # No static keys required; signing identity is bound to the
+  # GitHub Actions OIDC token used during chart publish.
+  verify:
+    provider: cosign

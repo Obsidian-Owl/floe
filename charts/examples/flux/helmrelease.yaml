@@ -5,30 +5,18 @@
 #
 # Prerequisites:
 #   1. Flux v2 installed in the cluster
-#   2. HelmRepository or GitRepository source configured
+#   2. OCIRepository source configured (see ocirepository.yaml)
 #   3. Namespace created (or use spec.install.createNamespace)
 #
 # Usage:
-#   1. Update spec.chart.spec.sourceRef to point to your chart source
+#   1. Create the OCIRepository source first (ocirepository.yaml)
 #   2. Update spec.values or spec.valuesFrom as needed
 #   3. Apply: kubectl apply -f helmrelease.yaml
 #
 # Requirements:
 # - 9b-FR-072: Flux HelmRelease template
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
-kind: HelmRepository
-metadata:
-  name: floe
-  namespace: flux-system
-spec:
-  interval: 5m
-  url: https://your-org.github.io/floe-charts
-  # For OCI registry:
-  # type: oci
-  # url: oci://ghcr.io/your-org/charts
----
-apiVersion: helm.toolkit.fluxcd.io/v2beta2
+apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: floe-platform-dev
@@ -38,26 +26,28 @@ metadata:
     app.kubernetes.io/instance: floe-dev
     app.kubernetes.io/managed-by: flux
 spec:
-  # Release configuration
+  # Name of the Helm release in the target namespace
   releaseName: floe
+
+  # Namespace where resources will be deployed
   targetNamespace: floe-dev
 
-  # Chart reference
+  # Chart source — references the companion OCIRepository resource
   chart:
     spec:
       chart: floe-platform
       version: ">=1.0.0"
       sourceRef:
-        kind: HelmRepository
-        name: floe
+        kind: OCIRepository
+        name: floe-platform
         namespace: flux-system
       # Reconciliation interval for chart updates
       interval: 5m
 
-  # Reconciliation interval
+  # How often Flux reconciles this release
   interval: 10m
 
-  # Installation configuration
+  # Installation configuration — first-time deploy settings
   install:
     # Create namespace if it doesn't exist
     createNamespace: true
@@ -67,33 +57,37 @@ spec:
     # Timeout for install
     timeout: 10m
 
-  # Upgrade configuration
+  # Upgrade configuration — rolling update settings
   upgrade:
     # Remediation on upgrade failure
     remediation:
       retries: 3
-      # Rollback on upgrade failure
+      # Use rollback strategy: reverts to last known-good release.
+      # For test environments, use 'strategy: uninstall' instead
+      # to get a clean slate on each failure.
+      strategy: rollback
+      # Remediate even on the last retry failure
       remediateLastFailure: true
-    # Clean up old releases
+    # Clean up failed upgrade resources before remediation
     cleanupOnFail: true
     # Timeout for upgrade
     timeout: 10m
 
-  # Rollback configuration
+  # Rollback configuration — settings when remediation triggers rollback
   rollback:
     # Timeout for rollback
     timeout: 5m
     # Clean up on rollback
     cleanupOnFail: true
 
-  # Uninstall configuration
+  # Uninstall configuration — cleanup behaviour on HelmRelease deletion
   uninstall:
     # Keep history on uninstall
     keepHistory: false
     # Timeout for uninstall
     timeout: 5m
 
-  # Values configuration
+  # Inline values — override chart defaults for this environment
   values:
     global:
       environment: dev
@@ -117,7 +111,10 @@ spec:
     networkPolicy:
       enabled: false
 
-  # External values sources (optional)
+  # External values sources — load values from ConfigMaps or Secrets.
+  # Use valuesFrom to externalise environment-specific values so the
+  # same HelmRelease can be reused across environments.
+  # To use: create the ConfigMap first, then uncomment the block below.
   # valuesFrom:
   #   - kind: ConfigMap
   #     name: floe-values
@@ -131,19 +128,7 @@ spec:
   #   - name: cert-manager
   #     namespace: cert-manager
 
-  # Post-install/upgrade hooks (optional)
-  # postRenderers:
-  #   - kustomize:
-  #       patches:
-  #         - target:
-  #             kind: Deployment
-  #             name: dagster-webserver
-  #           patch: |
-  #             - op: add
-  #               path: /spec/template/metadata/annotations/custom
-  #               value: annotation
-
-  # Drift detection
+  # Drift detection — detect and correct out-of-band changes
   driftDetection:
     mode: enabled
     ignore:

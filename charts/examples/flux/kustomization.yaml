@@ -23,6 +23,12 @@
 #   2. Update spec.sourceRef to point to your GitRepository
 #   3. Flux will automatically reconcile
 #
+# Secrets management:
+#   This file shows SOPS with Age for secret decryption.
+#   For enterprise environments, consider External Secrets Operator (ESO)
+#   instead of SOPS — see https://external-secrets.io
+#   ESO integrates with AWS Secrets Manager, HashiCorp Vault, and others.
+#
 # Requirements:
 # - 9b-FR-072: Flux Kustomization template
 ---
@@ -77,6 +83,14 @@ spec:
       name: floe-polaris
       namespace: floe-dev
 
+  # External values sources — load values from ConfigMaps.
+  # Use valuesFrom with HelmRelease resources referenced by this
+  # Kustomization to inject environment-specific configuration.
+  # valuesFrom:
+  #   - kind: ConfigMap
+  #     name: floe-env-values
+  #     valuesKey: values.yaml
+
   # Patches to apply (optional)
   # patches:
   #   - patch: |
@@ -87,11 +101,23 @@ spec:
   #       kind: HelmRelease
   #       name: floe-platform-dev
 
-  # Decryption for SOPS-encrypted secrets (optional)
+  # SOPS Age decryption for encrypted secrets (optional)
+  #
+  # Age is the recommended key management method for SOPS (replaces GPG).
+  # Setup steps:
+  #   1. Install age: brew install age (macOS) or apt install age (Linux)
+  #   2. Generate a key pair: age-keygen -o age.txt
+  #   3. Create the Kubernetes secret with the Age private key:
+  #      kubectl create secret generic sops-age \
+  #        --namespace=flux-system \
+  #        --from-file=age.agekey=age.txt
+  #   4. Encrypt values: sops --age <AGE-PUBLIC-KEY> --encrypt values.yaml
+  #   5. Uncomment the decryption block below
+  #
   # decryption:
   #   provider: sops
   #   secretRef:
-  #     name: sops-gpg
+  #     name: sops-age
 
   # Post-build variable substitution (optional)
   # postBuild:
