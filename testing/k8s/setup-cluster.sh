@@ -342,6 +342,100 @@ install_pyiceberg_fix() {
     }
 }
 
+# ---------------------------------------------------------------------------
+# Flux GitOps deployment path
+# ---------------------------------------------------------------------------
+
+# Pre-Flux cleanup: remove stuck Helm releases before Flux takes over
+pre_flux_cleanup() {
+    log_info "Checking for stuck Helm releases..."
+
+    local release_status
+    release_status=$(helm status "${FLOE_RELEASE_NAME}" -n "${NAMESPACE}" --output json 2>/dev/null | \
+        python3 -c "import sys,json; print(json.load(sys.stdin)['info']['status'])" 2>/dev/null || echo "not-found")
+
+    case "${release_status}" in
+        failed|pending-upgrade|pending-install|pending-rollback)
+            log_warn "Release ${FLOE_RELEASE_NAME} is in '${release_status}' state — uninstalling"
+            helm uninstall "${FLOE_RELEASE_NAME}" -n "${NAMESPACE}" --wait --timeout=300s || {
+                log_error "Failed to uninstall stuck release ${FLOE_RELEASE_NAME}"
+                exit 1
+            }
+            ;;
+        deployed|superseded)
+            log_info "Release ${FLOE_RELEASE_NAME} is in '${release_status}' state — no cleanup needed"
+            ;;
+        not-found)
+            log_info "No existing release found — clean install"
+            ;;
+    esac
+}
+
+# Install Flux controllers (source-controller + helm-controller only)
+install_flux() {
+    log_info "Installing Flux controllers..."
+
+    if ! flux install --components="source-controller,helm-controller" 2>&1; then
+        log_error "Flux installation failed"
+        kubectl get pods -n flux-system 2>/dev/null || true
+        log_error "Flux installation failed. Check cluster resources and network connectivity." >&2
+        exit 1
+    fi
+
+    # Wait for controllers to reach Running (120s timeout)
+    log_info "Waiting for Flux controllers to be ready..."
+    local retries=0
+    while [[ ${retries} -lt 60 ]]; do
+        local sc_phase hc_phase
+        sc_phase=$(kubectl get pods -n flux-system \
+            -l app.kubernetes.io/component=source-controller \
+            -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "Unknown")
+        hc_phase=$(kubectl get pods -n flux-system \
+            -l app.kubernetes.io/component=helm-controller \
+            -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "Unknown")
+
+        if [[ "${sc_phase}" == "Running" && "${hc_phase}" == "Running" ]]; then
+            log_info "Flux controllers are ready"
+            return 0
+        fi
+        sleep 2
+        retries=$((retries + 1))
+    done
+
+    # 120s elapsed — controllers not ready
+    log_error "Flux controllers did not reach Running within 120s"
+    kubectl get pods -n flux-system 2>/dev/null >&2 || true
+    log_error "Flux installation failed. Check cluster resources and network connectivity." >&2
+    exit 1
+}
+
+# Deploy via Flux: apply CRDs and wait for HelmRelease readiness
+deploy_via_flux() {
+    log_info "Applying Flux HelmRelease CRDs..."
+
+    kubectl apply -f "${PROJECT_ROOT}/charts/floe-platform/flux/"
+
+    log_info "Waiting for floe-platform HelmRelease to be ready (up to 15m)..."
+    if ! kubectl wait helmrelease/floe-platform -n "${NAMESPACE}" \
+        --for=condition=Ready --timeout=900s 2>&1; then
+        log_error "floe-platform HelmRelease did not reach Ready state"
+        flux get helmrelease -n "${NAMESPACE}" 2>/dev/null >&2 || true
+        kubectl get events --sort-by='.lastTimestamp' -n "${NAMESPACE}" 2>/dev/null | tail -10 >&2 || true
+        exit 1
+    fi
+
+    log_info "Waiting for floe-jobs-test HelmRelease to be ready (up to 10m)..."
+    if ! kubectl wait helmrelease/floe-jobs-test -n "${NAMESPACE}" \
+        --for=condition=Ready --timeout=600s 2>&1; then
+        log_error "floe-jobs-test HelmRelease did not reach Ready state"
+        flux get helmrelease -n "${NAMESPACE}" 2>/dev/null >&2 || true
+        kubectl get events --sort-by='.lastTimestamp' -n "${NAMESPACE}" 2>/dev/null | tail -10 >&2 || true
+        exit 1
+    fi
+
+    log_info "Flux-managed releases are ready"
+}
+
 # Print cluster info
 print_info() {
     log_info "Cluster is ready!"
@@ -384,8 +478,21 @@ main() {
     create_cluster
     preload_images
     deploy_metrics_server
-    deploy_services_helm
-    wait_for_services_helm
+
+    # Pre-Flux cleanup runs regardless of path (cleans Helm state, not Flux state)
+    pre_flux_cleanup
+
+    if [[ "${FLOE_NO_FLUX}" == "1" ]]; then
+        log_info "FLOE_NO_FLUX=1 — using direct Helm deployment path"
+        deploy_services_helm
+        wait_for_services_helm
+    else
+        log_info "Using Flux GitOps deployment path"
+        install_flux
+        deploy_via_flux
+        wait_for_services_helm
+    fi
+
     deploy_monitoring_stack
     install_pyiceberg_fix
     print_info
