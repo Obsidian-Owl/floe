@@ -255,6 +255,17 @@ deploy_monitoring_stack() {
     log_info "  Prometheus: http://localhost:9090"
 }
 
+# Build and load the Dagster demo image into Kind (required by values-test.yaml).
+# Both Helm and Flux paths need this — Dagster pods use pullPolicy: Never.
+build_demo_image() {
+    if [[ -f "${PROJECT_ROOT}/docker/dagster-demo/Dockerfile" ]]; then
+        log_info "Building Dagster demo image..."
+        KIND_CLUSTER_NAME="${CLUSTER_NAME}" make -C "${PROJECT_ROOT}" build-demo-image 2>&1 || {
+            log_warn "Dagster demo image build failed — Dagster pods will be in ErrImageNeverPull"
+        }
+    fi
+}
+
 # Deploy services via Helm charts
 deploy_services_helm() {
     if [[ "${SKIP_SERVICES:-false}" == "true" ]]; then
@@ -269,15 +280,6 @@ deploy_services_helm() {
     fi
 
     log_info "Deploying services via Helm to namespace: ${NAMESPACE}"
-
-    # Build and load the Dagster demo image into Kind (required by values-test.yaml)
-    # The dagster webserver and daemon use floe-dagster-demo:latest with pullPolicy: Never
-    if [[ -f "${PROJECT_ROOT}/docker/dagster-demo/Dockerfile" ]]; then
-        log_info "Building Dagster demo image..."
-        KIND_CLUSTER_NAME="${CLUSTER_NAME}" make -C "${PROJECT_ROOT}" build-demo-image 2>&1 || {
-            log_warn "Dagster demo image build failed — Dagster pods will be in ErrImageNeverPull"
-        }
-    fi
 
     # Update Helm dependencies
     log_info "Updating Helm chart dependencies..."
@@ -485,19 +487,26 @@ main() {
     preload_images
     deploy_metrics_server
 
-    # Pre-Flux cleanup runs regardless of path (cleans Helm state, not Flux state)
-    pre_flux_cleanup
-
-    if [[ "${FLOE_NO_FLUX}" == "1" ]]; then
-        log_info "FLOE_NO_FLUX=1 — using direct Helm deployment path"
-        deploy_services_helm
-        wait_for_services_helm
+    if [[ "${SKIP_SERVICES:-false}" == "true" ]]; then
+        log_info "Skipping service deployment (SKIP_SERVICES=true)"
     else
-        log_info "Using Flux GitOps deployment path"
-        install_flux
-        deploy_via_flux
-        # No wait_for_services_helm here — HelmRelease Ready condition is the
-        # authoritative readiness signal for Flux-managed releases.
+        # Pre-Flux cleanup: remove stuck Helm releases (skips when Flux already installed)
+        pre_flux_cleanup
+
+        # Demo image is needed by both paths (Dagster uses pullPolicy: Never)
+        build_demo_image
+
+        if [[ "${FLOE_NO_FLUX}" == "1" ]]; then
+            log_info "FLOE_NO_FLUX=1 — using direct Helm deployment path"
+            deploy_services_helm
+            wait_for_services_helm
+        else
+            log_info "Using Flux GitOps deployment path"
+            install_flux
+            deploy_via_flux
+            # No wait_for_services_helm here — HelmRelease Ready condition is the
+            # authoritative readiness signal for Flux-managed releases.
+        fi
     fi
 
     deploy_monitoring_stack

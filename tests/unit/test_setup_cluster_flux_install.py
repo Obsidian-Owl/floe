@@ -71,9 +71,7 @@ def test_pre_flux_cleanup_checks_helm_status() -> None:
     assert re.search(r"helm\s+status.*--output\s+json", content), (
         "Must check existing release status via 'helm status --output json'"
     )
-    assert re.search(r"jq\s+-r", content), (
-        "Must parse helm status JSON with jq (not python3)"
-    )
+    assert re.search(r"jq\s+-r", content), "Must parse helm status JSON with jq (not python3)"
 
 
 @pytest.mark.requirement("AC-7")
