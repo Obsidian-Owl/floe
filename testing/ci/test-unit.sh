@@ -73,6 +73,12 @@ if [[ -d "testing/tests/unit" ]]; then
     UNIT_TEST_PATHS="${UNIT_TEST_PATHS} testing/tests/unit"
 fi
 
+# Include root-level unit tests (cross-package fixture tests, infrastructure tests)
+if [[ -d "tests/unit" ]]; then
+    echo "  Found: tests/unit"
+    UNIT_TEST_PATHS="${UNIT_TEST_PATHS} tests/unit"
+fi
+
 echo ""
 
 if [[ -z "${UNIT_TEST_PATHS}" ]]; then
