@@ -35,21 +35,28 @@ _SETUP_SCRIPT = _REPO_ROOT / "testing" / "k8s" / "setup-cluster.sh"
 
 @pytest.mark.requirement("AC-6")
 def test_flux_install_command() -> None:
-    """setup-cluster.sh runs flux install with source and helm controllers."""
+    """setup-cluster.sh runs flux install with pinned version and controllers."""
     content = _SETUP_SCRIPT.read_text()
     assert re.search(
-        r"flux\s+install.*--components.*source-controller.*helm-controller",
+        r"flux\s+install\s+--version.*--components.*source-controller.*helm-controller",
         content,
-    ), "Must run 'flux install' with source-controller and helm-controller components"
+    ), "Must run 'flux install --version=... --components=source-controller,helm-controller'"
 
 
 @pytest.mark.requirement("AC-6")
 def test_flux_install_gated_on_no_flux() -> None:
-    """Flux install is skipped when FLOE_NO_FLUX is set."""
+    """Flux install only runs in the else branch of FLOE_NO_FLUX check."""
     content = _SETUP_SCRIPT.read_text()
-    # The flux install must be inside a FLOE_NO_FLUX conditional
-    pattern = r"FLOE_NO_FLUX.*flux\s+install|flux\s+install.*FLOE_NO_FLUX"
-    assert re.search(pattern, content, re.DOTALL), "flux install must be gated on FLOE_NO_FLUX"
+    # The install_flux call must appear inside an else block following
+    # the FLOE_NO_FLUX == "1" conditional (i.e., when FLOE_NO_FLUX is NOT set).
+    # Match: if FLOE_NO_FLUX == "1" ... else ... install_flux
+    pattern = (
+        r'if\s+\[\[\s+"\$\{FLOE_NO_FLUX\}"\s*==\s*"1"\s*\]\].*?'
+        r"else.*?install_flux"
+    )
+    assert re.search(pattern, content, re.DOTALL), (
+        "install_flux must be called in the else branch of FLOE_NO_FLUX check"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -59,10 +66,29 @@ def test_flux_install_gated_on_no_flux() -> None:
 
 @pytest.mark.requirement("AC-7")
 def test_pre_flux_cleanup_checks_helm_status() -> None:
-    """setup-cluster.sh checks existing Helm release status via helm status."""
+    """setup-cluster.sh checks existing Helm release status via helm status + jq."""
     content = _SETUP_SCRIPT.read_text()
     assert re.search(r"helm\s+status.*--output\s+json", content), (
         "Must check existing release status via 'helm status --output json'"
+    )
+    assert re.search(r"jq\s+-r", content), (
+        "Must parse helm status JSON with jq (not python3)"
+    )
+
+
+@pytest.mark.requirement("AC-7")
+def test_pre_flux_cleanup_skips_when_flux_installed() -> None:
+    """Pre-Flux cleanup skips when flux-system namespace already exists."""
+    content = _SETUP_SCRIPT.read_text()
+    match = re.search(
+        r"pre_flux_cleanup\(\)\s*\{(.*?)\n\}",
+        content,
+        re.DOTALL,
+    )
+    assert match is not None, "pre_flux_cleanup function must exist"
+    func_body = match.group(1)
+    assert "flux-system" in func_body, (
+        "pre_flux_cleanup must check for existing flux-system namespace"
     )
 
 
@@ -72,6 +98,23 @@ def test_pre_flux_cleanup_detects_bad_states() -> None:
     content = _SETUP_SCRIPT.read_text()
     for state in ["failed", "pending-upgrade", "pending-install", "pending-rollback"]:
         assert state in content, f"Must detect Helm release state '{state}' for pre-Flux cleanup"
+
+
+@pytest.mark.requirement("AC-7")
+def test_pre_flux_cleanup_checks_both_releases() -> None:
+    """Pre-Flux cleanup checks both floe-platform and floe-jobs-test releases."""
+    content = _SETUP_SCRIPT.read_text()
+    # Extract pre_flux_cleanup function body
+    match = re.search(
+        r"pre_flux_cleanup\(\)\s*\{(.*?)\n\}",
+        content,
+        re.DOTALL,
+    )
+    assert match is not None, "pre_flux_cleanup function must exist"
+    func_body = match.group(1)
+    assert "floe-jobs-test" in func_body, (
+        "pre_flux_cleanup must check floe-jobs-test release (not just platform)"
+    )
 
 
 @pytest.mark.requirement("AC-7")
@@ -86,6 +129,25 @@ def test_pre_flux_cleanup_runs_helm_uninstall() -> None:
 # ---------------------------------------------------------------------------
 # AC-8: HelmRelease application and readiness wait
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.requirement("AC-8")
+def test_flux_path_creates_namespace_before_apply() -> None:
+    """deploy_via_flux creates the target namespace before applying CRDs."""
+    content = _SETUP_SCRIPT.read_text()
+    # Namespace creation must appear before kubectl apply in the function
+    match = re.search(
+        r"deploy_via_flux\(\)\s*\{(.*?)\n\}",
+        content,
+        re.DOTALL,
+    )
+    assert match is not None, "deploy_via_flux function must exist"
+    func_body = match.group(1)
+    ns_pos = func_body.find("kubectl create namespace")
+    apply_pos = func_body.find("kubectl apply -f")
+    assert ns_pos != -1, "Must create namespace before applying Flux CRDs"
+    assert apply_pos != -1, "Must apply Flux CRDs"
+    assert ns_pos < apply_pos, "Namespace creation must precede kubectl apply"
 
 
 @pytest.mark.requirement("AC-8")
@@ -135,9 +197,13 @@ def test_flux_install_failure_diagnostics() -> None:
 
 @pytest.mark.requirement("AC-9")
 def test_flux_failure_controller_wait() -> None:
-    """setup-cluster.sh waits for controllers with 120s timeout."""
+    """setup-cluster.sh waits for controllers with kubectl wait and 120s timeout."""
     content = _SETUP_SCRIPT.read_text()
-    assert re.search(r"120|120s", content), "Must have 120s timeout for controller readiness"
+    assert re.search(
+        r"kubectl\s+wait\s+--for=condition=Ready\s+pod.*flux-system.*--timeout=120s",
+        content,
+        re.DOTALL,
+    ), "Must use 'kubectl wait --for=condition=Ready' with 120s timeout for controller readiness"
 
 
 # ---------------------------------------------------------------------------
@@ -164,11 +230,23 @@ def test_no_flux_uses_direct_helm() -> None:
 
 @pytest.mark.requirement("AC-11")
 def test_no_flux_path_deploys_both_charts() -> None:
-    """Non-Flux path deploys both floe-platform and floe-jobs charts."""
+    """Non-Flux path's deploy_services_helm installs both charts via helm upgrade."""
     content = _SETUP_SCRIPT.read_text()
-    # Both chart installations must exist in the script
-    assert re.search(r"floe-platform", content), "Must deploy floe-platform chart"
-    assert re.search(r"floe-jobs", content), "Must deploy floe-jobs chart"
+    # Extract the deploy_services_helm function body
+    match = re.search(
+        r"deploy_services_helm\(\)\s*\{(.*?)\n\}",
+        content,
+        re.DOTALL,
+    )
+    assert match is not None, "deploy_services_helm function must exist"
+    func_body = match.group(1)
+    # Both charts must be installed via helm upgrade --install within this function
+    assert re.search(r"helm\s+upgrade\s+--install\s+floe-platform", func_body), (
+        "deploy_services_helm must run 'helm upgrade --install floe-platform'"
+    )
+    assert re.search(r"helm\s+upgrade\s+--install\s+floe-jobs", func_body), (
+        "deploy_services_helm must run 'helm upgrade --install floe-jobs'"
+    )
 
 
 @pytest.mark.requirement("AC-8")

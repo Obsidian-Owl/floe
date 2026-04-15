@@ -171,6 +171,16 @@ def test_helmrelease_platform_interval() -> None:
     assert doc["spec"]["interval"] == "30m"
 
 
+@pytest.mark.requirement("AC-2")
+def test_helmrelease_platform_values_files() -> None:
+    """HelmRelease for floe-platform references values-test.yaml."""
+    doc = _load_yaml(_FLUX_DIR / "helmrelease-platform.yaml")
+    values_files = doc["spec"]["chart"]["spec"].get("valuesFiles", [])
+    assert any("values-test.yaml" in vf for vf in values_files), (
+        "HelmRelease must reference values-test.yaml via valuesFiles"
+    )
+
+
 # ---------------------------------------------------------------------------
 # AC-3: HelmRelease CRD for floe-jobs-test
 # ---------------------------------------------------------------------------
@@ -211,6 +221,16 @@ def test_helmrelease_jobs_depends_on_platform() -> None:
 
 
 @pytest.mark.requirement("AC-3")
+def test_helmrelease_jobs_values_files() -> None:
+    """HelmRelease for floe-jobs-test references values-test.yaml."""
+    doc = _load_yaml(_FLUX_DIR / "helmrelease-jobs.yaml")
+    values_files = doc["spec"]["chart"]["spec"].get("valuesFiles", [])
+    assert any("values-test.yaml" in vf for vf in values_files), (
+        "HelmRelease must reference values-test.yaml via valuesFiles"
+    )
+
+
+@pytest.mark.requirement("AC-3")
 def test_helmrelease_jobs_remediation() -> None:
     """HelmRelease for floe-jobs-test has strategy: uninstall with 2 retries."""
     doc = _load_yaml(_FLUX_DIR / "helmrelease-jobs.yaml")
@@ -246,9 +266,11 @@ def test_gitrepository_metadata() -> None:
 
 @pytest.mark.requirement("AC-4")
 def test_gitrepository_spec() -> None:
-    """GitRepository points to floe repo via HTTPS with main branch."""
+    """GitRepository points to Obsidian-Owl/floe repo via HTTPS with main branch."""
     doc = _load_yaml(_FLUX_DIR / "gitrepository.yaml")
     spec = doc["spec"]
     assert spec["interval"] == "1m"
-    assert "https://github.com/" in spec["url"], f"Expected HTTPS URL, got {spec['url']}"
+    assert spec["url"] == "https://github.com/Obsidian-Owl/floe", (
+        f"Expected exact repo URL https://github.com/Obsidian-Owl/floe, got {spec['url']}"
+    )
     assert spec["ref"]["branch"] == "main"

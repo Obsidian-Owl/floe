@@ -10,6 +10,8 @@ spec:
   chart:
     spec:
       chart: ./charts/floe-jobs
+      valuesFiles:
+        - ./charts/floe-jobs/values-test.yaml
       sourceRef:
         kind: GitRepository
         name: floe

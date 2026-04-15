@@ -5,6 +5,8 @@ metadata:
   namespace: flux-system
 spec:
   interval: 1m
-  url: https://github.com/floe-platform/floe
+  url: https://github.com/Obsidian-Owl/floe
   ref:
+    # TODO(flux-test-fixtures): parameterise branch so CI tests the PR branch,
+    # not main. See Unit 2 AC for dynamic branch injection via sed/envsubst.
     branch: main

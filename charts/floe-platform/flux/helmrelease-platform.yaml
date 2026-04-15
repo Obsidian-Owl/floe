@@ -8,6 +8,8 @@ spec:
   chart:
     spec:
       chart: ./charts/floe-platform
+      valuesFiles:
+        - ./charts/floe-platform/values-test.yaml
       sourceRef:
         kind: GitRepository
         name: floe

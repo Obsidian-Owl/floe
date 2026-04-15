@@ -346,71 +346,77 @@ install_pyiceberg_fix() {
 # Flux GitOps deployment path
 # ---------------------------------------------------------------------------
 
-# Pre-Flux cleanup: remove stuck Helm releases before Flux takes over
+# Pre-Flux cleanup: remove stuck Helm releases before Flux takes over.
+# Skipped when Flux is already managing the cluster (flux-system namespace exists).
 pre_flux_cleanup() {
+    # If Flux is already installed, its own remediation handles stuck releases.
+    if kubectl get namespace flux-system &>/dev/null; then
+        log_info "Flux already installed — skipping pre-Flux cleanup (Flux remediation handles stuck releases)"
+        return
+    fi
+
     log_info "Checking for stuck Helm releases..."
 
-    local release_status
-    release_status=$(helm status "${FLOE_RELEASE_NAME}" -n "${NAMESPACE}" --output json 2>/dev/null | \
-        python3 -c "import sys,json; print(json.load(sys.stdin)['info']['status'])" 2>/dev/null || echo "not-found")
+    local releases=("${FLOE_RELEASE_NAME}" "floe-jobs-test")
+    for release in "${releases[@]}"; do
+        local release_status
+        release_status=$(helm status "${release}" -n "${NAMESPACE}" --output json 2>/dev/null | \
+            jq -r '.info.status // "not-found"' 2>/dev/null || echo "not-found")
 
-    case "${release_status}" in
-        failed|pending-upgrade|pending-install|pending-rollback)
-            log_warn "Release ${FLOE_RELEASE_NAME} is in '${release_status}' state — uninstalling"
-            helm uninstall "${FLOE_RELEASE_NAME}" -n "${NAMESPACE}" --wait --timeout=300s || {
-                log_error "Failed to uninstall stuck release ${FLOE_RELEASE_NAME}"
-                exit 1
-            }
-            ;;
-        deployed|superseded)
-            log_info "Release ${FLOE_RELEASE_NAME} is in '${release_status}' state — no cleanup needed"
-            ;;
-        not-found)
-            log_info "No existing release found — clean install"
-            ;;
-    esac
+        case "${release_status}" in
+            failed|pending-upgrade|pending-install|pending-rollback)
+                log_warn "Release ${release} is in '${release_status}' state — uninstalling"
+                helm uninstall "${release}" -n "${NAMESPACE}" --wait --timeout=300s || {
+                    log_error "Failed to uninstall stuck release ${release}"
+                    exit 1
+                }
+                ;;
+            deployed|superseded)
+                log_info "Release ${release} is in '${release_status}' state — no cleanup needed"
+                ;;
+            not-found)
+                log_info "No existing release '${release}' found — clean install"
+                ;;
+        esac
+    done
 }
 
 # Install Flux controllers (source-controller + helm-controller only)
 install_flux() {
     log_info "Installing Flux controllers..."
 
-    if ! flux install --components="source-controller,helm-controller" 2>&1; then
+    if ! flux install --version="v${FLUX_VERSION}" --components="source-controller,helm-controller" 2>&1; then
         log_error "Flux installation failed"
         kubectl get pods -n flux-system 2>/dev/null || true
         log_error "Flux installation failed. Check cluster resources and network connectivity." >&2
         exit 1
     fi
 
-    # Wait for controllers to reach Running (120s timeout)
+    # Wait for controllers to be Ready (not just Running — containers must pass readiness probes)
     log_info "Waiting for Flux controllers to be ready..."
-    local retries=0
-    while [[ ${retries} -lt 60 ]]; do
-        local sc_phase hc_phase
-        sc_phase=$(kubectl get pods -n flux-system \
-            -l app.kubernetes.io/component=source-controller \
-            -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "Unknown")
-        hc_phase=$(kubectl get pods -n flux-system \
-            -l app.kubernetes.io/component=helm-controller \
-            -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "Unknown")
-
-        if [[ "${sc_phase}" == "Running" && "${hc_phase}" == "Running" ]]; then
-            log_info "Flux controllers are ready"
-            return 0
-        fi
-        sleep 2
-        retries=$((retries + 1))
-    done
-
-    # 120s elapsed — controllers not ready
-    log_error "Flux controllers did not reach Running within 120s"
-    kubectl get pods -n flux-system 2>/dev/null >&2 || true
-    log_error "Flux installation failed. Check cluster resources and network connectivity." >&2
-    exit 1
+    if ! kubectl wait --for=condition=Ready pod \
+        -l app.kubernetes.io/component=source-controller \
+        -n flux-system --timeout=120s 2>&1; then
+        log_error "source-controller did not reach Ready within 120s" >&2
+        kubectl get pods -n flux-system 2>/dev/null >&2 || true
+        exit 1
+    fi
+    if ! kubectl wait --for=condition=Ready pod \
+        -l app.kubernetes.io/component=helm-controller \
+        -n flux-system --timeout=120s 2>&1; then
+        log_error "helm-controller did not reach Ready within 120s" >&2
+        kubectl get pods -n flux-system 2>/dev/null >&2 || true
+        exit 1
+    fi
+    log_info "Flux controllers are ready"
 }
 
 # Deploy via Flux: apply CRDs and wait for HelmRelease readiness
 deploy_via_flux() {
+    # Ensure target namespace exists (direct Helm path uses --create-namespace,
+    # but kubectl apply of namespaced CRDs requires the namespace to pre-exist)
+    kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+
     log_info "Applying Flux HelmRelease CRDs..."
 
     kubectl apply -f "${PROJECT_ROOT}/charts/floe-platform/flux/"
@@ -490,7 +496,8 @@ main() {
         log_info "Using Flux GitOps deployment path"
         install_flux
         deploy_via_flux
-        wait_for_services_helm
+        # No wait_for_services_helm here — HelmRelease Ready condition is the
+        # authoritative readiness signal for Flux-managed releases.
     fi
 
     deploy_monitoring_stack
