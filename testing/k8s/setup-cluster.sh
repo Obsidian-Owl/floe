@@ -86,10 +86,13 @@ check_prerequisites() {
         exit 1
     fi
 
-    # jq is required for pre-Flux cleanup (helm status JSON parsing)
-    if ! command -v jq &> /dev/null; then
-        log_error "jq is not installed. Install: brew install jq (macOS) or apt install jq (Linux)"
-        exit 1
+    # jq is required for pre-Flux cleanup (helm status JSON parsing).
+    # Skipped when services are disabled — jq is only needed for service deployment.
+    if [[ "${SKIP_SERVICES:-false}" != "true" ]]; then
+        if ! command -v jq &> /dev/null; then
+            log_error "jq is not installed. Install: brew install jq (macOS) or apt install jq (Linux)"
+            exit 1
+        fi
     fi
 
     # Flux CLI check — skipped when --no-flux is set or services are skipped
@@ -368,8 +371,22 @@ pre_flux_cleanup() {
     local releases=("${FLOE_RELEASE_NAME}" "floe-jobs-test")
     for release in "${releases[@]}"; do
         local release_status
-        release_status=$(helm status "${release}" -n "${NAMESPACE}" --output json 2>/dev/null | \
-            jq -r '.info.status // "not-found"' 2>/dev/null || echo "not-found")
+        local helm_output
+        if helm_output=$(helm status "${release}" -n "${NAMESPACE}" --output json 2>&1); then
+            # helm succeeded — parse status with jq
+            release_status=$(echo "${helm_output}" | jq -r '.info.status // "unknown"') || {
+                log_error "Failed to parse helm status JSON for release ${release}"
+                exit 1
+            }
+        else
+            # helm failed — distinguish "not found" from unexpected errors
+            if echo "${helm_output}" | grep -qi "not found"; then
+                release_status="not-found"
+            else
+                log_error "helm status failed for release ${release}: ${helm_output}"
+                exit 1
+            fi
+        fi
 
         case "${release_status}" in
             failed|pending-upgrade|pending-install|pending-rollback)
