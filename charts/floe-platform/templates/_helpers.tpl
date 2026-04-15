@@ -195,6 +195,15 @@ OTel Collector component name.
 {{- end }}
 
 {{/*
+Jaeger query service name.
+Jaeger subchart uses Release.Name as its prefix (not fullnameOverride),
+so service names follow the pattern: {Release.Name}-jaeger-query.
+*/}}
+{{- define "floe-platform.jaeger.queryName" -}}
+{{- printf "%s-jaeger-query" .Release.Name | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
 Marquez component name.
 */}}
 {{- define "floe-platform.marquez.fullname" -}}
