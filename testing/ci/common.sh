@@ -25,7 +25,11 @@
 : "${FLOE_CHART_DIR:=charts/floe-platform}"
 : "${FLOE_VALUES_FILE:=charts/floe-platform/values-test.yaml}"
 
+# Flux CD version — pinned for reproducible CI installs.
+: "${FLUX_VERSION:=2.5.1}"
+
 export FLOE_RELEASE_NAME FLOE_NAMESPACE FLOE_KIND_CLUSTER FLOE_CHART_DIR FLOE_VALUES_FILE
+export FLUX_VERSION
 
 # floe_service_name <component>
 # Returns the K8s service/resource name for a platform component, derived

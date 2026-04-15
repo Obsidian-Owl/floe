@@ -1,0 +1,27 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: floe-jobs-test
+  namespace: floe-test
+spec:
+  interval: 30m
+  dependsOn:
+    - name: floe-platform
+  chart:
+    spec:
+      chart: ./charts/floe-jobs
+      sourceRef:
+        kind: GitRepository
+        name: floe
+        namespace: flux-system
+  install:
+    timeout: 10m
+    remediation:
+      retries: 2
+  upgrade:
+    timeout: 10m
+    cleanupOnFail: true
+    remediation:
+      retries: 2
+      strategy: uninstall
+      remediateLastFailure: true
