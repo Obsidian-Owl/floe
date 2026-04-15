@@ -77,6 +77,49 @@ securityContexts:
         - ALL
 
 # =============================================================================
+# Writable Volume Anchors (readOnlyRootFilesystem compatibility)
+# =============================================================================
+# Dagster creates these directories at startup; without writable mounts pods
+# crash with OSError: [Errno 30] Read-only file system.
+#
+# Validated against: dagster/dagster-celery-k8s image, Dagster chart 1.12.17,
+# runAsUser: 1000 (UID of dagster user in upstream image).
+#
+# storage/, history/, schedules/ are intentionally ephemeral — Dagster run/event
+# state lives in PostgreSQL, not on the local filesystem. If a user enables
+# fs_io_manager, data will be lost on pod restart.
+dagsterWritableVolumes:
+  volumes: &dagsterWritableVolumes
+    - name: dagster-writable
+      emptyDir:
+        sizeLimit: 1Gi
+  volumeMounts: &dagsterWritableMounts
+    - name: dagster-writable
+      mountPath: /opt/dagster/dagster_home/.telemetry
+      subPath: telemetry
+    - name: dagster-writable
+      mountPath: /opt/dagster/dagster_home/logs
+      subPath: logs
+    - name: dagster-writable
+      mountPath: /opt/dagster/dagster_home/.logs_queue
+      subPath: logs_queue
+    - name: dagster-writable
+      mountPath: /opt/dagster/dagster_home/history
+      subPath: history
+    - name: dagster-writable
+      mountPath: /opt/dagster/dagster_home/schedules
+      subPath: schedules
+    - name: dagster-writable
+      mountPath: /opt/dagster/dagster_home/storage
+      subPath: storage
+    - name: dagster-writable
+      mountPath: /tmp
+      subPath: tmp
+    - name: dagster-writable
+      mountPath: /home/dagster/.dagster
+      subPath: home-dagster
+
+# =============================================================================
 # Cluster Mapping (Multi-Environment Support)
 # =============================================================================
 # Maps logical environments to physical cluster/namespace configurations.
@@ -174,37 +217,8 @@ dagster:
         value: "floe-platform"
     envSecrets: []
     envConfigMaps: []
-    # Writable emptyDir volumes for readOnlyRootFilesystem compatibility.
-    # Dagster creates these directories at startup; without them pods crash
-    # with OSError: [Errno 30] Read-only file system.
-    volumes:
-      - name: dagster-writable
-        emptyDir: {}
-    volumeMounts:
-      - name: dagster-writable
-        mountPath: /opt/dagster/dagster_home/.telemetry
-        subPath: telemetry
-      - name: dagster-writable
-        mountPath: /opt/dagster/dagster_home/logs
-        subPath: logs
-      - name: dagster-writable
-        mountPath: /opt/dagster/dagster_home/.logs_queue
-        subPath: logs_queue
-      - name: dagster-writable
-        mountPath: /opt/dagster/dagster_home/history
-        subPath: history
-      - name: dagster-writable
-        mountPath: /opt/dagster/dagster_home/schedules
-        subPath: schedules
-      - name: dagster-writable
-        mountPath: /opt/dagster/dagster_home/storage
-        subPath: storage
-      - name: dagster-writable
-        mountPath: /tmp
-        subPath: tmp
-      - name: dagster-writable
-        mountPath: /home/dagster/.dagster
-        subPath: home-dagster
+    volumes: *dagsterWritableVolumes
+    volumeMounts: *dagsterWritableMounts
 
   # Dagster daemon configuration
   dagsterDaemon:
@@ -231,35 +245,8 @@ dagster:
         value: "floe-platform"
     envSecrets: []
     envConfigMaps: []
-    # Writable emptyDir volumes — same as dagsterWebserver (see comment above)
-    volumes:
-      - name: dagster-writable
-        emptyDir: {}
-    volumeMounts:
-      - name: dagster-writable
-        mountPath: /opt/dagster/dagster_home/.telemetry
-        subPath: telemetry
-      - name: dagster-writable
-        mountPath: /opt/dagster/dagster_home/logs
-        subPath: logs
-      - name: dagster-writable
-        mountPath: /opt/dagster/dagster_home/.logs_queue
-        subPath: logs_queue
-      - name: dagster-writable
-        mountPath: /opt/dagster/dagster_home/history
-        subPath: history
-      - name: dagster-writable
-        mountPath: /opt/dagster/dagster_home/schedules
-        subPath: schedules
-      - name: dagster-writable
-        mountPath: /opt/dagster/dagster_home/storage
-        subPath: storage
-      - name: dagster-writable
-        mountPath: /tmp
-        subPath: tmp
-      - name: dagster-writable
-        mountPath: /home/dagster/.dagster
-        subPath: home-dagster
+    volumes: *dagsterWritableVolumes
+    volumeMounts: *dagsterWritableMounts
 
   # PostgreSQL configuration for Dagster
   # Disable subchart's PostgreSQL - we use parent chart's PostgreSQL
@@ -295,8 +282,10 @@ dagster:
         runK8sConfig:
           podSpecConfig:
             securityContext: *podSecurityContextPSS
+            volumes: *dagsterWritableVolumes
           containerConfig:
             securityContext: *containerSecurityContextPSS
+            volumeMounts: *dagsterWritableMounts
         envConfigMaps: []
         envSecrets: []
         jobNamespace: ""
