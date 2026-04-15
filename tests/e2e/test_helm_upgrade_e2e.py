@@ -22,6 +22,7 @@ import os
 
 import pytest
 
+from testing.fixtures.flux import flux_suspended  # noqa: F401 (pytest fixture import)
 from testing.fixtures.polling import wait_for_condition
 from tests.e2e.conftest import run_helm, run_kubectl
 
@@ -65,7 +66,7 @@ class TestHelmUpgrade:
     """
 
     @pytest.mark.requirement("AC-2.9")
-    def test_helm_upgrade_succeeds(self) -> None:
+    def test_helm_upgrade_succeeds(self, flux_suspended: None) -> None:  # noqa: F811
         """Verify helm upgrade completes without error.
 
         Detects and recovers from stuck release states (pending-upgrade,
