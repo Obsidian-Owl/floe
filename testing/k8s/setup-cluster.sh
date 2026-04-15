@@ -30,6 +30,20 @@ CLUSTER_NAME="${CLUSTER_NAME:-floe-test}"
 NAMESPACE="floe-test"
 TIMEOUT="${TIMEOUT:-300}"
 
+# Source shared constants (FLUX_VERSION, FLOE_RELEASE_NAME, etc.)
+# shellcheck source=../ci/common.sh
+source "${SCRIPT_DIR}/../ci/common.sh"
+
+# Parse command line arguments
+for arg in "$@"; do
+    case "${arg}" in
+        --no-flux)
+            FLOE_NO_FLUX=1
+            ;;
+    esac
+done
+: "${FLOE_NO_FLUX:=0}"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -70,6 +84,21 @@ check_prerequisites() {
     if ! docker info &> /dev/null; then
         log_error "Docker daemon is not running"
         exit 1
+    fi
+
+    # Flux CLI check — skipped when --no-flux is set
+    if [[ "${FLOE_NO_FLUX}" != "1" ]]; then
+        if ! command -v flux &> /dev/null; then
+            log_error "flux CLI not found. Install: curl -s https://fluxcd.io/install.sh | sudo bash"
+            exit 1
+        fi
+
+        # Verify flux version matches FLUX_VERSION (warning only)
+        local flux_ver
+        flux_ver=$(flux --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+        if [[ -n "${flux_ver}" && "${flux_ver}" != "${FLUX_VERSION}" ]]; then
+            log_warn "flux CLI version ${flux_ver} does not match FLUX_VERSION=${FLUX_VERSION}"
+        fi
     fi
 }
 
