@@ -86,8 +86,14 @@ check_prerequisites() {
         exit 1
     fi
 
-    # Flux CLI check — skipped when --no-flux is set
-    if [[ "${FLOE_NO_FLUX}" != "1" ]]; then
+    # jq is required for pre-Flux cleanup (helm status JSON parsing)
+    if ! command -v jq &> /dev/null; then
+        log_error "jq is not installed. Install: brew install jq (macOS) or apt install jq (Linux)"
+        exit 1
+    fi
+
+    # Flux CLI check — skipped when --no-flux is set or services are skipped
+    if [[ "${FLOE_NO_FLUX}" != "1" && "${SKIP_SERVICES:-false}" != "true" ]]; then
         if ! command -v flux &> /dev/null; then
             log_error "flux CLI not found. Install: curl -s https://fluxcd.io/install.sh | sudo bash"
             exit 1

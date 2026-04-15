@@ -69,11 +69,23 @@ def test_flux_version_check_exists() -> None:
 
 @pytest.mark.requirement("AC-5")
 def test_flux_check_skipped_when_no_flux() -> None:
-    """Flux CLI check is skipped when FLOE_NO_FLUX is set."""
+    """Flux CLI check is skipped when FLOE_NO_FLUX is set or SKIP_SERVICES is true."""
     content = _SETUP_SCRIPT.read_text()
-    # The flux prerequisite check must be gated on FLOE_NO_FLUX
+    # The flux prerequisite check must be gated on FLOE_NO_FLUX and SKIP_SERVICES
     assert re.search(r"FLOE_NO_FLUX", content), (
         "setup-cluster.sh must reference FLOE_NO_FLUX to skip flux check"
+    )
+    assert re.search(r"SKIP_SERVICES", content), (
+        "setup-cluster.sh must reference SKIP_SERVICES to skip flux check"
+    )
+
+
+@pytest.mark.requirement("AC-5")
+def test_jq_prerequisite_check() -> None:
+    """check_prerequisites verifies jq is installed."""
+    content = _SETUP_SCRIPT.read_text()
+    assert re.search(r"command\s+-v\s+jq", content), (
+        "check_prerequisites must check for jq CLI via 'command -v jq'"
     )
 
 
