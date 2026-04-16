@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Specwright gate check — blocks PR creation unless gates have been run
+# Specwright gate check — advisory reminder to run gates before creating a PR
 #
 # Checks for evidence files in the active work unit's evidence/ directory.
 # If no evidence exists, warns the agent to run /sw-verify first.
@@ -16,62 +16,41 @@ GIT_COMMON_DIR="$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-
 SESSION_FILE="${GIT_DIR:+$GIT_DIR/specwright/session.json}"
 LEGACY_WORKFLOW="${PROJECT_ARTIFACTS_ROOT}/state/workflow.json"
 
-# No Specwright state — skip check
-if [[ ! -f "$SESSION_FILE" ]] && [[ ! -f "$LEGACY_WORKFLOW" ]]; then
-    exit 0
-fi
+warn() {
+    echo "WARNING: $1" >&2
+}
 
-WORK_ID=""
-WORKFLOW_FILE=""
-WORK_DIR=""
-WORK_ARTIFACTS_ROOT=""
+read_json_field() {
+    local json_file="$1"
+    local field_path="$2"
 
-if [[ -f "$SESSION_FILE" ]]; then
-    WORK_ID="$(python3 - "$SESSION_FILE" <<'PY'
+    python3 - "$json_file" "$field_path" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-session = json.loads(Path(sys.argv[1]).read_text())
-print(session.get("attachedWorkId") or "")
+json_path = Path(sys.argv[1])
+field_path = sys.argv[2]
+
+data = json.loads(json_path.read_text())
+value = data
+for part in field_path.split("."):
+    if isinstance(value, dict):
+        value = value.get(part)
+    else:
+        value = ""
+        break
+
+print(value or "")
 PY
-)"
-fi
+}
 
-if [[ -z "$WORK_ID" ]]; then
-    if [[ ! -f "$LEGACY_WORKFLOW" ]]; then
-        exit 0
-    fi
-    WORK_ID="$(python3 - "$LEGACY_WORKFLOW" <<'PY'
-import json
-import sys
-from pathlib import Path
+resolve_work_artifacts_root() {
+    local config_path="$1"
+    local default_root="$2"
+    local project_root="$3"
 
-workflow = json.loads(Path(sys.argv[1]).read_text())
-print((workflow.get("currentWork") or {}).get("id") or "")
-PY
-)"
-    if [[ -z "$WORK_ID" ]]; then
-        exit 0
-    fi
-    EVIDENCE_DIR="${PROJECT_ARTIFACTS_ROOT}/work/${WORK_ID}/evidence"
-else
-    WORKFLOW_FILE="${GIT_COMMON_DIR}/specwright/work/${WORK_ID}/workflow.json"
-    if [[ ! -f "$WORKFLOW_FILE" ]]; then
-        exit 0
-    fi
-
-    WORK_DIR="$(python3 - "$WORKFLOW_FILE" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-workflow = json.loads(Path(sys.argv[1]).read_text())
-print(workflow.get("workDir") or "")
-PY
-)"
-
-    WORK_ARTIFACTS_ROOT="$(python3 - "$PROJECT_ARTIFACTS_ROOT/config.json" "${GIT_COMMON_DIR}/specwright/work" "$PROJECT_ROOT" <<'PY'
+    python3 - "$config_path" "$default_root" "$project_root" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -91,7 +70,46 @@ if work_artifacts.get("mode") == "tracked" and work_artifacts.get("trackedRoot")
 else:
     print(default_root)
 PY
-)"
+}
+
+# No Specwright state — skip check
+if [[ ! -f "$SESSION_FILE" ]] && [[ ! -f "$LEGACY_WORKFLOW" ]]; then
+    exit 0
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+    warn "python3 not available; skipping Specwright gate evidence check."
+    exit 0
+fi
+
+WORK_ID=""
+WORKFLOW_FILE=""
+WORK_DIR=""
+WORK_ARTIFACTS_ROOT=""
+
+if [[ -f "$SESSION_FILE" ]]; then
+    WORK_ID="$(read_json_field "$SESSION_FILE" "attachedWorkId" || true)"
+fi
+
+if [[ -z "$WORK_ID" ]]; then
+    if [[ ! -f "$LEGACY_WORKFLOW" ]]; then
+        exit 0
+    fi
+    WORK_ID="$(read_json_field "$LEGACY_WORKFLOW" "currentWork.id" || true)"
+    if [[ -z "$WORK_ID" ]]; then
+        exit 0
+    fi
+    EVIDENCE_DIR="${PROJECT_ARTIFACTS_ROOT}/work/${WORK_ID}/evidence"
+else
+    WORKFLOW_FILE="${GIT_COMMON_DIR:+$GIT_COMMON_DIR/specwright/work/${WORK_ID}/workflow.json}"
+    if [[ -z "$WORKFLOW_FILE" ]] || [[ ! -f "$WORKFLOW_FILE" ]]; then
+        warn "Specwright runtime workflow not found for work '$WORK_ID'; skipping gate evidence check."
+        exit 0
+    fi
+
+    WORK_DIR="$(read_json_field "$WORKFLOW_FILE" "workDir" || true)"
+
+    WORK_ARTIFACTS_ROOT="$(resolve_work_artifacts_root "$PROJECT_ARTIFACTS_ROOT/config.json" "${GIT_COMMON_DIR}/specwright/work" "$PROJECT_ROOT" || true)"
 
     if [[ -z "$WORK_DIR" ]]; then
         EVIDENCE_DIR="${WORK_ARTIFACTS_ROOT}/${WORK_ID}/evidence"
@@ -101,10 +119,10 @@ PY
 fi
 
 # Check if evidence directory exists and has files
-if [[ ! -d "$EVIDENCE_DIR" ]] || [[ -z "$(ls -A "$EVIDENCE_DIR" 2>/dev/null)" ]]; then
-    echo "WARNING: No Specwright gate evidence found for work '$WORK_ID'." >&2
-    echo "Run /sw-verify before creating a PR to ensure quality gates pass." >&2
-    echo "Evidence expected at: $EVIDENCE_DIR/" >&2
+if [[ ! -d "$EVIDENCE_DIR" ]] || ! find "$EVIDENCE_DIR" -mindepth 1 -print -quit | grep -q .; then
+    warn "No Specwright gate evidence found for work '$WORK_ID'."
+    warn "Run /sw-verify before creating a PR to ensure quality gates pass."
+    warn "Evidence expected at: $EVIDENCE_DIR/"
 fi
 
 exit 0
