@@ -74,7 +74,6 @@ pip-delete-this-directory.txt
 *.local
 .agent/
 .omc/
-.claude/hooks/
 .pre-commit.log
 
 # Local tool state (rebuilt on demand)
@@ -83,7 +82,9 @@ pip-delete-this-directory.txt
 .agentlint/
 .aikido
 .deepeval/
-.specwright/
+
+# Shared Specwright artifacts and repo hooks are versioned.
+# Runtime/session state now lives under .git/specwright.
 
 # Testing artifacts
 target/

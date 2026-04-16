@@ -1,0 +1,59 @@
+{
+  "workId": "e2e-materialization-fix",
+  "timestamp": "2026-03-28T20:45:00Z",
+  "findings": [
+    {
+      "category": "infrastructure",
+      "source": "docker/dagster-demo/Dockerfile discovery during E2E validation",
+      "description": "dbt manifest.json embeds absolute host paths via root_path in every node. partial_parse.msgpack caches these. When manifest is built on host and COPYed into Docker, dbt operations fail with path mismatch.",
+      "proposedRule": "P67: Delete partial_parse.msgpack and regenerate manifests inside Docker container after COPY",
+      "disposition": "promoted:patterns.md+auto-memory"
+    },
+    {
+      "category": "ci",
+      "source": "PR #213 review comment by greptile-apps[bot] on helm-ci.yaml",
+      "description": "azure/setup-helm@v4 is the GitHub Action version, not the Helm binary version. The version: input parameter controls the actual binary. Confusing the two caused decision D4 to be wrong (believed CI ran Helm v4 when it ran v3.14.0).",
+      "proposedRule": "P68: Always distinguish GitHub Action version (@vN tag) from tool binary version (version: input)",
+      "disposition": "promoted:patterns.md+auto-memory"
+    },
+    {
+      "category": "infrastructure",
+      "source": "Helm v4 migration research + E2E test failure",
+      "description": "Helm v3 --atomic implied --wait. Helm v4 renamed it to --rollback-on-failure but dropped the implicit --wait. Without --wait, Helm returns immediately and rollback-on-failure may not detect startup failures.",
+      "proposedRule": "P69: Always pair --rollback-on-failure with --wait in Helm v4",
+      "disposition": "promoted:patterns.md+auto-memory"
+    }
+  ],
+  "gateCalibration": {
+    "build": {
+      "status": "PASS",
+      "findings": "0B/0W/1I",
+      "falsePositives": [],
+      "notes": "1I: pre-existing ruff errors in plugin.py (992 violations, all pre-existing)"
+    },
+    "tests": {
+      "status": "PASS",
+      "findings": "0B/0W/0I",
+      "falsePositives": [],
+      "notes": "Unit tests passed. Integration tests require Kind cluster (expected skip on local)."
+    },
+    "security": {
+      "status": "WARN",
+      "findings": "0B/1W/3I",
+      "falsePositives": [],
+      "notes": "1W was cryptography CVE — resolved by upgrading to 46.0.6. 3I were pre-existing vuln-ignore entries."
+    },
+    "wiring": {
+      "status": "PASS",
+      "findings": "0B/1W/0I",
+      "falsePositives": [],
+      "notes": "1W was stale docstring in generate_entry_point_code() — fixed."
+    },
+    "spec": {
+      "status": "PASS",
+      "findings": "0B/0W/0I",
+      "falsePositives": [],
+      "notes": "All 4 acceptance criteria verified."
+    }
+  }
+}

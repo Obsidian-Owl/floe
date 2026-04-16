@@ -1,0 +1,41 @@
+{
+  "workId": "polaris-rbac-keycloak",
+  "timestamp": "2026-03-16T15:10:00Z",
+  "findings": [
+    {
+      "category": "security",
+      "source": "gate-security + PR review (3 reviewers)",
+      "description": "eval in Helm shell scripts for variable indirection is CWE-78. Replaced with case dispatch.",
+      "proposedRule": "P31: No eval in Helm shell scripts — use case dispatch for variable indirection",
+      "disposition": "promoted:auto-memory+patterns"
+    },
+    {
+      "category": "build",
+      "source": "CI failure (helm unittest pipeline)",
+      "description": "Chart unit tests were not updated when bootstrap template was rewritten. CI failed independently of Python tests.",
+      "proposedRule": "P32: Update chart unit tests alongside template changes — CI runs them independently",
+      "disposition": "promoted:auto-memory+patterns"
+    },
+    {
+      "category": "architecture",
+      "source": "PR review (Greptile)",
+      "description": "Initial implementation only handled 201/409 for all Polaris operations. Grant PUT returns 204, assign returns 200/204.",
+      "proposedRule": "P33: Full idempotency codes for Polaris REST by operation type",
+      "disposition": "promoted:auto-memory+patterns"
+    },
+    {
+      "category": "testing",
+      "source": "gate-wiring + post-build review",
+      "description": "Unit tests reading E2E conftest source as text creates fragile cross-tier coupling.",
+      "proposedRule": "P35: No cross-tier text-parsing tests — structural tests belong in the same tier as the code they inspect",
+      "disposition": "promoted:patterns+auto-memory"
+    },
+    {
+      "category": "process",
+      "source": "PR review interaction",
+      "description": "Declining PR suggestions without explaining the policy rationale wastes reviewer time and misses a teaching opportunity.",
+      "proposedRule": "P34: When declining due to policy, name the policy, explain the rationale, offer an alternative",
+      "disposition": "promoted:auto-memory+patterns"
+    }
+  ]
+}

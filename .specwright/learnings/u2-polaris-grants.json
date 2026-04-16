@@ -1,0 +1,41 @@
+{
+  "workId": "u2-polaris-grants",
+  "timestamp": "2026-03-14T15:50:00Z",
+  "findings": [
+    {
+      "category": "security",
+      "source": "PR review (claude[bot], greptile, github-actions)",
+      "description": "Privilege values from {{ range }} bypassed shell-side input validation while named variables were validated",
+      "proposedRule": "P22: Validate ALL interpolated values in templates",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "wiring",
+      "source": "gate-wiring WARN",
+      "description": "grants.enabled defaulted to true while parent bootstrap.enabled defaulted to false — silent privilege escalation",
+      "proposedRule": "P23: Child feature flags default to restrictive",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "architecture",
+      "source": "PR review (greptile)",
+      "description": "$totalSteps hardcoded to 4/7 didn't account for s3.enabled conditional — wrong count for s3=false+grants=true",
+      "proposedRule": "P24: Dynamic step counting from ALL conditionals",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "process",
+      "source": "User feedback",
+      "description": "Two PR review comments were acknowledged but not tracked as GitHub issues — work silently dropped",
+      "proposedRule": "Every acknowledged PR comment MUST create a tech-debt issue before replying",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "process",
+      "source": "PR review convergence",
+      "description": "3 independent reviewers all flagged the same privilege validation gap — strong signal for severity",
+      "proposedRule": null,
+      "disposition": "dismissed"
+    }
+  ]
+}

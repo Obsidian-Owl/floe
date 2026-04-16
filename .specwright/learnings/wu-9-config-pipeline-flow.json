@@ -1,0 +1,41 @@
+{
+  "workId": "wu-9-config-pipeline-flow",
+  "timestamp": "2026-02-16T08:15:00Z",
+  "findings": [
+    {
+      "category": "security",
+      "source": "gate-evidence",
+      "description": "CI security review flagged TracingManifestConfig.endpoint and LineageManifestConfig.endpoint as SSRF vectors (CWE-918). Pydantic str fields accepted arbitrary URLs including ftp://, file:///etc/passwd, and AWS metadata endpoint. Gate-security missed this — it focuses on code patterns, not attack surface.",
+      "proposedRule": "Pydantic models with endpoint/URL fields MUST validate http/https scheme and reject private network targets",
+      "disposition": "promoted-constitution"
+    },
+    {
+      "category": "build",
+      "source": "git-log",
+      "description": "Bumping COMPILED_ARTIFACTS_VERSION from 0.7.0 to 0.8.0 required regenerating all 8 OCI golden fixture files. Not planned as a task — consumed 2 fix-up commits.",
+      "proposedRule": "Version bumps must include golden fixture regeneration as an explicit subtask",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "build",
+      "source": "git-log",
+      "description": "Regenerated golden fixtures contained hex checksums that triggered detect-secrets false positives. First git push failed on pre-push hook. Required .secrets.baseline update.",
+      "proposedRule": "After modifying golden fixtures, run detect-secrets scan --baseline before pushing",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "testing",
+      "source": "gate-evidence",
+      "description": "Gate-security found 0 BLOCK/0 WARN for WU-9. CI security review found 1 CRITICAL + 2 HIGH + 4 MEDIUM on the same code. They catch fundamentally different classes of issues.",
+      "proposedRule": "Gate-security and CI security review are complementary layers, not redundant — both must be green",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "friction",
+      "source": "git-log",
+      "description": "WU-9 produced 12 commits: 7 task + 5 fix-up. Fix-ups were all predictable downstream effects of schema changes (golden fixtures, secrets baseline, exports, security). Recurring pattern from WU-6 and WU-8.",
+      "proposedRule": "Schema change work units must include a ripple checklist covering re-exports, golden fixtures, secrets baseline, and contract test updates",
+      "disposition": "promoted-patterns"
+    }
+  ]
+}

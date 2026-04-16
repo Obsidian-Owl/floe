@@ -1,0 +1,48 @@
+{
+  "workId": "wu-8-polish",
+  "timestamp": "2026-02-15T08:00:00Z",
+  "findings": [
+    {
+      "category": "testing",
+      "source": "gate-evidence",
+      "description": "12 xfail markers with strict=False silently swallowed xpass in test_data_pipeline.py. Infrastructure improvements would go unnoticed.",
+      "proposedRule": "All @pytest.mark.xfail MUST use strict=True",
+      "disposition": "promoted-constitution"
+    },
+    {
+      "category": "testing",
+      "source": "gate-evidence",
+      "description": "wait_for_service treated any status_code < 500 as healthy. Polaris management endpoint returns 503 when not ready, but 401/404 from misconfiguration would also pass.",
+      "proposedRule": "Health-readiness endpoints use strict_status=True for exact 200 validation",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "testing",
+      "source": "gate-evidence",
+      "description": "Migrating Polaris test from port 8181 to 8182 deleted HTTP validation of catalog API port. Coverage subtracted silently.",
+      "proposedRule": "When migrating test targets, verify old target is still tested elsewhere. Test BOTH if not.",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "architecture",
+      "source": "gate-evidence",
+      "description": "Two kubectl port-forward processes targeting same service created race condition and dual PID management.",
+      "proposedRule": "Use single kubectl port-forward with multiple port pairs for same-service multi-port forwarding",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "testing",
+      "source": "gate-evidence",
+      "description": "Governance enforcement had 3 positive-path tests but zero negative-path tests. A hardcoded passed=True implementation would pass all tests.",
+      "proposedRule": "Enforcement/validation logic MUST have negative-path tests verifying rejection content, not just exception type",
+      "disposition": "promoted-constitution"
+    },
+    {
+      "category": "friction",
+      "source": "insights",
+      "description": "5-gate verification caught actionable findings in 7 of 8 WUs. gate-tests found the most issues. Total: 8 BLOCKs, 61 WARNs across epic.",
+      "proposedRule": "Never skip 5-gate verification, even for simple changes. gate-tests (adversarial auditor) is the highest-yield gate.",
+      "disposition": "promoted-patterns"
+    }
+  ]
+}

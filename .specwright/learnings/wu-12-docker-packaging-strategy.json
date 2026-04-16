@@ -1,0 +1,48 @@
+{
+  "workId": "docker-packaging-strategy",
+  "timestamp": "2026-02-17T08:15:00Z",
+  "findings": [
+    {
+      "category": "architecture",
+      "source": "plan",
+      "description": "uv export --frozen --require-hashes as vendor image replacement. 3-stage build eliminates version matrix coordination (P14/P15). Lockfile is authoritative; hashes provide supply chain verification.",
+      "proposedRule": "When packaging Python monorepo packages for Docker, prefer uv export over vendor base images.",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "build",
+      "source": "git-log",
+      "description": "Python stdlib version guards: sys.version_info at module level for cross-version imports (tomllib 3.11+ vs tomli 3.10). mypy natively understands version guards but not try/except.",
+      "proposedRule": "For stdlib modules that differ across supported Python versions, use sys.version_info guards at module level.",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "security",
+      "source": "gate-security",
+      "description": "Non-root USER in Dockerfile runtime stages must come after all COPY/RUN file operations. Placing before COPY causes silent permission errors.",
+      "proposedRule": "USER directive MUST appear after all COPY, RUN, and file-creation commands but before WORKDIR and CMD.",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "friction",
+      "source": "git-log",
+      "description": "Make backslash continuation preserves leading whitespace, breaking Python indentation in one-liners. Needed 3 debug cycles to resolve.",
+      "proposedRule": "Python commands in Makefile recipes MUST be single-line. Never use backslash continuation.",
+      "disposition": "dismissed"
+    },
+    {
+      "category": "architecture",
+      "source": "plan",
+      "description": "Docker extras pattern: [project.optional-dependencies] docker for runtime-only dependencies (dagster-webserver, daemon, k8s). uv export --extra docker includes them; uv sync excludes them.",
+      "proposedRule": "Runtime-only dependencies should use optional-dependencies extras, not top-level dependencies.",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "testing",
+      "source": "gate-tests",
+      "description": "Deterministic count assertions: 12 instances of >= N where == N was correct. Recurring finding across WU-6, WU-8, WU-11, WU-12 — the #1 most-recurring gate-tests finding.",
+      "proposedRule": "When expected count is deterministic, ALWAYS use == N, never >= N or > 0.",
+      "disposition": "promoted-constitution"
+    }
+  ]
+}

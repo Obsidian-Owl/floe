@@ -1,0 +1,73 @@
+{
+  "workId": "e2e-test-stability",
+  "timestamp": "2026-03-31T11:40:00Z",
+  "findings": [
+    {
+      "category": "infra",
+      "source": "build-experience",
+      "description": "Docker build cache silently skips new COPY lines — must use --no-cache when adding new directives",
+      "proposedRule": "P70",
+      "disposition": "promoted-to-patterns"
+    },
+    {
+      "category": "infra",
+      "source": "build-experience",
+      "description": "macOS resolves localhost to ::1 (IPv6) — always use 127.0.0.1 in scripts for port-forward/tunnel targets",
+      "proposedRule": "P71",
+      "disposition": "promoted-to-patterns"
+    },
+    {
+      "category": "testing",
+      "source": "spec-compliance-gate",
+      "description": "Fixing a masking error (import error) exposed downstream errors (STORAGE:s3 plugin) — use relative AC thresholds, not absolute",
+      "proposedRule": "P72",
+      "disposition": "promoted-to-patterns"
+    },
+    {
+      "category": "process",
+      "source": "build-experience",
+      "description": "Architect review before build catches path errors (packages/ vs plugins/) that would waste an entire build cycle",
+      "proposedRule": null,
+      "disposition": "dismissed-standard-practice"
+    },
+    {
+      "category": "ci",
+      "source": "ci-failure",
+      "description": "Local make test-unit doesn't run ruff — lint errors only caught in CI. Already covered by P61.",
+      "proposedRule": null,
+      "disposition": "dismissed-already-covered"
+    }
+  ],
+  "gateCalibration": {
+    "build": {
+      "verdict": "PASS",
+      "findingCount": 0,
+      "falsePositives": [],
+      "falseNegatives": []
+    },
+    "tests": {
+      "verdict": "WARN",
+      "findingCount": 1,
+      "falsePositives": [],
+      "falseNegatives": []
+    },
+    "security": {
+      "verdict": "WARN",
+      "findingCount": 2,
+      "falsePositives": [],
+      "falseNegatives": []
+    },
+    "wiring": {
+      "verdict": "PASS",
+      "findingCount": 0,
+      "falsePositives": [],
+      "falseNegatives": []
+    },
+    "spec": {
+      "verdict": "WARN",
+      "findingCount": 1,
+      "falsePositives": [],
+      "falseNegatives": []
+    }
+  }
+}

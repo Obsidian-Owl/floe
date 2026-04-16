@@ -1,0 +1,34 @@
+{
+  "workId": "fix-postgresql-volumes",
+  "timestamp": "2026-03-20T07:10:00Z",
+  "findings": [
+    {
+      "category": "helm",
+      "source": "template-bug",
+      "description": "Go YAML last-key-wins silently drops duplicate keys at the same mapping level",
+      "proposedRule": "P48: Verify rendered output with helm template when conditionals produce structural YAML keys",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "helm-testing",
+      "source": "as-built-notes",
+      "description": "Three helm-unittest assertion edge cases: notExists vs isNullOrEmpty, equal vs contains for complex objects, template dependency listing",
+      "proposedRule": "P49: helm-unittest assertion gotchas reference",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "helm-testing",
+      "source": "pr-review",
+      "description": "Tests relying on values.yaml defaults break silently when defaults change",
+      "proposedRule": "P50: Helm unit tests must explicitly set all values they assert on",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "helm",
+      "source": "dead-key-discovery",
+      "description": "Dead key in values-test.yaml masked template bug for months",
+      "proposedRule": "P51: Verify values paths are consumed by templates",
+      "disposition": "promoted:patterns"
+    }
+  ]
+}

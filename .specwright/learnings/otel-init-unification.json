@@ -1,0 +1,41 @@
+{
+  "workId": "otel-init-unification",
+  "timestamp": "2026-03-19T14:10:00Z",
+  "findings": [
+    {
+      "category": "security",
+      "source": "gate-security + PR review (Greptile P1)",
+      "description": "exc_info=True contradicted 'type only' comment — security boundary was stderr vs operator logs, not total suppression",
+      "proposedRule": "P45: CWE-532 trust boundary clarity — comments MUST specify exact boundary (operator logs vs user stderr)",
+      "disposition": "promoted:auto-memory+patterns"
+    },
+    {
+      "category": "build",
+      "source": "PR review (claude[bot] + Greptile)",
+      "description": "MeterProvider reset logic duplicated 5x across 3 files — maintenance risk when OTel SDK changes",
+      "proposedRule": "P46: Test fixtures call reset_telemetry() directly, never duplicate private API manipulation",
+      "disposition": "promoted:auto-memory+patterns"
+    },
+    {
+      "category": "architecture",
+      "source": "Implementation discovery (T2)",
+      "description": "TracerProvider and MeterProvider have different null-safety semantics in reset — None vs fresh proxy",
+      "proposedRule": "P47: OTel reset asymmetry — verify proxy restoration per provider type independently",
+      "disposition": "promoted:auto-memory+patterns"
+    },
+    {
+      "category": "build",
+      "source": "PR review (claude[bot])",
+      "description": "sys.exc_info()[1] replaced by except Exception as exc — simpler, removes import sys",
+      "proposedRule": null,
+      "disposition": "dismissed:too-minor"
+    },
+    {
+      "category": "testing",
+      "source": "Pyright reportUnnecessaryIsInstance",
+      "description": "isinstance() on typed module-level state flagged as redundant — simplified to is not None",
+      "proposedRule": null,
+      "disposition": "dismissed:standard-behavior"
+    }
+  ]
+}

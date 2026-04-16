@@ -1,0 +1,55 @@
+{
+  "workId": "salvage-branch-wrap-up",
+  "timestamp": "2026-04-14T08:50:00Z",
+  "findings": [
+    {
+      "category": "helm-safety",
+      "source": "CI failure + PR review",
+      "description": "Go template nil pointer on nested .Values access when intermediate key is absent",
+      "proposedRule": "P76: Always wrap nested Helm value access in {{- with }} or guard each level explicitly",
+      "disposition": "promoted:patterns.md"
+    },
+    {
+      "category": "helm-security",
+      "source": "PR review (codex)",
+      "description": "Gating env var on plaintext password breaks existingSecret production pattern",
+      "proposedRule": "P77: Render env var unconditionally for feature mode, not on plaintext value presence",
+      "disposition": "promoted:patterns.md"
+    },
+    {
+      "category": "env-var-wiring",
+      "source": "gate-wiring + PR review",
+      "description": "POLARIS_URI double-suffix from Helm value already containing /api/catalog",
+      "proposedRule": "P78: Never append URI path components that may already be in env var",
+      "disposition": "promoted:patterns.md"
+    },
+    {
+      "category": "test-regex",
+      "source": "CI failure",
+      "description": "Helm unittest notMatchRegex matched explanatory comment containing key name",
+      "proposedRule": null,
+      "disposition": "dismissed:one-off"
+    },
+    {
+      "category": "s3-auth",
+      "source": "as-built notes",
+      "description": "MinIO requires AWS Sig V4, httpx BasicAuth rejected — used boto3",
+      "proposedRule": null,
+      "disposition": "dismissed:already-in-as-built"
+    },
+    {
+      "category": "k8s-security",
+      "source": "PR review (3 bots)",
+      "description": "CWE-312: JDBC password in ConfigMap — moved to Secret with secretKeyRef",
+      "proposedRule": null,
+      "disposition": "dismissed:standard-practice"
+    }
+  ],
+  "gateCalibration": {
+    "build": { "status": "FAIL", "findings": { "block": 2, "warn": 0, "info": 0 }, "falsePositives": [] },
+    "tests": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "falsePositives": [] },
+    "security": { "status": "WARN", "findings": { "block": 1, "warn": 5, "info": 2 }, "falsePositives": [] },
+    "wiring": { "status": "WARN", "findings": { "block": 0, "warn": 1, "info": 0 }, "falsePositives": [] },
+    "spec": { "status": "PASS", "findings": { "block": 0, "warn": 0, "info": 0 }, "falsePositives": [] }
+  }
+}

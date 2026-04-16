@@ -1,0 +1,34 @@
+{
+  "workId": "e2e-test-infra-fixes",
+  "timestamp": "2026-03-17T19:45:00Z",
+  "findings": [
+    {
+      "category": "testing",
+      "source": "plan.md architecture decision + user feedback",
+      "description": "E2E fixtures should clean stale state at setup AND teardown. Setup is reliable (always runs), teardown is courtesy (crashes skip it).",
+      "proposedRule": "P36: Cleanup at Setup AND Teardown",
+      "disposition": "promoted:patterns+memory"
+    },
+    {
+      "category": "build",
+      "source": "PR review (claude[bot] P1, greptile P1)",
+      "description": "kubectl wait timeout return code was silently discarded, causing mystery downstream failures. Every kubectl/helm call in fixtures must have return code checked.",
+      "proposedRule": "P37: Guard kubectl/helm Return Codes in Fixtures",
+      "disposition": "promoted:patterns+memory"
+    },
+    {
+      "category": "security",
+      "source": "PR review (claude[bot], greptile P2)",
+      "description": "Empty variable expansion produces invalid CLI arguments. Use ${VAR:+--flag \"$VAR\"} to omit flags when empty.",
+      "proposedRule": "P38: Conditional CLI Flag Expansion",
+      "disposition": "promoted:patterns+memory"
+    },
+    {
+      "category": "architecture",
+      "source": "AC-3 implementation — vuln ignore list drift",
+      "description": "Duplicated config between pre-commit and E2E caused 2 missing GHSAs. Single file (.vuln-ignore) read by all consumers eliminates drift.",
+      "proposedRule": "P39: Single-File Ignore/Allow Lists",
+      "disposition": "promoted:patterns+memory"
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "workId": "openlineage-observability-fixes",
+  "timestamp": "2026-03-26T18:45:00Z",
+  "findings": [
+    {
+      "category": "testing",
+      "source": "PR review (greptile-apps)",
+      "description": "Env var mutation outside try block leaks on ensure_telemetry_initialized() failure",
+      "proposedRule": "[P58] Place ALL failable code inside try block when using env var save/restore",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "architecture",
+      "source": "PR review (claude, greptile-apps)",
+      "description": "OPENLINEAGE_URL silently ignored when manifest has HTTP transport but no endpoint — early return fires before env var check",
+      "proposedRule": "[P59] Env var overrides must be checked before missing-config guards",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "testing",
+      "source": "PR review (claude)",
+      "description": "Wiring test using real compile_pipeline() with demo files placed in unit/ tier",
+      "proposedRule": "[P60] Tests invoking full compilation with real files belong in integration tier",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "build",
+      "source": "CI failure (ruff F401)",
+      "description": "Moving wiring test class to new file left orphaned unittest.mock.patch import",
+      "proposedRule": "[P61] Run ruff check on both source and destination after moving code",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "architecture",
+      "source": "E2E test debugging",
+      "description": "NoOp tracer produces all-zero trace IDs — add_trace_context skips injection for these",
+      "proposedRule": "[P62] Tests validating trace context must set OTEL_EXPORTER_OTLP_ENDPOINT before ensure_telemetry_initialized()",
+      "disposition": "promoted:auto-memory"
+    }
+  ],
+  "gateCalibration": {
+    "build": {
+      "status": "PASS",
+      "findingsCount": 0,
+      "falsePositives": []
+    },
+    "tests": {
+      "status": "WARN",
+      "findingsCount": 7,
+      "falsePositives": []
+    },
+    "security": {
+      "status": "WARN",
+      "findingsCount": 3,
+      "falsePositives": []
+    },
+    "wiring": {
+      "status": "PASS",
+      "findingsCount": 7,
+      "falsePositives": []
+    },
+    "spec": {
+      "status": "WARN",
+      "findingsCount": 1,
+      "falsePositives": []
+    }
+  }
+}

@@ -15,9 +15,14 @@ NC='\033[0m' # No Color
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# State file for tracking quality checks
-QUALITY_STATE="${PROJECT_ROOT}/.specwright/state/workflow.json"
+PROJECT_ARTIFACTS_ROOT="${PROJECT_ROOT}/.specwright"
+GIT_DIR="$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-dir 2>/dev/null || true)"
+GIT_COMMON_DIR="$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+REPO_STATE_ROOT="${GIT_COMMON_DIR:+$GIT_COMMON_DIR/specwright}"
+WORKTREE_STATE_ROOT="${GIT_DIR:+$GIT_DIR/specwright}"
+SESSION_FILE="${WORKTREE_STATE_ROOT:+$WORKTREE_STATE_ROOT/session.json}"
+WORKFLOW_ROOT="${REPO_STATE_ROOT:+$REPO_STATE_ROOT/work}"
+LEGACY_WORKFLOW="${PROJECT_ARTIFACTS_ROOT}/state/workflow.json"
 
 log_info() {
     echo -e "${GREEN}[pre-pr-gate]${NC} $1"
@@ -42,13 +47,29 @@ check_dependencies() {
 }
 
 check_quality_state() {
-    if [[ ! -f "$QUALITY_STATE" ]]; then
-        return 1
+    local workflow_file=""
+    local work_id=""
+    local legacy_mode=0
+
+    if [[ -n "${SESSION_FILE:-}" ]] && [[ -f "$SESSION_FILE" ]]; then
+        work_id=$(jq -r '.attachedWorkId // empty' "$SESSION_FILE")
+        if [[ -n "$work_id" ]]; then
+            workflow_file="${WORKFLOW_ROOT}/${work_id}/workflow.json"
+        fi
+    fi
+
+    if [[ -z "$workflow_file" ]] || [[ ! -f "$workflow_file" ]]; then
+        if [[ ! -f "$LEGACY_WORKFLOW" ]]; then
+            return 1
+        fi
+        workflow_file="$LEGACY_WORKFLOW"
+        work_id=$(jq -r '.currentWork.id // empty' "$workflow_file")
+        legacy_mode=1
     fi
 
     # Check if state is recent (within last hour)
     local state_time
-    state_time=$(stat -f %m "$QUALITY_STATE" 2>/dev/null || stat -c %Y "$QUALITY_STATE" 2>/dev/null)
+    state_time=$(stat -f %m "$workflow_file" 2>/dev/null || stat -c %Y "$workflow_file" 2>/dev/null)
     local current_time
     current_time=$(date +%s)
     local age=$((current_time - state_time))
@@ -58,26 +79,25 @@ check_quality_state() {
         return 1
     fi
 
-    # Read current work unit ID and check gate results
-    local work_id
-    work_id=$(jq -r '.currentWork.id // empty' "$QUALITY_STATE")
-
     if [[ -z "$work_id" ]]; then
-        log_error "No active work unit in workflow.json."
-        return 1
-    fi
-
-    # Check that all enabled gates passed (PASS, WARN, or SKIP are acceptable)
-    local gate_statuses
-    gate_statuses=$(jq -r ".gates[\"$work_id\"] // empty" "$QUALITY_STATE")
-
-    if [[ -z "$gate_statuses" ]]; then
-        log_error "No gate results for work unit '$work_id'. Run /sw-verify first."
+        log_error "No active Specwright work is attached to this worktree."
         return 1
     fi
 
     local failed_gates
-    failed_gates=$(jq -r ".gates[\"$work_id\"] | to_entries[] | select(.value.status == \"FAIL\") | .key" "$QUALITY_STATE")
+    if [[ "$legacy_mode" -eq 1 ]]; then
+        if [[ "$(jq -r ".gates[\"$work_id\"] != null" "$workflow_file")" != "true" ]]; then
+            log_error "No gate results for work '$work_id'. Run /sw-verify first."
+            return 1
+        fi
+        failed_gates=$(jq -r ".gates[\"$work_id\"] | to_entries[]? | select((.value.status // \"\") == \"FAIL\" or (.value.status // \"\") == \"ERROR\") | .key" "$workflow_file")
+    else
+        if [[ "$(jq -r '(.gates // {}) | length > 0' "$workflow_file")" != "true" ]]; then
+            log_error "No gate results for work '$work_id'. Run /sw-verify first."
+            return 1
+        fi
+        failed_gates=$(jq -r '(.gates // {}) | to_entries[]? | select((.value.verdict // "") == "FAIL" or (.value.verdict // "") == "ERROR") | .key' "$workflow_file")
+    fi
 
     if [[ -n "$failed_gates" ]]; then
         log_error "Failed gates for '$work_id':"
@@ -147,10 +167,10 @@ main() {
     check_no_uncommitted_changes || failed=1
 
     # Quality state check (if state file exists)
-    if [[ -f "$QUALITY_STATE" ]]; then
+    if [[ -f "$LEGACY_WORKFLOW" ]] || [[ -f "$SESSION_FILE" ]]; then
         check_quality_state || failed=1
     else
-        log_warn "No quality state file found."
+        log_warn "No Specwright session or legacy workflow state found."
         log_warn "For full quality gate, run:"
         log_warn "  1. /sw-verify"
         log_warn "  2. Fix any gate findings"

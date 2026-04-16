@@ -1,0 +1,41 @@
+{
+  "workId": "e2e-infra-fixes",
+  "timestamp": "2026-03-25T17:00:00Z",
+  "findings": [
+    {
+      "category": "testing",
+      "source": "test_platform_bootstrap.py",
+      "description": "OTel SDK silently ignores second set_tracer_provider() — spans go to first provider's exporter",
+      "proposedRule": "[P54] Use standalone provider.get_tracer() when multiple providers exist in one process",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "testing",
+      "source": "test_helm_upgrade_e2e.py",
+      "description": "Helm upgrades without --atomic leave releases in failed state, cascading to downstream tests",
+      "proposedRule": "[P55] Always use --atomic + try/finally recovery in test Helm upgrades",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "testing",
+      "source": "PR review feedback",
+      "description": "Bare except: pass in finally blocks hides CI debugging clues",
+      "proposedRule": "[P56] Best-effort cleanup MUST log with logging.warning()",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "infrastructure",
+      "source": "postStartCommand.sh",
+      "description": "docker inspect range template concatenates all network IPs without separator",
+      "proposedRule": "[P57] Pin docker inspect to specific network name, not range over all",
+      "disposition": "promoted:auto-memory"
+    }
+  ],
+  "gateCalibration": {
+    "build": { "ran": true, "verdict": "PASS", "findings": 0, "falsePositives": [] },
+    "tests": { "ran": true, "verdict": "PASS", "findings": 2, "falsePositives": [] },
+    "security": { "ran": true, "verdict": "PASS", "findings": 6, "falsePositives": [] },
+    "wiring": { "ran": true, "verdict": "PASS", "findings": 5, "falsePositives": [] },
+    "spec": { "ran": true, "verdict": "PASS", "findings": 0, "falsePositives": [] }
+  }
+}
