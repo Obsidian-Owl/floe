@@ -1,0 +1,48 @@
+{
+  "workId": "wu-6-plugin-pipeline",
+  "timestamp": "2026-02-14T09:00:00Z",
+  "findings": [
+    {
+      "category": "testing",
+      "source": "gate-evidence",
+      "description": "Module-level autouse=True fixtures ran for all tests including those that didn't need mocking. Scoped to class-level _apply_mocks pattern.",
+      "proposedRule": "autouse=True fixtures MUST be scoped to narrowest applicable level (class > module > session)",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "testing",
+      "source": "gate-evidence",
+      "description": "pytest.raises(Exception) caught wrong exception types silently. Contract tests passed even when compiler raised TypeError instead of CompilationException.",
+      "proposedRule": "pytest.raises() MUST specify exact exception type with attribute assertions",
+      "disposition": "promoted-constitution"
+    },
+    {
+      "category": "architecture",
+      "source": "git-log",
+      "description": "AlertChannelPlugin caused circular imports requiring TYPE_CHECKING guards, __init__.py exclusion, and documented comments.",
+      "proposedRule": "Plugin ABCs with bidirectional imports use TYPE_CHECKING + exclusion + comment pattern",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "security",
+      "source": "gate-evidence",
+      "description": "run_enforce_stage() accepted token/principal without validation, relying on caller behavior. Gate-security flagged this.",
+      "proposedRule": "Security-sensitive parameters MUST be validated at function boundary regardless of caller trust",
+      "disposition": "promoted-constitution"
+    },
+    {
+      "category": "friction",
+      "source": "insights",
+      "description": "27 findings required structured cleanup plan grouped by commit scope. Ad-hoc fixing would have been error-prone.",
+      "proposedRule": "When >5 WARN findings, create structured cleanup plan before fixing",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "architecture",
+      "source": "gate-evidence",
+      "description": "run_enforce_stage only importable via deep path while compile_pipeline had convenience re-export. Asymmetric API surface.",
+      "proposedRule": "Public API functions MUST be re-exported from package __init__.py",
+      "disposition": "promoted-patterns"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "workId": "u3-e2e-integration",
+  "timestamp": "2026-03-15T15:30:00Z",
+  "findings": [
+    {
+      "category": "build",
+      "source": "dbt-fusion PATH conflict (commit 70a893f)",
+      "description": "System-installed dbt-fusion shadows venv dbt-core — error message doesn't indicate PATH conflict",
+      "proposedRule": "P25: Resolve CLI tools from venv (sys.executable parent), not PATH",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "build",
+      "source": "Stale Iceberg metadata 404s (commits 41f67f4, 91af553, d36220c)",
+      "description": "dbt --full-refresh doesn't handle stale Iceberg metadata — 3 iterative commits to get purge right",
+      "proposedRule": "P26: Purge Iceberg tables via catalog API before dbt seed/run",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "testing",
+      "source": "CI failure test_dbt_profile_backup.py (commit 56a813a)",
+      "description": "AST-inspecting test broke when fixture gained a new try block — regex matched wrong block",
+      "proposedRule": "P27: Structure-inspecting tests must search by content landmarks, not ordinal position",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "security",
+      "source": "gate-security BLOCK (commit 4f28920)",
+      "description": "OAuth error responses may reflect credentials in body — logging response.text creates CWE-532",
+      "proposedRule": "P28: Never log auth/management API response bodies — status code only",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "security",
+      "source": "gate-security WARN (commit 4f28920)",
+      "description": "Hardcoded /tmp/polaris-create.txt is world-readable on shared CI runners",
+      "proposedRule": "P29: mktemp for CI temporary files with explicit cleanup",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "process",
+      "source": "False stuck diagnosis during verify (14+ min debugging)",
+      "description": "Background pipe buffering (tail/head) hides all output until EOF — wasted debugging time",
+      "proposedRule": "P30: No pipe buffering on background tasks — redirect to file",
+      "disposition": "promoted:patterns"
+    }
+  ]
+}

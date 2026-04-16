@@ -1,0 +1,41 @@
+{
+  "workId": "e2e-alpha-stability",
+  "timestamp": "2026-03-28T05:30:00Z",
+  "findings": [
+    {
+      "category": "testing",
+      "source": "gate-tests BLOCK-1, gate-wiring BLOCK-1",
+      "description": "MagicMock auto-attributes bypass type constructors (UUID, int, Path) — silently raise ValueError, invisible when caught by broad except Exception. 9 tests appeared green while exercising only the error path.",
+      "proposedRule": "P63: When production code applies type constructors to context attributes, mock fixtures MUST set those attributes to values of the correct type.",
+      "disposition": "promoted:patterns.md+auto-memory"
+    },
+    {
+      "category": "security",
+      "source": "gate-security WARN-1 (CWE-269)",
+      "description": "NOPASSWD sudoers entries for /bin/sh, /usr/bin/tee, /bin/rm effectively grant unrestricted root access. Dangerous when Docker socket is mounted.",
+      "proposedRule": "P64: Never grant NOPASSWD to shells or file-writing utilities. Use dedicated wrapper scripts.",
+      "disposition": "promoted:patterns.md+auto-memory"
+    },
+    {
+      "category": "security",
+      "source": "gate-security WARN-3 (CWE-532)",
+      "description": "Credential values interpolated into pytest assertion messages leak to CI logs and test report artifacts on failure.",
+      "proposedRule": "P65: Assertion messages must describe what was expected, never include actual credential values.",
+      "disposition": "promoted:patterns.md+auto-memory"
+    },
+    {
+      "category": "infrastructure",
+      "source": "setup-cluster.sh changes",
+      "description": "Kind taint-removal races API server in DooD. Use --retain + manual recovery. docker exec does not need --privileged for kubectl.",
+      "proposedRule": "P66: Kind DooD taint-recovery pattern with --retain and manual taint removal.",
+      "disposition": "promoted:patterns.md+auto-memory"
+    }
+  ],
+  "gateCalibration": {
+    "build": {"status": "PASS", "findings": {"block": 0, "warn": 0, "info": 0}, "falsePositives": []},
+    "tests": {"status": "BLOCK->PASS", "findings": {"block": 1, "warn": 0, "info": 0}, "falsePositives": [], "notes": "BLOCK resolved by fixing mock fixture type"},
+    "security": {"status": "WARN->PASS", "findings": {"block": 0, "warn": 3, "info": 6}, "falsePositives": [], "notes": "All 3 WARNs were true positives, fixed in f1e4325"},
+    "wiring": {"status": "BLOCK->PASS", "findings": {"block": 1, "warn": 0, "info": 0}, "falsePositives": [], "notes": "Same root cause as gate-tests BLOCK-1"},
+    "spec": {"status": "WARN->PASS", "findings": {"block": 0, "warn": 2, "info": 0}, "falsePositives": [], "notes": "WARN-1 resolved by mock fix, WARN-2 informational (no spec.md for debug work)"}
+  }
+}

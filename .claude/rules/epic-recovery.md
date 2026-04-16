@@ -15,7 +15,8 @@ fi
 1. **Read the state file** to understand current context
 2. **Continue implementing automatically** - do NOT wait for user prompt
 3. **Follow the workflow**:
-   - Check workflow state in `.specwright/state/workflow.json`
+   - Resolve the active session in `$(git rev-parse --git-dir)/specwright/session.json`
+   - Resolve the selected work in `$(git rev-parse --git-common-dir)/specwright/work/{workId}/workflow.json`
    - Find next ready task (status: backlog/unstarted)
    - Implement (TDD, SOLID, atomic commits)
    - Update Linear status to Done

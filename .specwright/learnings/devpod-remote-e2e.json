@@ -1,0 +1,41 @@
+{
+  "workId": "devpod-remote-e2e",
+  "timestamp": "2026-03-25T08:05:00Z",
+  "findings": [
+    {
+      "category": "build",
+      "source": "gate-spec",
+      "description": "grep -oP (GNU Perl regex) in devpod-sync-kubeconfig.sh fails on macOS BSD grep. Replaced with POSIX-compatible sed -nE.",
+      "proposedRule": "Shell scripts MUST use POSIX-compatible constructs — sed -nE instead of grep -oP",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "build",
+      "source": "pr-review",
+      "description": "Port-forwarding loop skipped all ports but SSH command still ran with zero -L flags, creating no-op background connection reported as success.",
+      "proposedRule": "Guard post-loop actions against empty iteration when loop items can be skipped",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "testing",
+      "source": "pr-review",
+      "description": "postStartCommand.sh counted all pod lines (wc -l) including CrashLoopBackOff/Error/Pending as 'healthy'. Replaced with grep -c for Running/Completed.",
+      "proposedRule": "K8s pod health checks MUST filter for Running/Completed status",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "security",
+      "source": "gate-security",
+      "description": ".mcp.json used npx -y kubernetes-mcp-server@latest — supply-chain risk with auto-confirm flag.",
+      "proposedRule": "Pin exact versions for npx-invoked tools, never use @latest with -y",
+      "disposition": "promoted:patterns"
+    }
+  ],
+  "gateCalibration": {
+    "build": { "ran": true, "verdict": "PASS", "findingsCount": 0, "falsePositives": [] },
+    "tests": { "ran": true, "verdict": "PASS", "findingsCount": 1, "falsePositives": [] },
+    "security": { "ran": true, "verdict": "PASS", "findingsCount": 0, "falsePositives": [] },
+    "wiring": { "ran": true, "verdict": "PASS", "findingsCount": 0, "falsePositives": [] },
+    "spec": { "ran": true, "verdict": "PASS", "findingsCount": 0, "falsePositives": [] }
+  }
+}

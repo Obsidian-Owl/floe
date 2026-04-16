@@ -1,0 +1,48 @@
+{
+  "workId": "wu-11-demo-packaging",
+  "timestamp": "2026-02-16T17:00:00Z",
+  "findings": [
+    {
+      "category": "build",
+      "source": "git-log",
+      "description": "dbt compile --project-dir defaults --profiles-dir to ~/.dbt, not the project directory. Each demo product has a local profiles.yml but dbt ignored it, causing build failure.",
+      "proposedRule": "When using dbt compile --project-dir, ALWAYS pass --profiles-dir explicitly",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "architecture",
+      "source": "gate-evidence",
+      "description": "pip install --no-deps + pip check in Dockerfile failed with 17 missing transitive deps and 3 version conflicts. Base image (dagster-celery-k8s:1.9.6) doesn't contain our packages' transitive dependencies.",
+      "proposedRule": "Layered Docker builds with --no-deps require an explicit dependency compatibility matrix",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "architecture",
+      "source": "gate-evidence",
+      "description": "Base image dagster 1.9.6 conflicts with floe packages requiring >=1.10.0. Also pydantic and kubernetes version conflicts. Discovered at Docker build time, not design time.",
+      "proposedRule": "Base image version pinning MUST be coordinated with package pyproject.toml constraints",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "testing",
+      "source": "gate-evidence",
+      "description": "96 structural tests validate Dockerfile, Makefile, Helm values, .dockerignore, and definitions.py by parsing files on disk. Zero Docker builds, zero K8s deployments. Caught real issues at 1% of runtime test cost.",
+      "proposedRule": "Packaging pipelines MUST have structural parse-and-assert tests as the first tier",
+      "disposition": "promoted-constitution"
+    },
+    {
+      "category": "build",
+      "source": "git-log",
+      "description": "PR reviewer caught COPY packages/ and COPY plugins/ copying 23+ packages when only 4 installed. Wasted build context, bloated image, leaked source code.",
+      "proposedRule": "Dockerfile COPY instructions MUST be selective — copy only what's installed or used",
+      "disposition": "promoted-patterns"
+    },
+    {
+      "category": "friction",
+      "source": "git-log",
+      "description": "Makefile demo target had inline floe compile block duplicating work already done by compile-demo prerequisite. Two code paths used different flags and drifted.",
+      "proposedRule": "Makefile targets MUST rely on prerequisite dependencies. Never duplicate compilation steps inline.",
+      "disposition": "promoted-patterns"
+    }
+  ]
+}

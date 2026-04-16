@@ -1,0 +1,88 @@
+{
+  "version": "3.0",
+  "project": {
+    "name": "floe",
+    "languages": [
+      "python"
+    ],
+    "frameworks": [
+      "pydantic",
+      "dagster",
+      "dbt",
+      "pytest",
+      "helm"
+    ],
+    "packageManager": "uv",
+    "testRunner": "pytest",
+    "monorepo": true
+  },
+  "commands": {
+    "build": "make lint && make typecheck",
+    "test": "make test-unit",
+    "test:integration": "make test-integration",
+    "test:smoke": "make test-e2e",
+    "lint": "make lint",
+    "typecheck": "make typecheck",
+    "format": "uv run ruff format ."
+  },
+  "gates": {
+    "build": {
+      "enabled": true
+    },
+    "tests": {
+      "enabled": true
+    },
+    "security": {
+      "enabled": true
+    },
+    "wiring": {
+      "enabled": true
+    },
+    "semantic": {
+      "enabled": true
+    },
+    "spec": {
+      "enabled": true
+    }
+  },
+  "git": {
+    "strategy": "github-flow",
+    "baseBranch": "main",
+    "targets": {
+      "defaultRole": "integration",
+      "roles": {
+        "integration": {
+          "branch": "main"
+        },
+        "release": {
+          "branch": "main"
+        }
+      }
+    },
+    "freshness": {
+      "validation": "branch-head",
+      "reconcile": "manual",
+      "checkpoints": {
+        "build": "require",
+        "verify": "require",
+        "ship": "require"
+      }
+    },
+    "workArtifacts": {
+      "mode": "tracked",
+      "trackedRoot": ".specwright/work"
+    },
+    "branchPrefix": "feat/",
+    "mergeStrategy": "squash",
+    "prRequired": true,
+    "commitFormat": "conventional",
+    "commitTemplate": null,
+    "branchPerWorkUnit": true,
+    "cleanupBranch": true,
+    "prTool": "gh"
+  },
+  "backlog": {
+    "type": "github-issues",
+    "label": "specwright-backlog"
+  }
+}

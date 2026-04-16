@@ -1,0 +1,48 @@
+{
+  "workId": "lineage-resource",
+  "timestamp": "2026-03-18T18:50:00Z",
+  "findings": [
+    {
+      "category": "build",
+      "source": "CI segfault investigation + gate-tests",
+      "description": "14 tests constructed LineageResource without calling close(), causing daemon thread segfaults on CI during interpreter shutdown",
+      "proposedRule": "P40: Daemon thread resource tests MUST call close()",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "security",
+      "source": "PR review (claude[bot], greptile)",
+      "description": "Logging str(exc) for transport errors can leak credentials from exception messages (CWE-532)",
+      "proposedRule": "S-VI: Transport Error Logging — log type(exc).__name__ only, never str(exc)",
+      "disposition": "promoted:constitution"
+    },
+    {
+      "category": "architecture",
+      "source": "PR review (claude[bot]) + plan deviation",
+      "description": "LineageResource created in factory scope started daemon thread at definition-load time, not resource-init time",
+      "proposedRule": "P41: Dagster resource creation inside generator",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "architecture",
+      "source": "Test failure during close() thread-alive test",
+      "description": "loop.close() on a still-running event loop raises RuntimeError — must guard with is_alive() check",
+      "proposedRule": "P42: Event loop lifecycle — close() after stop()+join(), guard with is_alive()",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "testing",
+      "source": "PR review (claude[bot])",
+      "description": "Timed-out futures from run_coroutine_threadsafe continue running, accumulating work in the background loop",
+      "proposedRule": "P43: Cancel timed-out futures",
+      "disposition": "promoted:patterns"
+    },
+    {
+      "category": "architecture",
+      "source": "PR review (claude[bot], greptile)",
+      "description": "NoOpLineageResource used **kwargs while real class had explicit signatures, defeating type checking and IDE support",
+      "proposedRule": "P44: NoOp implementations must match real signatures",
+      "disposition": "promoted:patterns"
+    }
+  ]
+}

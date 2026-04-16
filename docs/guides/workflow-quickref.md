@@ -19,7 +19,7 @@ Ship:      /sw-ship -> PR with evidence
 | `/sw-design` | Research codebase, design solution |
 | `/sw-plan` | Break design into work units with specs |
 | `/sw-build` | TDD implementation of next work unit |
-| `/sw-verify` | Run quality gates (tests, security, wiring, spec) |
+| `/sw-verify` | Run quality gates (tests, security, wiring, semantic, spec) |
 | `/sw-ship` | Create PR with gate evidence |
 | `/sw-status` | Check current work state and gate results |
 | `/sw-audit` | Periodic codebase health check |
@@ -55,7 +55,8 @@ Ship:      /sw-ship -> PR with evidence
 
 ## Quality Gates (Specwright)
 
-Gate results are tracked in `.specwright/state/workflow.json`:
+Gate results are tracked in the selected work's runtime workflow under
+`$(git rev-parse --git-common-dir)/specwright/work/{id}/workflow.json`:
 
 | Gate | What It Checks |
 |------|---------------|
@@ -63,6 +64,7 @@ Gate results are tracked in `.specwright/state/workflow.json`:
 | `gate-tests` | Test quality, assertion strength, mock discipline |
 | `gate-security` | Secrets, injection, sensitive data |
 | `gate-wiring` | Unused exports, orphaned files, layer violations |
+| `gate-semantic` | Structural and semantic bug patterns beyond compile/test |
 | `gate-spec` | Every acceptance criterion has evidence |
 
 ### Running Gates
@@ -151,8 +153,9 @@ Review the critic's findings:
 | `.claude/settings.json` | Hook configuration |
 | `.claude/agents/*.md` | Agent definitions |
 | `.claude/skills/*/SKILL.md` | Skill definitions |
-| `.specwright/state/workflow.json` | Work unit state and gate results |
-| `.specwright/work/{id}/` | Design, spec, plan, evidence per work unit |
+| `.git/specwright/session.json` | Current worktree attachment and mode |
+| `.git/specwright/work/{id}/workflow.json` | Runtime work state and gate results |
+| `.specwright/work/{id}/` | Auditable work artifacts for this repo |
 | `tests/fixtures/golden/` | Contract baselines |
 
 ## References

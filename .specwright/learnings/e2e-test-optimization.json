@@ -1,0 +1,73 @@
+{
+  "workId": "e2e-test-optimization",
+  "timestamp": "2026-04-05T11:30:00Z",
+  "findings": [
+    {
+      "category": "testing",
+      "source": "build-experience",
+      "description": "E2E smoke-check autouse fixture blocks static analysis tests — must run structural validation via subprocess or sibling test directory",
+      "proposedRule": "P73",
+      "disposition": "promoted-to-patterns"
+    },
+    {
+      "category": "testing",
+      "source": "gate-tests",
+      "description": "dbt test is read-only validation, distinct from dbt seed/run — gates checking for 'no dbt calls' must exclude dbt test",
+      "proposedRule": "P74",
+      "disposition": "promoted-to-patterns"
+    },
+    {
+      "category": "process",
+      "source": "gate-spec",
+      "description": "Spec ACs with absolute claims (X=0) that conflict with exception ACs require qualifiers — cross-check all ACs as a set",
+      "proposedRule": "P75",
+      "disposition": "promoted-to-patterns"
+    },
+    {
+      "category": "testing",
+      "source": "build-experience",
+      "description": "indirect=True parametrize pattern for sharing module-scoped fixtures across parametrized tests — standard pytest feature",
+      "proposedRule": null,
+      "disposition": "dismissed-standard-practice"
+    },
+    {
+      "category": "process",
+      "source": "build-experience",
+      "description": "Descoping test relocations that depend on E2E conftest fixtures was correct — tracked in spec with strikethrough",
+      "proposedRule": null,
+      "disposition": "dismissed-standard-practice"
+    }
+  ],
+  "gateCalibration": {
+    "build": {
+      "verdict": "PASS",
+      "findingCount": 0,
+      "falsePositives": [],
+      "falseNegatives": []
+    },
+    "tests": {
+      "verdict": "PASS",
+      "findingCount": 0,
+      "falsePositives": [],
+      "falseNegatives": []
+    },
+    "security": {
+      "verdict": "PASS",
+      "findingCount": 0,
+      "falsePositives": [],
+      "falseNegatives": []
+    },
+    "wiring": {
+      "verdict": "PASS",
+      "findingCount": 0,
+      "falsePositives": [],
+      "falseNegatives": []
+    },
+    "spec": {
+      "verdict": "PASS",
+      "findingCount": 0,
+      "falsePositives": [],
+      "falseNegatives": []
+    }
+  }
+}

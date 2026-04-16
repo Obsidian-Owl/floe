@@ -1,0 +1,41 @@
+{
+  "workId": "e2e-demo-fixes",
+  "timestamp": "2026-03-17T07:30:00Z",
+  "findings": [
+    {
+      "category": "build",
+      "source": "as-built-notes",
+      "description": "Polaris catalog-role-to-principal-role PUT returns 201 on first assignment, not just 200/204. P33 assign row was incomplete.",
+      "proposedRule": "Update P33 assign codes to 200/201/204/409",
+      "disposition": "promoted:patterns+auto-memory"
+    },
+    {
+      "category": "infrastructure",
+      "source": "as-built-notes",
+      "description": "Kind cluster Calico CNI loses credentials after laptop suspend. All pod sandbox ops fail with TLS timeouts until daemonset restart.",
+      "proposedRule": "Restart calico-node daemonset after laptop suspend before investigating pod failures",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "build",
+      "source": "plan-deviation",
+      "description": "Shell-level ${VAR:-default} scopes env vars to recipe subshell. Make ?= pollutes all targets.",
+      "proposedRule": "Use shell-level defaults for recipe-scoped env vars",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "infrastructure",
+      "source": "as-built-notes",
+      "description": "Orphaned minio service (48 days old) conflicted with chart nodePort 30900. Not obvious from Helm error.",
+      "proposedRule": "Check for orphaned resources by creation timestamp before debugging Helm conflicts",
+      "disposition": "promoted:auto-memory"
+    },
+    {
+      "category": "infrastructure",
+      "source": "as-built-notes",
+      "description": "MinIO PVC stuck Terminating with finalizers after failed Helm upgrades. Required force-patching finalizers and cleaning up provisioner helper pods.",
+      "proposedRule": "Patch PVC finalizers to null when stuck Terminating",
+      "disposition": "promoted:auto-memory"
+    }
+  ]
+}
