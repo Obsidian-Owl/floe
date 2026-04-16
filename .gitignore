@@ -89,6 +89,7 @@ pip-delete-this-directory.txt
 # Testing artifacts
 target/
 .hypothesis/
+/test-artifacts/
 
 # Demo runtime artifacts
 .demo-pids
@@ -100,6 +101,7 @@ site/
 # Kubernetes / Helm
 charts/**/charts/
 *.tgz
+/minio/
 
 # Terraform
 .terraform/
