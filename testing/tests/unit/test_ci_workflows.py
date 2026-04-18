@@ -144,11 +144,13 @@ class TestValuesTestCubeStore:
     """Structural validation of Cube Store config in values-test.yaml."""
 
     @pytest.mark.requirement("WU2-AC2")
-    def test_cube_store_enabled(self) -> None:
-        """Verify cubeStore.enabled is true in test values.
+    def test_cube_store_rollback_path_enabled(self) -> None:
+        """Verify the local test values use the documented Cube rollback path.
 
-        Cube Store must be enabled for E2E tests to validate the full
-        Cube stack (API + Store).
+        The local Kind/DevPod test environment keeps the Cube API enabled but
+        disables Cube Store because the upstream Cube Store image is not
+        reliable in this environment. The API must fall back to in-memory
+        cache/queue mode instead of blocking namespace readiness.
         """
         values = yaml.safe_load(VALUES_TEST.read_text())
         cube = values.get("cube", {})
@@ -157,8 +159,13 @@ class TestValuesTestCubeStore:
             f" Found keys: {list(cube.keys())}"
         )
         cubestore = cube["cubeStore"]
-        assert cubestore.get("enabled") is True, (
-            f"cube.cubeStore.enabled must be true. Got: {cubestore.get('enabled')}"
+        assert cubestore.get("enabled") is False, (
+            f"cube.cubeStore.enabled must be false for the rollback path. Got: {cubestore.get('enabled')}"
+        )
+
+        config = cube.get("config", {})
+        assert config.get("cacheDriver") == "memory", (
+            f"cube.config.cacheDriver must be 'memory' when cubeStore is disabled. Got: {config.get('cacheDriver')}"
         )
 
     @pytest.mark.requirement("WU2-AC2")
@@ -229,6 +236,26 @@ class TestValuesTestCubeStore:
         assert tag != "latest", "Cube Store image tag must not be 'latest'"
 
 
+class TestValuesTestJobs:
+    """Structural validation of test-job toggles in values-test.yaml."""
+
+    def test_chart_test_jobs_are_opt_in_only(self) -> None:
+        """Verify values-test does not auto-render in-cluster test Jobs.
+
+        The E2E runner scripts render these templates explicitly with
+        ``--set tests.enabled=true``. Leaving the toggle enabled in
+        ``values-test.yaml`` deploys the standard and destructive test Jobs
+        into every normal platform install, which poisons namespace readiness
+        and interferes with Task 6 bootstrap verification.
+        """
+        values = yaml.safe_load(VALUES_TEST.read_text())
+        tests_config = values.get("tests", {})
+        assert tests_config.get("enabled") is False, (
+            "values-test.yaml must keep tests.enabled=false so chart test Jobs "
+            "remain opt-in via testing/ci/common.sh rendering."
+        )
+
+
 class TestCubeStoreRollbackPath:
     """Verify Cube Store E2E tests exist and rollback path is documented."""
 
@@ -239,10 +266,16 @@ class TestCubeStoreRollbackPath:
         """Verify Cube Store E2E test exists in deployment suite.
 
         The rollback path (cubeStore.enabled: false) is available via
-        values-test.yaml. Cube Store tests now pass reliably with the
-        GHCR image, so xfail markers have been removed.
+        values-test.yaml. The deployment E2E suite must gate its Cube Store
+        assertions on that toggle instead of hard-failing when the rollback
+        path is active.
         """
         content = self.E2E_DEPLOY_TEST.read_text()
         assert "test_cube_store_pod_running" in content, (
             "Missing test_cube_store_pod_running in E2E deployment tests"
+        )
+        values = yaml.safe_load(VALUES_TEST.read_text())
+        cube = values.get("cube", {})
+        assert "cubeStore" in cube and "enabled" in cube["cubeStore"], (
+            "values-test.yaml must keep the cube.cubeStore.enabled rollback toggle"
         )

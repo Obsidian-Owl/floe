@@ -131,6 +131,28 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"409"'
 
+  - it: should tolerate duplicate grant record 500 during privilege grants
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'is_duplicate_grant_record_error'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'GRANT_CODE" = "500" ] && is_duplicate_grant_record_error'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'duplicate grant record, Polaris returned HTTP 500'
+
   # --- T2: Assign catalog role to principal role ---
   - it: should PUT to principal-roles endpoint
     set:
@@ -174,6 +196,25 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: '"409"'
 
+  - it: should tolerate duplicate grant record 500 during catalog role assignment
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'ASSIGN_CODE" = "500" ] && is_duplicate_grant_record_error'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'grant_records_pkey'
+
   # --- T2: Create and assign principal role ---
   - it: should POST to principal-roles endpoint to create principal role
     set:
@@ -215,6 +256,25 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: "PR_ASSIGN_CODE"
+
+  - it: should tolerate duplicate grant record 500 during principal role assignment to bootstrap principal
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.bootstrap.grants.enabled: true
+      polaris.bootstrap.grants.catalogRole: catalog_admin
+      polaris.bootstrap.grants.principalRole: floe-pipeline
+      polaris.bootstrap.grants.bootstrapPrincipal: root
+      polaris.bootstrap.grants.privileges:
+        - CATALOG_MANAGE_CONTENT
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'PR_ASSIGN_CODE" = "500" ] && is_duplicate_grant_record_error'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'sql-state ''23505'''
 
   # --- T3: Configurability ---
   - it: should propagate custom catalogRole name

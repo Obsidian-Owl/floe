@@ -406,6 +406,10 @@ cube:
   enabled: true
   secret:
     apiSecret: "test-cube-api-secret-32chars000"  # pragma: allowlist secret
+  config:
+    # Local rollback path: Cube Store image availability is not reliable in
+    # this test environment, so keep the API on in-memory cache/queue mode.
+    cacheDriver: memory
   api:
     resources:
       requests:
@@ -415,7 +419,7 @@ cube:
         cpu: 250m
         memory: 512Mi
   cubeStore:
-    enabled: true
+    enabled: false
     image:
       repository: cubejs/cubestore
       tag: "v0.36.0"
@@ -437,7 +441,7 @@ cube:
 #   helm template floe-platform charts/floe-platform -f charts/floe-platform/values-test.yaml \
 #     --set tests.enabled=true -s templates/tests/job-e2e.yaml | kubectl apply -f -
 tests:
-  enabled: true
+  enabled: false
   image:
     repository: floe-test-runner
     tag: latest

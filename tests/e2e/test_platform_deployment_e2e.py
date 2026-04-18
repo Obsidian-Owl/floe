@@ -24,10 +24,12 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
 import pytest
+import yaml
 
 from testing.fixtures.services import ServiceEndpoint
 from tests.e2e.conftest import run_helm, run_kubectl
@@ -38,6 +40,7 @@ if TYPE_CHECKING:
 
 # K8s namespace — set by test-e2e.sh or default to floe-test
 NAMESPACE = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
+VALUES_TEST = Path(__file__).resolve().parents[2] / "charts" / "floe-platform" / "values-test.yaml"
 
 # Expected core services that MUST be deployed
 EXPECTED_COMPONENTS = frozenset(
@@ -49,6 +52,12 @@ EXPECTED_COMPONENTS = frozenset(
         "otel",
     }
 )
+
+
+def _cube_store_enabled_in_test_values() -> bool:
+    values = yaml.safe_load(VALUES_TEST.read_text())
+    cube = values.get("cube", {})
+    return bool(cube.get("cubeStore", {}).get("enabled"))
 
 
 @pytest.mark.e2e
@@ -407,6 +416,9 @@ class TestPlatformDeployment:
         This test validates that the multi-arch Cube Store image was
         successfully pulled and the pod is running.
         """
+        if not _cube_store_enabled_in_test_values():
+            pytest.skip("Cube Store rollback path is active in values-test.yaml")
+
         result = run_kubectl(
             [
                 "get",
@@ -439,6 +451,9 @@ class TestPlatformDeployment:
         Goes beyond Running phase — validates the pod's readiness probe
         is passing, meaning Cube Store is accepting connections.
         """
+        if not _cube_store_enabled_in_test_values():
+            pytest.skip("Cube Store rollback path is active in values-test.yaml")
+
         result = run_kubectl(
             [
                 "get",

@@ -113,39 +113,45 @@ cleanup_job() {
 load_image() {
     local image="$1"
     local method="${IMAGE_LOAD_METHOD}"
+    local kind_cluster="${FLOE_KIND_CLUSTER}"
 
-    if [[ "${method}" == "skip" ]]; then
-        info "Skipping image load (IMAGE_LOAD_METHOD=skip)"
-        return 0
-    fi
+    case "${method}" in
+        skip)
+            info "Skipping image load (IMAGE_LOAD_METHOD=skip)"
+            return 0
+            ;;
+        kind)
+            info "Loading image into Kind cluster '${kind_cluster}' (IMAGE_LOAD_METHOD=kind)..."
+            kind load docker-image "${image}" --name "${kind_cluster}"
+            return 0
+            ;;
+        devpod)
+            local ssh_host="${DEVPOD_WORKSPACE:-floe}.devpod"
+            info "Loading image into DevPod workspace '${ssh_host}' and Kind cluster '${kind_cluster}'..."
+            docker save "${image}" | ssh "${ssh_host}" docker load
+            ssh "${ssh_host}" kind load docker-image "${image}" --name "${kind_cluster}"
+            return 0
+            ;;
+        *)
+            # auto: detect environment
+            if command -v kind &>/dev/null && kind get clusters 2>/dev/null | grep -q "^${kind_cluster}$"; then
+                info "Loading image into Kind cluster '${kind_cluster}'..."
+                kind load docker-image "${image}" --name "${kind_cluster}"
+                return 0
+            fi
 
-    if [[ "${method}" == "kind" ]]; then
-        info "Loading image into Kind cluster '${FLOE_KIND_CLUSTER}' (IMAGE_LOAD_METHOD=kind)..."
-        kind load docker-image "${image}" --name "${FLOE_KIND_CLUSTER}"
-        return 0
-    fi
+            if [[ -n "${DEVPOD_WORKSPACE:-}" ]]; then
+                local ssh_host="${DEVPOD_WORKSPACE}.devpod"
+                info "Loading image into DevPod workspace '${ssh_host}' and Kind cluster '${kind_cluster}'..."
+                docker save "${image}" | ssh "${ssh_host}" docker load
+                ssh "${ssh_host}" kind load docker-image "${image}" --name "${kind_cluster}"
+                return 0
+            fi
 
-    if [[ "${method}" == "devpod" ]]; then
-        info "Loading image into DevPod workspace via docker save pipe..."
-        docker save "${image}" | ssh devpod docker load
-        return 0
-    fi
-
-    # auto: detect environment
-    if command -v kind &>/dev/null && kind get clusters 2>/dev/null | grep -q "^${FLOE_KIND_CLUSTER}$"; then
-        info "Loading image into Kind cluster '${FLOE_KIND_CLUSTER}'..."
-        kind load docker-image "${image}" --name "${FLOE_KIND_CLUSTER}"
-        return 0
-    fi
-
-    if [[ -n "${DEVPOD_WORKSPACE:-}" ]]; then
-        info "Loading image into DevPod workspace via docker save pipe..."
-        docker save "${image}" | ssh devpod docker load
-        return 0
-    fi
-
-    error "No Kind cluster '${FLOE_KIND_CLUSTER}' or DevPod workspace detected. Run 'make kind-up' or start DevPod."
-    exit 1
+            error "No Kind cluster '${kind_cluster}' or DevPod workspace detected. Run 'make kind-up' or start DevPod."
+            exit 1
+            ;;
+    esac
 }
 
 # Ensure Job is cleaned up on interrupt or exit (idempotent via --ignore-not-found)
