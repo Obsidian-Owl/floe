@@ -26,7 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from testing.fixtures.credentials import get_minio_credentials
 
 if TYPE_CHECKING:
-    from minio import Minio
+    from minio.api import Minio
 
 
 def _minio_defaults() -> tuple[str, str]:
@@ -83,7 +83,7 @@ def create_minio_client(config: MinIOConfig) -> Minio:
         MinIOConnectionError: If client creation fails.
     """
     try:
-        from minio import Minio
+        from minio.api import Minio
     except ImportError as e:
         raise MinIOConnectionError("minio not installed. Install with: pip install minio") from e
 

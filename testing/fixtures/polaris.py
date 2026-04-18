@@ -19,8 +19,29 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
+from testing.fixtures.services import ServiceEndpoint
+
 if TYPE_CHECKING:
     from pyiceberg.catalog import Catalog
+
+
+def _default_polaris_uri() -> str:
+    explicit_uri = os.environ.get("POLARIS_URI")
+    if explicit_uri:
+        return explicit_uri
+
+    base_url = os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
+    return f"{base_url.rstrip('/')}/api/catalog"
+
+
+def _default_polaris_credential() -> SecretStr:
+    explicit_credential = os.environ.get("POLARIS_CREDENTIAL")
+    if explicit_credential:
+        return SecretStr(explicit_credential)
+
+    client_id, client_secret = get_polaris_credentials()
+    return SecretStr(f"{client_id}:{client_secret}")
 
 
 class PolarisConfig(BaseModel):
@@ -36,15 +57,11 @@ class PolarisConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    uri: str = Field(
-        default_factory=lambda: os.environ.get("POLARIS_URI", "http://polaris:8181/api/catalog")
-    )
+    uri: str = Field(default_factory=_default_polaris_uri)
     warehouse: str = Field(
         default_factory=lambda: os.environ.get("POLARIS_WAREHOUSE", "test_warehouse")
     )
-    credential: SecretStr = Field(
-        default_factory=lambda: SecretStr(os.environ.get("POLARIS_CREDENTIAL", "root:secret"))
-    )
+    credential: SecretStr = Field(default_factory=_default_polaris_credential)
     scope: str = Field(
         default_factory=lambda: os.environ.get("POLARIS_SCOPE", "PRINCIPAL_ROLE:ALL")
     )
@@ -90,6 +107,8 @@ def create_polaris_catalog(config: PolarisConfig) -> Catalog:
         ) from e
 
     try:
+        minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
+        minio_access, minio_secret = get_minio_credentials()
         catalog = load_catalog(
             "polaris",
             type="rest",
@@ -97,6 +116,13 @@ def create_polaris_catalog(config: PolarisConfig) -> Catalog:
             warehouse=config.warehouse,
             credential=config.credential.get_secret_value(),
             scope=config.scope,
+            **{
+                "s3.endpoint": minio_url,
+                "s3.access-key-id": minio_access,
+                "s3.secret-access-key": minio_secret,
+                "s3.region": os.environ.get("AWS_REGION", "us-east-1"),
+                "s3.path-style-access": "true",
+            },
         )
         return catalog
     except Exception as e:

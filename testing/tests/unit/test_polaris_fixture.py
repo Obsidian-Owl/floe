@@ -18,6 +18,7 @@ from testing.fixtures.polaris import (
     create_polaris_catalog,
     get_connection_info,
 )
+from testing.fixtures.services import ServiceEndpoint
 
 
 class TestPolarisConfig:
@@ -27,7 +28,7 @@ class TestPolarisConfig:
     def test_default_config(self) -> None:
         """Test default configuration values."""
         config = PolarisConfig()
-        assert config.uri == "http://polaris:8181/api/catalog"
+        assert config.uri == f"{ServiceEndpoint('polaris').url}/api/catalog"
         assert config.warehouse == "test_warehouse"
         assert config.scope == "PRINCIPAL_ROLE:ALL"
         assert config.namespace == "floe-test"
@@ -95,6 +96,26 @@ class TestPolarisConfig:
             assert config.warehouse == "env_warehouse"
             assert config.scope == "ENV_SCOPE"
 
+    @pytest.mark.requirement("9c-FR-012")
+    def test_config_uses_polaris_url_env_when_uri_missing(self) -> None:
+        """Test POLARIS_URL expands to the catalog API path."""
+        with patch.dict(os.environ, {"POLARIS_URL": "http://env-base:30181"}, clear=True):
+            config = PolarisConfig()
+            assert config.uri == "http://env-base:30181/api/catalog"
+
+    @pytest.mark.requirement("9c-FR-012")
+    def test_default_credential_uses_centralized_helper(self) -> None:
+        """Test credential fallback comes from the shared credentials helper."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch(
+                "testing.fixtures.polaris.get_polaris_credentials",
+                return_value=("shared-id", "shared-secret"),
+            ),
+        ):
+            config = PolarisConfig()
+            assert config.credential.get_secret_value() == "shared-id:shared-secret"
+
 
 class TestCreatePolarisCatalog:
     """Tests for create_polaris_catalog function."""
@@ -132,6 +153,13 @@ class TestCreatePolarisCatalog:
                 warehouse="test_warehouse",
                 credential="test_client:test_secret",
                 scope="TEST_SCOPE",
+                **{
+                    "s3.endpoint": ServiceEndpoint("minio").url,
+                    "s3.access-key-id": "minioadmin",
+                    "s3.secret-access-key": "minioadmin123",
+                    "s3.region": "us-east-1",
+                    "s3.path-style-access": "true",
+                },
             )
             assert result == mock_catalog
 
