@@ -31,7 +31,6 @@ data:
     {{- if and .Values.polaris.persistence (eq (.Values.polaris.persistence.type | default "in-memory") "relational-jdbc") }}
     # JDBC persistence — Polaris stores catalog metadata in PostgreSQL
     polaris.persistence.type=relational-jdbc
-    polaris.persistence.auto-bootstrap-types=relational-jdbc
     quarkus.datasource.db-kind=postgresql
     {{- with .Values.polaris.persistence.jdbc }}
     {{- if .url }}

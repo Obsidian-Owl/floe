@@ -1,12 +1,12 @@
-# Unit A: Polaris JDBC bootstrap config tests
-# Covers AC-1 through AC-3 for the Polaris bootstrap recovery work unit.
+# Unit A: Polaris guarded bootstrap config tests
+# Covers RAC-1 and RAC-4 for the Polaris bootstrap recovery work unit.
 suite: polaris bootstrap config
 templates:
   - templates/configmap-polaris.yaml
   - templates/secret-polaris.yaml
 tests:
-  # AC-1: JDBC mode must render the exact auto-bootstrap-types property line.
-  - it: should render auto-bootstrap-types exactly when persistence.type is relational-jdbc
+  # RAC-1: runtime config must NOT carry steady-state auto-bootstrap after the pivot.
+  - it: should omit runtime auto-bootstrap-types even when persistence.type is relational-jdbc
     template: templates/configmap-polaris.yaml
     set:
       polaris.enabled: true
@@ -18,11 +18,11 @@ tests:
     asserts:
       - isKind:
           of: ConfigMap
-      - matchRegex:
+      - notMatchRegex:
           path: data["application.properties"]
-          pattern: '(?m)^polaris\.persistence\.auto-bootstrap-types=relational-jdbc$'
+          pattern: auto-bootstrap-types
 
-  # AC-2: In-memory mode must not leak the JDBC auto-bootstrap flag.
+  # RAC-1 defense-in-depth: in-memory mode still must not render the stale flag.
   - it: should omit auto-bootstrap-types when persistence.type is in-memory
     template: templates/configmap-polaris.yaml
     set:
@@ -37,7 +37,7 @@ tests:
           path: data["application.properties"]
           pattern: auto-bootstrap-types
 
-  # AC-3: Secret output must stay in the parser-accepted realm,clientId,clientSecret form.
+  # RAC-4: Secret output must stay in the parser-accepted realm,clientId,clientSecret form.
   - it: should render bootstrap-credentials in the expected Polaris root credential format
     template: templates/secret-polaris.yaml
     set:
@@ -47,6 +47,6 @@ tests:
     asserts:
       - isKind:
           of: Secret
-      - equal:
+      - matchRegex:
           path: data["bootstrap-credentials"]
-          value: UE9MQVJJUyxkZW1vLWFkbWluLGRlbW8tc2VjcmV0
+          pattern: ^UE9MQVJJUyxkZW1vLWFkbWluLGRlbW8tc2VjcmV0$
