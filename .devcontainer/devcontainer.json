@@ -10,6 +10,7 @@
       "KIND_VERSION": "0.22.0",
       "KUBECTL_VERSION": "1.29.0",
       "HELM_VERSION": "3.16.4",
+      "FLUX_VERSION": "2.5.1",
       "UV_VERSION": "0.7.2"
     }
   },

@@ -19,14 +19,17 @@ from __future__ import annotations
 import os
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any
+from importlib import import_module
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from testing.fixtures.credentials import get_minio_credentials
 
 if TYPE_CHECKING:
-    from minio.api import Minio
+    from minio.api import Minio as MinioClient
+else:
+    MinioClient = Any
 
 
 def _minio_defaults() -> tuple[str, str]:
@@ -70,7 +73,30 @@ class MinIOConnectionError(Exception):
     pass
 
 
-def create_minio_client(config: MinIOConfig) -> Minio:
+def _load_minio_client_class() -> type[MinioClient]:
+    """Resolve the MinIO client class from supported package layouts."""
+    try:
+        minio_module = import_module("minio")
+    except ImportError as e:
+        raise MinIOConnectionError("minio not installed. Install with: pip install minio") from e
+
+    client_class = getattr(minio_module, "Minio", None)
+    if client_class is None:
+        try:
+            api_module = import_module("minio.api")
+        except ImportError as e:
+            raise MinIOConnectionError(
+                "minio not installed. Install with: pip install minio"
+            ) from e
+        client_class = getattr(api_module, "Minio", None)
+
+    if client_class is None:
+        raise MinIOConnectionError("minio package does not expose a Minio client")
+
+    return cast("type[MinioClient]", client_class)
+
+
+def create_minio_client(config: MinIOConfig) -> MinioClient:
     """Create MinIO client from config.
 
     Args:
@@ -83,12 +109,8 @@ def create_minio_client(config: MinIOConfig) -> Minio:
         MinIOConnectionError: If client creation fails.
     """
     try:
-        from minio.api import Minio
-    except ImportError as e:
-        raise MinIOConnectionError("minio not installed. Install with: pip install minio") from e
-
-    try:
-        client = Minio(
+        client_class = _load_minio_client_class()
+        client = client_class(
             endpoint=config.endpoint,
             access_key=config.access_key,
             secret_key=config.secret_key.get_secret_value(),
@@ -105,7 +127,7 @@ def create_minio_client(config: MinIOConfig) -> Minio:
 @contextmanager
 def minio_client_context(
     config: MinIOConfig | None = None,
-) -> Generator[Minio, None, None]:
+) -> Generator[MinioClient, None, None]:
     """Context manager for MinIO client.
 
     Creates client on entry, cleans up on exit (no explicit close needed).
@@ -129,7 +151,7 @@ def minio_client_context(
 
 
 def ensure_bucket(
-    client: Minio,
+    client: MinioClient,
     bucket_name: str,
     region: str = "us-east-1",
 ) -> bool:
@@ -150,7 +172,7 @@ def ensure_bucket(
 
 
 def delete_bucket_contents(
-    client: Minio,
+    client: MinioClient,
     bucket_name: str,
 ) -> int:
     """Delete all objects in a bucket.
@@ -176,7 +198,7 @@ def delete_bucket_contents(
 
 
 def cleanup_bucket(
-    client: Minio,
+    client: MinioClient,
     bucket_name: str,
 ) -> None:
     """Delete bucket and all its contents.
