@@ -382,6 +382,53 @@ def process(data: dict[str, Any]) -> ProcessedData:
 
 ---
 
+## Code Intelligence Tools
+
+Three tools are available for code search and understanding. Use them in escalation order — the cheapest tool that answers the question wins.
+
+### 1. Grep (Default)
+
+Use for all known-symbol lookups. ~50 tokens per query.
+
+```
+Grep("def compile_pipeline", type="py")
+Grep("class CompiledArtifacts", type="py")
+```
+
+### 2. Auggie (`augment_code_search`)
+
+Remote semantic search. Returns actual source code at natural granularity. ~2k tokens per query.
+
+Use for conceptual questions spanning multiple files: "how does compilation work?", "show me Polaris auth handling".
+
+```
+augment_code_search({
+  repo_owner: "Obsidian-Owl",
+  repo_name: "floe",
+  query: "how does pipeline compilation work"
+})
+```
+
+Do NOT use for known symbol names (Grep is 50x cheaper) or dependency questions ("what breaks if I change X?" — Auggie cannot answer this).
+
+### 3. GitNexus (Targeted Use Only)
+
+Local knowledge graph. Use only these two tools routinely:
+
+- **`impact()`** — blast radius before editing shared contracts (`CompiledArtifacts`, `FloeSpec`, plugin ABCs, cross-package functions). Always pass `repo: "floe"`.
+- **`detect_changes()`** — pre-commit safety check mapping staged diffs to affected symbols.
+
+Optionally use **`cypher()`** for structural queries Grep can't answer ("all implementors of CatalogPlugin").
+
+**Do NOT use routinely:**
+- `gitnexus_query()` — noisy results, ranks test files above source. Use Auggie or Grep.
+- `gitnexus_context()` — 3-5k token dump. Read the file directly instead.
+- `gitnexus_rename()` — heavyweight. Use Grep + Edit for simple renames.
+
+**See**: `.claude/rules/tool-selection.md`
+
+---
+
 ## Core Principles
 
 ### 1. Technology Ownership (NON-NEGOTIABLE)
