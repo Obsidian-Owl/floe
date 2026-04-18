@@ -1,0 +1,71 @@
+{
+  "version": "1.0",
+  "project": {
+    "languages": [
+      "python"
+    ]
+  },
+  "commands": {
+    "build": "make typecheck",
+    "test": "./testing/ci/test-specwright-unit.sh"
+  },
+  "gates": {
+    "build": {
+      "enabled": true
+    },
+    "tests": {
+      "enabled": true
+    },
+    "security": {
+      "enabled": true
+    },
+    "wiring": {
+      "enabled": true
+    },
+    "semantic": {
+      "enabled": true
+    },
+    "spec": {
+      "enabled": true
+    }
+  },
+  "git": {
+    "strategy": "trunk-based",
+    "baseBranch": "main",
+    "targets": {
+      "defaultRole": "integration",
+      "roles": {
+        "integration": {
+          "branch": "main"
+        },
+        "release": {
+          "branch": "main"
+        },
+        "maintenance": {
+          "pattern": "release/*"
+        }
+      }
+    },
+    "freshness": {
+      "validation": "branch-head",
+      "reconcile": "manual",
+      "checkpoints": {
+        "build": "require",
+        "verify": "require",
+        "ship": "require"
+      }
+    },
+    "workArtifacts": {
+      "mode": "clone-local",
+      "trackedRoot": null
+    },
+    "branchPrefix": "feat/",
+    "mergeStrategy": "squash",
+    "prRequired": true,
+    "commitFormat": "conventional",
+    "commitTemplate": null,
+    "branchPerWorkUnit": true,
+    "cleanupBranch": true,
+    "prTool": "gh"
+  }
+}
