@@ -332,11 +332,44 @@ Waits for PostgreSQL to be ready before starting main container.
 - name: wait-for-postgres
   image: postgres:16-alpine
   imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+  env:
+    - name: JDBC_URL
+      value: {{ .Values.polaris.persistence.jdbc.url | quote }}
   command:
     - /bin/sh
     - -c
     - |
-      until pg_isready -h {{ include "floe-platform.postgresql.host" . }} -p {{ include "floe-platform.postgresql.port" . }}; do
+      set -eu
+
+      CONNECTION_TARGET="${JDBC_URL#jdbc:postgresql://}"
+      if [ "${CONNECTION_TARGET}" = "${JDBC_URL}" ]; then
+        echo "ERROR: Unsupported PostgreSQL JDBC URL: ${JDBC_URL}" >&2
+        exit 1
+      fi
+
+      AUTHORITY="${CONNECTION_TARGET%%/*}"
+      if [ -z "${AUTHORITY}" ]; then
+        echo "ERROR: Unable to parse PostgreSQL host from JDBC URL: ${JDBC_URL}" >&2
+        exit 1
+      fi
+
+      case "${AUTHORITY}" in
+        \[*\]:*)
+          PGHOST_PARSED="${AUTHORITY%\]:*}"
+          PGHOST_PARSED="${PGHOST_PARSED#\[}"
+          PGPORT_PARSED="${AUTHORITY##*\]:}"
+          ;;
+        *:*)
+          PGHOST_PARSED="${AUTHORITY%:*}"
+          PGPORT_PARSED="${AUTHORITY##*:}"
+          ;;
+        *)
+          PGHOST_PARSED="${AUTHORITY}"
+          PGPORT_PARSED="5432"
+          ;;
+      esac
+
+      until pg_isready -h "${PGHOST_PARSED}" -p "${PGPORT_PARSED}"; do
         echo "Waiting for PostgreSQL..."
         sleep 2
       done

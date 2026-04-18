@@ -12,11 +12,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import SecretStr, ValidationError
 
+from testing.fixtures.credentials import get_minio_credentials
 from testing.fixtures.polaris import (
     PolarisConfig,
     PolarisConnectionError,
     create_polaris_catalog,
     get_connection_info,
+    rewrite_table_io_for_host_access,
 )
 from testing.fixtures.services import ServiceEndpoint
 
@@ -145,6 +147,7 @@ class TestCreatePolarisCatalog:
                 scope="TEST_SCOPE",
             )
             result = create_polaris_catalog(config)
+            expected_access, expected_secret = get_minio_credentials()
 
             mock_pyiceberg.load_catalog.assert_called_once_with(
                 "polaris",
@@ -155,13 +158,37 @@ class TestCreatePolarisCatalog:
                 scope="TEST_SCOPE",
                 **{
                     "s3.endpoint": ServiceEndpoint("minio").url,
-                    "s3.access-key-id": "minioadmin",
-                    "s3.secret-access-key": "minioadmin123",
+                    "s3.access-key-id": expected_access,
+                    "s3.secret-access-key": expected_secret,
                     "s3.region": "us-east-1",
                     "s3.path-style-access": "true",
                 },
             )
             assert result == mock_catalog
+
+
+class TestRewriteTableIoForHostAccess:
+    """Tests for rewrite_table_io_for_host_access."""
+
+    @pytest.mark.requirement("RAC-9")
+    def test_rewrites_s3_endpoint_using_shared_minio_url(self) -> None:
+        """Test the helper swaps the FileIO endpoint for host-side access."""
+        replacement_io = object()
+        pyiceberg_io = MagicMock()
+        pyiceberg_io.load_file_io.return_value = replacement_io
+        table = MagicMock()
+        table.io = MagicMock(properties={"s3.endpoint": "http://cluster-minio:9000", "foo": "bar"})
+
+        with (
+            patch.dict("sys.modules", {"pyiceberg.io": pyiceberg_io}),
+            patch.dict(os.environ, {"MINIO_URL": "http://host.minio:9000"}, clear=False),
+        ):
+            rewrite_table_io_for_host_access(table)
+
+        pyiceberg_io.load_file_io.assert_called_once_with(
+            properties={"s3.endpoint": "http://host.minio:9000", "foo": "bar"}
+        )
+        assert table.io is replacement_io
 
 
 class TestGetConnectionInfo:

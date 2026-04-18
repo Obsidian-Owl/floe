@@ -29,6 +29,12 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[2].name
           value: bootstrap-polaris-metastore
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.initContainers[0].env[0].name
+          value: JDBC_URL
 
   - it: should omit guarded bootstrap init containers in in-memory mode
     template: templates/deployment-polaris.yaml
@@ -65,7 +71,36 @@ tests:
           pattern: "principal_client_id"
       - matchRegex:
           path: spec.template.spec.initContainers[1].command[2]
+          pattern: "-v client_id=\\\"\\$\\{POLARIS_BOOTSTRAP_CLIENT_ID\\}\\\""
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "principal_client_id = :'client_id'"
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
           pattern: "touch /work/polaris-bootstrap-required"
+
+  - it: should derive postgres host and port from the JDBC URL for both init probes
+    template: templates/deployment-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.persistence.jdbc.url: jdbc:postgresql://postgres.external:5544/polaris
+      polaris.persistence.jdbc.username: floe
+      polaris.auth.bootstrapCredentials.clientId: demo-admin
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "PGHOST_PARSED"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "pg_isready -h \\\"\\$\\{PGHOST_PARSED\\}\\\" -p \\\"\\$\\{PGPORT_PARSED\\}\\\""
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "export PGHOST=\\\"\\$\\{PGHOST_PARSED\\}\\\""
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "export PGPORT=\\\"\\$\\{PGPORT_PARSED\\}\\\""
 
   - it: should use the matching Polaris admin tool image for explicit bootstrap
     template: templates/deployment-polaris.yaml

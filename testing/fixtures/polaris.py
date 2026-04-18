@@ -24,6 +24,7 @@ from testing.fixtures.services import ServiceEndpoint
 
 if TYPE_CHECKING:
     from pyiceberg.catalog import Catalog
+    from pyiceberg.table import Table
 
 
 def _default_polaris_uri() -> str:
@@ -129,6 +130,21 @@ def create_polaris_catalog(config: PolarisConfig) -> Catalog:
         raise PolarisConnectionError(
             f"Failed to create Polaris catalog at {config.uri}: {e}"
         ) from e
+
+
+def rewrite_table_io_for_host_access(table: Table) -> None:
+    """Rewrite a loaded Iceberg table's FileIO endpoint for host-run tests.
+
+    Polaris table metadata can carry a cluster-internal S3 endpoint that is valid
+    for in-cluster workloads but unreachable from host-side pytest runs. Replace
+    the FileIO layer with one pointed at the host-accessible MinIO endpoint while
+    preserving the rest of the table IO properties.
+    """
+    from pyiceberg.io import load_file_io
+
+    io_props = dict(getattr(table.io, "properties", {}))
+    io_props["s3.endpoint"] = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
+    table.io = load_file_io(properties=io_props)
 
 
 @contextmanager
@@ -247,4 +263,5 @@ __all__ = [
     "get_connection_info",
     "namespace_exists",
     "polaris_catalog_context",
+    "rewrite_table_io_for_host_access",
 ]

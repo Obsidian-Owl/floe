@@ -160,12 +160,14 @@ class TestValuesTestCubeStore:
         )
         cubestore = cube["cubeStore"]
         assert cubestore.get("enabled") is False, (
-            f"cube.cubeStore.enabled must be false for the rollback path. Got: {cubestore.get('enabled')}"
+            "cube.cubeStore.enabled must be false for the rollback path. "
+            f"Got: {cubestore.get('enabled')}"
         )
 
         config = cube.get("config", {})
         assert config.get("cacheDriver") == "memory", (
-            f"cube.config.cacheDriver must be 'memory' when cubeStore is disabled. Got: {config.get('cacheDriver')}"
+            "cube.config.cacheDriver must be 'memory' when cubeStore is disabled. "
+            f"Got: {config.get('cacheDriver')}"
         )
 
     @pytest.mark.requirement("WU2-AC2")
@@ -239,6 +241,7 @@ class TestValuesTestCubeStore:
 class TestValuesTestJobs:
     """Structural validation of test-job toggles in values-test.yaml."""
 
+    @pytest.mark.requirement("9b-AC-6")
     def test_chart_test_jobs_are_opt_in_only(self) -> None:
         """Verify values-test does not auto-render in-cluster test Jobs.
 

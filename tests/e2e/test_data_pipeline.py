@@ -38,7 +38,6 @@ No pytest.skip() - see .claude/rules/testing-standards.md
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -47,7 +46,7 @@ import pytest
 from dbt_utils import run_dbt
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
-from testing.fixtures.services import ServiceEndpoint
+from testing.fixtures.polaris import rewrite_table_io_for_host_access
 
 ALL_PRODUCTS = ["customer-360", "iot-telemetry", "financial-risk"]
 """All demo product directories to test across."""
@@ -145,18 +144,8 @@ class TestDataPipeline(IntegrationTestBase):
         Raises:
             NoSuchTableError: If table does not exist.
         """
-        from pyiceberg.io import load_file_io
-
         table = catalog.load_table(f"{namespace}.{table_name}")
-
-        # Polaris table-default.s3.endpoint overrides client config with
-        # K8s-internal hostname (floe-platform-minio). Replace FileIO
-        # so scans resolve against the host-accessible MinIO URL.
-        minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
-        io_props = dict(table.io.properties)
-        io_props["s3.endpoint"] = minio_url
-        table.io = load_file_io(properties=io_props)
-
+        rewrite_table_io_for_host_access(table)
         return table
 
     def _get_iceberg_row_count(self, catalog: Any, namespace: str, table_name: str) -> int:

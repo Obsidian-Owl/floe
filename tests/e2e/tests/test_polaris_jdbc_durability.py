@@ -29,7 +29,11 @@ import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 from testing.fixtures.credentials import get_minio_credentials
-from testing.fixtures.polaris import PolarisConfig, create_polaris_catalog
+from testing.fixtures.polaris import (
+    PolarisConfig,
+    create_polaris_catalog,
+    rewrite_table_io_for_host_access,
+)
 from testing.fixtures.polling import wait_for_condition
 from testing.fixtures.services import ServiceEndpoint
 
@@ -67,14 +71,27 @@ def _request_oauth_token(config: PolarisConfig) -> str:
         },
         timeout=10.0,
     )
+    response_body = _safe_response_body(response)
     assert response.status_code == 200, (
-        f"Polaris OAuth token request failed: HTTP {response.status_code} body={response.text!r}"
+        f"Polaris OAuth token request failed: HTTP {response.status_code} body={response_body!r}"
     )
     access_token = response.json().get("access_token")
     assert isinstance(access_token, str) and access_token, (
-        f"Polaris OAuth token response missing a non-empty access_token field: {response.text!r}"
+        f"Polaris OAuth token response missing a non-empty access_token field: {response_body!r}"
     )
     return access_token
+
+
+def _safe_response_body(response: httpx.Response) -> object:
+    """Return a log-safe response body with token-like fields redacted."""
+    try:
+        body = response.json()
+    except ValueError:
+        return response.text
+
+    if isinstance(body, dict):
+        return {key: ("***" if "token" in key.lower() else value) for key, value in body.items()}
+    return body
 
 
 def _assert_seeded_catalog_lookup(config: PolarisConfig, access_token: str) -> None:
@@ -111,15 +128,6 @@ def _ensure_iceberg_bucket() -> None:
         f"Failed to ensure MinIO bucket {bucket_name!r}: "
         f"stdout={result.stdout!r} stderr={result.stderr!r}"
     )
-
-
-def _rewrite_table_io_for_host_access(table: object) -> None:
-    from pyiceberg.io import load_file_io
-
-    io = getattr(table, "io", None)
-    io_props = dict(getattr(io, "properties", {}))
-    io_props["s3.endpoint"] = _minio_base_url()
-    table.io = load_file_io(properties=io_props)
 
 
 def _polaris_deployment_ref(namespace: str) -> str:
@@ -219,7 +227,7 @@ class TestPolarisJdbcDurability(IntegrationTestBase):
             NestedField(field_id=2, name="value", field_type=StringType(), required=False),
         )
         table = catalog.create_table(fqn, schema=schema)
-        _rewrite_table_io_for_host_access(table)
+        rewrite_table_io_for_host_access(table)
         recorded_table_uuid = table.metadata.table_uuid
         assert recorded_table_uuid is not None, (
             f"PyIceberg did not assign a table_uuid to {fqn} — cannot proceed"
@@ -339,7 +347,7 @@ class TestPolarisJdbcDurability(IntegrationTestBase):
         )
 
         loaded = fresh_catalog.load_table(fqn)
-        _rewrite_table_io_for_host_access(loaded)
+        rewrite_table_io_for_host_access(loaded)
         assert loaded.metadata.table_uuid == recorded_table_uuid, (
             f"table_uuid mismatch after restart: "
             f"expected {recorded_table_uuid}, got {loaded.metadata.table_uuid}. "
