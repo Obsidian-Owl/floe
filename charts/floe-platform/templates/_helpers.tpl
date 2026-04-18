@@ -342,5 +342,12 @@ Waits for PostgreSQL to be ready before starting main container.
       done
       echo "PostgreSQL is ready"
   securityContext:
-    {{- include "floe-platform.containerSecurityContext" . | nindent 4 }}
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 70
+    runAsGroup: 70
+    capabilities:
+      drop:
+        - ALL
 {{- end }}

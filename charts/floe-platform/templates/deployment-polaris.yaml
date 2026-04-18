@@ -41,7 +41,14 @@ spec:
           image: postgres:16-alpine
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           securityContext:
-            {{- include "floe-platform.containerSecurityContext" . | nindent 12 }}
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: JDBC_URL
               value: {{ .Values.polaris.persistence.jdbc.url | quote }}
@@ -120,7 +127,8 @@ spec:
                 exit 0
               fi
 
-              exec java -jar /deployments/polaris-admin-tool.jar bootstrap -r POLARIS -f /bootstrap/bootstrap-credentials
+              BOOTSTRAP_CREDENTIALS=$(cat /bootstrap/bootstrap-credentials)
+              exec java -jar /deployments/polaris-admin-tool.jar bootstrap -r POLARIS -c "${BOOTSTRAP_CREDENTIALS}"
           volumeMounts:
             - name: bootstrap-credentials
               mountPath: /bootstrap

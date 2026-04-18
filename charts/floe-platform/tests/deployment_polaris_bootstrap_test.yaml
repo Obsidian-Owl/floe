@@ -83,4 +83,7 @@ tests:
           value: apache/polaris-admin-tool:1.2.0-incubating
       - matchRegex:
           path: spec.template.spec.initContainers[2].command[2]
-          pattern: "bootstrap -r POLARIS -f /bootstrap/bootstrap-credentials"
+          pattern: 'BOOTSTRAP_CREDENTIALS=\$\(cat /bootstrap/bootstrap-credentials\)'
+      - matchRegex:
+          path: spec.template.spec.initContainers[2].command[2]
+          pattern: 'bootstrap -r POLARIS -c "\$\{BOOTSTRAP_CREDENTIALS\}"'
