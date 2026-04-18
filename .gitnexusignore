@@ -1,0 +1,41 @@
+# GitNexus ignore — reduces graph noise.
+# Syntax: same as .gitignore. Re-run `npx gitnexus analyze --embeddings` after editing.
+
+# Tests dominate caller lists in context() outputs; exclude from graph.
+# impact() includeTests defaults to false, so behaviour is unchanged.
+**/tests/**
+**/test_*.py
+**/*_test.py
+**/conftest.py
+tests/
+
+# Virtualenvs and caches
+**/.venv/**
+**/__pycache__/**
+**/.pytest_cache/**
+**/.mypy_cache/**
+**/.ruff_cache/**
+**/node_modules/**
+**/target/**
+**/dist/**
+**/build/**
+
+# Docs, specs, planning artefacts — not executable code.
+docs/
+specs/
+.specify/
+.specwright/
+.claude/
+.agent/
+
+# Generated
+**/*.generated.py
+**/compiled_artifacts.json
+
+# Helm chart templates (Go templating, not Python — noisy in graph)
+charts/**/templates/**
+
+# IDE/OS
+.vscode/
+.idea/
+.DS_Store

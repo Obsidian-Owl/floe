@@ -97,6 +97,25 @@
     "claude-code-setup@claude-plugins-official": true,
     "specwright@specwright": true
   },
+  "permissions": {
+    "allow": [
+      "Bash(helm unittest *)",
+      "Bash(kind get *)",
+      "Bash(helm lint *)",
+      "Bash(helm dependency list *)",
+      "Bash(helm status *)",
+      "Bash(helm show *)",
+      "mcp__auggie__augment_code_search",
+      "mcp__gitnexus__query",
+      "mcp__gitnexus__impact",
+      "mcp__gitnexus__cypher",
+      "mcp__gitnexus__detect_changes",
+      "mcp__gitnexus__list_repos",
+      "mcp__plugin_aikido_aikido-mcp__aikido_full_scan",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs"
+    ]
+  },
   "companyAnnouncements": [
     "🔒 Security: Never commit secrets or use eval()/exec()",
     "📝 Type Safety: Use Pydantic for ALL data validation",

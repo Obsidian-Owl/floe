@@ -192,6 +192,7 @@ ALL choices between valid approaches MUST be presented to the user via `AskUserQ
 
 Read when working on specific domain:
 - `.claude/rules/quality-escalation.md` - **Escalation protocol (READ FIRST)**
+- `.claude/rules/tool-selection.md` - Code intelligence tool ladder (Grep → Auggie → GitNexus)
 - `.claude/rules/python-standards.md` - Type hints, Pydantic v2
 - `.claude/rules/testing-standards.md` - Test organization, markers
 - `.claude/rules/component-ownership.md` - Technology boundaries
@@ -216,3 +217,22 @@ Read when working on specific domain:
 
 ## Recent Changes
 - 9b-helm-deployment: Added Python 3.11 (CLI), Go templating (Helm) + Helm 3.12+, Dagster Helm chart 1.12.x, OTel Collector chart 0.85.x
+
+## Code Intelligence Tools
+
+**Escalation ladder** — use the cheapest tool that answers the question:
+
+| Step | Tool | Use when | ~Tokens |
+|------|------|----------|---------|
+| 1 | `Grep` | Known symbol/string name | 50 |
+| 2 | `Auggie` | Conceptual "how does X work?" / multi-file discovery | 2,000 |
+| 3 | `GitNexus impact()` | Before editing shared contracts or cross-package symbols | 4,000 |
+| 4 | `GitNexus cypher()` | Structural queries Grep can't answer | 1,000 |
+| 5 | `GitNexus detect_changes()` | Pre-commit scope check | 500 |
+
+**Auggie config**: `repo_owner: Obsidian-Owl`, `repo_name: floe`, `branch: main`
+**GitNexus**: Always pass `repo: "floe"` to all MCP calls.
+
+**Do NOT use routinely**: `gitnexus_query()`, `gitnexus_context()` — too noisy and token-expensive. Use Grep or Auggie instead.
+
+**See**: `.claude/rules/tool-selection.md` for full guidance, anti-patterns, and when to use each tool.

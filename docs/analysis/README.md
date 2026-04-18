@@ -1,6 +1,17 @@
-# Code Complexity Analysis Reports
+# Code Analysis Reports
 
-This directory contains complexity analysis reports for the floe codebase.
+This directory contains analysis reports for the floe codebase.
+
+## Reports
+
+### Code Intelligence Tools Review (2026-04-17)
+
+- **Report**: [`code-intelligence-tools-review-2026-04-17.md`](code-intelligence-tools-review-2026-04-17.md)
+- **Summary**: Comparative benchmark of GitNexus (local knowledge graph), Auggie Context Engine (remote semantic search), and Grep across 5 representative queries. Includes token cost analysis, unique capability matrix, and recommended tool selection ladder for AI coding agents.
+
+---
+
+## Complexity Analysis Reports
 
 ## Reports
 

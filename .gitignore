@@ -127,3 +127,4 @@ coverage.json
 # Test artifacts
 test-logs/
 tests/e2e/generated_profiles/
+.gitnexus
