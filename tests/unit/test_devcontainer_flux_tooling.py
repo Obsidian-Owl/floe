@@ -31,7 +31,7 @@ def test_devcontainer_dockerfile_installs_flux_cli() -> None:
     version = _flux_version()
 
     assert f"ARG FLUX_VERSION={version}" in content
-    assert 'flux_${FLUX_VERSION}_linux_${ARCH}.tar.gz' in content
+    assert "flux_${FLUX_VERSION}_linux_${ARCH}.tar.gz" in content
     assert "/usr/local/bin/flux" in content
 
 
