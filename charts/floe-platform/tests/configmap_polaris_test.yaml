@@ -1,0 +1,52 @@
+# Unit A: Polaris JDBC bootstrap config tests
+# Covers AC-1 through AC-3 for the Polaris bootstrap recovery work unit.
+suite: polaris bootstrap config
+templates:
+  - templates/configmap-polaris.yaml
+  - templates/secret-polaris.yaml
+tests:
+  # AC-1: JDBC mode must render the exact auto-bootstrap-types property line.
+  - it: should render auto-bootstrap-types exactly when persistence.type is relational-jdbc
+    template: templates/configmap-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.persistence.jdbc.url: jdbc:postgresql://floe-platform-postgresql:5432/polaris
+      polaris.persistence.jdbc.username: floe
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: http://floe-platform-minio:9000
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: '(?m)^polaris\.persistence\.auto-bootstrap-types=relational-jdbc$'
+
+  # AC-2: In-memory mode must not leak the JDBC auto-bootstrap flag.
+  - it: should omit auto-bootstrap-types when persistence.type is in-memory
+    template: templates/configmap-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: in-memory
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: http://floe-platform-minio:9000
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - notMatchRegex:
+          path: data["application.properties"]
+          pattern: auto-bootstrap-types
+
+  # AC-3: Secret output must stay in the parser-accepted realm,clientId,clientSecret form.
+  - it: should render bootstrap-credentials in the expected Polaris root credential format
+    template: templates/secret-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.auth.bootstrapCredentials.clientId: demo-admin
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+    asserts:
+      - isKind:
+          of: Secret
+      - equal:
+          path: data["bootstrap-credentials"]
+          value: UE9MQVJJUyxkZW1vLWFkbWluLGRlbW8tc2VjcmV0
