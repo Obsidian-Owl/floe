@@ -195,13 +195,18 @@ def test_flux_install_failure_diagnostics() -> None:
 
 @pytest.mark.requirement("AC-9")
 def test_flux_failure_controller_wait() -> None:
-    """setup-cluster.sh waits for controllers with kubectl wait and 120s timeout."""
+    """setup-cluster.sh waits on named Flux deployments with a 120s timeout."""
     content = _SETUP_SCRIPT.read_text()
     assert re.search(
-        r"kubectl\s+wait\s+--for=condition=Ready\s+pod.*flux-system.*--timeout=120s",
+        r"kubectl\s+wait\s+--for=condition=Available\s+deployment/source-controller.*flux-system.*--timeout=120s",
         content,
         re.DOTALL,
-    ), "Must use 'kubectl wait --for=condition=Ready' with 120s timeout for controller readiness"
+    ), "Must wait on deployment/source-controller with condition=Available and 120s timeout"
+    assert re.search(
+        r"kubectl\s+wait\s+--for=condition=Available\s+deployment/helm-controller.*flux-system.*--timeout=120s",
+        content,
+        re.DOTALL,
+    ), "Must wait on deployment/helm-controller with condition=Available and 120s timeout"
 
 
 # ---------------------------------------------------------------------------

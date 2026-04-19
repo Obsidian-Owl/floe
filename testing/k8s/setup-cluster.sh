@@ -177,8 +177,9 @@ create_cluster() {
         local my_id
         my_id=$(hostname)
         if ! docker inspect "${my_id}" --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | grep -q '"kind"'; then
-            docker network connect kind "${my_id}" 2>/dev/null && \
-                log_info "DooD: Connected container to kind network" || true
+            if docker network connect kind "${my_id}" 2>/dev/null; then
+                log_info "DooD: Connected container to kind network"
+            fi
         fi
     fi
 
@@ -417,20 +418,22 @@ install_flux() {
         exit 1
     fi
 
-    # Wait for controllers to be Ready (not just Running — containers must pass readiness probes)
+    # Wait on the named controller Deployments. Flux already verifies install,
+    # but a second wait here protects the rest of bootstrap from racing the
+    # controllers and avoids brittle pod-label assumptions across Flux versions.
     log_info "Waiting for Flux controllers to be ready..."
-    if ! kubectl wait --for=condition=Ready pod \
-        -l app.kubernetes.io/component=source-controller \
+    if ! kubectl wait --for=condition=Available deployment/source-controller \
         -n flux-system --timeout=120s 2>&1; then
-        log_error "source-controller did not reach Ready within 120s" >&2
-        kubectl get pods -n flux-system 2>/dev/null >&2 || true
+        log_error "source-controller deployment did not reach Available within 120s" >&2
+        kubectl get deployment,pods -n flux-system 2>/dev/null >&2 || true
+        kubectl describe deployment/source-controller -n flux-system 2>/dev/null >&2 || true
         exit 1
     fi
-    if ! kubectl wait --for=condition=Ready pod \
-        -l app.kubernetes.io/component=helm-controller \
+    if ! kubectl wait --for=condition=Available deployment/helm-controller \
         -n flux-system --timeout=120s 2>&1; then
-        log_error "helm-controller did not reach Ready within 120s" >&2
-        kubectl get pods -n flux-system 2>/dev/null >&2 || true
+        log_error "helm-controller deployment did not reach Available within 120s" >&2
+        kubectl get deployment,pods -n flux-system 2>/dev/null >&2 || true
+        kubectl describe deployment/helm-controller -n flux-system 2>/dev/null >&2 || true
         exit 1
     fi
     log_info "Flux controllers are ready"
