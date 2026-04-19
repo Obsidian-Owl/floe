@@ -173,11 +173,15 @@ def test_helmrelease_platform_interval() -> None:
 
 @pytest.mark.requirement("AC-2")
 def test_helmrelease_platform_values_files() -> None:
-    """HelmRelease for floe-platform references values-test.yaml."""
+    """HelmRelease for floe-platform layers base and test values files."""
     doc = _load_yaml(_FLUX_DIR / "helmrelease-platform.yaml")
     values_files = doc["spec"]["chart"]["spec"].get("valuesFiles", [])
-    assert any("values-test.yaml" in vf for vf in values_files), (
-        "HelmRelease must reference values-test.yaml via valuesFiles"
+    assert values_files == [
+        "./charts/floe-platform/values.yaml",
+        "./charts/floe-platform/values-test.yaml",
+    ], (
+        "HelmRelease must layer base values.yaml before values-test.yaml so "
+        "Flux sees the same defaults as direct Helm installs."
     )
 
 
@@ -222,11 +226,15 @@ def test_helmrelease_jobs_depends_on_platform() -> None:
 
 @pytest.mark.requirement("AC-3")
 def test_helmrelease_jobs_values_files() -> None:
-    """HelmRelease for floe-jobs-test references values-test.yaml."""
+    """HelmRelease for floe-jobs-test layers base and test values files."""
     doc = _load_yaml(_FLUX_DIR / "helmrelease-jobs.yaml")
     values_files = doc["spec"]["chart"]["spec"].get("valuesFiles", [])
-    assert any("values-test.yaml" in vf for vf in values_files), (
-        "HelmRelease must reference values-test.yaml via valuesFiles"
+    assert values_files == [
+        "./charts/floe-jobs/values.yaml",
+        "./charts/floe-jobs/values-test.yaml",
+    ], (
+        "HelmRelease must layer base values.yaml before values-test.yaml so "
+        "Flux sees the same defaults as direct Helm installs."
     )
 
 

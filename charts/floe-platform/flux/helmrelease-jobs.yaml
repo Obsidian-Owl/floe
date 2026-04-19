@@ -11,6 +11,7 @@ spec:
     spec:
       chart: ./charts/floe-jobs
       valuesFiles:
+        - ./charts/floe-jobs/values.yaml
         - ./charts/floe-jobs/values-test.yaml
       sourceRef:
         kind: GitRepository
