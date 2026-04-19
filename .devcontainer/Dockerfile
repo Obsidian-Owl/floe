@@ -85,6 +85,13 @@ RUN ARCH=$(dpkg --print-architecture) && \
   mv "linux-${ARCH}/helm" /usr/local/bin/helm && \
   rm -rf "linux-${ARCH}" "helm-v${HELM_VERSION}-linux-${ARCH}.tar.gz"
 
+ARG FLUX_VERSION=2.5.1
+RUN ARCH=$(dpkg --print-architecture) && \
+  curl -LO "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/flux_${FLUX_VERSION}_linux_${ARCH}.tar.gz" && \
+  tar -xzf "flux_${FLUX_VERSION}_linux_${ARCH}.tar.gz" flux && \
+  chmod +x flux && mv flux /usr/local/bin/flux && \
+  rm -f flux "flux_${FLUX_VERSION}_linux_${ARCH}.tar.gz"
+
 # ============================================================
 # Sudoers — firewall + K8s tooling (passwordless)
 # ============================================================

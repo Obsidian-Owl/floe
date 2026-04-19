@@ -383,7 +383,8 @@ polaris:
   # Catalog bootstrap configuration
   bootstrap:
     enabled: false
-    backoffLimit: 5
+    backoffLimit: 6
+    activeDeadlineSeconds: 600
     catalogName: "floe"
     defaultBaseLocation: "s3://floe-iceberg"
     allowedLocations:

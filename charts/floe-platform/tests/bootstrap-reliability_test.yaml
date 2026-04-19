@@ -34,7 +34,7 @@ tests:
           path: spec.ttlSecondsAfterFinished
           value: 3600
 
-  - it: should have backoffLimit set to 5 by default
+  - it: should have backoffLimit set to 6 by default
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
@@ -42,7 +42,17 @@ tests:
     asserts:
       - equal:
           path: spec.backoffLimit
-          value: 5
+          value: 6
+
+  - it: should have activeDeadlineSeconds set to 600 by default
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 600
 
   - it: should have restartPolicy set to Never
     set:
@@ -338,7 +348,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: 'log "Step [1-7]/[3-7]:'
+          pattern: 'log "Step [0-9]+/[0-9]+:'
 
   - it: error messages should use log function not bare echo
     set:

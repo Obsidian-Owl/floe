@@ -34,6 +34,132 @@ spec:
         runAsGroup: 10000
         runAsNonRoot: true
         fsGroup: 10000
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if and .Values.polaris.persistence .Values.polaris.persistence.jdbc (eq (.Values.polaris.persistence.type | default "in-memory") "relational-jdbc") }}
+      initContainers:
+        {{- include "floe-platform.waitForPostgres" . | nindent 8 }}
+        - name: check-polaris-bootstrap
+          image: postgres:16-alpine
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: JDBC_URL
+              value: {{ .Values.polaris.persistence.jdbc.url | quote }}
+            - name: PGUSER
+              value: {{ .Values.polaris.persistence.jdbc.username | quote }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
+                  key: jdbc-password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+
+              CONNECTION_TARGET="${JDBC_URL#jdbc:postgresql://}"
+              if [ "${CONNECTION_TARGET}" = "${JDBC_URL}" ]; then
+                echo "ERROR: Unsupported PostgreSQL JDBC URL: ${JDBC_URL}" >&2
+                exit 1
+              fi
+
+              AUTHORITY="${CONNECTION_TARGET%%/*}"
+              DB_NAME="${CONNECTION_TARGET#*/}"
+              DB_NAME="${DB_NAME%%\?*}"
+              if [ -z "${AUTHORITY}" ] || [ -z "${DB_NAME}" ] || [ "${DB_NAME}" = "${CONNECTION_TARGET}" ]; then
+                echo "ERROR: Unable to parse database name from JDBC URL: ${JDBC_URL}" >&2
+                exit 1
+              fi
+
+              case "${AUTHORITY}" in
+                \[*\]:*)
+                  PGHOST_PARSED="${AUTHORITY%\]:*}"
+                  PGHOST_PARSED="${PGHOST_PARSED#\[}"
+                  PGPORT_PARSED="${AUTHORITY##*\]:}"
+                  ;;
+                *:*)
+                  PGHOST_PARSED="${AUTHORITY%:*}"
+                  PGPORT_PARSED="${AUTHORITY##*:}"
+                  ;;
+                *)
+                  PGHOST_PARSED="${AUTHORITY}"
+                  PGPORT_PARSED="5432"
+                  ;;
+              esac
+
+              export PGHOST="${PGHOST_PARSED}"
+              export PGPORT="${PGPORT_PARSED}"
+              export PGDATABASE="${DB_NAME}"
+
+              SCHEMA_READY=$(psql -tA -c "select 1 from information_schema.tables where table_schema = 'polaris_schema' and table_name = 'version' limit 1;")
+              REALM_READY=""
+
+              if [ "${SCHEMA_READY}" = "1" ]; then
+                REALM_READY=$(psql -tA \
+                  -c "select 1 from polaris_schema.principal_authentication_data where realm_id = 'POLARIS' limit 1;")
+              fi
+
+              if [ "${SCHEMA_READY}" = "1" ] && [ "${REALM_READY}" = "1" ]; then
+                echo "Polaris metastore already bootstrapped; skipping bootstrap init container"
+                rm -f /work/polaris-bootstrap-required
+              else
+                echo "Polaris metastore bootstrap required"
+                touch /work/polaris-bootstrap-required
+              fi
+          volumeMounts:
+            - name: work
+              mountPath: /work
+        - name: bootstrap-polaris-metastore
+          image: "apache/polaris-admin-tool:{{ .Values.polaris.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.polaris.image.pullPolicy | default .Values.global.imagePullPolicy }}
+          securityContext:
+            {{- include "floe-platform.containerSecurityContext" . | nindent 12 }}
+          env:
+            - name: POLARIS_PERSISTENCE_TYPE
+              value: relational-jdbc
+            - name: QUARKUS_DATASOURCE_USERNAME
+              value: {{ .Values.polaris.persistence.jdbc.username | quote }}
+            - name: QUARKUS_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
+                  key: jdbc-password
+            - name: QUARKUS_DATASOURCE_JDBC_URL
+              value: {{ .Values.polaris.persistence.jdbc.url | quote }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+
+              if [ ! -f /work/polaris-bootstrap-required ]; then
+                echo "Polaris metastore bootstrap not required"
+                exit 0
+              fi
+
+              BOOTSTRAP_CREDENTIALS=$(cat /bootstrap/bootstrap-credentials)
+              exec java -jar /deployments/polaris-admin-tool.jar bootstrap -r POLARIS -c "${BOOTSTRAP_CREDENTIALS}"
+          volumeMounts:
+            - name: bootstrap-credentials
+              mountPath: /bootstrap
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: work
+              mountPath: /work
+            - name: home
+              mountPath: /home/polaris
+      {{- end }}
       containers:
         - name: polaris
           securityContext:
@@ -117,6 +243,12 @@ spec:
         - name: config
           configMap:
             name: {{ include "floe-platform.polaris.fullname" . }}-config
+        - name: bootstrap-credentials
+          secret:
+            secretName: {{ include "floe-platform.polaris.credentialSecretName" . }}
+            items:
+              - key: bootstrap-credentials
+                path: bootstrap-credentials
         - name: tmp
           emptyDir: {}
         - name: work

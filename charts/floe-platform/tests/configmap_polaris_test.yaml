@@ -1,0 +1,52 @@
+# Unit A: Polaris guarded bootstrap config tests
+# Covers RAC-1 and RAC-4 for the Polaris bootstrap recovery work unit.
+suite: polaris bootstrap config
+templates:
+  - templates/configmap-polaris.yaml
+  - templates/secret-polaris.yaml
+tests:
+  # RAC-1: runtime config must NOT carry steady-state auto-bootstrap after the pivot.
+  - it: should omit runtime auto-bootstrap-types even when persistence.type is relational-jdbc
+    template: templates/configmap-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.persistence.jdbc.url: jdbc:postgresql://floe-platform-postgresql:5432/polaris
+      polaris.persistence.jdbc.username: floe
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: http://floe-platform-minio:9000
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - notMatchRegex:
+          path: data["application.properties"]
+          pattern: auto-bootstrap-types
+
+  # RAC-1 defense-in-depth: in-memory mode still must not render the stale flag.
+  - it: should omit auto-bootstrap-types when persistence.type is in-memory
+    template: templates/configmap-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: in-memory
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: http://floe-platform-minio:9000
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - notMatchRegex:
+          path: data["application.properties"]
+          pattern: auto-bootstrap-types
+
+  # RAC-4: Secret output must stay in the parser-accepted realm,clientId,clientSecret form.
+  - it: should render bootstrap-credentials in the expected Polaris root credential format
+    template: templates/secret-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.auth.bootstrapCredentials.clientId: demo-admin
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+    asserts:
+      - isKind:
+          of: Secret
+      - matchRegex:
+          path: data["bootstrap-credentials"]
+          pattern: ^UE9MQVJJUyxkZW1vLWFkbWluLGRlbW8tc2VjcmV0$

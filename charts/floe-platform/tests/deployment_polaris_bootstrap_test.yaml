@@ -1,0 +1,118 @@
+# Unit A: Polaris guarded bootstrap deployment tests
+# Covers RAC-2 and RAC-3 for the Polaris bootstrap recovery work unit.
+suite: polaris guarded bootstrap deployment
+templates:
+  - templates/configmap-polaris.yaml
+  - templates/deployment-polaris.yaml
+tests:
+  - it: should render guarded bootstrap init containers in relational-jdbc mode
+    template: templates/deployment-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.persistence.jdbc.url: jdbc:postgresql://floe-platform-postgresql:5432/polaris
+      polaris.persistence.jdbc.username: floe
+      polaris.auth.bootstrapCredentials.clientId: demo-admin
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+    asserts:
+      - isKind:
+          of: Deployment
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 3
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-postgres
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: check-polaris-bootstrap
+      - equal:
+          path: spec.template.spec.initContainers[2].name
+          value: bootstrap-polaris-metastore
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+      - equal:
+          path: spec.template.spec.initContainers[0].env[0].name
+          value: JDBC_URL
+
+  - it: should omit guarded bootstrap init containers in in-memory mode
+    template: templates/deployment-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: in-memory
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.template.spec.initContainers
+
+  - it: should query both schema version and Polaris realm state before bootstrapping
+    template: templates/deployment-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.persistence.jdbc.url: jdbc:postgresql://floe-platform-postgresql:5432/polaris
+      polaris.persistence.jdbc.username: floe
+      polaris.auth.bootstrapCredentials.clientId: demo-admin
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "table_schema = 'polaris_schema'"
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "table_name = 'version'"
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "principal_authentication_data"
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "realm_id = 'POLARIS' limit 1"
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "touch /work/polaris-bootstrap-required"
+
+  - it: should derive postgres host and port from the JDBC URL for both init probes
+    template: templates/deployment-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.persistence.jdbc.url: jdbc:postgresql://postgres.external:5544/polaris
+      polaris.persistence.jdbc.username: floe
+      polaris.auth.bootstrapCredentials.clientId: demo-admin
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "PGHOST_PARSED"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "pg_isready -h \\\"\\$\\{PGHOST_PARSED\\}\\\" -p \\\"\\$\\{PGPORT_PARSED\\}\\\""
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "export PGHOST=\\\"\\$\\{PGHOST_PARSED\\}\\\""
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].command[2]
+          pattern: "export PGPORT=\\\"\\$\\{PGPORT_PARSED\\}\\\""
+
+  - it: should use the matching Polaris admin tool image for explicit bootstrap
+    template: templates/deployment-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.persistence.type: relational-jdbc
+      polaris.persistence.jdbc.url: jdbc:postgresql://floe-platform-postgresql:5432/polaris
+      polaris.persistence.jdbc.username: floe
+      polaris.image.tag: 1.2.0-incubating
+      polaris.auth.bootstrapCredentials.clientId: demo-admin
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[2].image
+          value: apache/polaris-admin-tool:1.2.0-incubating
+      - matchRegex:
+          path: spec.template.spec.initContainers[2].command[2]
+          pattern: 'BOOTSTRAP_CREDENTIALS=\$\(cat /bootstrap/bootstrap-credentials\)'
+      - matchRegex:
+          path: spec.template.spec.initContainers[2].command[2]
+          pattern: 'bootstrap -r POLARIS -c "\$\{BOOTSTRAP_CREDENTIALS\}"'

@@ -12,7 +12,8 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   ttlSecondsAfterFinished: 3600
-  backoffLimit: {{ .Values.polaris.bootstrap.backoffLimit | default 5 }}
+  backoffLimit: {{ .Values.polaris.bootstrap.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.polaris.bootstrap.activeDeadlineSeconds }}
   template:
     metadata:
       labels:
@@ -148,6 +149,11 @@ spec:
               trap 'rm -f /tmp/response.txt /tmp/verify.txt' EXIT
               set -e
               log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] BOOTSTRAP: $*"; }
+              is_duplicate_grant_record_error() {
+                [ -f /tmp/response.txt ] || return 1
+                grep -q 'grant_records_pkey' /tmp/response.txt && \
+                  grep -q "sql-state '23505'" /tmp/response.txt
+              }
 
               # Preflight: check required environment variables
               if [ -z "$POLARIS_CLIENT_ID" ]; then
@@ -375,8 +381,11 @@ spec:
                 log "Principal role '$PRINCIPAL_ROLE' assigned to principal '$BOOTSTRAP_PRINCIPAL' successfully"
               elif [ "$PR_ASSIGN_CODE" = "409" ]; then
                 log "Principal role '$PRINCIPAL_ROLE' already assigned to '$BOOTSTRAP_PRINCIPAL' (HTTP 409) - OK"
+              elif [ "$PR_ASSIGN_CODE" = "500" ] && is_duplicate_grant_record_error; then
+                log "Principal role '$PRINCIPAL_ROLE' already assigned to '$BOOTSTRAP_PRINCIPAL' (duplicate grant record, Polaris returned HTTP 500) - OK"
               else
                 log "ERROR: Failed to assign principal role (HTTP $PR_ASSIGN_CODE). Check Polaris logs for detail." >&2
+                head -5 /tmp/response.txt >&2
                 exit 1
               fi
 
@@ -412,6 +421,8 @@ spec:
                 log "Privilege '{{ . }}' granted successfully"
               elif [ "$GRANT_CODE" = "409" ]; then
                 log "Privilege '{{ . }}' already granted (HTTP 409) - OK"
+              elif [ "$GRANT_CODE" = "500" ] && is_duplicate_grant_record_error; then
+                log "Privilege '{{ . }}' already granted (duplicate grant record, Polaris returned HTTP 500) - OK"
               else
                 log "ERROR: Failed to grant privilege '{{ . }}' (HTTP $GRANT_CODE)" >&2
                 head -5 /tmp/response.txt >&2
@@ -432,6 +443,8 @@ spec:
                 log "Catalog role '$CATALOG_ROLE' assigned to principal role '$PRINCIPAL_ROLE' successfully"
               elif [ "$ASSIGN_CODE" = "409" ]; then
                 log "Catalog role '$CATALOG_ROLE' already assigned to '$PRINCIPAL_ROLE' (HTTP 409) - OK"
+              elif [ "$ASSIGN_CODE" = "500" ] && is_duplicate_grant_record_error; then
+                log "Catalog role '$CATALOG_ROLE' already assigned to '$PRINCIPAL_ROLE' (duplicate grant record, Polaris returned HTTP 500) - OK"
               else
                 log "ERROR: Failed to assign catalog role (HTTP $ASSIGN_CODE)" >&2
                 head -5 /tmp/response.txt >&2

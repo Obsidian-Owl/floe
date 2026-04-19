@@ -177,7 +177,7 @@ tests:
           path: spec.template.spec.restartPolicy
           value: Never
 
-  - it: should use default backoffLimit of 5
+  - it: should use default backoffLimit of 6
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
@@ -185,7 +185,17 @@ tests:
     asserts:
       - equal:
           path: spec.backoffLimit
-          value: 5
+          value: 6
+
+  - it: should use default activeDeadlineSeconds of 600
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+    asserts:
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 600
 
   - it: should respect custom backoffLimit
     set:
@@ -197,3 +207,14 @@ tests:
       - equal:
           path: spec.backoffLimit
           value: 3
+
+  - it: should respect custom activeDeadlineSeconds
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.bootstrap.activeDeadlineSeconds: 900
+    asserts:
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 900

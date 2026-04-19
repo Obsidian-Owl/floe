@@ -24,10 +24,13 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
 import pytest
+import yaml
 
 from testing.fixtures.services import ServiceEndpoint
 from tests.e2e.conftest import run_helm, run_kubectl
@@ -38,6 +41,7 @@ if TYPE_CHECKING:
 
 # K8s namespace — set by test-e2e.sh or default to floe-test
 NAMESPACE = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
+VALUES_TEST = Path(__file__).resolve().parents[2] / "charts" / "floe-platform" / "values-test.yaml"
 
 # Expected core services that MUST be deployed
 EXPECTED_COMPONENTS = frozenset(
@@ -49,6 +53,40 @@ EXPECTED_COMPONENTS = frozenset(
         "otel",
     }
 )
+
+
+def _cube_store_enabled_in_test_values() -> bool:
+    values = yaml.safe_load(VALUES_TEST.read_text())
+    cube = values.get("cube", {})
+    return bool(cube.get("cubeStore", {}).get("enabled"))
+
+
+def _get_cube_store_pods() -> list[dict[str, object]]:
+    result = run_kubectl(
+        [
+            "get",
+            "pods",
+            "-l",
+            "app.kubernetes.io/component=cube-store",
+            "-o",
+            "json",
+        ],
+        namespace=NAMESPACE,
+    )
+    assert result.returncode == 0, f"kubectl failed: {result.stderr}"
+    pods = json.loads(result.stdout)
+    return pods.get("items", [])
+
+
+def _assert_cube_store_rollback_state() -> None:
+    pod_items = _get_cube_store_pods()
+    pod_names = [str(pod.get("metadata", {}).get("name", "<unknown>")) for pod in pod_items]
+    assert not pod_items, (
+        "Cube Store rollback path is active in values-test.yaml, so no Cube Store "
+        "pods should be rendered in the namespace.\n"
+        f"Found: {pod_names}\n"
+        f"Check: kubectl get pods -l app.kubernetes.io/component=cube-store -n {NAMESPACE}"
+    )
 
 
 @pytest.mark.e2e
@@ -407,25 +445,21 @@ class TestPlatformDeployment:
         This test validates that the multi-arch Cube Store image was
         successfully pulled and the pod is running.
         """
-        result = run_kubectl(
-            [
-                "get",
-                "pods",
-                "-l",
-                "app.kubernetes.io/component=cube-store",
-                "-o",
-                "jsonpath={.items[*].status.phase}",
-            ],
-            namespace=NAMESPACE,
-        )
-        assert result.returncode == 0, f"kubectl failed: {result.stderr}"
+        if not _cube_store_enabled_in_test_values():
+            warnings.warn(
+                "Cube Store disabled in values-test.yaml; verifying rollback state instead.",
+                stacklevel=2,
+            )
+            _assert_cube_store_rollback_state()
+            return
 
-        phases = result.stdout.strip()
-        assert phases, (
+        pod_items = _get_cube_store_pods()
+        assert pod_items, (
             "No Cube Store pods found. "
             "Ensure cube.cubeStore.enabled=true in values-test.yaml "
             "and the multi-arch image is available at cubejs/cubestore"
         )
+        phases = [str(pod.get("status", {}).get("phase", "Unknown")) for pod in pod_items]
         assert "Running" in phases, (
             f"Cube Store pod not running. Phase(s): {phases}. "
             "Check: kubectl get pods -l app.kubernetes.io/component=cube-store "
@@ -439,22 +473,16 @@ class TestPlatformDeployment:
         Goes beyond Running phase — validates the pod's readiness probe
         is passing, meaning Cube Store is accepting connections.
         """
-        result = run_kubectl(
-            [
-                "get",
-                "pods",
-                "-l",
-                "app.kubernetes.io/component=cube-store",
-                "-o",
-                "json",
-            ],
-            namespace=NAMESPACE,
-        )
-        assert result.returncode == 0, f"kubectl failed: {result.stderr}"
+        if not _cube_store_enabled_in_test_values():
+            warnings.warn(
+                "Cube Store disabled in values-test.yaml; verifying rollback state instead.",
+                stacklevel=2,
+            )
+            _assert_cube_store_rollback_state()
+            return
 
-        pods = json.loads(result.stdout)
-        pod_items = pods.get("items", [])
-        assert len(pod_items) > 0, "No Cube Store pods found"
+        pod_items = _get_cube_store_pods()
+        assert pod_items, "No Cube Store pods found"
 
         pod = pod_items[0]
         conditions = pod.get("status", {}).get("conditions", [])

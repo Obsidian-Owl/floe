@@ -7,6 +7,7 @@ and client utilities. Integration tests require Kind cluster.
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -128,6 +129,35 @@ class TestCreateMinioClient:
                 secret_key="test_secret",
                 secure=True,
                 region="us-west-2",
+            )
+            assert result == mock_client
+
+    @pytest.mark.requirement("9c-FR-013")
+    def test_client_created_with_minio_api_fallback(self) -> None:
+        """Test client falls back to the minio.api module layout when needed."""
+        mock_client = MagicMock()
+        mock_api = SimpleNamespace(Minio=MagicMock(return_value=mock_client))
+
+        with patch("testing.fixtures.minio.import_module") as import_module_mock:
+            import_module_mock.side_effect = [SimpleNamespace(), mock_api]
+            config = MinIOConfig(
+                endpoint="test:9000",
+                access_key="test_key",
+                secret_key=SecretStr("test_secret"),
+                secure=False,
+                region="us-east-1",
+            )
+
+            result = create_minio_client(config)
+
+            assert import_module_mock.call_args_list[0].args == ("minio",)
+            assert import_module_mock.call_args_list[1].args == ("minio.api",)
+            mock_api.Minio.assert_called_once_with(
+                endpoint="test:9000",
+                access_key="test_key",
+                secret_key="test_secret",
+                secure=False,
+                region="us-east-1",
             )
             assert result == mock_client
 

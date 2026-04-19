@@ -16,11 +16,34 @@ import os
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
+from testing.fixtures.services import ServiceEndpoint
+
 if TYPE_CHECKING:
     from pyiceberg.catalog import Catalog
+    from pyiceberg.table import Table
+
+
+def _default_polaris_uri() -> str:
+    explicit_uri = os.environ.get("POLARIS_URI")
+    if explicit_uri:
+        return explicit_uri
+
+    base_url = os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
+    return f"{base_url.rstrip('/')}/api/catalog"
+
+
+def _default_polaris_credential() -> SecretStr:
+    explicit_credential = os.environ.get("POLARIS_CREDENTIAL")
+    if explicit_credential:
+        return SecretStr(explicit_credential)
+
+    client_id, client_secret = get_polaris_credentials()
+    return SecretStr(f"{client_id}:{client_secret}")
 
 
 class PolarisConfig(BaseModel):
@@ -36,15 +59,11 @@ class PolarisConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    uri: str = Field(
-        default_factory=lambda: os.environ.get("POLARIS_URI", "http://polaris:8181/api/catalog")
-    )
+    uri: str = Field(default_factory=_default_polaris_uri)
     warehouse: str = Field(
         default_factory=lambda: os.environ.get("POLARIS_WAREHOUSE", "test_warehouse")
     )
-    credential: SecretStr = Field(
-        default_factory=lambda: SecretStr(os.environ.get("POLARIS_CREDENTIAL", "root:secret"))
-    )
+    credential: SecretStr = Field(default_factory=_default_polaris_credential)
     scope: str = Field(
         default_factory=lambda: os.environ.get("POLARIS_SCOPE", "PRINCIPAL_ROLE:ALL")
     )
@@ -62,6 +81,15 @@ class PolarisConfig(BaseModel):
             k8s_host = f"{host}.{self.namespace}.svc.cluster.local"
             return f"{proto}://{k8s_host}:{port}/{path}"
         return self.uri
+
+    @property
+    def api_base_url(self) -> str:
+        """Get the Polaris service base URL without the catalog API suffix."""
+        parsed = urlsplit(self.uri)
+        path = parsed.path.rstrip("/")
+        catalog_suffix = "/api/catalog"
+        base_path = path[: -len(catalog_suffix)] if path.endswith(catalog_suffix) else path
+        return urlunsplit((parsed.scheme, parsed.netloc, base_path, "", ""))
 
 
 class PolarisConnectionError(Exception):
@@ -90,6 +118,8 @@ def create_polaris_catalog(config: PolarisConfig) -> Catalog:
         ) from e
 
     try:
+        minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
+        minio_access, minio_secret = get_minio_credentials()
         catalog = load_catalog(
             "polaris",
             type="rest",
@@ -97,12 +127,34 @@ def create_polaris_catalog(config: PolarisConfig) -> Catalog:
             warehouse=config.warehouse,
             credential=config.credential.get_secret_value(),
             scope=config.scope,
+            **{
+                "s3.endpoint": minio_url,
+                "s3.access-key-id": minio_access,
+                "s3.secret-access-key": minio_secret,
+                "s3.region": os.environ.get("AWS_REGION", "us-east-1"),
+                "s3.path-style-access": "true",
+            },
         )
         return catalog
     except Exception as e:
         raise PolarisConnectionError(
             f"Failed to create Polaris catalog at {config.uri}: {e}"
         ) from e
+
+
+def rewrite_table_io_for_host_access(table: Table) -> None:
+    """Rewrite a loaded Iceberg table's FileIO endpoint for host-run tests.
+
+    Polaris table metadata can carry a cluster-internal S3 endpoint that is valid
+    for in-cluster workloads but unreachable from host-side pytest runs. Replace
+    the FileIO layer with one pointed at the host-accessible MinIO endpoint while
+    preserving the rest of the table IO properties.
+    """
+    from pyiceberg.io import load_file_io
+
+    io_props = dict(getattr(table.io, "properties", {}))
+    io_props["s3.endpoint"] = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
+    table.io = load_file_io(properties=io_props)
 
 
 @contextmanager
@@ -221,4 +273,5 @@ __all__ = [
     "get_connection_info",
     "namespace_exists",
     "polaris_catalog_context",
+    "rewrite_table_io_for_host_access",
 ]

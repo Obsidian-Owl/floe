@@ -21,7 +21,7 @@
 : "${FLOE_NAMESPACE:=floe-test}"
 # FLOE_KIND_CLUSTER absorbs both legacy env var names (KIND_CLUSTER,
 # KIND_CLUSTER_NAME). New code should use FLOE_KIND_CLUSTER only.
-: "${FLOE_KIND_CLUSTER:=${KIND_CLUSTER:-${KIND_CLUSTER_NAME:-floe}}}"
+: "${FLOE_KIND_CLUSTER:=${KIND_CLUSTER:-${KIND_CLUSTER_NAME:-floe-test}}}"
 : "${FLOE_CHART_DIR:=charts/floe-platform}"
 : "${FLOE_VALUES_FILE:=charts/floe-platform/values-test.yaml}"
 
