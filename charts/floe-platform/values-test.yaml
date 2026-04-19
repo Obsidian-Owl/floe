@@ -23,6 +23,11 @@ global:
   imagePullPolicy: IfNotPresent
   imagePullSecrets: []
   storageClass: ""
+  security:
+    # Required after bitnami/minio 14.10.5: this repo intentionally overrides
+    # the sub-chart image to minio/minio:latest in values.yaml for local/dev
+    # compatibility, and the newer Bitnami chart blocks renders without this.
+    allowInsecureImages: true
 
 # =============================================================================
 # Namespace Configuration
@@ -262,6 +267,8 @@ minio:
   enabled: true
   mode: standalone
   replicas: 1
+  provisioning:
+    enabled: false
   persistence:
     enabled: true
     size: 1Gi
