@@ -1,0 +1,54 @@
+# Unit B: dormant MinIO bucket-init fallback job
+suite: minio bucket-init fallback job
+templates:
+  - templates/job-minio-bucket-init.yaml
+tests:
+  - it: should not render the fallback Job by default
+    set:
+      minio.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render the fallback Job when minio.provisioning.fallbackJob=true
+    set:
+      minio.enabled: true
+      minio.provisioning.fallbackJob: true
+      minio.auth.rootUser: minioadmin
+      minio.auth.rootPassword: minioadmin123
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "5"
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded
+      - equal:
+          path: spec.backoffLimit
+          value: 6
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 600
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop[0]
+          value: ALL
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: '^minio/mc:RELEASE\\.'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ':latest$'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'mc mb --ignore-existing local/floe-iceberg'
