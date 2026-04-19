@@ -269,6 +269,11 @@ minio:
   replicas: 1
   provisioning:
     enabled: false
+    # The upstream minio/minio image used by this repo does not honor the
+    # Bitnami chart's MINIO_DEFAULT_BUCKETS bootstrap contract. Enable the
+    # chart-owned mc fallback hook in tests so the bucket exists before
+    # Polaris bootstrap and E2E harness checks run.
+    fallbackJob: true
   persistence:
     enabled: true
     size: 1Gi

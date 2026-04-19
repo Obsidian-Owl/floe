@@ -51,7 +51,7 @@ spec:
             - -c
             - |
               set -eu
-              mc alias set local "http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@${MINIO_HOST}:9000"
+              mc alias set local "http://${MINIO_HOST}:9000" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
               mc mb --ignore-existing local/{{ $bucketName }}
           volumeMounts:
             - name: tmp

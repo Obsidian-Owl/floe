@@ -51,4 +51,7 @@ tests:
           pattern: ':latest$'
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
+          pattern: 'mc alias set local "http://\$\{MINIO_HOST\}:9000" "\$\{MINIO_ROOT_USER\}" "\$\{MINIO_ROOT_PASSWORD\}"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
           pattern: 'mc mb --ignore-existing local/floe-iceberg'

@@ -107,6 +107,35 @@ class TestDefaultBucketsFirstPath:
             f"Found: {bucket_names}"
         )
 
+    @pytest.mark.requirement("AC-2")
+    def test_values_test_enables_bucket_init_fallback_hook(
+        self,
+        values_test_config: dict[str, Any],
+    ) -> None:
+        """values-test.yaml must enable the chart-owned bucket-init hook.
+
+        The parent chart intentionally overrides MinIO to upstream
+        ``minio/minio`` for local/dev compatibility. That image does not honor
+        the Bitnami chart's ``MINIO_DEFAULT_BUCKETS`` startup contract, so the
+        test path must enable the explicit ``minio/mc`` fallback hook instead.
+        """
+        minio_config = values_test_config.get("minio", {})
+        assert isinstance(minio_config, dict), "values-test.yaml minio section is missing"
+
+        provisioning = minio_config.get("provisioning")
+        assert isinstance(provisioning, dict), (
+            "values-test.yaml must define minio.provisioning so the test-path "
+            "bucket-init contract is explicit."
+        )
+        assert provisioning.get("enabled") is not True, (
+            "values-test.yaml must keep Bitnami provisioning disabled; Unit B "
+            "uses the chart-owned bucket-init hook instead."
+        )
+        assert provisioning.get("fallbackJob") is True, (
+            "values-test.yaml must enable minio.provisioning.fallbackJob so "
+            "fresh test installs create floe-iceberg on the supported image path."
+        )
+
     @pytest.mark.requirement("AC-3")
     def test_values_test_leaves_minio_provisioning_disabled(
         self,
@@ -125,7 +154,7 @@ class TestDefaultBucketsFirstPath:
 
     @pytest.mark.requirement("AC-3")
     def test_values_test_render_has_no_minio_provisioning_job(self) -> None:
-        """Full chart render should not include a MinIO provisioning Job by default."""
+        """Full chart render should include the fallback hook, not Bitnami provisioning."""
         result = subprocess.run(
             [
                 "helm",
@@ -144,7 +173,11 @@ class TestDefaultBucketsFirstPath:
         assert result.returncode == 0, f"helm template failed: {result.stderr}"
         assert "app.kubernetes.io/component: minio-provisioning" not in result.stdout, (
             "values-test.yaml unexpectedly renders a MinIO provisioning Job. "
-            "The revised Unit B contract requires the normal path to stay on defaultBuckets."
+            "Unit B keeps Bitnami provisioning disabled on the test path."
+        )
+        assert "app.kubernetes.io/component: minio-bucket-init" in result.stdout, (
+            "values-test.yaml must render the chart-owned minio-bucket-init hook "
+            "so fresh test installs create floe-iceberg before Polaris bootstrap."
         )
 
 
