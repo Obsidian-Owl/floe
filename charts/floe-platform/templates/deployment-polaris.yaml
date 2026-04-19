@@ -61,11 +61,6 @@ spec:
                 secretKeyRef:
                   name: {{ include "floe-platform.polaris.credentialSecretName" . }}
                   key: jdbc-password
-            - name: POLARIS_BOOTSTRAP_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
-                  key: client-id
           command:
             - /bin/sh
             - -c
@@ -107,15 +102,14 @@ spec:
               export PGDATABASE="${DB_NAME}"
 
               SCHEMA_READY=$(psql -tA -c "select 1 from information_schema.tables where table_schema = 'polaris_schema' and table_name = 'version' limit 1;")
-              PRINCIPAL_READY=""
+              REALM_READY=""
 
               if [ "${SCHEMA_READY}" = "1" ]; then
-                PRINCIPAL_READY=$(psql -tA \
-                  -v client_id="${POLARIS_BOOTSTRAP_CLIENT_ID}" \
-                  -c "select 1 from polaris_schema.principal_authentication_data where realm_id = 'POLARIS' and principal_client_id = :'client_id' limit 1;")
+                REALM_READY=$(psql -tA \
+                  -c "select 1 from polaris_schema.principal_authentication_data where realm_id = 'POLARIS' limit 1;")
               fi
 
-              if [ "${SCHEMA_READY}" = "1" ] && [ "${PRINCIPAL_READY}" = "1" ]; then
+              if [ "${SCHEMA_READY}" = "1" ] && [ "${REALM_READY}" = "1" ]; then
                 echo "Polaris metastore already bootstrapped; skipping bootstrap init container"
                 rm -f /work/polaris-bootstrap-required
               else

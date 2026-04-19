@@ -67,6 +67,18 @@ class TestPolarisConfig:
         )
         assert "/api/catalog/v1" in config.k8s_uri
 
+    @pytest.mark.requirement("RAC-7")
+    def test_api_base_url_strips_catalog_suffix(self) -> None:
+        """Test api_base_url derives the Polaris service root from catalog URI."""
+        config = PolarisConfig(uri="http://polaris:8181/api/catalog")
+        assert config.api_base_url == "http://polaris:8181"
+
+    @pytest.mark.requirement("RAC-7")
+    def test_api_base_url_preserves_path_prefix(self) -> None:
+        """Test api_base_url keeps any path prefix before /api/catalog."""
+        config = PolarisConfig(uri="http://gateway.example/prefix/api/catalog")
+        assert config.api_base_url == "http://gateway.example/prefix"
+
     @pytest.mark.requirement("9c-FR-012")
     def test_credential_is_secret(self) -> None:
         """Test credential is SecretStr type."""

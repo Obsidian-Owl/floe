@@ -38,19 +38,12 @@ from testing.fixtures.polling import wait_for_condition
 from testing.fixtures.services import ServiceEndpoint
 
 
-def _polaris_base_url() -> str:
-    return os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
-
-
 def _minio_base_url() -> str:
     return os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
 
 
 def _durability_polaris_config() -> PolarisConfig:
-    return PolarisConfig(
-        uri=os.environ.get("POLARIS_URI", f"{_polaris_base_url()}/api/catalog"),
-        warehouse=os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"),
-    )
+    return PolarisConfig(warehouse=os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"))
 
 
 def _validated_identifier(value: str, label: str) -> str:
@@ -62,7 +55,7 @@ def _validated_identifier(value: str, label: str) -> str:
 def _request_oauth_token(config: PolarisConfig) -> str:
     client_id, client_secret = config.credential.get_secret_value().split(":", 1)
     response = httpx.post(
-        f"{_polaris_base_url()}/api/catalog/v1/oauth/tokens",
+        f"{config.api_base_url}/api/catalog/v1/oauth/tokens",
         data={
             "grant_type": "client_credentials",
             "client_id": client_id,
@@ -97,7 +90,7 @@ def _safe_response_body(response: httpx.Response) -> object:
 def _assert_seeded_catalog_lookup(config: PolarisConfig, access_token: str) -> None:
     catalog_name = _validated_identifier(config.warehouse, "Polaris warehouse")
     response = httpx.get(
-        f"{_polaris_base_url()}/api/management/v1/catalogs/{catalog_name}",
+        f"{config.api_base_url}/api/management/v1/catalogs/{catalog_name}",
         headers={"Authorization": f"Bearer {access_token}"},
         timeout=10.0,
     )

@@ -16,6 +16,7 @@ import os
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
@@ -80,6 +81,15 @@ class PolarisConfig(BaseModel):
             k8s_host = f"{host}.{self.namespace}.svc.cluster.local"
             return f"{proto}://{k8s_host}:{port}/{path}"
         return self.uri
+
+    @property
+    def api_base_url(self) -> str:
+        """Get the Polaris service base URL without the catalog API suffix."""
+        parsed = urlsplit(self.uri)
+        path = parsed.path.rstrip("/")
+        catalog_suffix = "/api/catalog"
+        base_path = path[: -len(catalog_suffix)] if path.endswith(catalog_suffix) else path
+        return urlunsplit((parsed.scheme, parsed.netloc, base_path, "", ""))
 
 
 class PolarisConnectionError(Exception):

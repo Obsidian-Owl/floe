@@ -47,7 +47,7 @@ tests:
       - notExists:
           path: spec.template.spec.initContainers
 
-  - it: should query both schema version and root principal state before bootstrapping
+  - it: should query both schema version and Polaris realm state before bootstrapping
     template: templates/deployment-polaris.yaml
     set:
       polaris.enabled: true
@@ -68,13 +68,7 @@ tests:
           pattern: "principal_authentication_data"
       - matchRegex:
           path: spec.template.spec.initContainers[1].command[2]
-          pattern: "principal_client_id"
-      - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
-          pattern: "-v client_id=\\\"\\$\\{POLARIS_BOOTSTRAP_CLIENT_ID\\}\\\""
-      - matchRegex:
-          path: spec.template.spec.initContainers[1].command[2]
-          pattern: "principal_client_id = :'client_id'"
+          pattern: "realm_id = 'POLARIS' limit 1"
       - matchRegex:
           path: spec.template.spec.initContainers[1].command[2]
           pattern: "touch /work/polaris-bootstrap-required"
