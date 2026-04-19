@@ -40,7 +40,7 @@ format_exports = extract_manifest_config.format_exports
 # Exact expected values from demo/manifest.yaml -- the single source of truth
 # ---------------------------------------------------------------------------
 EXPECTED_VARS: dict[str, str] = {
-    "MANIFEST_BUCKET": "floe-data",
+    "MANIFEST_BUCKET": "floe-iceberg",
     "MANIFEST_REGION": "us-east-1",
     "MANIFEST_PATH_STYLE_ACCESS": "true",
     "MANIFEST_WAREHOUSE": "floe-demo",
@@ -70,7 +70,7 @@ DEMO_MANIFEST_YAML = textwrap.dedent("""\
         type: s3
         config:
           endpoint: http://floe-platform-minio:9000
-          bucket: floe-data
+          bucket: floe-iceberg
           region: us-east-1
           path_style_access: true
 """)
@@ -109,7 +109,7 @@ def manifest_no_catalog(tmp_path: Path) -> Path:
           storage:
             type: s3
             config:
-              bucket: floe-data
+              bucket: floe-iceberg
               region: us-east-1
               path_style_access: true
     """)
@@ -175,9 +175,9 @@ class TestExtractConfigReturnsAllVars:
         assert missing == set(), f"Missing required env vars: {missing}"
 
     def test_manifest_bucket_value(self, manifest_file: Path) -> None:
-        """MANIFEST_BUCKET must equal 'floe-data' from storage.config.bucket."""
+        """MANIFEST_BUCKET must equal 'floe-iceberg' from storage.config.bucket."""
         result = extract_config(manifest_file)
-        assert result["MANIFEST_BUCKET"] == "floe-data"
+        assert result["MANIFEST_BUCKET"] == "floe-iceberg"
 
     def test_manifest_region_value(self, manifest_file: Path) -> None:
         """MANIFEST_REGION must equal 'us-east-1' from storage.config.region."""
@@ -533,7 +533,7 @@ class TestEdgeCases:
         p.write_text(content)
         result = extract_config(p)
         assert result["MANIFEST_BUCKET"] == "my-custom-bucket", (
-            "Script must read from YAML, not hardcode 'floe-data'"
+            "Script must read from YAML, not hardcode 'floe-iceberg'"
         )
         assert result["MANIFEST_REGION"] == "eu-west-1", (
             "Script must read from YAML, not hardcode 'us-east-1'"

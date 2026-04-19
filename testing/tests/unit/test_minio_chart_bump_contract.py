@@ -22,6 +22,7 @@ CHART_YAML = REPO_ROOT / "charts" / "floe-platform" / "Chart.yaml"
 CHART_LOCK = REPO_ROOT / "charts" / "floe-platform" / "Chart.lock"
 VALUES_TEST = REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
 VALUES_DEFAULTS = REPO_ROOT / "charts" / "floe-platform" / "values.yaml"
+DEMO_MANIFEST = REPO_ROOT / "demo" / "manifest.yaml"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -62,6 +63,12 @@ def values_test_config() -> dict[str, Any]:
 def values_defaults_config() -> dict[str, Any]:
     """Parse values.yaml into a dictionary."""
     return _load_yaml(VALUES_DEFAULTS)
+
+
+@pytest.fixture(scope="module")
+def demo_manifest_config() -> dict[str, Any]:
+    """Parse the demo manifest into a dictionary."""
+    return _load_yaml(DEMO_MANIFEST)
 
 
 class TestMinioDependencyVersion:
@@ -105,6 +112,60 @@ class TestDefaultBucketsFirstPath:
         assert "floe-iceberg" in bucket_names, (
             "values-test.yaml minio.defaultBuckets must include 'floe-iceberg'. "
             f"Found: {bucket_names}"
+        )
+
+    @pytest.mark.requirement("AC-2")
+    def test_demo_manifest_bucket_matches_test_bucket_contract(
+        self,
+        values_test_config: dict[str, Any],
+        demo_manifest_config: dict[str, Any],
+    ) -> None:
+        """The user-facing demo manifest must match the chart test bucket contract."""
+        minio_config = values_test_config.get("minio", {})
+        polaris_config = values_test_config.get("polaris", {})
+        assert isinstance(minio_config, dict), "values-test.yaml minio section is missing"
+        assert isinstance(polaris_config, dict), "values-test.yaml polaris section is missing"
+
+        manifest_bucket = (
+            demo_manifest_config.get("plugins", {})
+            .get("storage", {})
+            .get("config", {})
+            .get("bucket")
+        )
+        assert isinstance(manifest_bucket, str) and manifest_bucket, (
+            "demo/manifest.yaml must declare plugins.storage.config.bucket so users "
+            "have a discoverable bucket contract."
+        )
+
+        default_buckets = minio_config.get("defaultBuckets")
+        assert isinstance(default_buckets, str) and default_buckets, (
+            "values-test.yaml must keep minio.defaultBuckets as a non-empty string."
+        )
+        bucket_names = [bucket.strip() for bucket in default_buckets.split(",") if bucket.strip()]
+        assert manifest_bucket in bucket_names, (
+            "demo/manifest.yaml bucket must be provisioned by values-test.yaml "
+            f"minio.defaultBuckets. Manifest bucket: {manifest_bucket!r}, "
+            f"defaultBuckets: {bucket_names!r}"
+        )
+
+        bootstrap = polaris_config.get("bootstrap")
+        assert isinstance(bootstrap, dict), "values-test.yaml polaris.bootstrap is missing"
+        base_location = bootstrap.get("defaultBaseLocation")
+        assert isinstance(base_location, str) and base_location.startswith("s3://"), (
+            "values-test.yaml polaris.bootstrap.defaultBaseLocation must be an s3:// URI."
+        )
+        assert base_location == f"s3://{manifest_bucket}", (
+            "values-test.yaml polaris.bootstrap.defaultBaseLocation must match the "
+            f"demo manifest bucket. Expected s3://{manifest_bucket}, got {base_location!r}"
+        )
+
+        allowed_locations = bootstrap.get("allowedLocations")
+        assert isinstance(allowed_locations, list), (
+            "values-test.yaml polaris.bootstrap.allowedLocations must be a list."
+        )
+        assert f"s3://{manifest_bucket}" in allowed_locations, (
+            "values-test.yaml polaris.bootstrap.allowedLocations must include the "
+            f"demo manifest bucket. Allowed locations: {allowed_locations!r}"
         )
 
     @pytest.mark.requirement("AC-2")
