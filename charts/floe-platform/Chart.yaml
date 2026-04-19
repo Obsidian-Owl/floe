@@ -68,7 +68,7 @@ dependencies:
   # MinIO - S3-compatible storage (dev/demo only)
   # https://charts.bitnami.com/bitnami
   - name: minio
-    version: "14.8.5"
+    version: "14.10.5"
     repository: "https://charts.bitnami.com/bitnami"
     condition: minio.enabled
     alias: minio
