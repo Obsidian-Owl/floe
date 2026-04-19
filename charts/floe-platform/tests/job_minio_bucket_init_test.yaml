@@ -45,7 +45,7 @@ tests:
           value: ALL
       - matchRegex:
           path: spec.template.spec.containers[0].image
-          pattern: '^minio/mc:RELEASE\\.'
+          pattern: '^minio/mc:RELEASE\.'
       - notMatchRegex:
           path: spec.template.spec.containers[0].image
           pattern: ':latest$'
