@@ -141,7 +141,7 @@ load_image() {
             fi
 
             if [[ -n "${DEVPOD_WORKSPACE:-}" ]]; then
-                local ssh_host="${DEVPOD_WORKSPACE}.devpod"
+                local ssh_host="${DEVPOD_WORKSPACE:-floe}.devpod"
                 info "Loading image into DevPod workspace '${ssh_host}' and Kind cluster '${kind_cluster}'..."
                 docker save "${image}" | ssh "${ssh_host}" docker load
                 ssh "${ssh_host}" kind load docker-image "${image}" --name "${kind_cluster}"
