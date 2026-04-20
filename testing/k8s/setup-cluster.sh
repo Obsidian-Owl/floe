@@ -486,10 +486,18 @@ deploy_via_flux() {
     flux_git_branch=$(resolve_flux_git_branch)
     local flux_manifest_dir
     flux_manifest_dir=$(render_flux_manifests "${flux_git_branch}")
+    local apply_status=0
 
     log_info "Applying Flux HelmRelease CRDs from ${FLOE_FLUX_GIT_URL}@${flux_git_branch}..."
-    kubectl apply -f "${flux_manifest_dir}/"
+    if kubectl apply -f "${flux_manifest_dir}/"; then
+        apply_status=0
+    else
+        apply_status=$?
+    fi
     rm -rf "${flux_manifest_dir}"
+    if [[ "${apply_status}" -ne 0 ]]; then
+        return "${apply_status}"
+    fi
 
     log_info "Waiting for floe-platform HelmRelease to be ready (up to 15m)..."
     if ! kubectl wait helmrelease/floe-platform -n "${NAMESPACE}" \
