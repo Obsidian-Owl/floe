@@ -614,8 +614,10 @@ minio:
       cpu: 500m
       memory: 512Mi
 
-  # Default buckets to create
-  defaultBuckets: "floe-data,floe-artifacts"
+  # Default buckets to create. Keep the discoverable bucket contract aligned
+  # with the Polaris base location above so fresh installs provision the
+  # warehouse bucket users see in floe.yaml / manifest examples.
+  defaultBuckets: "floe-iceberg,floe-artifacts"
 
   provisioning:
     # Keep the normal path on defaultBuckets. The fallback Job below is a
@@ -623,6 +625,13 @@ minio:
     # an explicit post-install/post-upgrade retry path.
     enabled: false
     fallbackJob: false
+    fallbackJobResources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
 
   # Service configuration
   service:

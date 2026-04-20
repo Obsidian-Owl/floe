@@ -377,6 +377,36 @@
         "mode": {
           "type": "string",
           "enum": ["standalone", "distributed"]
+        },
+        "defaultBuckets": {
+          "type": "string",
+          "description": "Comma-separated buckets created at startup"
+        },
+        "provisioning": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "fallbackJob": {
+              "type": "boolean",
+              "default": false
+            },
+            "fallbackJobResources": {
+              "type": "object",
+              "properties": {
+                "requests": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                },
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                }
+              }
+            }
+          }
         }
       }
     },

@@ -10,6 +10,7 @@ These tests cover the revised Unit B contract:
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ VALUES_TEST = REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
 VALUES_DEMO = REPO_ROOT / "charts" / "floe-platform" / "values-demo.yaml"
 VALUES_DEFAULTS = REPO_ROOT / "charts" / "floe-platform" / "values.yaml"
 DEMO_MANIFEST = REPO_ROOT / "demo" / "manifest.yaml"
+BUCKET_INIT_TEMPLATE = "templates/job-minio-bucket-init.yaml"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -40,6 +42,38 @@ def _find_dependency(config: dict[str, Any], name: str) -> dict[str, Any]:
         if isinstance(dependency, dict) and dependency.get("name") == name:
             return dependency
     pytest.fail(f"Could not find dependency {name!r} in Chart metadata")
+
+
+def _render_template(template: str, values_file: Path) -> list[dict[str, Any]]:
+    """Render a single chart template without requiring vendored dependencies."""
+
+    if shutil.which("helm") is None:
+        pytest.fail("helm CLI not available on PATH — required for chart render assertions.")
+
+    result = subprocess.run(
+        [
+            "helm",
+            "template",
+            "floe-platform",
+            "charts/floe-platform",
+            "-f",
+            str(values_file.relative_to(REPO_ROOT)),
+            "-s",
+            template,
+        ],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, f"helm template failed: {result.stderr}"
+
+    docs: list[dict[str, Any]] = []
+    for raw in yaml.safe_load_all(result.stdout):
+        if isinstance(raw, dict) and raw:
+            docs.append(raw)
+    return docs
 
 
 @pytest.fixture(scope="module")
@@ -124,11 +158,12 @@ class TestDefaultBucketsFirstPath:
     @pytest.mark.requirement("AC-2")
     def test_demo_manifest_bucket_matches_chart_bucket_contracts(
         self,
+        values_defaults_config: dict[str, Any],
         values_test_config: dict[str, Any],
         values_demo_config: dict[str, Any],
         demo_manifest_config: dict[str, Any],
     ) -> None:
-        """The user-facing demo manifest must match both chart entrypoints."""
+        """The user-facing demo manifest must match all discoverable chart entrypoints."""
 
         manifest_bucket = (
             demo_manifest_config.get("plugins", {})
@@ -180,6 +215,7 @@ class TestDefaultBucketsFirstPath:
                 f"demo manifest bucket. Allowed locations: {allowed_locations!r}"
             )
 
+        assert_chart_bucket_contract("values.yaml", values_defaults_config)
         assert_chart_bucket_contract("values-test.yaml", values_test_config)
         assert_chart_bucket_contract("values-demo.yaml", values_demo_config)
 
@@ -221,39 +257,48 @@ class TestDefaultBucketsFirstPath:
         minio_config = values_test_config.get("minio", {})
         assert isinstance(minio_config, dict), "values-test.yaml minio section is missing"
         provisioning = minio_config.get("provisioning")
-        if provisioning is None:
-            return
-        assert isinstance(provisioning, dict), "minio.provisioning must be a mapping when present"
+        assert isinstance(provisioning, dict), (
+            "values-test.yaml must define minio.provisioning so the normal-path contract "
+            "cannot pass vacuously."
+        )
         assert provisioning.get("enabled") is not True, (
             "values-test.yaml must keep Bitnami provisioning disabled in the normal path."
         )
 
     @pytest.mark.requirement("AC-3")
     def test_values_test_render_has_no_minio_provisioning_job(self) -> None:
-        """Full chart render should include the fallback hook, not Bitnami provisioning."""
-        result = subprocess.run(
-            [
-                "helm",
-                "template",
-                "floe-platform",
-                "charts/floe-platform",
-                "-f",
-                "charts/floe-platform/values-test.yaml",
-            ],
-            capture_output=True,
-            text=True,
-            cwd=REPO_ROOT,
-            timeout=120,
-            check=False,
+        """The offline bucket-init template render must stay on the fallback path."""
+        docs = _render_template(BUCKET_INIT_TEMPLATE, VALUES_TEST)
+        assert len(docs) == 1, (
+            "values-test.yaml must render exactly one chart-owned minio-bucket-init Job "
+            "from templates/job-minio-bucket-init.yaml."
         )
-        assert result.returncode == 0, f"helm template failed: {result.stderr}"
-        assert "app.kubernetes.io/component: minio-provisioning" not in result.stdout, (
-            "values-test.yaml unexpectedly renders a MinIO provisioning Job. "
-            "Unit B keeps Bitnami provisioning disabled on the test path."
-        )
-        assert "app.kubernetes.io/component: minio-bucket-init" in result.stdout, (
+        job = docs[0]
+        assert job.get("kind") == "Job", "Fallback render must produce a Kubernetes Job."
+
+        metadata = job.get("metadata", {})
+        assert isinstance(metadata, dict), "Rendered bucket-init Job metadata is missing."
+        labels = metadata.get("labels", {})
+        assert isinstance(labels, dict), "Rendered bucket-init Job labels are missing."
+        assert labels.get("app.kubernetes.io/component") == "minio-bucket-init", (
             "values-test.yaml must render the chart-owned minio-bucket-init hook "
             "so fresh test installs create floe-iceberg before Polaris bootstrap."
+        )
+
+        containers = job.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+        assert isinstance(containers, list) and containers, (
+            "Rendered bucket-init Job must include a container definition."
+        )
+        container = containers[0]
+        assert isinstance(container, dict), "Rendered bucket-init container must be a mapping."
+        command = container.get("command", [])
+        assert isinstance(command, list) and command, (
+            "Rendered bucket-init Job must define the shell command that creates the bucket."
+        )
+        shell_script = command[-1]
+        assert isinstance(shell_script, str), "Bucket-init shell script must be a string."
+        assert "mc mb --ignore-existing \"local/floe-iceberg\"" in shell_script, (
+            "values-test.yaml must render the fallback hook against the floe-iceberg bucket."
         )
 
 
@@ -276,3 +321,29 @@ class TestFallbackJobDefault:
             "values.yaml must define minio.provisioning.fallbackJob: false for the dormant path. "
             f"Found: {provisioning.get('fallbackJob')!r}"
         )
+
+    @pytest.mark.requirement("AC-7")
+    def test_values_yaml_exposes_fallback_job_resources(
+        self,
+        values_defaults_config: dict[str, Any],
+    ) -> None:
+        """values.yaml must expose fallback-job resources as discoverable config."""
+        minio_config = values_defaults_config.get("minio", {})
+        assert isinstance(minio_config, dict), "values.yaml minio section is missing"
+        provisioning = minio_config.get("provisioning")
+        assert isinstance(provisioning, dict), (
+            "values.yaml must define minio.provisioning so fallback-job tuning is discoverable."
+        )
+        resources = provisioning.get("fallbackJobResources")
+        assert isinstance(resources, dict), (
+            "values.yaml must define minio.provisioning.fallbackJobResources instead of "
+            "hardcoding hook resources in the template."
+        )
+        requests = resources.get("requests")
+        limits = resources.get("limits")
+        assert isinstance(requests, dict), "fallbackJobResources.requests must be a mapping."
+        assert isinstance(limits, dict), "fallbackJobResources.limits must be a mapping."
+        assert requests.get("cpu") == "50m"
+        assert requests.get("memory") == "64Mi"
+        assert limits.get("cpu") == "100m"
+        assert limits.get("memory") == "128Mi"

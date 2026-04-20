@@ -1,4 +1,5 @@
-{{- if and .Values.minio.enabled (.Values.minio.provisioning.fallbackJob | default false) }}
+{{- $provisioning := .Values.minio.provisioning | default dict }}
+{{- if and .Values.minio.enabled (get $provisioning "fallbackJob" | default false) }}
 {{- $bucketName := trimPrefix "s3://" .Values.polaris.bootstrap.defaultBaseLocation | splitList "/" | first }}
 apiVersion: batch/v1
 kind: Job
@@ -31,6 +32,10 @@ spec:
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           securityContext:
             {{- include "floe-platform.containerSecurityContext" . | nindent 12 }}
+          {{- with (get $provisioning "fallbackJobResources") }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             - name: MC_CONFIG_DIR
               value: /tmp/.mc
@@ -52,7 +57,7 @@ spec:
             - |
               set -eu
               mc alias set local "http://${MINIO_HOST}:9000" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
-              mc mb --ignore-existing local/{{ $bucketName }}
+              mc mb --ignore-existing "local/{{ $bucketName }}"
           volumeMounts:
             - name: tmp
               mountPath: /tmp
