@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import tarfile
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,8 @@ import yaml
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _FLUX_DIR = _REPO_ROOT / "charts" / "floe-platform" / "flux"
 _COMMON_SH = _REPO_ROOT / "testing" / "ci" / "common.sh"
+_PLATFORM_CHART_DIR = _REPO_ROOT / "charts" / "floe-platform"
+_PACKAGED_PLATFORM_CHART = _PLATFORM_CHART_DIR / "flux-artifacts" / "floe-platform.tgz"
 
 
 # ---------------------------------------------------------------------------
@@ -43,6 +46,15 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     docs = list(yaml.safe_load_all(content))
     assert len(docs) >= 1, f"No YAML documents in {path}"
     return docs[0]
+
+
+def _load_packaged_chart_yaml(package_path: Path, member_name: str) -> dict[str, Any]:
+    """Load a YAML member from a packaged Helm chart."""
+    assert package_path.exists(), f"Packaged chart not found: {package_path}"
+    with tarfile.open(package_path, "r:gz") as archive:
+        member = archive.extractfile(member_name)
+        assert member is not None, f"Packaged chart is missing {member_name}"
+        return yaml.safe_load(member.read().decode("utf-8"))
 
 
 # ---------------------------------------------------------------------------
@@ -125,10 +137,11 @@ def test_helmrelease_platform_metadata() -> None:
 
 @pytest.mark.requirement("AC-2")
 def test_helmrelease_platform_chart_source() -> None:
-    """HelmRelease references GitRepository source with correct chart path."""
+    """HelmRelease references a packaged chart artifact from GitRepository."""
     doc = _load_yaml(_FLUX_DIR / "helmrelease-platform.yaml")
     chart_spec = doc["spec"]["chart"]["spec"]
-    assert chart_spec["chart"] == "./charts/floe-platform"
+    assert chart_spec["chart"] == "./charts/floe-platform/flux-artifacts/floe-platform.tgz"
+    assert chart_spec["reconcileStrategy"] == "Revision"
     source_ref = chart_spec["sourceRef"]
     assert source_ref["kind"] == "GitRepository"
     assert source_ref["name"] == "floe"
@@ -185,6 +198,38 @@ def test_helmrelease_platform_values_files() -> None:
     )
 
 
+@pytest.mark.requirement("AC-2")
+def test_packaged_platform_chart_exists() -> None:
+    """Flux fixture ships a packaged floe-platform chart artifact in-repo."""
+    assert _PACKAGED_PLATFORM_CHART.exists(), (
+        "The Flux fixture must point at a committed packaged chart artifact so "
+        "source-controller does not have to rebuild the Bitnami MinIO dependency."
+    )
+
+
+@pytest.mark.requirement("AC-2")
+def test_packaged_platform_chart_matches_source_chart_metadata() -> None:
+    """Packaged floe-platform chart preserves the source chart name and version."""
+    source_chart = _load_yaml(_PLATFORM_CHART_DIR / "Chart.yaml")
+    packaged_chart = _load_packaged_chart_yaml(
+        _PACKAGED_PLATFORM_CHART,
+        "floe-platform/Chart.yaml",
+    )
+    assert packaged_chart["name"] == source_chart["name"]
+    assert packaged_chart["version"] == source_chart["version"]
+
+
+@pytest.mark.requirement("AC-2")
+def test_packaged_platform_chart_vendors_minio_dependency() -> None:
+    """Packaged floe-platform chart includes the MinIO dependency content."""
+    with tarfile.open(_PACKAGED_PLATFORM_CHART, "r:gz") as archive:
+        members = archive.getnames()
+    assert "floe-platform/charts/minio/Chart.yaml" in members, (
+        "The packaged chart must vendor the MinIO dependency so Flux does not "
+        "attempt OCI-backed dependency resolution during GitRepository packaging."
+    )
+
+
 # ---------------------------------------------------------------------------
 # AC-3: HelmRelease CRD for floe-jobs-test
 # ---------------------------------------------------------------------------
@@ -209,7 +254,9 @@ def test_helmrelease_jobs_metadata() -> None:
 def test_helmrelease_jobs_source_ref() -> None:
     """HelmRelease for floe-jobs-test references GitRepository source."""
     doc = _load_yaml(_FLUX_DIR / "helmrelease-jobs.yaml")
-    source_ref = doc["spec"]["chart"]["spec"]["sourceRef"]
+    chart_spec = doc["spec"]["chart"]["spec"]
+    assert chart_spec["reconcileStrategy"] == "Revision"
+    source_ref = chart_spec["sourceRef"]
     assert source_ref["kind"] == "GitRepository"
     assert source_ref["name"] == "floe"
     assert source_ref["namespace"] == "flux-system"

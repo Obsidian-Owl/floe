@@ -150,10 +150,35 @@ def test_flux_path_creates_namespace_before_apply() -> None:
 
 @pytest.mark.requirement("AC-8")
 def test_kubectl_apply_flux_crds() -> None:
-    """setup-cluster.sh applies CRD manifests from flux/ directory."""
+    """setup-cluster.sh applies rendered Flux manifests, not the raw directory."""
     content = _SETUP_SCRIPT.read_text()
-    assert re.search(r"kubectl\s+apply\s+-f.*flux", content), (
-        "Must apply CRD manifests from charts/floe-platform/flux/ directory"
+    assert "render_flux_manifests" in content, (
+        "Must render Flux manifests before apply so the GitRepository ref can "
+        "track the selected branch or explicit override."
+    )
+    assert re.search(r"kubectl\s+apply\s+-f.*flux_manifest", content), (
+        "Must apply the rendered Flux manifest directory rather than the raw "
+        "charts/floe-platform/flux path."
+    )
+
+
+@pytest.mark.requirement("AC-8")
+def test_render_flux_manifests_uses_configurable_git_source() -> None:
+    """setup-cluster.sh renders GitRepository URL and branch from env-aware config."""
+    content = _SETUP_SCRIPT.read_text()
+    assert "FLOE_FLUX_GIT_URL" in content, (
+        "Flux manifest rendering must support an explicit Git URL override."
+    )
+    assert "FLOE_FLUX_GIT_BRANCH" in content, (
+        "Flux manifest rendering must support an explicit branch override."
+    )
+    assert "rev-parse --abbrev-ref HEAD" in content, (
+        "When no explicit branch override is provided, setup-cluster.sh must "
+        "detect the current checked-out branch instead of hardcoding main."
+    )
+    assert re.search(r"sed\s+-i\.bak.*branch: main", content, re.DOTALL), (
+        "render_flux_manifests must rewrite the default GitRepository branch "
+        "in a temporary manifest copy before applying Flux resources."
     )
 
 
