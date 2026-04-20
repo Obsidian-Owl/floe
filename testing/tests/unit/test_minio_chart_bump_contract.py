@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -45,28 +46,45 @@ def _find_dependency(config: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 def _render_template(template: str, values_file: Path) -> list[dict[str, Any]]:
-    """Render a single chart template without requiring vendored dependencies."""
+    """Render a single chart template through a synthetic dependency-free chart."""
 
     if shutil.which("helm") is None:
         pytest.fail("helm CLI not available on PATH — required for chart render assertions.")
 
-    result = subprocess.run(
-        [
-            "helm",
-            "template",
-            "floe-platform",
-            "charts/floe-platform",
-            "-f",
-            str(values_file.relative_to(REPO_ROOT)),
-            "-s",
-            template,
-        ],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-        timeout=120,
-        check=False,
-    )
+    helpers_source = REPO_ROOT / "charts" / "floe-platform" / "templates" / "_helpers.tpl"
+    template_source = REPO_ROOT / "charts" / "floe-platform" / template
+    assert helpers_source.exists(), f"Missing chart helpers at {helpers_source}"
+    assert template_source.exists(), f"Missing chart template at {template_source}"
+
+    with tempfile.TemporaryDirectory(prefix="floe-minio-chart-") as temp_dir:
+        temp_chart_dir = Path(temp_dir)
+        (temp_chart_dir / "Chart.yaml").write_text(
+            'apiVersion: v2\nname: floe-platform\nversion: 0.1.0\nappVersion: "1.0.0"\n'
+        )
+        shutil.copy2(VALUES_DEFAULTS, temp_chart_dir / "values.yaml")
+
+        temp_template_path = temp_chart_dir / template
+        temp_template_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(helpers_source, temp_chart_dir / "templates" / "_helpers.tpl")
+        shutil.copy2(template_source, temp_template_path)
+
+        result = subprocess.run(
+            [
+                "helm",
+                "template",
+                "floe-platform",
+                str(temp_chart_dir),
+                "-f",
+                str(values_file),
+                "-s",
+                template,
+            ],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+            timeout=120,
+            check=False,
+        )
     assert result.returncode == 0, f"helm template failed: {result.stderr}"
 
     docs: list[dict[str, Any]] = []
