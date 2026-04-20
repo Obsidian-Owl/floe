@@ -332,23 +332,29 @@ def _check_flux_controllers() -> None:
         return
 
     for controller in ["source-controller", "helm-controller"]:
-        pod_check = subprocess.run(
-            [
-                "kubectl",
-                "get",
-                "pods",
-                "-n",
-                "flux-system",
-                "-l",
-                f"app.kubernetes.io/component={controller}",
-                "-o",
-                "jsonpath={.items[0].status.phase}",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        status = pod_check.stdout.strip()
+        status = ""
+        # Flux pods in Kind currently use `app=<controller>`, but older
+        # manifests can still carry the component label. Accept either.
+        for selector in [f"app={controller}", f"app.kubernetes.io/component={controller}"]:
+            pod_check = subprocess.run(
+                [
+                    "kubectl",
+                    "get",
+                    "pods",
+                    "-n",
+                    "flux-system",
+                    "-l",
+                    selector,
+                    "-o",
+                    "jsonpath={.items[0].status.phase}",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            status = pod_check.stdout.strip()
+            if pod_check.returncode == 0 and status:
+                break
         if status != "Running":
             pytest.fail(f"Flux controller {controller} is not Running (status: {status})")
 

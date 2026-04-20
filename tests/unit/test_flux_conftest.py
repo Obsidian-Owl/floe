@@ -632,16 +632,16 @@ class TestFluxControllerSmokeCheckStructural:
         )
 
     @pytest.mark.requirement("AC-4")
-    def test_uses_component_label_selector(self) -> None:
-        """Flux controller check uses app.kubernetes.io/component labels.
-
-        Must use the standard Flux label selector to find controller pods,
-        not pod name matching which is fragile.
-        """
+    def test_uses_flux_label_selectors(self) -> None:
+        """Flux controller check supports current and legacy Flux pod labels."""
         source = _conftest_source()
+        assert "app=" in source, (
+            "Flux controller check must support the current Flux pod label "
+            "selector format ('app=<controller>')."
+        )
         assert "app.kubernetes.io/component" in source, (
-            "Flux controller check must use 'app.kubernetes.io/component' "
-            "label selector to find controller pods."
+            "Flux controller check must retain fallback support for the legacy "
+            "component label selector."
         )
 
     @pytest.mark.requirement("AC-4")
@@ -998,4 +998,33 @@ class TestFluxControllerSmokeCheckBehavioral:
         mock_subprocess.side_effect = _kubectl_side_effect
 
         # Must not raise -- "Running\n" should be treated as "Running"
+        _check_flux_controllers()
+
+    @pytest.mark.requirement("AC-4")
+    def test_falls_back_to_legacy_component_label_when_app_label_missing(
+        self,
+        mock_subprocess: MagicMock,
+    ) -> None:
+        """Falls back to the legacy component label when `app=` finds no pods."""
+        from tests.e2e.conftest import _check_flux_controllers
+
+        def _kubectl_side_effect(
+            cmd: list[str], **kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
+            if "get" in cmd and "namespace" in cmd:
+                return _make_completed_process(returncode=0)
+            if "get" in cmd and "pods" in cmd:
+                cmd_str = " ".join(cmd)
+                if "app=source-controller" in cmd_str:
+                    return _make_completed_process(returncode=0, stdout="")
+                if "app=helm-controller" in cmd_str:
+                    return _make_completed_process(returncode=0, stdout="")
+                if "app.kubernetes.io/component=source-controller" in cmd_str:
+                    return _make_completed_process(returncode=0, stdout="Running")
+                if "app.kubernetes.io/component=helm-controller" in cmd_str:
+                    return _make_completed_process(returncode=0, stdout="Running")
+            return _make_completed_process(returncode=0)
+
+        mock_subprocess.side_effect = _kubectl_side_effect
+
         _check_flux_controllers()

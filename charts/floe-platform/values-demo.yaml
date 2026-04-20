@@ -134,9 +134,10 @@ polaris:
   bootstrap:
     enabled: true
     catalogName: "floe-demo"
-    defaultBaseLocation: "s3://floe-data"
+    # Keep this bucket contract aligned with demo/manifest.yaml.
+    defaultBaseLocation: "s3://floe-iceberg"
     allowedLocations:
-      - "s3://floe-data"
+      - "s3://floe-iceberg"
 
 # =============================================================================
 # OpenTelemetry Collector Configuration (Observability)
@@ -186,7 +187,9 @@ minio:
   persistence:
     enabled: true
     size: 5Gi  # Reduced for demo
-  defaultBuckets: "floe-data,floe-artifacts"
+  # Keep this list aligned with demo/manifest.yaml so the demo install path
+  # exposes the same bucket contract the data-product manifest advertises.
+  defaultBuckets: "floe-iceberg,floe-artifacts"
 
 # =============================================================================
 # Jaeger Configuration (Distributed Tracing - Demo Visualization)

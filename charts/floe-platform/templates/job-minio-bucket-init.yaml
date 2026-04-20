@@ -1,0 +1,67 @@
+{{- $provisioning := .Values.minio.provisioning | default dict }}
+{{- if and .Values.minio.enabled (get $provisioning "fallbackJob" | default false) }}
+{{- $bucketName := trimPrefix "s3://" .Values.polaris.bootstrap.defaultBaseLocation | splitList "/" | first }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-minio-bucket-init
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio-bucket-init
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        {{- include "floe-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: minio-bucket-init
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "floe-platform.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "floe-platform.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: bucket-init
+          image: minio/mc:RELEASE.2025-01-17T23-25-50Z
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          securityContext:
+            {{- include "floe-platform.containerSecurityContext" . | nindent 12 }}
+          {{- with (get $provisioning "fallbackJobResources") }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
+            - name: MINIO_HOST
+              value: {{ include "floe-platform.minio.fullname" . | quote }}
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "floe-platform.minio.secretName" . }}
+                  key: root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "floe-platform.minio.secretName" . }}
+                  key: root-password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              mc alias set local "http://${MINIO_HOST}:9000" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
+              mc mb --ignore-existing "local/{{ $bucketName }}"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

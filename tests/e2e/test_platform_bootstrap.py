@@ -379,7 +379,7 @@ class TestPlatformBootstrap(IntegrationTestBase):
         1. Verifying MinIO pod is running
         2. Verifying MinIO health endpoint responds
         3. Using MinIO mc CLI to list actual buckets
-        4. Verifying 'warehouse' bucket exists
+        4. Verifying the configured MinIO bucket exists
 
         Raises:
             AssertionError: If buckets are missing or MinIO is not functional.

@@ -12,7 +12,7 @@ Requirements tested:
     AC-28.2: S3 endpoint required when S3 enabled
     AC-28.3: Both values files pass enhanced schema (no regressions)
     AC-28.4: Custom overlays not blocked (additionalProperties: true)
-    AC-28.5: Environment enum enforced (dev, qa, staging, prod, test only)
+    AC-28.5: Environment enum enforced (dev, qa, staging, prod, test, demo only)
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ ENVIRONMENT_FIELD = "environment"
 
 # The exact set of valid environment values per the schema enum.
 # Tests MUST verify ALL of these are accepted; a partial enum is a bug.
-VALID_ENVIRONMENTS = ("dev", "qa", "staging", "prod", "test")
+VALID_ENVIRONMENTS = ("dev", "qa", "staging", "prod", "test", "demo")
 
 
 # ---------------------------------------------------------------------------
@@ -678,10 +678,11 @@ class TestEnvironmentEnumEnforced:
     """Tests that global.environment only accepts the defined enum values.
 
     AC-28.5: global.environment MUST only accept ["dev", "qa", "staging",
-    "prod", "test"]. Any other value (typos like "production", random strings
-    like "invalid", numeric strings, empty strings) MUST be rejected at
-    install time via schema validation. This prevents silent misconfiguration
-    where an operator deploys to a non-existent environment tier.
+    "prod", "test", "demo"]. Any other value (typos like "production",
+    random strings like "invalid", numeric strings, empty strings) MUST be
+    rejected at install time via schema validation. This prevents silent
+    misconfiguration where an operator deploys to a non-existent environment
+    tier.
     """
 
     # -- Positive controls: each valid enum value MUST be accepted ----------
@@ -744,7 +745,7 @@ class TestEnvironmentEnumEnforced:
             "helm template should have FAILED with global.environment=invalid, "
             "but it succeeded. This means the schema does not enforce AC-28.5 "
             "(environment enum constraint). The enum MUST reject values outside "
-            "['dev', 'qa', 'staging', 'prod', 'test'].\n"
+            "['dev', 'qa', 'staging', 'prod', 'test', 'demo'].\n"
             f"STDOUT (first 500 chars): {_stdout_text(result)[:500]}"
         )
 
