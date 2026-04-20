@@ -9,8 +9,10 @@
 # Environment:
 #   KUBECONFIG          Path to kubeconfig (default: ~/.kube/config)
 #   JOB_TIMEOUT         Job completion timeout in seconds (default: 3600)
+#   JOB_STARTUP_TIMEOUT Startup-only timeout in seconds (default: 180)
 #   SKIP_BUILD          Skip image build if set to "true" (default: false)
 #   IMAGE_LOAD_METHOD   How to load image: auto|kind|devpod|skip (default: auto)
+#   STARTUP_ONLY        Exit after proving pod startup boundary (default: false)
 #   TEST_SUITE          Test suite to run: e2e|e2e-destructive (default: e2e)
 #   LOG_TAIL_LINES      Lines to capture per pod on failure (default: 100)
 #   DEVPOD_REMOTE_WORKDIR Remote repo root inside the DevPod workspace
@@ -29,8 +31,10 @@ source "${SCRIPT_DIR}/common.sh"
 KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
 TEST_NAMESPACE="${FLOE_NAMESPACE}"
 JOB_TIMEOUT="${JOB_TIMEOUT:-3600}"
+JOB_STARTUP_TIMEOUT="${JOB_STARTUP_TIMEOUT:-180}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
 IMAGE_LOAD_METHOD="${IMAGE_LOAD_METHOD:-auto}"
+STARTUP_ONLY="${STARTUP_ONLY:-false}"
 TEST_SUITE="${TEST_SUITE:-e2e}"
 IMAGE_NAME="floe-test-runner:latest"
 ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts"
@@ -124,6 +128,61 @@ extract_pod_logs() {
 
     info "Pod log extraction complete: ${collected} pod(s) collected"
     info "Pod logs saved to: ${ARTIFACTS_DIR}/pod-logs/"
+}
+
+job_pod_name() {
+    kubectl get pods -n "${TEST_NAMESPACE}" \
+        -l "job-name=${JOB_NAME}" \
+        --sort-by=.metadata.creationTimestamp \
+        -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null || true
+}
+
+job_waiting_reason() {
+    local pod_name="$1"
+    kubectl get pod "${pod_name}" -n "${TEST_NAMESPACE}" \
+        -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || true
+}
+
+job_started_at() {
+    local pod_name="$1"
+    kubectl get pod "${pod_name}" -n "${TEST_NAMESPACE}" \
+        -o jsonpath='{.status.containerStatuses[0].state.running.startedAt}{.status.containerStatuses[0].state.terminated.startedAt}' 2>/dev/null || true
+}
+
+assert_startup_boundary() {
+    local pod_name=""
+    local waiting_reason=""
+    local started_at=""
+
+    info "STARTUP_ONLY=true — waiting up to ${JOB_STARTUP_TIMEOUT}s for the pod startup boundary..."
+
+    for _ in $(seq 1 "${JOB_STARTUP_TIMEOUT}"); do
+        pod_name=$(job_pod_name)
+        if [[ -n "${pod_name}" ]]; then
+            waiting_reason=$(job_waiting_reason "${pod_name}")
+            started_at=$(job_started_at "${pod_name}")
+
+            case "${waiting_reason}" in
+                ImagePullBackOff|ErrImagePull|CreateContainerConfigError)
+                    extract_pod_logs
+                    error "Test pod hit startup failure reason '${waiting_reason}'."
+                    error "Pod: ${pod_name}"
+                    return 1
+                    ;;
+            esac
+
+            if [[ -n "${started_at}" ]]; then
+                info "Startup boundary passed for pod '${pod_name}'."
+                return 0
+            fi
+        fi
+
+        sleep 1
+    done
+
+    extract_pod_logs
+    error "Test pod did not reach a started state within ${JOB_STARTUP_TIMEOUT}s."
+    return 1
 }
 
 # Select Job name and chart-rendered template based on TEST_SUITE
@@ -251,6 +310,14 @@ info "Submitting ${TEST_SUITE} test Job from chart..."
 floe_render_test_job "${JOB_TEMPLATE}" | kubectl apply -f -
 info "Job '${JOB_NAME}' submitted. Waiting up to ${JOB_TIMEOUT}s for completion..."
 
+if [[ "${STARTUP_ONLY}" == "true" ]]; then
+    if assert_startup_boundary; then
+        info "E2E startup boundary PASSED"
+        exit 0
+    fi
+    exit 1
+fi
+
 # --- Step 5: Wait for completion ---
 
 # kubectl wait returns non-zero on timeout
@@ -272,10 +339,7 @@ info "Extracting test results..."
 mkdir -p "${ARTIFACTS_DIR}"
 
 # Get pod name for the Job
-POD_NAME=$(kubectl get pods -n "${TEST_NAMESPACE}" \
-    -l "job-name=${JOB_NAME}" \
-    --sort-by=.metadata.creationTimestamp \
-    -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null || true)
+POD_NAME=$(job_pod_name)
 
 if [[ -n "${POD_NAME}" ]]; then
     # Extract logs (use TEST_SUITE in filename to avoid overwriting between suites)
