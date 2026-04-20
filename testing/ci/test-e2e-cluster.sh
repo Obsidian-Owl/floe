@@ -283,7 +283,7 @@ if [[ "${IMAGE_LOAD_METHOD}" == "skip" ]]; then
     info "Skipping image build and load (IMAGE_LOAD_METHOD=skip)"
 elif [[ "${SKIP_BUILD}" != "true" ]]; then
     info "Building test runner image..."
-    docker build -t "${IMAGE_NAME}" -f testing/Dockerfile . 2>&1 | tail -5
+    scripts/with-public-docker-config.sh docker build -t "${IMAGE_NAME}" -f testing/Dockerfile . 2>&1 | tail -5
     load_image "${IMAGE_NAME}"
 else
     info "Skipping image build (SKIP_BUILD=true)"

@@ -9,7 +9,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${SCRIPT_DIR}/common.sh"
 
 COMMAND="${1:-}"
-PLATFORM_READY_TIMEOUT="${PLATFORM_READY_TIMEOUT:-120}"
+PLATFORM_READY_TIMEOUT="${PLATFORM_READY_TIMEOUT:-900}"
 REMOTE_STARTUP_TIMEOUT="${REMOTE_STARTUP_TIMEOUT:-180}"
 REMOTE_JOB_TIMEOUT="${REMOTE_JOB_TIMEOUT:-600}"
 
@@ -44,6 +44,55 @@ remote_image_present() {
     return 1
 }
 
+sync_devpod_checkout() {
+    local workspace
+    workspace=$(devpod_workspace)
+
+    info "Syncing the current checkout into DevPod workspace '${workspace}'..."
+    COPYFILE_DISABLE=1 tar \
+        --exclude='.git' \
+        --exclude='.venv' \
+        --exclude='.mypy_cache' \
+        --exclude='.pytest_cache' \
+        --exclude='.ruff_cache' \
+        --exclude='test-artifacts' \
+        --exclude='.specify' \
+        -cf - -C "${PROJECT_ROOT}" . \
+        | devpod ssh "${workspace}" \
+            --start-services=false \
+            --workdir "${DEVPOD_REMOTE_WORKDIR}" \
+            --command "tar -xf -"
+}
+
+ensure_remote_demo_image_loaded() {
+    local demo_image="floe-dagster-demo:latest"
+
+    if remote_image_present "${demo_image}"; then
+        info "Remote demo image '${demo_image}' is present. Reloading it into Kind..."
+        devpod_remote_command \
+            "kind load docker-image '${demo_image}' --name '${FLOE_KIND_CLUSTER}'"
+        return 0
+    fi
+
+    sync_devpod_checkout
+    info "Remote demo image '${demo_image}' is missing. Rebuilding it in the DevPod workspace..."
+    devpod_remote_command \
+        "KIND_CLUSTER_NAME='${FLOE_KIND_CLUSTER}' make build-demo-image"
+}
+
+ensure_remote_test_runner_image_loaded() {
+    local test_runner_image="floe-test-runner:latest"
+
+    if remote_image_present "${test_runner_image}"; then
+        info "Remote test-runner image '${test_runner_image}' is present."
+        return 0
+    fi
+
+    sync_devpod_checkout
+    info "Remote test-runner image '${test_runner_image}' is missing. Rebuilding it in the DevPod workspace..."
+    devpod_remote_command "make test-integration-image"
+}
+
 ensure_devpod_ready() {
     local workspace
     workspace=$(devpod_workspace)
@@ -52,9 +101,24 @@ ensure_devpod_ready() {
     KUBECONFIG="$(devpod_kubeconfig_path)"
 }
 
+rebootstrap_remote_platform() {
+    info "Namespace '${FLOE_NAMESPACE}' is missing. Re-running the remote DevPod post-start bootstrap..."
+    devpod_remote_command "bash .devcontainer/hetzner/postStartCommand.sh"
+    ensure_devpod_ready
+}
+
 check_platform_ready() {
     ensure_devpod_ready
+    if ! kubectl get namespace "${FLOE_NAMESPACE}" >/dev/null 2>&1; then
+        rebootstrap_remote_platform
+    fi
     floe_require_cluster
+
+    if ! kubectl get helmrelease/floe-platform -n "${FLOE_NAMESPACE}" \
+        -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null \
+        | grep -qx "True"; then
+        ensure_remote_demo_image_loaded
+    fi
 
     info "Checking Flux-managed floe-platform readiness..."
     kubectl wait helmrelease/floe-platform -n "${FLOE_NAMESPACE}" \
@@ -69,11 +133,7 @@ check_platform_ready() {
 
 run_remote_kind_startup() {
     check_platform_ready
-    if ! remote_image_present "floe-test-runner:latest"; then
-        error "Remote image floe-test-runner:latest is not present in the DevPod workspace."
-        error "Rebuild it on the remote workspace before rerunning this proof."
-        return 1
-    fi
+    ensure_remote_test_runner_image_loaded
 
     info "Loading the cached remote test-runner image into Kind..."
     devpod_remote_command \

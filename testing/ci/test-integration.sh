@@ -87,7 +87,7 @@ floe_require_cluster
 # 1. Build Docker image
 if [[ "${SKIP_BUILD}" != "true" ]]; then
     echo "Building test runner image..."
-    docker build -t "${IMAGE_NAME}" -f testing/Dockerfile .
+    scripts/with-public-docker-config.sh docker build -t "${IMAGE_NAME}" -f testing/Dockerfile .
     echo "Image built successfully."
     echo ""
 

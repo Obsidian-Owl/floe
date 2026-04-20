@@ -123,7 +123,7 @@ test-integration: ## Run integration tests (requires Kind cluster)
 .PHONY: test-integration-image
 test-integration-image: ## Build test runner Docker image
 	@echo "Building test runner Docker image..."
-	@docker build -t floe-test-runner:latest -f testing/Dockerfile .
+	@scripts/with-public-docker-config.sh docker build -t floe-test-runner:latest -f testing/Dockerfile .
 	@echo "Image built: floe-test-runner:latest"
 
 .PHONY: test-e2e
@@ -206,11 +206,11 @@ helm-validate: ## Validate rendered manifests against K8s 1.28 schema (container
 	@echo "Validating Helm templates with containerized kubeconform (ghcr.io/yannh/kubeconform:v0.6.7)..."
 	@echo "  Validating with values.yaml (production defaults)..."
 	@helm template floe-platform charts/floe-platform --values charts/floe-platform/values.yaml | \
-		docker run --rm -i ghcr.io/yannh/kubeconform:v0.6.7 \
+		scripts/with-public-docker-config.sh docker run --rm -i ghcr.io/yannh/kubeconform:v0.6.7 \
 			--strict --kubernetes-version 1.28.0 --ignore-missing-schemas -summary
 	@echo "  Validating with values-test.yaml (test overrides)..."
 	@helm template floe-platform charts/floe-platform --values charts/floe-platform/values-test.yaml | \
-		docker run --rm -i ghcr.io/yannh/kubeconform:v0.6.7 \
+		scripts/with-public-docker-config.sh docker run --rm -i ghcr.io/yannh/kubeconform:v0.6.7 \
 			--strict --kubernetes-version 1.28.0 --ignore-missing-schemas -summary
 	@echo "Helm template validation passed!"
 
@@ -368,7 +368,7 @@ build-demo-image: compile-demo ## Build Dagster demo Docker image and load to Ki
 	@echo "Building Dagster demo Docker image..."
 	@echo "  Plugins: $(DEMO_PLUGINS)"
 	@echo "  Platform: $(DOCKER_PLATFORM)"
-	@docker build -f docker/dagster-demo/Dockerfile \
+	@scripts/with-public-docker-config.sh docker build -f docker/dagster-demo/Dockerfile \
 		--build-arg FLOE_PLUGINS="$(DEMO_PLUGINS)" \
 		--platform $(DOCKER_PLATFORM) \
 		-t floe-dagster-demo:latest .
