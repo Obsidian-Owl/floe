@@ -40,6 +40,38 @@ LOG_TAIL_LINES="${LOG_TAIL_LINES:-100}"
 info() { echo "[INFO] $*"; }
 error() { echo "[ERROR] $*" >&2; }
 
+devpod_workspace() {
+    printf '%s\n' "${DEVPOD_WORKSPACE:-floe}"
+}
+
+devpod_kubeconfig_path() {
+    local workspace
+    workspace=$(devpod_workspace)
+    printf '%s\n' "${HOME}/.kube/devpod-${workspace}.config"
+}
+
+ensure_devpod_ready() {
+    local workspace
+    workspace=$(devpod_workspace)
+
+    if ! command -v devpod >/dev/null 2>&1; then
+        error "devpod CLI not found. Install it or use IMAGE_LOAD_METHOD=kind."
+        exit 1
+    fi
+
+    DEVPOD_WORKSPACE="${workspace}" \
+        bash "${PROJECT_ROOT}/scripts/devpod-ensure-ready.sh"
+    export KUBECONFIG
+    KUBECONFIG="$(devpod_kubeconfig_path)"
+}
+
+devpod_remote_command() {
+    local command="$1"
+    local workspace
+    workspace=$(devpod_workspace)
+    devpod ssh "${workspace}" --start-services=false --workdir /workspace --command "${command}"
+}
+
 # extract_pod_logs — collect pod logs and K8s events on failure for debugging
 extract_pod_logs() {
     mkdir -p "${ARTIFACTS_DIR}/pod-logs"
@@ -126,10 +158,11 @@ load_image() {
             return 0
             ;;
         devpod)
-            local ssh_host="${DEVPOD_WORKSPACE:-floe}.devpod"
-            info "Loading image into DevPod workspace '${ssh_host}' and Kind cluster '${kind_cluster}'..."
-            docker save "${image}" | ssh "${ssh_host}" docker load
-            ssh "${ssh_host}" kind load docker-image "${image}" --name "${kind_cluster}"
+            local workspace
+            workspace=$(devpod_workspace)
+            info "Loading image into DevPod workspace '${workspace}' and Kind cluster '${kind_cluster}'..."
+            docker save "${image}" | devpod_remote_command "docker load"
+            devpod_remote_command "kind load docker-image '${image}' --name '${kind_cluster}'"
             return 0
             ;;
         *)
@@ -141,10 +174,11 @@ load_image() {
             fi
 
             if [[ -n "${DEVPOD_WORKSPACE:-}" ]]; then
-                local ssh_host="${DEVPOD_WORKSPACE:-floe}.devpod"
-                info "Loading image into DevPod workspace '${ssh_host}' and Kind cluster '${kind_cluster}'..."
-                docker save "${image}" | ssh "${ssh_host}" docker load
-                ssh "${ssh_host}" kind load docker-image "${image}" --name "${kind_cluster}"
+                local workspace
+                workspace=$(devpod_workspace)
+                info "Loading image into DevPod workspace '${workspace}' and Kind cluster '${kind_cluster}'..."
+                docker save "${image}" | devpod_remote_command "docker load"
+                devpod_remote_command "kind load docker-image '${image}' --name '${kind_cluster}'"
                 return 0
             fi
 
@@ -162,6 +196,14 @@ trap cleanup_job EXIT
 if ! command -v helm &>/dev/null; then
     error "helm not found."
     exit 1
+fi
+
+if [[ "${IMAGE_LOAD_METHOD}" == "devpod" ]]; then
+    ensure_devpod_ready
+elif [[ "${IMAGE_LOAD_METHOD}" == "auto" && -n "${DEVPOD_WORKSPACE:-}" ]]; then
+    if ! kubectl cluster-info >/dev/null 2>&1; then
+        ensure_devpod_ready
+    fi
 fi
 
 floe_require_cluster

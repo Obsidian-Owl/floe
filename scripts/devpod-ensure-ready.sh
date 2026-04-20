@@ -19,7 +19,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE="${DEVPOD_WORKSPACE:-floe}"
-KUBECONFIG_PATH="${HOME}/.kube/devpod-floe.config"
+KUBECONFIG_PATH="${HOME}/.kube/devpod-${WORKSPACE}.config"
 
 log() {
     echo "[devpod-ready] $*"
