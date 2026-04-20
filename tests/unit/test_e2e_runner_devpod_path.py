@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _SCRIPT_PATH = _REPO_ROOT / "testing" / "ci" / "test-e2e-cluster.sh"
+_COMMON_SH_PATH = _REPO_ROOT / "testing" / "ci" / "common.sh"
+_ENV_EXAMPLE_PATH = _REPO_ROOT / ".env.example"
 
 
 def _read_script() -> str:
     """Return the current test-e2e-cluster.sh contents."""
     return _SCRIPT_PATH.read_text()
+
+
+def _read_common_sh() -> str:
+    """Return the shared CI shell config."""
+    return _COMMON_SH_PATH.read_text()
 
 
 @pytest.mark.requirement("AC-7")
@@ -50,4 +56,25 @@ def test_devpod_mode_prepares_kubeconfig_via_helper_script() -> None:
     )
     assert script.index("ensure_devpod_ready") < script.index("floe_require_cluster"), (
         "DevPod readiness must be established before floe_require_cluster runs."
+    )
+
+
+@pytest.mark.requirement("AC-7")
+def test_devpod_mode_uses_configurable_remote_workdir() -> None:
+    """DevPod mode must expose the remote workspace path as config, not a literal."""
+    script = _read_script()
+    common = _read_common_sh()
+    env_example = _ENV_EXAMPLE_PATH.read_text()
+    assert 'DEVPOD_REMOTE_WORKDIR:=/workspace' in common, (
+        "common.sh must define a default DevPod remote workdir so callers "
+        "have one documented place to override it."
+    )
+    assert "DEVPOD_REMOTE_WORKDIR" in env_example, (
+        ".env.example must surface the DevPod remote workdir override for users."
+    )
+    assert '--workdir "${remote_workdir}"' in script, (
+        "test-e2e-cluster.sh must pass a configurable workdir to `devpod ssh`."
+    )
+    assert "--workdir /workspace" not in script, (
+        "test-e2e-cluster.sh still hardcodes the remote DevPod workdir."
     )

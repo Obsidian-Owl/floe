@@ -28,12 +28,15 @@
 # Leave the branch unset by default so setup-cluster.sh can auto-detect the
 # current checkout while still allowing explicit overrides from the environment.
 : "${FLOE_FLUX_GIT_BRANCH:=}"
+# Remote repo root inside the DevPod workspace. Defaults to the devcontainer
+# workspaceFolder, but stays overrideable for non-standard layouts.
+: "${DEVPOD_REMOTE_WORKDIR:=/workspace}"
 
 # Flux CD version — pinned for reproducible CI installs.
 : "${FLUX_VERSION:=2.5.1}"
 
 export FLOE_RELEASE_NAME FLOE_NAMESPACE FLOE_KIND_CLUSTER FLOE_CHART_DIR FLOE_VALUES_FILE
-export FLOE_FLUX_GIT_URL FLOE_FLUX_GIT_BRANCH
+export FLOE_FLUX_GIT_URL FLOE_FLUX_GIT_BRANCH DEVPOD_REMOTE_WORKDIR
 export FLUX_VERSION
 
 # floe_service_name <component>

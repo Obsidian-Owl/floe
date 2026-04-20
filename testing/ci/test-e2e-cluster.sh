@@ -13,6 +13,7 @@
 #   IMAGE_LOAD_METHOD   How to load image: auto|kind|devpod|skip (default: auto)
 #   TEST_SUITE          Test suite to run: e2e|e2e-destructive (default: e2e)
 #   LOG_TAIL_LINES      Lines to capture per pod on failure (default: 100)
+#   DEVPOD_REMOTE_WORKDIR Remote repo root inside the DevPod workspace
 #
 # Identifiers (release name, namespace, Kind cluster, chart dir, values file)
 # come from testing/ci/common.sh — override via FLOE_* env vars there.
@@ -50,6 +51,10 @@ devpod_kubeconfig_path() {
     printf '%s\n' "${HOME}/.kube/devpod-${workspace}.config"
 }
 
+devpod_remote_workdir() {
+    printf '%s\n' "${DEVPOD_REMOTE_WORKDIR}"
+}
+
 ensure_devpod_ready() {
     local workspace
     workspace=$(devpod_workspace)
@@ -68,8 +73,13 @@ ensure_devpod_ready() {
 devpod_remote_command() {
     local command="$1"
     local workspace
+    local remote_workdir
     workspace=$(devpod_workspace)
-    devpod ssh "${workspace}" --start-services=false --workdir /workspace --command "${command}"
+    remote_workdir=$(devpod_remote_workdir)
+    devpod ssh "${workspace}" \
+        --start-services=false \
+        --workdir "${remote_workdir}" \
+        --command "${command}"
 }
 
 # extract_pod_logs — collect pod logs and K8s events on failure for debugging
