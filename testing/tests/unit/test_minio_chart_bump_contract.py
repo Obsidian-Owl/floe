@@ -297,7 +297,7 @@ class TestDefaultBucketsFirstPath:
         )
         shell_script = command[-1]
         assert isinstance(shell_script, str), "Bucket-init shell script must be a string."
-        assert "mc mb --ignore-existing \"local/floe-iceberg\"" in shell_script, (
+        assert 'mc mb --ignore-existing "local/floe-iceberg"' in shell_script, (
             "values-test.yaml must render the fallback hook against the floe-iceberg bucket."
         )
 
