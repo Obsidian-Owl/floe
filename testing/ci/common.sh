@@ -98,6 +98,56 @@ floe_render_test_job() {
         -s "templates/${template}"
 }
 
+# floe_test_artifacts_pvc_name
+# Returns the PVC name for chart-managed test artifacts. Reads the real chart
+# template instead of hardcoding `test-artifacts` in runner scripts.
+floe_test_artifacts_pvc_name() {
+    local rendered_pvc
+    rendered_pvc="$(mktemp "${TMPDIR:-/tmp}/floe-test-pvc-name.XXXXXX.yaml")"
+
+    floe_render_test_job "tests/pvc-artifacts.yaml" > "${rendered_pvc}" \
+        || { rm -f "${rendered_pvc}"; return 1; }
+    if [[ ! -s "${rendered_pvc}" ]]; then
+        rm -f "${rendered_pvc}"
+        return 1
+    fi
+
+    kubectl create --dry-run=client -f "${rendered_pvc}" -o jsonpath='{.metadata.name}' \
+        || { rm -f "${rendered_pvc}"; return 1; }
+    rm -f "${rendered_pvc}"
+}
+
+# floe_ensure_test_artifacts_pvc
+# values-test.yaml keeps tests.enabled=false during normal platform installs,
+# so the chart-owned artifacts PVC is absent on a fresh cluster. Create the
+# real PVC from the chart template and backfill the Helm ownership metadata
+# Helm later validates during upgrade/import checks.
+floe_ensure_test_artifacts_pvc() {
+    local rendered_pvc
+    rendered_pvc="$(mktemp "${TMPDIR:-/tmp}/floe-test-pvc.XXXXXX.yaml")"
+
+    floe_render_test_job "tests/pvc-artifacts.yaml" > "${rendered_pvc}" \
+        || { rm -f "${rendered_pvc}"; return 1; }
+    if [[ ! -s "${rendered_pvc}" ]]; then
+        rm -f "${rendered_pvc}"
+        return 0
+    fi
+
+    kubectl apply -f "${rendered_pvc}" >/dev/null \
+        || { rm -f "${rendered_pvc}"; return 1; }
+    kubectl annotate -f "${rendered_pvc}" \
+        meta.helm.sh/release-name="${FLOE_RELEASE_NAME}" \
+        meta.helm.sh/release-namespace="${FLOE_NAMESPACE}" \
+        --overwrite >/dev/null \
+        || { rm -f "${rendered_pvc}"; return 1; }
+    kubectl label -f "${rendered_pvc}" \
+        app.kubernetes.io/managed-by=Helm \
+        --overwrite >/dev/null \
+        || { rm -f "${rendered_pvc}"; return 1; }
+
+    rm -f "${rendered_pvc}"
+}
+
 # floe_require_cluster
 # Fails fast if the Kind cluster is not reachable. Writes a single
 # actionable message to stderr and exits 1 on failure.
