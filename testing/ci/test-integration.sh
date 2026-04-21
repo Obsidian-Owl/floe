@@ -123,12 +123,18 @@ kubectl delete job "${JOB_NAME}" -n "${TEST_NAMESPACE}" --ignore-not-found 2>/de
 # Wait for pod cleanup
 sleep 2
 
-# 6. Render and apply the test Job from the chart
+# 6. Ensure the chart-gated artifacts PVC exists with Helm ownership metadata.
+echo "Ensuring chart-owned test artifacts PVC exists..."
+floe_ensure_test_artifacts_pvc \
+    || { echo "ERROR: Failed to provision the chart-owned test-artifacts PVC" >&2; exit 1; }
+echo ""
+
+# 7. Render and apply the test Job from the chart
 echo "Creating ${TEST_SUITE} test Job from chart..."
 floe_render_test_job "${JOB_TEMPLATE}" | kubectl apply -f - 2>/dev/null | grep "${JOB_NAME}" || true
 echo ""
 
-# 7. Wait for test pod to start
+# 8. Wait for test pod to start
 echo "Waiting for test pod to start..."
 for i in $(seq 1 60); do
     pod_status=$(kubectl get pods -l "test-type=${TEST_TYPE_LABEL}" -n "${TEST_NAMESPACE}" -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "")
@@ -145,27 +151,31 @@ done
 echo "Test pod is running."
 echo ""
 
-# 8. Stream logs (follows until Job completes)
+# 9. Stream logs (follows until Job completes)
 echo "=== Test Output ==="
 kubectl logs -f "job/${JOB_NAME}" -n "${TEST_NAMESPACE}" --tail=-1 2>/dev/null || true
 echo "=== End Test Output ==="
 echo ""
 
-# 9. Extract JUnit XML from PVC (E2E suites only)
+# 10. Extract JUnit XML from PVC (E2E suites only)
 if [[ "${TEST_SUITE}" == "e2e" || "${TEST_SUITE}" == "e2e-destructive" ]]; then
+    artifacts_pvc_name="$(floe_test_artifacts_pvc_name || true)"
     echo "Extracting test artifacts from PVC..."
     # Create helper pod to access PVC
     kubectl run artifact-extractor \
         --image=busybox:1.36.1 \
         --restart=Never \
         -n "${TEST_NAMESPACE}" \
-        --overrides='{
+        --overrides="$(cat <<EOF
+{
             "spec": {
-                "volumes": [{"name": "artifacts", "persistentVolumeClaim": {"claimName": "test-artifacts"}}],
+                "volumes": [{"name": "artifacts", "persistentVolumeClaim": {"claimName": "${artifacts_pvc_name}"}}],
                 "containers": [{"name": "extractor", "image": "busybox:1.36.1", "command": ["sleep", "30"],
                     "volumeMounts": [{"name": "artifacts", "mountPath": "/artifacts"}]}]
             }
-        }' 2>/dev/null || echo "WARNING: Failed to create artifact-extractor pod — JUnit XML will be missing" >&2
+        }
+EOF
+)" 2>/dev/null || echo "WARNING: Failed to create artifact-extractor pod — JUnit XML will be missing" >&2
 
     # Wait for helper pod
     kubectl wait --for=condition=ready pod/artifact-extractor -n "${TEST_NAMESPACE}" --timeout=30s 2>/dev/null || true
@@ -184,7 +194,7 @@ if [[ "${TEST_SUITE}" == "e2e" || "${TEST_SUITE}" == "e2e-destructive" ]]; then
     echo ""
 fi
 
-# 10. Check Job status
+# 11. Check Job status
 echo "Checking Job status..."
 JOB_SUCCEEDED=$(kubectl get job "${JOB_NAME}" -n "${TEST_NAMESPACE}" -o jsonpath='{.status.succeeded}' 2>/dev/null || echo "")
 JOB_FAILED=$(kubectl get job "${JOB_NAME}" -n "${TEST_NAMESPACE}" -o jsonpath='{.status.failed}' 2>/dev/null || echo "")

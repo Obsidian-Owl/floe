@@ -301,6 +301,11 @@ cleanup_job
 info "Applying ${TEST_SUITE} RBAC from chart..."
 floe_render_test_job "${RBAC_TEMPLATE}" | kubectl apply -f -
 
+# Ensure the chart-gated artifacts PVC exists before the Job mounts it.
+
+info "Ensuring chart-owned test artifacts PVC exists..."
+floe_ensure_test_artifacts_pvc
+
 # --- Step 4: Submit Job ---
 
 info "Submitting ${TEST_SUITE} test Job from chart..."

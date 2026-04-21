@@ -67,7 +67,7 @@ def _render_pvc_template(values_file: Path, *extra_args: str) -> list[dict[str, 
             capture_output=True,
             text=True,
             cwd=REPO_ROOT,
-            timeout=120,
+            timeout=30,
             check=False,
         )
 
@@ -120,11 +120,7 @@ class TestPvcTemplateOwnership:
             "PVC must preserve the test-artifacts component label."
         )
 
-        expected_pvc_name = (
-            values_test_config.get("tests", {})
-            .get("artifacts", {})
-            .get("pvcName")
-        )
+        expected_pvc_name = values_test_config.get("tests", {}).get("artifacts", {}).get("pvcName")
         assert isinstance(expected_pvc_name, str) and expected_pvc_name, (
             "values-test.yaml must expose tests.artifacts.pvcName."
         )
@@ -144,6 +140,5 @@ class TestPvcTemplateOwnership:
 
         docs = _render_pvc_template(VALUES_TEST, "--set", "tests.enabled=false")
         assert docs == [], (
-            "templates/tests/pvc-artifacts.yaml must render no documents when "
-            "tests.enabled=false."
+            "templates/tests/pvc-artifacts.yaml must render no documents when tests.enabled=false."
         )

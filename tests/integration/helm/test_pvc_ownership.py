@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 def _run_command(args: list[str], timeout: int = 180) -> subprocess.CompletedProcess[str]:
@@ -55,8 +56,22 @@ def _build_focused_pvc_chart(temp_root: Path, platform_chart_path: Path) -> tupl
     return chart_dir, values_test
 
 
+def _load_test_artifacts_pvc_name(values_test: Path) -> str:
+    """Return the configured test-artifacts PVC name from values-test.yaml."""
+
+    values = yaml.safe_load(values_test.read_text(encoding="utf-8"))
+    assert isinstance(values, dict), f"{values_test} did not parse to a mapping"
+
+    pvc_name = values.get("tests", {}).get("artifacts", {}).get("pvcName")
+    assert isinstance(pvc_name, str) and pvc_name, (
+        "values-test.yaml must expose tests.artifacts.pvcName for the focused PVC proof."
+    )
+    return pvc_name
+
+
 @pytest.mark.requirement("AC-4")
 @pytest.mark.requirement("AC-5")
+@pytest.mark.integration
 @pytest.mark.slow
 @pytest.mark.usefixtures("kind_cluster", "helm_available")
 def test_pvc_template_is_helm_owned_and_repeat_upgrade_safe(
@@ -69,7 +84,7 @@ def test_pvc_template_is_helm_owned_and_repeat_upgrade_safe(
 
     chart_dir, values_test = _build_focused_pvc_chart(tmp_path, platform_chart_path)
     release_name = f"{helm_release_name}-pvc"
-    pvc_name = "test-artifacts"
+    pvc_name = _load_test_artifacts_pvc_name(values_test)
 
     install_result = _run_command(
         [
