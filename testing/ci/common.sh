@@ -65,12 +65,16 @@ floe_ensure_chart_dependencies() {
     local dep_status=""
 
     dependency_list=$(helm dependency list "${FLOE_CHART_DIR}") || return 1
-    if ! printf '%s\n' "${dependency_list}" | tail -n +2 | grep -q $'\tmissing$'; then
+    if ! printf '%s\n' "${dependency_list}" | tail -n +2 | grep -Eq $'\tmissing[[:space:]]*$'; then
         return 0
     fi
 
     echo "Resolving Helm chart dependencies for ${FLOE_CHART_DIR}..." >&2
     while IFS=$'\t' read -r dep_name dep_version dep_repo dep_status; do
+        dep_name="${dep_name%%[[:space:]]*}"
+        dep_repo="${dep_repo%%[[:space:]]*}"
+        dep_status="${dep_status%%[[:space:]]*}"
+
         if [[ -z "${dep_name}" || "${dep_status}" != "missing" || -z "${dep_repo}" ]]; then
             continue
         fi
@@ -86,7 +90,7 @@ floe_render_test_job() {
         echo "floe_render_test_job: template path required" >&2
         return 2
     fi
-    floe_ensure_chart_dependencies
+    floe_ensure_chart_dependencies || return 1
     helm template "${FLOE_RELEASE_NAME}" "${FLOE_CHART_DIR}" \
         -f "${FLOE_VALUES_FILE}" \
         --set tests.enabled=true \
