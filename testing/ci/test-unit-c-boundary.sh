@@ -126,9 +126,9 @@ check_platform_ready() {
 
     info "Checking required platform secrets..."
     kubectl get secret -n "${FLOE_NAMESPACE}" \
-        floe-platform-postgresql \
-        floe-platform-minio \
-        floe-platform-polaris-credentials >/dev/null
+        "$(floe_service_name postgresql)" \
+        "$(floe_service_name minio)" \
+        "$(floe_service_name polaris-credentials)" >/dev/null
 }
 
 run_remote_kind_startup() {

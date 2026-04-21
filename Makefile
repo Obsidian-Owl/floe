@@ -183,8 +183,10 @@ helm-package-flux-artifact: ## Package the vendored floe-platform chart used by 
 	@echo "Packaging floe-platform Flux artifact..."
 	@mkdir -p charts/floe-platform/flux-artifacts
 	@rm -f charts/floe-platform/flux-artifacts/floe-platform.tgz
+	@rm -f charts/floe-platform/flux-artifacts/floe-platform-*.tgz
 	@helm dependency build charts/floe-platform >/dev/null
-	@helm package charts/floe-platform --destination charts/floe-platform/flux-artifacts >/dev/null
+	@package_path=$$(helm package charts/floe-platform --destination charts/floe-platform/flux-artifacts | awk '{print $$NF}'); \
+		mv "$${package_path}" charts/floe-platform/flux-artifacts/floe-platform.tgz
 	@echo "Packaged charts/floe-platform/flux-artifacts/floe-platform.tgz"
 
 .PHONY: helm-template
