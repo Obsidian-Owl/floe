@@ -100,6 +100,7 @@ class TestE2EWorkflowPhaseE1:
 
         workflow = _load_workflow()
         triggers = _workflow_triggers(workflow)
+        permissions = workflow.get("permissions")
 
         pull_request = triggers.get("pull_request")
         assert isinstance(pull_request, dict), "pull_request trigger must be configured."
@@ -108,6 +109,9 @@ class TestE2EWorkflowPhaseE1:
         )
         assert "merge_group" in triggers, "merge_group trigger must be declared."
         assert "workflow_dispatch" in triggers, "workflow_dispatch trigger must be declared."
+        assert permissions == {"contents": "read", "pull-requests": "read"}, (
+            "Workflow permissions must grant contents: read and pull-requests: read."
+        )
 
     @pytest.mark.requirement("AC-2")
     def test_e2e_job_is_dormant_in_phase_e1(self) -> None:
@@ -144,7 +148,7 @@ class TestE2EWorkflowPhaseE1:
             "charts/**",
             "testing/**",
             "plugins/**",
-            "floe-core/**",
+            "packages/floe-core/**",
             "tests/**",
             "pyproject.toml",
             "uv.lock",
@@ -280,7 +284,12 @@ class TestE2EWorkflowPhaseE1:
         assert isinstance(upload_path, str) and upload_path.strip(), (
             "Artifact upload must define a non-empty path list."
         )
-        for artifact_path in ["test-artifacts/", "/tmp/floe-*.log"]:
+        for artifact_path in [
+            "test-artifacts/",
+            "/tmp/floe-*.log",
+            "e2e-results.xml",
+            "e2e-destructive-results.xml",
+        ]:
             assert artifact_path in upload_path, f"Artifact upload must include '{artifact_path}'."
 
     @pytest.mark.requirement("AC-9")
@@ -307,15 +316,17 @@ class TestE2EWorkflowPhaseE1:
                 f"Step '{step_name}' must pin {action_prefix} to the repo-standard SHA."
             )
 
-        assert _step_by_name(e2e, "Install dependencies").get("run") == "uv sync --all-extras --dev"
+        assert _step_by_name(e2e, "Install dependencies").get("run") == "uv sync --all-extras --dev", (
+            "Install dependencies step must run 'uv sync --all-extras --dev'."
+        )
         assert (
             _step_by_name(e2e, "Deploy floe-platform").get("run")
             == "./testing/k8s/setup-cluster.sh"
-        )
+        ), "Deploy step must run './testing/k8s/setup-cluster.sh'."
         assert (
             _step_by_name(e2e, "Run E2E (standard + destructive)").get("run")
             == "make test-e2e-full"
-        )
+        ), "E2E run step must invoke 'make test-e2e-full'."
 
     @pytest.mark.requirement("AC-10")
     def test_workflow_contract_is_wired_into_fast_specwright_unit_slice(self) -> None:
