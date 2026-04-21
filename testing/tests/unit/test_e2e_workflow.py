@@ -2,18 +2,21 @@
 
 These tests parse ``.github/workflows/e2e.yml`` directly so the CI gate can be
 validated without needing GitHub Actions infrastructure, Kind, or Helm CLI.
+They also verify that the workflow contract remains wired into the repo's fast
+Specwright unit command.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e.yml"
+FAST_UNIT_SLICE = REPO_ROOT / "testing" / "ci" / "test-specwright-unit.sh"
 
 CHECKOUT_SHA = "34e114876b0b11c390a56381ad16ebd13914f8d5"
 SETUP_PYTHON_SHA = "a26af69be951a213d495a4c3e4e4022e16d87065"
@@ -24,24 +27,32 @@ PATHS_FILTER_SHA = "d1c1ffe0248fe513906c8e24db8ea791d46f8590"
 UPLOAD_ARTIFACT_SHA = "ea165f8d65b6e75b540449e92b4886f43607fa02"
 
 
-def _load_workflow() -> dict[str, Any]:
+def _load_workflow() -> dict[object, Any]:
     """Return the parsed E2E workflow YAML."""
 
     assert E2E_WORKFLOW.exists(), f"Expected E2E workflow at {E2E_WORKFLOW}"
     workflow = yaml.safe_load(E2E_WORKFLOW.read_text(encoding="utf-8"))
     assert isinstance(workflow, dict), "Workflow YAML must parse to a mapping."
-    return workflow
+    return cast(dict[object, Any], workflow)
 
 
-def _workflow_triggers(workflow: dict[str, Any]) -> dict[str, Any]:
+def _workflow_text() -> str:
+    """Return the raw workflow text for comment-level contract checks."""
+
+    return E2E_WORKFLOW.read_text(encoding="utf-8")
+
+
+def _workflow_triggers(workflow: dict[object, Any]) -> dict[str, Any]:
     """Return the workflow trigger mapping, handling YAML 1.1 ``on`` parsing."""
 
-    triggers = workflow.get("on", workflow.get(True, {}))
+    triggers = workflow.get("on")
+    if triggers is None and True in workflow:
+        triggers = workflow[True]
     assert isinstance(triggers, dict), "Workflow triggers must parse to a mapping."
-    return triggers
+    return cast(dict[str, Any], triggers)
 
 
-def _job(workflow: dict[str, Any], job_name: str) -> dict[str, Any]:
+def _job(workflow: dict[object, Any], job_name: str) -> dict[str, Any]:
     """Return one named job from the workflow."""
 
     jobs = workflow.get("jobs", {})
@@ -49,7 +60,7 @@ def _job(workflow: dict[str, Any], job_name: str) -> dict[str, Any]:
     assert job_name in jobs, f"Missing '{job_name}' job. Found jobs: {list(jobs.keys())}"
     job = jobs[job_name]
     assert isinstance(job, dict), f"Job '{job_name}' must parse to a mapping."
-    return job
+    return cast(dict[str, Any], job)
 
 
 def _job_steps(job: dict[str, Any]) -> list[dict[str, Any]]:
@@ -146,6 +157,29 @@ class TestE2EWorkflowPhaseE1:
 
         e2e = _job(workflow, "e2e")
         assert e2e.get("needs") == ["changed-files"], "e2e job must depend on changed-files."
+
+    @pytest.mark.requirement("AC-4")
+    def test_phase_e2_activation_contract_is_recorded_inline(self) -> None:
+        """Phase E1 must keep the exact future Phase E2 condition discoverable inline."""
+
+        workflow = _load_workflow()
+        e2e = _job(workflow, "e2e")
+        workflow_text = _workflow_text()
+
+        assert e2e.get("if") is False, "Phase E1 must keep the live e2e job dormant."
+        assert "# Phase E2 activation contract (arm in a follow-on PR):" in workflow_text, (
+            "Workflow must explain where the future arming condition lives."
+        )
+        for expected_line in [
+            "# if: |",
+            "#   github.event_name == 'merge_group' ||",
+            "#   github.event_name == 'workflow_dispatch' ||",
+            "#   contains(github.event.pull_request.labels.*.name, 'run-e2e') ||",
+            "#   needs.changed-files.outputs.infra == 'true'",
+        ]:
+            assert expected_line in workflow_text, (
+                f"Workflow must keep the Phase E2 activation line '{expected_line}'."
+            )
 
     @pytest.mark.requirement("AC-5")
     def test_workflow_has_non_cancelling_ref_scoped_concurrency(self) -> None:
@@ -281,4 +315,15 @@ class TestE2EWorkflowPhaseE1:
         assert (
             _step_by_name(e2e, "Run E2E (standard + destructive)").get("run")
             == "make test-e2e-full"
+        )
+
+    @pytest.mark.requirement("AC-10")
+    def test_workflow_contract_is_wired_into_fast_specwright_unit_slice(self) -> None:
+        """The workflow contract test must stay in the configured fast unit command."""
+
+        assert FAST_UNIT_SLICE.exists(), f"Expected fast unit command at {FAST_UNIT_SLICE}"
+        script_text = FAST_UNIT_SLICE.read_text(encoding="utf-8")
+
+        assert "testing/tests/unit/test_e2e_workflow.py" in script_text, (
+            "Fast Specwright unit command must include the workflow contract test."
         )

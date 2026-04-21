@@ -57,7 +57,7 @@ jobs:
     # Phase E1: keep the workflow dormant until Units A-D have landed and the
     # end-to-end path is ready to serve as a real CI gate.
     #
-    # Phase E2 replacement:
+    # Phase E2 activation contract (arm in a follow-on PR):
     # if: |
     #   github.event_name == 'merge_group' ||
     #   github.event_name == 'workflow_dispatch' ||
