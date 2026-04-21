@@ -318,11 +318,8 @@ class TestE2EWorkflowPhaseE1:
             )
 
         assert (
-            _step_by_name(e2e, "Install dependencies").get("run")
-            == "uv sync --all-extras --dev"
-        ), (
-            "Install dependencies step must run 'uv sync --all-extras --dev'."
-        )
+            _step_by_name(e2e, "Install dependencies").get("run") == "uv sync --all-extras --dev"
+        ), "Install dependencies step must run 'uv sync --all-extras --dev'."
         assert (
             _step_by_name(e2e, "Deploy floe-platform").get("run")
             == "./testing/k8s/setup-cluster.sh"
