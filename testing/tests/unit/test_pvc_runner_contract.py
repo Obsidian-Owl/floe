@@ -16,9 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 COMMON_HELPERS = REPO_ROOT / "testing" / "ci" / "common.sh"
 E2E_RUNNER = REPO_ROOT / "testing" / "ci" / "test-e2e-cluster.sh"
 INTEGRATION_RUNNER = REPO_ROOT / "testing" / "ci" / "test-integration.sh"
-FAIL_FAST_CLEANUP_RETURN = (
-    r'\s*\\?\s*\|\|\s*\{ rm -f "\$\{rendered_pvc\}"; return 1; \}'
-)
+FAIL_FAST_CLEANUP_RETURN = r'\s*\\?\s*\|\|\s*\{ rm -f "\$\{rendered_pvc\}"; return 1; \}'
 
 
 class TestRunnerPvcOwnershipContract:
@@ -64,8 +62,7 @@ class TestRunnerPvcOwnershipContract:
             pytest.param(
                 (
                     r'floe_render_test_job "tests/pvc-artifacts\.yaml" > '
-                    r'"\$\{rendered_pvc\}"'
-                    + FAIL_FAST_CLEANUP_RETURN
+                    r'"\$\{rendered_pvc\}"' + FAIL_FAST_CLEANUP_RETURN
                 ),
                 "rendering the chart PVC template",
                 id="render-fail-fast",
@@ -115,8 +112,7 @@ class TestRunnerPvcOwnershipContract:
             pytest.param(
                 (
                     r'floe_render_test_job "tests/pvc-artifacts\.yaml" > '
-                    r'"\$\{rendered_pvc\}"'
-                    + FAIL_FAST_CLEANUP_RETURN
+                    r'"\$\{rendered_pvc\}"' + FAIL_FAST_CLEANUP_RETURN
                 ),
                 "rendering the chart PVC template",
                 id="name-helper-render-fail-fast",
@@ -124,8 +120,7 @@ class TestRunnerPvcOwnershipContract:
             pytest.param(
                 (
                     r'kubectl create --dry-run=client -f "\$\{rendered_pvc\}" '
-                    r"-o jsonpath='\{\.metadata\.name\}'"
-                    + FAIL_FAST_CLEANUP_RETURN
+                    r"-o jsonpath='\{\.metadata\.name\}'" + FAIL_FAST_CLEANUP_RETURN
                 ),
                 "parsing the rendered PVC name",
                 id="name-helper-parse-fail-fast",
