@@ -154,6 +154,7 @@ class TestE2EWorkflowPhaseE1:
             "uv.lock",
             "Makefile",
             "Dockerfile*",
+            "**/Dockerfile*",
             ".github/workflows/ci.yml",
             ".github/workflows/e2e.yml",
         ]:
@@ -316,7 +317,10 @@ class TestE2EWorkflowPhaseE1:
                 f"Step '{step_name}' must pin {action_prefix} to the repo-standard SHA."
             )
 
-        assert _step_by_name(e2e, "Install dependencies").get("run") == "uv sync --all-extras --dev", (
+        assert (
+            _step_by_name(e2e, "Install dependencies").get("run")
+            == "uv sync --all-extras --dev"
+        ), (
             "Install dependencies step must run 'uv sync --all-extras --dev'."
         )
         assert (

@@ -49,6 +49,7 @@ jobs:
               - 'uv.lock'
               - 'Makefile'
               - 'Dockerfile*'
+              - '**/Dockerfile*'
               - '.github/workflows/ci.yml'
               - '.github/workflows/e2e.yml'
 
