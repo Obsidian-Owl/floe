@@ -16,6 +16,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 COMMON_HELPERS = REPO_ROOT / "testing" / "ci" / "common.sh"
 E2E_RUNNER = REPO_ROOT / "testing" / "ci" / "test-e2e-cluster.sh"
 INTEGRATION_RUNNER = REPO_ROOT / "testing" / "ci" / "test-integration.sh"
+FAIL_FAST_CLEANUP_RETURN = (
+    r'\s*\\?\s*\|\|\s*\{ rm -f "\$\{rendered_pvc\}"; return 1; \}'
+)
 
 
 class TestRunnerPvcOwnershipContract:
@@ -59,22 +62,32 @@ class TestRunnerPvcOwnershipContract:
         ("pattern", "description"),
         [
             pytest.param(
-                r'floe_render_test_job "tests/pvc-artifacts\.yaml" > "\$\{rendered_pvc\}"\s*\\?\s*\|\|\s*\{ rm -f "\$\{rendered_pvc\}"; return 1; \}',
+                (
+                    r'floe_render_test_job "tests/pvc-artifacts\.yaml" > '
+                    r'"\$\{rendered_pvc\}"'
+                    + FAIL_FAST_CLEANUP_RETURN
+                ),
                 "rendering the chart PVC template",
                 id="render-fail-fast",
             ),
             pytest.param(
-                r'kubectl apply -f "\$\{rendered_pvc\}" >/dev/null\s*\\?\s*\|\|\s*\{ rm -f "\$\{rendered_pvc\}"; return 1; \}',
+                r'kubectl apply -f "\$\{rendered_pvc\}" >/dev/null' + FAIL_FAST_CLEANUP_RETURN,
                 "applying the rendered PVC",
                 id="apply-fail-fast",
             ),
             pytest.param(
-                r'kubectl annotate -f "\$\{rendered_pvc\}".*?--overwrite >/dev/null\s*\\?\s*\|\|\s*\{ rm -f "\$\{rendered_pvc\}"; return 1; \}',
+                (
+                    r'kubectl annotate -f "\$\{rendered_pvc\}".*?--overwrite >/dev/null'
+                    + FAIL_FAST_CLEANUP_RETURN
+                ),
                 "adding Helm release annotations",
                 id="annotate-fail-fast",
             ),
             pytest.param(
-                r'kubectl label -f "\$\{rendered_pvc\}".*?--overwrite >/dev/null\s*\\?\s*\|\|\s*\{ rm -f "\$\{rendered_pvc\}"; return 1; \}',
+                (
+                    r'kubectl label -f "\$\{rendered_pvc\}".*?--overwrite >/dev/null'
+                    + FAIL_FAST_CLEANUP_RETURN
+                ),
                 "restoring the Helm managed-by label",
                 id="label-fail-fast",
             ),
