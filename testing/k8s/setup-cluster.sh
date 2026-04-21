@@ -12,6 +12,8 @@
 #   SKIP_SERVICES: Set to "true" to skip deploying services
 #   SKIP_MONITORING: Set to "true" to skip Prometheus/Grafana stack
 #   VERBOSE: Set to "true" for verbose output
+#   FLOE_FLUX_GIT_URL: Git URL for the Flux GitRepository test fixture
+#   FLOE_FLUX_GIT_BRANCH: Git branch for the Flux GitRepository fixture
 #
 # After setup, services are accessible via localhost:
 #   Polaris:     http://localhost:8181
@@ -439,15 +441,69 @@ install_flux() {
     log_info "Flux controllers are ready"
 }
 
+resolve_flux_git_branch() {
+    if [[ -n "${FLOE_FLUX_GIT_BRANCH:-}" ]]; then
+        printf '%s\n' "${FLOE_FLUX_GIT_BRANCH}"
+        return 0
+    fi
+
+    local current_branch=""
+    if git -C "${PROJECT_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        current_branch=$(git -C "${PROJECT_ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    fi
+
+    if [[ -n "${current_branch}" && "${current_branch}" != "HEAD" ]]; then
+        printf '%s\n' "${current_branch}"
+        return 0
+    fi
+
+    printf '%s\n' "main"
+}
+
+render_flux_manifests() {
+    local flux_git_branch="$1"
+    local rendered_dir
+    rendered_dir=$(mktemp -d "${TMPDIR:-/tmp}/floe-flux-manifests.XXXXXX")
+
+    cp "${PROJECT_ROOT}/charts/floe-platform/flux/"*.yaml "${rendered_dir}/"
+
+    if [[ "${FLOE_FLUX_GIT_URL}" == *"|"* ]]; then
+        log_error "FLOE_FLUX_GIT_URL contains pipe character — cannot safely render Flux manifests"
+        rm -rf "${rendered_dir}"
+        return 1
+    fi
+
+    sed -i.bak \
+        -e "s|url: https://github.com/Obsidian-Owl/floe|url: ${FLOE_FLUX_GIT_URL}|" \
+        -e "s|branch: main|branch: ${flux_git_branch}|" \
+        "${rendered_dir}/gitrepository.yaml"
+    rm -f "${rendered_dir}/gitrepository.yaml.bak"
+
+    printf '%s\n' "${rendered_dir}"
+}
+
 # Deploy via Flux: apply CRDs and wait for HelmRelease readiness
 deploy_via_flux() {
     # Ensure target namespace exists (direct Helm path uses --create-namespace,
     # but kubectl apply of namespaced CRDs requires the namespace to pre-exist)
     kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-    log_info "Applying Flux HelmRelease CRDs..."
+    local flux_git_branch
+    flux_git_branch=$(resolve_flux_git_branch)
+    local flux_manifest_dir
+    flux_manifest_dir=$(render_flux_manifests "${flux_git_branch}")
+    local apply_status=0
 
-    kubectl apply -f "${PROJECT_ROOT}/charts/floe-platform/flux/"
+    log_info "Applying Flux HelmRelease CRDs from ${FLOE_FLUX_GIT_URL}@${flux_git_branch}..."
+    if kubectl apply -f "${flux_manifest_dir}/"; then
+        apply_status=0
+    else
+        apply_status=$?
+    fi
+    rm -rf "${flux_manifest_dir}"
+    if [[ "${apply_status}" -ne 0 ]]; then
+        return "${apply_status}"
+    fi
 
     log_info "Waiting for floe-platform HelmRelease to be ready (up to 15m)..."
     if ! kubectl wait helmrelease/floe-platform -n "${NAMESPACE}" \

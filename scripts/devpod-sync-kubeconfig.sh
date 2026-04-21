@@ -10,13 +10,13 @@
 #   ./scripts/devpod-sync-kubeconfig.sh [workspace-name]
 #
 # After running, use:
-#   export KUBECONFIG=~/.kube/devpod-floe.config
+#   export KUBECONFIG=~/.kube/devpod-${WORKSPACE}.config
 #   kubectl get pods -n floe-test
 
 set -euo pipefail
 
 WORKSPACE="${1:-floe}"
-LOCAL_KUBECONFIG="${HOME}/.kube/devpod-floe.config"
+LOCAL_KUBECONFIG="${HOME}/.kube/devpod-${WORKSPACE}.config"
 LOCAL_API_PORT="${DEVPOD_K8S_API_PORT:-26443}"
 
 # Validate inputs contain only safe characters

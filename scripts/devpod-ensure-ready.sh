@@ -13,13 +13,21 @@
 #   ./scripts/devpod-ensure-ready.sh
 #
 # Environment:
-#   DEVPOD_WORKSPACE  Workspace name (default: floe)
+#   DEVPOD_WORKSPACE    Workspace name (default: floe)
+#   DEVPOD_AUTO_START   Restart a stopped saved workspace when set to 1 (default: 1)
+#   DEVPOD_PROVIDER     Provider used for restart/create via devpod up (default: hetzner)
+#   DEVPOD_DEVCONTAINER Devcontainer path used for restart/create
+#                       (default: .devcontainer/hetzner/devcontainer.json)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 WORKSPACE="${DEVPOD_WORKSPACE:-floe}"
-KUBECONFIG_PATH="${HOME}/.kube/devpod-floe.config"
+AUTO_START="${DEVPOD_AUTO_START:-1}"
+PROVIDER="${DEVPOD_PROVIDER:-hetzner}"
+DEVCONTAINER="${DEVPOD_DEVCONTAINER:-.devcontainer/hetzner/devcontainer.json}"
+KUBECONFIG_PATH="${HOME}/.kube/devpod-${WORKSPACE}.config"
 
 log() {
     echo "[devpod-ready] $*"
@@ -30,6 +38,10 @@ error() {
     exit 1
 }
 
+workspace_running() {
+    devpod status "${WORKSPACE}" 2>&1 | grep -qi "running"
+}
+
 # ─── 1. Check devpod CLI exists ──────────────────────────────────────────────
 
 if ! command -v devpod >/dev/null 2>&1; then
@@ -38,12 +50,28 @@ if ! command -v devpod >/dev/null 2>&1; then
   Then run: make devpod-up"
 fi
 
-# ─── 2. Check workspace is running ───────────────────────────────────────────
+# ─── 2. Check workspace is running (or start it if allowed) ─────────────────
 
-if ! devpod status "${WORKSPACE}" 2>&1 | grep -qi "running"; then
-    error "DevPod workspace '${WORKSPACE}' is not running.
+if ! workspace_running; then
+    case "${AUTO_START}" in
+        1|true|TRUE|yes|YES)
+            if [[ "${DEVCONTAINER}" != .devcontainer/* ]]; then
+                error "DEVPOD_DEVCONTAINER must stay under .devcontainer/. Got: '${DEVCONTAINER}'"
+            fi
+
+            log "Workspace '${WORKSPACE}' is not running. Starting it via devpod up..."
+            devpod up "${PROJECT_ROOT}" \
+                --id "${WORKSPACE}" \
+                --provider "${PROVIDER}" \
+                --devcontainer-path "${DEVCONTAINER}" \
+                --ide none
+            ;;
+        *)
+            error "DevPod workspace '${WORKSPACE}' is not running.
   Start it with: make devpod-up
   Or run the full lifecycle: make devpod-test"
+            ;;
+    esac
 fi
 
 log "Workspace '${WORKSPACE}' is running."

@@ -10,6 +10,7 @@ spec:
   chart:
     spec:
       chart: ./charts/floe-jobs
+      reconcileStrategy: Revision
       valuesFiles:
         - ./charts/floe-jobs/values.yaml
         - ./charts/floe-jobs/values-test.yaml
