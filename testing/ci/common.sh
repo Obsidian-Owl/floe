@@ -57,12 +57,36 @@ floe_service_name() {
 # (e.g. "tests/job-e2e.yaml").
 #
 # Emits rendered YAML on stdout — caller pipes to `kubectl apply -f -`.
+floe_ensure_chart_dependencies() {
+    local dependency_list=""
+    local dep_name=""
+    local dep_version=""
+    local dep_repo=""
+    local dep_status=""
+
+    dependency_list=$(helm dependency list "${FLOE_CHART_DIR}") || return 1
+    if ! printf '%s\n' "${dependency_list}" | tail -n +2 | grep -q $'\tmissing$'; then
+        return 0
+    fi
+
+    echo "Resolving Helm chart dependencies for ${FLOE_CHART_DIR}..." >&2
+    while IFS=$'\t' read -r dep_name dep_version dep_repo dep_status; do
+        if [[ -z "${dep_name}" || "${dep_status}" != "missing" || -z "${dep_repo}" ]]; then
+            continue
+        fi
+        helm repo add --force-update "floe-${dep_name}" "${dep_repo}" >/dev/null
+    done < <(printf '%s\n' "${dependency_list}" | tail -n +2)
+
+    helm dependency build "${FLOE_CHART_DIR}" >/dev/null
+}
+
 floe_render_test_job() {
     local template="$1"
     if [[ -z "${template}" ]]; then
         echo "floe_render_test_job: template path required" >&2
         return 2
     fi
+    floe_ensure_chart_dependencies
     helm template "${FLOE_RELEASE_NAME}" "${FLOE_CHART_DIR}" \
         -f "${FLOE_VALUES_FILE}" \
         --set tests.enabled=true \
