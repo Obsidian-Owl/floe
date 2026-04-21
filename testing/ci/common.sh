@@ -24,11 +24,19 @@
 : "${FLOE_KIND_CLUSTER:=${KIND_CLUSTER:-${KIND_CLUSTER_NAME:-floe-test}}}"
 : "${FLOE_CHART_DIR:=charts/floe-platform}"
 : "${FLOE_VALUES_FILE:=charts/floe-platform/values-test.yaml}"
+: "${FLOE_FLUX_GIT_URL:=https://github.com/Obsidian-Owl/floe}"
+# Leave the branch unset by default so setup-cluster.sh can auto-detect the
+# current checkout while still allowing explicit overrides from the environment.
+: "${FLOE_FLUX_GIT_BRANCH:=}"
+# Remote repo root inside the DevPod workspace. Defaults to the devcontainer
+# workspaceFolder, but stays overrideable for non-standard layouts.
+: "${DEVPOD_REMOTE_WORKDIR:=/workspace}"
 
 # Flux CD version — pinned for reproducible CI installs.
 : "${FLUX_VERSION:=2.5.1}"
 
 export FLOE_RELEASE_NAME FLOE_NAMESPACE FLOE_KIND_CLUSTER FLOE_CHART_DIR FLOE_VALUES_FILE
+export FLOE_FLUX_GIT_URL FLOE_FLUX_GIT_BRANCH DEVPOD_REMOTE_WORKDIR
 export FLUX_VERSION
 
 # floe_service_name <component>
@@ -49,12 +57,40 @@ floe_service_name() {
 # (e.g. "tests/job-e2e.yaml").
 #
 # Emits rendered YAML on stdout — caller pipes to `kubectl apply -f -`.
+floe_ensure_chart_dependencies() {
+    local dependency_list=""
+    local dep_name=""
+    local dep_version=""
+    local dep_repo=""
+    local dep_status=""
+
+    dependency_list=$(helm dependency list "${FLOE_CHART_DIR}") || return 1
+    if ! printf '%s\n' "${dependency_list}" | tail -n +2 | grep -Eq $'\tmissing[[:space:]]*$'; then
+        return 0
+    fi
+
+    echo "Resolving Helm chart dependencies for ${FLOE_CHART_DIR}..." >&2
+    while IFS=$'\t' read -r dep_name dep_version dep_repo dep_status; do
+        dep_name="${dep_name%%[[:space:]]*}"
+        dep_repo="${dep_repo%%[[:space:]]*}"
+        dep_status="${dep_status%%[[:space:]]*}"
+
+        if [[ -z "${dep_name}" || "${dep_status}" != "missing" || -z "${dep_repo}" ]]; then
+            continue
+        fi
+        helm repo add --force-update "floe-${dep_name}" "${dep_repo}" >/dev/null
+    done < <(printf '%s\n' "${dependency_list}" | tail -n +2)
+
+    helm dependency build "${FLOE_CHART_DIR}" >/dev/null
+}
+
 floe_render_test_job() {
     local template="$1"
     if [[ -z "${template}" ]]; then
         echo "floe_render_test_job: template path required" >&2
         return 2
     fi
+    floe_ensure_chart_dependencies || return 1
     helm template "${FLOE_RELEASE_NAME}" "${FLOE_CHART_DIR}" \
         -f "${FLOE_VALUES_FILE}" \
         --set tests.enabled=true \

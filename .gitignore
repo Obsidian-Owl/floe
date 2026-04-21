@@ -99,6 +99,7 @@ site/
 # Kubernetes / Helm
 charts/**/charts/
 *.tgz
+!charts/floe-platform/flux-artifacts/*.tgz
 
 # Terraform
 .terraform/
