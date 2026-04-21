@@ -101,14 +101,12 @@ else
     echo ""
 fi
 
-# 3. Apply RBAC and PVC for the selected suite — rendered from the chart.
+# 3. Apply RBAC for the selected suite — rendered from the chart.
 # Every identifier (ServiceAccount name, Role name, PVC name) flows from
 # _helpers.tpl, so this script contains no literal `floe-platform-*` strings.
-echo "Rendering and applying ${TEST_SUITE} RBAC and PVC from chart..."
+echo "Rendering and applying ${TEST_SUITE} RBAC from chart..."
 floe_render_test_job "${RBAC_TEMPLATE}" | kubectl apply -f - \
     || { echo "ERROR: Failed to apply ${TEST_SUITE} RBAC" >&2; exit 1; }
-floe_render_test_job "tests/pvc-artifacts.yaml" | kubectl apply -f - \
-    || { echo "ERROR: Failed to apply test-artifacts PVC" >&2; exit 1; }
 echo ""
 
 # 4. Wait for service pods to be ready

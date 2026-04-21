@@ -183,15 +183,12 @@ fi
 
 cleanup_job
 
-# --- Step 3: Render and apply RBAC + PVC + Job from the chart ---
+# --- Step 3: Render and apply RBAC + Job from the chart ---
 # All identifiers flow from _helpers.tpl via floe_render_test_job — no
 # manifest paths, no raw YAML heredocs, no hardcoded resource names.
 
 info "Applying ${TEST_SUITE} RBAC from chart..."
 floe_render_test_job "${RBAC_TEMPLATE}" | kubectl apply -f -
-
-info "Applying test-artifacts PVC from chart..."
-floe_render_test_job "tests/pvc-artifacts.yaml" | kubectl apply -f -
 
 # --- Step 4: Submit Job ---
 
