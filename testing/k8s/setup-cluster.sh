@@ -467,6 +467,12 @@ render_flux_manifests() {
 
     cp "${PROJECT_ROOT}/charts/floe-platform/flux/"*.yaml "${rendered_dir}/"
 
+    if [[ "${FLOE_FLUX_GIT_URL}" == *"|"* ]]; then
+        log_error "FLOE_FLUX_GIT_URL contains pipe character — cannot safely render Flux manifests"
+        rm -rf "${rendered_dir}"
+        return 1
+    fi
+
     sed -i.bak \
         -e "s|url: https://github.com/Obsidian-Owl/floe|url: ${FLOE_FLUX_GIT_URL}|" \
         -e "s|branch: main|branch: ${flux_git_branch}|" \

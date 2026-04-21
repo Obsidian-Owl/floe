@@ -66,7 +66,7 @@ def test_devpod_mode_uses_configurable_remote_workdir() -> None:
     script = _read_script()
     common = _read_common_sh()
     env_example = _ENV_EXAMPLE_PATH.read_text()
-    assert 'DEVPOD_REMOTE_WORKDIR:=/workspace' in common, (
+    assert "DEVPOD_REMOTE_WORKDIR:=/workspace" in common, (
         "common.sh must define a default DevPod remote workdir so callers "
         "have one documented place to override it."
     )

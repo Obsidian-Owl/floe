@@ -78,7 +78,7 @@ def test_public_docker_wrapper_defaults_builds_to_classic_engine(tmp_path: Path)
     fake_docker.write_text(
         "#!/usr/bin/env bash\n"
         "printf 'DOCKER_BUILDKIT=%s\\n' \"${DOCKER_BUILDKIT:-}\" \n"
-        "printf 'ARGS=%s %s\\n' \"$1\" \"$2\"\n"
+        'printf \'ARGS=%s %s\\n\' "$1" "$2"\n'
     )
     fake_docker.chmod(0o755)
     result = _run_wrapper(
@@ -97,8 +97,7 @@ def test_build_demo_image_uses_public_docker_wrapper() -> None:
     makefile = _MAKEFILE_PATH.read_text()
     assert "scripts/with-public-docker-config.sh docker build" in makefile
     assert (
-        "scripts/with-public-docker-config.sh docker run --rm -i "
-        "ghcr.io/yannh/kubeconform:v0.6.7"
+        "scripts/with-public-docker-config.sh docker run --rm -i ghcr.io/yannh/kubeconform:v0.6.7"
     ) in makefile
     assert (
         "scripts/with-public-docker-config.sh docker build -t floe-test-runner:latest "
@@ -113,11 +112,11 @@ def test_ci_test_runner_builds_use_public_docker_wrapper() -> None:
     integration_script = (_REPO_ROOT / "testing" / "ci" / "test-integration.sh").read_text()
     assert (
         "scripts/with-public-docker-config.sh docker build -t "
-        "\"${IMAGE_NAME}\" -f testing/Dockerfile ."
+        '"${IMAGE_NAME}" -f testing/Dockerfile .'
     ) in e2e_script
     assert (
         "scripts/with-public-docker-config.sh docker build -t "
-        "\"${IMAGE_NAME}\" -f testing/Dockerfile ."
+        '"${IMAGE_NAME}" -f testing/Dockerfile .'
     ) in integration_script
 
 

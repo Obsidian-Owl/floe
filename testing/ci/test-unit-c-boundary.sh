@@ -38,7 +38,7 @@ devpod_remote_command() {
 
 remote_image_present() {
     local image_name="${1:-floe-test-runner:latest}"
-    if devpod_remote_command "docker image inspect ${image_name} >/dev/null 2>&1"; then
+    if devpod_remote_command "docker image inspect '${image_name}' >/dev/null 2>&1"; then
         return 0
     fi
     return 1

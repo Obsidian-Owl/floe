@@ -39,6 +39,7 @@ help: ## Show this help message
 	@echo "  make helm-test       Run Helm tests (RELEASE=..., NAMESPACE=...)"
 	@echo "  make helm-install-dev Install floe-platform for development"
 	@echo "  make helm-install-test Install floe with test values (CI/CD)"
+	@echo "  make helm-package-flux-artifact Package the vendored floe-platform chart for Flux"
 	@echo "  make helm-upgrade-test Upgrade test installation"
 	@echo "  make helm-uninstall-test Uninstall test installation"
 	@echo "  make helm-test-infra Verify test infrastructure health"
@@ -176,6 +177,15 @@ helm-lint: ## Lint Helm charts
 	@helm lint charts/floe-platform --values charts/floe-platform/values.yaml
 	@helm lint charts/floe-jobs --values charts/floe-jobs/values.yaml
 	@echo "Helm linting passed!"
+
+.PHONY: helm-package-flux-artifact
+helm-package-flux-artifact: ## Package the vendored floe-platform chart used by Flux
+	@echo "Packaging floe-platform Flux artifact..."
+	@mkdir -p charts/floe-platform/flux-artifacts
+	@rm -f charts/floe-platform/flux-artifacts/floe-platform.tgz
+	@helm dependency build charts/floe-platform >/dev/null
+	@helm package charts/floe-platform --destination charts/floe-platform/flux-artifacts >/dev/null
+	@echo "Packaged charts/floe-platform/flux-artifacts/floe-platform.tgz"
 
 .PHONY: helm-template
 helm-template: ## Render Helm templates (ENV=dev|staging|prod)
