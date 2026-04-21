@@ -105,13 +105,15 @@ floe_test_artifacts_pvc_name() {
     local rendered_pvc
     rendered_pvc="$(mktemp "${TMPDIR:-/tmp}/floe-test-pvc-name.XXXXXX.yaml")"
 
-    floe_render_test_job "tests/pvc-artifacts.yaml" > "${rendered_pvc}"
+    floe_render_test_job "tests/pvc-artifacts.yaml" > "${rendered_pvc}" \
+        || { rm -f "${rendered_pvc}"; return 1; }
     if [[ ! -s "${rendered_pvc}" ]]; then
         rm -f "${rendered_pvc}"
         return 1
     fi
 
-    kubectl create --dry-run=client -f "${rendered_pvc}" -o jsonpath='{.metadata.name}'
+    kubectl create --dry-run=client -f "${rendered_pvc}" -o jsonpath='{.metadata.name}' \
+        || { rm -f "${rendered_pvc}"; return 1; }
     rm -f "${rendered_pvc}"
 }
 

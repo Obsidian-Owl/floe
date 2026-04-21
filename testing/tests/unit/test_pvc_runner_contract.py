@@ -25,15 +25,15 @@ class TestRunnerPvcOwnershipContract:
     """AC-3 plus the runner-side fresh-cluster provisioning contract."""
 
     @staticmethod
-    def _pvc_helper_body(helper_text: str) -> str:
-        """Extract the shared PVC bootstrap helper body from common.sh."""
+    def _common_helper_body(helper_text: str, helper_name: str) -> str:
+        """Extract a shared helper body from common.sh."""
 
         match = re.search(
-            r"floe_ensure_test_artifacts_pvc\(\)\s*\{(?P<body>.*?)^\}",
+            rf"{helper_name}\(\)\s*\{{(?P<body>.*?)^\}}",
             helper_text,
             re.DOTALL | re.MULTILINE,
         )
-        assert match is not None, "Could not locate floe_ensure_test_artifacts_pvc() in common.sh."
+        assert match is not None, f"Could not locate {helper_name}() in common.sh."
         return match.group("body")
 
     @pytest.mark.requirement("AC-3")
@@ -102,10 +102,49 @@ class TestRunnerPvcOwnershipContract:
         """common.sh must stop immediately when PVC bootstrap commands fail."""
 
         helper_text = COMMON_HELPERS.read_text(encoding="utf-8")
-        helper_body = self._pvc_helper_body(helper_text)
+        helper_body = self._common_helper_body(helper_text, "floe_ensure_test_artifacts_pvc")
 
         assert re.search(pattern, helper_body, re.DOTALL), (
             "floe_ensure_test_artifacts_pvc() must remove the rendered manifest "
+            f"and return 1 immediately when {description} fails."
+        )
+
+    @pytest.mark.parametrize(
+        ("pattern", "description"),
+        [
+            pytest.param(
+                (
+                    r'floe_render_test_job "tests/pvc-artifacts\.yaml" > '
+                    r'"\$\{rendered_pvc\}"'
+                    + FAIL_FAST_CLEANUP_RETURN
+                ),
+                "rendering the chart PVC template",
+                id="name-helper-render-fail-fast",
+            ),
+            pytest.param(
+                (
+                    r'kubectl create --dry-run=client -f "\$\{rendered_pvc\}" '
+                    r"-o jsonpath='\{\.metadata\.name\}'"
+                    + FAIL_FAST_CLEANUP_RETURN
+                ),
+                "parsing the rendered PVC name",
+                id="name-helper-parse-fail-fast",
+            ),
+        ],
+    )
+    @pytest.mark.requirement("AC-3")
+    def test_pvc_name_helper_fails_fast_on_lookup_errors(
+        self,
+        pattern: str,
+        description: str,
+    ) -> None:
+        """PVC name helper must return non-zero when render/parse steps fail."""
+
+        helper_text = COMMON_HELPERS.read_text(encoding="utf-8")
+        helper_body = self._common_helper_body(helper_text, "floe_test_artifacts_pvc_name")
+
+        assert re.search(pattern, helper_body, re.DOTALL), (
+            "floe_test_artifacts_pvc_name() must remove the rendered manifest "
             f"and return 1 immediately when {description} fails."
         )
 
@@ -170,4 +209,25 @@ class TestRunnerPvcOwnershipContract:
         assert '"claimName": "test-artifacts"' not in runner_text, (
             f"{runner_label} still hardcodes the test-artifacts PVC name. "
             "PVC naming must flow from chart values via shared helpers."
+        )
+
+    @pytest.mark.requirement("AC-3")
+    def test_integration_runner_skips_artifact_extraction_when_pvc_name_lookup_fails(self) -> None:
+        """test-integration.sh must not mount an empty PVC name after lookup failure."""
+
+        runner_text = INTEGRATION_RUNNER.read_text(encoding="utf-8")
+
+        assert (
+            'if artifacts_pvc_name="$(floe_test_artifacts_pvc_name)" '
+            '&& [[ -n "${artifacts_pvc_name}" ]]; then'
+        ) in runner_text, (
+            "test-integration.sh must gate artifact extraction on a successful, non-empty "
+            "PVC name lookup."
+        )
+        assert (
+            'echo "WARNING: Could not resolve test artifacts PVC name '
+            '— JUnit XML will be missing" >&2'
+        ) in runner_text, (
+            "test-integration.sh must emit a direct warning when PVC name lookup fails "
+            "instead of creating an extractor pod with an empty claim name."
         )

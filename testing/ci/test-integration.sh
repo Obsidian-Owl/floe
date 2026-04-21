@@ -159,14 +159,15 @@ echo ""
 
 # 10. Extract JUnit XML from PVC (E2E suites only)
 if [[ "${TEST_SUITE}" == "e2e" || "${TEST_SUITE}" == "e2e-destructive" ]]; then
-    artifacts_pvc_name="$(floe_test_artifacts_pvc_name || true)"
-    echo "Extracting test artifacts from PVC..."
-    # Create helper pod to access PVC
-    kubectl run artifact-extractor \
-        --image=busybox:1.36.1 \
-        --restart=Never \
-        -n "${TEST_NAMESPACE}" \
-        --overrides="$(cat <<EOF
+    artifacts_pvc_name=""
+    if artifacts_pvc_name="$(floe_test_artifacts_pvc_name)" && [[ -n "${artifacts_pvc_name}" ]]; then
+        echo "Extracting test artifacts from PVC..."
+        # Create helper pod to access PVC
+        kubectl run artifact-extractor \
+            --image=busybox:1.36.1 \
+            --restart=Never \
+            -n "${TEST_NAMESPACE}" \
+            --overrides="$(cat <<EOF
 {
             "spec": {
                 "volumes": [{"name": "artifacts", "persistentVolumeClaim": {"claimName": "${artifacts_pvc_name}"}}],
@@ -177,21 +178,24 @@ if [[ "${TEST_SUITE}" == "e2e" || "${TEST_SUITE}" == "e2e-destructive" ]]; then
 EOF
 )" 2>/dev/null || echo "WARNING: Failed to create artifact-extractor pod — JUnit XML will be missing" >&2
 
-    # Wait for helper pod
-    kubectl wait --for=condition=ready pod/artifact-extractor -n "${TEST_NAMESPACE}" --timeout=30s 2>/dev/null || true
+        # Wait for helper pod
+        kubectl wait --for=condition=ready pod/artifact-extractor -n "${TEST_NAMESPACE}" --timeout=30s 2>/dev/null || true
 
-    # Copy artifacts
-    if [[ "${TEST_SUITE}" == "e2e" ]]; then
-        kubectl cp "${TEST_NAMESPACE}/artifact-extractor:/artifacts/e2e-results.xml" ./e2e-results.xml 2>/dev/null || \
-            echo "WARNING: Could not extract e2e-results.xml" >&2
+        # Copy artifacts
+        if [[ "${TEST_SUITE}" == "e2e" ]]; then
+            kubectl cp "${TEST_NAMESPACE}/artifact-extractor:/artifacts/e2e-results.xml" ./e2e-results.xml 2>/dev/null || \
+                echo "WARNING: Could not extract e2e-results.xml" >&2
+        else
+            kubectl cp "${TEST_NAMESPACE}/artifact-extractor:/artifacts/e2e-destructive-results.xml" ./e2e-destructive-results.xml 2>/dev/null || \
+                echo "WARNING: Could not extract e2e-destructive-results.xml" >&2
+        fi
+
+        # Clean up helper pod
+        kubectl delete pod artifact-extractor -n "${TEST_NAMESPACE}" --ignore-not-found 2>/dev/null || true
+        echo ""
     else
-        kubectl cp "${TEST_NAMESPACE}/artifact-extractor:/artifacts/e2e-destructive-results.xml" ./e2e-destructive-results.xml 2>/dev/null || \
-            echo "WARNING: Could not extract e2e-destructive-results.xml" >&2
+        echo "WARNING: Could not resolve test artifacts PVC name — JUnit XML will be missing" >&2
     fi
-
-    # Clean up helper pod
-    kubectl delete pod artifact-extractor -n "${TEST_NAMESPACE}" --ignore-not-found 2>/dev/null || true
-    echo ""
 fi
 
 # 11. Check Job status
