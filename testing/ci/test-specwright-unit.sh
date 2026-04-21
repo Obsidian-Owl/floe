@@ -19,6 +19,7 @@ cd "${PROJECT_ROOT}"
 uv run pytest -q \
     testing/tests/unit/test_polaris_fixture.py \
     testing/tests/unit/test_ci_workflows.py \
+    testing/tests/unit/test_e2e_workflow.py \
     testing/tests/unit/test_pvc_ownership_contract.py \
     testing/tests/unit/test_pvc_runner_contract.py \
     tests/unit/test_helm_bootstrap_template.py \
