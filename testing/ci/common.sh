@@ -124,20 +124,24 @@ floe_ensure_test_artifacts_pvc() {
     local rendered_pvc
     rendered_pvc="$(mktemp "${TMPDIR:-/tmp}/floe-test-pvc.XXXXXX.yaml")"
 
-    floe_render_test_job "tests/pvc-artifacts.yaml" > "${rendered_pvc}"
+    floe_render_test_job "tests/pvc-artifacts.yaml" > "${rendered_pvc}" \
+        || { rm -f "${rendered_pvc}"; return 1; }
     if [[ ! -s "${rendered_pvc}" ]]; then
         rm -f "${rendered_pvc}"
         return 0
     fi
 
-    kubectl apply -f "${rendered_pvc}" >/dev/null
+    kubectl apply -f "${rendered_pvc}" >/dev/null \
+        || { rm -f "${rendered_pvc}"; return 1; }
     kubectl annotate -f "${rendered_pvc}" \
         meta.helm.sh/release-name="${FLOE_RELEASE_NAME}" \
         meta.helm.sh/release-namespace="${FLOE_NAMESPACE}" \
-        --overwrite >/dev/null
+        --overwrite >/dev/null \
+        || { rm -f "${rendered_pvc}"; return 1; }
     kubectl label -f "${rendered_pvc}" \
         app.kubernetes.io/managed-by=Helm \
-        --overwrite >/dev/null
+        --overwrite >/dev/null \
+        || { rm -f "${rendered_pvc}"; return 1; }
 
     rm -f "${rendered_pvc}"
 }

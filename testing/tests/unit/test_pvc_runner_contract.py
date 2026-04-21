@@ -21,6 +21,18 @@ INTEGRATION_RUNNER = REPO_ROOT / "testing" / "ci" / "test-integration.sh"
 class TestRunnerPvcOwnershipContract:
     """AC-3 plus the runner-side fresh-cluster provisioning contract."""
 
+    @staticmethod
+    def _pvc_helper_body(helper_text: str) -> str:
+        """Extract the shared PVC bootstrap helper body from common.sh."""
+
+        match = re.search(
+            r"floe_ensure_test_artifacts_pvc\(\)\s*\{(?P<body>.*?)^\}",
+            helper_text,
+            re.DOTALL | re.MULTILINE,
+        )
+        assert match is not None, "Could not locate floe_ensure_test_artifacts_pvc() in common.sh."
+        return match.group("body")
+
     @pytest.mark.requirement("AC-3")
     def test_common_helpers_provision_pvc_with_helm_ownership_metadata(self) -> None:
         """common.sh must provide the shared Helm-adoptable PVC bootstrap helper."""
@@ -41,6 +53,47 @@ class TestRunnerPvcOwnershipContract:
         )
         assert "app.kubernetes.io/managed-by=Helm" in helper_text, (
             "PVC bootstrap helper must preserve the Helm managed-by label."
+        )
+
+    @pytest.mark.parametrize(
+        ("pattern", "description"),
+        [
+            pytest.param(
+                r'floe_render_test_job "tests/pvc-artifacts\.yaml" > "\$\{rendered_pvc\}"\s*\\?\s*\|\|\s*\{ rm -f "\$\{rendered_pvc\}"; return 1; \}',
+                "rendering the chart PVC template",
+                id="render-fail-fast",
+            ),
+            pytest.param(
+                r'kubectl apply -f "\$\{rendered_pvc\}" >/dev/null\s*\\?\s*\|\|\s*\{ rm -f "\$\{rendered_pvc\}"; return 1; \}',
+                "applying the rendered PVC",
+                id="apply-fail-fast",
+            ),
+            pytest.param(
+                r'kubectl annotate -f "\$\{rendered_pvc\}".*?--overwrite >/dev/null\s*\\?\s*\|\|\s*\{ rm -f "\$\{rendered_pvc\}"; return 1; \}',
+                "adding Helm release annotations",
+                id="annotate-fail-fast",
+            ),
+            pytest.param(
+                r'kubectl label -f "\$\{rendered_pvc\}".*?--overwrite >/dev/null\s*\\?\s*\|\|\s*\{ rm -f "\$\{rendered_pvc\}"; return 1; \}',
+                "restoring the Helm managed-by label",
+                id="label-fail-fast",
+            ),
+        ],
+    )
+    @pytest.mark.requirement("AC-3")
+    def test_common_helper_fails_fast_on_bootstrap_errors(
+        self,
+        pattern: str,
+        description: str,
+    ) -> None:
+        """common.sh must stop immediately when PVC bootstrap commands fail."""
+
+        helper_text = COMMON_HELPERS.read_text(encoding="utf-8")
+        helper_body = self._pvc_helper_body(helper_text)
+
+        assert re.search(pattern, helper_body, re.DOTALL), (
+            "floe_ensure_test_artifacts_pvc() must remove the rendered manifest "
+            f"and return 1 immediately when {description} fails."
         )
 
     @pytest.mark.parametrize(
