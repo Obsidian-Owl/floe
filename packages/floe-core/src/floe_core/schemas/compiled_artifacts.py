@@ -18,6 +18,7 @@ See Also:
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -29,6 +30,40 @@ from floe_core.schemas.quality_config import QualityConfig
 from floe_core.schemas.quality_score import QualityCheck
 from floe_core.schemas.telemetry import TelemetryConfig
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+
+_K8S_DNS_SUBDOMAIN_PATTERN = re.compile(
+    r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+)
+_K8S_NAMESPACE_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+_MAX_K8S_NAME_LENGTH = 253
+_MAX_K8S_NAMESPACE_LENGTH = 63
+
+
+def _validate_configmap_name(name: str) -> str:
+    """Validate ConfigMap metadata.name as a Kubernetes DNS subdomain."""
+    if len(name) > _MAX_K8S_NAME_LENGTH:
+        raise ValueError(
+            f"Invalid ConfigMap name: {name!r} exceeds {_MAX_K8S_NAME_LENGTH} characters"
+        )
+    if not _K8S_DNS_SUBDOMAIN_PATTERN.match(name):
+        raise ValueError(
+            "Invalid ConfigMap name: "
+            f"{name!r} must match Kubernetes DNS subdomain rules"
+        )
+    return name
+
+
+def _validate_configmap_namespace(namespace: str) -> str:
+    """Validate ConfigMap metadata.namespace as a Kubernetes namespace name."""
+    if len(namespace) > _MAX_K8S_NAMESPACE_LENGTH:
+        raise ValueError(
+            f"Invalid namespace: {namespace!r} exceeds {_MAX_K8S_NAMESPACE_LENGTH} characters"
+        )
+    if not _K8S_NAMESPACE_PATTERN.match(namespace):
+        raise ValueError(
+            f"Invalid namespace: {namespace!r} must match Kubernetes namespace rules"
+        )
+    return namespace
 
 
 class CompilationMetadata(BaseModel):
@@ -741,7 +776,6 @@ class CompiledArtifacts(BaseModel):
                 self._to_serializable_dict(),
                 default_flow_style=False,
                 allow_unicode=True,
-                sort_keys=False,
             ),
             encoding="utf-8",
         )
@@ -767,6 +801,11 @@ class CompiledArtifacts(BaseModel):
         """
         import yaml
 
+        validated_name = _validate_configmap_name(name)
+        validated_namespace = (
+            _validate_configmap_namespace(namespace) if namespace is not None else None
+        )
+
         class _LiteralYamlString(str):
             """Force PyYAML to emit multiline values as a literal block."""
 
@@ -785,9 +824,9 @@ class CompiledArtifacts(BaseModel):
 
         _ConfigMapDumper.add_representer(_LiteralYamlString, _represent_literal_yaml)
 
-        metadata: dict[str, str] = {"name": name}
-        if namespace is not None:
-            metadata["namespace"] = namespace
+        metadata: dict[str, str] = {"name": validated_name}
+        if validated_namespace is not None:
+            metadata["namespace"] = validated_namespace
 
         configmap = {
             "apiVersion": "v1",

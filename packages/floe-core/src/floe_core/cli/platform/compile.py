@@ -25,6 +25,10 @@ import click
 import structlog
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warn
+from floe_core.schemas.compiled_artifacts import (
+    _validate_configmap_name,
+    _validate_configmap_namespace,
+)
 
 if TYPE_CHECKING:
     from floe_core.enforcement.result import EnforcementResult
@@ -127,7 +131,7 @@ Examples:
     is_flag=True,
     default=False,
     help="Generate Dagster definitions.py file alongside CompiledArtifacts. "
-    "The generated file can be used as a Dagster code location entry point.",
+    "Requires JSON output at a path named compiled_artifacts.json.",
 )
 def compile_command(
     spec: Path | None,
@@ -189,6 +193,11 @@ def compile_command(
             "Ignoring configmap-only options outside configmap output mode: "
             "--configmap-name, --namespace"
         )
+    elif output_format == "configmap":
+        _validate_configmap_metadata(configmap_name, namespace)
+
+    if generate_definitions:
+        _validate_generate_definitions_output(output_format, resolved_output)
 
     # Log contract-related options (T077)
     if skip_contracts:
@@ -286,6 +295,10 @@ def _write_artifacts_output(
         artifacts.to_yaml_file(output_path)
         return
 
+    if output_format != "configmap":
+        msg = f"Unsupported output format: {output_format}"
+        raise ValueError(msg)
+
     output_path.write_text(
         artifacts.to_configmap_yaml(
             name=configmap_name,
@@ -293,6 +306,43 @@ def _write_artifacts_output(
         ),
         encoding="utf-8",
     )
+
+
+def _validate_configmap_metadata(
+    configmap_name: str,
+    namespace: str | None,
+) -> None:
+    """Validate CLI-facing ConfigMap metadata before running compilation."""
+    try:
+        _validate_configmap_name(configmap_name)
+        if namespace is not None:
+            _validate_configmap_namespace(namespace)
+    except ValueError as exc:
+        error_exit(
+            str(exc),
+            exit_code=ExitCode.USAGE_ERROR,
+        )
+
+
+def _validate_generate_definitions_output(
+    output_format: str,
+    resolved_output: Path,
+) -> None:
+    """Ensure generated definitions can find the artifacts file at runtime."""
+    if output_format != "json":
+        error_exit(
+            "--generate-definitions requires --output-format json because the "
+            "generated Dagster loader reads compiled_artifacts.json at runtime.",
+            exit_code=ExitCode.USAGE_ERROR,
+        )
+
+    if resolved_output.name != "compiled_artifacts.json":
+        error_exit(
+            "--generate-definitions requires the output file to be named "
+            "compiled_artifacts.json so the generated Dagster loader can find it. "
+            "Either omit --output or pass a JSON path ending with compiled_artifacts.json.",
+            exit_code=ExitCode.USAGE_ERROR,
+        )
 
 
 def _export_enforcement_report(

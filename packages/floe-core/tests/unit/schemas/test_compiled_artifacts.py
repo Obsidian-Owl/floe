@@ -685,6 +685,25 @@ class TestYamlSerialization:
         assert from_json.model_dump(mode="json") == from_yaml.model_dump(mode="json")
 
     @pytest.mark.requirement("FR-011")
+    def test_to_yaml_file_preserves_legacy_sorted_key_order(
+        self,
+        full_artifacts: CompiledArtifacts,
+        tmp_path: Path,
+    ) -> None:
+        """Test that YAML output keeps the pre-ConfigMap key ordering contract."""
+        import yaml
+
+        yaml_path = tmp_path / "compiled_artifacts.yaml"
+        full_artifacts.to_yaml_file(yaml_path)
+
+        expected = yaml.safe_dump(
+            full_artifacts.model_dump(mode="json", by_alias=True),
+            default_flow_style=False,
+            allow_unicode=True,
+        )
+        assert yaml_path.read_text(encoding="utf-8") == expected
+
+    @pytest.mark.requirement("FR-011")
     def test_yaml_preserves_all_fields(
         self,
         full_artifacts: CompiledArtifacts,
@@ -786,6 +805,21 @@ class TestYamlSerialization:
         assert configmap["metadata"]["name"] == "team-values"
         assert configmap["metadata"]["namespace"] == "data-platform"
         assert embedded_values == full_artifacts.model_dump(mode="json", by_alias=True)
+
+    @pytest.mark.requirement("FR-011")
+    def test_to_configmap_yaml_rejects_invalid_name(self, full_artifacts: CompiledArtifacts) -> None:
+        """Test that invalid ConfigMap names are rejected before rendering YAML."""
+        with pytest.raises(ValueError, match="Invalid ConfigMap name"):
+            full_artifacts.to_configmap_yaml(name="My ConfigMap!")
+
+    @pytest.mark.requirement("FR-011")
+    def test_to_configmap_yaml_rejects_invalid_namespace(
+        self,
+        full_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test that invalid namespaces are rejected before rendering YAML."""
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            full_artifacts.to_configmap_yaml(namespace="Invalid_Namespace")
 
     @pytest.mark.requirement("FR-011")
     def test_from_yaml_file_not_found(self, tmp_path: Path) -> None:
