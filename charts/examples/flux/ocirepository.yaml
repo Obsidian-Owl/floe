@@ -1,0 +1,30 @@
+# Flux OCIRepository for floe-platform
+#
+# This source tracks the published floe-platform Helm chart in GHCR.
+# Keep this resource in the same namespace as the HelmRelease that consumes it.
+#
+# Usage:
+#   1. Update spec.ref.tag (or ref.semver) to the chart version you want to deploy
+#   2. Apply this manifest before the companion HelmRelease
+#   3. Optionally enable Flux OCI verification once you have matching trust policy
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: floe-platform
+  namespace: flux-system
+spec:
+  interval: 10m
+  url: oci://ghcr.io/obsidian-owl/charts/floe-platform
+  ref:
+    tag: "0.1.0"
+  # Alternative version knob:
+  # ref:
+  #   semver: ">=0.1.0"
+  #
+  # Optional Cosign verification for tag-triggered chart releases:
+  # verify:
+  #   provider: cosign
+  #   matchOIDCIdentity:
+  #     - issuer: "^https://token.actions.githubusercontent.com$"
+  #       subject: "^https://github.com/Obsidian-Owl/floe/.github/workflows/helm-release.yaml@refs/tags/.+$"
