@@ -1,153 +1,68 @@
 # Flux HelmRelease for floe-platform
 #
-# This template deploys floe-platform using Flux CD's HelmRelease CRD.
-# Requires Flux v2 with the helm-controller and source-controller.
-#
-# Prerequisites:
-#   1. Flux v2 installed in the cluster
-#   2. HelmRepository or GitRepository source configured
-#   3. Namespace created (or use spec.install.createNamespace)
+# This example consumes the published chart from `ocirepository.yaml`.
+# Keep the HelmRelease, compiled values ConfigMap, and override Secret in the
+# same namespace so `valuesFrom` can resolve them cleanly.
 #
 # Usage:
-#   1. Update spec.chart.spec.sourceRef to point to your chart source
-#   2. Update spec.values or spec.valuesFrom as needed
-#   3. Apply: kubectl apply -f helmrelease.yaml
+#   1. Apply `ocirepository.yaml` in `flux-system`
+#   2. Generate compiled values with:
+#        floe platform compile \
+#          --spec floe.yaml \
+#          --manifest manifest.yaml \
+#          --output-format configmap \
+#          --configmap-name floe-compiled-values \
+#          --namespace flux-system
+#   3. Commit the rendered ConfigMap and an optional Secret named
+#      `floe-platform-overrides` beside this HelmRelease
 #
-# Requirements:
-# - 9b-FR-072: Flux HelmRelease template
+# Notes:
+# - The chart version knob lives in `ocirepository.yaml` under `spec.ref.tag`
+#   or `spec.ref.semver`
+# - `targetNamespace` is where the chart installs workloads; it is separate
+#   from the `flux-system` namespace that stores the source and values objects
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta2
-kind: HelmRepository
-metadata:
-  name: floe
-  namespace: flux-system
-spec:
-  interval: 5m
-  url: https://your-org.github.io/floe-charts
-  # For OCI registry:
-  # type: oci
-  # url: oci://ghcr.io/your-org/charts
----
-apiVersion: helm.toolkit.fluxcd.io/v2beta2
+apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
-  name: floe-platform-dev
+  name: floe-platform
   namespace: flux-system
-  labels:
-    app.kubernetes.io/name: floe-platform
-    app.kubernetes.io/instance: floe-dev
-    app.kubernetes.io/managed-by: flux
 spec:
-  # Release configuration
+  interval: 10m
   releaseName: floe
   targetNamespace: floe-dev
-
-  # Chart reference
-  chart:
-    spec:
-      chart: floe-platform
-      version: ">=1.0.0"
-      sourceRef:
-        kind: HelmRepository
-        name: floe
-        namespace: flux-system
-      # Reconciliation interval for chart updates
-      interval: 5m
-
-  # Reconciliation interval
-  interval: 10m
-
-  # Installation configuration
+  chartRef:
+    kind: OCIRepository
+    name: floe-platform
+    namespace: flux-system
   install:
-    # Create namespace if it doesn't exist
     createNamespace: true
-    # Remediation on install failure
     remediation:
       retries: 3
-    # Timeout for install
     timeout: 10m
-
-  # Upgrade configuration
   upgrade:
-    # Remediation on upgrade failure
+    cleanupOnFail: true
     remediation:
       retries: 3
-      # Rollback on upgrade failure
       remediateLastFailure: true
-    # Clean up old releases
-    cleanupOnFail: true
-    # Timeout for upgrade
     timeout: 10m
-
-  # Rollback configuration
-  rollback:
-    # Timeout for rollback
-    timeout: 5m
-    # Clean up on rollback
-    cleanupOnFail: true
-
-  # Uninstall configuration
-  uninstall:
-    # Keep history on uninstall
-    keepHistory: false
-    # Timeout for uninstall
-    timeout: 5m
-
-  # Values configuration
+  valuesFrom:
+    - kind: ConfigMap
+      name: floe-compiled-values
+      valuesKey: values.yaml
+    - kind: Secret
+      name: floe-platform-overrides
+      valuesKey: values.yaml
+      optional: true
   values:
     global:
       environment: dev
-
     namespace:
       name: floe-dev
-      create: false  # Flux creates it via install.createNamespace
-
-    dagster:
-      enabled: true
-
-    polaris:
-      enabled: true
-
-    postgresql:
-      enabled: true
-
-    minio:
-      enabled: true
-
-    networkPolicy:
-      enabled: false
-
-  # External values sources (optional)
-  # valuesFrom:
-  #   - kind: ConfigMap
-  #     name: floe-values
-  #     valuesKey: values.yaml
-  #   - kind: Secret
-  #     name: floe-secrets
-  #     valuesKey: secrets.yaml
-
-  # Depends on other HelmReleases (optional)
-  # dependsOn:
-  #   - name: cert-manager
-  #     namespace: cert-manager
-
-  # Post-install/upgrade hooks (optional)
-  # postRenderers:
-  #   - kustomize:
-  #       patches:
-  #         - target:
-  #             kind: Deployment
-  #             name: dagster-webserver
-  #           patch: |
-  #             - op: add
-  #               path: /spec/template/metadata/annotations/custom
-  #               value: annotation
-
-  # Drift detection
+      create: false
   driftDetection:
     mode: enabled
     ignore:
-      # Ignore replica count changes (may be controlled by HPA)
       - paths:
           - /spec/replicas
         target:
