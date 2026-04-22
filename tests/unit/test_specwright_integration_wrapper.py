@@ -77,6 +77,8 @@ def test_dispatcher_unit_c_profile_dry_run_reports_remote_boundary_command() -> 
         "testing/ci/test-unit-c-boundary.sh",
         "testing/k8s/setup-cluster.sh",
         "testing/k8s/flux/gitrepository.yaml",
+        "charts/floe-platform/Chart.yaml",
+        "charts/floe-platform/values.yaml",
         "charts/floe-platform/values-test.yaml",
         "charts/floe-platform/templates/_helpers.tpl",
         "charts/floe-platform/templates/tests/_test-job.tpl",

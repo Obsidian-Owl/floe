@@ -17,7 +17,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck source=./common.sh
 source "${SCRIPT_DIR}/common.sh"
 
-UNIT_C_DEVPOD_BOUNDARY_TRIGGER_PATTERN='^(testing/ci/(common\.sh|test-e2e-cluster\.sh|test-unit-c-boundary\.sh)|testing/k8s/setup-cluster\.sh|testing/k8s/flux/[^/]+\.yaml|tests/integration/test_unit_c_devpod_flux_boundary\.py|tests/unit/test_unit_c_boundary_wrapper\.py|scripts/devpod-ensure-ready\.sh|\.devcontainer/hetzner/postStartCommand\.sh|charts/floe-platform/values-test\.yaml|charts/floe-platform/templates/_helpers\.tpl|charts/floe-platform/templates/tests/(_test-job\.tpl|job-e2e\.yaml|pvc-artifacts\.yaml|rbac-standard\.yaml))$'
+UNIT_C_DEVPOD_BOUNDARY_TRIGGER_PATTERN='^(testing/ci/(common\.sh|test-e2e-cluster\.sh|test-unit-c-boundary\.sh)|testing/k8s/setup-cluster\.sh|testing/k8s/flux/[^/]+\.yaml|tests/integration/test_unit_c_devpod_flux_boundary\.py|tests/unit/test_unit_c_boundary_wrapper\.py|scripts/devpod-ensure-ready\.sh|\.devcontainer/hetzner/postStartCommand\.sh|charts/floe-platform/(Chart\.yaml|values\.yaml|values-test\.yaml)|charts/floe-platform/templates/_helpers\.tpl|charts/floe-platform/templates/tests/(_test-job\.tpl|job-e2e\.yaml|pvc-artifacts\.yaml|rbac-standard\.yaml))$'
 
 collect_reachable_changed_files() {
     git -C "${PROJECT_ROOT}" log --format= --name-only HEAD 2>/dev/null \
