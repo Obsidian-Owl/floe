@@ -29,6 +29,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     assert path.exists(), f"File not found: {path}"
     docs = list(yaml.safe_load_all(path.read_text()))
     assert len(docs) == 1, f"Expected one YAML document in {path}, got {len(docs)}"
+    assert isinstance(docs[0], dict), f"Expected a YAML mapping in {path}, got {type(docs[0])}"
     return docs[0]
 
 
@@ -36,7 +37,10 @@ def _section(markdown_path: Path, heading: str) -> str:
     """Extract a markdown section body by heading."""
     content = markdown_path.read_text()
     marker = f"## {heading}\n"
-    start = content.index(marker) + len(marker)
+    try:
+        start = content.index(marker) + len(marker)
+    except ValueError:
+        pytest.fail(f"Heading '## {heading}' not found in {markdown_path}")
     remainder = content[start:]
     next_heading = remainder.find("\n## ")
     if next_heading == -1:
@@ -131,6 +135,7 @@ def test_public_flux_story_does_not_regress_to_legacy_paths_or_api_versions() ->
     legacy_terms = (
         "HelmRepository",
         "helm.toolkit.fluxcd.io/v2beta2",
+        "source.toolkit.fluxcd.io/v1beta2",
         "charts/floe-platform/flux",
     )
 

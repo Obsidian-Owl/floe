@@ -54,6 +54,8 @@ spec:
       name: floe-platform-overrides
       valuesKey: values.yaml
       optional: true
+  # Inline values intentionally override matching keys from valuesFrom.
+  # Keep only environment-local knobs here; put shared compiled values in the ConfigMap.
   values:
     global:
       environment: dev
