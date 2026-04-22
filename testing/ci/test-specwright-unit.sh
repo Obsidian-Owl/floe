@@ -23,5 +23,6 @@ uv run pytest -q \
     testing/tests/unit/test_pvc_ownership_contract.py \
     testing/tests/unit/test_pvc_runner_contract.py \
     tests/unit/test_helm_bootstrap_template.py \
+    tests/unit/test_specwright_integration_wrapper.py \
     tests/unit/test_helm_values_rbac.py \
     "$@"
