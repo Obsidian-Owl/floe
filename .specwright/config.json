@@ -8,7 +8,7 @@
   "commands": {
     "build": "make typecheck",
     "test": "./testing/ci/test-specwright-unit.sh",
-    "test:integration": "uv run pytest -q tests/integration/test_unit_c_devpod_flux_boundary.py"
+    "test:integration": "./testing/ci/test-specwright-integration.sh"
   },
   "gates": {
     "build": {

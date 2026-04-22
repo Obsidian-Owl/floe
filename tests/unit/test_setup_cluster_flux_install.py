@@ -158,7 +158,7 @@ def test_kubectl_apply_flux_crds() -> None:
     )
     assert re.search(r"kubectl\s+apply\s+-f.*flux_manifest", content), (
         "Must apply the rendered Flux manifest directory rather than the raw "
-        "charts/floe-platform/flux path."
+        "testing-owned fixture path."
     )
 
 
@@ -193,6 +193,9 @@ def test_flux_manifest_render_dir_is_cleaned_on_failure_and_success() -> None:
 def test_render_flux_manifests_uses_configurable_git_source() -> None:
     """setup-cluster.sh renders GitRepository URL and branch from env-aware config."""
     content = _SETUP_SCRIPT.read_text()
+    assert "FLOE_FLUX_FIXTURE_DIR" in content, (
+        "render_flux_manifests must read the shared fixture directory constant."
+    )
     assert "FLOE_FLUX_GIT_URL" in content, (
         "Flux manifest rendering must support an explicit Git URL override."
     )
@@ -206,6 +209,48 @@ def test_render_flux_manifests_uses_configurable_git_source() -> None:
     assert re.search(r"sed\s+-i\.bak.*branch: main", content, re.DOTALL), (
         "render_flux_manifests must rewrite the default GitRepository branch "
         "in a temporary manifest copy before applying Flux resources."
+    )
+
+
+@pytest.mark.requirement("AC-8")
+def test_render_flux_manifests_no_longer_copies_from_chart_owned_fixture_path() -> None:
+    """setup-cluster.sh must not use charts/floe-platform/flux as the active fixture source."""
+    content = _SETUP_SCRIPT.read_text()
+    match = re.search(
+        r"render_flux_manifests\(\)\s*\{(.*?)\n\}",
+        content,
+        re.DOTALL,
+    )
+    assert match is not None, "render_flux_manifests function must exist"
+    func_body = match.group(1)
+    assert "charts/floe-platform/flux" not in func_body, (
+        "render_flux_manifests must stop copying manifests from the chart-owned fixture path."
+    )
+
+
+@pytest.mark.requirement("AC-8")
+def test_render_flux_manifests_checks_fixture_directory_before_copy() -> None:
+    """setup-cluster.sh should fail with a clear message when fixture input is invalid."""
+    content = _SETUP_SCRIPT.read_text()
+    match = re.search(
+        r"render_flux_manifests\(\)\s*\{(.*?)\n\}",
+        content,
+        re.DOTALL,
+    )
+    assert match is not None, "render_flux_manifests function must exist"
+    func_body = match.group(1)
+
+    assert '[[ ! -d "${flux_fixture_dir}" ]]' in func_body, (
+        "render_flux_manifests must validate the fixture directory before copying manifests."
+    )
+    assert "Flux fixture directory not found:" in func_body, (
+        "render_flux_manifests must emit a clear missing-directory error."
+    )
+    assert 'compgen -G "${manifest_glob}"' in func_body, (
+        "render_flux_manifests must validate that the fixture directory contains YAML manifests."
+    )
+    assert "Flux fixture directory contains no YAML manifests:" in func_body, (
+        "render_flux_manifests must emit a clear empty-directory error."
     )
 
 
