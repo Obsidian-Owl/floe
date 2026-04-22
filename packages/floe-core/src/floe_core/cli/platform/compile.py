@@ -28,6 +28,7 @@ from floe_core.cli.utils import ExitCode, error_exit, info, success, warn
 
 if TYPE_CHECKING:
     from floe_core.enforcement.result import EnforcementResult
+    from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
 logger = structlog.get_logger(__name__)
 
@@ -212,7 +213,7 @@ def compile_command(
         from floe_core.compilation.stages import compile_pipeline
 
         info("Running compilation pipeline...")
-        artifacts = compile_pipeline(spec, manifest)
+        artifacts: CompiledArtifacts = compile_pipeline(spec, manifest)
 
         # Step 4: Save CompiledArtifacts to output path (FR-011)
         _write_artifacts_output(
@@ -270,7 +271,7 @@ def compile_command(
 
 
 def _write_artifacts_output(
-    artifacts: object,
+    artifacts: CompiledArtifacts,
     output_path: Path,
     output_format: str,
     configmap_name: str,
