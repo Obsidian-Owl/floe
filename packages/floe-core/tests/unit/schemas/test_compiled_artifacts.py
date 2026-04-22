@@ -751,6 +751,43 @@ class TestYamlSerialization:
         assert loaded.governance.data_retention_days == 90
 
     @pytest.mark.requirement("FR-011")
+    def test_to_configmap_yaml_uses_default_name_and_omits_namespace(
+        self,
+        full_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test that ConfigMap serialization uses the documented defaults."""
+        import yaml
+
+        configmap = yaml.safe_load(full_artifacts.to_configmap_yaml())
+
+        assert configmap["apiVersion"] == "v1"
+        assert configmap["kind"] == "ConfigMap"
+        assert configmap["metadata"]["name"] == "floe-compiled-values"
+        assert "namespace" not in configmap["metadata"]
+        assert isinstance(configmap["data"]["values.yaml"], str)
+
+    @pytest.mark.requirement("FR-011")
+    def test_to_configmap_yaml_wraps_existing_artifact_payload(
+        self,
+        full_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test that ConfigMap output wraps the existing artifact dump."""
+        import yaml
+
+        configmap = yaml.safe_load(
+            full_artifacts.to_configmap_yaml(
+                name="team-values",
+                namespace="data-platform",
+            )
+        )
+
+        embedded_values = yaml.safe_load(configmap["data"]["values.yaml"])
+
+        assert configmap["metadata"]["name"] == "team-values"
+        assert configmap["metadata"]["namespace"] == "data-platform"
+        assert embedded_values == full_artifacts.model_dump(mode="json", by_alias=True)
+
+    @pytest.mark.requirement("FR-011")
     def test_from_yaml_file_not_found(self, tmp_path: Path) -> None:
         """Test that from_yaml_file raises FileNotFoundError for missing file."""
         nonexistent = tmp_path / "nonexistent.yaml"
