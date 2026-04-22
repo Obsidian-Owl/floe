@@ -119,6 +119,10 @@ class TestPlatformHelpSnapshot:
         # Check that option descriptions exist
         assert "floe.yaml" in output.lower() or "spec" in output.lower()
         assert "manifest" in output.lower()
+        assert "--output-format" in output
+        assert "--configmap-name" in output
+        assert "--namespace" in output
+        assert "configmap" in output.lower()
 
 
 class TestRbacHelpSnapshot:

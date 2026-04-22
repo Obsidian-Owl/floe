@@ -118,6 +118,9 @@ class TestPlatformGroupHelp:
         assert "--spec" in result.output or "-s" in result.output
         assert "--manifest" in result.output or "-m" in result.output
         assert "--output" in result.output or "-o" in result.output
+        assert "--output-format" in result.output
+        assert "--configmap-name" in result.output
+        assert "--namespace" in result.output
         assert "--enforcement-report" in result.output
         assert "--enforcement-format" in result.output
 

@@ -24,12 +24,19 @@ from typing import TYPE_CHECKING
 import click
 import structlog
 
-from floe_core.cli.utils import ExitCode, error_exit, info, success
+from floe_core.cli.utils import ExitCode, error_exit, info, success, warn
 
 if TYPE_CHECKING:
     from floe_core.enforcement.result import EnforcementResult
 
 logger = structlog.get_logger(__name__)
+
+DEFAULT_CONFIGMAP_NAME = "floe-compiled-values"
+DEFAULT_OUTPUT_PATHS = {
+    "json": Path("target/compiled_artifacts.json"),
+    "yaml": Path("target/compiled_artifacts.yaml"),
+    "configmap": Path("target/floe-compiled-values.yaml"),
+}
 
 
 @click.command(
@@ -39,6 +46,7 @@ logger = structlog.get_logger(__name__)
 Examples:
     $ floe platform compile --spec floe.yaml --manifest manifest.yaml
     $ floe platform compile --output target/artifacts.json
+    $ floe platform compile --output-format configmap --configmap-name floe-values
     $ floe platform compile --enforcement-report report.json --enforcement-format json
     $ floe platform compile --enforcement-report report.sarif --enforcement-format sarif
     $ floe platform compile --skip-contracts
@@ -63,10 +71,28 @@ Examples:
     "--output",
     "-o",
     type=click.Path(dir_okay=False, resolve_path=True, path_type=Path),
-    default="target/compiled_artifacts.json",
-    show_default=True,
-    help="Output path for CompiledArtifacts (FR-011).",
+    default=None,
+    help="Output path for CompiledArtifacts. Defaults to a format-specific path "
+    "(json: target/compiled_artifacts.json, yaml: target/compiled_artifacts.yaml, "
+    "configmap: target/floe-compiled-values.yaml).",
     metavar="PATH",
+)
+@click.option(
+    "--output-format",
+    type=click.Choice(["json", "yaml", "configmap"], case_sensitive=False),
+    default="json",
+    show_default=True,
+    help="CompiledArtifacts output format.",
+)
+@click.option(
+    "--configmap-name",
+    default=DEFAULT_CONFIGMAP_NAME,
+    show_default=True,
+    help="ConfigMap metadata.name for configmap output.",
+)
+@click.option(
+    "--namespace",
+    help="Optional ConfigMap metadata.namespace for configmap output.",
 )
 @click.option(
     "--enforcement-report",
@@ -105,7 +131,10 @@ Examples:
 def compile_command(
     spec: Path | None,
     manifest: Path | None,
-    output: Path,
+    output: Path | None,
+    output_format: str,
+    configmap_name: str,
+    namespace: str | None,
     enforcement_report: Path | None,
     enforcement_format: str,
     skip_contracts: bool,
@@ -121,13 +150,19 @@ def compile_command(
     Args:
         spec: Path to FloeSpec file (floe.yaml).
         manifest: Path to PlatformManifest file (manifest.yaml).
-        output: Output path for CompiledArtifacts.
+        output: Explicit output path for CompiledArtifacts, if provided.
+        output_format: Output format for CompiledArtifacts.
+        configmap_name: ConfigMap metadata.name when using configmap output.
+        namespace: Optional ConfigMap metadata.namespace when using configmap output.
         enforcement_report: Output path for enforcement report.
         enforcement_format: Enforcement report format (json, sarif, html).
         skip_contracts: Skip data contract validation if True.
         drift_detection: Enable schema drift detection if True.
         generate_definitions: Generate Dagster definitions.py if True.
     """
+    output_format = output_format.lower()
+    resolved_output = output or DEFAULT_OUTPUT_PATHS[output_format]
+
     # Validate required inputs
     if spec is None:
         error_exit(
@@ -143,7 +178,16 @@ def compile_command(
 
     info(f"Compiling spec: {spec}")
     info(f"Using manifest: {manifest}")
-    info(f"Output path: {output}")
+    info(f"Output format: {output_format}")
+    info(f"Output path: {resolved_output}")
+
+    if output_format != "configmap" and (
+        configmap_name != DEFAULT_CONFIGMAP_NAME or namespace is not None
+    ):
+        warn(
+            "Ignoring configmap-only options outside configmap output mode: "
+            "--configmap-name, --namespace"
+        )
 
     # Log contract-related options (T077)
     if skip_contracts:
@@ -156,7 +200,7 @@ def compile_command(
             info("Schema drift detection: DISABLED (use --drift-detection to enable)")
 
     # Create parent directories for output (FR-011)
-    output.parent.mkdir(parents=True, exist_ok=True)
+    resolved_output.parent.mkdir(parents=True, exist_ok=True)
 
     # Create parent directories for enforcement report (FR-014)
     if enforcement_report is not None:
@@ -171,8 +215,14 @@ def compile_command(
         artifacts = compile_pipeline(spec, manifest)
 
         # Step 4: Save CompiledArtifacts to output path (FR-011)
-        artifacts.to_json_file(output)
-        success(f"CompiledArtifacts written to: {output}")
+        _write_artifacts_output(
+            artifacts=artifacts,
+            output_path=resolved_output,
+            output_format=output_format,
+            configmap_name=configmap_name,
+            namespace=namespace,
+        )
+        success(f"CompiledArtifacts written to: {resolved_output}")
 
         # Step 5: Export enforcement report if requested (FR-012, FR-013, T020)
         if enforcement_report is not None:
@@ -188,7 +238,7 @@ def compile_command(
         if generate_definitions:
             entry_point_path = _generate_orchestrator_entry_point(
                 artifacts=artifacts,
-                output_dir=output.parent,
+                output_dir=resolved_output.parent,
             )
             success(f"Entry point generated: {entry_point_path}")
 
@@ -217,6 +267,31 @@ def compile_command(
             "Compilation failed. Check input files and configuration.",
             exit_code=ExitCode.COMPILATION_ERROR,
         )
+
+
+def _write_artifacts_output(
+    artifacts: object,
+    output_path: Path,
+    output_format: str,
+    configmap_name: str,
+    namespace: str | None,
+) -> None:
+    """Write CompiledArtifacts using the requested output format."""
+    if output_format == "json":
+        artifacts.to_json_file(output_path)
+        return
+
+    if output_format == "yaml":
+        artifacts.to_yaml_file(output_path)
+        return
+
+    output_path.write_text(
+        artifacts.to_configmap_yaml(
+            name=configmap_name,
+            namespace=namespace,
+        ),
+        encoding="utf-8",
+    )
 
 
 def _export_enforcement_report(
