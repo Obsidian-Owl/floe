@@ -19,6 +19,12 @@ source "${SCRIPT_DIR}/common.sh"
 
 UNIT_C_DEVPOD_BOUNDARY_TRIGGER_PATTERN='^(testing/ci/(common\.sh|test-e2e-cluster\.sh|test-unit-c-boundary\.sh)|testing/k8s/setup-cluster\.sh|testing/k8s/flux/[^/]+\.yaml|tests/integration/test_unit_c_devpod_flux_boundary\.py|tests/unit/test_unit_c_boundary_wrapper\.py|scripts/devpod-ensure-ready\.sh|\.devcontainer/hetzner/postStartCommand\.sh|charts/floe-platform/values-test\.yaml|charts/floe-platform/templates/_helpers\.tpl|charts/floe-platform/templates/tests/(_test-job\.tpl|job-e2e\.yaml|pvc-artifacts\.yaml|rbac-standard\.yaml))$'
 
+collect_reachable_changed_files() {
+    git -C "${PROJECT_ROOT}" log --format= --name-only HEAD 2>/dev/null \
+        | sed '/^$/d' \
+        | LC_ALL=C sort -u
+}
+
 resolve_changed_files() {
     if [[ -n "${SPECWRIGHT_CHANGED_FILES:-}" ]]; then
         printf '%s\n' "${SPECWRIGHT_CHANGED_FILES}"
@@ -34,6 +40,16 @@ resolve_changed_files() {
 
     if [[ -n "${merge_base}" ]]; then
         git -C "${PROJECT_ROOT}" diff --name-only "${merge_base}" HEAD
+        return 0
+    fi
+
+    # In single-branch or shallow checkouts without main refs, aggregate all
+    # reachable branch changes instead of only the last commit so earlier PR
+    # commits still trigger the focused integration proof.
+    local reachable_files=""
+    reachable_files="$(collect_reachable_changed_files)"
+    if [[ -n "${reachable_files}" ]]; then
+        printf '%s\n' "${reachable_files}"
         return 0
     fi
 

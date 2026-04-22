@@ -16,12 +16,19 @@ _SCRIPT_PATH = _REPO_ROOT / "testing" / "ci" / "test-specwright-integration.sh"
 
 def _run_wrapper(*, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     """Run the wrapper with a controlled environment."""
+    return _run_wrapper_in_repo(_REPO_ROOT, env=env)
+
+
+def _run_wrapper_in_repo(
+    repo_root: Path, *, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run the wrapper from an arbitrary repository root."""
     merged_env = os.environ.copy()
     if env:
         merged_env.update(env)
     return subprocess.run(
-        ["bash", str(_SCRIPT_PATH)],
-        cwd=_REPO_ROOT,
+        ["bash", str(repo_root / "testing" / "ci" / "test-specwright-integration.sh")],
+        cwd=repo_root,
         env=merged_env,
         text=True,
         capture_output=True,
@@ -104,3 +111,115 @@ def test_dispatcher_rejects_unknown_profile() -> None:
     combined = f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     assert result.returncode == 2, combined
     assert "Unknown Specwright integration profile" in result.stderr
+
+
+@pytest.mark.requirement("AC-5")
+def test_dispatcher_uses_reachable_branch_history_without_main_refs(
+    tmp_path: Path,
+) -> None:
+    """Shallow single-branch clones should still see earlier PR-triggering commits."""
+    origin_repo = tmp_path / "origin"
+    subprocess.run(
+        ["git", "init", "--initial-branch=main", str(origin_repo)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Specwright Tests"],
+        cwd=origin_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "specwright@example.com"],
+        cwd=origin_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    (origin_repo / "testing" / "ci").mkdir(parents=True)
+    (origin_repo / "testing" / "k8s").mkdir(parents=True)
+    (origin_repo / "testing" / "ci" / "common.sh").write_text(
+        (_REPO_ROOT / "testing" / "ci" / "common.sh").read_text()
+    )
+    (origin_repo / "testing" / "ci" / "test-specwright-integration.sh").write_text(
+        _SCRIPT_PATH.read_text()
+    )
+    (origin_repo / "testing" / "k8s" / "setup-cluster.sh").write_text("base\n")
+    (origin_repo / "README.md").write_text("base\n")
+    subprocess.run(
+        ["git", "add", "."],
+        cwd=origin_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "base"],
+        cwd=origin_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=origin_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    (origin_repo / "testing" / "k8s" / "setup-cluster.sh").write_text("trigger\n")
+    subprocess.run(
+        ["git", "commit", "-am", "trigger unit c"],
+        cwd=origin_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    (origin_repo / "README.md").write_text("unrelated\n")
+    subprocess.run(
+        ["git", "commit", "-am", "unrelated follow-up"],
+        cwd=origin_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    shallow_clone = tmp_path / "shallow-clone"
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "--depth=2",
+            "--branch",
+            "feature",
+            "--single-branch",
+            origin_repo.as_uri(),
+            str(shallow_clone),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    missing_main_ref = subprocess.run(
+        ["git", "rev-parse", "--verify", "origin/main"],
+        cwd=shallow_clone,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert missing_main_ref.returncode != 0
+
+    result = _run_wrapper_in_repo(
+        shallow_clone,
+        env={"SPECWRIGHT_INTEGRATION_DRY_RUN": "1"},
+    )
+    combined = f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    assert result.returncode == 0, combined
+    assert "Selected profile: unit-c-devpod-boundary" in result.stdout
