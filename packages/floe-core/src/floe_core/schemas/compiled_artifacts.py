@@ -18,6 +18,7 @@ See Also:
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -29,6 +30,37 @@ from floe_core.schemas.quality_config import QualityConfig
 from floe_core.schemas.quality_score import QualityCheck
 from floe_core.schemas.telemetry import TelemetryConfig
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+
+_K8S_DNS_SUBDOMAIN_PATTERN = re.compile(
+    r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+)
+_K8S_NAMESPACE_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+_MAX_K8S_NAME_LENGTH = 253
+_MAX_K8S_NAMESPACE_LENGTH = 63
+
+
+def _validate_configmap_name(name: str) -> str:
+    """Validate ConfigMap metadata.name as a Kubernetes DNS subdomain."""
+    if len(name) > _MAX_K8S_NAME_LENGTH:
+        raise ValueError(
+            f"Invalid ConfigMap name: {name!r} exceeds {_MAX_K8S_NAME_LENGTH} characters"
+        )
+    if not _K8S_DNS_SUBDOMAIN_PATTERN.fullmatch(name):
+        raise ValueError(
+            f"Invalid ConfigMap name: {name!r} must match Kubernetes DNS subdomain rules"
+        )
+    return name
+
+
+def _validate_configmap_namespace(namespace: str) -> str:
+    """Validate ConfigMap metadata.namespace as a Kubernetes namespace name."""
+    if len(namespace) > _MAX_K8S_NAMESPACE_LENGTH:
+        raise ValueError(
+            f"Invalid namespace: {namespace!r} exceeds {_MAX_K8S_NAMESPACE_LENGTH} characters"
+        )
+    if not _K8S_NAMESPACE_PATTERN.fullmatch(namespace):
+        raise ValueError(f"Invalid namespace: {namespace!r} must match Kubernetes namespace rules")
+    return namespace
 
 
 class CompilationMetadata(BaseModel):
@@ -692,6 +724,10 @@ class CompiledArtifacts(BaseModel):
         description="Resolved quality configuration",
     )
 
+    def _to_serializable_dict(self) -> dict[str, Any]:
+        """Return the shared JSON-safe artifact payload."""
+        return self.model_dump(mode="json", by_alias=True)
+
     def to_json_file(self, path: Path) -> None:
         """Write CompiledArtifacts to a JSON file.
 
@@ -710,7 +746,7 @@ class CompiledArtifacts(BaseModel):
             - to_yaml_file: Write artifacts to YAML
         """
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(self.model_dump(mode="json", by_alias=True), indent=2))
+        path.write_text(json.dumps(self._to_serializable_dict(), indent=2))
 
     def to_yaml_file(self, path: Path) -> None:
         """Write CompiledArtifacts to a YAML file.
@@ -732,11 +768,84 @@ class CompiledArtifacts(BaseModel):
         import yaml
 
         path.parent.mkdir(parents=True, exist_ok=True)
-        # Use model_dump with mode="json" to ensure datetime serialization
-        data = self.model_dump(mode="json", by_alias=True)
         path.write_text(
-            yaml.safe_dump(data, default_flow_style=False, allow_unicode=True),
+            yaml.safe_dump(
+                self._to_serializable_dict(),
+                default_flow_style=False,
+                allow_unicode=True,
+            ),
             encoding="utf-8",
+        )
+
+    def to_configmap_yaml(
+        self,
+        name: str = "floe-compiled-values",
+        namespace: str | None = None,
+    ) -> str:
+        """Render CompiledArtifacts as a Kubernetes ConfigMap.
+
+        The embedded ``data.values.yaml`` payload is generated from the same
+        JSON-safe dictionary used by the existing JSON and YAML serializers so
+        ConfigMap output stays a wrapper around the single CompiledArtifacts
+        contract rather than becoming a parallel representation.
+
+        Args:
+            name: ConfigMap metadata.name. Defaults to ``floe-compiled-values``.
+            namespace: Optional ConfigMap metadata.namespace.
+
+        Returns:
+            YAML string containing a v1 ConfigMap with ``data.values.yaml``.
+        """
+        import yaml
+
+        validated_name = _validate_configmap_name(name)
+        validated_namespace = (
+            _validate_configmap_namespace(namespace) if namespace is not None else None
+        )
+
+        class _LiteralYamlString(str):
+            """Force PyYAML to emit multiline values as a literal block."""
+
+        class _ConfigMapDumper(yaml.SafeDumper):
+            """Safe dumper with literal-block support for embedded YAML."""
+
+        def _represent_literal_yaml(
+            dumper: yaml.SafeDumper,
+            value: _LiteralYamlString,
+        ) -> yaml.nodes.ScalarNode:
+            return dumper.represent_scalar(
+                "tag:yaml.org,2002:str",
+                value,
+                style="|",
+            )
+
+        _ConfigMapDumper.add_representer(_LiteralYamlString, _represent_literal_yaml)
+
+        metadata: dict[str, str] = {"name": validated_name}
+        if validated_namespace is not None:
+            metadata["namespace"] = validated_namespace
+
+        configmap = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": metadata,
+            "data": {
+                "values.yaml": _LiteralYamlString(
+                    yaml.safe_dump(
+                        self._to_serializable_dict(),
+                        default_flow_style=False,
+                        allow_unicode=True,
+                        sort_keys=False,
+                    )
+                )
+            },
+        }
+        return yaml.dump(
+            configmap,
+            Dumper=_ConfigMapDumper,
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
         )
 
     @classmethod

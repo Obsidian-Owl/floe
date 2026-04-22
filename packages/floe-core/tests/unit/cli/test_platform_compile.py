@@ -27,6 +27,49 @@ if TYPE_CHECKING:
     from click.testing import CliRunner
 
 
+class _FakeCompiledArtifacts:
+    """Minimal serializer surface for compile CLI unit tests."""
+
+    def __init__(self) -> None:
+        self.configmap_calls: list[tuple[str, str | None]] = []
+
+    def to_json_file(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"format": "json"}', encoding="utf-8")
+
+    def to_yaml_file(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("format: yaml\n", encoding="utf-8")
+
+    def to_configmap_yaml(
+        self,
+        name: str = "floe-compiled-values",
+        namespace: str | None = None,
+    ) -> str:
+        import yaml
+
+        self.configmap_calls.append((name, namespace))
+        payload: dict[str, object] = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": name},
+            "data": {"values.yaml": "format: configmap\n"},
+        }
+        if namespace is not None:
+            payload["metadata"] = {"name": name, "namespace": namespace}
+        return yaml.safe_dump(payload, sort_keys=False)
+
+
+@pytest.fixture
+def fake_compiled_artifacts(monkeypatch: pytest.MonkeyPatch) -> _FakeCompiledArtifacts:
+    """Patch the compile pipeline to return a deterministic serializer stub."""
+    import floe_core.compilation.stages as stages
+
+    artifacts = _FakeCompiledArtifacts()
+    monkeypatch.setattr(stages, "compile_pipeline", lambda _spec, _manifest: artifacts)
+    return artifacts
+
+
 class TestPlatformCompileCommand:
     """Tests for the platform compile CLI command."""
 
@@ -163,6 +206,35 @@ class TestPlatformCompileCommand:
                 f"Format {format_choice} should be valid"
             )
 
+    @pytest.mark.requirement("FR-011")
+    def test_compile_accepts_output_format_option(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+    ) -> None:
+        """Test that compile accepts the documented output formats."""
+        from floe_core.cli.main import cli
+
+        for format_choice in ["json", "yaml", "configmap"]:
+            result = cli_runner.invoke(
+                cli,
+                [
+                    "platform",
+                    "compile",
+                    "--spec",
+                    str(sample_floe_yaml),
+                    "--manifest",
+                    str(sample_manifest_yaml),
+                    "--output-format",
+                    format_choice,
+                ],
+            )
+
+            assert "Error: Invalid value for '--output-format'" not in (result.output or ""), (
+                f"Format {format_choice} should be valid"
+            )
+
     @pytest.mark.requirement("FR-013")
     def test_compile_rejects_invalid_enforcement_format(
         self,
@@ -223,6 +295,397 @@ class TestPlatformCompileCommand:
         assert result.exit_code == 0
         assert "compile" in result.output.lower()
 
+    @pytest.mark.requirement("FR-011")
+    @pytest.mark.parametrize(
+        ("output_format", "expected_output"),
+        [
+            ("json", Path("target/compiled_artifacts.json")),
+            ("yaml", Path("target/compiled_artifacts.yaml")),
+            ("configmap", Path("target/floe-compiled-values.yaml")),
+        ],
+    )
+    def test_compile_uses_format_specific_default_output_paths(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+        output_format: str,
+        expected_output: Path,
+    ) -> None:
+        """Test that each output format has a predictable default path."""
+        from floe_core.cli.main import cli
+
+        monkeypatch.chdir(temp_dir)
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                output_format,
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert (temp_dir / expected_output).exists()
+
+    @pytest.mark.requirement("FR-011")
+    @pytest.mark.parametrize("output_format", ["json", "yaml", "configmap"])
+    def test_compile_respects_explicit_output_path_for_all_formats(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+        output_format: str,
+    ) -> None:
+        """Test that explicit --output overrides format-specific defaults."""
+        from floe_core.cli.main import cli
+
+        output_path = temp_dir / f"custom-{output_format}.out"
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                output_format,
+                "--output",
+                str(output_path),
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert output_path.exists()
+
+    @pytest.mark.requirement("FR-011")
+    def test_compile_warns_when_configmap_flags_are_used_outside_configmap_mode(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+    ) -> None:
+        """Test that configmap-only flags are surfaced clearly outside configmap mode."""
+        from floe_core.cli.main import cli
+
+        monkeypatch.chdir(temp_dir)
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "json",
+                "--configmap-name",
+                "team-values",
+                "--namespace",
+                "data-platform",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "Warning:" in result.output
+        assert "--configmap-name" in result.output
+        assert "--namespace" in result.output
+        assert (temp_dir / "target" / "compiled_artifacts.json").read_text(
+            encoding="utf-8"
+        ) == '{"format": "json"}'
+
+    @pytest.mark.requirement("FR-011")
+    def test_compile_passes_configmap_name_and_namespace_in_configmap_mode(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+    ) -> None:
+        """Test that configmap mode wires the serializer controls through the CLI."""
+        import yaml
+
+        from floe_core.cli.main import cli
+
+        monkeypatch.chdir(temp_dir)
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "configmap",
+                "--configmap-name",
+                "team-values",
+                "--namespace",
+                "data-platform",
+            ],
+        )
+
+        output_path = temp_dir / "target" / "floe-compiled-values.yaml"
+
+        assert result.exit_code == 0, result.output
+        assert fake_compiled_artifacts.configmap_calls == [("team-values", "data-platform")]
+        assert output_path.exists()
+
+        rendered = yaml.safe_load(output_path.read_text(encoding="utf-8"))
+        assert rendered["metadata"]["name"] == "team-values"
+        assert rendered["metadata"]["namespace"] == "data-platform"
+
+    @pytest.mark.requirement("FR-011")
+    @pytest.mark.parametrize("output_format", ["yaml", "configmap"])
+    def test_compile_rejects_generate_definitions_with_non_json_output(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+        output_format: str,
+    ) -> None:
+        """Test that generated definitions are rejected for non-JSON artifacts."""
+        from floe_core.cli.main import cli
+
+        monkeypatch.chdir(temp_dir)
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                output_format,
+                "--generate-definitions",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "--generate-definitions requires --output-format json" in result.output
+        assert not (temp_dir / "target" / "definitions.py").exists()
+
+    @pytest.mark.requirement("FR-011")
+    def test_compile_rejects_generate_definitions_for_custom_json_filename(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+    ) -> None:
+        """Test that generated definitions require compiled_artifacts.json by name."""
+        from floe_core.cli.main import cli
+
+        monkeypatch.chdir(temp_dir)
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output",
+                str(temp_dir / "target" / "custom-name.json"),
+                "--generate-definitions",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "requires the output file to be named compiled_artifacts.json" in result.output
+        assert not (temp_dir / "target" / "definitions.py").exists()
+
+    @pytest.mark.requirement("FR-011")
+    def test_compile_rejects_invalid_configmap_name(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+    ) -> None:
+        """Test that invalid ConfigMap names fail with a clear CLI error."""
+        from floe_core.cli.main import cli
+
+        monkeypatch.chdir(temp_dir)
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "configmap",
+                "--configmap-name",
+                "My ConfigMap!",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "Invalid ConfigMap name" in result.output
+        assert fake_compiled_artifacts.configmap_calls == []
+
+    @pytest.mark.requirement("FR-011")
+    def test_compile_rejects_configmap_name_with_trailing_newline(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+    ) -> None:
+        """Test that trailing newlines are rejected in ConfigMap names."""
+        from floe_core.cli.main import cli
+
+        monkeypatch.chdir(temp_dir)
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "configmap",
+                "--configmap-name",
+                "floe-values\n",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "Invalid ConfigMap name" in result.output
+        assert fake_compiled_artifacts.configmap_calls == []
+
+    @pytest.mark.requirement("FR-011")
+    def test_compile_rejects_invalid_namespace_for_configmap_output(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+    ) -> None:
+        """Test that invalid namespaces fail before writing ConfigMap output."""
+        from floe_core.cli.main import cli
+
+        monkeypatch.chdir(temp_dir)
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "configmap",
+                "--namespace",
+                "Invalid_Namespace",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "Invalid namespace" in result.output
+        assert fake_compiled_artifacts.configmap_calls == []
+
+    @pytest.mark.requirement("FR-011")
+    def test_compile_rejects_namespace_with_trailing_newline_for_configmap_output(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+    ) -> None:
+        """Test that trailing newlines are rejected in namespaces."""
+        from floe_core.cli.main import cli
+
+        monkeypatch.chdir(temp_dir)
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "configmap",
+                "--namespace",
+                "data-platform\n",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "Invalid namespace" in result.output
+        assert fake_compiled_artifacts.configmap_calls == []
+
+    @pytest.mark.requirement("FR-011")
+    def test_write_artifacts_output_rejects_unknown_format(
+        self,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+        temp_dir: Path,
+    ) -> None:
+        """Test that the output helper fails closed on unknown formats."""
+        from floe_core.cli.platform.compile import _write_artifacts_output
+
+        with pytest.raises(ValueError, match="Unsupported output format: xml"):
+            _write_artifacts_output(
+                artifacts=fake_compiled_artifacts,
+                output_path=temp_dir / "artifacts.out",
+                output_format="xml",
+                configmap_name="floe-compiled-values",
+                namespace=None,
+            )
+
     @pytest.mark.requirement("FR-010")
     def test_compile_shows_help_with_help_flag(
         self,
@@ -241,9 +704,11 @@ class TestPlatformCompileCommand:
 
         assert result.exit_code == 0
         assert "compile" in result.output.lower()
-        # Once implemented, these should be in help
-        # assert "--spec" in result.output
-        # assert "--manifest" in result.output
+        assert "--spec" in result.output
+        assert "--manifest" in result.output
+        assert "--output-format" in result.output
+        assert "--configmap-name" in result.output
+        assert "--namespace" in result.output
 
     @pytest.mark.requirement("FR-010")
     def test_compile_spec_file_not_found(

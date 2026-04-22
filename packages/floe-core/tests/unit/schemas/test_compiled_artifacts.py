@@ -685,6 +685,25 @@ class TestYamlSerialization:
         assert from_json.model_dump(mode="json") == from_yaml.model_dump(mode="json")
 
     @pytest.mark.requirement("FR-011")
+    def test_to_yaml_file_preserves_legacy_sorted_key_order(
+        self,
+        full_artifacts: CompiledArtifacts,
+        tmp_path: Path,
+    ) -> None:
+        """Test that YAML output keeps the pre-ConfigMap key ordering contract."""
+        import yaml
+
+        yaml_path = tmp_path / "compiled_artifacts.yaml"
+        full_artifacts.to_yaml_file(yaml_path)
+
+        expected = yaml.safe_dump(
+            full_artifacts.model_dump(mode="json", by_alias=True),
+            default_flow_style=False,
+            allow_unicode=True,
+        )
+        assert yaml_path.read_text(encoding="utf-8") == expected
+
+    @pytest.mark.requirement("FR-011")
     def test_yaml_preserves_all_fields(
         self,
         full_artifacts: CompiledArtifacts,
@@ -749,6 +768,78 @@ class TestYamlSerialization:
         assert loaded.governance.audit_logging == "enabled"
         assert loaded.governance.policy_enforcement_level == "strict"
         assert loaded.governance.data_retention_days == 90
+
+    @pytest.mark.requirement("FR-011")
+    def test_to_configmap_yaml_uses_default_name_and_omits_namespace(
+        self,
+        full_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test that ConfigMap serialization uses the documented defaults."""
+        import yaml
+
+        configmap = yaml.safe_load(full_artifacts.to_configmap_yaml())
+
+        assert configmap["apiVersion"] == "v1"
+        assert configmap["kind"] == "ConfigMap"
+        assert configmap["metadata"]["name"] == "floe-compiled-values"
+        assert "namespace" not in configmap["metadata"]
+        assert isinstance(configmap["data"]["values.yaml"], str)
+
+    @pytest.mark.requirement("FR-011")
+    def test_to_configmap_yaml_wraps_existing_artifact_payload(
+        self,
+        full_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test that ConfigMap output wraps the existing artifact dump."""
+        import yaml
+
+        configmap = yaml.safe_load(
+            full_artifacts.to_configmap_yaml(
+                name="team-values",
+                namespace="data-platform",
+            )
+        )
+
+        embedded_values = yaml.safe_load(configmap["data"]["values.yaml"])
+
+        assert configmap["metadata"]["name"] == "team-values"
+        assert configmap["metadata"]["namespace"] == "data-platform"
+        assert embedded_values == full_artifacts.model_dump(mode="json", by_alias=True)
+
+    @pytest.mark.requirement("FR-011")
+    def test_to_configmap_yaml_rejects_invalid_name(
+        self, full_artifacts: CompiledArtifacts
+    ) -> None:
+        """Test that invalid ConfigMap names are rejected before rendering YAML."""
+        with pytest.raises(ValueError, match="Invalid ConfigMap name"):
+            full_artifacts.to_configmap_yaml(name="My ConfigMap!")
+
+    @pytest.mark.requirement("FR-011")
+    def test_to_configmap_yaml_rejects_name_with_trailing_newline(
+        self,
+        full_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test that trailing newlines are rejected in ConfigMap names."""
+        with pytest.raises(ValueError, match="Invalid ConfigMap name"):
+            full_artifacts.to_configmap_yaml(name="team-values\n")
+
+    @pytest.mark.requirement("FR-011")
+    def test_to_configmap_yaml_rejects_invalid_namespace(
+        self,
+        full_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test that invalid namespaces are rejected before rendering YAML."""
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            full_artifacts.to_configmap_yaml(namespace="Invalid_Namespace")
+
+    @pytest.mark.requirement("FR-011")
+    def test_to_configmap_yaml_rejects_namespace_with_trailing_newline(
+        self,
+        full_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test that trailing newlines are rejected in namespaces."""
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            full_artifacts.to_configmap_yaml(namespace="data-platform\n")
 
     @pytest.mark.requirement("FR-011")
     def test_from_yaml_file_not_found(self, tmp_path: Path) -> None:
