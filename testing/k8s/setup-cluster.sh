@@ -462,10 +462,15 @@ resolve_flux_git_branch() {
 
 render_flux_manifests() {
     local flux_git_branch="$1"
+    local flux_fixture_dir="${FLOE_FLUX_FIXTURE_DIR}"
     local rendered_dir
     rendered_dir=$(mktemp -d "${TMPDIR:-/tmp}/floe-flux-manifests.XXXXXX")
 
-    cp "${PROJECT_ROOT}/charts/floe-platform/flux/"*.yaml "${rendered_dir}/"
+    if [[ "${flux_fixture_dir}" != /* ]]; then
+        flux_fixture_dir="${PROJECT_ROOT}/${flux_fixture_dir}"
+    fi
+
+    cp "${flux_fixture_dir}/"*.yaml "${rendered_dir}/"
 
     if [[ "${FLOE_FLUX_GIT_URL}" == *"|"* ]]; then
         log_error "FLOE_FLUX_GIT_URL contains pipe character — cannot safely render Flux manifests"

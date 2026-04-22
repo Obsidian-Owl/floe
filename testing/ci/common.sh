@@ -24,6 +24,7 @@
 : "${FLOE_KIND_CLUSTER:=${KIND_CLUSTER:-${KIND_CLUSTER_NAME:-floe-test}}}"
 : "${FLOE_CHART_DIR:=charts/floe-platform}"
 : "${FLOE_VALUES_FILE:=charts/floe-platform/values-test.yaml}"
+: "${FLOE_FLUX_FIXTURE_DIR:=testing/k8s/flux}"
 : "${FLOE_FLUX_GIT_URL:=https://github.com/Obsidian-Owl/floe}"
 # Leave the branch unset by default so setup-cluster.sh can auto-detect the
 # current checkout while still allowing explicit overrides from the environment.
@@ -36,7 +37,7 @@
 : "${FLUX_VERSION:=2.5.1}"
 
 export FLOE_RELEASE_NAME FLOE_NAMESPACE FLOE_KIND_CLUSTER FLOE_CHART_DIR FLOE_VALUES_FILE
-export FLOE_FLUX_GIT_URL FLOE_FLUX_GIT_BRANCH DEVPOD_REMOTE_WORKDIR
+export FLOE_FLUX_FIXTURE_DIR FLOE_FLUX_GIT_URL FLOE_FLUX_GIT_BRANCH DEVPOD_REMOTE_WORKDIR
 export FLUX_VERSION
 
 # floe_service_name <component>

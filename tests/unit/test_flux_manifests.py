@@ -1,9 +1,9 @@
-"""Structural tests: Flux CRD manifests and FLUX_VERSION constant.
+"""Structural tests: internal Flux fixture manifests and shared constants.
 
 Validates that the HelmRelease and GitRepository CRD manifests in
-``charts/floe-platform/flux/`` have the correct structure, API versions,
-and field values for Flux v2 GA. Also validates that FLUX_VERSION is
-defined in ``testing/ci/common.sh`` and not hardcoded elsewhere.
+``testing/k8s/flux/`` have the correct structure, API versions, and field
+values for Flux v2 GA. Also validates that shared Flux constants are defined
+in ``testing/ci/common.sh`` and not hardcoded elsewhere.
 
 Requirements Covered:
     - AC-1: Flux version constant in common.sh
@@ -28,7 +28,7 @@ import yaml
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-_FLUX_DIR = _REPO_ROOT / "charts" / "floe-platform" / "flux"
+_FLUX_DIR = _REPO_ROOT / "testing" / "k8s" / "flux"
 _COMMON_SH = _REPO_ROOT / "testing" / "ci" / "common.sh"
 _PLATFORM_CHART_DIR = _REPO_ROOT / "charts" / "floe-platform"
 _PACKAGED_PLATFORM_CHART = _PLATFORM_CHART_DIR / "flux-artifacts" / "floe-platform.tgz"
@@ -76,6 +76,20 @@ def test_flux_version_defined_in_common_sh() -> None:
     assert "FLUX_VERSION" in content, "FLUX_VERSION must be present in common.sh"
     assert re.search(r"export\s+.*FLUX_VERSION", content), (
         "FLUX_VERSION must be exported in common.sh"
+    )
+
+
+@pytest.mark.requirement("AC-1")
+def test_flux_fixture_dir_defined_in_common_sh() -> None:
+    """FLOE_FLUX_FIXTURE_DIR is defined and exported in testing/ci/common.sh."""
+    content = _COMMON_SH.read_text()
+    match = re.search(r'FLOE_FLUX_FIXTURE_DIR:=([^"\n]+|"[^"]+")', content)
+    assert match is not None, "FLOE_FLUX_FIXTURE_DIR must be defined in common.sh"
+    assert "testing/k8s/flux" in match.group(0), (
+        "FLOE_FLUX_FIXTURE_DIR must default to testing/k8s/flux"
+    )
+    assert re.search(r"export\s+.*FLOE_FLUX_FIXTURE_DIR", content), (
+        "FLOE_FLUX_FIXTURE_DIR must be exported in common.sh"
     )
 
 
