@@ -243,13 +243,13 @@ def test_render_flux_manifests_checks_fixture_directory_before_copy() -> None:
     assert '[[ ! -d "${flux_fixture_dir}" ]]' in func_body, (
         "render_flux_manifests must validate the fixture directory before copying manifests."
     )
-    assert 'Flux fixture directory not found:' in func_body, (
+    assert "Flux fixture directory not found:" in func_body, (
         "render_flux_manifests must emit a clear missing-directory error."
     )
     assert 'compgen -G "${manifest_glob}"' in func_body, (
         "render_flux_manifests must validate that the fixture directory contains YAML manifests."
     )
-    assert 'Flux fixture directory contains no YAML manifests:' in func_body, (
+    assert "Flux fixture directory contains no YAML manifests:" in func_body, (
         "render_flux_manifests must emit a clear empty-directory error."
     )
 
