@@ -56,12 +56,10 @@ def test_publish_oci_installs_cosign_before_signing() -> None:
     install_step = _step_named("Install Cosign")
     cosign_login_step = _step_named("Login Cosign to GHCR")
     assert (
-        install_step["uses"]
-        == "sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da"
+        install_step["uses"] == "sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da"
     )
     assert (
-        cosign_login_step["uses"]
-        == "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9"
+        cosign_login_step["uses"] == "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9"
     )
     assert cosign_login_step["with"]["registry"] == "ghcr.io"
     assert _step_index("Install Cosign") < _step_index("Sign OCI charts")
