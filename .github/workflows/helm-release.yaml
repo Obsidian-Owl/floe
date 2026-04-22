@@ -168,6 +168,7 @@ jobs:
     needs: build
     permissions:
       packages: write
+      id-token: write
     steps:
       - name: Download chart artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -179,6 +180,9 @@ jobs:
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
           version: v3.14.0
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3
 
       - name: Login to GHCR
         env:
@@ -204,6 +208,19 @@ jobs:
           echo ""
           echo "Install with:"
           echo "  helm install floe oci://${REGISTRY_PATH}/floe-platform --version ${VERSION}"
+
+      - name: Sign OCI charts
+        continue-on-error: true
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          for chart_name in floe-platform floe-jobs; do
+            chart_ref="${REGISTRY_PATH}/${chart_name}:${VERSION}"
+            echo "Signing ${chart_ref}..."
+            if ! cosign sign --yes "${chart_ref}"; then
+              echo "WARNING: Failed to sign ${chart_name}" >&2
+            fi
+          done
 
   # ============================================================
   # Stage 4: Create GitHub Release
