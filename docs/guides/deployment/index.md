@@ -17,6 +17,7 @@ This document describes deployment architecture for floe, covering the separatio
 | [Two-Layer Model](two-layer-model.md) | Platform Services vs Pipeline Jobs |
 | [Local Development](local-development.md) | Local (uv) and Docker Compose setup |
 | [Kubernetes Helm](kubernetes-helm.md) | Helm chart structure and installation |
+| [GitOps with Flux](gitops-flux.md) | Public Flux operator workflow for OCI chart releases and compiled values |
 | [Production](production.md) | HA, scaling, monitoring, backups |
 | [Data Mesh](data-mesh.md) | Federated Data Mesh deployment topology |
 
@@ -41,6 +42,7 @@ This document describes deployment architecture for floe, covering the separatio
 
 ### Production Deployment
 - [Kubernetes Helm](kubernetes-helm.md) - Deploy to Kubernetes
+- [GitOps with Flux](gitops-flux.md) - Deploy with Flux using the public OCI chart path
 - [Production](production.md) - Production-ready configuration
 - [Data Mesh](data-mesh.md) - Multi-domain enterprise deployment
 
