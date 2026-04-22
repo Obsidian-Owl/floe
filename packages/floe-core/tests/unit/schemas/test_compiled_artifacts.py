@@ -807,7 +807,9 @@ class TestYamlSerialization:
         assert embedded_values == full_artifacts.model_dump(mode="json", by_alias=True)
 
     @pytest.mark.requirement("FR-011")
-    def test_to_configmap_yaml_rejects_invalid_name(self, full_artifacts: CompiledArtifacts) -> None:
+    def test_to_configmap_yaml_rejects_invalid_name(
+        self, full_artifacts: CompiledArtifacts
+    ) -> None:
         """Test that invalid ConfigMap names are rejected before rendering YAML."""
         with pytest.raises(ValueError, match="Invalid ConfigMap name"):
             full_artifacts.to_configmap_yaml(name="My ConfigMap!")
