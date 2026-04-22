@@ -45,7 +45,7 @@ def _validate_configmap_name(name: str) -> str:
         raise ValueError(
             f"Invalid ConfigMap name: {name!r} exceeds {_MAX_K8S_NAME_LENGTH} characters"
         )
-    if not _K8S_DNS_SUBDOMAIN_PATTERN.match(name):
+    if not _K8S_DNS_SUBDOMAIN_PATTERN.fullmatch(name):
         raise ValueError(
             f"Invalid ConfigMap name: {name!r} must match Kubernetes DNS subdomain rules"
         )
@@ -58,7 +58,7 @@ def _validate_configmap_namespace(namespace: str) -> str:
         raise ValueError(
             f"Invalid namespace: {namespace!r} exceeds {_MAX_K8S_NAMESPACE_LENGTH} characters"
         )
-    if not _K8S_NAMESPACE_PATTERN.match(namespace):
+    if not _K8S_NAMESPACE_PATTERN.fullmatch(namespace):
         raise ValueError(f"Invalid namespace: {namespace!r} must match Kubernetes namespace rules")
     return namespace
 

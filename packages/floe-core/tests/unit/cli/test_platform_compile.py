@@ -564,6 +564,41 @@ class TestPlatformCompileCommand:
         assert fake_compiled_artifacts.configmap_calls == []
 
     @pytest.mark.requirement("FR-011")
+    def test_compile_rejects_configmap_name_with_trailing_newline(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+    ) -> None:
+        """Test that trailing newlines are rejected in ConfigMap names."""
+        from floe_core.cli.main import cli
+
+        monkeypatch.chdir(temp_dir)
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "configmap",
+                "--configmap-name",
+                "floe-values\n",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "Invalid ConfigMap name" in result.output
+        assert fake_compiled_artifacts.configmap_calls == []
+
+    @pytest.mark.requirement("FR-011")
     def test_compile_rejects_invalid_namespace_for_configmap_output(
         self,
         cli_runner: CliRunner,
@@ -591,6 +626,41 @@ class TestPlatformCompileCommand:
                 "configmap",
                 "--namespace",
                 "Invalid_Namespace",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert "Invalid namespace" in result.output
+        assert fake_compiled_artifacts.configmap_calls == []
+
+    @pytest.mark.requirement("FR-011")
+    def test_compile_rejects_namespace_with_trailing_newline_for_configmap_output(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        temp_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+    ) -> None:
+        """Test that trailing newlines are rejected in namespaces."""
+        from floe_core.cli.main import cli
+
+        monkeypatch.chdir(temp_dir)
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--output-format",
+                "configmap",
+                "--namespace",
+                "data-platform\n",
             ],
         )
 

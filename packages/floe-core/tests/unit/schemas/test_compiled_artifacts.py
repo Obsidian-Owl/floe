@@ -815,6 +815,15 @@ class TestYamlSerialization:
             full_artifacts.to_configmap_yaml(name="My ConfigMap!")
 
     @pytest.mark.requirement("FR-011")
+    def test_to_configmap_yaml_rejects_name_with_trailing_newline(
+        self,
+        full_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test that trailing newlines are rejected in ConfigMap names."""
+        with pytest.raises(ValueError, match="Invalid ConfigMap name"):
+            full_artifacts.to_configmap_yaml(name="team-values\n")
+
+    @pytest.mark.requirement("FR-011")
     def test_to_configmap_yaml_rejects_invalid_namespace(
         self,
         full_artifacts: CompiledArtifacts,
@@ -822,6 +831,15 @@ class TestYamlSerialization:
         """Test that invalid namespaces are rejected before rendering YAML."""
         with pytest.raises(ValueError, match="Invalid namespace"):
             full_artifacts.to_configmap_yaml(namespace="Invalid_Namespace")
+
+    @pytest.mark.requirement("FR-011")
+    def test_to_configmap_yaml_rejects_namespace_with_trailing_newline(
+        self,
+        full_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Test that trailing newlines are rejected in namespaces."""
+        with pytest.raises(ValueError, match="Invalid namespace"):
+            full_artifacts.to_configmap_yaml(namespace="data-platform\n")
 
     @pytest.mark.requirement("FR-011")
     def test_from_yaml_file_not_found(self, tmp_path: Path) -> None:
