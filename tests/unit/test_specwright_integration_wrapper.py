@@ -62,14 +62,39 @@ def test_dispatcher_unit_c_profile_dry_run_reports_remote_boundary_command() -> 
 
 
 @pytest.mark.requirement("AC-5")
-def test_dispatcher_auto_detects_unit_c_profile_from_changed_files() -> None:
-    """The wrapper should detect the Unit C profile from matching changed files."""
+@pytest.mark.parametrize(
+    "changed_file",
+    [
+        "testing/ci/common.sh",
+        "testing/ci/test-e2e-cluster.sh",
+        "testing/ci/test-unit-c-boundary.sh",
+        "testing/k8s/setup-cluster.sh",
+        "testing/k8s/flux/gitrepository.yaml",
+        "tests/integration/test_unit_c_devpod_flux_boundary.py",
+        "tests/unit/test_unit_c_boundary_wrapper.py",
+        "scripts/devpod-ensure-ready.sh",
+        ".devcontainer/hetzner/postStartCommand.sh",
+    ],
+)
+def test_dispatcher_auto_detects_unit_c_profile_from_changed_files(
+    changed_file: str,
+) -> None:
+    """The wrapper should detect Unit C's direct runtime dependencies."""
     result = _run_wrapper(
         env={
-            "SPECWRIGHT_CHANGED_FILES": "testing/ci/test-unit-c-boundary.sh",
+            "SPECWRIGHT_CHANGED_FILES": changed_file,
             "SPECWRIGHT_INTEGRATION_DRY_RUN": "1",
         }
     )
     combined = f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     assert result.returncode == 0, combined
     assert "Selected profile: unit-c-devpod-boundary" in result.stdout
+
+
+@pytest.mark.requirement("AC-5")
+def test_dispatcher_rejects_unknown_profile() -> None:
+    """Unknown profiles must fail closed with exit code 2."""
+    result = _run_wrapper(env={"SPECWRIGHT_INTEGRATION_PROFILE": "bogus-profile"})
+    combined = f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    assert result.returncode == 2, combined
+    assert "Unknown Specwright integration profile" in result.stderr

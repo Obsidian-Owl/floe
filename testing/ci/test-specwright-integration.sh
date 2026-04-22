@@ -14,6 +14,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck source=./common.sh
+source "${SCRIPT_DIR}/common.sh"
+
+UNIT_C_DEVPOD_BOUNDARY_TRIGGER_PATTERN='^(testing/ci/(common\.sh|test-e2e-cluster\.sh|test-unit-c-boundary\.sh)|testing/k8s/setup-cluster\.sh|testing/k8s/flux/[^/]+\.yaml|tests/integration/test_unit_c_devpod_flux_boundary\.py|tests/unit/test_unit_c_boundary_wrapper\.py|scripts/devpod-ensure-ready\.sh|\.devcontainer/hetzner/postStartCommand\.sh)$'
 
 resolve_changed_files() {
     if [[ -n "${SPECWRIGHT_CHANGED_FILES:-}" ]]; then
@@ -40,7 +44,7 @@ detect_profile() {
     local changed_files="$1"
 
     if printf '%s\n' "${changed_files}" | grep -Eq \
-        '^(testing/ci/test-unit-c-boundary\.sh|tests/integration/test_unit_c_devpod_flux_boundary\.py|tests/unit/test_unit_c_boundary_wrapper\.py|scripts/devpod-ensure-ready\.sh|\.devcontainer/hetzner/postStartCommand\.sh)$'; then
+        "${UNIT_C_DEVPOD_BOUNDARY_TRIGGER_PATTERN}"; then
         printf '%s\n' "unit-c-devpod-boundary"
         return 0
     fi
