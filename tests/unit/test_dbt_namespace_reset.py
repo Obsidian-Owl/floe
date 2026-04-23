@@ -33,6 +33,32 @@ def test_purge_namespace_raises_when_namespace_still_contains_tables(
         dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
 
 
+def test_purge_namespace_raises_when_verified_s3_cleanup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    purge_catalog = Mock()
+    purge_catalog.list_tables.return_value = [("customer_360", "stg_customers")]
+    table = Mock()
+    table.metadata.location = "s3://warehouse/customer_360/stg_customers"
+    purge_catalog.load_table.return_value = table
+    verify_catalog = Mock()
+    verify_catalog.list_tables.return_value = []
+    catalogs = [purge_catalog, verify_catalog]
+
+    def _get_catalog(*, fresh: bool = False) -> Mock:
+        return catalogs.pop(0)
+
+    def _raise_s3_failure(*args: object, **kwargs: object) -> int:
+        raise RuntimeError("s3 boom")
+
+    monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
+    monkeypatch.setattr(dbt_utils.boto3, "client", lambda *args, **kwargs: Mock())
+    monkeypatch.setattr(dbt_utils, "_delete_s3_prefix", _raise_s3_failure)
+
+    with pytest.raises(dbt_utils.NamespaceResetError, match="S3 cleanup failed"):
+        dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
+
+
 def test_purge_namespace_uses_fresh_catalog_for_purge_and_verification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -124,3 +150,27 @@ def test_run_dbt_resets_raw_namespace_before_seed(
     dbt_utils.run_dbt(["seed"], project_dir)
 
     assert purge_calls == [("customer_360_raw", True)]
+
+
+def test_run_dbt_resets_model_namespace_before_run(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    project_dir = tmp_path / "customer-360"
+    project_dir.mkdir()
+
+    purge_calls: list[tuple[str, bool]] = []
+
+    def _record(namespace: str, verify_empty: bool = False, retries: int = 3) -> None:
+        purge_calls.append((namespace, verify_empty))
+
+    monkeypatch.setattr(dbt_utils, "_purge_iceberg_namespace", _record)
+    monkeypatch.setattr(
+        dbt_utils.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+
+    dbt_utils.run_dbt(["run"], project_dir)
+
+    assert purge_calls == [("customer_360", True)]

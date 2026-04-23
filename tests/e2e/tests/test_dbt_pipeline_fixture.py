@@ -215,6 +215,28 @@ def _finally_calls_function(func: ast.FunctionDef, callee_name: str) -> bool:
     return False
 
 
+def _collect_purge_calls(
+    statements: list[ast.stmt],
+) -> list[ast.Call]:
+    """Collect _purge_iceberg_namespace calls from a statement list."""
+    calls: list[ast.Call] = []
+    for node in ast.walk(ast.Module(body=statements, type_ignores=[])):
+        if not isinstance(node, ast.Call):
+            continue
+        callee = node.func
+        if isinstance(callee, ast.Name) and callee.id == "_purge_iceberg_namespace":
+            calls.append(node)
+    return calls
+
+
+def _call_has_keyword_bool(call: ast.Call, keyword: str, value: bool) -> bool:
+    """Return whether a call sets a bool keyword to the expected value."""
+    for kw in call.keywords:
+        if kw.arg == keyword and isinstance(kw.value, ast.Constant) and kw.value.value is value:
+            return True
+    return False
+
+
 # =========================================================================
 # Tests
 # =========================================================================
@@ -414,6 +436,48 @@ class TestDbtPipelineResultFixtureSemantics:
             "'_purge_iceberg_namespace'. Cleanup must use this function "
             "to properly remove Iceberg tables and namespace."
         )
+
+    @pytest.mark.requirement("AC-1")
+    def test_setup_purges_use_verified_reset(self) -> None:
+        """Setup purges must verify both raw and model namespaces are empty."""
+        tree = _parse_conftest()
+        func = _find_function_def(tree, "dbt_pipeline_result")
+        assert func is not None, "Function 'dbt_pipeline_result' not found."
+
+        setup_calls: list[ast.Call] = []
+        for node in func.body:
+            if isinstance(node, ast.Try):
+                setup_calls = _collect_purge_calls(node.body)
+                break
+
+        assert len(setup_calls) == 2, (
+            "dbt_pipeline_result setup must call _purge_iceberg_namespace twice "
+            "for raw and model namespaces before running dbt."
+        )
+        assert all(_call_has_keyword_bool(call, "verify_empty", True) for call in setup_calls), (
+            "All setup _purge_iceberg_namespace calls must pass verify_empty=True."
+        )
+
+    @pytest.mark.requirement("AC-1")
+    def test_teardown_purges_use_verified_reset(self) -> None:
+        """Teardown purges must verify both raw and model namespaces are empty."""
+        tree = _parse_conftest()
+        func = _find_function_def(tree, "dbt_pipeline_result")
+        assert func is not None, "Function 'dbt_pipeline_result' not found."
+
+        teardown_calls: list[ast.Call] = []
+        for node in func.body:
+            if isinstance(node, ast.Try):
+                teardown_calls = _collect_purge_calls(node.finalbody)
+                break
+
+        assert len(teardown_calls) == 2, (
+            "dbt_pipeline_result teardown must call _purge_iceberg_namespace twice "
+            "for raw and model namespaces in finally."
+        )
+        assert all(
+            _call_has_keyword_bool(call, "verify_empty", True) for call in teardown_calls
+        ), "All teardown _purge_iceberg_namespace calls must pass verify_empty=True."
 
     @pytest.mark.requirement("AC-1")
     def test_yield_inside_try_block(self) -> None:

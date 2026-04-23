@@ -141,6 +141,7 @@ def _purge_iceberg_namespace(
         retries: Number of verification attempts when ``verify_empty`` is true.
     """
     catalog = _get_polaris_catalog(fresh=True)
+    s3_cleanup_failure_reason: str | None = None
     if catalog is not None:
         # Collect S3 config from environment (same defaults as _get_polaris_catalog).
         s3_endpoint = os.environ.get("MINIO_ENDPOINT", ServiceEndpoint("minio").url)
@@ -188,6 +189,10 @@ def _purge_iceberg_namespace(
                         deleted = _delete_s3_prefix(s3_client, bucket, prefix)
                         logger.info("Deleted %d S3 objects under %s", deleted, location)
                     except Exception as exc:
+                        if verify_empty and s3_cleanup_failure_reason is None:
+                            s3_cleanup_failure_reason = (
+                                f"S3 cleanup failed for {fqn}: {type(exc).__name__}"
+                            )
                         logger.warning(
                             "S3 cleanup failed for table %s: %s",
                             fqn,
@@ -217,6 +222,7 @@ def _purge_iceberg_namespace(
         return
 
     remaining: Any = []
+    verification_succeeded = False
     failure_reason = "verification did not complete"
     for attempt in range(1, retries + 1):
         fresh_catalog = _get_polaris_catalog(fresh=True)
@@ -236,7 +242,8 @@ def _purge_iceberg_namespace(
             if PyIcebergNoSuchNamespaceError is not None and isinstance(
                 exc, PyIcebergNoSuchNamespaceError
             ):
-                return
+                verification_succeeded = True
+                break
             failure_reason = f"verification failed: {type(exc).__name__}"
             logger.warning(
                 "Could not verify namespace %s reset on attempt %d/%d: %s",
@@ -248,7 +255,8 @@ def _purge_iceberg_namespace(
             continue
 
         if not remaining:
-            return
+            verification_succeeded = True
+            break
 
         failure_reason = f"remaining tables={remaining}"
         logger.warning(
@@ -258,6 +266,14 @@ def _purge_iceberg_namespace(
             retries,
             remaining,
         )
+
+    if s3_cleanup_failure_reason is not None:
+        raise NamespaceResetError(
+            f"Namespace reset incomplete for {namespace}: {s3_cleanup_failure_reason}"
+        )
+
+    if verification_succeeded:
+        return
 
     raise NamespaceResetError(
         f"Namespace reset incomplete for {namespace}: {failure_reason}"
