@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 from typing import TYPE_CHECKING
@@ -26,7 +27,7 @@ import httpx
 import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
-from testing.fixtures.credentials import get_minio_credentials
+from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
 from testing.fixtures.polling import wait_for_condition
 from testing.fixtures.services import ServiceEndpoint
 
@@ -54,6 +55,26 @@ def _run_kubectl(
         timeout=timeout,
         check=False,
     )
+
+
+def _expected_polaris_catalog() -> str:
+    """Return the catalog/warehouse name bootstrap must have created."""
+    catalog_name = os.environ.get("POLARIS_CATALOG") or os.environ.get("POLARIS_WAREHOUSE")
+    if not catalog_name:
+        pytest.fail("POLARIS_CATALOG or POLARIS_WAREHOUSE must be set for bootstrap validation.")
+    if not re.fullmatch(r"[a-zA-Z0-9_-]+", catalog_name):
+        pytest.fail(f"Polaris catalog name contains unsafe characters: {catalog_name!r}")
+    return catalog_name
+
+
+def _polaris_credentials() -> tuple[str, str]:
+    """Return Polaris OAuth client credentials without logging secret values."""
+    credential = os.environ.get("POLARIS_CREDENTIAL")
+    if credential:
+        if ":" not in credential:
+            pytest.fail("POLARIS_CREDENTIAL must be in 'client_id:client_secret' format.")
+        return credential.split(":", 1)
+    return get_polaris_credentials()
 
 
 @pytest.mark.requirement("FR-001")
@@ -230,6 +251,44 @@ class TestPlatformBootstrap(IntegrationTestBase):
             f"{ServiceEndpoint('jaeger-query').url}/api/services",
             timeout=60.0,
             description="Jaeger query",
+        )
+
+    @pytest.mark.requirement("FR-005")
+    def test_polaris_catalog_exists(self) -> None:
+        """Test that Polaris bootstrap created the expected catalog/warehouse.
+
+        This is intentionally read-only. Product E2E fallback code may repair a
+        missing catalog after bootstrap, but bootstrap validation itself must
+        fail when the expected catalog is absent.
+        """
+        catalog_name = _expected_polaris_catalog()
+        client_id, client_secret = _polaris_credentials()
+        polaris_url = ServiceEndpoint("polaris").url.rstrip("/")
+        token_response = httpx.post(
+            f"{polaris_url}/api/catalog/v1/oauth/tokens",
+            data={
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "scope": os.environ.get("POLARIS_SCOPE", "PRINCIPAL_ROLE:ALL"),
+            },
+            timeout=10.0,
+        )
+        assert token_response.status_code == 200, (
+            f"Failed to get Polaris token for bootstrap catalog check: "
+            f"HTTP {token_response.status_code}"
+        )
+        token = token_response.json().get("access_token")
+        assert token, "Polaris token response missing access_token"
+
+        response = httpx.get(
+            f"{polaris_url}/api/management/v1/catalogs/{catalog_name}",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10.0,
+        )
+        assert response.status_code == 200, (
+            f"Expected Polaris catalog/warehouse '{catalog_name}' to exist before "
+            f"product E2E. Management API returned HTTP {response.status_code}."
         )
 
     @pytest.mark.requirement("FR-004")

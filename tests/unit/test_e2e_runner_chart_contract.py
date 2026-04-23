@@ -44,6 +44,12 @@ def _render_bootstrap_job() -> str:
     return _render_test_job("tests/job-bootstrap.yaml")
 
 
+def _render_standard_rbac_docs() -> list[dict[str, Any]]:
+    """Render standard test runner RBAC docs."""
+    docs = yaml.safe_load_all(_render_test_job("tests/rbac-standard.yaml"))
+    return [doc for doc in docs if isinstance(doc, dict)]
+
+
 def _rendered_job_args(rendered: str) -> list[str]:
     """Return the pytest args from a rendered test Job."""
     docs = yaml.safe_load_all(rendered)
@@ -154,3 +160,58 @@ def test_generated_contract_env_helper_matches_emitter() -> None:
     )
 
     assert generated.read_text() == render_helm_test_env_template()
+
+
+def test_standard_runner_rbac_can_read_flux_controller_health() -> None:
+    """Bootstrap checks need narrow read access to Flux controller pods."""
+    docs = _render_standard_rbac_docs()
+    flux_roles = [
+        doc
+        for doc in docs
+        if doc.get("kind") == "Role"
+        and doc.get("metadata", {}).get("namespace") == "flux-system"
+        and doc.get("metadata", {}).get("name") == "floe-platform-test-runner-flux-health"
+    ]
+    assert len(flux_roles) == 1
+
+    rules = flux_roles[0].get("rules") or []
+    assert {
+        "apiGroups": [""],
+        "resources": ["pods"],
+        "verbs": ["get", "list", "watch"],
+    } in rules
+
+    binding = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "RoleBinding"
+        and doc.get("metadata", {}).get("name") == "floe-platform-test-runner-flux-health"
+    )
+    assert binding["metadata"]["namespace"] == "flux-system"
+    assert binding["subjects"] == [
+        {
+            "kind": "ServiceAccount",
+            "name": "floe-platform-test-runner",
+            "namespace": "floe-test",
+        }
+    ]
+    assert not [doc for doc in docs if doc.get("kind") == "ClusterRole"]
+
+
+def test_standard_runner_rbac_can_read_and_resume_helmreleases() -> None:
+    """Bootstrap checks need HelmRelease read and patch in the platform namespace."""
+    docs = _render_standard_rbac_docs()
+    role = next(
+        doc
+        for doc in docs
+        if doc.get("kind") == "Role"
+        and doc.get("metadata", {}).get("name") == "floe-platform-test-runner"
+        and doc.get("metadata", {}).get("namespace") == "floe-test"
+    )
+    rules = role.get("rules") or []
+
+    assert {
+        "apiGroups": ["helm.toolkit.fluxcd.io"],
+        "resources": ["helmreleases"],
+        "verbs": ["get", "list", "watch", "patch"],
+    } in rules

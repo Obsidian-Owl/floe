@@ -182,6 +182,9 @@ def test_test_e2e_runs_bootstrap_before_repair_fallbacks() -> None:
 
     assert bootstrap_idx < bucket_idx < catalog_idx < product_idx
     assert "export FLOE_EXECUTION_CONTEXT=host" in _script_content[:bootstrap_idx]
+    assert "export POLARIS_CATALOG=" in _script_content[:bootstrap_idx]
+    assert "export POLARIS_WAREHOUSE=" in _script_content[:bootstrap_idx]
+    assert "export POLARIS_CLIENT_ID=" in _script_content[:bootstrap_idx]
 
 
 def test_unit_c_boundary_does_not_route_secret_names_through_service_contract(

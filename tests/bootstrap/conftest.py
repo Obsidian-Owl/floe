@@ -42,40 +42,89 @@ def _cluster_reachable() -> bool:
     return _run_kubectl(["cluster-info"], timeout=10).returncode == 0
 
 
-def _flux_installed() -> bool:
-    """Return whether Flux appears installed in the active cluster."""
-    return _run_kubectl(["get", "namespace", _FLUX_NAMESPACE]).returncode == 0
-
-
 def _platform_namespace() -> str:
     """Return the namespace containing platform HelmReleases."""
     return os.environ.get("FLOE_E2E_NAMESPACE") or os.environ.get("FLOE_NAMESPACE", "floe-test")
 
 
-def _check_flux_controllers_running() -> None:
-    """Fail if installed Flux controllers are not Running."""
+def _kubectl_error(result: subprocess.CompletedProcess[str]) -> str:
+    """Return normalized kubectl output for error classification."""
+    return f"{result.stderr}\n{result.stdout}".lower()
+
+
+def _is_forbidden(result: subprocess.CompletedProcess[str]) -> bool:
+    """Return whether kubectl failed because RBAC denied the request."""
+    output = _kubectl_error(result)
+    return (
+        "forbidden" in output or "cannot get resource" in output or "cannot list resource" in output
+    )
+
+
+def _is_not_found(result: subprocess.CompletedProcess[str]) -> bool:
+    """Return whether kubectl failed because a resource or namespace is absent."""
+    output = _kubectl_error(result)
+    return (
+        "notfound" in output
+        or "not found" in output
+        or "the server doesn't have a resource type" in output
+    )
+
+
+def _fail_forbidden(resource: str, result: subprocess.CompletedProcess[str]) -> None:
+    """Fail bootstrap with an actionable message for missing test-runner RBAC."""
+    pytest.fail(
+        f"Bootstrap Flux/Helm safeguard cannot read {resource}: {result.stderr.strip()}. "
+        "The standard test runner ServiceAccount is missing required RBAC."
+    )
+
+
+def _flux_controller_phases(controller: str) -> list[str] | None:
+    """Return Flux controller pod phases, or None when Flux is absent."""
+    saw_not_found = False
+    for selector in (f"app={controller}", f"app.kubernetes.io/component={controller}"):
+        result = _run_kubectl(
+            [
+                "get",
+                "pods",
+                "-n",
+                _FLUX_NAMESPACE,
+                "-l",
+                selector,
+                "-o",
+                "jsonpath={.items[*].status.phase}",
+            ]
+        )
+        if result.returncode == 0:
+            phases = result.stdout.split()
+            if phases:
+                return phases
+            continue
+        if _is_forbidden(result):
+            _fail_forbidden(f"pods in namespace {_FLUX_NAMESPACE}", result)
+        if _is_not_found(result):
+            saw_not_found = True
+            continue
+        pytest.fail(f"Failed to inspect Flux controller {controller}: {result.stderr.strip()}")
+    if saw_not_found:
+        return None
+    return []
+
+
+def _check_flux_controllers_running() -> bool:
+    """Fail if installed Flux controllers are not Running.
+
+    Returns:
+        True when Flux controllers were observed, False when Flux is absent.
+    """
     for controller in _FLUX_CONTROLLERS:
-        phases: list[str] = []
-        for selector in (f"app={controller}", f"app.kubernetes.io/component={controller}"):
-            result = _run_kubectl(
-                [
-                    "get",
-                    "pods",
-                    "-n",
-                    _FLUX_NAMESPACE,
-                    "-l",
-                    selector,
-                    "-o",
-                    "jsonpath={.items[*].status.phase}",
-                ]
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                phases = result.stdout.split()
-                break
+        phases = _flux_controller_phases(controller)
+        if phases is None:
+            return False
         if "Running" not in phases:
             pytest.fail(
                 f"Flux controller {controller} is not Running (observed phases: {phases or 'none'})"
             )
+    return True
 
 
 def _resume_suspended_helmreleases(namespace: str) -> None:
@@ -93,6 +142,10 @@ def _resume_suspended_helmreleases(namespace: str) -> None:
             ]
         )
         if result.returncode != 0:
+            if _is_forbidden(result):
+                _fail_forbidden(f"HelmRelease {release} in namespace {namespace}", result)
+            if not _is_not_found(result):
+                pytest.fail(f"Failed to inspect HelmRelease {release}: {result.stderr.strip()}")
             continue
         if result.stdout.strip() != "true":
             continue
@@ -109,6 +162,8 @@ def _resume_suspended_helmreleases(namespace: str) -> None:
             check=False,
         )
         if resume.returncode != 0:
+            if _is_forbidden(resume):
+                _fail_forbidden(f"HelmRelease {release} in namespace {namespace}", resume)
             pytest.fail(f"Failed to resume HelmRelease {release} in {namespace}: {resume.stderr}")
 
 
@@ -117,6 +172,10 @@ def _check_helmrelease_readiness(namespace: str) -> None:
     for release in _HELM_RELEASES:
         exists = _run_kubectl(["get", "helmrelease", release, "-n", namespace])
         if exists.returncode != 0:
+            if _is_forbidden(exists):
+                _fail_forbidden(f"HelmRelease {release} in namespace {namespace}", exists)
+            if not _is_not_found(exists):
+                pytest.fail(f"Failed to inspect HelmRelease {release}: {exists.stderr.strip()}")
             continue
         ready = _run_kubectl(
             [
@@ -130,6 +189,8 @@ def _check_helmrelease_readiness(namespace: str) -> None:
             timeout=130,
         )
         if ready.returncode != 0:
+            if _is_forbidden(ready):
+                _fail_forbidden(f"HelmRelease {release} readiness in namespace {namespace}", ready)
             pytest.fail(f"HelmRelease {release} in {namespace} is not Ready: {ready.stderr}")
 
 
@@ -144,11 +205,12 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 @pytest.fixture(scope="session", autouse=True)
 def flux_helm_reconciliation_health() -> None:
     """Validate minimal Flux/Helm reconciliation health before bootstrap tests."""
-    if not _cluster_reachable() or not _flux_installed():
+    if not _cluster_reachable():
         return
 
     namespace = _platform_namespace()
-    _check_flux_controllers_running()
+    if not _check_flux_controllers_running():
+        return
     _resume_suspended_helmreleases(namespace)
     _check_helmrelease_readiness(namespace)
 
