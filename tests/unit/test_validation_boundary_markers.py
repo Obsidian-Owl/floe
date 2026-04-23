@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
 
 
 def test_pytest_markers_include_validation_boundaries() -> None:
