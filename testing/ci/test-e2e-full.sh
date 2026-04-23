@@ -32,6 +32,8 @@ BOOTSTRAP_EXIT=0
 PLATFORM_EXIT=0
 DEVELOPER_EXIT=0
 DESTRUCTIVE_EXIT=0
+CAN_REUSE_PLATFORM_IMAGE=false
+CLEANUP_FAILED=false
 
 # =============================================================================
 # Phase 1: Bootstrap validation
@@ -55,6 +57,7 @@ if [[ "${BOOTSTRAP_EXIT}" -eq 0 ]]; then
 
     if "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
         info "Platform blackbox validation PASSED"
+        CAN_REUSE_PLATFORM_IMAGE=true
     else
         PLATFORM_EXIT=$?
         error "Platform blackbox validation FAILED (exit code: ${PLATFORM_EXIT})"
@@ -90,7 +93,9 @@ for i in $(seq 1 30); do
     fi
     if [[ $i -eq 30 ]]; then
         error "Platform validation pods did not terminate within 30s"
-        exit 1
+        CLEANUP_FAILED=true
+        DESTRUCTIVE_EXIT=1
+        break
     fi
     sleep 1
 done
@@ -101,11 +106,20 @@ done
 
 if [[ ("${BOOTSTRAP_EXIT}" -ne 0 || "${PLATFORM_EXIT}" -ne 0) && "${FORCE_DESTRUCTIVE}" != "true" ]]; then
     info "Skipping destructive tests (bootstrap and platform must pass). Set FORCE_DESTRUCTIVE=true to override."
+elif [[ "${CLEANUP_FAILED}" == "true" ]]; then
+    info "Skipping destructive tests because platform cleanup failed."
 else
     info "=== Phase 4: Destructive E2E Tests ==="
 
-    # Use SKIP_BUILD=true since the image was already built in Phase 1
-    if SKIP_BUILD=true IMAGE_LOAD_METHOD=skip TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
+    if [[ "${CAN_REUSE_PLATFORM_IMAGE}" == "true" ]]; then
+        # Platform validation already built and loaded the runner image.
+        if SKIP_BUILD=true IMAGE_LOAD_METHOD=skip TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
+            info "Destructive E2E tests PASSED"
+        else
+            DESTRUCTIVE_EXIT=$?
+            error "Destructive E2E tests FAILED (exit code: ${DESTRUCTIVE_EXIT})"
+        fi
+    elif TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
         info "Destructive E2E tests PASSED"
     else
         DESTRUCTIVE_EXIT=$?
@@ -141,6 +155,8 @@ fi
 
 if [[ ("${BOOTSTRAP_EXIT}" -ne 0 || "${PLATFORM_EXIT}" -ne 0) && "${FORCE_DESTRUCTIVE}" != "true" ]]; then
     info "  Destructive: SKIPPED"
+elif [[ "${CLEANUP_FAILED}" == "true" ]]; then
+    error "  Destructive: SKIPPED (cleanup failed)"
 elif [[ "${DESTRUCTIVE_EXIT}" -eq 0 ]]; then
     info "  Destructive: PASSED"
 else

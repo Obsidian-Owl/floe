@@ -37,3 +37,23 @@ def test_full_runner_orchestrates_bootstrap_platform_developer_then_destructive(
     assert "test-e2e-cluster.sh" in script
     assert "test-developer-workflow.sh" in script
     assert "TEST_SUITE=e2e-destructive" in script
+
+
+def test_full_runner_only_reuses_platform_image_after_successful_platform_lane() -> None:
+    script = (REPO_ROOT / "testing" / "ci" / "test-e2e-full.sh").read_text()
+
+    assert 'CAN_REUSE_PLATFORM_IMAGE=false' in script
+    assert 'CAN_REUSE_PLATFORM_IMAGE=true' in script
+    assert 'if [[ "${CAN_REUSE_PLATFORM_IMAGE}" == "true" ]]; then' in script
+    assert 'SKIP_BUILD=true IMAGE_LOAD_METHOD=skip TEST_SUITE=e2e-destructive' in script
+    assert 'elif TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then' in script
+
+
+def test_full_runner_records_cleanup_failure_without_skipping_summary() -> None:
+    script = (REPO_ROOT / "testing" / "ci" / "test-e2e-full.sh").read_text()
+
+    assert 'CLEANUP_FAILED=false' in script
+    assert 'CLEANUP_FAILED=true' in script
+    assert 'DESTRUCTIVE_EXIT=1' in script
+    assert 'Skipping destructive tests because platform cleanup failed.' in script
+    assert 'Destructive: SKIPPED (cleanup failed)' in script
