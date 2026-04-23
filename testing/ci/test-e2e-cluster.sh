@@ -1,5 +1,6 @@
 #!/bin/bash
-# In-cluster E2E test runner — runs tests as a K8s Job inside the Kind cluster
+# In-cluster validation runner — runs deployed-product lanes as a K8s Job inside
+# the Kind cluster.
 #
 # This eliminates host-to-cluster connectivity issues (port-forwards, SSH tunnels)
 # by running tests where the services are.
@@ -13,7 +14,8 @@
 #   SKIP_BUILD          Skip image build if set to "true" (default: false)
 #   IMAGE_LOAD_METHOD   How to load image: auto|kind|devpod|skip (default: auto)
 #   STARTUP_ONLY        Exit after proving pod startup boundary (default: false)
-#   TEST_SUITE          Test suite to run: e2e|e2e-destructive (default: e2e)
+#   TEST_SUITE          Validation suite to run: e2e (platform blackbox) |
+#                       e2e-destructive (default: e2e)
 #   LOG_TAIL_LINES      Lines to capture per pod on failure (default: 100)
 #   DEVPOD_REMOTE_WORKDIR Remote repo root inside the DevPod workspace
 #
@@ -185,7 +187,8 @@ assert_startup_boundary() {
     return 1
 }
 
-# Select Job name and chart-rendered template based on TEST_SUITE
+# Select Job name and chart-rendered template based on TEST_SUITE. The standard
+# lane is the deployed-product/platform-blackbox validation that runs in-cluster.
 case "${TEST_SUITE}" in
     e2e)
         JOB_NAME="floe-test-e2e"

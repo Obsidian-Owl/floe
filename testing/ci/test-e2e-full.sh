@@ -1,13 +1,16 @@
 #!/bin/bash
-# Full E2E test orchestrator — runs standard then destructive E2E suites sequentially.
+# Full validation orchestrator — runs bootstrap, platform blackbox,
+# developer workflow, then destructive validation lanes.
 #
-# Standard E2E tests run first. If they fail, destructive tests are skipped
-# (unless FORCE_DESTRUCTIVE=true). Artifacts from both suites are preserved.
+# Bootstrap runs first and gates in-cluster platform validation. Developer
+# workflow validation always runs. Destructive validation requires bootstrap and
+# platform success unless FORCE_DESTRUCTIVE=true. Artifacts from all lanes are
+# preserved.
 #
 # Usage: ./testing/ci/test-e2e-full.sh
 #
 # Environment:
-#   FORCE_DESTRUCTIVE   Run destructive tests even if standard tests fail (default: false)
+#   FORCE_DESTRUCTIVE   Run destructive tests even if bootstrap/platform fail (default: false)
 #   SKIP_BUILD          Skip image build (passed through to test-e2e-cluster.sh)
 #   IMAGE_LOAD_METHOD   Image loading method (passed through to test-e2e-cluster.sh)
 #   TEST_NAMESPACE      K8s namespace (passed through, default: floe-test)
@@ -25,57 +28,85 @@ info() { echo "[INFO] $*"; }
 error() { echo "[ERROR] $*" >&2; }
 
 # Track exit codes
-STANDARD_EXIT=0
+BOOTSTRAP_EXIT=0
+PLATFORM_EXIT=0
+DEVELOPER_EXIT=0
 DESTRUCTIVE_EXIT=0
 
 # =============================================================================
-# Phase 1: Standard E2E tests (non-destructive)
+# Phase 1: Bootstrap validation
 # =============================================================================
 
-info "=== Phase 1: Standard E2E Tests ==="
+info "=== Phase 1: Bootstrap Validation ==="
 
-if "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
-    info "Standard E2E tests PASSED"
-    STANDARD_EXIT=0
+if "${SCRIPT_DIR}/test-bootstrap-validation.sh"; then
+    info "Bootstrap validation PASSED"
 else
-    STANDARD_EXIT=$?
-    error "Standard E2E tests FAILED (exit code: ${STANDARD_EXIT})"
+    BOOTSTRAP_EXIT=$?
+    error "Bootstrap validation FAILED (exit code: ${BOOTSTRAP_EXIT})"
 fi
 
 # =============================================================================
-# Pod cleanup between suites
+# Phase 2: Platform blackbox validation
 # =============================================================================
 
-info "Cleaning up standard test pods before destructive suite..."
+if [[ "${BOOTSTRAP_EXIT}" -eq 0 ]]; then
+    info "=== Phase 2: Platform Blackbox Validation ==="
+
+    if "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
+        info "Platform blackbox validation PASSED"
+    else
+        PLATFORM_EXIT=$?
+        error "Platform blackbox validation FAILED (exit code: ${PLATFORM_EXIT})"
+    fi
+else
+    info "Skipping platform blackbox validation because bootstrap failed."
+fi
+
+# =============================================================================
+# Phase 3: Developer workflow validation
+# =============================================================================
+
+info "=== Phase 3: Developer Workflow Validation ==="
+
+if "${SCRIPT_DIR}/test-developer-workflow.sh"; then
+    info "Developer workflow validation PASSED"
+else
+    DEVELOPER_EXIT=$?
+    error "Developer workflow validation FAILED (exit code: ${DEVELOPER_EXIT})"
+fi
+
+# =============================================================================
+# Pod cleanup before destructive suite
+# =============================================================================
+
+info "Cleaning up platform validation pods before destructive suite..."
 kubectl delete pods -l test-type=e2e -n "${TEST_NAMESPACE}" --ignore-not-found 2>/dev/null || true
 
-# Wait for pods to terminate
 for i in $(seq 1 30); do
     pod_count=$(kubectl get pods -l test-type=e2e -n "${TEST_NAMESPACE}" --no-headers 2>/dev/null | wc -l | tr -d ' ')
     if [[ "${pod_count}" == "0" ]]; then
         break
     fi
     if [[ $i -eq 30 ]]; then
-        error "Standard test pods did not terminate within 30s"
+        error "Platform validation pods did not terminate within 30s"
         exit 1
     fi
     sleep 1
 done
 
 # =============================================================================
-# Phase 2: Destructive E2E tests
+# Phase 4: Destructive E2E tests
 # =============================================================================
 
-if [[ "${STANDARD_EXIT}" -ne 0 ]] && [[ "${FORCE_DESTRUCTIVE}" != "true" ]]; then
-    info "Skipping destructive tests (standard tests failed). Set FORCE_DESTRUCTIVE=true to override."
-    DESTRUCTIVE_EXIT=0
+if [[ ("${BOOTSTRAP_EXIT}" -ne 0 || "${PLATFORM_EXIT}" -ne 0) && "${FORCE_DESTRUCTIVE}" != "true" ]]; then
+    info "Skipping destructive tests (bootstrap and platform must pass). Set FORCE_DESTRUCTIVE=true to override."
 else
-    info "=== Phase 2: Destructive E2E Tests ==="
+    info "=== Phase 4: Destructive E2E Tests ==="
 
     # Use SKIP_BUILD=true since the image was already built in Phase 1
     if SKIP_BUILD=true IMAGE_LOAD_METHOD=skip TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
         info "Destructive E2E tests PASSED"
-        DESTRUCTIVE_EXIT=0
     else
         DESTRUCTIVE_EXIT=$?
         error "Destructive E2E tests FAILED (exit code: ${DESTRUCTIVE_EXIT})"
@@ -88,13 +119,27 @@ fi
 
 info ""
 info "=== E2E Test Summary ==="
-if [[ "${STANDARD_EXIT}" -eq 0 ]]; then
-    info "  Standard:    PASSED"
+if [[ "${BOOTSTRAP_EXIT}" -eq 0 ]]; then
+    info "  Bootstrap:   PASSED"
 else
-    error "  Standard:    FAILED (exit ${STANDARD_EXIT})"
+    error "  Bootstrap:   FAILED (exit ${BOOTSTRAP_EXIT})"
 fi
 
-if [[ "${STANDARD_EXIT}" -ne 0 ]] && [[ "${FORCE_DESTRUCTIVE}" != "true" ]]; then
+if [[ "${BOOTSTRAP_EXIT}" -ne 0 ]]; then
+    info "  Platform:    SKIPPED"
+elif [[ "${PLATFORM_EXIT}" -eq 0 ]]; then
+    info "  Platform:    PASSED"
+else
+    error "  Platform:    FAILED (exit ${PLATFORM_EXIT})"
+fi
+
+if [[ "${DEVELOPER_EXIT}" -eq 0 ]]; then
+    info "  Developer:   PASSED"
+else
+    error "  Developer:   FAILED (exit ${DEVELOPER_EXIT})"
+fi
+
+if [[ ("${BOOTSTRAP_EXIT}" -ne 0 || "${PLATFORM_EXIT}" -ne 0) && "${FORCE_DESTRUCTIVE}" != "true" ]]; then
     info "  Destructive: SKIPPED"
 elif [[ "${DESTRUCTIVE_EXIT}" -eq 0 ]]; then
     info "  Destructive: PASSED"
@@ -103,8 +148,12 @@ else
 fi
 
 # Exit with first non-zero exit code
-if [[ "${STANDARD_EXIT}" -ne 0 ]]; then
-    exit "${STANDARD_EXIT}"
+if [[ "${BOOTSTRAP_EXIT}" -ne 0 ]]; then
+    exit "${BOOTSTRAP_EXIT}"
+elif [[ "${PLATFORM_EXIT}" -ne 0 ]]; then
+    exit "${PLATFORM_EXIT}"
+elif [[ "${DEVELOPER_EXIT}" -ne 0 ]]; then
+    exit "${DEVELOPER_EXIT}"
 elif [[ "${DESTRUCTIVE_EXIT}" -ne 0 ]]; then
     exit "${DESTRUCTIVE_EXIT}"
 fi
