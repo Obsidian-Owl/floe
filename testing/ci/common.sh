@@ -29,8 +29,12 @@ if [[ -n "${FLOE_PYTHON+x}" ]]; then
 else
     FLOE_PYTHON="${FLOE_PROJECT_ROOT}/.venv/bin/python"
 fi
-if [[ "${FLOE_PYTHON_WAS_SET}" -eq 0 && ! -x "${FLOE_PYTHON}" ]] && command -v python >/dev/null 2>&1; then
-    FLOE_PYTHON="$(command -v python)"
+if [[ "${FLOE_PYTHON_WAS_SET}" -eq 0 && ! -x "${FLOE_PYTHON}" ]]; then
+    if command -v python3 >/dev/null 2>&1; then
+        FLOE_PYTHON="$(command -v python3)"
+    elif command -v python >/dev/null 2>&1; then
+        FLOE_PYTHON="$(command -v python)"
+    fi
 fi
 if [[ ! -x "${FLOE_PYTHON}" ]]; then
     floe_common_fail "FLOE_PYTHON is not executable: ${FLOE_PYTHON}. Run 'uv sync' or set FLOE_PYTHON."
