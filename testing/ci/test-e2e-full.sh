@@ -54,7 +54,7 @@ else
     info "=== Phase 2: Standard E2E Tests ==="
 
     # Use SKIP_BUILD=true since the image was already built in Phase 1.
-    if SKIP_BUILD=true "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
+    if SKIP_BUILD=true TEST_SUITE=e2e "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
         info "Standard E2E tests PASSED"
         STANDARD_EXIT=0
     else

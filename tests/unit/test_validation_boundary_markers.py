@@ -31,10 +31,8 @@ def test_make_test_e2e_runs_bootstrap_before_product_e2e() -> None:
     """In-cluster E2E make target validates bootstrap before product E2E."""
     makefile = Path("Makefile").read_text()
 
-    bootstrap_index = makefile.index("TEST_SUITE=bootstrap ./testing/ci/test-e2e-cluster.sh")
-    e2e_index = makefile.index("SKIP_BUILD=true ./testing/ci/test-e2e-cluster.sh")
-
-    assert bootstrap_index < e2e_index
+    assert "Running bootstrap-gated E2E tests in-cluster" in makefile
+    assert "@./testing/ci/test-e2e-cluster.sh" in makefile
 
 
 def test_cluster_runner_supports_bootstrap_suite() -> None:
@@ -48,12 +46,25 @@ def test_cluster_runner_supports_bootstrap_suite() -> None:
     assert 'RBAC_TEMPLATE="tests/rbac-standard.yaml"' in script
 
 
+def test_cluster_runner_default_direct_invocation_is_bootstrap_gated() -> None:
+    """Direct in-cluster runner use defaults to bootstrap before product E2E."""
+    script = Path("testing/ci/test-e2e-cluster.sh").read_text()
+
+    assert 'if [[ -z "${TEST_SUITE+x}" ]]; then' in script
+    assert 'FLOE_DIRECT_BOOTSTRAP_GATE="true"' in script
+    assert 'TEST_SUITE="bootstrap"' in script
+    assert "SKIP_BUILD=true IMAGE_LOAD_METHOD=skip TEST_SUITE=e2e" in script
+    assert "Bootstrap passed; running product E2E suite without rebuilding/loading image." in script
+
+
 def test_full_e2e_runner_sequences_bootstrap_before_product_e2e() -> None:
     """Full in-cluster runner gates product E2E behind bootstrap success."""
     script = Path("testing/ci/test-e2e-full.sh").read_text()
 
     bootstrap_index = script.index('TEST_SUITE=bootstrap "${SCRIPT_DIR}/test-e2e-cluster.sh"')
-    standard_index = script.index('SKIP_BUILD=true "${SCRIPT_DIR}/test-e2e-cluster.sh"')
+    standard_index = script.index(
+        'SKIP_BUILD=true TEST_SUITE=e2e "${SCRIPT_DIR}/test-e2e-cluster.sh"'
+    )
     destructive_index = script.index(
         "SKIP_BUILD=true IMAGE_LOAD_METHOD=skip TEST_SUITE=e2e-destructive"
     )
@@ -73,6 +84,18 @@ def test_host_e2e_runner_runs_bootstrap_before_product_e2e() -> None:
 
     assert bootstrap_index < e2e_index
     assert "-m bootstrap" in script
+
+
+def test_bootstrap_conftest_has_minimal_flux_helm_safeguards() -> None:
+    """Bootstrap validation keeps focused Flux/Helm reconciliation safeguards."""
+    conftest = Path("tests/bootstrap/conftest.py").read_text()
+
+    assert "flux_helm_reconciliation_health" in conftest
+    assert "source-controller" in conftest
+    assert "helm-controller" in conftest
+    assert 'flux", "resume", "helmrelease"' in conftest
+    assert "--for=condition=Ready" in conftest
+    assert "tests.e2e.conftest" not in conftest
 
 
 def test_integration_runner_delegates_to_bootstrap_gated_cluster_runner() -> None:

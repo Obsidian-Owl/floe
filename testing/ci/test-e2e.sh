@@ -9,7 +9,7 @@
 #   TEST_NAMESPACE      K8s namespace for tests (default: floe-test)
 #   E2E_TIMEOUT         E2E test timeout in seconds (default: 600)
 #   COLLECT_LOGS        Collect logs on failure: true/false (default: true)
-#   DAGSTER_HOST_PORT   Dagster localhost port (default: 3100)
+#   DAGSTER_HOST_PORT   Dagster localhost port (default: topology host_port)
 #   MINIO_USER          MinIO admin username (from env or AWS_ACCESS_KEY_ID)
 #   MINIO_PASS          MinIO admin password (from env or AWS_SECRET_ACCESS_KEY)
 
@@ -46,6 +46,19 @@ cd "${PROJECT_ROOT}"
 
 # Extract config from manifest.yaml — sets MANIFEST_BUCKET, MANIFEST_REGION, etc.
 eval "$(python3 "${SCRIPT_DIR}/extract-manifest-config.py" "${PROJECT_ROOT}/demo/manifest.yaml")"
+
+# Host port defaults come from the topology contract. Callers can still
+# override the public env vars before invoking this script.
+DAGSTER_HOST_PORT="${DAGSTER_HOST_PORT:-$(floe_service_host_port dagster-webserver)}"
+POLARIS_HOST_PORT="${POLARIS_HOST_PORT:-$(floe_service_host_port polaris)}"
+POLARIS_MANAGEMENT_HOST_PORT="${POLARIS_MANAGEMENT_HOST_PORT:-$(floe_service_host_port polaris-management)}"
+MINIO_HOST_PORT="${MINIO_HOST_PORT:-$(floe_service_host_port minio)}"
+MINIO_CONSOLE_HOST_PORT="${MINIO_CONSOLE_HOST_PORT:-$(floe_service_host_port minio-console)}"
+OTEL_GRPC_HOST_PORT="${OTEL_GRPC_HOST_PORT:-$(floe_service_host_port otel-collector-grpc)}"
+OTEL_HTTP_HOST_PORT="${OTEL_HTTP_HOST_PORT:-$(floe_service_host_port otel-collector-http)}"
+MARQUEZ_HOST_PORT="${MARQUEZ_HOST_PORT:-$(floe_service_host_port marquez)}"
+JAEGER_QUERY_PORT="${JAEGER_QUERY_PORT:-$(floe_service_host_port jaeger-query)}"
+POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-$(floe_service_host_port postgresql)}"
 
 # Validate namespace format (K8s DNS label: lowercase alphanumeric + hyphens)
 if [[ ! "${TEST_NAMESPACE}" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
@@ -251,9 +264,8 @@ echo "(Ports already exposed via Kind NodePorts will be skipped)"
 # Port-forward all Helm chart services to localhost for E2E tests
 # When Kind NodePorts already expose a port, skip the port-forward
 
-# Dagster webserver (port 3000 -> localhost:3100)
+# Dagster webserver (port 3000 -> localhost host_port)
 # Remapped from 3000 to avoid conflict with local dev servers
-DAGSTER_HOST_PORT="${DAGSTER_HOST_PORT:-3100}"
 if port_already_available "${DAGSTER_HOST_PORT}"; then
     echo "  Dagster (${DAGSTER_HOST_PORT}): already available (NodePort)"
 else
@@ -263,53 +275,52 @@ else
 fi
 
 # Polaris catalog API (8181) + management health (8182)
-if port_already_available 8181; then
-    echo "  Polaris (8181): already available (NodePort)"
+if port_already_available "${POLARIS_HOST_PORT}"; then
+    echo "  Polaris (${POLARIS_HOST_PORT}): already available (NodePort)"
     # 8182 (management) may still need a port-forward even when 8181 has a NodePort
-    if ! port_already_available 8182; then
-        kubectl port-forward svc/"$(floe_service_name polaris)" 8182:8182 -n "${TEST_NAMESPACE}" &
+    if ! port_already_available "${POLARIS_MANAGEMENT_HOST_PORT}"; then
+        kubectl port-forward svc/"$(floe_service_name polaris)" "${POLARIS_MANAGEMENT_HOST_PORT}":8182 -n "${TEST_NAMESPACE}" &
         POLARIS_PF_PID=$!
-        register_port_forward 8182 "8182:8182" "$(floe_service_name polaris)" "POLARIS_PF_PID"
+        register_port_forward "${POLARIS_MANAGEMENT_HOST_PORT}" "${POLARIS_MANAGEMENT_HOST_PORT}:8182" "$(floe_service_name polaris)" "POLARIS_PF_PID"
     else
-        echo "  Polaris mgmt (8182): already available (NodePort)"
+        echo "  Polaris mgmt (${POLARIS_MANAGEMENT_HOST_PORT}): already available (NodePort)"
     fi
 else
-    kubectl port-forward svc/"$(floe_service_name polaris)" 8181:8181 8182:8182 -n "${TEST_NAMESPACE}" &
+    kubectl port-forward svc/"$(floe_service_name polaris)" "${POLARIS_HOST_PORT}":8181 "${POLARIS_MANAGEMENT_HOST_PORT}":8182 -n "${TEST_NAMESPACE}" &
     POLARIS_PF_PID=$!
-    register_port_forward 8181 "8181:8181 8182:8182" "$(floe_service_name polaris)" "POLARIS_PF_PID"
+    register_port_forward "${POLARIS_HOST_PORT}" "${POLARIS_HOST_PORT}:8181 ${POLARIS_MANAGEMENT_HOST_PORT}:8182" "$(floe_service_name polaris)" "POLARIS_PF_PID"
 fi
 
 # MinIO API (port 9000 -> localhost:9000)
-if port_already_available 9000; then
-    echo "  MinIO API (9000): already available (NodePort)"
+if port_already_available "${MINIO_HOST_PORT}"; then
+    echo "  MinIO API (${MINIO_HOST_PORT}): already available (NodePort)"
 else
-    kubectl port-forward svc/"$(floe_service_name minio)" 9000:9000 -n "${TEST_NAMESPACE}" &
+    kubectl port-forward svc/"$(floe_service_name minio)" "${MINIO_HOST_PORT}":9000 -n "${TEST_NAMESPACE}" &
     MINIO_API_PF_PID=$!
-    register_port_forward 9000 "9000:9000" "$(floe_service_name minio)" "MINIO_API_PF_PID"
+    register_port_forward "${MINIO_HOST_PORT}" "${MINIO_HOST_PORT}:9000" "$(floe_service_name minio)" "MINIO_API_PF_PID"
 fi
 
 # MinIO Console (port 9001 -> localhost:9001)
-if port_already_available 9001; then
-    echo "  MinIO Console (9001): already available (NodePort)"
+if port_already_available "${MINIO_CONSOLE_HOST_PORT}"; then
+    echo "  MinIO Console (${MINIO_CONSOLE_HOST_PORT}): already available (NodePort)"
 else
-    kubectl port-forward svc/"$(floe_service_name minio)" 9001:9001 -n "${TEST_NAMESPACE}" &
+    kubectl port-forward svc/"$(floe_service_name minio)" "${MINIO_CONSOLE_HOST_PORT}":9001 -n "${TEST_NAMESPACE}" &
     MINIO_UI_PF_PID=$!
-    register_port_forward 9001 "9001:9001" "$(floe_service_name minio)" "MINIO_UI_PF_PID"
+    register_port_forward "${MINIO_CONSOLE_HOST_PORT}" "${MINIO_CONSOLE_HOST_PORT}:9001" "$(floe_service_name minio)" "MINIO_UI_PF_PID"
 fi
 
 # OTel collector (port 4317 -> localhost:4317)
-if port_already_available 4317; then
-    echo "  OTel (4317): already available (NodePort)"
+if port_already_available "${OTEL_GRPC_HOST_PORT}"; then
+    echo "  OTel (${OTEL_GRPC_HOST_PORT}): already available (NodePort)"
 else
-    kubectl port-forward svc/"$(floe_service_name otel-collector-grpc)" 4317:4317 -n "${TEST_NAMESPACE}" &
+    kubectl port-forward svc/"$(floe_service_name otel-collector-grpc)" "${OTEL_GRPC_HOST_PORT}":4317 -n "${TEST_NAMESPACE}" &
     OTEL_PF_PID=$!
-    register_port_forward 4317 "4317:4317" "$(floe_service_name otel-collector-grpc)" "OTEL_PF_PID"
+    register_port_forward "${OTEL_GRPC_HOST_PORT}" "${OTEL_GRPC_HOST_PORT}:4317" "$(floe_service_name otel-collector-grpc)" "OTEL_PF_PID"
 fi
 
 # Marquez lineage service (if deployed)
 # Note: Marquez API is on port 5000, admin is on port 5001
 if kubectl get svc "$(floe_service_name marquez)" -n "${TEST_NAMESPACE}" &>/dev/null; then
-    MARQUEZ_HOST_PORT="${MARQUEZ_HOST_PORT:-5100}"
     if port_already_available "${MARQUEZ_HOST_PORT}"; then
         echo "  Marquez (${MARQUEZ_HOST_PORT}): already available (NodePort)"
     else
@@ -320,9 +331,8 @@ if kubectl get svc "$(floe_service_name marquez)" -n "${TEST_NAMESPACE}" &>/dev/
 fi
 
 # Jaeger query service (if deployed)
-# OrbStack can bind port 16686 to a stale container, causing silent failures.
+# OrbStack can bind the Jaeger port to a stale container, causing silent failures.
 # We kill any existing listener, establish a fresh port-forward, and health-check.
-JAEGER_QUERY_PORT="${JAEGER_QUERY_PORT:-16686}"
 if kubectl get svc "$(floe_service_name jaeger-query)" -n "${TEST_NAMESPACE}" &>/dev/null; then
     # Kill any stale listener on the preferred port
     lsof -ti :"${JAEGER_QUERY_PORT}" | xargs kill -9 2>/dev/null || true
@@ -368,28 +378,28 @@ if kubectl get svc "$(floe_service_name jaeger-query)" -n "${TEST_NAMESPACE}" &>
 fi
 
 # PostgreSQL (for direct DB access tests if needed)
-if port_already_available 5432; then
-    echo "  PostgreSQL (5432): already available (NodePort)"
+if port_already_available "${POSTGRES_HOST_PORT}"; then
+    echo "  PostgreSQL (${POSTGRES_HOST_PORT}): already available (NodePort)"
 else
-    kubectl port-forward svc/"$(floe_service_name postgresql)" 5432:5432 -n "${TEST_NAMESPACE}" &
+    kubectl port-forward svc/"$(floe_service_name postgresql)" "${POSTGRES_HOST_PORT}":5432 -n "${TEST_NAMESPACE}" &
     POSTGRES_PF_PID=$!
-    register_port_forward 5432 "5432:5432" "$(floe_service_name postgresql)" "POSTGRES_PF_PID"
+    register_port_forward "${POSTGRES_HOST_PORT}" "${POSTGRES_HOST_PORT}:5432" "$(floe_service_name postgresql)" "POSTGRES_PF_PID"
 fi
 
 # Wait for ports to be available (either NodePort or port-forward)
 wait_for_port localhost "${DAGSTER_HOST_PORT}" 15
-wait_for_port localhost 8181 15
-wait_for_port localhost 8182 15
-wait_for_port localhost 9000 15
-wait_for_port localhost 4317 15
+wait_for_port localhost "${POLARIS_HOST_PORT}" 15
+wait_for_port localhost "${POLARIS_MANAGEMENT_HOST_PORT}" 15
+wait_for_port localhost "${MINIO_HOST_PORT}" 15
+wait_for_port localhost "${OTEL_GRPC_HOST_PORT}" 15
 # OTel Collector HTTP (non-critical — warn but continue)
-if port_already_available 4318; then
-    echo "  OTel HTTP (4318): Already available"
+if port_already_available "${OTEL_HTTP_HOST_PORT}"; then
+    echo "  OTel HTTP (${OTEL_HTTP_HOST_PORT}): Already available"
 else
-    echo "  WARNING: OTel HTTP (4318) not yet available — port-forward may be needed" >&2
+    echo "  WARNING: OTel HTTP (${OTEL_HTTP_HOST_PORT}) not yet available — port-forward may be needed" >&2
 fi
-wait_for_port localhost 5432 15
-wait_for_port localhost "${MARQUEZ_HOST_PORT:-5100}" 15 || true  # Marquez API port (optional)
+wait_for_port localhost "${POSTGRES_HOST_PORT}" 15
+wait_for_port localhost "${MARQUEZ_HOST_PORT}" 15 || true  # Marquez API port (optional)
 wait_for_port localhost "${JAEGER_QUERY_PORT}" 15 || true  # Jaeger optional
 
 echo "Port-forwards established."
@@ -398,13 +408,43 @@ echo "Port-forwards established."
 start_port_forward_watchdog
 echo "Port-forward watchdog started (${#WATCHDOG_ENTRIES[@]} ports monitored)"
 
+# Export canonical {SERVICE}_PORT env vars for Python port resolution
+# (testing.fixtures.services.get_effective_port reads these).
+# Both dagster aliases get the same host-mapped port so tests using either
+# name resolve correctly.
+export FLOE_EXECUTION_CONTEXT=host
+export DAGSTER_WEBSERVER_PORT="${DAGSTER_HOST_PORT}"
+export DAGSTER_PORT="${DAGSTER_HOST_PORT}"
+export POLARIS_PORT="${POLARIS_HOST_PORT}"
+export POLARIS_MANAGEMENT_PORT="${POLARIS_MANAGEMENT_HOST_PORT}"
+export MINIO_PORT="${MINIO_HOST_PORT}"
+export OTEL_COLLECTOR_GRPC_PORT="${OTEL_GRPC_HOST_PORT}"
+export OTEL_COLLECTOR_HTTP_PORT="${OTEL_HTTP_HOST_PORT}"
+export MARQUEZ_PORT="${MARQUEZ_HOST_PORT}"
+export JAEGER_QUERY_PORT="${JAEGER_QUERY_PORT}"
+export POSTGRES_PORT="${POSTGRES_HOST_PORT}"
+export MINIO_BUCKET="${MINIO_BUCKET:-${MANIFEST_BUCKET}}"
+
+echo ""
+echo "Running bootstrap tests..."
+
+# Run bootstrap tests before repair/fallback behavior. If platform readiness
+# fails, product E2E tests must not run because their failures would be
+# misleading and the repair path would mask bootstrap regressions.
+DAGSTER_URL="http://localhost:${DAGSTER_HOST_PORT}" \
+uv run pytest \
+    tests/bootstrap/ \
+    -m bootstrap \
+    -v \
+    --tb=short \
+    --timeout="${E2E_TIMEOUT}"
+
 # Verify MinIO bucket exists before running tests (defense-in-depth)
 # Uses boto3 HeadBucket with credentials — anonymous curl returns 403 for both
 # existing and non-existing buckets, making it useless for detection.
 # The bucket should exist from defaultBuckets server startup, but we retry
 # to handle the window between MinIO TCP-ready and API-ready.
-MINIO_BUCKET="${MINIO_BUCKET:-${MANIFEST_BUCKET}}"
-MINIO_URL="${MINIO_URL:-http://localhost:9000}"
+MINIO_URL="${MINIO_URL:-http://localhost:${MINIO_HOST_PORT}}"
 
 # Fail fast on missing credentials — don't waste retry time on config errors
 if [[ -z "${MINIO_USER}" ]] || [[ -z "${MINIO_PASS}" ]]; then
@@ -448,7 +488,7 @@ echo "Verifying Polaris catalog '${POLARIS_CATALOG}'..."
 POLARIS_TOKEN=$(printf 'grant_type=client_credentials&client_id=%s&client_secret=%s&scope=PRINCIPAL_ROLE:ALL' \
     "${POLARIS_CLIENT_ID}" "${POLARIS_CLIENT_SECRET}" | \
     curl -s -X POST \
-    "http://localhost:8181/api/catalog/v1/oauth/tokens" \
+    "http://localhost:${POLARIS_HOST_PORT}/api/catalog/v1/oauth/tokens" \
     -d @- \
     2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))") || true
 
@@ -460,7 +500,7 @@ fi
 # Check if catalog exists
 CATALOG_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
     -H "Authorization: Bearer ${POLARIS_TOKEN}" \
-    "http://localhost:8181/api/management/v1/catalogs/${POLARIS_CATALOG}" 2>/dev/null) || true
+    "http://localhost:${POLARIS_HOST_PORT}/api/management/v1/catalogs/${POLARIS_CATALOG}" 2>/dev/null) || true
 
 if [[ "${CATALOG_CODE}" == "404" ]]; then
     echo "WARNING: Polaris catalog fallback triggered — catalog '${POLARIS_CATALOG}' not found" >&2
@@ -512,7 +552,7 @@ print(json.dumps(payload))
     CREATE_CODE=$(printf '%s' "${CATALOG_JSON}" | curl -s -o "${POLARIS_TMP}" -w '%{http_code}' -X POST \
         -H "Authorization: Bearer ${POLARIS_TOKEN}" \
         -H "Content-Type: application/json" \
-        "http://localhost:8181/api/management/v1/catalogs" \
+        "http://localhost:${POLARIS_HOST_PORT}/api/management/v1/catalogs" \
         -d @- 2>/dev/null) || true
 
     if [[ "${CREATE_CODE}" == "200" ]] || [[ "${CREATE_CODE}" == "201" ]]; then
@@ -538,29 +578,6 @@ uv pip install "pyiceberg[s3fs]==0.11.1" 2>&1 || {
     echo "ERROR: PyIceberg install failed -- E2E tests WILL fail" >&2
     exit 1
 }
-
-# Export canonical {SERVICE}_PORT env vars for Python port resolution
-# (testing.fixtures.services.get_effective_port reads these).
-# Both dagster aliases get the same host-mapped port so tests using either
-# name resolve correctly.
-export FLOE_EXECUTION_CONTEXT=host
-export DAGSTER_WEBSERVER_PORT="${DAGSTER_HOST_PORT}"
-export DAGSTER_PORT="${DAGSTER_HOST_PORT}"
-export MARQUEZ_PORT="${MARQUEZ_HOST_PORT:-5100}"
-export JAEGER_QUERY_PORT="${JAEGER_QUERY_PORT}"
-
-echo ""
-echo "Running bootstrap tests..."
-
-# Run bootstrap tests first. If platform readiness fails, product E2E tests
-# must not run because their failures would be misleading.
-DAGSTER_URL="http://localhost:${DAGSTER_HOST_PORT}" \
-uv run pytest \
-    tests/bootstrap/ \
-    -m bootstrap \
-    -v \
-    --tb=short \
-    --timeout="${E2E_TIMEOUT}"
 
 echo ""
 echo "Running E2E tests..."

@@ -13,7 +13,8 @@
 #   SKIP_BUILD          Skip image build if set to "true" (default: false)
 #   IMAGE_LOAD_METHOD   How to load image: auto|kind|devpod|skip (default: auto)
 #   STARTUP_ONLY        Exit after proving pod startup boundary (default: false)
-#   TEST_SUITE          Test suite to run: bootstrap|e2e|e2e-destructive (default: e2e)
+#   TEST_SUITE          Test suite to run: bootstrap|e2e|e2e-destructive
+#                       (default: bootstrap first, then e2e)
 #   LOG_TAIL_LINES      Lines to capture per pod on failure (default: 100)
 #   DEVPOD_REMOTE_WORKDIR Remote repo root inside the DevPod workspace
 #
@@ -35,7 +36,12 @@ JOB_STARTUP_TIMEOUT="${JOB_STARTUP_TIMEOUT:-180}"
 SKIP_BUILD="${SKIP_BUILD:-false}"
 IMAGE_LOAD_METHOD="${IMAGE_LOAD_METHOD:-auto}"
 STARTUP_ONLY="${STARTUP_ONLY:-false}"
-TEST_SUITE="${TEST_SUITE:-e2e}"
+if [[ -z "${TEST_SUITE+x}" ]]; then
+    FLOE_DIRECT_BOOTSTRAP_GATE="true"
+    TEST_SUITE="bootstrap"
+else
+    FLOE_DIRECT_BOOTSTRAP_GATE="false"
+fi
 IMAGE_NAME="floe-test-runner:latest"
 ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts"
 LOG_TAIL_LINES="${LOG_TAIL_LINES:-100}"
@@ -377,7 +383,13 @@ fi
 
 case "${JOB_STATUS}" in
     complete)
-        info "E2E tests PASSED"
+        info "${TEST_SUITE} tests PASSED"
+        if [[ "${FLOE_DIRECT_BOOTSTRAP_GATE}" == "true" ]]; then
+            info "Bootstrap passed; running product E2E suite without rebuilding/loading image."
+            cleanup_job
+            SKIP_BUILD=true IMAGE_LOAD_METHOD=skip TEST_SUITE=e2e "${SCRIPT_DIR}/test-e2e-cluster.sh"
+            exit $?
+        fi
         exit 0
         ;;
     failed)

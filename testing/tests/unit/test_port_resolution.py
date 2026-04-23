@@ -1595,10 +1595,9 @@ class TestShellEnvVarExports:
     def test_marquez_port_uses_marquez_host_port_with_default(
         self, script_lines: list[str]
     ) -> None:
-        """Test that MARQUEZ_PORT derives from MARQUEZ_HOST_PORT with default 5100.
+        """Test that MARQUEZ_PORT derives from MARQUEZ_HOST_PORT.
 
-        The export must reference MARQUEZ_HOST_PORT and provide a fallback
-        default of 5100, e.g. '${MARQUEZ_HOST_PORT:-5100}'.
+        The host-port default is set earlier from the topology contract.
         """
         export_lines = [
             line.strip() for line in script_lines if line.strip().startswith("export MARQUEZ_PORT=")
@@ -1606,7 +1605,6 @@ class TestShellEnvVarExports:
         assert len(export_lines) >= 1
         line = export_lines[0]
         assert "MARQUEZ_HOST_PORT" in line, "MARQUEZ_PORT must reference MARQUEZ_HOST_PORT"
-        assert "5100" in line, "MARQUEZ_PORT must have default 5100"
 
     # --- Ordering: after port-forward setup, before pytest ---
 

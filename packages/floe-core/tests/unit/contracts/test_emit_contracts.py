@@ -52,6 +52,14 @@ def test_service_name_command_uses_topology_contract() -> None:
     assert render_service_name_output("polaris", "demo") == "demo-polaris\n"
 
 
+def test_service_host_port_command_uses_topology_contract() -> None:
+    """Host port rendering comes from the topology contract."""
+    from floe_core.contracts.emit import render_service_host_port_output
+
+    assert render_service_host_port_output("dagster-webserver") == "3100\n"
+    assert render_service_host_port_output("marquez") == "5100\n"
+
+
 def test_helm_env_fragment_contains_execution_context() -> None:
     """The Helm env fragment includes explicit execution context binding."""
     from floe_core.contracts.emit import render_helm_test_env_template

@@ -32,6 +32,12 @@ def render_service_name_output(component_name: str, release_name: str) -> str:
     return render_service_name(service.component_id, release_name=release_name) + "\n"
 
 
+def render_service_host_port_output(component_name: str) -> str:
+    """Render a service host port and trailing newline for shell command use."""
+    service = service_contract_by_name(component_name)
+    return f"{service.host_port}\n"
+
+
 def _helm_host_helper(component_id: ComponentId) -> str:
     helper_by_component = {
         ComponentId.POSTGRESQL: 'include "floe-platform.postgresql.host" $context',
@@ -85,6 +91,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     service_parser.add_argument("component")
     service_parser.add_argument("--release-name", default=DEFAULT_RELEASE_NAME)
 
+    host_port_parser = subcommands.add_parser("service-host-port")
+    host_port_parser.add_argument("component")
+
     subcommands.add_parser("helm-test-env")
 
     args = parser.parse_args(argv)
@@ -93,6 +102,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "service-name":
         print(render_service_name_output(args.component, args.release_name), end="")
+        return 0
+    if args.command == "service-host-port":
+        print(render_service_host_port_output(args.component), end="")
         return 0
     if args.command == "helm-test-env":
         print(render_helm_test_env_template(), end="")

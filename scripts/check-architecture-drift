@@ -44,13 +44,13 @@ check_dbt_ownership() {
     # Check for SQL parsing in Python
     if grep -qE "(sqlparse|sql[[:space:]_.-]*(parse|parser|parsing)|parse[[:space:]_.-]*sql|ast[[:space:]_.-]*sql)" "$file" 2>/dev/null; then
         log_error "$file: SQL parsing detected - dbt owns SQL compilation"
-        ((violations++))
+        violations=$((violations + 1))
     fi
 
     # Check for SQL validation
     if grep -qE "(validate.*sql|sql.*valid)" "$file" 2>/dev/null; then
         log_warn "$file: SQL validation detected - consider delegating to dbt"
-        ((warnings++))
+        warnings=$((warnings + 1))
     fi
 }
 
@@ -64,7 +64,7 @@ check_layer_boundaries() {
         # Check for manifest.yaml modifications
         if grep -qE "(manifest\.yaml|write.*manifest|save.*manifest)" "$file" 2>/dev/null; then
             log_error "$file: Layer 4 (Data) modifying Layer 2 (Configuration) - FORBIDDEN"
-            ((violations++))
+            violations=$((violations + 1))
         fi
     fi
 }
@@ -86,7 +86,7 @@ check_contract_boundaries() {
             return 0
         fi
         log_warn "$file: Direct FloeSpec usage - use CompiledArtifacts for cross-package contracts"
-        ((warnings++))
+        warnings=$((warnings + 1))
     fi
 }
 
@@ -99,7 +99,7 @@ check_plugin_rules() {
         # Check for hardcoded secrets
         if grep -qE "(password|secret|api_key|token)\s*=\s*['\"][^'\"]+['\"]" "$file" 2>/dev/null; then
             log_error "$file: Hardcoded secret in plugin - use SecretReference"
-            ((violations++))
+            violations=$((violations + 1))
         fi
 
         # Check for missing entry point registration (in setup.py or pyproject.toml)
@@ -108,7 +108,7 @@ check_plugin_rules() {
             package_dir=$(dirname "$file")
             if [[ ! -f "${package_dir}/pyproject.toml" ]]; then
                 log_warn "$file: Plugin may be missing entry point registration"
-                ((warnings++))
+                warnings=$((warnings + 1))
             fi
         fi
     fi
@@ -132,20 +132,20 @@ check_test_organization() {
 
         if [[ "$package_imports" -lt 2 ]]; then
             log_warn "$file: Root-level test imports from <2 packages - should be in package tests/"
-            ((warnings++))
+            warnings=$((warnings + 1))
         fi
     fi
 
     # Check for time.sleep in tests
     if grep -qE "time\.sleep\(" "$file" 2>/dev/null; then
         log_warn "$file: time.sleep() in test - use polling utilities instead"
-        ((warnings++))
+        warnings=$((warnings + 1))
     fi
 
     # Check for pytest.skip
     if grep -qE "@pytest\.mark\.skip|pytest\.skip\(" "$file" 2>/dev/null; then
         log_error "$file: pytest.skip detected - tests must FAIL not skip"
-        ((violations++))
+        violations=$((violations + 1))
     fi
 }
 
@@ -158,7 +158,7 @@ check_platform_contract_literals() {
             ;;
     esac
 
-    if grep -qE "['\"](dagster|polaris|polaris-management|minio|minio-console|postgres|postgresql|jaeger-query|otel-collector-grpc|otel-collector-http|marquez|oci-registry|oci-registry-auth)['\"][[:space:]]*:[[:space:]]*['\"]?[0-9]+['\"]?([[:space:]]*[,}])" "$file" 2>/dev/null; then
+    if grep -qE "['\"](dagster|polaris|polaris-management|minio|minio-console|postgres|postgresql|jaeger-query|otel-collector-grpc|otel-collector-http|marquez|oci-registry|oci-registry-auth)['\"][[:space:]]*:[[:space:]]*['\"]?[0-9]+['\"]?([[:space:]]*[,}]|[[:space:]]*$)" "$file" 2>/dev/null; then
         log_error "$file: duplicated platform service map detected - use floe_core.contracts.topology"
         violations=$((violations + 1))
     fi
@@ -167,11 +167,6 @@ check_platform_contract_literals() {
 check_file() {
     local file="$1"
 
-    # Only check Python files
-    if [[ ! "$file" == *.py ]]; then
-        return 0
-    fi
-
     # Skip non-existent files (deleted)
     if [[ ! -f "$file" ]]; then
         return 0
@@ -179,12 +174,24 @@ check_file() {
 
     log_info "Checking $file..."
 
+    # Platform contract literal checks apply to source-controlled text files.
+    # Other checks below remain Python-only.
+    case "$file" in
+        *.py|*.sh|*.yaml|*.yml|*.toml|*.tpl|*.md|*/Makefile|Makefile)
+            check_platform_contract_literals "$file"
+            ;;
+    esac
+
+    # Only check Python files for Python-specific rules.
+    if [[ ! "$file" == *.py ]]; then
+        return 0
+    fi
+
     check_dbt_ownership "$file"
     check_layer_boundaries "$file"
     check_contract_boundaries "$file"
     check_plugin_rules "$file"
     check_test_organization "$file"
-    check_platform_contract_literals "$file"
 }
 
 validate_file_path() {
@@ -233,7 +240,7 @@ main() {
         check_file "$target"
     else
         # Check all changed files
-        log_info "Checking all changed Python files..."
+        log_info "Checking all changed files..."
 
         # Validate git refs exist before using them
         local base_ref="main"
@@ -249,7 +256,7 @@ main() {
 
         # Get changed files using validated refs with -- separator
         local changed_files
-        changed_files=$(git diff --name-only "${base_ref}...${head_ref}" -- "*.py" 2>/dev/null || true)
+        changed_files=$(git diff --name-only "${base_ref}...${head_ref}" 2>/dev/null || true)
 
         if [[ -z "$changed_files" ]]; then
             log_info "No changed files to check"
@@ -261,9 +268,7 @@ main() {
             local safe_path
             safe_path=$(validate_file_path "$file") || continue
 
-            if [[ "$safe_path" == *.py ]]; then
-                check_file "$safe_path"
-            fi
+            check_file "$safe_path"
         done <<< "$changed_files"
     fi
 

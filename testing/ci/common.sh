@@ -90,6 +90,18 @@ floe_service_name() {
     floe_contract_emit service-name --release-name "${FLOE_RELEASE_NAME}" "${component}"
 }
 
+# floe_service_host_port <component>
+# Returns the host execution port for a platform component from the topology
+# contract. Environment overrides stay in callers via ${VAR:-$(...)}.
+floe_service_host_port() {
+    local component="$1"
+    if [[ -z "${component}" ]]; then
+        echo "floe_service_host_port: component argument required" >&2
+        return 2
+    fi
+    floe_contract_emit service-host-port "${component}"
+}
+
 # floe_render_test_job <template-path>
 # Renders a single test template from the chart, with tests.enabled=true.
 # template-path is relative to the chart's templates/ directory

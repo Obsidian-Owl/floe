@@ -36,6 +36,38 @@ def test_architecture_drift_rejects_single_quoted_platform_service_map(
     assert "duplicated platform service map detected" in result.stderr
 
 
+def test_architecture_drift_reaches_summary_under_set_e(tmp_path: Path) -> None:
+    """Incrementing violations/warnings must not exit before the summary."""
+    parser_module = "sql" + "parse"
+    validation_suffix = "s" + "ql"
+    drift_file = tmp_path / "sql_drift.py"
+    drift_file.write_text(
+        f"import {parser_module}\n"
+        f"\ndef validate_{validation_suffix}(text: str) -> bool:\n"
+        "    return True\n"
+    )
+
+    result = run_architecture_drift(drift_file)
+
+    assert result.returncode == 2
+    assert "ARCHITECTURE DRIFT DETECTED" in result.stderr
+    assert "Violations: 1, Warnings: 1" in result.stderr
+
+
+def test_architecture_drift_rejects_non_python_platform_service_map(
+    tmp_path: Path,
+) -> None:
+    """Duplicated platform service maps in text files must be rejected."""
+    service_key = "pola" + "ris"
+    duplicated_map = tmp_path / "duplicated_service_map.yaml"
+    duplicated_map.write_text(f'ports:\n  "{service_key}": 8181\n')
+
+    result = run_architecture_drift(duplicated_map)
+
+    assert result.returncode == 2
+    assert "duplicated platform service map detected" in result.stderr
+
+
 def test_architecture_drift_allows_nested_platform_service_config_map(
     tmp_path: Path,
 ) -> None:

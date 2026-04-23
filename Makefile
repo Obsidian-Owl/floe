@@ -135,10 +135,8 @@ test-integration-image: ## Build test runner Docker image
 
 .PHONY: test-e2e
 test-e2e: ## Run E2E tests in-cluster as K8s Job (auto-detects Kind/DevPod)
-	@echo "Running bootstrap tests in-cluster..."
-	@TEST_SUITE=bootstrap ./testing/ci/test-e2e-cluster.sh
-	@echo "Running E2E tests in-cluster..."
-	@SKIP_BUILD=true ./testing/ci/test-e2e-cluster.sh
+	@echo "Running bootstrap-gated E2E tests in-cluster..."
+	@./testing/ci/test-e2e-cluster.sh
 
 .PHONY: test-e2e-full
 test-e2e-full: ## Run standard + destructive E2E suites sequentially

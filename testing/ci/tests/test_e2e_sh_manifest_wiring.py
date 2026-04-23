@@ -60,6 +60,8 @@ def test_common_sh_uses_contract_emitter_for_service_names(repo_root: Path) -> N
     common = (repo_root / "testing" / "ci" / "common.sh").read_text()
 
     assert "-m floe_core.contracts.emit" in common
+    assert "floe_service_host_port()" in common
+    assert "service-host-port" in common
     assert ".venv/bin/python" in common
     assert 'printf \'%s-%s\\n\' "${FLOE_RELEASE_NAME}" "${component}"' not in common
 
@@ -73,9 +75,10 @@ def test_common_sh_sources_with_repo_managed_python(repo_root: Path) -> None:
             (
                 "set -euo pipefail; "
                 "source testing/ci/common.sh; "
-                "printf '%s\\n%s\\n%s\\n' "
-                "\"${FLOE_PYTHON}\" \"${FLOE_RELEASE_NAME}\" "
-                "\"$(floe_service_name polaris)\""
+                "printf '%s\\n%s\\n%s\\n%s\\n' "
+                '"${FLOE_PYTHON}" "${FLOE_RELEASE_NAME}" '
+                '"$(floe_service_name polaris)" '
+                '"$(floe_service_host_port dagster-webserver)"'
             ),
         ],
         cwd=repo_root,
@@ -89,6 +92,7 @@ def test_common_sh_sources_with_repo_managed_python(repo_root: Path) -> None:
         str(repo_root / ".venv" / "bin" / "python"),
         "floe-platform",
         "floe-platform-polaris",
+        "3100",
     ]
 
 
@@ -101,10 +105,10 @@ def test_common_sh_preserves_caller_script_dir_and_project_root(repo_root: Path)
             "-c",
             (
                 "set -euo pipefail; "
-                "SCRIPT_DIR=\"${PWD}/testing/k8s\"; "
-                "PROJECT_ROOT=\"${PWD}\"; "
+                'SCRIPT_DIR="${PWD}/testing/k8s"; '
+                'PROJECT_ROOT="${PWD}"; '
                 "source testing/ci/common.sh; "
-                "printf '%s\\n%s\\n' \"${SCRIPT_DIR}\" \"${PROJECT_ROOT}\""
+                'printf \'%s\\n%s\\n\' "${SCRIPT_DIR}" "${PROJECT_ROOT}"'
             ),
         ],
         cwd=repo_root,
@@ -151,6 +155,33 @@ def test_test_e2e_removes_stale_service_name_precomputation() -> None:
         assert assignment not in _script_content
 
     assert "$(floe_service_name otel-collector-grpc)" in _script_content
+
+
+def test_test_e2e_host_port_defaults_come_from_contract_helper() -> None:
+    """test-e2e.sh host port defaults must not duplicate topology literals."""
+    expected_defaults = [
+        'DAGSTER_HOST_PORT="${DAGSTER_HOST_PORT:-$(floe_service_host_port dagster-webserver)}"',
+        'MARQUEZ_HOST_PORT="${MARQUEZ_HOST_PORT:-$(floe_service_host_port marquez)}"',
+        'JAEGER_QUERY_PORT="${JAEGER_QUERY_PORT:-$(floe_service_host_port jaeger-query)}"',
+    ]
+
+    for expected in expected_defaults:
+        assert expected in _script_content
+
+    assert "DAGSTER_HOST_PORT:-3100" not in _script_content
+    assert "MARQUEZ_HOST_PORT:-5100" not in _script_content
+    assert "JAEGER_QUERY_PORT:-16686" not in _script_content
+
+
+def test_test_e2e_runs_bootstrap_before_repair_fallbacks() -> None:
+    """Host runner must fail bootstrap before bucket/catalog repair can mask it."""
+    bootstrap_idx = _script_content.index("Running bootstrap tests")
+    bucket_idx = _script_content.index("Verifying MinIO bucket")
+    catalog_idx = _script_content.index("Verifying Polaris catalog")
+    product_idx = _script_content.rindex('echo "Running E2E tests..."')
+
+    assert bootstrap_idx < bucket_idx < catalog_idx < product_idx
+    assert "export FLOE_EXECUTION_CONTEXT=host" in _script_content[:bootstrap_idx]
 
 
 def test_unit_c_boundary_does_not_route_secret_names_through_service_contract(
