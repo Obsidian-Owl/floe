@@ -44,6 +44,10 @@ _DESTRUCTIVE_JSON_REPORT = "--json-report-file=/artifacts/e2e-destructive-report
 # Expected OTel env vars (AC-2)
 _OTEL_ENDPOINT_NAME = "OTEL_EXPORTER_OTLP_ENDPOINT"
 _OTEL_ENDPOINT_VALUE = "http://floe-platform-otel:4317"
+_OTEL_COLLECTOR_GRPC_HOST_NAME = "OTEL_COLLECTOR_GRPC_HOST"
+_OTEL_COLLECTOR_GRPC_HOST_VALUE = "floe-platform-otel"
+_OTEL_COLLECTOR_GRPC_PORT_NAME = "OTEL_COLLECTOR_GRPC_PORT"
+_OTEL_COLLECTOR_GRPC_PORT_VALUE = "4317"
 _OTEL_SERVICE_NAME = "OTEL_SERVICE_NAME"
 _OTEL_SERVICE_VALUE_E2E = "floe-test-runner-e2e"
 _OTEL_SERVICE_VALUE_DESTRUCTIVE = "floe-test-runner-e2e-destructive"
@@ -479,29 +483,47 @@ class TestDestructiveJobOtelEnvVars:
         )
 
 
-class TestOtelEnvVarNotConfusedWithOtelHost:
-    """Verify OTEL_EXPORTER_OTLP_ENDPOINT is distinct from OTEL_HOST.
-
-    A sloppy implementation might think the existing OTEL_HOST env var
-    satisfies AC-2. It does not: OTEL_HOST is a floe-internal variable,
-    while OTEL_EXPORTER_OTLP_ENDPOINT is the standard OTel SDK variable.
-    """
+class TestOtelCollectorContractEnvVars:
+    """Verify the standard Job exposes canonical generated OTel collector bindings."""
 
     @pytest.mark.requirement("AC-2")
-    def test_standard_job_has_both_otel_host_and_endpoint(self) -> None:
-        """Standard Job must have OTEL_EXPORTER_OTLP_ENDPOINT in addition to OTEL_HOST.
+    def test_standard_job_has_canonical_otel_collector_bindings(self) -> None:
+        """Standard Job must expose canonical OTel collector host and port env vars.
 
-        OTEL_HOST alone does not satisfy AC-2. The standard OTel SDK
-        env var is required.
+        Generated Helm test-runner contracts use OTEL_COLLECTOR_* names,
+        not the legacy OTEL_HOST binding.
         """
         manifest = _render_job_manifest(_STANDARD_TEMPLATE)
         env_vars = _get_env_vars(manifest)
 
-        assert "OTEL_HOST" in env_vars, "OTEL_HOST should still be present (not removed)"
+        assert _OTEL_COLLECTOR_GRPC_HOST_NAME in env_vars, (
+            f"Standard Job must set '{_OTEL_COLLECTOR_GRPC_HOST_NAME}' env var. "
+            f"Current env vars: {sorted(env_vars.keys())}"
+        )
+        assert _OTEL_COLLECTOR_GRPC_PORT_NAME in env_vars, (
+            f"Standard Job must set '{_OTEL_COLLECTOR_GRPC_PORT_NAME}' env var. "
+            f"Current env vars: {sorted(env_vars.keys())}"
+        )
         assert _OTEL_ENDPOINT_NAME in env_vars, (
-            f"'{_OTEL_ENDPOINT_NAME}' must be present IN ADDITION TO 'OTEL_HOST'. "
-            f"OTEL_HOST is a floe-internal var; {_OTEL_ENDPOINT_NAME} is the "
-            f"standard OTel SDK env var required by AC-2."
+            f"'{_OTEL_ENDPOINT_NAME}' must be present with canonical collector "
+            f"bindings. Current env vars: {sorted(env_vars.keys())}"
+        )
+
+    @pytest.mark.requirement("AC-2")
+    def test_standard_job_otel_collector_binding_values(self) -> None:
+        """Standard Job OTel collector bindings must point at the gRPC collector."""
+        manifest = _render_job_manifest(_STANDARD_TEMPLATE)
+        env_vars = _get_env_vars(manifest)
+
+        actual_host = env_vars.get(_OTEL_COLLECTOR_GRPC_HOST_NAME)
+        actual_port = env_vars.get(_OTEL_COLLECTOR_GRPC_PORT_NAME)
+        assert actual_host == _OTEL_COLLECTOR_GRPC_HOST_VALUE, (
+            f"'{_OTEL_COLLECTOR_GRPC_HOST_NAME}' must be "
+            f"'{_OTEL_COLLECTOR_GRPC_HOST_VALUE}', got '{actual_host}'"
+        )
+        assert actual_port == _OTEL_COLLECTOR_GRPC_PORT_VALUE, (
+            f"'{_OTEL_COLLECTOR_GRPC_PORT_NAME}' must be "
+            f"'{_OTEL_COLLECTOR_GRPC_PORT_VALUE}', got '{actual_port}'"
         )
 
     @pytest.mark.requirement("AC-2")
