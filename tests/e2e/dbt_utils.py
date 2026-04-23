@@ -20,6 +20,11 @@ import boto3
 from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
 from testing.fixtures.services import ServiceEndpoint
 
+try:
+    from pyiceberg.exceptions import NoSuchNamespaceError as PyIcebergNoSuchNamespaceError
+except ImportError:
+    PyIcebergNoSuchNamespaceError = None
+
 logger = logging.getLogger(__name__)
 
 # Session-scoped catalog cache — persists across calls within a single
@@ -27,12 +32,24 @@ logger = logging.getLogger(__name__)
 _catalog_cache: dict[str, Any] = {}
 
 
-def _get_polaris_catalog() -> Any:
+class NamespaceResetError(RuntimeError):
+    """Raised when an Iceberg namespace cannot be reset to an empty state."""
+
+
+def _clear_catalog_cache() -> None:
+    """Drop cached Polaris catalog state so each reset can re-auth cleanly."""
+    _catalog_cache.clear()
+
+
+def _get_polaris_catalog(*, fresh: bool = False) -> Any:
     """Get or create a cached PyIceberg REST catalog for Polaris.
 
     Returns:
         PyIceberg catalog instance, or None if unavailable.
     """
+    if fresh:
+        _clear_catalog_cache()
+
     if "catalog" in _catalog_cache:
         return _catalog_cache["catalog"]
 
@@ -102,7 +119,11 @@ def _delete_s3_prefix(
     return deleted
 
 
-def _purge_iceberg_namespace(namespace: str) -> None:
+def _purge_iceberg_namespace(
+    namespace: str,
+    verify_empty: bool = False,
+    retries: int = 3,
+) -> None:
     """Purge all Iceberg tables in a namespace and delete their S3 data.
 
     Uses ``purge_table`` (which removes both catalog metadata and data files)
@@ -116,73 +137,129 @@ def _purge_iceberg_namespace(namespace: str) -> None:
 
     Args:
         namespace: Polaris namespace to purge (e.g. ``customer_360_raw``).
+        verify_empty: Whether to verify the namespace is empty after purge.
+        retries: Number of verification attempts when ``verify_empty`` is true.
     """
     catalog = _get_polaris_catalog()
-    if catalog is None:
-        return
+    if catalog is not None:
+        # Collect S3 config from environment (same defaults as _get_polaris_catalog).
+        s3_endpoint = os.environ.get("MINIO_ENDPOINT", ServiceEndpoint("minio").url)
+        access_key, secret_key = get_minio_credentials()
 
-    # Collect S3 config from environment (same defaults as _get_polaris_catalog).
-    s3_endpoint = os.environ.get("MINIO_ENDPOINT", ServiceEndpoint("minio").url)
-    access_key, secret_key = get_minio_credentials()
+        try:
+            tables = catalog.list_tables(namespace)
+            for table_id in tables:
+                fqn = f"{table_id[0]}.{table_id[1]}"
 
-    try:
-        tables = catalog.list_tables(namespace)
-        for table_id in tables:
-            fqn = f"{table_id[0]}.{table_id[1]}"
+                # Step 1: read table location BEFORE purge (purge removes metadata).
+                location: str | None = None
+                try:
+                    table = catalog.load_table(fqn)
+                    location = table.metadata.location  # e.g. s3://warehouse/ns1/t1
+                except Exception as exc:
+                    logger.warning(
+                        "Could not load table %s for S3 location: %s",
+                        fqn,
+                        type(exc).__name__,
+                    )
 
-            # Step 1: read table location BEFORE purge (purge removes metadata).
-            location: str | None = None
+                # Step 2: purge via catalog (removes metadata + signals data removal)
+                try:
+                    catalog.purge_table(fqn)
+                    logger.info("Purged Iceberg table %s", fqn)
+                except Exception as exc:
+                    logger.warning("Could not purge table %s: %s", fqn, type(exc).__name__)
+
+                # Step 3: sweep S3 objects under the table's data prefix via boto3.
+                # boto3 handles AWS Signature V4 required by MinIO.
+                if location is not None:
+                    try:
+                        parsed = urlparse(location)
+                        bucket: str = parsed.netloc
+                        prefix: str = parsed.path.lstrip("/")
+
+                        s3_client = boto3.client(
+                            "s3",
+                            endpoint_url=s3_endpoint,
+                            aws_access_key_id=access_key,
+                            aws_secret_access_key=secret_key,
+                            region_name=os.environ.get("AWS_REGION", "us-east-1"),
+                        )
+                        deleted = _delete_s3_prefix(s3_client, bucket, prefix)
+                        logger.info("Deleted %d S3 objects under %s", deleted, location)
+                    except Exception as exc:
+                        logger.warning(
+                            "S3 cleanup failed for table %s: %s",
+                            fqn,
+                            type(exc).__name__,
+                        )
+
+            # Drop the namespace itself so dbt starts completely fresh.
+            # DuckDB's Iceberg extension cannot DROP TABLE CASCADE, so stale
+            # namespace metadata causes "Not implemented" errors on re-run.
             try:
-                table = catalog.load_table(fqn)
-                location = table.metadata.location  # e.g. s3://warehouse/ns1/t1
+                catalog.drop_namespace(namespace)
+                logger.info("Dropped namespace %s", namespace)
             except Exception as exc:
                 logger.warning(
-                    "Could not load table %s for S3 location: %s",
-                    fqn,
+                    "Could not drop namespace %s: %s",
+                    namespace,
                     type(exc).__name__,
                 )
-
-            # Step 2: purge via catalog (removes metadata + signals data removal)
-            try:
-                catalog.purge_table(fqn)
-                logger.info("Purged Iceberg table %s", fqn)
-            except Exception as exc:
-                logger.warning("Could not purge table %s: %s", fqn, type(exc).__name__)
-
-            # Step 3: sweep S3 objects under the table's data prefix via boto3.
-            # boto3 handles AWS Signature V4 required by MinIO.
-            if location is not None:
-                try:
-                    parsed = urlparse(location)
-                    bucket: str = parsed.netloc
-                    prefix: str = parsed.path.lstrip("/")
-
-                    s3_client = boto3.client(
-                        "s3",
-                        endpoint_url=s3_endpoint,
-                        aws_access_key_id=access_key,
-                        aws_secret_access_key=secret_key,
-                        region_name=os.environ.get("AWS_REGION", "us-east-1"),
-                    )
-                    deleted = _delete_s3_prefix(s3_client, bucket, prefix)
-                    logger.info("Deleted %d S3 objects under %s", deleted, location)
-                except Exception as exc:
-                    logger.warning("S3 cleanup failed for table %s: %s", fqn, type(exc).__name__)
-
-        # Drop the namespace itself so dbt starts completely fresh.
-        # DuckDB's Iceberg extension cannot DROP TABLE CASCADE, so stale
-        # namespace metadata causes "Not implemented" errors on re-run.
-        try:
-            catalog.drop_namespace(namespace)
-            logger.info("Dropped namespace %s", namespace)
         except Exception as exc:
+            logger.debug("Namespace purge skipped for %s: %s", namespace, exc)
+            if not verify_empty:
+                return
+    elif not verify_empty:
+        return
+
+    if not verify_empty:
+        return
+
+    remaining: Any = []
+    for attempt in range(1, retries + 1):
+        fresh_catalog = _get_polaris_catalog(fresh=True)
+        if fresh_catalog is None:
+            remaining = ["<catalog unavailable>"]
             logger.warning(
-                "Could not drop namespace %s: %s",
+                "Could not verify namespace %s reset on attempt %d/%d: catalog unavailable",
                 namespace,
+                attempt,
+                retries,
+            )
+            continue
+
+        try:
+            remaining = fresh_catalog.list_tables(namespace)
+        except Exception as exc:
+            if PyIcebergNoSuchNamespaceError is not None and isinstance(
+                exc, PyIcebergNoSuchNamespaceError
+            ):
+                return
+            remaining = [f"<verification failed: {type(exc).__name__}>"]
+            logger.warning(
+                "Could not verify namespace %s reset on attempt %d/%d: %s",
+                namespace,
+                attempt,
+                retries,
                 type(exc).__name__,
             )
-    except Exception as exc:
-        logger.debug("Namespace purge skipped for %s: %s", namespace, exc)
+            continue
+
+        if not remaining:
+            return
+
+        logger.warning(
+            "Namespace %s still contains tables on attempt %d/%d: %s",
+            namespace,
+            attempt,
+            retries,
+            remaining,
+        )
+
+    raise NamespaceResetError(
+        f"Namespace reset incomplete for {namespace}: remaining tables={remaining}"
+    )
 
 
 def run_dbt(
@@ -219,11 +296,11 @@ def run_dbt(
     if args and args[0] == "seed":
         # Purge seed namespace only — model tables may depend on seeds
         product_name = project_dir.name.replace("-", "_")
-        _purge_iceberg_namespace(f"{product_name}_raw")
+        _purge_iceberg_namespace(f"{product_name}_raw", verify_empty=True)
     elif args and args[0] == "run":
         # Purge model namespace only — preserve seed tables as sources
         product_name = project_dir.name.replace("-", "_")
-        _purge_iceberg_namespace(product_name)
+        _purge_iceberg_namespace(product_name, verify_empty=True)
 
     # Use the venv's dbt to avoid PATH conflicts with dbt-fusion or other
     # system-installed dbt binaries that may not support the duckdb adapter.

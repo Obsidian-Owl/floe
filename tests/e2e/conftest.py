@@ -1602,8 +1602,8 @@ def dbt_pipeline_result(
 
     try:
         # Purge stale data from any prior run (P36: cleanup at setup)
-        _purge_iceberg_namespace(namespace_raw)
-        _purge_iceberg_namespace(namespace_models)
+        _purge_iceberg_namespace(namespace_raw, verify_empty=True)
+        _purge_iceberg_namespace(namespace_models, verify_empty=True)
 
         # Run dbt seed to load reference data
         seed_result = run_dbt(["seed"], project_dir)
@@ -1618,5 +1618,5 @@ def dbt_pipeline_result(
         yield (product, project_dir)
     finally:
         # Clean up Iceberg namespaces to prevent resource leaks
-        _purge_iceberg_namespace(namespace_raw)
-        _purge_iceberg_namespace(namespace_models)
+        _purge_iceberg_namespace(namespace_raw, verify_empty=True)
+        _purge_iceberg_namespace(namespace_models, verify_empty=True)
