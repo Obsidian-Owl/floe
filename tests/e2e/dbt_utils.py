@@ -226,6 +226,14 @@ def _purge_iceberg_namespace(
                     type(exc).__name__,
                 )
         except Exception as exc:
+            is_missing_namespace = PyIcebergNoSuchNamespaceError is not None and isinstance(
+                exc, PyIcebergNoSuchNamespaceError
+            )
+            if verify_empty and not is_missing_namespace and storage_cleanup_failure_reason is None:
+                storage_cleanup_failure_reason = (
+                    f"Could not enumerate tables for storage cleanup in {namespace}: "
+                    f"{type(exc).__name__}"
+                )
             logger.debug("Namespace purge skipped for %s: %s", namespace, exc)
             if not verify_empty:
                 return

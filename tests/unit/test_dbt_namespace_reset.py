@@ -86,6 +86,27 @@ def test_purge_namespace_raises_when_storage_location_cannot_be_resolved(
         dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
 
 
+def test_purge_namespace_raises_when_purge_phase_table_enumeration_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    purge_catalog = Mock()
+    purge_catalog.list_tables.side_effect = RuntimeError("catalog boom")
+    verify_catalog = Mock()
+    verify_catalog.list_tables.return_value = []
+    catalogs = [purge_catalog, verify_catalog]
+
+    def _get_catalog(*, fresh: bool = False) -> Mock:
+        return catalogs.pop(0)
+
+    monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
+
+    with pytest.raises(
+        dbt_utils.NamespaceResetError,
+        match="Could not enumerate tables for storage cleanup in customer_360: RuntimeError",
+    ):
+        dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
+
+
 def test_purge_namespace_uses_fresh_catalog_for_purge_and_verification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
