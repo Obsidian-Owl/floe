@@ -158,9 +158,9 @@ check_platform_contract_literals() {
             ;;
     esac
 
-    if grep -qE '"(dagster|polaris|polaris-management|minio|minio-console|postgres|postgresql|jaeger-query|otel-collector-grpc|otel-collector-http|marquez|oci-registry|oci-registry-auth)"[[:space:]]*:' "$file" 2>/dev/null; then
+    if grep -qE "['\"](dagster|polaris|polaris-management|minio|minio-console|postgres|postgresql|jaeger-query|otel-collector-grpc|otel-collector-http|marquez|oci-registry|oci-registry-auth)['\"][[:space:]]*:" "$file" 2>/dev/null; then
         log_error "$file: duplicated platform service map detected - use floe_core.contracts.topology"
-        ((violations++))
+        violations=$((violations + 1))
     fi
 }
 
