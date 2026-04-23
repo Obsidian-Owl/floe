@@ -71,3 +71,12 @@ def test_full_runner_records_cleanup_failure_without_skipping_summary() -> None:
     assert 'Skipping destructive tests because platform cleanup failed.' in script
     assert 'Destructive: SKIPPED (cleanup failed)' in script
     assert 'if [[ "${CAN_REUSE_PLATFORM_IMAGE}" == "true" ]]; then' in script
+
+
+def test_testing_guide_describes_validation_lanes() -> None:
+    guide = (REPO_ROOT / "TESTING.md").read_text()
+
+    assert "bootstrap" in guide
+    assert "platform_blackbox" in guide
+    assert "developer_workflow" in guide
+    assert "destructive" in guide
