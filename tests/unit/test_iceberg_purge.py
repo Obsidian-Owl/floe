@@ -149,6 +149,23 @@ class TestS3PrefixDeletion:
     """Verify S3 objects under the table prefix are deleted after purge."""
 
     @pytest.mark.requirement("AC-2")
+    def test_delete_s3_prefix_raises_on_partial_delete_errors(self) -> None:
+        """In-band delete_objects errors must raise instead of counting as success."""
+        mod = _load_dbt_utils()
+        mock_s3 = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = [
+            {"Contents": [{"Key": "ns1/t1/data/file1.parquet"}]},
+        ]
+        mock_s3.get_paginator.return_value = mock_paginator
+        mock_s3.delete_objects.return_value = {
+            "Errors": [{"Key": "ns1/t1/data/file1.parquet", "Code": "AccessDenied"}]
+        }
+
+        with pytest.raises(RuntimeError, match="delete_objects reported errors"):
+            mod._delete_s3_prefix(mock_s3, "warehouse", "ns1/t1")
+
+    @pytest.mark.requirement("AC-2")
     def test_s3_delete_called_after_purge(self) -> None:
         """After purge_table, S3 objects under the table prefix must be deleted."""
         mod = _load_dbt_utils()

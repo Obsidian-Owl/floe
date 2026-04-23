@@ -44,18 +44,45 @@ def test_purge_namespace_raises_when_verified_s3_cleanup_fails(
     verify_catalog = Mock()
     verify_catalog.list_tables.return_value = []
     catalogs = [purge_catalog, verify_catalog]
+    s3_client = Mock()
+    paginator = Mock()
+    paginator.paginate.return_value = [
+        {"Contents": [{"Key": "customer_360/stg_customers/data/file.parquet"}]}
+    ]
+    s3_client.get_paginator.return_value = paginator
+    s3_client.delete_objects.return_value = {
+        "Errors": [{"Key": "customer_360/stg_customers/data/file.parquet"}]
+    }
 
     def _get_catalog(*, fresh: bool = False) -> Mock:
         return catalogs.pop(0)
 
-    def _raise_s3_failure(*args: object, **kwargs: object) -> int:
-        raise RuntimeError("s3 boom")
+    monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
+    monkeypatch.setattr(dbt_utils.boto3, "client", lambda *args, **kwargs: s3_client)
+
+    with pytest.raises(dbt_utils.NamespaceResetError, match="delete_objects reported errors"):
+        dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
+
+
+def test_purge_namespace_raises_when_storage_location_cannot_be_resolved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    purge_catalog = Mock()
+    purge_catalog.list_tables.return_value = [("customer_360", "stg_customers")]
+    purge_catalog.load_table.side_effect = RuntimeError("load failed")
+    verify_catalog = Mock()
+    verify_catalog.list_tables.return_value = []
+    catalogs = [purge_catalog, verify_catalog]
+
+    def _get_catalog(*, fresh: bool = False) -> Mock:
+        return catalogs.pop(0)
 
     monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
-    monkeypatch.setattr(dbt_utils.boto3, "client", lambda *args, **kwargs: Mock())
-    monkeypatch.setattr(dbt_utils, "_delete_s3_prefix", _raise_s3_failure)
 
-    with pytest.raises(dbt_utils.NamespaceResetError, match="S3 cleanup failed"):
+    with pytest.raises(
+        dbt_utils.NamespaceResetError,
+        match="Could not resolve storage location for customer_360.stg_customers",
+    ):
         dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
 
 

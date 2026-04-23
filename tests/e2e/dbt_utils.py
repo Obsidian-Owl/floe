@@ -114,7 +114,17 @@ def _delete_s3_prefix(
         if not contents:
             continue
         objects = [{"Key": obj["Key"]} for obj in contents]
-        s3_client.delete_objects(Bucket=bucket, Delete={"Objects": objects, "Quiet": True})
+        response = s3_client.delete_objects(
+            Bucket=bucket,
+            Delete={"Objects": objects, "Quiet": True},
+        )
+        errors = response.get("Errors", []) if isinstance(response, dict) else []
+        if errors:
+            failed_keys = ",".join(str(error.get("Key", "<unknown>")) for error in errors)
+            raise RuntimeError(
+                f"S3 delete_objects reported errors under s3://{bucket}/{prefix}: "
+                f"{failed_keys}"
+            )
         deleted += len(objects)
     return deleted
 
@@ -141,7 +151,7 @@ def _purge_iceberg_namespace(
         retries: Number of verification attempts when ``verify_empty`` is true.
     """
     catalog = _get_polaris_catalog(fresh=True)
-    s3_cleanup_failure_reason: str | None = None
+    storage_cleanup_failure_reason: str | None = None
     if catalog is not None:
         # Collect S3 config from environment (same defaults as _get_polaris_catalog).
         s3_endpoint = os.environ.get("MINIO_ENDPOINT", ServiceEndpoint("minio").url)
@@ -158,6 +168,10 @@ def _purge_iceberg_namespace(
                     table = catalog.load_table(fqn)
                     location = table.metadata.location  # e.g. s3://warehouse/ns1/t1
                 except Exception as exc:
+                    if verify_empty and storage_cleanup_failure_reason is None:
+                        storage_cleanup_failure_reason = (
+                            f"Could not resolve storage location for {fqn}: {type(exc).__name__}"
+                        )
                     logger.warning(
                         "Could not load table %s for S3 location: %s",
                         fqn,
@@ -189,9 +203,9 @@ def _purge_iceberg_namespace(
                         deleted = _delete_s3_prefix(s3_client, bucket, prefix)
                         logger.info("Deleted %d S3 objects under %s", deleted, location)
                     except Exception as exc:
-                        if verify_empty and s3_cleanup_failure_reason is None:
-                            s3_cleanup_failure_reason = (
-                                f"S3 cleanup failed for {fqn}: {type(exc).__name__}"
+                        if verify_empty and storage_cleanup_failure_reason is None:
+                            storage_cleanup_failure_reason = (
+                                f"S3 cleanup failed for {fqn}: {exc}"
                             )
                         logger.warning(
                             "S3 cleanup failed for table %s: %s",
@@ -267,9 +281,9 @@ def _purge_iceberg_namespace(
             remaining,
         )
 
-    if s3_cleanup_failure_reason is not None:
+    if storage_cleanup_failure_reason is not None:
         raise NamespaceResetError(
-            f"Namespace reset incomplete for {namespace}: {s3_cleanup_failure_reason}"
+            f"Namespace reset incomplete for {namespace}: {storage_cleanup_failure_reason}"
         )
 
     if verification_succeeded:
