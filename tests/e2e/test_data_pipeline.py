@@ -99,7 +99,7 @@ class TestDataPipeline(IntegrationTestBase):
 
     # Services required for E2E pipeline tests
     required_services: ClassVar[list[str]] = [
-        "dagster",
+        "dagster-webserver",
         "polaris",
         "minio",
     ]

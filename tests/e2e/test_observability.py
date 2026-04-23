@@ -55,7 +55,7 @@ class TestObservability(IntegrationTestBase):
     # Only NodePort-accessible services in required_services
     # Other services (marquez, prometheus, otel-collector) checked individually
     required_services: ClassVar[list[str]] = [
-        "dagster",
+        "dagster-webserver",
         "jaeger-query",
     ]
 
