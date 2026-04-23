@@ -128,7 +128,7 @@ check_platform_ready() {
     kubectl get secret -n "${FLOE_NAMESPACE}" \
         "$(floe_service_name postgresql)" \
         "$(floe_service_name minio)" \
-        "$(floe_service_name polaris-credentials)" >/dev/null
+        "${FLOE_RELEASE_NAME}-polaris-credentials" >/dev/null
 }
 
 run_remote_kind_startup() {

@@ -153,6 +153,16 @@ def test_test_e2e_removes_stale_service_name_precomputation() -> None:
     assert "$(floe_service_name otel-collector-grpc)" in _script_content
 
 
+def test_unit_c_boundary_does_not_route_secret_names_through_service_contract(
+    repo_root: Path,
+) -> None:
+    """Non-service secret resources must not call floe_service_name."""
+    unit_c_boundary = (repo_root / "testing" / "ci" / "test-unit-c-boundary.sh").read_text()
+
+    assert "$(floe_service_name polaris-credentials)" not in unit_c_boundary
+    assert "${FLOE_RELEASE_NAME}-polaris-credentials" in unit_c_boundary
+
+
 # ---------------------------------------------------------------------------
 # AC-2.1: eval line exists after SCRIPT_DIR detection
 # ---------------------------------------------------------------------------
