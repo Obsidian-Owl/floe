@@ -250,8 +250,22 @@ def pytest_collection_modifyitems(
         print("=" * 70)
 
 
+def _selected_items_require_infrastructure_smoke_check(items: list[pytest.Item]) -> bool:
+    """Return whether the selected session needs live platform smoke checks.
+
+    The smoke check is only relevant when the selected items include tests in
+    lanes that require deployed platform connectivity.
+    """
+    required_markers = {"platform_blackbox", "destructive"}
+    for item in items:
+        item_markers = {mark.name for mark in item.iter_markers()}
+        if not item_markers.isdisjoint(required_markers):
+            return True
+    return False
+
+
 @pytest.fixture(scope="session", autouse=True)
-def infrastructure_smoke_check() -> None:
+def infrastructure_smoke_check(request: pytest.FixtureRequest) -> None:
     """Abort test session if core infrastructure is unreachable.
 
     Checks TCP connectivity to Dagster, Polaris, and MinIO before any
@@ -259,6 +273,9 @@ def infrastructure_smoke_check() -> None:
     the session with a clear message instead of producing 72+ ERRORs.
     """
     import socket
+
+    if not _selected_items_require_infrastructure_smoke_check(request.session.items):
+        return
 
     smoke_endpoints = {
         "Dagster": ServiceEndpoint("dagster-webserver"),

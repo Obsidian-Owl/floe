@@ -108,6 +108,49 @@ def test_pytest_collection_modifyitems_defaults_and_preserves_lane_ordering() ->
     assert items[3].marker_names.count("platform_blackbox") == 1
 
 
+def test_selected_items_require_smoke_check_for_platform_blackbox() -> None:
+    items = [
+        _FakeItem("tests/e2e/test_platform.py::test_live", ["e2e", "platform_blackbox"]),
+        _FakeItem("tests/e2e/test_dev.py::test_local", ["developer_workflow"]),
+    ]
+
+    assert e2e_conftest._selected_items_require_infrastructure_smoke_check(items) is True
+
+
+def test_selected_items_require_smoke_check_for_destructive() -> None:
+    items = [
+        _FakeItem("tests/e2e/test_destructive.py::test_breakage", ["e2e", "destructive"]),
+    ]
+
+    assert e2e_conftest._selected_items_require_infrastructure_smoke_check(items) is True
+
+
+def test_selected_items_skip_smoke_check_for_developer_workflow_only() -> None:
+    items = [
+        _FakeItem("tests/e2e/test_profile.py::test_repo", ["e2e", "developer_workflow"]),
+        _FakeItem("tests/e2e/test_repo.py::test_governance", ["e2e", "developer_workflow"]),
+    ]
+
+    assert e2e_conftest._selected_items_require_infrastructure_smoke_check(items) is False
+
+
+def test_selected_items_skip_smoke_check_for_bootstrap_only() -> None:
+    items = [
+        _FakeItem("tests/e2e/test_bootstrap.py::test_admin", ["e2e", "bootstrap"]),
+    ]
+
+    assert e2e_conftest._selected_items_require_infrastructure_smoke_check(items) is False
+
+
+def test_selected_items_skip_smoke_check_for_bootstrap_and_developer_workflow_only() -> None:
+    items = [
+        _FakeItem("tests/e2e/test_bootstrap.py::test_admin", ["e2e", "bootstrap"]),
+        _FakeItem("tests/e2e/test_profile.py::test_repo", ["e2e", "developer_workflow"]),
+    ]
+
+    assert e2e_conftest._selected_items_require_infrastructure_smoke_check(items) is False
+
+
 def test_bootstrap_modules_are_explicitly_marked() -> None:
     helm_workflow = (REPO_ROOT / "tests" / "e2e" / "test_helm_workflow.py").read_text()
     platform_bootstrap = (REPO_ROOT / "tests" / "e2e" / "test_platform_bootstrap.py").read_text()
