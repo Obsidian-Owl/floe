@@ -65,6 +65,26 @@ def test_get_polaris_catalog_uses_env_endpoints_without_eager_service_resolution
     ]
 
 
+def test_get_polaris_catalog_returns_none_when_service_endpoint_resolution_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pyiceberg_module = ModuleType("pyiceberg")
+    pyiceberg_module.catalog = SimpleNamespace(load_catalog=lambda *args, **kwargs: object())
+
+    def _failing_service_endpoint(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("service lookup failed")
+
+    monkeypatch.setitem(sys.modules, "pyiceberg", pyiceberg_module)
+    monkeypatch.delenv("POLARIS_URI", raising=False)
+    monkeypatch.delenv("MINIO_ENDPOINT", raising=False)
+    monkeypatch.setattr(dbt_utils, "ServiceEndpoint", _failing_service_endpoint)
+    monkeypatch.setattr(dbt_utils, "get_polaris_credentials", lambda: ("id", "secret"))
+    monkeypatch.setattr(dbt_utils, "get_minio_credentials", lambda: ("access", "secret"))
+    dbt_utils._clear_catalog_cache()
+
+    assert dbt_utils._get_polaris_catalog(fresh=True) is None
+
+
 def test_purge_namespace_raises_when_namespace_still_contains_tables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -107,6 +127,35 @@ def test_purge_namespace_raises_when_verified_s3_cleanup_fails(
     monkeypatch.setattr(dbt_utils.boto3, "client", lambda *args, **kwargs: s3_client)
 
     with pytest.raises(dbt_utils.NamespaceResetError, match="delete_objects reported errors"):
+        dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
+
+
+def test_purge_namespace_raises_when_storage_endpoint_cannot_be_resolved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    purge_catalog = Mock()
+    purge_catalog.list_tables.return_value = [("customer_360", "stg_customers")]
+    table = Mock()
+    table.metadata.location = "s3://warehouse/customer_360/stg_customers"
+    purge_catalog.load_table.return_value = table
+    verify_catalog = Mock()
+    verify_catalog.list_tables.return_value = []
+    catalogs = [purge_catalog, verify_catalog]
+
+    def _get_catalog(*, fresh: bool = False) -> Mock:
+        return catalogs.pop(0)
+
+    def _failing_service_endpoint(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("endpoint lookup failed")
+
+    monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
+    monkeypatch.delenv("MINIO_ENDPOINT", raising=False)
+    monkeypatch.setattr(dbt_utils, "ServiceEndpoint", _failing_service_endpoint)
+
+    with pytest.raises(
+        dbt_utils.NamespaceResetError,
+        match="Could not resolve storage endpoint for cleanup in customer_360: RuntimeError",
+    ):
         dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
 
 

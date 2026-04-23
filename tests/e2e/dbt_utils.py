@@ -58,18 +58,17 @@ def _get_polaris_catalog(*, fresh: bool = False) -> Any:
     except ImportError:
         _catalog_cache["catalog"] = None
         return None
-
-    polaris_url = os.environ.get("POLARIS_URI")
-    if polaris_url is None:
-        polaris_url = f"{ServiceEndpoint('polaris').url}/api/catalog"
     _polaris_id, _polaris_secret = get_polaris_credentials()
     default_cred = f"{_polaris_id}:{_polaris_secret}"  # pragma: allowlist secret
     _minio_access, _minio_secret = get_minio_credentials()
-    minio_endpoint = os.environ.get("MINIO_ENDPOINT")
-    if minio_endpoint is None:
-        minio_endpoint = ServiceEndpoint("minio").url
 
     try:
+        polaris_url = os.environ.get("POLARIS_URI")
+        if polaris_url is None:
+            polaris_url = f"{ServiceEndpoint('polaris').url}/api/catalog"
+        minio_endpoint = os.environ.get("MINIO_ENDPOINT")
+        if minio_endpoint is None:
+            minio_endpoint = ServiceEndpoint("minio").url
         catalog = pyiceberg_catalog.load_catalog(
             "polaris",
             **{
@@ -161,7 +160,20 @@ def _purge_iceberg_namespace(
         # Collect S3 config from environment (same defaults as _get_polaris_catalog).
         s3_endpoint = os.environ.get("MINIO_ENDPOINT")
         if s3_endpoint is None:
-            s3_endpoint = ServiceEndpoint("minio").url
+            try:
+                s3_endpoint = ServiceEndpoint("minio").url
+            except Exception as exc:
+                s3_endpoint = None
+                if verify_empty and storage_cleanup_failure_reason is None:
+                    storage_cleanup_failure_reason = (
+                        f"Could not resolve storage endpoint for cleanup in {namespace}: "
+                        f"{type(exc).__name__}"
+                    )
+                logger.warning(
+                    "Could not resolve storage endpoint for namespace %s cleanup: %s",
+                    namespace,
+                    type(exc).__name__,
+                )
         access_key, secret_key = get_minio_credentials()
 
         try:
@@ -195,6 +207,12 @@ def _purge_iceberg_namespace(
                 # Step 3: sweep S3 objects under the table's data prefix via boto3.
                 # boto3 handles AWS Signature V4 required by MinIO.
                 if location is not None:
+                    if s3_endpoint is None:
+                        logger.warning(
+                            "Skipping S3 cleanup for table %s: storage endpoint unavailable",
+                            fqn,
+                        )
+                        continue
                     try:
                         parsed = urlparse(location)
                         bucket: str = parsed.netloc
