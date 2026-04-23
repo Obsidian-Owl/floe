@@ -159,6 +159,28 @@ def test_purge_namespace_raises_when_storage_endpoint_cannot_be_resolved(
         dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
 
 
+def test_purge_namespace_empty_namespace_succeeds_when_storage_endpoint_resolution_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    purge_catalog = Mock()
+    purge_catalog.list_tables.return_value = []
+    verify_catalog = Mock()
+    verify_catalog.list_tables.return_value = []
+    catalogs = [purge_catalog, verify_catalog]
+
+    def _get_catalog(*, fresh: bool = False) -> Mock:
+        return catalogs.pop(0)
+
+    def _failing_service_endpoint(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("endpoint lookup failed")
+
+    monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
+    monkeypatch.delenv("MINIO_ENDPOINT", raising=False)
+    monkeypatch.setattr(dbt_utils, "ServiceEndpoint", _failing_service_endpoint)
+
+    dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
+
+
 def test_purge_namespace_raises_when_storage_location_cannot_be_resolved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
