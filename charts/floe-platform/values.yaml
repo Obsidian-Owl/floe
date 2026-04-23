@@ -207,7 +207,17 @@ dagster:
         memory: 512Mi
     service:
       type: ClusterIP
-      port: 80
+      # Keep aligned with the Dagster service topology contract and the
+      # non-root security context; privileged port 80 will not bind.
+      port: 3000
+    readinessProbe:
+      httpGet:
+        path: /server_info
+        port: 3000
+      periodSeconds: 20
+      timeoutSeconds: 10
+      successThreshold: 1
+      failureThreshold: 3
     # Workspace configuration - use external ConfigMap from this chart
     # Note: The ConfigMap name follows the pattern {release-name}-dagster-workspace
     # where release-name is set by fullnameOverride or computed from the release
