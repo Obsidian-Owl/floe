@@ -30,16 +30,6 @@ COLLECT_LOGS="${COLLECT_LOGS:-true}"
 export MINIO_USER="${MINIO_USER:-${AWS_ACCESS_KEY_ID:-}}"
 export MINIO_PASS="${MINIO_PASS:-${AWS_SECRET_ACCESS_KEY:-}}"
 
-# Pre-compute platform service names from the chart release name.
-# No literal `floe-platform-*` strings may appear below this line.
-SVC_DAGSTER_WEB="$(floe_service_name dagster-webserver)"
-SVC_POLARIS="$(floe_service_name polaris)"
-SVC_MINIO="$(floe_service_name minio)"
-SVC_OTEL="$(floe_service_name otel)"
-SVC_MARQUEZ="$(floe_service_name marquez)"
-SVC_JAEGER_QUERY="$(floe_service_name jaeger-query)"
-SVC_POSTGRES="$(floe_service_name postgresql)"
-
 # Validate MinIO credentials are available
 if [[ -z "${MINIO_USER}" ]]; then
     echo "ERROR: MINIO_USER not set and AWS_ACCESS_KEY_ID not available" >&2
@@ -267,9 +257,9 @@ DAGSTER_HOST_PORT="${DAGSTER_HOST_PORT:-3100}"
 if port_already_available "${DAGSTER_HOST_PORT}"; then
     echo "  Dagster (${DAGSTER_HOST_PORT}): already available (NodePort)"
 else
-    kubectl port-forward svc/"${SVC_DAGSTER_WEB}" "${DAGSTER_HOST_PORT}":3000 -n "${TEST_NAMESPACE}" &
+    kubectl port-forward svc/"$(floe_service_name dagster-webserver)" "${DAGSTER_HOST_PORT}":3000 -n "${TEST_NAMESPACE}" &
     DAGSTER_PF_PID=$!
-    register_port_forward "${DAGSTER_HOST_PORT}" "${DAGSTER_HOST_PORT}:3000" "${SVC_DAGSTER_WEB}" "DAGSTER_PF_PID"
+    register_port_forward "${DAGSTER_HOST_PORT}" "${DAGSTER_HOST_PORT}:3000" "$(floe_service_name dagster-webserver)" "DAGSTER_PF_PID"
 fi
 
 # Polaris catalog API (8181) + management health (8182)
@@ -277,55 +267,55 @@ if port_already_available 8181; then
     echo "  Polaris (8181): already available (NodePort)"
     # 8182 (management) may still need a port-forward even when 8181 has a NodePort
     if ! port_already_available 8182; then
-        kubectl port-forward svc/"${SVC_POLARIS}" 8182:8182 -n "${TEST_NAMESPACE}" &
+        kubectl port-forward svc/"$(floe_service_name polaris)" 8182:8182 -n "${TEST_NAMESPACE}" &
         POLARIS_PF_PID=$!
-        register_port_forward 8182 "8182:8182" "${SVC_POLARIS}" "POLARIS_PF_PID"
+        register_port_forward 8182 "8182:8182" "$(floe_service_name polaris)" "POLARIS_PF_PID"
     else
         echo "  Polaris mgmt (8182): already available (NodePort)"
     fi
 else
-    kubectl port-forward svc/"${SVC_POLARIS}" 8181:8181 8182:8182 -n "${TEST_NAMESPACE}" &
+    kubectl port-forward svc/"$(floe_service_name polaris)" 8181:8181 8182:8182 -n "${TEST_NAMESPACE}" &
     POLARIS_PF_PID=$!
-    register_port_forward 8181 "8181:8181 8182:8182" "${SVC_POLARIS}" "POLARIS_PF_PID"
+    register_port_forward 8181 "8181:8181 8182:8182" "$(floe_service_name polaris)" "POLARIS_PF_PID"
 fi
 
 # MinIO API (port 9000 -> localhost:9000)
 if port_already_available 9000; then
     echo "  MinIO API (9000): already available (NodePort)"
 else
-    kubectl port-forward svc/"${SVC_MINIO}" 9000:9000 -n "${TEST_NAMESPACE}" &
+    kubectl port-forward svc/"$(floe_service_name minio)" 9000:9000 -n "${TEST_NAMESPACE}" &
     MINIO_API_PF_PID=$!
-    register_port_forward 9000 "9000:9000" "${SVC_MINIO}" "MINIO_API_PF_PID"
+    register_port_forward 9000 "9000:9000" "$(floe_service_name minio)" "MINIO_API_PF_PID"
 fi
 
 # MinIO Console (port 9001 -> localhost:9001)
 if port_already_available 9001; then
     echo "  MinIO Console (9001): already available (NodePort)"
 else
-    kubectl port-forward svc/"${SVC_MINIO}" 9001:9001 -n "${TEST_NAMESPACE}" &
+    kubectl port-forward svc/"$(floe_service_name minio)" 9001:9001 -n "${TEST_NAMESPACE}" &
     MINIO_UI_PF_PID=$!
-    register_port_forward 9001 "9001:9001" "${SVC_MINIO}" "MINIO_UI_PF_PID"
+    register_port_forward 9001 "9001:9001" "$(floe_service_name minio)" "MINIO_UI_PF_PID"
 fi
 
 # OTel collector (port 4317 -> localhost:4317)
 if port_already_available 4317; then
     echo "  OTel (4317): already available (NodePort)"
 else
-    kubectl port-forward svc/"${SVC_OTEL}" 4317:4317 -n "${TEST_NAMESPACE}" &
+    kubectl port-forward svc/"$(floe_service_name otel-collector-grpc)" 4317:4317 -n "${TEST_NAMESPACE}" &
     OTEL_PF_PID=$!
-    register_port_forward 4317 "4317:4317" "${SVC_OTEL}" "OTEL_PF_PID"
+    register_port_forward 4317 "4317:4317" "$(floe_service_name otel-collector-grpc)" "OTEL_PF_PID"
 fi
 
 # Marquez lineage service (if deployed)
 # Note: Marquez API is on port 5000, admin is on port 5001
-if kubectl get svc "${SVC_MARQUEZ}" -n "${TEST_NAMESPACE}" &>/dev/null; then
+if kubectl get svc "$(floe_service_name marquez)" -n "${TEST_NAMESPACE}" &>/dev/null; then
     MARQUEZ_HOST_PORT="${MARQUEZ_HOST_PORT:-5100}"
     if port_already_available "${MARQUEZ_HOST_PORT}"; then
         echo "  Marquez (${MARQUEZ_HOST_PORT}): already available (NodePort)"
     else
-        kubectl port-forward svc/"${SVC_MARQUEZ}" "${MARQUEZ_HOST_PORT}":5000 -n "${TEST_NAMESPACE}" &
+        kubectl port-forward svc/"$(floe_service_name marquez)" "${MARQUEZ_HOST_PORT}":5000 -n "${TEST_NAMESPACE}" &
         MARQUEZ_PF_PID=$!
-        register_port_forward "${MARQUEZ_HOST_PORT}" "${MARQUEZ_HOST_PORT}:5000" "${SVC_MARQUEZ}" "MARQUEZ_PF_PID"
+        register_port_forward "${MARQUEZ_HOST_PORT}" "${MARQUEZ_HOST_PORT}:5000" "$(floe_service_name marquez)" "MARQUEZ_PF_PID"
     fi
 fi
 
@@ -333,7 +323,7 @@ fi
 # OrbStack can bind port 16686 to a stale container, causing silent failures.
 # We kill any existing listener, establish a fresh port-forward, and health-check.
 JAEGER_QUERY_PORT="${JAEGER_QUERY_PORT:-16686}"
-if kubectl get svc "${SVC_JAEGER_QUERY}" -n "${TEST_NAMESPACE}" &>/dev/null; then
+if kubectl get svc "$(floe_service_name jaeger-query)" -n "${TEST_NAMESPACE}" &>/dev/null; then
     # Kill any stale listener on the preferred port
     lsof -ti :"${JAEGER_QUERY_PORT}" | xargs kill -9 2>/dev/null || true
     sleep 1  # allow port to be released
@@ -341,7 +331,7 @@ if kubectl get svc "${SVC_JAEGER_QUERY}" -n "${TEST_NAMESPACE}" &>/dev/null; the
     if port_already_available "${JAEGER_QUERY_PORT}"; then
         echo "  Jaeger (${JAEGER_QUERY_PORT}): already available (NodePort)"
     else
-        kubectl port-forward svc/"${SVC_JAEGER_QUERY}" "${JAEGER_QUERY_PORT}":16686 -n "${TEST_NAMESPACE}" &
+        kubectl port-forward svc/"$(floe_service_name jaeger-query)" "${JAEGER_QUERY_PORT}":16686 -n "${TEST_NAMESPACE}" &
         JAEGER_PF_PID=$!
         sleep 2  # allow port-forward to establish
 
@@ -359,7 +349,7 @@ if kubectl get svc "${SVC_JAEGER_QUERY}" -n "${TEST_NAMESPACE}" &>/dev/null; the
                 sleep 1
             fi
 
-            kubectl port-forward svc/"${SVC_JAEGER_QUERY}" "${JAEGER_QUERY_PORT}":16686 -n "${TEST_NAMESPACE}" &
+            kubectl port-forward svc/"$(floe_service_name jaeger-query)" "${JAEGER_QUERY_PORT}":16686 -n "${TEST_NAMESPACE}" &
             JAEGER_PF_PID=$!
             sleep 2
 
@@ -370,7 +360,7 @@ if kubectl get svc "${SVC_JAEGER_QUERY}" -n "${TEST_NAMESPACE}" &>/dev/null; the
         fi
         # Only register watchdog if Jaeger health check ultimately succeeded
         if curl -sf "http://localhost:${JAEGER_QUERY_PORT}/api/services" >/dev/null 2>&1; then
-            register_port_forward "${JAEGER_QUERY_PORT}" "${JAEGER_QUERY_PORT}:16686" "${SVC_JAEGER_QUERY}" "JAEGER_PF_PID"
+            register_port_forward "${JAEGER_QUERY_PORT}" "${JAEGER_QUERY_PORT}:16686" "$(floe_service_name jaeger-query)" "JAEGER_PF_PID"
         else
             echo "WARNING: Jaeger watchdog not registered — health check never passed" >&2
         fi
@@ -381,9 +371,9 @@ fi
 if port_already_available 5432; then
     echo "  PostgreSQL (5432): already available (NodePort)"
 else
-    kubectl port-forward svc/"${SVC_POSTGRES}" 5432:5432 -n "${TEST_NAMESPACE}" &
+    kubectl port-forward svc/"$(floe_service_name postgresql)" 5432:5432 -n "${TEST_NAMESPACE}" &
     POSTGRES_PF_PID=$!
-    register_port_forward 5432 "5432:5432" "${SVC_POSTGRES}" "POSTGRES_PF_PID"
+    register_port_forward 5432 "5432:5432" "$(floe_service_name postgresql)" "POSTGRES_PF_PID"
 fi
 
 # Wait for ports to be available (either NodePort or port-forward)
@@ -480,7 +470,7 @@ if [[ "${CATALOG_CODE}" == "404" ]]; then
     # Build JSON payload with python3 to safely escape special characters.
     # Credentials read from environment (MINIO_USER, MINIO_PASS) to avoid
     # exposing them in process arguments (visible in ps aux).
-    CATALOG_JSON=$(SVC_MINIO="${SVC_MINIO}" python3 -c "
+    CATALOG_JSON=$(SVC_MINIO="$(floe_service_name minio)" python3 -c "
 import json, os, sys
 MINIO_ENDPOINT = f\"http://{os.environ['SVC_MINIO']}:9000\"
 minio_user = os.environ.get('MINIO_USER', '')

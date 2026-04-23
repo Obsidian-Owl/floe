@@ -32,6 +32,12 @@ _script_content: str = SCRIPT_PATH.read_text()
 _script_lines: list[str] = _script_content.splitlines()
 
 
+@pytest.fixture
+def repo_root() -> Path:
+    """Return the repository root for cross-file static wiring checks."""
+    return Path(__file__).parent.parent.parent.parent
+
+
 def _find_line_index(pattern: str) -> int | None:
     """Return the 0-based index of the first line matching regex pattern."""
     regex = re.compile(pattern)
@@ -45,6 +51,14 @@ def _find_all_lines(pattern: str) -> list[tuple[int, str]]:
     """Return all (0-based index, line) tuples matching regex pattern."""
     regex = re.compile(pattern)
     return [(i, line) for i, line in enumerate(_script_lines) if regex.search(line)]
+
+
+def test_common_sh_uses_contract_emitter_for_service_names(repo_root: Path) -> None:
+    """Shell service names must come from floe_core.contracts.emit."""
+    common = (repo_root / "testing" / "ci" / "common.sh").read_text()
+
+    assert "python3 -m floe_core.contracts.emit" in common
+    assert 'printf \'%s-%s\\n\' "${FLOE_RELEASE_NAME}" "${component}"' not in common
 
 
 # ---------------------------------------------------------------------------

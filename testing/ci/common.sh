@@ -15,10 +15,20 @@
 # namespace, Kind cluster name, chart dir, and values file. Consumers
 # MUST NOT redefine these.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+floe_contract_emit() {
+    PYTHONPATH="${PROJECT_ROOT}/packages/floe-core/src:${PYTHONPATH:-}" \
+        python3 -m floe_core.contracts.emit "$@"
+}
+
+eval "$(floe_contract_emit shell-defaults)"
+
 # Canonical identifiers. Scripts may override via environment before sourcing,
 # but must not redefine after sourcing.
-: "${FLOE_RELEASE_NAME:=floe-platform}"
-: "${FLOE_NAMESPACE:=floe-test}"
+: "${FLOE_RELEASE_NAME:=${FLOE_DEFAULT_RELEASE_NAME}}"
+: "${FLOE_NAMESPACE:=${FLOE_DEFAULT_NAMESPACE}}"
 # FLOE_KIND_CLUSTER absorbs both legacy env var names (KIND_CLUSTER,
 # KIND_CLUSTER_NAME). New code should use FLOE_KIND_CLUSTER only.
 : "${FLOE_KIND_CLUSTER:=${KIND_CLUSTER:-${KIND_CLUSTER_NAME:-floe-test}}}"
@@ -49,7 +59,7 @@ floe_service_name() {
         echo "floe_service_name: component argument required" >&2
         return 2
     fi
-    printf '%s-%s\n' "${FLOE_RELEASE_NAME}" "${component}"
+    floe_contract_emit service-name --release-name "${FLOE_RELEASE_NAME}" "${component}"
 }
 
 # floe_render_test_job <template-path>
