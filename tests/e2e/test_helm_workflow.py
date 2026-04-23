@@ -29,6 +29,12 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
 
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.bootstrap,
+]
+
+
 def _run_command(
     cmd: list[str],
     timeout: int = 900,

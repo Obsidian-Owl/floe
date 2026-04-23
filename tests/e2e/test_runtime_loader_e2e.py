@@ -20,13 +20,13 @@ See Also:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import httpx
 import pytest
 
-DAGSTER_HOST = "127.0.0.1"
-DAGSTER_PORT = 3000
+from testing.fixtures.services import ServiceEndpoint
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def dagster_url() -> str:
     Raises:
         pytest.fail: If Dagster webserver is unreachable.
     """
-    url = f"http://{DAGSTER_HOST}:{DAGSTER_PORT}"
+    url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
     try:
         resp = httpx.get(f"{url}/server_info", timeout=5.0)
         resp.raise_for_status()
@@ -50,6 +50,8 @@ def dagster_url() -> str:
     return url
 
 
+@pytest.mark.e2e
+@pytest.mark.platform_blackbox
 @pytest.mark.requirement("AC-1")
 @pytest.mark.requirement("AC-6")
 def test_dagster_discovers_code_location(dagster_url: str) -> None:
@@ -88,6 +90,8 @@ def test_dagster_discovers_code_location(dagster_url: str) -> None:
     assert len(loaded) >= 1, f"No code locations in LOADED status. Entries: {entries}"
 
 
+@pytest.mark.e2e
+@pytest.mark.platform_blackbox
 @pytest.mark.requirement("AC-1")
 @pytest.mark.requirement("AC-6")
 def test_dagster_discovers_assets(dagster_url: str) -> None:
@@ -120,6 +124,7 @@ def test_dagster_discovers_assets(dagster_url: str) -> None:
     )
 
 
+@pytest.mark.developer_workflow
 @pytest.mark.requirement("AC-6")
 def test_thin_definitions_are_deployed() -> None:
     """Verify the deployed definitions.py files are thin loader shims.

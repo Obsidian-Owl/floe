@@ -106,3 +106,33 @@ def test_pytest_collection_modifyitems_defaults_and_preserves_lane_ordering() ->
     assert items[1].marker_names == ["e2e", "bootstrap"]
     assert items[2].marker_names == []
     assert items[3].marker_names.count("platform_blackbox") == 1
+
+
+def test_bootstrap_modules_are_explicitly_marked() -> None:
+    helm_workflow = (REPO_ROOT / "tests" / "e2e" / "test_helm_workflow.py").read_text()
+    platform_bootstrap = (REPO_ROOT / "tests" / "e2e" / "test_platform_bootstrap.py").read_text()
+    platform_deployment = (
+        REPO_ROOT / "tests" / "e2e" / "test_platform_deployment_e2e.py"
+    ).read_text()
+
+    assert "pytest.mark.bootstrap" in helm_workflow
+    assert "pytest.mark.bootstrap" in platform_bootstrap
+    assert "pytest.mark.bootstrap" in platform_deployment
+
+
+def test_developer_workflow_outliers_are_explicitly_marked() -> None:
+    profile_isolation = (REPO_ROOT / "tests" / "e2e" / "test_profile_isolation.py").read_text()
+    governance = (REPO_ROOT / "tests" / "e2e" / "test_governance.py").read_text()
+    runtime_loader = (REPO_ROOT / "tests" / "e2e" / "test_runtime_loader_e2e.py").read_text()
+
+    assert "pytest.mark.developer_workflow" in profile_isolation
+    assert "def test_pip_audit_clean" in governance
+    assert "@pytest.mark.developer_workflow" in governance
+    assert "pytest.mark.developer_workflow" in runtime_loader
+
+
+def test_runtime_loader_uses_service_contract_not_localhost_literal() -> None:
+    runtime_loader = (REPO_ROOT / "tests" / "e2e" / "test_runtime_loader_e2e.py").read_text()
+
+    assert 'ServiceEndpoint("dagster-webserver")' in runtime_loader
+    assert 'DAGSTER_HOST = "127.0.0.1"' not in runtime_loader

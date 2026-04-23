@@ -33,6 +33,12 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.bootstrap,
+]
+
+
 def _run_kubectl(
     args: list[str],
     timeout: int = 60,

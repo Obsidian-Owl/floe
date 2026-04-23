@@ -448,6 +448,7 @@ class TestGovernance(IntegrationTestBase):
         except FileNotFoundError:
             pytest.fail("bandit not found. Install with: uv pip install bandit[toml]")
 
+    @pytest.mark.developer_workflow
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-064")
     def test_pip_audit_clean(self) -> None:

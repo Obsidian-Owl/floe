@@ -39,6 +39,12 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.bootstrap,
+]
+
+
 # K8s namespace — set by test-e2e.sh or default to floe-test
 NAMESPACE = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
 VALUES_TEST = Path(__file__).resolve().parents[2] / "charts" / "floe-platform" / "values-test.yaml"
