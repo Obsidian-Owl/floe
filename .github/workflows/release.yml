@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       run_integration:
-        description: 'Run integration tests'
+        description: 'Run bootstrap-gated integration tests'
         required: false
         default: true
         type: boolean
@@ -117,10 +117,11 @@ jobs:
           kubectl wait --for=condition=ready pods --all -n floe-test --timeout=300s || true
           kubectl get pods -n floe-test
 
-      - name: Run integration tests
+      - name: Run bootstrap-gated integration tests
         run: ./testing/ci/test-integration.sh
         env:
           TEST_NAMESPACE: floe-test
+          KIND_CLUSTER_NAME: floe-release
 
       - name: Collect logs on failure
         if: failure()

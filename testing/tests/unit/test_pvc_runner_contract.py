@@ -147,7 +147,6 @@ class TestRunnerPvcOwnershipContract:
         ("runner_path", "runner_label"),
         [
             pytest.param(E2E_RUNNER, "test-e2e-cluster.sh", id="e2e-runner"),
-            pytest.param(INTEGRATION_RUNNER, "test-integration.sh", id="integration-runner"),
         ],
     )
     @pytest.mark.requirement("AC-3")
@@ -180,7 +179,6 @@ class TestRunnerPvcOwnershipContract:
         ("runner_path", "runner_label"),
         [
             pytest.param(E2E_RUNNER, "test-e2e-cluster.sh", id="e2e-runner"),
-            pytest.param(INTEGRATION_RUNNER, "test-integration.sh", id="integration-runner"),
         ],
     )
     @pytest.mark.requirement("AC-3")
@@ -206,23 +204,11 @@ class TestRunnerPvcOwnershipContract:
             "PVC naming must flow from chart values via shared helpers."
         )
 
-    @pytest.mark.requirement("AC-3")
-    def test_integration_runner_skips_artifact_extraction_when_pvc_name_lookup_fails(self) -> None:
-        """test-integration.sh must not mount an empty PVC name after lookup failure."""
+    def test_integration_runner_delegates_pvc_handling_to_cluster_runner(self) -> None:
+        """test-integration.sh must not duplicate PVC/artifact extraction logic."""
 
         runner_text = INTEGRATION_RUNNER.read_text(encoding="utf-8")
 
-        assert (
-            'if artifacts_pvc_name="$(floe_test_artifacts_pvc_name)" '
-            '&& [[ -n "${artifacts_pvc_name}" ]]; then'
-        ) in runner_text, (
-            "test-integration.sh must gate artifact extraction on a successful, non-empty "
-            "PVC name lookup."
-        )
-        assert (
-            'echo "WARNING: Could not resolve test artifacts PVC name '
-            '— JUnit XML will be missing" >&2'
-        ) in runner_text, (
-            "test-integration.sh must emit a direct warning when PVC name lookup fails "
-            "instead of creating an extractor pod with an empty claim name."
-        )
+        assert '"${SCRIPT_DIR}/test-e2e-cluster.sh"' in runner_text
+        assert "floe_test_artifacts_pvc_name" not in runner_text
+        assert "artifact-extractor" not in runner_text

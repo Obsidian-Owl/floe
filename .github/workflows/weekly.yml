@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       run_integration:
-        description: 'Run integration tests'
+        description: 'Run bootstrap-gated integration tests'
         required: false
         default: true
         type: boolean
@@ -83,7 +83,7 @@ jobs:
         env:
           SKIP_MONITORING: "true"
 
-      - name: Run integration tests
+      - name: Run bootstrap-gated integration tests
         run: ./testing/ci/test-integration.sh
         env:
           TEST_NAMESPACE: floe-test
@@ -140,7 +140,7 @@ jobs:
         env:
           SKIP_MONITORING: "true"
 
-      - name: Run standard E2E tests
+      - name: Run bootstrap-gated standard E2E tests
         run: ./testing/ci/test-integration.sh
         env:
           TEST_SUITE: e2e
@@ -148,7 +148,7 @@ jobs:
           KIND_CLUSTER_NAME: floe-e2e
           WAIT_TIMEOUT: "1800"
 
-      - name: Run destructive E2E tests
+      - name: Run bootstrap-gated destructive E2E tests
         if: success()
         run: ./testing/ci/test-integration.sh
         env:

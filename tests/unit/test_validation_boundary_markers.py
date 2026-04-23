@@ -73,3 +73,31 @@ def test_host_e2e_runner_runs_bootstrap_before_product_e2e() -> None:
 
     assert bootstrap_index < e2e_index
     assert "-m bootstrap" in script
+
+
+def test_integration_runner_delegates_to_bootstrap_gated_cluster_runner() -> None:
+    """Legacy integration runner gates product suites with bootstrap first."""
+    script = Path("testing/ci/test-integration.sh").read_text()
+
+    assert 'export JOB_TIMEOUT="${JOB_TIMEOUT:-${WAIT_TIMEOUT}}"' in script
+    assert '"${SCRIPT_DIR}/test-e2e-cluster.sh"' in script
+    assert 'run_cluster_suite "bootstrap"' in script
+    assert 'run_cluster_suite_skip_build "e2e"' in script
+    assert 'run_cluster_suite_skip_build "e2e-destructive"' in script
+    assert "docker build" not in script
+    assert "kubectl apply" not in script
+
+
+def test_release_and_weekly_workflows_use_bootstrap_gated_integration_steps() -> None:
+    """Scheduled/release workflow call sites must not bypass bootstrap gating."""
+    release = Path(".github/workflows/release.yml").read_text()
+    weekly = Path(".github/workflows/weekly.yml").read_text()
+
+    assert "Run bootstrap-gated integration tests" in release
+    assert "Run integration tests" not in release
+    assert "run: ./testing/ci/test-integration.sh" in release
+
+    assert "Run bootstrap-gated integration tests" in weekly
+    assert "Run bootstrap-gated standard E2E tests" in weekly
+    assert "Run bootstrap-gated destructive E2E tests" in weekly
+    assert "Run integration tests" not in weekly

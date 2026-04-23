@@ -110,14 +110,13 @@ def test_ci_test_runner_builds_use_public_docker_wrapper() -> None:
     """Remote-safe CI scripts should not build test-runner images with ambient auth."""
     e2e_script = (_REPO_ROOT / "testing" / "ci" / "test-e2e-cluster.sh").read_text()
     integration_script = (_REPO_ROOT / "testing" / "ci" / "test-integration.sh").read_text()
+
     assert (
         "scripts/with-public-docker-config.sh docker build -t "
         '"${IMAGE_NAME}" -f testing/Dockerfile .'
     ) in e2e_script
-    assert (
-        "scripts/with-public-docker-config.sh docker build -t "
-        '"${IMAGE_NAME}" -f testing/Dockerfile .'
-    ) in integration_script
+    assert "docker build" not in integration_script
+    assert '"${SCRIPT_DIR}/test-e2e-cluster.sh"' in integration_script
 
 
 @pytest.mark.requirement("AC-2")
