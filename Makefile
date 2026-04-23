@@ -15,7 +15,7 @@ help: ## Show this help message
 	@echo "floe Platform - Development Commands"
 	@echo ""
 	@echo "Testing:"
-	@echo "  make test            Run all tests (unit + integration)"
+	@echo "  make test            Run all tests (unit + contract + integration)"
 	@echo "  make test-unit       Run unit tests only (fast, no K8s)"
 	@echo "  make test-integration Run integration tests (requires K8s)"
 	@echo "  make test-e2e        Run E2E tests in-cluster (auto-detects Kind/DevPod)"
@@ -108,13 +108,18 @@ kind-down: ## Destroy Kind cluster
 # ============================================================
 
 .PHONY: test
-test: test-unit test-integration ## Run all tests (unit + integration)
+test: test-unit test-contract test-integration ## Run all tests (unit + contract + integration)
 	@echo "All tests completed."
 
 .PHONY: test-unit
 test-unit: ## Run unit tests only (fast, no K8s required)
 	@echo "Running unit tests..."
 	@./testing/ci/test-unit.sh
+
+.PHONY: test-contract
+test-contract: ## Run cross-package contract tests
+	@echo "Running contract tests..."
+	@./testing/ci/test-contract.sh
 
 .PHONY: test-integration
 test-integration: ## Run integration tests (requires Kind cluster)

@@ -149,6 +149,11 @@ def pytest_collection_modifyitems(
     import re
     import warnings
 
+    e2e_dir = Path(__file__).parent
+    for item in items:
+        if item.path.is_relative_to(e2e_dir):
+            item.add_marker(pytest.mark.platform_blackbox)
+
     # Reorder: move destructive (pod-killing) tests to the end
     destructive_module = "test_service_failure_resilience_e2e"
     non_destructive: list[pytest.Item] = []
