@@ -53,3 +53,28 @@ def test_rendered_e2e_job_uses_if_not_present_for_test_runner() -> None:
     )
     assert 'image: "floe-test-runner:latest"' in result.stdout
     assert "imagePullPolicy: IfNotPresent" in result.stdout
+
+
+def test_test_runner_uses_generated_contract_env_helper() -> None:
+    """The test Job env table must come from the generated contract helper."""
+    template = _TEMPLATE_PATH.read_text()
+
+    assert 'include "floe-platform.testRunner.contractEnv" $context' in template
+    assert "name: INTEGRATION_TEST_HOST" not in template
+    assert "name: POLARIS_HOST" not in template
+
+
+def test_generated_contract_env_helper_matches_emitter() -> None:
+    """Committed Helm helper must match the contract emitter output."""
+    from floe_core.contracts.emit import render_helm_test_env_template
+
+    generated = (
+        _REPO_ROOT
+        / "charts"
+        / "floe-platform"
+        / "templates"
+        / "tests"
+        / "_contract-env.generated.tpl"
+    )
+
+    assert generated.read_text() == render_helm_test_env_template()

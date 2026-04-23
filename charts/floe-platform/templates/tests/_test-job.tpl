@@ -40,13 +40,6 @@ Fields:
 {{- $pytestMarker := .pytestMarker }}
 {{- $serviceAccount := .serviceAccount }}
 {{- $artifactPrefix := .artifactPrefix }}
-{{- $polaris := include "floe-platform.polaris.fullname" $context }}
-{{- $minio := include "floe-platform.minio.fullname" $context }}
-{{- $postgres := include "floe-platform.postgresql.host" $context }}
-{{- $dagsterWeb := include "floe-platform.dagster.webserverName" $context }}
-{{- $marquez := include "floe-platform.marquez.fullname" $context }}
-{{- $otel := include "floe-platform.otel.fullname" $context }}
-{{- $jaegerQuery := include "floe-platform.jaeger.queryName" $context }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -98,12 +91,7 @@ spec:
             - "--json-report-file=/artifacts/{{ $artifactPrefix }}-report.json"
             - "--log-cli-level=INFO"
           env:
-            - name: INTEGRATION_TEST_HOST
-              value: "k8s"
-            - name: POSTGRES_HOST
-              value: {{ $postgres | quote }}
-            - name: POSTGRES_PORT
-              value: {{ include "floe-platform.postgresql.port" $context | quote }}
+            {{- include "floe-platform.testRunner.contractEnv" $context | nindent 12 }}
             - name: POSTGRES_USER
               value: floe
             - name: POSTGRES_PASSWORD
@@ -112,7 +100,7 @@ spec:
                   name: {{ include "floe-platform.postgresql.secretName" $context }}
                   key: postgresql-password
             - name: MINIO_ENDPOINT
-              value: "http://{{ $minio }}:9000"
+              value: "http://{{ include "floe-platform.minio.fullname" $context }}:9000"
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
@@ -126,7 +114,7 @@ spec:
             - name: AWS_REGION
               value: us-east-1
             - name: POLARIS_URI
-              value: "http://{{ $polaris }}:{{ $context.Values.polaris.service.port | default 8181 }}/api/catalog"
+              value: "http://{{ include "floe-platform.polaris.fullname" $context }}:{{ $context.Values.polaris.service.port | default 8181 }}/api/catalog"
             - name: POLARIS_CREDENTIAL
               valueFrom:
                 secretKeyRef:
@@ -136,30 +124,10 @@ spec:
               value: {{ include "floe-platform.polaris.warehouse" $context | quote }}
             - name: POLARIS_SCOPE
               value: "PRINCIPAL_ROLE:ALL"
-            - name: POLARIS_HOST
-              value: {{ $polaris | quote }}
-            - name: POLARIS_MANAGEMENT_HOST
-              value: {{ $polaris | quote }}
-            - name: MINIO_HOST
-              value: {{ $minio | quote }}
-            - name: MINIO_CONSOLE_HOST
-              value: {{ $minio | quote }}
-            - name: MARQUEZ_HOST
-              value: {{ $marquez | quote }}
-            - name: DAGSTER_HOST
-              value: {{ $dagsterWeb | quote }}
-            - name: DAGSTER_WEBSERVER_HOST
-              value: {{ $dagsterWeb | quote }}
-            - name: JAEGER_QUERY_HOST
-              value: {{ $jaegerQuery | quote }}
             - name: JAEGER_URL
-              value: "http://{{ $jaegerQuery }}:16686"
-            - name: OTEL_HOST
-              value: {{ $otel | quote }}
-            - name: OTEL_COLLECTOR_GRPC_HOST
-              value: {{ $otel | quote }}
+              value: "http://{{ include "floe-platform.jaeger.queryName" $context }}:16686"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "http://{{ $otel }}:4317"
+              value: "http://{{ include "floe-platform.otel.fullname" $context }}:4317"
             - name: OTEL_SERVICE_NAME
               value: "floe-test-runner-{{ $suite }}"
             - name: PYTHONPATH
