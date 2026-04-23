@@ -35,7 +35,7 @@ spec:
         - -c
         - |
           echo "Testing Dagster webserver connectivity..."
-          DAGSTER_URL="http://{{ .Release.Name }}-dagster-webserver:80"
+          DAGSTER_URL="http://{{ .Release.Name }}-dagster-webserver:{{ .Values.dagster.dagsterWebserver.service.port }}"
           for i in 1 2 3 4 5; do
             if curl -sf "${DAGSTER_URL}/server_info" > /dev/null 2>&1; then
               echo "SUCCESS: Dagster webserver is reachable"

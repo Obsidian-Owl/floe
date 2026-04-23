@@ -46,7 +46,7 @@ tests:
           value: test-dagster
       - matchRegex:
           path: spec.containers[0].command[2]
-          pattern: "curl.*server_info"
+          pattern: "dagster-webserver:3000.*/server_info"
 
   - it: MinIO test should curl /minio/health/live endpoint
     set:

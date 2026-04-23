@@ -12,6 +12,8 @@ from testing.fixtures.services import SERVICE_DEFAULT_PORTS
 
 VALUES_BASE = Path("charts/floe-platform/values.yaml")
 VALUES_TEST = Path("charts/floe-platform/values-test.yaml")
+NOTES_TEMPLATE = Path("charts/floe-platform/templates/NOTES.txt")
+TEST_CONNECTION_TEMPLATE = Path("charts/floe-platform/templates/tests/test-connection.yaml")
 
 
 def _load_values(path: Path) -> dict[str, Any]:
@@ -37,3 +39,21 @@ def test_test_values_keep_dagster_webserver_probe_aligned() -> None:
 
     assert webserver["service"]["port"] == SERVICE_DEFAULT_PORTS["dagster-webserver"] == 3000
     assert webserver["readinessProbe"]["httpGet"]["port"] == 3000
+
+
+@pytest.mark.requirement("env-resilient-AC-1")
+def test_notes_template_uses_dagster_webserver_service_port() -> None:
+    """Rendered operator instructions must not hardcode the old privileged port."""
+    notes = NOTES_TEMPLATE.read_text(encoding="utf-8")
+
+    assert "3000:80" not in notes
+    assert ".Values.dagster.dagsterWebserver.service.port" in notes
+
+
+@pytest.mark.requirement("env-resilient-AC-1")
+def test_helm_test_pod_uses_dagster_webserver_service_port() -> None:
+    """Helm test connectivity checks must follow the shared Dagster port contract."""
+    template = TEST_CONNECTION_TEMPLATE.read_text(encoding="utf-8")
+
+    assert 'dagster-webserver:80' not in template
+    assert '.Values.dagster.dagsterWebserver.service.port' in template

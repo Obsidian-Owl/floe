@@ -62,8 +62,8 @@ dagster:
         cpu: 100m
         memory: 512Mi
       limits:
-        cpu: 500m
-        memory: 1Gi
+        cpu: "1"
+        memory: 1536Mi
 
   # Dagster daemon configuration
   dagsterDaemon:
@@ -77,8 +77,8 @@ dagster:
         cpu: 100m
         memory: 512Mi
       limits:
-        cpu: 500m
-        memory: 1Gi
+        cpu: "1"
+        memory: 1536Mi
     # Demo scheduling: 10-minute intervals
     env:
       DAGSTER_DEFAULT_SCHEDULE_CRON: "*/10 * * * *"

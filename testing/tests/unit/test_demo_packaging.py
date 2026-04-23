@@ -1641,16 +1641,16 @@ class TestHelmValuesImageOverride:
             "dagster.dagsterWebserver.resources.requests.memory must be '512Mi' "
             "in values-demo.yaml."
         )
-        assert webserver_resources.get("limits", {}).get("memory") == "1Gi", (
-            "dagster.dagsterWebserver.resources.limits.memory must be '1Gi' "
+        assert webserver_resources.get("limits", {}).get("memory") == "1536Mi", (
+            "dagster.dagsterWebserver.resources.limits.memory must be '1536Mi' "
             "in values-demo.yaml."
         )
         assert daemon_resources.get("requests", {}).get("memory") == "512Mi", (
             "dagster.dagsterDaemon.resources.requests.memory must be '512Mi' "
             "in values-demo.yaml."
         )
-        assert daemon_resources.get("limits", {}).get("memory") == "1Gi", (
-            "dagster.dagsterDaemon.resources.limits.memory must be '1Gi' "
+        assert daemon_resources.get("limits", {}).get("memory") == "1536Mi", (
+            "dagster.dagsterDaemon.resources.limits.memory must be '1536Mi' "
             "in values-demo.yaml."
         )
 
