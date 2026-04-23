@@ -26,6 +26,7 @@ import httpx
 import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
+from testing.fixtures.credentials import get_minio_credentials
 from testing.fixtures.polling import wait_for_condition
 from testing.fixtures.services import ServiceEndpoint
 
@@ -55,7 +56,6 @@ def _run_kubectl(
     )
 
 
-@pytest.mark.e2e
 @pytest.mark.requirement("FR-001")
 @pytest.mark.requirement("FR-002")
 @pytest.mark.requirement("FR-003")
@@ -413,11 +413,12 @@ class TestPlatformBootstrap(IntegrationTestBase):
         # The minio/minio image does NOT include the `mc` CLI, and MinIO
         # with policy=none requires credentials for bucket operations.
         expected_bucket = os.environ.get("MINIO_BUCKET", "floe-iceberg")
+        minio_access_key, minio_secret_key = get_minio_credentials()
         s3 = boto3.client(
             "s3",
             endpoint_url=ServiceEndpoint("minio").url,
-            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
-            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin123"),
+            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", minio_access_key),
+            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", minio_secret_key),
             region_name=os.environ.get("AWS_REGION", "us-east-1"),
         )
         try:

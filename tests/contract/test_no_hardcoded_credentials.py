@@ -55,7 +55,6 @@ EXCLUDED_FILES: frozenset[str] = frozenset(
         "tests/e2e/tests/test_conftest_manifest_wiring.py",
         "tests/e2e/test_dbt_e2e_profile.py",
         "tests/e2e/test_governance_enforcement_e2e.py",
-        "tests/e2e/test_platform_bootstrap.py",
         # This test file itself (contains patterns as string literals)
         "tests/contract/test_no_hardcoded_credentials.py",
     }

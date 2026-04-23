@@ -17,6 +17,7 @@ help: ## Show this help message
 	@echo "Testing:"
 	@echo "  make test            Run all tests (unit + contract + integration)"
 	@echo "  make test-unit       Run unit tests only (fast, no K8s)"
+	@echo "  make test-contract   Run cross-package contract tests"
 	@echo "  make test-integration Run integration tests (requires K8s)"
 	@echo "  make test-e2e        Run E2E tests in-cluster (auto-detects Kind/DevPod)"
 	@echo "  make test-e2e-full   Run standard + destructive E2E suites sequentially"
