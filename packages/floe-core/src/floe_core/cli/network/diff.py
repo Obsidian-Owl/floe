@@ -33,6 +33,7 @@ from floe_core.cli.utils import (
     success,
     warning,
 )
+from floe_core.contracts.schemas import MachineOutputName, validate_machine_output
 
 # =============================================================================
 # Extracted Helper Functions
@@ -570,7 +571,14 @@ def diff_command(
         if output_format.lower() == "json":
             import json
 
-            click.echo(json.dumps(diff_result, indent=2))
+            payload = {
+                "expected": expected_policies,
+                "actual": deployed_policies,
+                "diffs": diff_result.get("diffs", []),
+                "summary": diff_result.get("summary", {}),
+            }
+            validate_machine_output(MachineOutputName.NETWORK_DIFF, payload)
+            click.echo(json.dumps(payload, indent=2))
         else:
             _output_diff_as_text(diff_result)
 

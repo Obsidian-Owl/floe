@@ -20,12 +20,14 @@ Example:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import click
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warning
+from floe_core.contracts.schemas import MachineOutputName, validate_machine_output
 
 if TYPE_CHECKING:
     from floe_core.schemas.rbac_diff import RBACDiffResult
@@ -391,7 +393,9 @@ def diff_command(
 
         # Output results
         if output_format == "json":
-            click.echo(diff_result.model_dump_json(indent=2))
+            payload = diff_result.model_dump(mode="json")
+            validate_machine_output(MachineOutputName.RBAC_DIFF, payload)
+            click.echo(json.dumps(payload, indent=2))
         else:
             _output_diff_as_text(diff_result)
 

@@ -1075,12 +1075,11 @@ class TestOutputFormatting:
             json_output = "\n".join(lines[json_start:])
             output_data = json.loads(json_output)
 
-            assert "missing" in output_data
-            assert "extra" in output_data
-            assert "modified" in output_data
-            assert "missing_count" in output_data
-            assert "extra_count" in output_data
-            assert "modified_count" in output_data
+            from floe_core.contracts.schemas import MachineOutputName, contract_for_output
+
+            contract = contract_for_output(MachineOutputName.NETWORK_DIFF)
+            for key in contract.required_keys:
+                assert key in output_data
 
 
 class TestDiffCommandIntegration:

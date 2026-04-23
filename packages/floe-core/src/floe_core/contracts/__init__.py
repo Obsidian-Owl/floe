@@ -26,6 +26,12 @@ from floe_core.contracts.errors import (
 )
 from floe_core.contracts.generator import ContractGenerator
 from floe_core.contracts.runtime import OciAuthType, enum_values, runtime_enum
+from floe_core.contracts.schemas import (
+    JsonOutputContract,
+    MachineOutputName,
+    contract_for_output,
+    validate_machine_output,
+)
 
 __all__ = [
     "ContractError",
@@ -33,7 +39,11 @@ __all__ = [
     "ContractGenerator",
     "ContractViolationError",
     "ExecutionContextMismatch",
+    "JsonOutputContract",
+    "MachineOutputName",
     "OciAuthType",
+    "contract_for_output",
     "enum_values",
     "runtime_enum",
+    "validate_machine_output",
 ]

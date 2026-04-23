@@ -33,6 +33,7 @@ from floe_core.cli.utils import (
     success,
     warning,
 )
+from floe_core.contracts.schemas import MachineOutputName, validate_machine_output
 from floe_core.network.schemas import _validate_namespace
 
 if TYPE_CHECKING:
@@ -537,6 +538,7 @@ def _output_report(report: dict[str, Any], output_format: str) -> None:
     if output_format == "json":
         import json
 
+        validate_machine_output(MachineOutputName.NETWORK_AUDIT, report)
         click.echo(json.dumps(report, indent=2))
         return
 

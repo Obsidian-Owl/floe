@@ -18,12 +18,14 @@ Example:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import click
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warning
+from floe_core.contracts.schemas import MachineOutputName, validate_machine_output
 
 if TYPE_CHECKING:
     from floe_core.schemas.rbac_audit import AuditFinding, RBACAuditReport
@@ -264,7 +266,9 @@ def _output_report(report: RBACAuditReport, output_format: str) -> None:
         output_format: Output format ('json' or 'text').
     """
     if output_format == "json":
-        click.echo(report.model_dump_json(indent=2))
+        payload = report.model_dump(mode="json")
+        validate_machine_output(MachineOutputName.RBAC_AUDIT, payload)
+        click.echo(json.dumps(payload, indent=2))
         return
 
     _output_report_as_text(report)
