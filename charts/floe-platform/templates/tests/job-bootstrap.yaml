@@ -1,0 +1,17 @@
+{{/*
+Bootstrap validation test runner Job.
+
+Runs environment bring-up and platform readiness checks before product E2E
+tests. Uses the standard test runner ServiceAccount because bootstrap checks
+must not perform destructive operations.
+*/}}
+{{- if .Values.tests.enabled }}
+{{- include "floe-platform.testJob" (dict
+    "context" .
+    "suite" "bootstrap"
+    "pytestMarker" "bootstrap"
+    "testPath" "tests/bootstrap/"
+    "serviceAccount" (include "floe-platform.testRunner.saName" .)
+    "artifactPrefix" "bootstrap"
+    ) }}
+{{- end }}

@@ -14,13 +14,13 @@ _TEMPLATE_PATH = _REPO_ROOT / "charts" / "floe-platform" / "templates" / "tests"
 _VALUES_TEST_PATH = _REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
 
 
-def _render_e2e_job() -> str:
-    """Render the standard E2E Job template using the chart contract helper."""
+def _render_test_job(template: str) -> str:
+    """Render a test Job template using the chart contract helper."""
     result = subprocess.run(
         [
             "bash",
             "-lc",
-            "source testing/ci/common.sh && floe_render_test_job tests/job-e2e.yaml",
+            f"source testing/ci/common.sh && floe_render_test_job {template}",
         ],
         cwd=_REPO_ROOT,
         text=True,
@@ -28,10 +28,30 @@ def _render_e2e_job() -> str:
         check=False,
     )
     assert result.returncode == 0, (
-        "Failed to render the Unit C E2E Job via floe_render_test_job.\n"
+        f"Failed to render {template} via floe_render_test_job.\n"
         f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     )
     return result.stdout
+
+
+def _render_e2e_job() -> str:
+    """Render the standard E2E Job template using the chart contract helper."""
+    return _render_test_job("tests/job-e2e.yaml")
+
+
+def _render_bootstrap_job() -> str:
+    """Render the bootstrap Job template using the chart contract helper."""
+    return _render_test_job("tests/job-bootstrap.yaml")
+
+
+def _rendered_job_args(rendered: str) -> list[str]:
+    """Return the pytest args from a rendered test Job."""
+    docs = yaml.safe_load_all(rendered)
+    jobs = [doc for doc in docs if isinstance(doc, dict) and doc.get("kind") == "Job"]
+    assert len(jobs) == 1
+    containers: list[dict[str, Any]] = jobs[0]["spec"]["template"]["spec"]["containers"]
+    args: list[str] = containers[0].get("args", [])
+    return args
 
 
 def _rendered_e2e_env_names() -> list[str]:
@@ -70,6 +90,32 @@ def test_rendered_e2e_job_uses_if_not_present_for_test_runner() -> None:
     rendered = _render_e2e_job()
     assert 'image: "floe-test-runner:latest"' in rendered
     assert "imagePullPolicy: IfNotPresent" in rendered
+
+
+def test_test_runner_template_uses_configurable_test_path() -> None:
+    """The shared test Job template must not hardcode product E2E test paths."""
+    template = _TEMPLATE_PATH.read_text()
+
+    assert '{{- $testPath := default "tests/e2e/" .testPath }}' in template
+    assert "- {{ $testPath | quote }}" in template
+
+
+def test_rendered_bootstrap_job_targets_bootstrap_boundary() -> None:
+    """Bootstrap Job runs only the bootstrap validation boundary."""
+    args = _rendered_job_args(_render_bootstrap_job())
+
+    assert "tests/bootstrap/" in args
+    assert "tests/e2e/" not in args
+    marker_index = args.index("-m")
+    assert args[marker_index + 1] == "bootstrap"
+
+
+def test_rendered_e2e_job_targets_product_e2e_boundary() -> None:
+    """Product E2E Job keeps the default product E2E path."""
+    args = _rendered_job_args(_render_e2e_job())
+
+    assert "tests/e2e/" in args
+    assert "tests/bootstrap/" not in args
 
 
 def test_test_runner_uses_generated_contract_env_helper() -> None:

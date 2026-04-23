@@ -13,7 +13,7 @@
 #   SKIP_BUILD          Skip image build if set to "true" (default: false)
 #   IMAGE_LOAD_METHOD   How to load image: auto|kind|devpod|skip (default: auto)
 #   STARTUP_ONLY        Exit after proving pod startup boundary (default: false)
-#   TEST_SUITE          Test suite to run: e2e|e2e-destructive (default: e2e)
+#   TEST_SUITE          Test suite to run: bootstrap|e2e|e2e-destructive (default: e2e)
 #   LOG_TAIL_LINES      Lines to capture per pod on failure (default: 100)
 #   DEVPOD_REMOTE_WORKDIR Remote repo root inside the DevPod workspace
 #
@@ -187,6 +187,11 @@ assert_startup_boundary() {
 
 # Select Job name and chart-rendered template based on TEST_SUITE
 case "${TEST_SUITE}" in
+    bootstrap)
+        JOB_NAME="floe-test-bootstrap"
+        JOB_TEMPLATE="tests/job-bootstrap.yaml"
+        RBAC_TEMPLATE="tests/rbac-standard.yaml"
+        ;;
     e2e)
         JOB_NAME="floe-test-e2e"
         JOB_TEMPLATE="tests/job-e2e.yaml"
@@ -198,7 +203,7 @@ case "${TEST_SUITE}" in
         RBAC_TEMPLATE="tests/rbac-destructive.yaml"
         ;;
     *)
-        error "Unknown TEST_SUITE '${TEST_SUITE}'. Use: e2e|e2e-destructive"
+        error "Unknown TEST_SUITE '${TEST_SUITE}'. Use: bootstrap|e2e|e2e-destructive"
         exit 1
         ;;
 esac

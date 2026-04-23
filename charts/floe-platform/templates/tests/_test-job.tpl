@@ -15,6 +15,7 @@ Usage:
       "pytestMarker" "not destructive"
       "serviceAccount" (include "floe-platform.testRunner.saName" .)
       "artifactPrefix" "e2e"
+      "testPath" "tests/e2e/"
       ) }}
 
 Fields:
@@ -33,6 +34,9 @@ Fields:
                     about which SA a given suite uses.
   artifactPrefix  — Filename prefix for junitxml/html/json-report
                     artifacts. Typically matches `suite`.
+  testPath        — Pytest collection path. Defaults to "tests/e2e/" for
+                    product E2E runners; bootstrap callers set
+                    "tests/bootstrap/" explicitly.
 */}}
 {{- define "floe-platform.testJob" -}}
 {{- $context := .context }}
@@ -40,6 +44,7 @@ Fields:
 {{- $pytestMarker := .pytestMarker }}
 {{- $serviceAccount := .serviceAccount }}
 {{- $artifactPrefix := .artifactPrefix }}
+{{- $testPath := default "tests/e2e/" .testPath }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -81,7 +86,7 @@ spec:
             - "--tb=short"
             - "-v"
             - "--color=yes"
-            - "tests/e2e/"
+            - {{ $testPath | quote }}
             - "-m"
             - {{ $pytestMarker | quote }}
             - "--junitxml=/artifacts/{{ $artifactPrefix }}-results.xml"

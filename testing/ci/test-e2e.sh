@@ -550,6 +550,19 @@ export MARQUEZ_PORT="${MARQUEZ_HOST_PORT:-5100}"
 export JAEGER_QUERY_PORT="${JAEGER_QUERY_PORT}"
 
 echo ""
+echo "Running bootstrap tests..."
+
+# Run bootstrap tests first. If platform readiness fails, product E2E tests
+# must not run because their failures would be misleading.
+DAGSTER_URL="http://localhost:${DAGSTER_HOST_PORT}" \
+uv run pytest \
+    tests/bootstrap/ \
+    -m bootstrap \
+    -v \
+    --tb=short \
+    --timeout="${E2E_TIMEOUT}"
+
+echo ""
 echo "Running E2E tests..."
 
 # Run E2E tests
