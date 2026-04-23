@@ -31,6 +31,50 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider as SdkTracerProvider
 
 
+def test_service_default_ports_are_contract_derived() -> None:
+    """E2E service defaults must be derived from topology contracts."""
+    from floe_core.contracts.topology import service_contracts
+
+    from testing.fixtures.services import SERVICE_DEFAULT_PORTS
+
+    expected = {service.short_name: service.default_port for service in service_contracts()}
+
+    assert SERVICE_DEFAULT_PORTS == expected
+
+
+def test_service_endpoint_requires_explicit_execution_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Service helpers must not silently probe DNS and fall back to localhost."""
+    from floe_core.contracts.errors import ExecutionContextMismatch
+
+    from testing.fixtures.services import ServiceEndpoint
+
+    monkeypatch.delenv("FLOE_EXECUTION_CONTEXT", raising=False)
+    monkeypatch.delenv("POLARIS_HOST", raising=False)
+
+    endpoint = ServiceEndpoint("polaris")
+
+    with pytest.raises(ExecutionContextMismatch, match="FLOE_EXECUTION_CONTEXT"):
+        _ = endpoint.host
+
+
+def test_service_endpoint_uses_contract_env_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ServiceEndpoint uses contract binding for in-cluster runtime."""
+    from testing.fixtures.services import ServiceEndpoint
+
+    monkeypatch.setenv("FLOE_EXECUTION_CONTEXT", "in-cluster")
+    monkeypatch.setenv("FLOE_RELEASE_NAME", "floe-platform")
+
+    endpoint = ServiceEndpoint("polaris")
+
+    assert endpoint.host == "floe-platform-polaris"
+    assert endpoint.port == 8181
+    assert endpoint.url == "http://floe-platform-polaris:8181"
+
+
 @pytest.fixture(autouse=True)
 def _reset_otel_global_state() -> Generator[None, None, None]:
     """Reset OTel global state before and after each test.

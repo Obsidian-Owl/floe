@@ -9,11 +9,11 @@ Functions:
     check_infrastructure: Verify multiple services are healthy
 
 Environment Variables:
-    INTEGRATION_TEST_HOST: Override host for all services (default: auto-detect)
-        - "k8s": Use K8s DNS names (for in-cluster testing)
-        - "localhost": Use localhost (for host-based testing with NodePort)
-        - Not set: Auto-detect based on DNS resolution
-    {SERVICE}_HOST: Override host for specific service (e.g., POLARIS_HOST=localhost)
+    FLOE_EXECUTION_CONTEXT: Required execution context for generated bindings.
+        Supported values: "in-cluster", "host", "devpod", "demo".
+    FLOE_RELEASE_NAME: Helm release name for in-cluster service bindings.
+    FLOE_NAMESPACE: Kubernetes namespace for generated bindings.
+    {SERVICE}_HOST: Explicit host override for a contract-defined service.
 
 Example:
     from testing.fixtures.services import check_service_health
@@ -25,29 +25,24 @@ Example:
 from __future__ import annotations
 
 import os
-import socket
 from collections.abc import Sequence
 from dataclasses import dataclass
+from socket import create_connection
+
+from floe_core.contracts.execution import parse_execution_context, service_binding
+from floe_core.contracts.topology import (
+    DEFAULT_NAMESPACE,
+    DEFAULT_RELEASE_NAME,
+    service_contract_by_name,
+    service_contracts,
+)
 
 # ---------------------------------------------------------------------------
 # Port resolution constants and utilities
 # ---------------------------------------------------------------------------
 
 SERVICE_DEFAULT_PORTS: dict[str, int] = {
-    "dagster-webserver": 3000,
-    "dagster": 3000,
-    "polaris": 8181,
-    "polaris-management": 8182,
-    "minio": 9000,
-    "minio-console": 9001,
-    "postgres": 5432,
-    "jaeger-query": 16686,
-    "otel-collector-grpc": 4317,
-    "otel-collector-http": 4318,
-    "marquez": 5000,
-    "oci-registry": 5000,
-    "oci-registry-auth": 5000,
-    "registry": 5000,
+    service.short_name: service.default_port for service in service_contracts()
 }
 """Default ports for well-known floe platform services."""
 
@@ -127,56 +122,23 @@ def get_effective_port(service_name: str, default: int | None = None) -> int:
 
 
 def _get_effective_host(service_name: str, namespace: str) -> str:
-    """Determine the effective host for a service.
-
-    Checks environment variables and auto-detects whether to use K8s DNS
-    or localhost based on network reachability.
-
-    Args:
-        service_name: Name of the service (e.g., "polaris").
-        namespace: K8s namespace.
-
-    Returns:
-        Effective hostname to use for connections.
-    """
-    # Check service-specific override (e.g., POLARIS_HOST=localhost)
-    env_key = f"{service_name.upper().replace('-', '_')}_HOST"
+    """Determine the effective host for a service from execution contracts."""
+    service = service_contract_by_name(service_name)
+    env_key = service.host_env_var
     service_host = os.environ.get(env_key)
     if service_host:
         return service_host
 
-    # Check global override
-    global_host = os.environ.get("INTEGRATION_TEST_HOST")
-    if global_host == "k8s":
-        return f"{service_name}.{namespace}.svc.cluster.local"
-    if global_host == "localhost":
-        return "localhost"
-    if global_host:
-        return global_host
-
-    # Auto-detect: try K8s DNS first, fall back to localhost
-    k8s_dns = f"{service_name}.{namespace}.svc.cluster.local"
-    if _can_resolve_host(k8s_dns):
-        return k8s_dns
-
-    # Fallback to localhost for Kind cluster NodePort access
-    return "localhost"
-
-
-def _can_resolve_host(hostname: str) -> bool:
-    """Check if a hostname can be resolved.
-
-    Args:
-        hostname: The hostname to resolve.
-
-    Returns:
-        True if hostname resolves, False otherwise.
-    """
-    try:
-        socket.gethostbyname(hostname)
-        return True
-    except socket.gaierror:
-        return False
+    context = parse_execution_context(os.environ.get("FLOE_EXECUTION_CONTEXT"))
+    release_name = os.environ.get("FLOE_RELEASE_NAME", DEFAULT_RELEASE_NAME)
+    effective_namespace = namespace or os.environ.get("FLOE_NAMESPACE", DEFAULT_NAMESPACE)
+    binding = service_binding(
+        service.component_id,
+        context,
+        release_name=release_name,
+        namespace=effective_namespace,
+    )
+    return binding.host
 
 
 @dataclass(frozen=True)
@@ -345,7 +307,7 @@ def _tcp_health_check(host: str, port: int, timeout: float) -> bool:
         True if connection successful, False otherwise.
     """
     try:
-        with socket.create_connection((host, port), timeout=timeout):
+        with create_connection((host, port), timeout=timeout):
             return True
     except OSError:
         return False
@@ -357,20 +319,20 @@ def get_effective_host(
 ) -> str:
     """Get the effective hostname for a service.
 
-    Determines whether to use K8s DNS or localhost based on environment
-    variables and network reachability. This is useful for tests that
-    need to construct URIs for services.
+    Resolves the host from contract-defined execution context bindings.
 
     Args:
         service_name: Name of the service (e.g., "polaris").
         namespace: K8s namespace. Defaults to "floe-test".
 
     Returns:
-        Effective hostname (e.g., "localhost" or "polaris.floe-test.svc.cluster.local").
+        Effective hostname from the configured execution context.
 
     Environment Variables:
-        {SERVICE}_HOST: Override host for specific service (e.g., POLARIS_HOST=localhost)
-        INTEGRATION_TEST_HOST: Global override ("k8s", "localhost", or custom host)
+        FLOE_EXECUTION_CONTEXT: Required execution context for generated bindings.
+        FLOE_RELEASE_NAME: Helm release name for in-cluster service bindings.
+        FLOE_NAMESPACE: Kubernetes namespace for generated bindings.
+        {SERVICE}_HOST: Explicit host override for a contract-defined service.
 
     Example:
         host = get_effective_host("polaris")
