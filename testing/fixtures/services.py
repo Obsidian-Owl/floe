@@ -131,7 +131,11 @@ def _get_effective_host(service_name: str, namespace: str) -> str:
 
     context = parse_execution_context(os.environ.get("FLOE_EXECUTION_CONTEXT"))
     release_name = os.environ.get("FLOE_RELEASE_NAME", DEFAULT_RELEASE_NAME)
-    effective_namespace = namespace or os.environ.get("FLOE_NAMESPACE", DEFAULT_NAMESPACE)
+    effective_namespace = (
+        os.environ.get("FLOE_NAMESPACE", DEFAULT_NAMESPACE)
+        if namespace == DEFAULT_NAMESPACE
+        else namespace
+    )
     binding = service_binding(
         service.component_id,
         context,
