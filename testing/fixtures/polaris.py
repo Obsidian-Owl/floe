@@ -28,12 +28,20 @@ if TYPE_CHECKING:
     from pyiceberg.table import Table
 
 
+def _service_url_from_env(env_key: str, service_name: str) -> str:
+    """Resolve a service URL lazily from an env override or service contract."""
+    explicit_url = os.environ.get(env_key)
+    if explicit_url:
+        return explicit_url
+    return ServiceEndpoint(service_name).url
+
+
 def _default_polaris_uri() -> str:
     explicit_uri = os.environ.get("POLARIS_URI")
     if explicit_uri:
         return explicit_uri
 
-    base_url = os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
+    base_url = _service_url_from_env("POLARIS_URL", "polaris")
     return f"{base_url.rstrip('/')}/api/catalog"
 
 
@@ -118,7 +126,7 @@ def create_polaris_catalog(config: PolarisConfig) -> Catalog:
         ) from e
 
     try:
-        minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
+        minio_url = _service_url_from_env("MINIO_URL", "minio")
         minio_access, minio_secret = get_minio_credentials()
         catalog = load_catalog(
             "polaris",
@@ -153,7 +161,7 @@ def rewrite_table_io_for_host_access(table: Table) -> None:
     from pyiceberg.io import load_file_io
 
     io_props = dict(getattr(table.io, "properties", {}))
-    io_props["s3.endpoint"] = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
+    io_props["s3.endpoint"] = _service_url_from_env("MINIO_URL", "minio")
     table.io = load_file_io(properties=io_props)
 
 

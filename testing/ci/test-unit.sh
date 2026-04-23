@@ -32,6 +32,8 @@ fi
 
 cd "${PROJECT_ROOT}"
 
+export FLOE_EXECUTION_CONTEXT="${FLOE_EXECUTION_CONTEXT:-host}"
+
 echo "Running unit tests..."
 echo "Coverage threshold: ${COVERAGE_THRESHOLD}%"
 echo "Coverage report: ${COVERAGE_REPORT}"

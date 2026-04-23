@@ -24,9 +24,13 @@ floe_common_fail() {
 }
 
 : "${FLOE_PYTHON:=${FLOE_PROJECT_ROOT}/.venv/bin/python}"
+if [[ ! -x "${FLOE_PYTHON}" ]] && command -v python >/dev/null 2>&1; then
+    FLOE_PYTHON="$(command -v python)"
+fi
 if [[ ! -x "${FLOE_PYTHON}" ]]; then
     floe_common_fail "FLOE_PYTHON is not executable: ${FLOE_PYTHON}. Run 'uv sync' or set FLOE_PYTHON."
 fi
+export FLOE_PYTHON
 
 floe_contract_emit() {
     PYTHONPATH="${FLOE_PROJECT_ROOT}/packages/floe-core/src:${PYTHONPATH:-}" \

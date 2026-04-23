@@ -42,7 +42,7 @@ check_dbt_ownership() {
     fi
 
     # Check for SQL parsing in Python
-    if grep -qE "(sqlparse|sql.*parse|parse.*sql|ast.*sql)" "$file" 2>/dev/null; then
+    if grep -qE "(sqlparse|sql[[:space:]_.-]*(parse|parser|parsing)|parse[[:space:]_.-]*sql|ast[[:space:]_.-]*sql)" "$file" 2>/dev/null; then
         log_error "$file: SQL parsing detected - dbt owns SQL compilation"
         ((violations++))
     fi
@@ -149,6 +149,21 @@ check_test_organization() {
     fi
 }
 
+check_platform_contract_literals() {
+    local file="$1"
+
+    case "$file" in
+        *"packages/floe-core/src/floe_core/contracts/"*|*"charts/floe-platform/templates/tests/_contract-env.generated.tpl")
+            return 0
+            ;;
+    esac
+
+    if grep -qE '"(dagster|polaris|polaris-management|minio|minio-console|postgres|postgresql|jaeger-query|otel-collector-grpc|otel-collector-http|marquez|oci-registry|oci-registry-auth)"[[:space:]]*:' "$file" 2>/dev/null; then
+        log_error "$file: duplicated platform service map detected - use floe_core.contracts.topology"
+        ((violations++))
+    fi
+}
+
 check_file() {
     local file="$1"
 
@@ -169,6 +184,7 @@ check_file() {
     check_contract_boundaries "$file"
     check_plugin_rules "$file"
     check_test_organization "$file"
+    check_platform_contract_literals "$file"
 }
 
 validate_file_path() {

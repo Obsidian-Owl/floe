@@ -23,6 +23,8 @@ source "${SCRIPT_DIR}/common.sh"
 
 cd "${PROJECT_ROOT}"
 
+export FLOE_EXECUTION_CONTEXT="${FLOE_EXECUTION_CONTEXT:-host}"
+
 echo "Running contract tests..."
 echo ""
 

@@ -121,7 +121,7 @@ class TestPolarisConfig:
     def test_default_credential_uses_centralized_helper(self) -> None:
         """Test credential fallback comes from the shared credentials helper."""
         with (
-            patch.dict(os.environ, {}, clear=True),
+            patch.dict(os.environ, {"FLOE_EXECUTION_CONTEXT": "host"}, clear=True),
             patch(
                 "testing.fixtures.polaris.get_polaris_credentials",
                 return_value=("shared-id", "shared-secret"),
