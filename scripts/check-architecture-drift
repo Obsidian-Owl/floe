@@ -158,7 +158,7 @@ check_platform_contract_literals() {
             ;;
     esac
 
-    if grep -qE "['\"](dagster|polaris|polaris-management|minio|minio-console|postgres|postgresql|jaeger-query|otel-collector-grpc|otel-collector-http|marquez|oci-registry|oci-registry-auth)['\"][[:space:]]*:" "$file" 2>/dev/null; then
+    if grep -qE "['\"](dagster|polaris|polaris-management|minio|minio-console|postgres|postgresql|jaeger-query|otel-collector-grpc|otel-collector-http|marquez|oci-registry|oci-registry-auth)['\"][[:space:]]*:[[:space:]]*['\"]?[0-9]+['\"]?([[:space:]]*[,}])" "$file" 2>/dev/null; then
         log_error "$file: duplicated platform service map detected - use floe_core.contracts.topology"
         violations=$((violations + 1))
     fi
@@ -190,10 +190,26 @@ check_file() {
 validate_file_path() {
     # Prevent path traversal - ensure file is within PROJECT_ROOT
     local file="$1"
+    local candidate_path
+    local candidate_dir
+    local candidate_name
+    local resolved_dir
     local resolved_path
 
     # Resolve to absolute path and check it's within project
-    resolved_path=$(realpath -m "${PROJECT_ROOT}/${file}" 2>/dev/null) || return 1
+    case "$file" in
+        /*)
+            candidate_path="$file"
+            ;;
+        *)
+            candidate_path="${PROJECT_ROOT}/${file}"
+            ;;
+    esac
+
+    candidate_dir="$(dirname "$candidate_path")"
+    candidate_name="$(basename "$candidate_path")"
+    resolved_dir="$(cd "$candidate_dir" 2>/dev/null && pwd -P)" || return 1
+    resolved_path="${resolved_dir}/${candidate_name}"
 
     # Ensure path starts with PROJECT_ROOT (no traversal)
     if [[ "$resolved_path" != "${PROJECT_ROOT}"/* ]]; then
