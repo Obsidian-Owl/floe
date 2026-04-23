@@ -133,7 +133,7 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
         registry_url = f"localhost:5000/floe-lock-{unique_id}"
         registry_config = RegistryConfig(
             registry_uri=f"oci://{registry_url}",
-            auth=RegistryAuth(auth_type=AuthType.NONE),
+            auth=RegistryAuth(type=AuthType.ANONYMOUS),
         )
         client = OCIClient.from_registry_config(registry_config)
 
@@ -250,7 +250,7 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
         registry_url = f"localhost:5000/floe-persist-{unique_id}"
         registry_config = RegistryConfig(
             registry_uri=f"oci://{registry_url}",
-            auth=RegistryAuth(auth_type=AuthType.NONE),
+            auth=RegistryAuth(type=AuthType.ANONYMOUS),
         )
         client = OCIClient.from_registry_config(registry_config)
 
@@ -311,7 +311,7 @@ class TestLockUnlockWorkflow(IntegrationTestBase):
         registry_url = f"localhost:5000/floe-idem-{unique_id}"
         registry_config = RegistryConfig(
             registry_uri=f"oci://{registry_url}",
-            auth=RegistryAuth(auth_type=AuthType.NONE),
+            auth=RegistryAuth(type=AuthType.ANONYMOUS),
         )
         client = OCIClient.from_registry_config(registry_config)
 
@@ -370,7 +370,7 @@ class TestLockErrorHandling(IntegrationTestBase):
         registry_url = f"localhost:5000/floe-err-{unique_id}"
         registry_config = RegistryConfig(
             registry_uri=f"oci://{registry_url}",
-            auth=RegistryAuth(auth_type=AuthType.NONE),
+            auth=RegistryAuth(type=AuthType.ANONYMOUS),
         )
         client = OCIClient.from_registry_config(registry_config)
 

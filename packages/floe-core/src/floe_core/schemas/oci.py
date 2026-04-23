@@ -29,6 +29,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
+from floe_core.contracts.runtime import OciAuthType as AuthType
 from floe_core.schemas.secrets import SecretReference
 from floe_core.schemas.signing import SigningConfig, VerificationPolicy
 
@@ -56,17 +57,6 @@ OCI_EMPTY_CONFIG_TYPE = "application/vnd.oci.empty.v1+json"
 # =============================================================================
 # Registry Configuration Schemas
 # =============================================================================
-
-
-class AuthType(str, Enum):
-    """Authentication types for OCI registries."""
-
-    ANONYMOUS = "anonymous"
-    BASIC = "basic"
-    TOKEN = "token"
-    AWS_IRSA = "aws-irsa"
-    AZURE_MANAGED_IDENTITY = "azure-managed-identity"
-    GCP_WORKLOAD_IDENTITY = "gcp-workload-identity"
 
 
 class RegistryAuth(BaseModel):
