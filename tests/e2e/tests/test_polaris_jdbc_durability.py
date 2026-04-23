@@ -285,8 +285,8 @@ class TestPolarisJdbcDurability(IntegrationTestBase):
         # Step 6: Wait for Polaris readiness via /q/health/ready
         from testing.fixtures.services import get_effective_host, get_effective_port
 
-        health_host = get_effective_host("polaris")
-        health_port = get_effective_port("polaris", default=8182)
+        health_host = get_effective_host("polaris-management")
+        health_port = get_effective_port("polaris-management", default=8182)
         health_url = f"http://{health_host}:{health_port}/q/health/ready"
 
         def _is_ready() -> bool:
