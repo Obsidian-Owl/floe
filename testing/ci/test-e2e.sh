@@ -553,6 +553,7 @@ uv pip install "pyiceberg[s3fs]==0.11.1" 2>&1 || {
 # (testing.fixtures.services.get_effective_port reads these).
 # Both dagster aliases get the same host-mapped port so tests using either
 # name resolve correctly.
+export FLOE_EXECUTION_CONTEXT=host
 export DAGSTER_WEBSERVER_PORT="${DAGSTER_HOST_PORT}"
 export DAGSTER_PORT="${DAGSTER_HOST_PORT}"
 export MARQUEZ_PORT="${MARQUEZ_HOST_PORT:-5100}"

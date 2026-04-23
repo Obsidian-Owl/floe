@@ -1618,23 +1618,26 @@ class TestShellEnvVarExports:
         the DAGSTER_HOST_PORT variable may not be fully resolved yet.
         """
         port_forwards_line: int | None = None
-        export_lines_idx: list[int] = []
+        expected_exports = [
+            "export DAGSTER_WEBSERVER_PORT=",
+            "export DAGSTER_PORT=",
+            "export MARQUEZ_PORT=",
+        ]
+        export_lines_idx: dict[str, int] = {}
 
         for idx, line in enumerate(script_lines):
             if "Port-forwards established" in line:
                 port_forwards_line = idx
-            if line.strip().startswith("export DAGSTER_WEBSERVER_PORT="):
-                export_lines_idx.append(idx)
-            if line.strip().startswith("export DAGSTER_WEBSERVER_PORT="):
-                export_lines_idx.append(idx)
-            if line.strip().startswith("export MARQUEZ_PORT="):
-                export_lines_idx.append(idx)
+            stripped = line.strip()
+            for export_prefix in expected_exports:
+                if stripped.startswith(export_prefix):
+                    export_lines_idx[export_prefix] = idx
 
         assert port_forwards_line is not None, (
             "Script must contain 'Port-forwards established' message"
         )
-        assert len(export_lines_idx) >= 3, f"Expected 3 export lines, found {len(export_lines_idx)}"
-        for idx in export_lines_idx:
+        assert set(export_lines_idx) == set(expected_exports)
+        for idx in export_lines_idx.values():
             assert idx > port_forwards_line, (
                 f"Export at line {idx + 1} must come after 'Port-forwards established' "
                 f"at line {port_forwards_line + 1}"
@@ -1648,21 +1651,24 @@ class TestShellEnvVarExports:
         child process will not see them.
         """
         pytest_line: int | None = None
-        export_lines_idx: list[int] = []
+        expected_exports = [
+            "export DAGSTER_WEBSERVER_PORT=",
+            "export DAGSTER_PORT=",
+            "export MARQUEZ_PORT=",
+        ]
+        export_lines_idx: dict[str, int] = {}
 
         for idx, line in enumerate(script_lines):
             if "uv run pytest" in line and pytest_line is None:
                 pytest_line = idx
-            if line.strip().startswith("export DAGSTER_WEBSERVER_PORT="):
-                export_lines_idx.append(idx)
-            if line.strip().startswith("export DAGSTER_WEBSERVER_PORT="):
-                export_lines_idx.append(idx)
-            if line.strip().startswith("export MARQUEZ_PORT="):
-                export_lines_idx.append(idx)
+            stripped = line.strip()
+            for export_prefix in expected_exports:
+                if stripped.startswith(export_prefix):
+                    export_lines_idx[export_prefix] = idx
 
         assert pytest_line is not None, "Script must contain 'uv run pytest' invocation"
-        assert len(export_lines_idx) >= 3, f"Expected 3 export lines, found {len(export_lines_idx)}"
-        for idx in export_lines_idx:
+        assert set(export_lines_idx) == set(expected_exports)
+        for idx in export_lines_idx.values():
             assert idx < pytest_line, (
                 f"Export at line {idx + 1} must come before 'uv run pytest' "
                 f"at line {pytest_line + 1}"
