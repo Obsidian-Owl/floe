@@ -33,6 +33,7 @@ from floe_core.cli.utils import (
     success,
     warning,
 )
+from floe_core.contracts.errors import ContractViolationError
 from floe_core.contracts.schemas import MachineOutputName, validate_machine_output
 
 # =============================================================================
@@ -574,11 +575,11 @@ def diff_command(
             payload = {
                 "expected": expected_policies,
                 "actual": deployed_policies,
-                "diffs": [
-                    {"change_type": "missing", "items": diff_result["missing"]},
-                    {"change_type": "extra", "items": diff_result["extra"]},
-                    {"change_type": "modified", "items": diff_result["modified"]},
-                ],
+                "diffs": {
+                    "missing": diff_result["missing"],
+                    "extra": diff_result["extra"],
+                    "modified": diff_result["modified"],
+                },
                 "summary": {
                     "missing_count": diff_result["missing_count"],
                     "extra_count": diff_result["extra_count"],
@@ -598,6 +599,11 @@ def diff_command(
         error_exit(
             f"Manifest file not found: {e.filename}",
             exit_code=ExitCode.FILE_NOT_FOUND,
+        )
+    except ContractViolationError as e:
+        error_exit(
+            f"Network diff output contract violation: {e}",
+            exit_code=ExitCode.GENERAL_ERROR,
         )
     except Exception as e:
         if debug:

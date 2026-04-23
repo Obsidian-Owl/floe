@@ -1101,6 +1101,8 @@ class TestOutputFormatting:
                 ],
             )
 
+            assert result.exit_code == 0
+
             # Extract JSON from output (skip info messages)
             # The output contains info messages followed by JSON
             lines = result.output.strip().split("\n")
@@ -1129,16 +1131,13 @@ class TestOutputFormatting:
                 "modified_count": 1,
             }
 
-            diffs_by_type = {
-                section["change_type"]: section["items"] for section in output_data["diffs"]
-            }
-            assert diffs_by_type["missing"][0]["id"] == "default/missing-policy"
-            assert diffs_by_type["missing"][0]["policy"] == expected_policy
-            assert diffs_by_type["extra"][0]["id"] == "default/extra-policy"
-            assert diffs_by_type["extra"][0]["policy"] == actual_extra
-            assert diffs_by_type["modified"][0]["id"] == "default/modified-policy"
-            assert diffs_by_type["modified"][0]["expected"] == expected_modified
-            assert diffs_by_type["modified"][0]["deployed"] == actual_modified
+            assert output_data["diffs"]["missing"][0]["id"] == "default/missing-policy"
+            assert output_data["diffs"]["missing"][0]["policy"] == expected_policy
+            assert output_data["diffs"]["extra"][0]["id"] == "default/extra-policy"
+            assert output_data["diffs"]["extra"][0]["policy"] == actual_extra
+            assert output_data["diffs"]["modified"][0]["id"] == "default/modified-policy"
+            assert output_data["diffs"]["modified"][0]["expected"] == expected_modified
+            assert output_data["diffs"]["modified"][0]["deployed"] == actual_modified
 
 
 class TestDiffCommandIntegration:

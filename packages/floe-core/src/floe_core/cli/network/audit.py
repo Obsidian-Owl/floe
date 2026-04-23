@@ -33,6 +33,7 @@ from floe_core.cli.utils import (
     success,
     warning,
 )
+from floe_core.contracts.errors import ContractViolationError
 from floe_core.contracts.schemas import MachineOutputName, validate_machine_output
 from floe_core.network.schemas import _validate_namespace
 
@@ -132,6 +133,11 @@ def audit_command(
         networking_api = _setup_kubernetes_client(kubeconfig, context)
         report = _perform_audit(networking_api, namespaces_to_audit)
         _output_report(report, output_format)
+    except ContractViolationError as e:
+        error_exit(
+            f"Network audit output contract violation: {e}",
+            exit_code=ExitCode.GENERAL_ERROR,
+        )
     except Exception as e:
         if debug:
             import traceback
