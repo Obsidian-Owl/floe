@@ -16,6 +16,7 @@
 #   TEST_SUITE          Test suite to run: bootstrap|e2e|e2e-destructive
 #                       (default: bootstrap first, then e2e)
 #   LOG_TAIL_LINES      Lines to capture per pod on failure (default: 100)
+#   JOB_POLL_INTERVAL   Seconds between terminal Job status checks (default: 5)
 #   DEVPOD_REMOTE_WORKDIR Remote repo root inside the DevPod workspace
 #
 # Identifiers (release name, namespace, Kind cluster, chart dir, values file)
@@ -45,6 +46,7 @@ fi
 IMAGE_NAME="floe-test-runner:latest"
 ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts"
 LOG_TAIL_LINES="${LOG_TAIL_LINES:-100}"
+JOB_POLL_INTERVAL="${JOB_POLL_INTERVAL:-5}"
 
 # --- Utility functions (must be defined before first use) ---
 
@@ -153,6 +155,30 @@ job_started_at() {
     local pod_name="$1"
     kubectl get pod "${pod_name}" -n "${TEST_NAMESPACE}" \
         -o jsonpath='{.status.containerStatuses[0].state.running.startedAt}{.status.containerStatuses[0].state.terminated.startedAt}' 2>/dev/null || true
+}
+
+wait_for_job_terminal_status() {
+    local deadline=$((SECONDS + JOB_TIMEOUT))
+    local conditions=""
+
+    while (( SECONDS < deadline )); do
+        conditions=$(kubectl get "job/${JOB_NAME}" -n "${TEST_NAMESPACE}" \
+            -o jsonpath='{range .status.conditions[*]}{.type}={.status}{"\n"}{end}' 2>/dev/null || true)
+
+        if grep -qx "Complete=True" <<< "${conditions}"; then
+            printf '%s\n' "complete"
+            return 0
+        fi
+
+        if grep -qx "Failed=True" <<< "${conditions}"; then
+            printf '%s\n' "failed"
+            return 0
+        fi
+
+        sleep "${JOB_POLL_INTERVAL}"
+    done
+
+    printf '%s\n' "timeout"
 }
 
 assert_startup_boundary() {
@@ -333,18 +359,7 @@ fi
 
 # --- Step 5: Wait for completion ---
 
-# kubectl wait returns non-zero on timeout
-if kubectl wait --for=condition=complete "job/${JOB_NAME}" \
-    -n "${TEST_NAMESPACE}" \
-    --timeout="${JOB_TIMEOUT}s" 2>/dev/null; then
-    JOB_STATUS="complete"
-elif kubectl wait --for=condition=failed "job/${JOB_NAME}" \
-    -n "${TEST_NAMESPACE}" \
-    --timeout=10s 2>/dev/null; then
-    JOB_STATUS="failed"
-else
-    JOB_STATUS="timeout"
-fi
+JOB_STATUS=$(wait_for_job_terminal_status)
 
 # --- Step 6: Extract results ---
 

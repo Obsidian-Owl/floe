@@ -57,6 +57,18 @@ def test_cluster_runner_default_direct_invocation_is_bootstrap_gated() -> None:
     assert "Bootstrap passed; running product E2E suite without rebuilding/loading image." in script
 
 
+def test_cluster_runner_fails_fast_when_job_reaches_failed_condition() -> None:
+    """In-cluster runner must not wait for complete timeout after Job failure."""
+    script = Path("testing/ci/test-e2e-cluster.sh").read_text()
+
+    assert "wait_for_job_terminal_status()" in script
+    assert 'JOB_POLL_INTERVAL="${JOB_POLL_INTERVAL:-5}"' in script
+    assert 'grep -qx "Complete=True"' in script
+    assert 'grep -qx "Failed=True"' in script
+    assert "JOB_STATUS=$(wait_for_job_terminal_status)" in script
+    assert "--timeout=10s" not in script
+
+
 def test_full_e2e_runner_sequences_bootstrap_before_product_e2e() -> None:
     """Full in-cluster runner gates product E2E behind bootstrap success."""
     script = Path("testing/ci/test-e2e-full.sh").read_text()
