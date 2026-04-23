@@ -140,7 +140,7 @@ def _purge_iceberg_namespace(
         verify_empty: Whether to verify the namespace is empty after purge.
         retries: Number of verification attempts when ``verify_empty`` is true.
     """
-    catalog = _get_polaris_catalog()
+    catalog = _get_polaris_catalog(fresh=True)
     if catalog is not None:
         # Collect S3 config from environment (same defaults as _get_polaris_catalog).
         s3_endpoint = os.environ.get("MINIO_ENDPOINT", ServiceEndpoint("minio").url)
@@ -217,16 +217,18 @@ def _purge_iceberg_namespace(
         return
 
     remaining: Any = []
+    failure_reason = "verification did not complete"
     for attempt in range(1, retries + 1):
         fresh_catalog = _get_polaris_catalog(fresh=True)
         if fresh_catalog is None:
+            failure_reason = "verification catalog unavailable"
             logger.warning(
                 "Could not verify namespace %s reset on attempt %d/%d: catalog unavailable",
                 namespace,
                 attempt,
                 retries,
             )
-            return
+            continue
 
         try:
             remaining = fresh_catalog.list_tables(namespace)
@@ -235,6 +237,7 @@ def _purge_iceberg_namespace(
                 exc, PyIcebergNoSuchNamespaceError
             ):
                 return
+            failure_reason = f"verification failed: {type(exc).__name__}"
             logger.warning(
                 "Could not verify namespace %s reset on attempt %d/%d: %s",
                 namespace,
@@ -242,11 +245,12 @@ def _purge_iceberg_namespace(
                 retries,
                 type(exc).__name__,
             )
-            return
+            continue
 
         if not remaining:
             return
 
+        failure_reason = f"remaining tables={remaining}"
         logger.warning(
             "Namespace %s still contains tables on attempt %d/%d: %s",
             namespace,
@@ -256,7 +260,7 @@ def _purge_iceberg_namespace(
         )
 
     raise NamespaceResetError(
-        f"Namespace reset incomplete for {namespace}: remaining tables={remaining}"
+        f"Namespace reset incomplete for {namespace}: {failure_reason}"
     )
 
 

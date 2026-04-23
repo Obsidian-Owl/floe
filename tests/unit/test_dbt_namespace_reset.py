@@ -33,37 +33,54 @@ def test_purge_namespace_raises_when_namespace_still_contains_tables(
         dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
 
 
-def test_purge_namespace_returns_when_fresh_catalog_unavailable(
+def test_purge_namespace_uses_fresh_catalog_for_purge_and_verification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    stale_catalog = Mock()
-    stale_catalog.list_tables.return_value = []
-
-    def _get_catalog(*, fresh: bool = False) -> Mock | None:
-        if fresh:
-            return None
-        return stale_catalog
-
-    monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
-
-    dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=2)
-
-
-def test_purge_namespace_returns_on_verification_exception(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    stale_catalog = Mock()
-    stale_catalog.list_tables.return_value = []
-    verification_catalog = Mock()
-    verification_catalog.list_tables.side_effect = RuntimeError("boom")
-    catalogs = [stale_catalog, verification_catalog]
+    purge_catalog = Mock()
+    purge_catalog.list_tables.return_value = []
+    verify_catalog = Mock()
+    verify_catalog.list_tables.return_value = []
+    fresh_calls: list[bool] = []
 
     def _get_catalog(*, fresh: bool = False) -> Mock:
-        return catalogs.pop(0) if fresh else stale_catalog
+        fresh_calls.append(fresh)
+        return purge_catalog if len(fresh_calls) == 1 else verify_catalog
 
     monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
 
     dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=2)
+
+    assert fresh_calls == [True, True]
+
+
+def test_purge_namespace_raises_when_fresh_catalog_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _get_catalog(*, fresh: bool = False) -> None:
+        return None
+
+    monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
+
+    with pytest.raises(dbt_utils.NamespaceResetError, match="verification catalog unavailable"):
+        dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=2)
+
+
+def test_purge_namespace_raises_on_verification_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    purge_catalog = Mock()
+    purge_catalog.list_tables.return_value = []
+    verification_catalog = Mock()
+    verification_catalog.list_tables.side_effect = RuntimeError("boom")
+    catalogs = [purge_catalog, verification_catalog, verification_catalog]
+
+    def _get_catalog(*, fresh: bool = False) -> Mock:
+        return catalogs.pop(0)
+
+    monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
+
+    with pytest.raises(dbt_utils.NamespaceResetError, match="verification failed: RuntimeError"):
+        dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=2)
 
 
 def test_purge_namespace_treats_missing_namespace_as_reset_success(
