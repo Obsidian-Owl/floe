@@ -176,6 +176,50 @@ def test_purge_namespace_treats_missing_namespace_as_reset_success(
     dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
 
 
+def test_purge_namespace_initial_missing_namespace_returns_without_verification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeNoSuchNamespaceError(Exception):
+        """Test-only stand-in for PyIceberg's missing namespace exception."""
+
+    purge_catalog = Mock()
+    purge_catalog.list_tables.side_effect = FakeNoSuchNamespaceError("customer_360")
+    fresh_calls: list[bool] = []
+
+    def _get_catalog(*, fresh: bool = False) -> Mock | None:
+        fresh_calls.append(fresh)
+        return purge_catalog if len(fresh_calls) == 1 else None
+
+    monkeypatch.setattr(
+        dbt_utils,
+        "PyIcebergNoSuchNamespaceError",
+        FakeNoSuchNamespaceError,
+    )
+    monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
+
+    dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
+
+    assert fresh_calls == [True]
+
+
+def test_purge_namespace_drop_failure_still_succeeds_when_verification_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    purge_catalog = Mock()
+    purge_catalog.list_tables.return_value = []
+    purge_catalog.drop_namespace.side_effect = RuntimeError("drop failed")
+    verify_catalog = Mock()
+    verify_catalog.list_tables.return_value = []
+    catalogs = [purge_catalog, verify_catalog]
+
+    def _get_catalog(*, fresh: bool = False) -> Mock:
+        return catalogs.pop(0)
+
+    monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
+
+    dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
+
+
 def test_run_dbt_resets_raw_namespace_before_seed(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

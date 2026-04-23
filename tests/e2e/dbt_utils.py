@@ -213,9 +213,9 @@ def _purge_iceberg_namespace(
                             type(exc).__name__,
                         )
 
-            # Drop the namespace itself so dbt starts completely fresh.
-            # DuckDB's Iceberg extension cannot DROP TABLE CASCADE, so stale
-            # namespace metadata causes "Not implemented" errors on re-run.
+            # Try to drop the namespace so reruns start from a cleaner catalog
+            # state. Verified success still means the namespace is empty or
+            # absent, even if the drop itself fails.
             try:
                 catalog.drop_namespace(namespace)
                 logger.info("Dropped namespace %s", namespace)
@@ -229,6 +229,8 @@ def _purge_iceberg_namespace(
             is_missing_namespace = PyIcebergNoSuchNamespaceError is not None and isinstance(
                 exc, PyIcebergNoSuchNamespaceError
             )
+            if verify_empty and is_missing_namespace:
+                return
             if verify_empty and not is_missing_namespace and storage_cleanup_failure_reason is None:
                 storage_cleanup_failure_reason = (
                     f"Could not enumerate tables for storage cleanup in {namespace}: "
