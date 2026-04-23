@@ -83,52 +83,54 @@ fi
 # Pod cleanup before destructive suite
 # =============================================================================
 
-info "Cleaning up platform validation pods before destructive suite..."
-kubectl delete pods -l test-type=e2e -n "${TEST_NAMESPACE}" --ignore-not-found 2>/dev/null || true
-
-for i in $(seq 1 30); do
-    if ! pod_count=$(kubectl get pods -l test-type=e2e -n "${TEST_NAMESPACE}" --no-headers 2>/dev/null | wc -l | tr -d ' '); then
-        error "Failed to query platform validation pods during cleanup"
-        CLEANUP_FAILED=true
-        DESTRUCTIVE_EXIT=1
-        break
-    fi
-    if [[ "${pod_count}" == "0" ]]; then
-        break
-    fi
-    if [[ $i -eq 30 ]]; then
-        error "Platform validation pods did not terminate within 30s"
-        CLEANUP_FAILED=true
-        DESTRUCTIVE_EXIT=1
-        break
-    fi
-    sleep 1
-done
-
-# =============================================================================
-# Phase 4: Destructive E2E tests
-# =============================================================================
-
 if [[ ("${BOOTSTRAP_EXIT}" -ne 0 || "${PLATFORM_EXIT}" -ne 0) && "${FORCE_DESTRUCTIVE}" != "true" ]]; then
     info "Skipping destructive tests (bootstrap and platform must pass). Set FORCE_DESTRUCTIVE=true to override."
-elif [[ "${CLEANUP_FAILED}" == "true" ]]; then
-    info "Skipping destructive tests because platform cleanup failed."
 else
-    info "=== Phase 4: Destructive E2E Tests ==="
-
     if [[ "${CAN_REUSE_PLATFORM_IMAGE}" == "true" ]]; then
-        # Platform validation already built and loaded the runner image.
-        if SKIP_BUILD=true IMAGE_LOAD_METHOD=skip TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
-            info "Destructive E2E tests PASSED"
-        else
-            DESTRUCTIVE_EXIT=$?
-            error "Destructive E2E tests FAILED (exit code: ${DESTRUCTIVE_EXIT})"
-        fi
-    elif TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
-        info "Destructive E2E tests PASSED"
+        info "Cleaning up platform validation pods before destructive suite..."
+        kubectl delete pods -l test-type=e2e -n "${TEST_NAMESPACE}" --ignore-not-found 2>/dev/null || true
+
+        for i in $(seq 1 30); do
+            if ! pod_count=$(kubectl get pods -l test-type=e2e -n "${TEST_NAMESPACE}" --no-headers 2>/dev/null | wc -l | tr -d ' '); then
+                error "Failed to query platform validation pods during cleanup"
+                CLEANUP_FAILED=true
+                DESTRUCTIVE_EXIT=1
+                break
+            fi
+            if [[ "${pod_count}" == "0" ]]; then
+                break
+            fi
+            if [[ $i -eq 30 ]]; then
+                error "Platform validation pods did not terminate within 30s"
+                CLEANUP_FAILED=true
+                DESTRUCTIVE_EXIT=1
+                break
+            fi
+            sleep 1
+        done
+    fi
+
+    if [[ "${CLEANUP_FAILED}" == "true" ]]; then
+        info "Skipping destructive tests because platform cleanup failed."
     else
-        DESTRUCTIVE_EXIT=$?
-        error "Destructive E2E tests FAILED (exit code: ${DESTRUCTIVE_EXIT})"
+        info "=== Phase 4: Destructive E2E Tests ==="
+
+        if [[ "${CAN_REUSE_PLATFORM_IMAGE}" == "true" ]]; then
+            # Platform validation already built and loaded the runner image.
+            if SKIP_BUILD=true IMAGE_LOAD_METHOD=skip TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
+                info "Destructive E2E tests PASSED"
+            else
+                DESTRUCTIVE_EXIT=$?
+                error "Destructive E2E tests FAILED (exit code: ${DESTRUCTIVE_EXIT})"
+            fi
+        else
+            if TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then
+                info "Destructive E2E tests PASSED"
+            else
+                DESTRUCTIVE_EXIT=$?
+                error "Destructive E2E tests FAILED (exit code: ${DESTRUCTIVE_EXIT})"
+            fi
+        fi
     fi
 fi
 
