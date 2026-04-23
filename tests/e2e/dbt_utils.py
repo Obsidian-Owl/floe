@@ -220,14 +220,13 @@ def _purge_iceberg_namespace(
     for attempt in range(1, retries + 1):
         fresh_catalog = _get_polaris_catalog(fresh=True)
         if fresh_catalog is None:
-            remaining = ["<catalog unavailable>"]
             logger.warning(
                 "Could not verify namespace %s reset on attempt %d/%d: catalog unavailable",
                 namespace,
                 attempt,
                 retries,
             )
-            continue
+            return
 
         try:
             remaining = fresh_catalog.list_tables(namespace)
@@ -236,7 +235,6 @@ def _purge_iceberg_namespace(
                 exc, PyIcebergNoSuchNamespaceError
             ):
                 return
-            remaining = [f"<verification failed: {type(exc).__name__}>"]
             logger.warning(
                 "Could not verify namespace %s reset on attempt %d/%d: %s",
                 namespace,
@@ -244,7 +242,7 @@ def _purge_iceberg_namespace(
                 retries,
                 type(exc).__name__,
             )
-            continue
+            return
 
         if not remaining:
             return
