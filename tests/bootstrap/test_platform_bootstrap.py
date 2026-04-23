@@ -59,9 +59,13 @@ def _run_kubectl(
 
 def _expected_polaris_catalog() -> str:
     """Return the catalog/warehouse name bootstrap must have created."""
-    catalog_name = os.environ.get("POLARIS_CATALOG") or os.environ.get("POLARIS_WAREHOUSE")
+    catalog_name = os.environ.get("POLARIS_BOOTSTRAP_CATALOG") or os.environ.get(
+        "POLARIS_WAREHOUSE"
+    )
     if not catalog_name:
-        pytest.fail("POLARIS_CATALOG or POLARIS_WAREHOUSE must be set for bootstrap validation.")
+        pytest.fail(
+            "POLARIS_BOOTSTRAP_CATALOG or POLARIS_WAREHOUSE must be set for bootstrap validation."
+        )
     if not re.fullmatch(r"[a-zA-Z0-9_-]+", catalog_name):
         pytest.fail(f"Polaris catalog name contains unsafe characters: {catalog_name!r}")
     return catalog_name

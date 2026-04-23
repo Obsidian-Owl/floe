@@ -46,6 +46,7 @@ cd "${PROJECT_ROOT}"
 
 # Extract config from manifest.yaml — sets MANIFEST_BUCKET, MANIFEST_REGION, etc.
 eval "$(python3 "${SCRIPT_DIR}/extract-manifest-config.py" "${PROJECT_ROOT}/demo/manifest.yaml")"
+BOOTSTRAP_CATALOG_NAME="${POLARIS_BOOTSTRAP_CATALOG:-$(floe_bootstrap_catalog_name)}"
 
 # Host port defaults come from the topology contract. Callers can still
 # override the public env vars before invoking this script.
@@ -424,8 +425,8 @@ export MARQUEZ_PORT="${MARQUEZ_HOST_PORT}"
 export JAEGER_QUERY_PORT="${JAEGER_QUERY_PORT}"
 export POSTGRES_PORT="${POSTGRES_HOST_PORT}"
 export MINIO_BUCKET="${MINIO_BUCKET:-${MANIFEST_BUCKET}}"
-export POLARIS_CATALOG="${POLARIS_CATALOG:-${MANIFEST_WAREHOUSE}}"
-export POLARIS_WAREHOUSE="${POLARIS_WAREHOUSE:-${POLARIS_CATALOG}}"
+export POLARIS_BOOTSTRAP_CATALOG="${BOOTSTRAP_CATALOG_NAME}"
+export POLARIS_WAREHOUSE="${POLARIS_BOOTSTRAP_CATALOG}"
 export POLARIS_CLIENT_ID="${POLARIS_CLIENT_ID:-${MANIFEST_OAUTH_CLIENT_ID}}"
 export POLARIS_CLIENT_SECRET="${POLARIS_CLIENT_SECRET:-}"
 
@@ -442,6 +443,11 @@ uv run pytest \
     -v \
     --tb=short \
     --timeout="${E2E_TIMEOUT}"
+
+# Product/demo E2E uses the manifest warehouse. Keep this after the bootstrap
+# gate so bootstrap validates the chart-created platform catalog first.
+export POLARIS_CATALOG="${POLARIS_CATALOG:-${MANIFEST_WAREHOUSE}}"
+export POLARIS_WAREHOUSE="${POLARIS_CATALOG}"
 
 # Verify MinIO bucket exists before running tests (defense-in-depth)
 # Uses boto3 HeadBucket with credentials — anonymous curl returns 403 for both

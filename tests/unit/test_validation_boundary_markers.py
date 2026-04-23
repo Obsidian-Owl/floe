@@ -97,7 +97,6 @@ def test_bootstrap_conftest_has_minimal_flux_helm_safeguards() -> None:
     assert "--for=condition=Ready" in conftest
     assert "_is_forbidden" in conftest
     assert "missing required RBAC" in conftest
-    assert '"get", "namespace", _FLUX_NAMESPACE' not in conftest
     assert "tests.e2e.conftest" not in conftest
 
 

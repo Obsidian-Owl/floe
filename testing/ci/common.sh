@@ -102,6 +102,24 @@ floe_service_host_port() {
     floe_contract_emit service-host-port "${component}"
 }
 
+# floe_bootstrap_catalog_name
+# Returns the chart/test-platform bootstrap catalog name from FLOE_VALUES_FILE.
+floe_bootstrap_catalog_name() {
+    "${FLOE_PYTHON}" - "$FLOE_VALUES_FILE" <<'PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+values_path = Path(sys.argv[1])
+values = yaml.safe_load(values_path.read_text())
+catalog = values.get("polaris", {}).get("bootstrap", {}).get("catalogName")
+if not catalog:
+    raise SystemExit(f"polaris.bootstrap.catalogName missing in {values_path}")
+print(catalog)
+PY
+}
+
 # floe_render_test_job <template-path>
 # Renders a single test template from the chart, with tests.enabled=true.
 # template-path is relative to the chart's templates/ directory

@@ -63,6 +63,8 @@ def test_common_sh_uses_contract_emitter_for_service_names(repo_root: Path) -> N
     assert "floe_service_host_port()" in common
     assert "service-host-port" in common
     assert ".venv/bin/python" in common
+    assert "floe_bootstrap_catalog_name()" in common
+    assert "polaris.bootstrap.catalogName" in common
     assert 'printf \'%s-%s\\n\' "${FLOE_RELEASE_NAME}" "${component}"' not in common
 
 
@@ -182,9 +184,25 @@ def test_test_e2e_runs_bootstrap_before_repair_fallbacks() -> None:
 
     assert bootstrap_idx < bucket_idx < catalog_idx < product_idx
     assert "export FLOE_EXECUTION_CONTEXT=host" in _script_content[:bootstrap_idx]
-    assert "export POLARIS_CATALOG=" in _script_content[:bootstrap_idx]
+    assert "export POLARIS_BOOTSTRAP_CATALOG=" in _script_content[:bootstrap_idx]
     assert "export POLARIS_WAREHOUSE=" in _script_content[:bootstrap_idx]
     assert "export POLARIS_CLIENT_ID=" in _script_content[:bootstrap_idx]
+
+
+def test_test_e2e_switches_from_bootstrap_to_product_catalog_after_gate() -> None:
+    """Host runner validates chart bootstrap catalog before product/demo fallback."""
+    bootstrap_idx = _script_content.index("Running bootstrap tests")
+    product_catalog_idx = _script_content.index(
+        'export POLARIS_CATALOG="${POLARIS_CATALOG:-${MANIFEST_WAREHOUSE}}"'
+    )
+    product_warehouse_idx = _script_content.index('export POLARIS_WAREHOUSE="${POLARIS_CATALOG}"')
+
+    assert (
+        'BOOTSTRAP_CATALOG_NAME="${POLARIS_BOOTSTRAP_CATALOG:-$(floe_bootstrap_catalog_name)}"'
+        in _script_content
+    )
+    assert product_catalog_idx > bootstrap_idx
+    assert product_warehouse_idx > product_catalog_idx
 
 
 def test_unit_c_boundary_does_not_route_secret_names_through_service_contract(

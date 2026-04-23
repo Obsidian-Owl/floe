@@ -162,14 +162,13 @@ def test_generated_contract_env_helper_matches_emitter() -> None:
     assert generated.read_text() == render_helm_test_env_template()
 
 
-def test_standard_runner_rbac_can_read_flux_controller_health() -> None:
-    """Bootstrap checks need narrow read access to Flux controller pods."""
+def test_standard_runner_rbac_can_detect_flux_without_flux_namespace() -> None:
+    """Bootstrap checks need no-Flux-safe cluster-level Flux detection reads."""
     docs = _render_standard_rbac_docs()
     flux_roles = [
         doc
         for doc in docs
-        if doc.get("kind") == "Role"
-        and doc.get("metadata", {}).get("namespace") == "flux-system"
+        if doc.get("kind") == "ClusterRole"
         and doc.get("metadata", {}).get("name") == "floe-platform-test-runner-flux-health"
     ]
     assert len(flux_roles) == 1
@@ -177,17 +176,21 @@ def test_standard_runner_rbac_can_read_flux_controller_health() -> None:
     rules = flux_roles[0].get("rules") or []
     assert {
         "apiGroups": [""],
+        "resources": ["namespaces"],
+        "verbs": ["get"],
+    } in rules
+    assert {
+        "apiGroups": [""],
         "resources": ["pods"],
-        "verbs": ["get", "list", "watch"],
+        "verbs": ["get", "list"],
     } in rules
 
     binding = next(
         doc
         for doc in docs
-        if doc.get("kind") == "RoleBinding"
+        if doc.get("kind") == "ClusterRoleBinding"
         and doc.get("metadata", {}).get("name") == "floe-platform-test-runner-flux-health"
     )
-    assert binding["metadata"]["namespace"] == "flux-system"
     assert binding["subjects"] == [
         {
             "kind": "ServiceAccount",
@@ -195,7 +198,25 @@ def test_standard_runner_rbac_can_read_flux_controller_health() -> None:
             "namespace": "floe-test",
         }
     ]
-    assert not [doc for doc in docs if doc.get("kind") == "ClusterRole"]
+    assert binding["roleRef"] == {
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "ClusterRole",
+        "name": "floe-platform-test-runner-flux-health",
+    }
+
+
+def test_standard_runner_rbac_does_not_require_flux_namespace_to_exist() -> None:
+    """The standard runner must not render resources into flux-system."""
+    docs = _render_standard_rbac_docs()
+
+    offenders = [
+        doc
+        for doc in docs
+        if doc.get("kind") in {"Role", "RoleBinding"}
+        and doc.get("metadata", {}).get("namespace") == "flux-system"
+    ]
+
+    assert not offenders
 
 
 def test_standard_runner_rbac_can_read_and_resume_helmreleases() -> None:
