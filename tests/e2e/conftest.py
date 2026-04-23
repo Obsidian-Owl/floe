@@ -1587,7 +1587,7 @@ def dbt_pipeline_result(
     Yields:
         Tuple of ``(product, project_dir)`` for the parametrized product.
     """
-    from dbt_utils import _purge_iceberg_namespace, run_dbt
+    from dbt_utils import NamespaceResetError, _purge_iceberg_namespace, run_dbt
 
     product: str = request.param
     project_dir = project_root / "demo" / product
@@ -1599,6 +1599,7 @@ def dbt_pipeline_result(
     product_name = product.replace("-", "_")
     namespace_raw = f"{product_name}_raw"
     namespace_models = product_name
+    primary_error: BaseException | None = None
 
     try:
         # Purge stale data from any prior run (P36: cleanup at setup)
@@ -1616,7 +1617,20 @@ def dbt_pipeline_result(
             pytest.fail(f"dbt run failed for {product}:\n{run_result.stderr[-500:]}")
 
         yield (product, project_dir)
+    except BaseException as exc:
+        primary_error = exc
+        raise
     finally:
         # Clean up Iceberg namespaces to prevent resource leaks
-        _purge_iceberg_namespace(namespace_raw, verify_empty=True)
-        _purge_iceberg_namespace(namespace_models, verify_empty=True)
+        for namespace in (namespace_raw, namespace_models):
+            try:
+                _purge_iceberg_namespace(namespace, verify_empty=True)
+            except NamespaceResetError as exc:
+                if primary_error is None:
+                    raise
+                logger.error(
+                    "Suppressed teardown namespace reset failure for %s after primary "
+                    "dbt/test failure: %s",
+                    namespace,
+                    exc,
+                )
