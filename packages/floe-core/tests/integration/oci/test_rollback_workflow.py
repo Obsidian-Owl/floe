@@ -113,7 +113,7 @@ class TestRollbackWorkflow(IntegrationTestBase):
     They are xfail until T050 implements rollback().
     """
 
-    required_services = ["registry"]
+    required_services = ["oci-registry"]
 
     @pytest.mark.xfail(reason="Integration: Requires Kind cluster with registry")
     @pytest.mark.requirement("8C-FR-013")
@@ -135,7 +135,7 @@ class TestRollbackWorkflow(IntegrationTestBase):
 
         # Setup
         unique_id = self.generate_unique_namespace("rollback")
-        registry_uri = self.get_service_uri("registry")
+        registry_uri = self.get_service_uri("oci-registry")
 
         auth = RegistryAuth(type=AuthType.ANONYMOUS)
         registry_config = RegistryConfig(uri=registry_uri, auth=auth)
@@ -214,7 +214,7 @@ class TestRollbackWorkflow(IntegrationTestBase):
 
         # Setup
         unique_id = self.generate_unique_namespace("rbktag")
-        registry_uri = self.get_service_uri("registry")
+        registry_uri = self.get_service_uri("oci-registry")
 
         auth = RegistryAuth(type=AuthType.ANONYMOUS)
         registry_config = RegistryConfig(uri=registry_uri, auth=auth)
@@ -284,7 +284,7 @@ class TestRollbackWorkflow(IntegrationTestBase):
 
         # Setup
         unique_id = self.generate_unique_namespace("rbkerr")
-        registry_uri = self.get_service_uri("registry")
+        registry_uri = self.get_service_uri("oci-registry")
 
         auth = RegistryAuth(type=AuthType.ANONYMOUS)
         registry_config = RegistryConfig(uri=registry_uri, auth=auth)
@@ -334,7 +334,7 @@ class TestRollbackWorkflow(IntegrationTestBase):
 
         # Setup
         unique_id = self.generate_unique_namespace("rbkimp")
-        registry_uri = self.get_service_uri("registry")
+        registry_uri = self.get_service_uri("oci-registry")
 
         auth = RegistryAuth(type=AuthType.ANONYMOUS)
         registry_config = RegistryConfig(uri=registry_uri, auth=auth)
@@ -385,7 +385,7 @@ class TestRollbackWorkflow(IntegrationTestBase):
 
         # Setup
         unique_id = self.generate_unique_namespace("rbkaud")
-        registry_uri = self.get_service_uri("registry")
+        registry_uri = self.get_service_uri("oci-registry")
 
         auth = RegistryAuth(type=AuthType.ANONYMOUS)
         registry_config = RegistryConfig(uri=registry_uri, auth=auth)

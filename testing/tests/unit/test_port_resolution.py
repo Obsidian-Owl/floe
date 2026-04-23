@@ -24,6 +24,13 @@ from testing.fixtures.services import (
     get_effective_port,
 )
 
+
+@pytest.fixture(autouse=True)
+def _default_execution_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run service endpoint tests in the host execution context by default."""
+    monkeypatch.setenv("FLOE_EXECUTION_CONTEXT", "host")
+
+
 # ---------------------------------------------------------------------------
 # AC-1: SERVICE_DEFAULT_PORTS dict exists with specific entries
 # ---------------------------------------------------------------------------
@@ -36,11 +43,6 @@ class TestServiceDefaultPorts:
     def test_dagster_webserver_port(self) -> None:
         """Test dagster-webserver defaults to port 3000."""
         assert SERVICE_DEFAULT_PORTS["dagster-webserver"] == 3000
-
-    @pytest.mark.requirement("env-resilient-AC-1")
-    def test_dagster_port(self) -> None:
-        """Test dagster defaults to port 3000."""
-        assert SERVICE_DEFAULT_PORTS["dagster"] == 3000
 
     @pytest.mark.requirement("env-resilient-AC-1")
     def test_polaris_port(self) -> None:
@@ -64,8 +66,8 @@ class TestServiceDefaultPorts:
 
     @pytest.mark.requirement("env-resilient-AC-1")
     def test_postgres_port(self) -> None:
-        """Test postgres defaults to port 5432."""
-        assert SERVICE_DEFAULT_PORTS["postgres"] == 5432
+        """Test postgresql defaults to port 5432."""
+        assert SERVICE_DEFAULT_PORTS["postgresql"] == 5432
 
     @pytest.mark.requirement("env-resilient-AC-1")
     def test_jaeger_query_port(self) -> None:
@@ -92,13 +94,13 @@ class TestServiceDefaultPorts:
 
     @pytest.mark.requirement("env-resilient-AC-1")
     def test_oci_registry_port(self) -> None:
-        """Test oci-registry defaults to port 5000."""
+        """Test oci-oci-registry defaults to port 5000."""
         assert SERVICE_DEFAULT_PORTS["oci-registry"] == 5000
 
     @pytest.mark.requirement("env-resilient-AC-1")
     def test_registry_port(self) -> None:
-        """Test registry defaults to port 5000."""
-        assert SERVICE_DEFAULT_PORTS["registry"] == 5000
+        """Test oci-registry defaults to port 5000."""
+        assert SERVICE_DEFAULT_PORTS["oci-registry"] == 5000
 
     @pytest.mark.requirement("env-resilient-AC-1")
     def test_all_expected_services_present(self) -> None:
@@ -108,18 +110,16 @@ class TestServiceDefaultPorts:
         """
         expected_services = {
             "dagster-webserver",
-            "dagster",
             "polaris",
             "polaris-management",
             "minio",
             "minio-console",
-            "postgres",
+            "postgresql",
             "jaeger-query",
             "otel-collector-grpc",
             "otel-collector-http",
             "marquez",
             "oci-registry",
-            "registry",
         }
         assert expected_services.issubset(set(SERVICE_DEFAULT_PORTS.keys()))
 
@@ -192,7 +192,7 @@ class TestGetEffectivePortPrecedence:
         # Should list multiple known services to help the user
         error_msg = str(exc_info.value)
         assert "polaris" in error_msg, "Error should list known services"
-        assert "dagster" in error_msg, "Error should list known services"
+        assert "dagster-webserver" in error_msg, "Error should list known services"
 
     @pytest.mark.requirement("env-resilient-AC-2")
     def test_empty_env_var_treated_as_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -225,29 +225,21 @@ class TestGetEffectivePortPrecedence:
         assert result == 5555
 
     @pytest.mark.requirement("env-resilient-AC-2")
-    def test_dagster_checks_dagster_port_not_dagster_webserver_port(
+    def test_contract_port_env_var_is_used_for_canonical_service(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that 'dagster' checks DAGSTER_PORT, not DAGSTER_WEBSERVER_PORT.
+        """Test canonical service IDs use contract-defined port env vars."""
+        monkeypatch.setenv("POSTGRES_PORT", "15432")
+        monkeypatch.setenv("POSTGRESQL_PORT", "25432")
 
-        This catches a bug where the implementation might confuse 'dagster'
-        with 'dagster-webserver'. Each service name maps to its OWN env var
-        only. 'dagster' -> DAGSTER_PORT, 'dagster-webserver' -> DAGSTER_WEBSERVER_PORT.
-        """
-        # Set DAGSTER_WEBSERVER_PORT but NOT DAGSTER_PORT
-        monkeypatch.setenv("DAGSTER_WEBSERVER_PORT", "8888")
-        # Ensure DAGSTER_PORT is not set
-        monkeypatch.delenv("DAGSTER_PORT", raising=False)
+        result = _get_effective_port("postgresql")
 
-        # 'dagster' should NOT pick up DAGSTER_WEBSERVER_PORT
-        result = _get_effective_port("dagster")
-        assert result == 3000  # Falls to dict default, not 8888
+        assert result == 15432
 
     @pytest.mark.requirement("env-resilient-AC-2")
     def test_dagster_webserver_checks_own_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that 'dagster-webserver' checks DAGSTER_WEBSERVER_PORT."""
         monkeypatch.setenv("DAGSTER_WEBSERVER_PORT", "8888")
-        monkeypatch.delenv("DAGSTER_PORT", raising=False)
         result = _get_effective_port("dagster-webserver")
         assert result == 8888
 
@@ -265,7 +257,7 @@ class TestGetEffectivePortPrecedence:
 
         Ensures None is treated the same as not passing a default.
         """
-        result = _get_effective_port("postgres", default=None)
+        result = _get_effective_port("postgresql", default=None)
         assert result == 5432
 
     @pytest.mark.requirement("env-resilient-AC-2")
@@ -276,7 +268,7 @@ class TestGetEffectivePortPrecedence:
         """
         assert _get_effective_port("polaris") == 8181
         assert _get_effective_port("minio") == 9000
-        assert _get_effective_port("postgres") == 5432
+        assert _get_effective_port("postgresql") == 5432
         assert _get_effective_port("marquez") == 5000
         assert _get_effective_port("jaeger-query") == 16686
 
@@ -318,7 +310,7 @@ class TestInvalidEnvVar:
         """Test that error message includes the invalid value that was set."""
         monkeypatch.setenv("POSTGRES_PORT", "xyz123")
         with pytest.raises(ValueError, match="xyz123"):
-            _get_effective_port("postgres")
+            _get_effective_port("postgresql")
 
     @pytest.mark.requirement("env-resilient-AC-9")
     def test_error_contains_integer_keyword(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -445,13 +437,13 @@ class TestServiceEndpointPortResolution:
 
     @pytest.mark.requirement("env-resilient-AC-4")
     def test_name_only_resolves_from_defaults(self) -> None:
-        """Test that ServiceEndpoint('dagster') resolves port from defaults.
+        """Test that ServiceEndpoint('dagster-webserver') resolves port from defaults.
 
         When port is omitted, __post_init__ must resolve it from
         SERVICE_DEFAULT_PORTS. Currently this fails because port is a
         required positional argument with no default.
         """
-        endpoint = ServiceEndpoint("dagster")
+        endpoint = ServiceEndpoint("dagster-webserver")
         assert endpoint.port == 3000
 
     @pytest.mark.requirement("env-resilient-AC-4")
@@ -460,10 +452,10 @@ class TestServiceEndpointPortResolution:
 
         Guards against a hardcoded return value that always returns 3000.
         """
-        dagster = ServiceEndpoint("dagster")
+        dagster = ServiceEndpoint("dagster-webserver")
         polaris = ServiceEndpoint("polaris")
         minio = ServiceEndpoint("minio")
-        postgres = ServiceEndpoint("postgres")
+        postgres = ServiceEndpoint("postgresql")
 
         assert dagster.port == 3000
         assert polaris.port == 8181
@@ -472,11 +464,11 @@ class TestServiceEndpointPortResolution:
 
     @pytest.mark.requirement("env-resilient-AC-4")
     def test_explicit_port_preserved(self) -> None:
-        """Test that ServiceEndpoint('dagster', 3100).port == 3100.
+        """Test that ServiceEndpoint('dagster-webserver', 3100).port == 3100.
 
         An explicit port must be used as-is, never overridden by defaults.
         """
-        endpoint = ServiceEndpoint("dagster", 3100)
+        endpoint = ServiceEndpoint("dagster-webserver", 3100)
         assert endpoint.port == 3100
 
     @pytest.mark.requirement("env-resilient-AC-4")
@@ -487,18 +479,18 @@ class TestServiceEndpointPortResolution:
         ignoring the explicit port. Use a port that differs from the
         default (3000) to catch this.
         """
-        endpoint = ServiceEndpoint("dagster", 5555)
+        endpoint = ServiceEndpoint("dagster-webserver", 5555)
         assert endpoint.port == 5555
-        assert endpoint.port != SERVICE_DEFAULT_PORTS["dagster"]
+        assert endpoint.port != SERVICE_DEFAULT_PORTS["dagster-webserver"]
 
     @pytest.mark.requirement("env-resilient-AC-4")
     def test_sentinel_triggers_resolution(self) -> None:
-        """Test that ServiceEndpoint('dagster', -1).port == 3000.
+        """Test that ServiceEndpoint('dagster-webserver', -1).port == 3000.
 
         Passing the sentinel value _PORT_UNSET (-1) explicitly must trigger
         port resolution, NOT store -1 as the port.
         """
-        endpoint = ServiceEndpoint("dagster", _PORT_UNSET)
+        endpoint = ServiceEndpoint("dagster-webserver", _PORT_UNSET)
         assert endpoint.port == 3000
         assert endpoint.port != -1
 
@@ -506,7 +498,7 @@ class TestServiceEndpointPortResolution:
     def test_sentinel_minus_one_resolves_multiple_services(self) -> None:
         """Test sentinel resolution works for different services.
 
-        Guards against sentinel resolution being hardcoded for dagster only.
+        Guards against sentinel resolution being hardcoded for dagster-webserver only.
         """
         polaris = ServiceEndpoint("polaris", -1)
         minio = ServiceEndpoint("minio", -1)
@@ -518,11 +510,11 @@ class TestServiceEndpointPortResolution:
     def test_env_var_overrides_default_resolution(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test env var is respected during name-only construction.
 
-        With DAGSTER_PORT=4000, ServiceEndpoint('dagster') should
+        With DAGSTER_WEBSERVER_PORT=4000, ServiceEndpoint('dagster-webserver') should
         resolve port to 4000, not the default 3000.
         """
-        monkeypatch.setenv("DAGSTER_PORT", "4000")
-        endpoint = ServiceEndpoint("dagster")
+        monkeypatch.setenv("DAGSTER_WEBSERVER_PORT", "4000")
+        endpoint = ServiceEndpoint("dagster-webserver")
         assert endpoint.port == 4000
 
     @pytest.mark.requirement("env-resilient-AC-4")
@@ -543,8 +535,8 @@ class TestServiceEndpointPortResolution:
         When the user provides a real port (not -1), the env var should be
         irrelevant. The explicit port takes absolute priority.
         """
-        monkeypatch.setenv("DAGSTER_PORT", "4000")
-        endpoint = ServiceEndpoint("dagster", 3100)
+        monkeypatch.setenv("DAGSTER_WEBSERVER_PORT", "4000")
+        endpoint = ServiceEndpoint("dagster-webserver", 3100)
         assert endpoint.port == 3100
 
     @pytest.mark.requirement("env-resilient-AC-4")
@@ -575,7 +567,7 @@ class TestServiceEndpointPortResolution:
         The frozen constraint must survive the addition of __post_init__.
         Assigning to .port after construction must raise.
         """
-        endpoint = ServiceEndpoint("dagster", 3000)
+        endpoint = ServiceEndpoint("dagster-webserver", 3000)
         with pytest.raises(AttributeError):
             endpoint.port = 9999  # type: ignore[misc]
 
@@ -587,7 +579,7 @@ class TestServiceEndpointPortResolution:
         __post_init__ but forgetting to re-freeze. Verify that the
         resolved endpoint is truly immutable.
         """
-        endpoint = ServiceEndpoint("dagster")
+        endpoint = ServiceEndpoint("dagster-webserver")
         with pytest.raises(AttributeError):
             endpoint.name = "something_else"  # type: ignore[misc]
         with pytest.raises(AttributeError):
@@ -596,20 +588,20 @@ class TestServiceEndpointPortResolution:
     @pytest.mark.requirement("env-resilient-AC-4")
     def test_namespace_default_preserved(self) -> None:
         """Test that namespace still defaults to 'floe-test' with name-only construction."""
-        endpoint = ServiceEndpoint("dagster")
+        endpoint = ServiceEndpoint("dagster-webserver")
         assert endpoint.namespace == "floe-test"
 
     @pytest.mark.requirement("env-resilient-AC-4")
     def test_namespace_can_be_overridden_with_name_only(self) -> None:
         """Test namespace override works with name-only (port-resolving) construction."""
-        endpoint = ServiceEndpoint("dagster", namespace="custom-ns")
+        endpoint = ServiceEndpoint("dagster-webserver", namespace="custom-ns")
         assert endpoint.namespace == "custom-ns"
         assert endpoint.port == 3000
 
     @pytest.mark.requirement("env-resilient-AC-4")
     def test_port_stored_as_integer(self) -> None:
         """Test that resolved port is stored as int, not string or float."""
-        endpoint = ServiceEndpoint("dagster")
+        endpoint = ServiceEndpoint("dagster-webserver")
         assert isinstance(endpoint.port, int)
 
     @pytest.mark.requirement("env-resilient-AC-4")
@@ -654,19 +646,19 @@ class TestServiceEndpointUrl:
 
         Currently ServiceEndpoint has no url attribute, so this fails.
         """
-        endpoint = ServiceEndpoint("dagster", 3000)
+        endpoint = ServiceEndpoint("dagster-webserver", 3000)
         _ = endpoint.url  # Should not raise AttributeError
 
     @pytest.mark.requirement("env-resilient-AC-5")
     def test_url_starts_with_http(self) -> None:
         """Test that url starts with 'http://'."""
-        endpoint = ServiceEndpoint("dagster", 3000)
+        endpoint = ServiceEndpoint("dagster-webserver", 3000)
         assert endpoint.url.startswith("http://")
 
     @pytest.mark.requirement("env-resilient-AC-5")
     def test_url_contains_port(self) -> None:
         """Test that url contains the correct port number."""
-        endpoint = ServiceEndpoint("dagster", 3000)
+        endpoint = ServiceEndpoint("dagster-webserver", 3000)
         assert endpoint.url.endswith(":3000")
 
     @pytest.mark.requirement("env-resilient-AC-5")
@@ -685,8 +677,8 @@ class TestServiceEndpointUrl:
 
         Forces localhost via env var so we get a deterministic host value.
         """
-        monkeypatch.setenv("INTEGRATION_TEST_HOST", "localhost")
-        endpoint = ServiceEndpoint("dagster", 3000)
+        monkeypatch.setenv("FLOE_EXECUTION_CONTEXT", "host")
+        endpoint = ServiceEndpoint("dagster-webserver", 3000)
         assert endpoint.url == "http://localhost:3000"
 
     @pytest.mark.requirement("env-resilient-AC-5")
@@ -703,11 +695,12 @@ class TestServiceEndpointUrl:
     def test_url_with_k8s_host(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test url with K8s DNS hostname.
 
-        When INTEGRATION_TEST_HOST=k8s, host should be the FQDN.
+        When FLOE_EXECUTION_CONTEXT=in-cluster, host should use the contract binding.
         """
-        monkeypatch.setenv("INTEGRATION_TEST_HOST", "k8s")
-        endpoint = ServiceEndpoint("dagster", 3000)
-        assert endpoint.url == "http://dagster.floe-test.svc.cluster.local:3000"
+        monkeypatch.setenv("FLOE_EXECUTION_CONTEXT", "in-cluster")
+        monkeypatch.setenv("FLOE_RELEASE_NAME", "floe-platform")
+        endpoint = ServiceEndpoint("dagster-webserver", 3000)
+        assert endpoint.url == "http://floe-platform-dagster-webserver:3000"
 
     @pytest.mark.requirement("env-resilient-AC-5")
     def test_url_with_resolved_port(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -715,7 +708,7 @@ class TestServiceEndpointUrl:
 
         Combines AC-4 (port resolution) with AC-5 (url property).
         """
-        monkeypatch.setenv("INTEGRATION_TEST_HOST", "localhost")
+        monkeypatch.setenv("FLOE_EXECUTION_CONTEXT", "host")
         endpoint = ServiceEndpoint("polaris")
         assert endpoint.url == "http://localhost:8181"
 
@@ -725,7 +718,7 @@ class TestServiceEndpointUrl:
 
         Accessing .url should return a string directly, not a callable.
         """
-        endpoint = ServiceEndpoint("dagster", 3000)
+        endpoint = ServiceEndpoint("dagster-webserver", 3000)
         result = endpoint.url
         assert isinstance(result, str)
 
@@ -733,11 +726,15 @@ class TestServiceEndpointUrl:
     def test_url_with_custom_namespace(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test url reflects custom namespace in K8s DNS host.
 
-        When using K8s host resolution, the namespace should appear in the FQDN.
+        When using in-cluster resolution, non-default namespaces render FQDNs.
         """
-        monkeypatch.setenv("INTEGRATION_TEST_HOST", "k8s")
-        endpoint = ServiceEndpoint("dagster", 3000, namespace="production")
-        assert endpoint.url == "http://dagster.production.svc.cluster.local:3000"
+        monkeypatch.setenv("FLOE_EXECUTION_CONTEXT", "in-cluster")
+        monkeypatch.setenv("FLOE_RELEASE_NAME", "floe-platform")
+        endpoint = ServiceEndpoint("dagster-webserver", 3000, namespace="production")
+        assert (
+            endpoint.url
+            == "http://floe-platform-dagster-webserver.production.svc.cluster.local:3000"
+        )
 
     @pytest.mark.requirement("env-resilient-AC-5")
     def test_url_no_trailing_slash(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -746,8 +743,8 @@ class TestServiceEndpointUrl:
         Consumers will append paths, so a trailing slash would cause
         double-slash issues like 'http://host:port//api/v1'.
         """
-        monkeypatch.setenv("INTEGRATION_TEST_HOST", "localhost")
-        endpoint = ServiceEndpoint("dagster", 3000)
+        monkeypatch.setenv("FLOE_EXECUTION_CONTEXT", "host")
+        endpoint = ServiceEndpoint("dagster-webserver", 3000)
         assert not endpoint.url.endswith("/")
 
 
@@ -887,24 +884,24 @@ class TestCheckInfrastructureMixedFormats:
     def test_mixed_list_returns_both_keys(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that a mixed list of tuples and strings returns all service keys.
 
-        check_infrastructure([("dagster", 3100), "polaris"]) must return a dict
-        with both 'dagster' and 'polaris' keys.
+        check_infrastructure([("dagster-webserver", 3100), "polaris"]) must return a dict
+        with both 'dagster-webserver' and 'polaris' keys.
         """
         monkeypatch.setattr(
             "testing.fixtures.services._tcp_health_check",
             lambda host, port, timeout: True,
         )
         result = check_infrastructure(
-            [("dagster", 3100), "polaris"],
+            [("dagster-webserver", 3100), "polaris"],
             raise_on_failure=False,
         )
-        assert set(result.keys()) == {"dagster", "polaris"}
+        assert set(result.keys()) == {"dagster-webserver", "polaris"}
 
     @pytest.mark.requirement("env-resilient-AC-6")
     def test_mixed_list_resolves_correct_ports(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that mixed entries resolve to correct ports.
 
-        ("dagster", 3100) should use port 3100 (explicit).
+        ("dagster-webserver", 3100) should use port 3100 (explicit).
         "polaris" should use port 8181 (from SERVICE_DEFAULT_PORTS).
         """
         captured_calls: list[tuple[str, int]] = []
@@ -918,7 +915,7 @@ class TestCheckInfrastructureMixedFormats:
             capturing_health_check,
         )
         check_infrastructure(
-            [("dagster", 3100), "polaris"],
+            [("dagster-webserver", 3100), "polaris"],
             raise_on_failure=False,
         )
         assert len(captured_calls) == 2
@@ -1015,10 +1012,10 @@ class TestCheckInfrastructureMixedFormats:
             lambda host, port, timeout: True,
         )
         result = check_infrastructure(
-            ["polaris", "minio", "postgres"],
+            ["polaris", "minio", "postgresql"],
             raise_on_failure=False,
         )
-        assert set(result.keys()) == {"polaris", "minio", "postgres"}
+        assert set(result.keys()) == {"polaris", "minio", "postgresql"}
         assert all(v is True for v in result.values())
 
     @pytest.mark.requirement("env-resilient-AC-6")
@@ -1038,7 +1035,7 @@ class TestCheckInfrastructureMixedFormats:
             capturing_health_check,
         )
         check_infrastructure(
-            ["polaris", "minio", "postgres"],
+            ["polaris", "minio", "postgresql"],
             raise_on_failure=False,
         )
         assert 8181 in captured_ports, "polaris should resolve to port 8181"
@@ -1174,7 +1171,7 @@ class TestIntegrationTestBasePortResolution:
 
     @pytest.mark.requirement("env-resilient-AC-7")
     def test_mixed_required_services(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test mixed format: required_services = [('dagster', 3100), 'polaris'].
+        """Test mixed format: required_services = [('dagster-webserver', 3100), 'polaris'].
 
         Both tuple and string entries must be accepted in a single list.
         """
@@ -1192,7 +1189,7 @@ class TestIntegrationTestBasePortResolution:
         )
 
         class MyTest(IntegrationTestBase):
-            required_services = [("dagster", 3100), "polaris"]
+            required_services = [("dagster-webserver", 3100), "polaris"]
 
         instance = MyTest()
         instance.setup_method()
@@ -1298,13 +1295,13 @@ class TestIntegrationTestBasePortResolution:
 
         instance.check_infrastructure("polaris")
         instance.check_infrastructure("minio")
-        instance.check_infrastructure("postgres")
+        instance.check_infrastructure("postgresql")
 
         assert len(captured_calls) == 3
         ports_by_service = dict(captured_calls)
         assert ports_by_service["polaris"] == 8181
         assert ports_by_service["minio"] == 9000
-        assert ports_by_service["postgres"] == 5432
+        assert ports_by_service["postgresql"] == 5432
 
     @pytest.mark.requirement("env-resilient-AC-7")
     def test_instance_check_infrastructure_explicit_port_still_works(
@@ -1501,7 +1498,7 @@ class TestShellEnvVarExports:
     """Tests for canonical env var exports in testing/ci/test-e2e.sh.
 
     After port-forward setup and before pytest invocation, test-e2e.sh must
-    export DAGSTER_WEBSERVER_PORT, DAGSTER_PORT, and MARQUEZ_PORT so they
+    export DAGSTER_WEBSERVER_PORT, DAGSTER_WEBSERVER_PORT, and MARQUEZ_PORT so they
     propagate to the pytest child process. These are static content tests
     that read the shell script as text and verify the correct export lines
     exist in the correct order.
@@ -1532,37 +1529,18 @@ class TestShellEnvVarExports:
         assert "export DAGSTER_WEBSERVER_PORT" in script_content
 
     @pytest.mark.requirement("env-resilient-AC-8")
-    def test_export_dagster_port_exists(self, script_content: str) -> None:
-        """Test that 'export DAGSTER_PORT' appears in the script.
-
-        This must be a distinct line from DAGSTER_WEBSERVER_PORT.
-        """
-        assert "export DAGSTER_PORT" in script_content
-
-    @pytest.mark.requirement("env-resilient-AC-8")
-    def test_export_dagster_port_is_distinct_from_webserver(self, script_lines: list[str]) -> None:
-        """Test that DAGSTER_PORT and DAGSTER_WEBSERVER_PORT are on separate lines.
-
-        A sloppy implementation might only export DAGSTER_WEBSERVER_PORT and
-        claim DAGSTER_PORT is 'covered'. They must be distinct export lines
-        so both env var names are available to the pytest child process.
-        """
-        dagster_port_lines = [
-            line.strip() for line in script_lines if line.strip().startswith("export DAGSTER_PORT=")
-        ]
+    def test_export_dagster_webserver_port_has_assignment(
+        self,
+        script_lines: list[str],
+    ) -> None:
+        """Test that the canonical Dagster webserver port export has an assignment."""
         dagster_webserver_lines = [
             line.strip()
             for line in script_lines
             if line.strip().startswith("export DAGSTER_WEBSERVER_PORT=")
         ]
-        assert len(dagster_port_lines) >= 1, "No 'export DAGSTER_PORT=...' line found"
         assert len(dagster_webserver_lines) >= 1, (
             "No 'export DAGSTER_WEBSERVER_PORT=...' line found"
-        )
-        # They must be different lines (DAGSTER_PORT= must not be a substring
-        # match of DAGSTER_WEBSERVER_PORT=)
-        assert dagster_port_lines[0] != dagster_webserver_lines[0], (
-            "DAGSTER_PORT and DAGSTER_WEBSERVER_PORT should be separate export lines"
         )
 
     @pytest.mark.requirement("env-resilient-AC-8")
@@ -1585,14 +1563,6 @@ class TestShellEnvVarExports:
             if line.strip().startswith("export DAGSTER_WEBSERVER_PORT=")
         ]
         assert len(export_lines) >= 1, "DAGSTER_WEBSERVER_PORT must be set with 'export'"
-
-    @pytest.mark.requirement("env-resilient-AC-8")
-    def test_dagster_port_uses_export(self, script_lines: list[str]) -> None:
-        """Test that DAGSTER_PORT uses 'export', not plain assignment."""
-        export_lines = [
-            line.strip() for line in script_lines if line.strip().startswith("export DAGSTER_PORT=")
-        ]
-        assert len(export_lines) >= 1, "DAGSTER_PORT must be set with 'export'"
 
     @pytest.mark.requirement("env-resilient-AC-8")
     def test_marquez_port_uses_export(self, script_lines: list[str]) -> None:
@@ -1619,20 +1589,6 @@ class TestShellEnvVarExports:
         assert len(export_lines) >= 1
         assert "DAGSTER_HOST_PORT" in export_lines[0], (
             "DAGSTER_WEBSERVER_PORT must reference DAGSTER_HOST_PORT, not hardcode a port"
-        )
-
-    @pytest.mark.requirement("env-resilient-AC-8")
-    def test_dagster_port_uses_dagster_host_port(self, script_lines: list[str]) -> None:
-        """Test that DAGSTER_PORT derives from DAGSTER_HOST_PORT.
-
-        Must not be hardcoded to a port number like '3100'.
-        """
-        export_lines = [
-            line.strip() for line in script_lines if line.strip().startswith("export DAGSTER_PORT=")
-        ]
-        assert len(export_lines) >= 1
-        assert "DAGSTER_HOST_PORT" in export_lines[0], (
-            "DAGSTER_PORT must reference DAGSTER_HOST_PORT, not hardcode a port"
         )
 
     @pytest.mark.requirement("env-resilient-AC-8")
@@ -1669,7 +1625,7 @@ class TestShellEnvVarExports:
                 port_forwards_line = idx
             if line.strip().startswith("export DAGSTER_WEBSERVER_PORT="):
                 export_lines_idx.append(idx)
-            if line.strip().startswith("export DAGSTER_PORT="):
+            if line.strip().startswith("export DAGSTER_WEBSERVER_PORT="):
                 export_lines_idx.append(idx)
             if line.strip().startswith("export MARQUEZ_PORT="):
                 export_lines_idx.append(idx)
@@ -1699,7 +1655,7 @@ class TestShellEnvVarExports:
                 pytest_line = idx
             if line.strip().startswith("export DAGSTER_WEBSERVER_PORT="):
                 export_lines_idx.append(idx)
-            if line.strip().startswith("export DAGSTER_PORT="):
+            if line.strip().startswith("export DAGSTER_WEBSERVER_PORT="):
                 export_lines_idx.append(idx)
             if line.strip().startswith("export MARQUEZ_PORT="):
                 export_lines_idx.append(idx)
@@ -1716,9 +1672,9 @@ class TestShellEnvVarExports:
 
     @pytest.mark.requirement("env-resilient-AC-8")
     def test_dagster_exports_not_hardcoded_to_3100(self, script_lines: list[str]) -> None:
-        """Test that DAGSTER_WEBSERVER_PORT and DAGSTER_PORT are not hardcoded to 3100.
+        """Test that DAGSTER_WEBSERVER_PORT and DAGSTER_WEBSERVER_PORT are not hardcoded to 3100.
 
-        A sloppy implementation might write 'export DAGSTER_PORT=3100' instead
+        A sloppy implementation might write 'export DAGSTER_WEBSERVER_PORT=3100' instead
         of referencing the DAGSTER_HOST_PORT variable. This would break when
         users override DAGSTER_HOST_PORT to a different value.
         """
@@ -1731,12 +1687,12 @@ class TestShellEnvVarExports:
                 assert stripped != "export DAGSTER_WEBSERVER_PORT=3100", (
                     "DAGSTER_WEBSERVER_PORT must not be hardcoded to 3100"
                 )
-            if stripped.startswith("export DAGSTER_PORT="):
-                assert stripped != 'export DAGSTER_PORT="3100"', (
-                    "DAGSTER_PORT must not be hardcoded to 3100"
+            if stripped.startswith("export DAGSTER_WEBSERVER_PORT="):
+                assert stripped != 'export DAGSTER_WEBSERVER_PORT="3100"', (
+                    "DAGSTER_WEBSERVER_PORT must not be hardcoded to 3100"
                 )
-                assert stripped != "export DAGSTER_PORT=3100", (
-                    "DAGSTER_PORT must not be hardcoded to 3100"
+                assert stripped != "export DAGSTER_WEBSERVER_PORT=3100", (
+                    "DAGSTER_WEBSERVER_PORT must not be hardcoded to 3100"
                 )
 
     @pytest.mark.requirement("env-resilient-AC-8")

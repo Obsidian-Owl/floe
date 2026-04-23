@@ -29,6 +29,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from socket import create_connection
 
+from floe_core.contracts.errors import ContractViolationError
 from floe_core.contracts.execution import parse_execution_context, service_binding
 from floe_core.contracts.topology import (
     DEFAULT_NAMESPACE,
@@ -70,7 +71,12 @@ def _get_effective_port(service_name: str, default: int | None = None) -> int:
         ValueError: If the env var contains a non-integer value, or if no
             port can be determined.
     """
-    env_key = f"{service_name.upper().replace('-', '_')}_PORT"
+    fallback_env_key = f"{service_name.upper().replace('-', '_')}_PORT"
+    try:
+        service = service_contract_by_name(service_name)
+        env_key = service.port_env_var
+    except ContractViolationError:
+        env_key = fallback_env_key
     env_val = os.environ.get(env_key)
     if env_val is not None and env_val.strip() != "":
         try:
@@ -154,7 +160,7 @@ class ServiceEndpoint:
     precedence chain (env var → dict default).
 
     Attributes:
-        name: Service name (e.g., "polaris", "postgres")
+        name: Service name (e.g., "polaris", "postgresql")
         port: Service port number.  Defaults to automatic resolution.
         namespace: K8s namespace. Defaults to "floe-test"
     """
@@ -230,7 +236,7 @@ def check_service_health(
         True if service responds, False otherwise.
 
     Example:
-        if check_service_health("postgres", 5432):
+        if check_service_health("postgresql", 5432):
             print("PostgreSQL is ready")
         else:
             print("PostgreSQL is not available")
@@ -271,13 +277,13 @@ def check_infrastructure(
 
     Example:
         # New string format (port resolved from env/defaults)
-        health = check_infrastructure(["polaris", "minio", "postgres"])
+        health = check_infrastructure(["polaris", "minio", "postgresql"])
 
         # Legacy tuple format still works
         health = check_infrastructure([("polaris", 8181)])
 
         # Mixed list
-        health = check_infrastructure([("dagster", 3100), "polaris"])
+        health = check_infrastructure([("dagster-webserver", 3100), "polaris"])
     """
     results: dict[str, bool] = {}
 

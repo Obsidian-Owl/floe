@@ -620,7 +620,7 @@ class TestDataPipeline(IntegrationTestBase):
             dbt_e2e_profile: E2E dbt profile fixture (writes Iceberg profile).
         """
         # Check infrastructure availability
-        self.check_infrastructure("dagster")
+        self.check_infrastructure("dagster-webserver")
 
         project_dir = self._get_demo_project_path(project_root)
 
@@ -744,7 +744,7 @@ class TestDataPipeline(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability
-        self.check_infrastructure("dagster")
+        self.check_infrastructure("dagster-webserver")
 
         # Test 1: Verify sensor module exists and is importable
         try:

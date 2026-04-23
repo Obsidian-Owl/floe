@@ -157,7 +157,7 @@ def _polaris_deployment_ref(namespace: str) -> str:
 class TestPolarisJdbcDurability(IntegrationTestBase):
     """E2E: Polaris JDBC state survives pod restart (salvage-wrap-up AC-4)."""
 
-    required_services = ["polaris", "minio", "postgres"]
+    required_services = ["polaris", "minio", "postgresql"]
 
     @pytest.mark.requirement("RAC-7")
     @pytest.mark.requirement("RAC-8")
@@ -196,7 +196,7 @@ class TestPolarisJdbcDurability(IntegrationTestBase):
             8. Assert namespace present, table loadable, UUID matches, row present
         """
         self.check_infrastructure("polaris")
-        self.check_infrastructure("postgres")
+        self.check_infrastructure("postgresql")
 
         # Step 1-2: Create namespace and table with unique UUID suffix
         uid = uuid.uuid4().hex[:12]

@@ -81,7 +81,7 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster")
+        self.check_infrastructure("dagster-webserver")
         self.check_infrastructure("jaeger-query")
 
         # Query Jaeger for customer-360 service traces
@@ -160,7 +160,7 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster")
+        self.check_infrastructure("dagster-webserver")
         try:
             self.check_infrastructure("marquez")
         except Exception:
@@ -281,7 +281,7 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster")
+        self.check_infrastructure("dagster-webserver")
         self.check_infrastructure("jaeger-query")
         try:
             self.check_infrastructure("marquez")
@@ -418,7 +418,7 @@ class TestObservability(IntegrationTestBase):
         import subprocess
 
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster")
+        self.check_infrastructure("dagster-webserver")
 
         # Verify OTel Collector is deployed AND healthy
         result = subprocess.run(
@@ -517,7 +517,7 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster")
+        self.check_infrastructure("dagster-webserver")
 
         # Validate that compilation emits structured logs with trace context
         import io
@@ -659,7 +659,7 @@ class TestObservability(IntegrationTestBase):
         from floe_core.compilation.stages import compile_pipeline
 
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster")
+        self.check_infrastructure("dagster-webserver")
 
         project_root = Path(__file__).parent.parent.parent
         spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
@@ -716,7 +716,7 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client (for infrastructure check).
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster")
+        self.check_infrastructure("dagster-webserver")
         try:
             self.check_infrastructure("marquez")
         except Exception:
@@ -808,7 +808,7 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster")
+        self.check_infrastructure("dagster-webserver")
         self.check_infrastructure("jaeger-query")
 
         # Query for traces from customer-360 service (real service name)
@@ -914,7 +914,7 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
         """
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster")
+        self.check_infrastructure("dagster-webserver")
         try:
             self.check_infrastructure("marquez")
         except Exception:
@@ -1141,7 +1141,7 @@ class TestObservability(IntegrationTestBase):
         from floe_core.compilation.stages import compile_pipeline
 
         # Check infrastructure availability - FAIL if not available
-        self.check_infrastructure("dagster")
+        self.check_infrastructure("dagster-webserver")
         self.check_infrastructure("jaeger-query")
 
         project_root = Path(__file__).parent.parent.parent

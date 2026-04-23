@@ -19,6 +19,12 @@ from testing.fixtures.services import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _default_execution_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run service endpoint tests in the host execution context by default."""
+    monkeypatch.setenv("FLOE_EXECUTION_CONTEXT", "host")
+
+
 class TestServiceEndpoint:
     """Tests for ServiceEndpoint dataclass."""
 
@@ -31,27 +37,36 @@ class TestServiceEndpoint:
     @pytest.mark.requirement("9c-FR-005")
     def test_custom_namespace(self) -> None:
         """Test ServiceEndpoint accepts custom namespace."""
-        endpoint = ServiceEndpoint("postgres", 5432, "custom-ns")
+        endpoint = ServiceEndpoint("postgresql", 5432, "custom-ns")
         assert endpoint.namespace == "custom-ns"
 
     @pytest.mark.requirement("9c-FR-005")
     def test_host_property(self) -> None:
-        """Test ServiceEndpoint generates effective host based on environment.
-
-        When K8s DNS is resolvable, returns K8s DNS name.
-        When not resolvable (running on host), returns localhost.
-        """
+        """Test ServiceEndpoint generates effective host from execution context."""
         endpoint = ServiceEndpoint("polaris", 8181, "floe-test")
-        # Mock K8s DNS resolution to return True so we get K8s DNS name
-        with patch("testing.fixtures.services._can_resolve_host", return_value=True):
-            assert endpoint.host == "polaris.floe-test.svc.cluster.local"
+        assert endpoint.host == "localhost"
 
     @pytest.mark.requirement("9c-FR-005")
-    def test_host_property_falls_back_to_localhost(self) -> None:
-        """Test ServiceEndpoint falls back to localhost when K8s DNS not resolvable."""
+    def test_host_property_uses_in_cluster_binding(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test ServiceEndpoint uses contract binding for in-cluster execution."""
+        monkeypatch.setenv("FLOE_EXECUTION_CONTEXT", "in-cluster")
+        monkeypatch.setenv("FLOE_RELEASE_NAME", "floe-platform")
+
         endpoint = ServiceEndpoint("polaris", 8181, "floe-test")
-        with patch("testing.fixtures.services._can_resolve_host", return_value=False):
-            assert endpoint.host == "localhost"
+        assert endpoint.host == "floe-platform-polaris"
+
+    @pytest.mark.requirement("9c-FR-005")
+    def test_host_property_uses_namespaced_in_cluster_binding(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test non-default namespaces render FQDN in in-cluster execution."""
+        monkeypatch.setenv("FLOE_EXECUTION_CONTEXT", "in-cluster")
+        monkeypatch.setenv("FLOE_RELEASE_NAME", "floe-platform")
+
+        endpoint = ServiceEndpoint("polaris", 8181, "custom-ns")
+        assert endpoint.host == "floe-platform-polaris.custom-ns.svc.cluster.local"
 
     @pytest.mark.requirement("9c-FR-005")
     def test_k8s_host_property(self) -> None:
@@ -62,9 +77,9 @@ class TestServiceEndpoint:
     @pytest.mark.requirement("9c-FR-005")
     def test_str_representation(self) -> None:
         """Test ServiceEndpoint string representation."""
-        endpoint = ServiceEndpoint("postgres", 5432)
+        endpoint = ServiceEndpoint("postgresql", 5432)
         result = str(endpoint)
-        assert "postgres:5432" in result
+        assert "postgresql:5432" in result
         assert "floe-test" in result
 
     @pytest.mark.requirement("9c-FR-005")
@@ -93,14 +108,14 @@ class TestCheckServiceHealth:
             assert result is False
 
     @pytest.mark.requirement("9c-FR-005")
-    def test_uses_custom_namespace(self) -> None:
+    def test_uses_custom_namespace(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test check_service_health uses custom namespace."""
-        with (
-            patch("testing.fixtures.services._can_resolve_host", return_value=True),
-            patch("testing.fixtures.services._tcp_health_check") as mock_check,
-        ):
+        monkeypatch.setenv("FLOE_EXECUTION_CONTEXT", "in-cluster")
+        monkeypatch.setenv("FLOE_RELEASE_NAME", "floe-platform")
+
+        with patch("testing.fixtures.services._tcp_health_check") as mock_check:
             mock_check.return_value = True
-            check_service_health("postgres", 5432, namespace="custom-ns")
+            check_service_health("postgresql", 5432, namespace="custom-ns")
 
             # Verify called with correct host (K8s DNS with custom namespace)
             call_args = mock_check.call_args[0]
@@ -129,14 +144,14 @@ class TestCheckInfrastructure:
                 [
                     ("polaris", 8181),
                     ("minio", 9000),
-                    ("postgres", 5432),
+                    ("postgresql", 5432),
                 ]
             )
 
             assert result == {
                 "polaris": True,
                 "minio": True,
-                "postgres": True,
+                "postgresql": True,
             }
 
     @pytest.mark.requirement("9c-FR-005")
@@ -144,13 +159,10 @@ class TestCheckInfrastructure:
         """Test check_infrastructure raises when service unhealthy."""
 
         def mock_check(host: str, port: int, timeout: float) -> bool:
-            _ = port, timeout  # Unused in mock
-            return "polaris" not in host
+            _ = host, timeout  # Unused in mock
+            return port != 8181
 
-        with (
-            patch("testing.fixtures.services._can_resolve_host", return_value=True),
-            patch("testing.fixtures.services._tcp_health_check", side_effect=mock_check),
-        ):
+        with patch("testing.fixtures.services._tcp_health_check", side_effect=mock_check):
             with pytest.raises(ServiceUnavailableError) as exc_info:
                 check_infrastructure(
                     [
@@ -166,13 +178,10 @@ class TestCheckInfrastructure:
         """Test check_infrastructure returns all statuses with raise_on_failure=False."""
 
         def mock_check(host: str, port: int, timeout: float) -> bool:
-            _ = port, timeout  # Unused in mock
-            return "polaris" not in host
+            _ = host, timeout  # Unused in mock
+            return port != 8181
 
-        with (
-            patch("testing.fixtures.services._can_resolve_host", return_value=True),
-            patch("testing.fixtures.services._tcp_health_check", side_effect=mock_check),
-        ):
+        with patch("testing.fixtures.services._tcp_health_check", side_effect=mock_check):
             result = check_infrastructure(
                 [("polaris", 8181), ("minio", 9000)],
                 raise_on_failure=False,
@@ -205,7 +214,7 @@ class TestServiceUnavailableError:
     @pytest.mark.requirement("9c-FR-005")
     def test_error_attributes(self) -> None:
         """Test error stores service and reason."""
-        endpoint = ServiceEndpoint("postgres", 5432)
+        endpoint = ServiceEndpoint("postgresql", 5432)
         error = ServiceUnavailableError(endpoint, "timeout")
 
         assert error.service == endpoint
@@ -223,7 +232,7 @@ class TestTcpHealthCheck:
         from testing.fixtures.services import _tcp_health_check
 
         mock_socket = MagicMock()
-        with patch("socket.create_connection", return_value=mock_socket):
+        with patch("testing.fixtures.services.create_connection", return_value=mock_socket):
             result = _tcp_health_check("localhost", 8080, 5.0)
             assert result is True
 
@@ -232,7 +241,10 @@ class TestTcpHealthCheck:
         """Test _tcp_health_check returns False for failed connection."""
         from testing.fixtures.services import _tcp_health_check
 
-        with patch("socket.create_connection", side_effect=OSError("Connection refused")):
+        with patch(
+            "testing.fixtures.services.create_connection",
+            side_effect=OSError("Connection refused"),
+        ):
             result = _tcp_health_check("localhost", 8080, 5.0)
             assert result is False
 
@@ -242,6 +254,9 @@ class TestTcpHealthCheck:
 
         from testing.fixtures.services import _tcp_health_check
 
-        with patch("socket.create_connection", side_effect=TimeoutError("timed out")):
+        with patch(
+            "testing.fixtures.services.create_connection",
+            side_effect=TimeoutError("timed out"),
+        ):
             result = _tcp_health_check("localhost", 8080, 5.0)
             assert result is False

@@ -90,6 +90,21 @@ def test_service_endpoint_uses_namespace_env_for_default_namespace(
     assert endpoint.host == "floe-platform-polaris.floe-prod.svc.cluster.local"
 
 
+def test_service_endpoint_explicit_namespace_overrides_namespace_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit non-default namespace arguments override FLOE_NAMESPACE."""
+    from testing.fixtures.services import ServiceEndpoint
+
+    monkeypatch.setenv("FLOE_EXECUTION_CONTEXT", "in-cluster")
+    monkeypatch.setenv("FLOE_RELEASE_NAME", "floe-platform")
+    monkeypatch.setenv("FLOE_NAMESPACE", "floe-prod")
+
+    endpoint = ServiceEndpoint("polaris", namespace="floe-dev")
+
+    assert endpoint.host == "floe-platform-polaris.floe-dev.svc.cluster.local"
+
+
 @pytest.fixture(autouse=True)
 def _reset_otel_global_state() -> Generator[None, None, None]:
     """Reset OTel global state before and after each test.
