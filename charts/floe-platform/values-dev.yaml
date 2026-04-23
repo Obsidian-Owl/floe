@@ -23,6 +23,14 @@ fullnameOverride: floe-platform
 # Dagster - enabled with minimal resources
 dagster:
   enabled: true
+  # Dagster subchart uses this nested PostgreSQL block for its init
+  # containers. Keep it aligned with the parent chart PostgreSQL service.
+  postgresql:
+    enabled: false
+    postgresqlHost: floe-platform-postgresql
+    postgresqlUsername: floe
+    postgresqlPassword: "floe-dev-password-1234"  # pragma: allowlist secret
+    postgresqlDatabase: dagster
   dagsterWebserver:
     replicaCount: 1
     resources:

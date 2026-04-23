@@ -20,6 +20,15 @@ fullnameOverride: floe-platform
 # Dagster Configuration (Orchestration)
 # =============================================================================
 dagster:
+  # Dagster subchart init containers read the nested postgresql block.
+  # Without this, demo Dagster pods wait on an empty host (`:5432`).
+  postgresql:
+    enabled: false
+    postgresqlHost: floe-platform-postgresql
+    postgresqlUsername: floe
+    postgresqlPassword: "floe-demo-password-1234"  # pragma: allowlist secret
+    postgresqlDatabase: dagster
+
   # Demo code locations - Python module-based loading
   # Each demo product appears as a separate code location in Dagster UI
   # Data engineers only write: floe.yaml + dbt models
@@ -158,6 +167,10 @@ otel:
 # =============================================================================
 postgresql:
   enabled: true
+  auth:
+    database: floe
+    username: floe
+    password: "floe-demo-password-1234"  # pragma: allowlist secret
   resources:
     requests:
       cpu: 100m
