@@ -37,6 +37,12 @@ class ServiceContract(BaseModel):
     component_id: ComponentId = Field(..., description="Canonical component identifier")
     chart_component: str = Field(..., description="Helm release suffix for service name")
     default_port: int = Field(..., ge=1, le=65535, description="Default service port")
+    local_port: int | None = Field(
+        default=None,
+        ge=1,
+        le=65535,
+        description="Local forwarded port for host-style execution contexts",
+    )
     host_env_var: str = Field(..., description="Environment variable for service host")
     port_env_var: str = Field(..., description="Environment variable for service port")
     readiness_path: str | None = Field(default=None, description="HTTP readiness path")
@@ -50,12 +56,18 @@ class ServiceContract(BaseModel):
         """Return the canonical short service name used by Python helpers."""
         return self.component_id.value
 
+    @property
+    def host_port(self) -> int:
+        """Return the local forwarded port, falling back to the service port."""
+        return self.local_port if self.local_port is not None else self.default_port
+
 
 _SERVICES: tuple[ServiceContract, ...] = (
     ServiceContract(
         component_id=ComponentId.DAGSTER_WEBSERVER,
         chart_component="dagster-webserver",
         default_port=3000,
+        local_port=3100,
         host_env_var="DAGSTER_WEBSERVER_HOST",
         port_env_var="DAGSTER_WEBSERVER_PORT",
     ),
@@ -63,9 +75,9 @@ _SERVICES: tuple[ServiceContract, ...] = (
         component_id=ComponentId.POLARIS,
         chart_component="polaris",
         default_port=8181,
+        local_port=8181,
         host_env_var="POLARIS_HOST",
         port_env_var="POLARIS_PORT",
-        readiness_path="/api/catalog/v1/config",
     ),
     ServiceContract(
         component_id=ComponentId.POLARIS_MANAGEMENT,
@@ -73,11 +85,13 @@ _SERVICES: tuple[ServiceContract, ...] = (
         default_port=8182,
         host_env_var="POLARIS_MANAGEMENT_HOST",
         port_env_var="POLARIS_MANAGEMENT_PORT",
+        readiness_path="/q/health/ready",
     ),
     ServiceContract(
         component_id=ComponentId.MINIO,
         chart_component="minio",
         default_port=9000,
+        local_port=9000,
         host_env_var="MINIO_HOST",
         port_env_var="MINIO_PORT",
     ),
@@ -92,6 +106,7 @@ _SERVICES: tuple[ServiceContract, ...] = (
         component_id=ComponentId.POSTGRESQL,
         chart_component="postgresql",
         default_port=5432,
+        local_port=5432,
         host_env_var="POSTGRES_HOST",
         port_env_var="POSTGRES_PORT",
     ),
@@ -99,6 +114,7 @@ _SERVICES: tuple[ServiceContract, ...] = (
         component_id=ComponentId.JAEGER_QUERY,
         chart_component="jaeger-query",
         default_port=16686,
+        local_port=16686,
         host_env_var="JAEGER_QUERY_HOST",
         port_env_var="JAEGER_QUERY_PORT",
     ),
@@ -106,6 +122,7 @@ _SERVICES: tuple[ServiceContract, ...] = (
         component_id=ComponentId.OTEL_COLLECTOR_GRPC,
         chart_component="otel",
         default_port=4317,
+        local_port=4317,
         host_env_var="OTEL_COLLECTOR_GRPC_HOST",
         port_env_var="OTEL_COLLECTOR_GRPC_PORT",
     ),
@@ -120,6 +137,7 @@ _SERVICES: tuple[ServiceContract, ...] = (
         component_id=ComponentId.MARQUEZ,
         chart_component="marquez",
         default_port=5000,
+        local_port=5100,
         host_env_var="MARQUEZ_HOST",
         port_env_var="MARQUEZ_PORT",
     ),

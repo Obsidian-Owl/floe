@@ -75,20 +75,24 @@ def service_binding(
     service = service_contract(component_id)
     if context is ExecutionContext.IN_CLUSTER:
         host = render_service_name(component_id, release_name=release_name)
+        port = service.default_port
+        if namespace != DEFAULT_NAMESPACE:
+            host = f"{host}.{namespace}.svc.cluster.local"
     elif context in (ExecutionContext.HOST, ExecutionContext.DEVPOD, ExecutionContext.DEMO):
         host = "localhost"
+        port = service.host_port
     else:
         raise ExecutionContextMismatch(f"Unsupported execution context: {context.value}")
 
     env = {
         service.host_env_var: host,
-        service.port_env_var: str(service.default_port),
+        service.port_env_var: str(port),
     }
     return ServiceBinding(
         component_id=component_id,
         context=context,
         host=host,
-        port=service.default_port,
+        port=port,
         env=env,
     )
 
