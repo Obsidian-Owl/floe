@@ -55,5 +55,6 @@ def test_full_runner_records_cleanup_failure_without_skipping_summary() -> None:
     assert 'CLEANUP_FAILED=false' in script
     assert 'CLEANUP_FAILED=true' in script
     assert 'DESTRUCTIVE_EXIT=1' in script
+    assert 'if ! pod_count=$(kubectl get pods -l test-type=e2e -n "${TEST_NAMESPACE}" --no-headers 2>/dev/null | wc -l | tr -d \' \'); then' in script
     assert 'Skipping destructive tests because platform cleanup failed.' in script
     assert 'Destructive: SKIPPED (cleanup failed)' in script

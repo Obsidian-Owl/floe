@@ -87,7 +87,12 @@ info "Cleaning up platform validation pods before destructive suite..."
 kubectl delete pods -l test-type=e2e -n "${TEST_NAMESPACE}" --ignore-not-found 2>/dev/null || true
 
 for i in $(seq 1 30); do
-    pod_count=$(kubectl get pods -l test-type=e2e -n "${TEST_NAMESPACE}" --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    if ! pod_count=$(kubectl get pods -l test-type=e2e -n "${TEST_NAMESPACE}" --no-headers 2>/dev/null | wc -l | tr -d ' '); then
+        error "Failed to query platform validation pods during cleanup"
+        CLEANUP_FAILED=true
+        DESTRUCTIVE_EXIT=1
+        break
+    fi
     if [[ "${pod_count}" == "0" ]]; then
         break
     fi
