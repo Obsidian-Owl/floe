@@ -57,6 +57,27 @@ class TestJobsChartLint:
 
     @pytest.mark.requirement("9b-FR-080")
     @pytest.mark.usefixtures("helm_available")
+    def test_chart_lint_flux_test_values(self, jobs_chart_path: Path) -> None:
+        """Test chart lints with the same values layering Flux uses."""
+        result = subprocess.run(
+            [
+                "helm",
+                "lint",
+                str(jobs_chart_path),
+                "-f",
+                str(jobs_chart_path / "values.yaml"),
+                "-f",
+                str(jobs_chart_path / "values-test.yaml"),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, f"Lint failed: {result.stderr}"
+        assert "0 chart(s) failed" in result.stdout
+
+    @pytest.mark.requirement("9b-FR-080")
+    @pytest.mark.usefixtures("helm_available")
     def test_chart_lint_dbt_cronjob(self, jobs_chart_path: Path) -> None:
         """Test chart lints with dbt as CronJob."""
         result = subprocess.run(

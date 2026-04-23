@@ -228,3 +228,37 @@ class TestJobsChartTemplate:
         docs = parse_yaml_documents(result.stdout)
         job_docs = [d for d in docs if d.get("kind") in ("Job", "CronJob")]
         assert len(job_docs) == 0
+
+    @pytest.mark.requirement("9b-FR-081")
+    @pytest.mark.usefixtures("helm_available")
+    def test_flux_test_values_render_smoke_install_only(self, jobs_chart_path: Path) -> None:
+        """Flux test values must not render a fake dbt workload."""
+        result = subprocess.run(
+            [
+                "helm",
+                "template",
+                "test-release",
+                str(jobs_chart_path),
+                "-f",
+                str(jobs_chart_path / "values.yaml"),
+                "-f",
+                str(jobs_chart_path / "values-test.yaml"),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        docs = parse_yaml_documents(result.stdout)
+        workload_docs = [d for d in docs if d.get("kind") in ("Job", "CronJob")]
+        assert workload_docs == []
+
+        test_pods = [
+            d
+            for d in docs
+            if d.get("kind") == "Pod"
+            and d.get("metadata", {}).get("annotations", {}).get("helm.sh/hook") == "test"
+        ]
+        assert len(test_pods) == 1
+        containers = test_pods[0]["spec"]["containers"]
+        assert [container["name"] for container in containers] == ["test-basic"]

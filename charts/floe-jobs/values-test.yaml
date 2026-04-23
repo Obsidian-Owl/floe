@@ -21,10 +21,12 @@ global:
   imagePullPolicy: IfNotPresent
 
 # =============================================================================
-# dbt Job Configuration (Minimal)
+# dbt Job Configuration
 # =============================================================================
 dbt:
-  enabled: true
+  # Test/bootstrap values are a smoke-install profile. Do not render an
+  # executable dbt Job unless a real dbt project and profiles are provided.
+  enabled: false
   image:
     repository: ghcr.io/dbt-labs/dbt-core
     tag: "1.7.0"
@@ -36,13 +38,6 @@ dbt:
     limits:
       cpu: 500m
       memory: 512Mi
-  # Test with minimal dbt project
-  projectDir: /dbt
-  profilesDir: /dbt/profiles
-  # Default test target
-  target: test
-  # Run in verbose mode for debugging
-  debug: true
 
 # =============================================================================
 # dlt Job Configuration (Disabled for Basic Tests)

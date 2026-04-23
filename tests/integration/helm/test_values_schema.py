@@ -137,6 +137,12 @@ class TestFloeJobsSchema:
         jsonschema.validate(values, floe_jobs_schema)
 
     @pytest.mark.requirement("9b-FR-004")
+    def test_test_values_conform_to_schema(self, floe_jobs_schema: dict[str, Any]) -> None:
+        """Test that values-test.yaml conforms to schema."""
+        values = load_values_file("floe-jobs", "values-test.yaml")
+        jsonschema.validate(values, floe_jobs_schema)
+
+    @pytest.mark.requirement("9b-FR-004")
     def test_schema_has_required_sections(self, floe_jobs_schema: dict[str, Any]) -> None:
         """Test that schema defines expected top-level sections."""
         properties = floe_jobs_schema.get("properties", {})
