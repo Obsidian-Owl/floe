@@ -81,6 +81,64 @@ def _polaris_credentials() -> tuple[str, str]:
     return get_polaris_credentials()
 
 
+def _resolve_postgresql_secret_name(namespace: str) -> str:
+    """Resolve PostgreSQL secret name without requiring secrets list RBAC.
+
+    In the in-cluster runner path, read the current test Job pod spec and
+    extract the secret name wired into POSTGRES_PASSWORD. Fall back to the
+    chart default naming contract (<release>-postgresql) for host-run flows.
+    """
+    pod_name = os.environ.get("HOSTNAME", "").strip()
+    if pod_name:
+        pod_result = _run_kubectl(
+            [
+                "get",
+                "pod",
+                "-n",
+                namespace,
+                pod_name,
+                "-o",
+                "json",
+            ],
+            timeout=15,
+        )
+        if pod_result.returncode == 0:
+            try:
+                pod = json.loads(pod_result.stdout)
+            except json.JSONDecodeError:
+                pod = {}
+
+            spec = pod.get("spec")
+            containers = spec.get("containers", []) if isinstance(spec, dict) else []
+            if isinstance(containers, list):
+                for container in containers:
+                    if not isinstance(container, dict):
+                        continue
+                    if container.get("name") != "test-runner":
+                        continue
+                    env_list = container.get("env", [])
+                    if not isinstance(env_list, list):
+                        continue
+                    for env_var in env_list:
+                        if not isinstance(env_var, dict):
+                            continue
+                        if env_var.get("name") != "POSTGRES_PASSWORD":
+                            continue
+                        value_from = env_var.get("valueFrom")
+                        if not isinstance(value_from, dict):
+                            continue
+                        secret_key_ref = value_from.get("secretKeyRef")
+                        if not isinstance(secret_key_ref, dict):
+                            continue
+                        secret_name = secret_key_ref.get("name")
+                        if isinstance(secret_name, str) and secret_name:
+                            return secret_name
+                    break
+
+    release_name = os.environ.get("FLOE_RELEASE_NAME", "floe-platform").strip() or "floe-platform"
+    return f"{release_name}-postgresql"
+
+
 @pytest.mark.requirement("FR-001")
 @pytest.mark.requirement("FR-002")
 @pytest.mark.requirement("FR-003")
@@ -352,21 +410,29 @@ class TestPlatformBootstrap(IntegrationTestBase):
             f"-l app.kubernetes.io/component=postgresql"
         )
 
-        # Verify PostgreSQL secret exists (floe-platform uses prefixed name)
+        # Verify PostgreSQL secret exists.
+        # Use direct-name `get` to remain compatible with least-privilege RBAC
+        # where the standard test runner is forbidden from listing secrets.
+        pg_secret_name = _resolve_postgresql_secret_name(self.namespace)
         result = _run_kubectl(
             [
                 "get",
                 "secret",
                 "-n",
                 self.namespace,
-                "-l",
-                "app.kubernetes.io/component=postgresql",
+                pg_secret_name,
                 "-o",
-                "jsonpath={.items[*].metadata.name}",
+                "jsonpath={.metadata.name}",
             ]
         )
-        assert result.returncode == 0, f"Failed to check PostgreSQL secret: {result.stderr}"
-        assert result.stdout.strip(), "PostgreSQL secret not found"
+        assert result.returncode == 0, (
+            f"Failed to check PostgreSQL secret '{pg_secret_name}': {result.stderr}\n"
+            f"Check: kubectl get secret -n {self.namespace} {pg_secret_name}"
+        )
+        assert result.stdout.strip() == pg_secret_name, (
+            f"PostgreSQL secret not found or name mismatch. "
+            f"Expected '{pg_secret_name}', got '{result.stdout.strip()}'."
+        )
 
         # Get PostgreSQL pod name for query execution
         pg_pod = None
