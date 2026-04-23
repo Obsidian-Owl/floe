@@ -1624,6 +1624,36 @@ class TestHelmValuesImageOverride:
             f"in values-demo.yaml. Got: {daemon_tag!r}"
         )
 
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_dagster_memory_limits_cover_three_code_locations(self) -> None:
+        """Verify demo Dagster components have enough memory for all code locations.
+
+        The demo image loads three code locations into the webserver and daemon
+        process. The smaller 512Mi limit observed in validation OOM-killed both
+        components before the rollout could become Ready.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        dagster = values.get("dagster", {})
+        webserver_resources = dagster.get("dagsterWebserver", {}).get("resources", {})
+        daemon_resources = dagster.get("dagsterDaemon", {}).get("resources", {})
+
+        assert webserver_resources.get("requests", {}).get("memory") == "512Mi", (
+            "dagster.dagsterWebserver.resources.requests.memory must be '512Mi' "
+            "in values-demo.yaml."
+        )
+        assert webserver_resources.get("limits", {}).get("memory") == "1Gi", (
+            "dagster.dagsterWebserver.resources.limits.memory must be '1Gi' "
+            "in values-demo.yaml."
+        )
+        assert daemon_resources.get("requests", {}).get("memory") == "512Mi", (
+            "dagster.dagsterDaemon.resources.requests.memory must be '512Mi' "
+            "in values-demo.yaml."
+        )
+        assert daemon_resources.get("limits", {}).get("memory") == "1Gi", (
+            "dagster.dagsterDaemon.resources.limits.memory must be '1Gi' "
+            "in values-demo.yaml."
+        )
+
 
 # ============================================================
 # T63: Helm Values Module Name Tests (AC-11.5)
