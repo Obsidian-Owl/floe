@@ -574,8 +574,16 @@ def diff_command(
             payload = {
                 "expected": expected_policies,
                 "actual": deployed_policies,
-                "diffs": diff_result.get("diffs", []),
-                "summary": diff_result.get("summary", {}),
+                "diffs": [
+                    {"change_type": "missing", "items": diff_result["missing"]},
+                    {"change_type": "extra", "items": diff_result["extra"]},
+                    {"change_type": "modified", "items": diff_result["modified"]},
+                ],
+                "summary": {
+                    "missing_count": diff_result["missing_count"],
+                    "extra_count": diff_result["extra_count"],
+                    "modified_count": diff_result["modified_count"],
+                },
             }
             validate_machine_output(MachineOutputName.NETWORK_DIFF, payload)
             click.echo(json.dumps(payload, indent=2))

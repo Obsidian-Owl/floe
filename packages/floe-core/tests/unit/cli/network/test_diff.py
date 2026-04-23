@@ -1045,9 +1045,49 @@ class TestOutputFormatting:
         """
         from floe_core.cli.main import cli
 
+        expected_policy = {
+            "apiVersion": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "metadata": {"name": "missing-policy", "namespace": "default"},
+            "spec": {"podSelector": {}, "policyTypes": ["Ingress"]},
+        }
+        expected_modified = {
+            "apiVersion": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "metadata": {"name": "modified-policy", "namespace": "default"},
+            "spec": {"podSelector": {}, "policyTypes": ["Ingress"]},
+        }
+        actual_extra = {
+            "apiVersion": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "metadata": {"name": "extra-policy", "namespace": "default"},
+            "spec": {"podSelector": {}, "policyTypes": ["Egress"]},
+        }
+        actual_modified = {
+            "apiVersion": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "metadata": {"name": "modified-policy", "namespace": "default"},
+            "spec": {"podSelector": {}, "policyTypes": ["Ingress", "Egress"]},
+        }
+        expected_policies = {
+            "default/missing-policy": expected_policy,
+            "default/modified-policy": expected_modified,
+        }
+        deployed_policies = {
+            "default/extra-policy": actual_extra,
+            "default/modified-policy": actual_modified,
+        }
+
         with (
             patch("floe_core.cli.network.diff._load_kubeconfig"),
-            patch("floe_core.cli.network.diff._get_deployed_policies", return_value={}),
+            patch(
+                "floe_core.cli.network.diff._load_expected_policies",
+                return_value=expected_policies,
+            ),
+            patch(
+                "floe_core.cli.network.diff._get_deployed_policies",
+                return_value=deployed_policies,
+            ),
         ):
             result = cli_runner.invoke(
                 cli,
@@ -1080,6 +1120,25 @@ class TestOutputFormatting:
             contract = contract_for_output(MachineOutputName.NETWORK_DIFF)
             for key in contract.required_keys:
                 assert key in output_data
+
+            assert output_data["expected"] == expected_policies
+            assert output_data["actual"] == deployed_policies
+            assert output_data["summary"] == {
+                "missing_count": 1,
+                "extra_count": 1,
+                "modified_count": 1,
+            }
+
+            diffs_by_type = {
+                section["change_type"]: section["items"] for section in output_data["diffs"]
+            }
+            assert diffs_by_type["missing"][0]["id"] == "default/missing-policy"
+            assert diffs_by_type["missing"][0]["policy"] == expected_policy
+            assert diffs_by_type["extra"][0]["id"] == "default/extra-policy"
+            assert diffs_by_type["extra"][0]["policy"] == actual_extra
+            assert diffs_by_type["modified"][0]["id"] == "default/modified-policy"
+            assert diffs_by_type["modified"][0]["expected"] == expected_modified
+            assert diffs_by_type["modified"][0]["deployed"] == actual_modified
 
 
 class TestDiffCommandIntegration:
