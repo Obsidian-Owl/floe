@@ -1587,7 +1587,7 @@ def dbt_pipeline_result(
     Yields:
         Tuple of ``(product, project_dir)`` for the parametrized product.
     """
-    from dbt_utils import NamespaceResetError, _purge_iceberg_namespace, run_dbt
+    from dbt_utils import _purge_iceberg_namespace, run_dbt
 
     product: str = request.param
     project_dir = project_root / "demo" / product
@@ -1622,17 +1622,17 @@ def dbt_pipeline_result(
         raise
     finally:
         # Clean up Iceberg namespaces to prevent resource leaks
-        teardown_error: NamespaceResetError | None = None
+        teardown_error: Exception | None = None
         for namespace in (namespace_raw, namespace_models):
             try:
                 _purge_iceberg_namespace(namespace, verify_empty=True)
-            except NamespaceResetError as exc:
+            except Exception as exc:
                 if primary_error is None:
                     if teardown_error is None:
                         teardown_error = exc
                     continue
                 logger.error(
-                    "Suppressed teardown namespace reset failure for %s after primary "
+                    "Suppressed teardown reset failure for %s after primary "
                     "dbt/test failure: %s",
                     namespace,
                     exc,

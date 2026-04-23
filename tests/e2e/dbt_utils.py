@@ -59,10 +59,15 @@ def _get_polaris_catalog(*, fresh: bool = False) -> Any:
         _catalog_cache["catalog"] = None
         return None
 
-    polaris_url = os.environ.get("POLARIS_URI", f"{ServiceEndpoint('polaris').url}/api/catalog")
+    polaris_url = os.environ.get("POLARIS_URI")
+    if polaris_url is None:
+        polaris_url = f"{ServiceEndpoint('polaris').url}/api/catalog"
     _polaris_id, _polaris_secret = get_polaris_credentials()
     default_cred = f"{_polaris_id}:{_polaris_secret}"  # pragma: allowlist secret
     _minio_access, _minio_secret = get_minio_credentials()
+    minio_endpoint = os.environ.get("MINIO_ENDPOINT")
+    if minio_endpoint is None:
+        minio_endpoint = ServiceEndpoint("minio").url
 
     try:
         catalog = pyiceberg_catalog.load_catalog(
@@ -73,7 +78,7 @@ def _get_polaris_catalog(*, fresh: bool = False) -> Any:
                 "credential": os.environ.get("POLARIS_CREDENTIAL", default_cred),
                 "scope": "PRINCIPAL_ROLE:ALL",
                 "warehouse": os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"),
-                "s3.endpoint": os.environ.get("MINIO_ENDPOINT", ServiceEndpoint("minio").url),
+                "s3.endpoint": minio_endpoint,
                 "s3.access-key-id": os.environ.get(  # pragma: allowlist secret
                     "AWS_ACCESS_KEY_ID", _minio_access
                 ),
@@ -154,7 +159,9 @@ def _purge_iceberg_namespace(
     storage_cleanup_failure_reason: str | None = None
     if catalog is not None:
         # Collect S3 config from environment (same defaults as _get_polaris_catalog).
-        s3_endpoint = os.environ.get("MINIO_ENDPOINT", ServiceEndpoint("minio").url)
+        s3_endpoint = os.environ.get("MINIO_ENDPOINT")
+        if s3_endpoint is None:
+            s3_endpoint = ServiceEndpoint("minio").url
         access_key, secret_key = get_minio_credentials()
 
         try:

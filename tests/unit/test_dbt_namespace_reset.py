@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+from types import ModuleType
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -17,6 +19,50 @@ def test_clear_catalog_cache_drops_cached_catalog() -> None:
     dbt_utils._clear_catalog_cache()
 
     assert dbt_utils._catalog_cache == {}
+
+
+def test_get_polaris_catalog_uses_env_endpoints_without_eager_service_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_catalog = object()
+    pyiceberg_module = ModuleType("pyiceberg")
+    load_calls: list[dict[str, object]] = []
+
+    def _load_catalog(name: str, **kwargs: object) -> object:
+        assert name == "polaris"
+        load_calls.append(kwargs)
+        return fake_catalog
+
+    def _unexpected_service_endpoint(*args: object, **kwargs: object) -> object:
+        raise AssertionError("ServiceEndpoint should not be evaluated")
+
+    pyiceberg_module.catalog = SimpleNamespace(load_catalog=_load_catalog)
+
+    monkeypatch.setitem(sys.modules, "pyiceberg", pyiceberg_module)
+    monkeypatch.setenv("POLARIS_URI", "http://example.test/api/catalog")
+    monkeypatch.setenv("MINIO_ENDPOINT", "http://minio.test:9000")
+    monkeypatch.setattr(dbt_utils, "ServiceEndpoint", _unexpected_service_endpoint)
+    monkeypatch.setattr(dbt_utils, "get_polaris_credentials", lambda: ("id", "secret"))
+    monkeypatch.setattr(dbt_utils, "get_minio_credentials", lambda: ("access", "secret"))
+    dbt_utils._clear_catalog_cache()
+
+    catalog = dbt_utils._get_polaris_catalog(fresh=True)
+
+    assert catalog is fake_catalog
+    assert load_calls == [
+        {
+            "type": "rest",
+            "uri": "http://example.test/api/catalog",
+            "credential": "id:secret",
+            "scope": "PRINCIPAL_ROLE:ALL",
+            "warehouse": "floe-e2e",
+            "s3.endpoint": "http://minio.test:9000",
+            "s3.access-key-id": "access",
+            "s3.secret-access-key": "secret",
+            "s3.region": "us-east-1",
+            "s3.path-style-access": "true",
+        }
+    ]
 
 
 def test_purge_namespace_raises_when_namespace_still_contains_tables(
