@@ -163,6 +163,9 @@ markers = [
     "integration: Marks tests requiring K8s services",
     "contract: Marks cross-package contract tests",
     "e2e: Marks end-to-end pipeline tests",
+    "bootstrap: Marks admin/bootstrap validation",
+    "platform_blackbox: Marks in-cluster product validation",
+    "developer_workflow: Marks repo-aware host validation",
     "requires_sts: Marks tests requiring STS-enabled storage backend (MinIO with STS)",
     "benchmark: Marks performance benchmark tests (CodSpeed)",
 ]

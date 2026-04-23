@@ -109,6 +109,18 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "destructive: mark test as destructive (helm upgrade, pod kill — requires elevated RBAC)",
     )
+    config.addinivalue_line(
+        "markers",
+        "bootstrap: mark test as bootstrap/admin validation",
+    )
+    config.addinivalue_line(
+        "markers",
+        "platform_blackbox: mark test as deployed in-cluster product validation",
+    )
+    config.addinivalue_line(
+        "markers",
+        "developer_workflow: mark test as repo-aware host validation",
+    )
 
     # Configure pytest-rerunfailures for E2E infrastructure resilience.
     # Scoped to E2E conftest so unit/contract/integration tests are unaffected.
@@ -148,6 +160,20 @@ def pytest_collection_modifyitems(
     import inspect
     import re
     import warnings
+
+    lane_markers = {
+        "bootstrap",
+        "platform_blackbox",
+        "developer_workflow",
+        "destructive",
+    }
+
+    for item in items:
+        item_markers = {mark.name for mark in item.iter_markers()}
+        if "e2e" not in item_markers:
+            continue
+        if item_markers.isdisjoint(lane_markers):
+            item.add_marker(pytest.mark.platform_blackbox)
 
     # Reorder: move destructive (pod-killing) tests to the end
     destructive_module = "test_service_failure_resilience_e2e"
