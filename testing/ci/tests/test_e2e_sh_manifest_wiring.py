@@ -19,7 +19,9 @@ Done when all fail before implementation.
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -57,8 +59,98 @@ def test_common_sh_uses_contract_emitter_for_service_names(repo_root: Path) -> N
     """Shell service names must come from floe_core.contracts.emit."""
     common = (repo_root / "testing" / "ci" / "common.sh").read_text()
 
-    assert "python3 -m floe_core.contracts.emit" in common
+    assert "-m floe_core.contracts.emit" in common
+    assert ".venv/bin/python" in common
     assert 'printf \'%s-%s\\n\' "${FLOE_RELEASE_NAME}" "${component}"' not in common
+
+
+def test_common_sh_sources_with_repo_managed_python(repo_root: Path) -> None:
+    """Direct shell sourcing must use the repo venv, not system python3."""
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            (
+                "set -euo pipefail; "
+                "source testing/ci/common.sh; "
+                "printf '%s\\n%s\\n%s\\n' "
+                "\"${FLOE_PYTHON}\" \"${FLOE_RELEASE_NAME}\" "
+                "\"$(floe_service_name polaris)\""
+            ),
+        ],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    lines = result.stdout.splitlines()
+    assert lines == [
+        str(repo_root / ".venv" / "bin" / "python"),
+        "floe-platform",
+        "floe-platform-polaris",
+    ]
+
+
+def test_common_sh_preserves_caller_script_dir_and_project_root(repo_root: Path) -> None:
+    """Sourcing common.sh must not clobber caller path globals."""
+    expected_script_dir = repo_root / "testing" / "k8s"
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            (
+                "set -euo pipefail; "
+                "SCRIPT_DIR=\"${PWD}/testing/k8s\"; "
+                "PROJECT_ROOT=\"${PWD}\"; "
+                "source testing/ci/common.sh; "
+                "printf '%s\\n%s\\n' \"${SCRIPT_DIR}\" \"${PROJECT_ROOT}\""
+            ),
+        ],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == [str(expected_script_dir), str(repo_root)]
+
+
+def test_common_sh_fails_explicitly_when_floe_python_invalid(repo_root: Path) -> None:
+    """Emitter dependency failures must fail the source operation before eval."""
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "source testing/ci/common.sh; printf 'unreachable\\n'",
+        ],
+        cwd=repo_root,
+        env={**os.environ, "FLOE_PYTHON": str(repo_root / "missing-python")},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "FLOE_PYTHON is not executable" in result.stderr
+    assert "unreachable" not in result.stdout
+
+
+def test_test_e2e_removes_stale_service_name_precomputation() -> None:
+    """test-e2e.sh should call floe_service_name at use sites, not cache stale SVC vars."""
+    forbidden_assignments = [
+        "SVC_DAGSTER_WEB=",
+        "SVC_POLARIS=",
+        "SVC_MINIO=",
+        "SVC_OTEL=",
+        "SVC_MARQUEZ=",
+        "SVC_JAEGER_QUERY=",
+        "SVC_POSTGRES=",
+    ]
+
+    for assignment in forbidden_assignments:
+        assert assignment not in _script_content
+
+    assert "$(floe_service_name otel-collector-grpc)" in _script_content
 
 
 # ---------------------------------------------------------------------------

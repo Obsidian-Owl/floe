@@ -15,15 +15,29 @@
 # namespace, Kind cluster name, chart dir, and values file. Consumers
 # MUST NOT redefine these.
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+FLOE_COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FLOE_PROJECT_ROOT="$(cd "${FLOE_COMMON_DIR}/../.." && pwd)"
 
-floe_contract_emit() {
-    PYTHONPATH="${PROJECT_ROOT}/packages/floe-core/src:${PYTHONPATH:-}" \
-        python3 -m floe_core.contracts.emit "$@"
+floe_common_fail() {
+    echo "ERROR: $*" >&2
+    exit 1
 }
 
-eval "$(floe_contract_emit shell-defaults)"
+: "${FLOE_PYTHON:=${FLOE_PROJECT_ROOT}/.venv/bin/python}"
+if [[ ! -x "${FLOE_PYTHON}" ]]; then
+    floe_common_fail "FLOE_PYTHON is not executable: ${FLOE_PYTHON}. Run 'uv sync' or set FLOE_PYTHON."
+fi
+
+floe_contract_emit() {
+    PYTHONPATH="${FLOE_PROJECT_ROOT}/packages/floe-core/src:${PYTHONPATH:-}" \
+        "${FLOE_PYTHON}" -m floe_core.contracts.emit "$@"
+}
+
+if ! FLOE_CONTRACT_DEFAULTS="$(floe_contract_emit shell-defaults)"; then
+    floe_common_fail "failed to emit floe shell defaults with FLOE_PYTHON=${FLOE_PYTHON}"
+fi
+eval "${FLOE_CONTRACT_DEFAULTS}"
+unset FLOE_CONTRACT_DEFAULTS
 
 # Canonical identifiers. Scripts may override via environment before sourcing,
 # but must not redefine after sourcing.

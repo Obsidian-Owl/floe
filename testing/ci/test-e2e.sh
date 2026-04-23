@@ -470,9 +470,9 @@ if [[ "${CATALOG_CODE}" == "404" ]]; then
     # Build JSON payload with python3 to safely escape special characters.
     # Credentials read from environment (MINIO_USER, MINIO_PASS) to avoid
     # exposing them in process arguments (visible in ps aux).
-    CATALOG_JSON=$(SVC_MINIO="$(floe_service_name minio)" python3 -c "
+    CATALOG_JSON=$(MINIO_SERVICE_NAME="$(floe_service_name minio)" python3 -c "
 import json, os, sys
-MINIO_ENDPOINT = f\"http://{os.environ['SVC_MINIO']}:9000\"
+MINIO_ENDPOINT = f\"http://{os.environ['MINIO_SERVICE_NAME']}:9000\"
 minio_user = os.environ.get('MINIO_USER', '')
 minio_pass = os.environ.get('MINIO_PASS', '')
 manifest_region = os.environ.get('MANIFEST_REGION', 'us-east-1')

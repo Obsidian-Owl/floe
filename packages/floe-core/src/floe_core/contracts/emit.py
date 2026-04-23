@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 from collections.abc import Sequence
 
 from floe_core.contracts.topology import (
@@ -18,9 +19,9 @@ from floe_core.contracts.topology import (
 def render_shell_defaults() -> str:
     """Render shell assignments for contract-owned defaults."""
     lines = [
-        f"FLOE_DEFAULT_RELEASE_NAME={DEFAULT_RELEASE_NAME}",
-        f"FLOE_DEFAULT_NAMESPACE={DEFAULT_NAMESPACE}",
-        "FLOE_DEFAULT_EXECUTION_CONTEXT=host",
+        f"FLOE_DEFAULT_RELEASE_NAME={shlex.quote(DEFAULT_RELEASE_NAME)}",
+        f"FLOE_DEFAULT_NAMESPACE={shlex.quote(DEFAULT_NAMESPACE)}",
+        f"FLOE_DEFAULT_EXECUTION_CONTEXT={shlex.quote('host')}",
     ]
     return "\n".join(lines) + "\n"
 
