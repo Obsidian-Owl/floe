@@ -580,3 +580,47 @@ class TestDbtPipelineResultFixtureSemantics:
             "customer_360_raw:True",
             "customer_360:True",
         ]
+
+    @pytest.mark.requirement("AC-1")
+    def test_runtime_teardown_attempts_both_namespaces_before_raising_reset_error(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Without a prior primary failure, teardown should try both namespaces then raise."""
+        import dbt_utils
+
+        runtime_conftest = _load_runtime_conftest_module()
+        fixture_func = runtime_conftest.dbt_pipeline_result.__wrapped__
+
+        project_root = tmp_path
+        project_dir = project_root / "demo" / "customer-360"
+        project_dir.mkdir(parents=True)
+        request = SimpleNamespace(param="customer-360")
+        purge_calls: list[str] = []
+
+        def _purge(namespace: str, verify_empty: bool = False, retries: int = 3) -> None:
+            del retries
+            purge_calls.append(f"{namespace}:{verify_empty}")
+            if len(purge_calls) == 3:
+                raise dbt_utils.NamespaceResetError(f"teardown failed for {namespace}")
+
+        def _run_dbt(args: list[str], project_dir_arg: Path) -> SimpleNamespace:
+            assert project_dir_arg == project_dir
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(dbt_utils, "_purge_iceberg_namespace", _purge)
+        monkeypatch.setattr(dbt_utils, "run_dbt", _run_dbt)
+
+        generator = fixture_func(request, project_root, {})
+
+        assert next(generator) == ("customer-360", project_dir)
+        with pytest.raises(dbt_utils.NamespaceResetError, match="teardown failed for customer_360_raw"):
+            next(generator)
+
+        assert purge_calls == [
+            "customer_360_raw:True",
+            "customer_360:True",
+            "customer_360_raw:True",
+            "customer_360:True",
+        ], "Teardown must attempt both namespaces before raising the first reset error."

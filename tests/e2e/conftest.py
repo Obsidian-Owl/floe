@@ -1622,15 +1622,20 @@ def dbt_pipeline_result(
         raise
     finally:
         # Clean up Iceberg namespaces to prevent resource leaks
+        teardown_error: NamespaceResetError | None = None
         for namespace in (namespace_raw, namespace_models):
             try:
                 _purge_iceberg_namespace(namespace, verify_empty=True)
             except NamespaceResetError as exc:
                 if primary_error is None:
-                    raise
+                    if teardown_error is None:
+                        teardown_error = exc
+                    continue
                 logger.error(
                     "Suppressed teardown namespace reset failure for %s after primary "
                     "dbt/test failure: %s",
                     namespace,
                     exc,
                 )
+        if primary_error is None and teardown_error is not None:
+            raise teardown_error
