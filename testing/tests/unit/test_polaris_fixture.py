@@ -12,8 +12,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import SecretStr, ValidationError
 
-from testing.fixtures.credentials import get_minio_credentials
-from testing.fixtures.credentials import get_polaris_scope, get_polaris_warehouse
+from testing.fixtures.credentials import (
+    get_minio_credentials,
+    get_polaris_scope,
+    get_polaris_warehouse,
+)
 from testing.fixtures.polaris import (
     PolarisConfig,
     PolarisConnectionError,
