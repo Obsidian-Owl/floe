@@ -32,6 +32,9 @@ make setup-hooks
 make check
 ```
 
+`make setup-hooks` also sets a repo-local `core.hooksPath`, so floe's hooks still
+run even if you use a global hook manager in other repositories.
+
 ### Running Tests
 
 ```bash

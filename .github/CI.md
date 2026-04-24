@@ -55,7 +55,7 @@ flowchart TB
 | Job | Purpose | Speed |
 |-----|---------|-------|
 | **lint-typecheck** | ruff + mypy --strict | ~30s |
-| **security** | bandit + pip-audit | ~30s |
+| **security** | bandit + uv-secure | ~30s |
 | **unit-tests** | pytest across Python versions | ~60s |
 | **contract-tests** | Cross-package schema validation | ~20s |
 | **traceability** | Requirement marker coverage | ~10s |
@@ -136,14 +136,16 @@ make setup-hooks
 ```
 
 > **Note**: This installs hooks for pre-commit code quality checks and Cognee knowledge sync.
+> It also sets a repo-local `core.hooksPath`, so these hooks still run if you use a
+> global hooks manager elsewhere.
 > Run again after `pre-commit install` to restore hooks.
 
 ### What Runs Locally
 
 | Hook | When | Checks |
 |------|------|--------|
-| **Pre-commit** | `git commit` | ruff, formatting, bandit, yaml |
-| **Pre-push** | `git push` | mypy --strict, unit tests |
+| **Pre-commit** | `git commit` | ruff autofix, formatting, secrets, file hygiene, bandit, yaml |
+| **Pre-push** | `git push` | ruff check, `ruff format --check`, mypy, dbt version validation, bandit, uv-secure, unit tests, contract tests, traceability |
 
 ### Reproduce CI Locally
 

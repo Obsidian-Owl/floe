@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from testing.fixtures.credentials import (
+    get_polaris_credentials,
     get_polaris_scope,
     get_polaris_warehouse,
     resolve_manifest_path,
@@ -22,15 +23,16 @@ def _write_manifest(path: Path, content: dict[str, object]) -> Path:
 
 
 def _make_manifest(tmp_path: Path, *, warehouse: str, scope: str | None) -> Path:
+    client_id, client_secret = get_polaris_credentials()
     oauth2: dict[str, str] = {
-        "client_id": "demo-admin",
-        "client_secret": "demo-secret",
+        "client_id": client_id,
+        "client_secret": client_secret,
         "token_url": "http://floe-platform-polaris:8181/api/catalog/v1/oauth/tokens",
     }
     if scope is not None:
         oauth2["scope"] = scope
 
-    manifest = {
+    manifest: dict[str, object] = {
         "plugins": {
             "catalog": {
                 "type": "polaris",

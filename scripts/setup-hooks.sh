@@ -13,12 +13,26 @@
 
 set -euo pipefail
 
-# Get the git hooks directory (works with worktrees)
+# Get the git hooks directory (works with worktrees) and force Git to use it
+# for this repository, even when the developer has a global core.hooksPath.
 GIT_DIR="$(git rev-parse --git-common-dir 2>/dev/null || git rev-parse --git-dir)"
+GIT_DIR="$(cd "$GIT_DIR" && pwd)"
 HOOKS_DIR="$GIT_DIR/hooks"
+GLOBAL_HOOKS_PATH="$(git config --global --get core.hooksPath || true)"
+LOCAL_HOOKS_PATH="$(git config --local --get core.hooksPath || true)"
 
 # Create hooks directory if it doesn't exist
 mkdir -p "$HOOKS_DIR"
+
+if [ -n "$GLOBAL_HOOKS_PATH" ] && [ "$GLOBAL_HOOKS_PATH" != "$HOOKS_DIR" ]; then
+    echo "Overriding global core.hooksPath for this repository:"
+    echo "  global: $GLOBAL_HOOKS_PATH"
+    echo "  local:  $HOOKS_DIR"
+fi
+
+if [ "$LOCAL_HOOKS_PATH" != "$HOOKS_DIR" ]; then
+    git config --local core.hooksPath "$HOOKS_DIR"
+fi
 
 # Backup existing hooks if they exist and weren't created by this script
 BACKUP_DIR="$HOOKS_DIR/backup.$(date +%Y%m%d-%H%M%S)"
@@ -134,12 +148,13 @@ echo ""
 echo "Hooks installed successfully:"
 echo "  - pre-commit:   ruff, bandit, secrets, sleep-detection, etc."
 echo "  - post-commit:  Cognee async sync (non-blocking)"
-echo "  - pre-push:     mypy, import-linter, unit tests, contract tests, traceability"
+echo "  - pre-push:     CI-aligned lint, type, security, test, and traceability checks"
 echo "  - post-merge:   Cognee full rebuild (non-blocking)"
 echo ""
 echo "Quality bar alignment:"
 echo "  - Pre-commit: Fast checks (<5s) matching CI lint stage"
 echo "  - Pre-push:   Thorough checks matching CI test stages"
+echo "  - hooksPath:  repo-local core.hooksPath -> $HOOKS_DIR"
 echo ""
 echo "Note: Run 'make setup-hooks' again after 'pre-commit install'"
 echo "      to restore hooks."

@@ -107,8 +107,7 @@ def test_load_image_scopes_devpod_transport_to_devpod_paths_only() -> None:
         "The explicit DevPod branch must use the shared DevPod transport helper."
     )
     assert "if devpod_context_configured; then" in body, (
-        "The auto branch must gate DevPod fallback on the shared DevPod "
-        "context detection helper."
+        "The auto branch must gate DevPod fallback on the shared DevPod context detection helper."
     )
 
 
@@ -119,7 +118,7 @@ def test_devpod_workspace_defaults_from_kubeconfig_when_env_unset() -> None:
 
     assert 'first_kubeconfig="${KUBECONFIG%%:*}"' in script
     assert 'if [[ "${kubeconfig_name}" =~ ^devpod-(.+)\\.config$ ]]; then' in script
-    assert 'printf \'%s\\n\' "${BASH_REMATCH[1]}"' in script
+    assert "printf '%s\\n' \"${BASH_REMATCH[1]}\"" in script
 
 
 @pytest.mark.requirement("AC-4")

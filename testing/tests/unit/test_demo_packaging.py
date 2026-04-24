@@ -1277,8 +1277,7 @@ class TestMakefileBuildDemoImage:
             "for docker build and kind load."
         )
         assert "resolve-demo-image-ref.py" in content, (
-            "Makefile must derive the demo image tag from testing/ci/"
-            "resolve-demo-image-ref.py."
+            "Makefile must derive the demo image tag from testing/ci/resolve-demo-image-ref.py."
         )
 
 

@@ -40,9 +40,9 @@ def test_e2e_conftest_registers_lane_markers() -> None:
     """The E2E conftest should register the same lane markers at runtime."""
     conftest = (REPO_ROOT / "tests" / "e2e" / "conftest.py").read_text()
 
-    assert 'bootstrap: mark test as bootstrap/admin validation' in conftest
-    assert 'platform_blackbox: mark test as deployed in-cluster product validation' in conftest
-    assert 'developer_workflow: mark test as repo-aware host validation' in conftest
+    assert "bootstrap: mark test as bootstrap/admin validation" in conftest
+    assert "platform_blackbox: mark test as deployed in-cluster product validation" in conftest
+    assert "developer_workflow: mark test as repo-aware host validation" in conftest
 
 
 def test_e2e_conftest_defaults_unclassified_items_to_platform_blackbox() -> None:

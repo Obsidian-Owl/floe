@@ -448,10 +448,13 @@ class TestOAuthScopePreservation:
 
         'PRINCIPAL_ROLE:ALL' is a valid OAuth scope that requests permissions
         for all principal roles. This is different from using 'ALL' as an
-        entity name in a URL path. The scope MUST be preserved.
+        entity name in a URL path. The scope MUST be preserved, either as an
+        inline literal or via the shared manifest-driven helper.
         """
         # Match the scope value in the OAuth token request — may be inline
-        # literal or via a variable that holds "PRINCIPAL_ROLE:ALL".
+        # literal, via a variable that holds "PRINCIPAL_ROLE:ALL", or via the
+        # shared get_polaris_scope() helper that defaults missing values to the
+        # canonical OAuth scope.
         has_scope_literal = bool(
             re.search(r"""["']scope["']\s*:\s*["']PRINCIPAL_ROLE:ALL["']""", conftest_text)
         )
@@ -459,11 +462,16 @@ class TestOAuthScopePreservation:
             re.search(r"""["']PRINCIPAL_ROLE:ALL["']""", conftest_text)
             and re.search(r"""["']scope["']""", conftest_text)
         )
-        assert has_scope_literal or has_scope_variable, (
-            "E2E conftest must include 'scope': 'PRINCIPAL_ROLE:ALL' in the "
-            "OAuth token request data (inline or via variable). This is a valid "
-            "OAuth scope and must not be confused with the entity name 'ALL' "
-            "which is incorrect."
+        has_manifest_scope_helper = (
+            "get_polaris_scope" in conftest_text
+            and "_manifest_scope" in conftest_text
+            and bool(re.search(r"""["']scope["']\s*:\s*_manifest_scope""", conftest_text))
+        )
+        assert has_scope_literal or has_scope_variable or has_manifest_scope_helper, (
+            "E2E conftest must include an OAuth 'scope' field backed by "
+            "'PRINCIPAL_ROLE:ALL', either inline, via variable, or via the "
+            "shared manifest-driven get_polaris_scope() helper. This scope must "
+            "not be confused with the entity name 'ALL', which is incorrect."
         )
 
 

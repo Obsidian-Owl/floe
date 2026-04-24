@@ -142,6 +142,7 @@ def pytest_collection_modifyitems(
         items: List of collected test items.
     """
     import inspect
+
     lane_markers = {
         "bootstrap",
         "platform_blackbox",
@@ -1606,8 +1607,7 @@ def dbt_pipeline_result(
                         teardown_error = exc
                     continue
                 logger.error(
-                    "Suppressed teardown reset failure for %s after primary "
-                    "dbt/test failure: %s",
+                    "Suppressed teardown reset failure for %s after primary dbt/test failure: %s",
                     namespace,
                     exc,
                 )

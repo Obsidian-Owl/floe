@@ -106,16 +106,14 @@ class TestManifestPathSelection:
         pattern = r"FLOE_MANIFEST_PATH=.*\$\{PROJECT_ROOT\}/demo/manifest\.yaml"
         match = _find_line_index(pattern)
         assert match is not None, (
-            "test-e2e.sh must export FLOE_MANIFEST_PATH before extracting "
-            "manifest-derived config."
+            "test-e2e.sh must export FLOE_MANIFEST_PATH before extracting manifest-derived config."
         )
 
     def test_extractor_uses_floe_manifest_path(self) -> None:
         pattern = r'extract-manifest-config\.py"\s+"\$\{FLOE_MANIFEST_PATH\}"'
         match = _find_line_index(pattern)
         assert match is not None, (
-            "test-e2e.sh must pass ${FLOE_MANIFEST_PATH} to "
-            "extract-manifest-config.py."
+            "test-e2e.sh must pass ${FLOE_MANIFEST_PATH} to extract-manifest-config.py."
         )
 
 

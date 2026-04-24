@@ -131,8 +131,7 @@ def _delete_s3_prefix(
         if errors:
             failed_keys = ",".join(str(error.get("Key", "<unknown>")) for error in errors)
             raise RuntimeError(
-                f"S3 delete_objects reported errors under s3://{bucket}/{prefix}: "
-                f"{failed_keys}"
+                f"S3 delete_objects reported errors under s3://{bucket}/{prefix}: {failed_keys}"
             )
         deleted += len(objects)
     return deleted
@@ -233,9 +232,7 @@ def _purge_iceberg_namespace(
                         logger.info("Deleted %d S3 objects under %s", deleted, location)
                     except Exception as exc:
                         if verify_empty and storage_cleanup_failure_reason is None:
-                            storage_cleanup_failure_reason = (
-                                f"S3 cleanup failed for {fqn}: {exc}"
-                            )
+                            storage_cleanup_failure_reason = f"S3 cleanup failed for {fqn}: {exc}"
                         logger.warning(
                             "S3 cleanup failed for table %s: %s",
                             fqn,
@@ -328,9 +325,7 @@ def _purge_iceberg_namespace(
     if verification_succeeded:
         return
 
-    raise NamespaceResetError(
-        f"Namespace reset incomplete for {namespace}: {failure_reason}"
-    )
+    raise NamespaceResetError(f"Namespace reset incomplete for {namespace}: {failure_reason}")
 
 
 def run_dbt(

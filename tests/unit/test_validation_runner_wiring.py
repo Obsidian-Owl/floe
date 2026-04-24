@@ -39,20 +39,20 @@ def test_full_runner_orchestrates_bootstrap_platform_developer_then_destructive(
     """The full runner should execute lanes in the documented order."""
     script = (REPO_ROOT / "testing" / "ci" / "test-e2e-full.sh").read_text()
 
-    assert 'BOOTSTRAP_EXIT=0' in script
-    assert 'PLATFORM_EXIT=0' in script
-    assert 'DEVELOPER_EXIT=0' in script
-    assert 'DESTRUCTIVE_EXIT=0' in script
+    assert "BOOTSTRAP_EXIT=0" in script
+    assert "PLATFORM_EXIT=0" in script
+    assert "DEVELOPER_EXIT=0" in script
+    assert "DESTRUCTIVE_EXIT=0" in script
 
     assert "test-bootstrap-validation.sh" in script
     assert "test-e2e-cluster.sh" in script
     assert "test-developer-workflow.sh" in script
     assert "TEST_SUITE=e2e-destructive" in script
 
-    bootstrap_index = script.index('test-bootstrap-validation.sh')
-    platform_index = script.index('Platform blackbox validation')
-    developer_index = script.index('test-developer-workflow.sh')
-    destructive_index = script.index('=== Phase 4: Destructive E2E Tests ===')
+    bootstrap_index = script.index("test-bootstrap-validation.sh")
+    platform_index = script.index("Platform blackbox validation")
+    developer_index = script.index("test-developer-workflow.sh")
+    destructive_index = script.index("=== Phase 4: Destructive E2E Tests ===")
 
     assert bootstrap_index < platform_index < developer_index < destructive_index
 
@@ -61,10 +61,10 @@ def test_full_runner_only_reuses_platform_image_after_successful_platform_lane()
     """Destructive reuse should only happen after a successful platform lane."""
     script = (REPO_ROOT / "testing" / "ci" / "test-e2e-full.sh").read_text()
 
-    assert 'CAN_REUSE_PLATFORM_IMAGE=false' in script
-    assert 'CAN_REUSE_PLATFORM_IMAGE=true' in script
+    assert "CAN_REUSE_PLATFORM_IMAGE=false" in script
+    assert "CAN_REUSE_PLATFORM_IMAGE=true" in script
     assert 'if [[ "${CAN_REUSE_PLATFORM_IMAGE}" == "true" ]]; then' in script
-    assert 'SKIP_BUILD=true IMAGE_LOAD_METHOD=skip TEST_SUITE=e2e-destructive' in script
+    assert "SKIP_BUILD=true IMAGE_LOAD_METHOD=skip TEST_SUITE=e2e-destructive" in script
     assert 'if TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then' in script
 
 
@@ -72,15 +72,15 @@ def test_full_runner_records_cleanup_failure_without_skipping_summary() -> None:
     """Cleanup failures should still be surfaced in the final summary path."""
     script = (REPO_ROOT / "testing" / "ci" / "test-e2e-full.sh").read_text()
 
-    assert 'CLEANUP_FAILED=false' in script
-    assert 'CLEANUP_FAILED=true' in script
-    assert 'DESTRUCTIVE_EXIT=1' in script
+    assert "CLEANUP_FAILED=false" in script
+    assert "CLEANUP_FAILED=true" in script
+    assert "DESTRUCTIVE_EXIT=1" in script
     assert (
         'if ! pod_count=$(kubectl get pods -l test-type=e2e -n "${TEST_NAMESPACE}" '
         "--no-headers 2>/dev/null | wc -l | tr -d ' '); then"
     ) in script
-    assert 'Skipping destructive tests because platform cleanup failed.' in script
-    assert 'Destructive: SKIPPED (cleanup failed)' in script
+    assert "Skipping destructive tests because platform cleanup failed." in script
+    assert "Destructive: SKIPPED (cleanup failed)" in script
     assert 'if [[ "${CAN_REUSE_PLATFORM_IMAGE}" == "true" ]]; then' in script
 
 

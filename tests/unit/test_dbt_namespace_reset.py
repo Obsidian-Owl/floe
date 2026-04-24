@@ -263,6 +263,7 @@ def test_purge_namespace_raises_when_fresh_catalog_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Verified purges should fail when a fresh catalog cannot be created."""
+
     def _get_catalog(*, fresh: bool = False) -> None:
         return None
 
@@ -295,6 +296,7 @@ def test_purge_namespace_treats_missing_namespace_as_reset_success(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A missing namespace should count as an already-clean reset state."""
+
     class FakeNoSuchNamespaceError(Exception):
         """Test-only stand-in for PyIceberg's missing namespace exception."""
 
@@ -315,6 +317,7 @@ def test_purge_namespace_initial_missing_namespace_returns_without_verification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Initial missing namespaces should short-circuit without extra verification."""
+
     class FakeNoSuchNamespaceError(Exception):
         """Test-only stand-in for PyIceberg's missing namespace exception."""
 

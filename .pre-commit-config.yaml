@@ -6,7 +6,7 @@
 #
 # Quality Bar Alignment:
 # - Pre-commit: Fast checks (<5s) - linting, formatting, secrets, sleep detection
-# - Pre-push: Thorough checks - mypy, tests, traceability (matches CI)
+# - Pre-push: CI-aligned validation - lint, format, type, security, tests, traceability
 
 default_language_version:
   python: python3
@@ -47,34 +47,42 @@ repos:
     hooks:
       # Trailing whitespace
       - id: trailing-whitespace
+        stages: [pre-commit]
 
       # End of file newline
       - id: end-of-file-fixer
+        stages: [pre-commit]
         exclude: \.omc/
 
       # YAML syntax (exclude Helm templates - Go template syntax not parseable)
       - id: check-yaml
+        stages: [pre-commit]
         args: [--unsafe]  # Allow custom tags
         exclude: ^charts/.*templates/
 
       # Large files
       - id: check-added-large-files
+        stages: [pre-commit]
         args: [--maxkb=1000]
 
       # Merge conflict markers
       - id: check-merge-conflict
+        stages: [pre-commit]
 
       # Debug statements
       - id: debug-statements
+        stages: [pre-commit]
 
       # Case conflicts (important for cross-platform)
       - id: check-case-conflict
+        stages: [pre-commit]
 
   # Security scanning
   - repo: https://github.com/PyCQA/bandit
     rev: 1.9.3
     hooks:
       - id: bandit
+        stages: [pre-commit]
         args: [-c, pyproject.toml]
         additional_dependencies: ["bandit[toml]"]
         exclude: ^(tests/|packages/.*/tests/|plugins/.*/tests/|\.claude/|devtools/|testing/)
@@ -153,6 +161,14 @@ repos:
         stages: [pre-push]
         pass_filenames: false
 
+      # Validate dbt dependency/version contracts (matches CI exactly)
+      - id: dbt-version-contracts
+        name: dbt version requirements
+        entry: ./testing/ci/validate-dbt-version-requirements.sh
+        language: script
+        stages: [pre-push]
+        pass_filenames: false
+
       # Security: Bandit static analysis (matches CI)
       - id: bandit-security
         name: bandit (security scan)
@@ -163,55 +179,28 @@ repos:
         pass_filenames: false
 
       # Security: Vulnerability audit (matches CI)
-      # Ignores documented false positives (see pyproject.toml for justification)
-      # GHSA-hm8f-75xx-w2vr: sigstore <4.2.0 - mitigated by network isolation (Epic 8B)
-      # GHSA-2q4j-m29v-hq73: pypdf in devtools/agent-memory - internal tool only
-      # GHSA-wp53-j4wj-2cfg: python-multipart in devtools/agent-memory - internal tool only
-      # GHSA-cfh3-3jmp-rvhc: pillow in devtools/agent-memory - cognee pins <12.0, internal tool
-      # GHSA-w8v5-vhqr-4h9v: diskcache in devtools/agent-memory - no fix available, internal tool
-      # GHSA-vp96-hxj8-p424: pyOpenSSL 25.3.0 - fix in 26.0.0, transitive dep via pyiceberg
-      # GHSA-5pwr-322w-8jr4: pyOpenSSL 25.3.0 - fix in 26.0.0, transitive dep via pyiceberg
       - id: uv-secure
         name: uv-secure (vulnerability audit)
-        entry: bash -c 'IGNORES=$(grep -v "^#" .vuln-ignore 2>/dev/null | grep -v "^$" | paste -sd "," -); uv run --no-sync uv-secure --no-check-uv-tool ${IGNORES:+--ignore-vulns "$IGNORES"} .'
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-
-      # Security: pip-audit (matches CI - catches CVEs from PyPI advisory DB)
-      - id: pip-audit
-        name: pip-audit (CVE check)
-        entry: bash -c 'uv run --no-sync pip-audit --strict 2>/dev/null || echo "pip-audit not installed, skipping" >&2'
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-
-      # Architecture boundary enforcement
-      - id: import-linter
-        name: import-linter (architecture)
-        entry: uv run --no-sync lint-imports
-        language: system
+        entry: ./testing/ci/uv-security-audit.sh
+        language: script
         types: [python]
         stages: [pre-push]
         pass_filenames: false
 
       # Unit tests (all packages - matches CI)
-      # Uses --ignore-glob to handle missing directories gracefully
-      # Must match CI's test-unit.sh behavior: only tests/unit/ directories
       - id: pytest-unit
         name: pytest (unit tests + coverage)
-        entry: bash -c 'uv run --no-sync pytest packages/ plugins/ --ignore-glob="**/integration/**" --ignore-glob="**/e2e/**" --ignore-glob="**/tests/contract/**" -v --tb=short -x --cov=packages --cov=plugins --cov-fail-under=80'
-        language: system
+        entry: ./testing/ci/test-unit.sh
+        language: script
         types: [python]
         stages: [pre-push]
         pass_filenames: false
 
       # Contract tests (cross-package validation - matches CI)
-      # Includes both root-level and package-level contract tests
       - id: pytest-contract
         name: pytest (contract tests)
-        entry: bash -c 'uv run --no-sync pytest tests/contract/ packages/*/tests/contract/ --ignore-glob="**/tests/contract/__pycache__/**" -v --tb=short -x 2>/dev/null || uv run --no-sync pytest tests/contract/ -v --tb=short -x'
-        language: system
+        entry: ./testing/ci/test-contract.sh
+        language: script
         types: [python]
         stages: [pre-push]
         pass_filenames: false

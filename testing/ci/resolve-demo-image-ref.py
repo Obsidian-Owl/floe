@@ -29,25 +29,35 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _git_output(repo_root: Path, *args: str, text: bool = True) -> str | bytes:
+def _git_text_output(repo_root: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", *args],
         cwd=repo_root,
         check=True,
         capture_output=True,
-        text=text,
+        text=True,
+    )
+    return result.stdout
+
+
+def _git_binary_output(repo_root: Path, *args: str) -> bytes:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=False,
     )
     return result.stdout
 
 
 def _iter_untracked_files(repo_root: Path) -> list[Path]:
-    output = _git_output(
+    output = _git_binary_output(
         repo_root,
         "ls-files",
         "--others",
         "--exclude-standard",
         "-z",
-        text=False,
     )
     files: list[Path] = []
     for raw_path in output.split(b"\0"):
@@ -63,13 +73,13 @@ def _iter_untracked_files(repo_root: Path) -> list[Path]:
 
 
 def _compute_default_tag(repo_root: Path) -> str:
-    head = str(_git_output(repo_root, "rev-parse", "--short=12", "HEAD")).strip()
-    status = str(_git_output(repo_root, "status", "--porcelain=v1", "--untracked-files=all"))
+    head = _git_text_output(repo_root, "rev-parse", "--short=12", "HEAD").strip()
+    status = _git_text_output(repo_root, "status", "--porcelain=v1", "--untracked-files=all")
     if not status.strip():
         return head
 
     hasher = hashlib.sha256()
-    tracked_diff = _git_output(repo_root, "diff", "--no-ext-diff", "--binary", "HEAD", text=False)
+    tracked_diff = _git_binary_output(repo_root, "diff", "--no-ext-diff", "--binary", "HEAD")
     hasher.update(tracked_diff)
 
     for path in _iter_untracked_files(repo_root):

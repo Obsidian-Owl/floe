@@ -488,9 +488,9 @@ class TestDbtPipelineResultFixtureSemantics:
             "dbt_pipeline_result teardown must call _purge_iceberg_namespace in finally "
             "for raw and model namespace cleanup."
         )
-        assert all(
-            _call_has_keyword_bool(call, "verify_empty", True) for call in teardown_calls
-        ), "All teardown _purge_iceberg_namespace calls must pass verify_empty=True."
+        assert all(_call_has_keyword_bool(call, "verify_empty", True) for call in teardown_calls), (
+            "All teardown _purge_iceberg_namespace calls must pass verify_empty=True."
+        )
 
     @pytest.mark.requirement("AC-1")
     def test_yield_inside_try_block(self) -> None:
@@ -571,9 +571,9 @@ class TestDbtPipelineResultFixtureSemantics:
             "Teardown NamespaceResetError should be logged for both namespaces "
             "when a primary failure already exists."
         )
-        assert all(
-            "Suppressed teardown reset failure" in message for message in log_messages
-        ), "Suppressed teardown reset failures must be surfaced in logs."
+        assert all("Suppressed teardown reset failure" in message for message in log_messages), (
+            "Suppressed teardown reset failures must be surfaced in logs."
+        )
         assert purge_calls == [
             "customer_360_raw:True",
             "customer_360:True",
@@ -682,9 +682,9 @@ class TestDbtPipelineResultFixtureSemantics:
             "Raw teardown exceptions should be logged for both namespaces when "
             "a primary failure already exists."
         )
-        assert all(
-            "Suppressed teardown reset failure" in message for message in log_messages
-        ), "Suppressed raw teardown failures must be surfaced in logs."
+        assert all("Suppressed teardown reset failure" in message for message in log_messages), (
+            "Suppressed raw teardown failures must be surfaced in logs."
+        )
         assert purge_calls == [
             "customer_360_raw:True",
             "customer_360:True",
