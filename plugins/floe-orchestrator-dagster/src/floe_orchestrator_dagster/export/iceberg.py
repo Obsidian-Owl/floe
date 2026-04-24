@@ -61,7 +61,6 @@ def export_dbt_to_iceberg(
 
     registry = _plugin_registry_module.get_registry()
     catalog_type = artifacts.plugins.catalog.type
-    catalog_plugin = registry.get(PluginType.CATALOG, catalog_type)
     validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config)
     if validated_config is None:
         context.log.warning(
@@ -69,7 +68,7 @@ def export_dbt_to_iceberg(
             catalog_type,
         )
         return
-    catalog_plugin = catalog_plugin(config=validated_config)
+    catalog_plugin = registry.get(PluginType.CATALOG, catalog_type)
     s3_config = {f"s3.{k}": v for k, v in storage_config.items()}
     catalog = catalog_plugin.connect(config=s3_config)
 

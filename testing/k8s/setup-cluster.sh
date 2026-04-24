@@ -64,6 +64,41 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
+inject_demo_image_values() {
+    local manifest_path="$1"
+    python3 - "${manifest_path}" "${FLOE_DEMO_IMAGE_REPOSITORY}" "${FLOE_DEMO_IMAGE_TAG}" <<'PY'
+from pathlib import Path
+import sys
+
+import yaml
+
+manifest_path = Path(sys.argv[1])
+repository = sys.argv[2]
+tag = sys.argv[3]
+
+raw = yaml.safe_load(manifest_path.read_text()) or {}
+spec = raw.setdefault("spec", {})
+values = spec.setdefault("values", {})
+dagster = values.setdefault("dagster", {})
+
+for component in ("dagsterWebserver", "dagsterDaemon"):
+    image = dagster.setdefault(component, {}).setdefault("image", {})
+    image["repository"] = repository
+    image["tag"] = tag
+
+run_image = (
+    dagster.setdefault("runLauncher", {})
+    .setdefault("config", {})
+    .setdefault("k8sRunLauncher", {})
+    .setdefault("image", {})
+)
+run_image["repository"] = repository
+run_image["tag"] = tag
+
+manifest_path.write_text(yaml.safe_dump(raw, sort_keys=False))
+PY
+}
+
 # Check prerequisites
 check_prerequisites() {
     log_info "Checking prerequisites..."
@@ -271,7 +306,7 @@ deploy_monitoring_stack() {
 # Both Helm and Flux paths need this — Dagster pods use pullPolicy: Never.
 build_demo_image() {
     if [[ -f "${PROJECT_ROOT}/docker/dagster-demo/Dockerfile" ]]; then
-        log_info "Building Dagster demo image..."
+        log_info "Building Dagster demo image (${FLOE_DEMO_IMAGE})..."
         KIND_CLUSTER_NAME="${CLUSTER_NAME}" make -C "${PROJECT_ROOT}" build-demo-image 2>&1 || {
             log_warn "Dagster demo image build failed — Dagster pods will be in ErrImageNeverPull"
         }
@@ -302,6 +337,12 @@ deploy_services_helm() {
     helm upgrade --install floe-platform "${PROJECT_ROOT}/charts/floe-platform" \
         --namespace "${NAMESPACE}" --create-namespace \
         --values "${PROJECT_ROOT}/charts/floe-platform/values-test.yaml" \
+        --set "dagster.dagsterWebserver.image.repository=${FLOE_DEMO_IMAGE_REPOSITORY}" \
+        --set "dagster.dagsterWebserver.image.tag=${FLOE_DEMO_IMAGE_TAG}" \
+        --set "dagster.dagsterDaemon.image.repository=${FLOE_DEMO_IMAGE_REPOSITORY}" \
+        --set "dagster.dagsterDaemon.image.tag=${FLOE_DEMO_IMAGE_TAG}" \
+        --set "dagster.runLauncher.config.k8sRunLauncher.image.repository=${FLOE_DEMO_IMAGE_REPOSITORY}" \
+        --set "dagster.runLauncher.config.k8sRunLauncher.image.tag=${FLOE_DEMO_IMAGE_TAG}" \
         --wait \
         --timeout 10m
 
@@ -497,6 +538,8 @@ render_flux_manifests() {
         -e "s|branch: main|branch: ${flux_git_branch}|" \
         "${rendered_dir}/gitrepository.yaml"
     rm -f "${rendered_dir}/gitrepository.yaml.bak"
+
+    inject_demo_image_values "${rendered_dir}/helmrelease-platform.yaml"
 
     printf '%s\n' "${rendered_dir}"
 }

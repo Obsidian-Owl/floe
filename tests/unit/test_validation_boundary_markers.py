@@ -153,14 +153,18 @@ def test_selected_items_skip_smoke_check_for_bootstrap_and_developer_workflow_on
 
 def test_bootstrap_modules_are_explicitly_marked() -> None:
     helm_workflow = (REPO_ROOT / "tests" / "e2e" / "test_helm_workflow.py").read_text()
+
+    assert "pytest.mark.bootstrap" in helm_workflow
+
+
+def test_platform_runtime_modules_are_explicitly_marked_platform_blackbox() -> None:
     platform_bootstrap = (REPO_ROOT / "tests" / "e2e" / "test_platform_bootstrap.py").read_text()
     platform_deployment = (
         REPO_ROOT / "tests" / "e2e" / "test_platform_deployment_e2e.py"
     ).read_text()
 
-    assert "pytest.mark.bootstrap" in helm_workflow
-    assert "pytest.mark.bootstrap" in platform_bootstrap
-    assert "pytest.mark.bootstrap" in platform_deployment
+    assert "pytest.mark.platform_blackbox" in platform_bootstrap
+    assert "pytest.mark.platform_blackbox" in platform_deployment
 
 
 def test_developer_workflow_outliers_are_explicitly_marked() -> None:
@@ -169,7 +173,7 @@ def test_developer_workflow_outliers_are_explicitly_marked() -> None:
     runtime_loader = (REPO_ROOT / "tests" / "e2e" / "test_runtime_loader_e2e.py").read_text()
 
     assert "pytest.mark.developer_workflow" in profile_isolation
-    assert "def test_pip_audit_clean" in governance
+    assert "class TestDependencyGovernance" in governance
     assert "@pytest.mark.developer_workflow" in governance
     assert "pytest.mark.developer_workflow" in runtime_loader
 

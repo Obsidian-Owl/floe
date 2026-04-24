@@ -106,9 +106,20 @@ def test_load_image_scopes_devpod_transport_to_devpod_paths_only() -> None:
     assert "devpod_remote_command" in devpod_branch.group(1), (
         "The explicit DevPod branch must use the shared DevPod transport helper."
     )
-    assert 'if [[ -n "${DEVPOD_WORKSPACE:-}" ]]; then' in body, (
-        "The auto branch must gate DevPod fallback on DEVPOD_WORKSPACE."
+    assert "if devpod_context_configured; then" in body, (
+        "The auto branch must gate DevPod fallback on the shared DevPod "
+        "context detection helper."
     )
+
+
+@pytest.mark.requirement("AC-3")
+def test_devpod_workspace_defaults_from_kubeconfig_when_env_unset() -> None:
+    """The runner must infer the workspace name from a synced DevPod kubeconfig."""
+    script = _read_script()
+
+    assert 'first_kubeconfig="${KUBECONFIG%%:*}"' in script
+    assert 'if [[ "${kubeconfig_name}" =~ ^devpod-(.+)\\.config$ ]]; then' in script
+    assert 'printf \'%s\\n\' "${BASH_REMATCH[1]}"' in script
 
 
 @pytest.mark.requirement("AC-4")

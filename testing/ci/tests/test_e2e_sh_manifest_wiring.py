@@ -98,6 +98,27 @@ class TestEvalManifestExtractorPresent:
         )
 
 
+@pytest.mark.requirement("ARC-002")
+class TestManifestPathSelection:
+    """Verify test-e2e.sh uses the shared manifest path contract."""
+
+    def test_sets_floe_manifest_path_before_extraction(self) -> None:
+        pattern = r"FLOE_MANIFEST_PATH=.*\$\{PROJECT_ROOT\}/demo/manifest\.yaml"
+        match = _find_line_index(pattern)
+        assert match is not None, (
+            "test-e2e.sh must export FLOE_MANIFEST_PATH before extracting "
+            "manifest-derived config."
+        )
+
+    def test_extractor_uses_floe_manifest_path(self) -> None:
+        pattern = r'extract-manifest-config\.py"\s+"\$\{FLOE_MANIFEST_PATH\}"'
+        match = _find_line_index(pattern)
+        assert match is not None, (
+            "test-e2e.sh must pass ${FLOE_MANIFEST_PATH} to "
+            "extract-manifest-config.py."
+        )
+
+
 # ---------------------------------------------------------------------------
 # AC-2.2: MINIO_BUCKET defaults to ${MANIFEST_BUCKET}
 # ---------------------------------------------------------------------------
@@ -145,10 +166,13 @@ class TestPolarisCatalogDefault:
 
     def test_polaris_catalog_uses_manifest_warehouse(self) -> None:
         """POLARIS_CATALOG default must reference MANIFEST_WAREHOUSE variable."""
-        pattern = r"POLARIS_CATALOG=.*\$\{POLARIS_CATALOG:-\$\{?MANIFEST_WAREHOUSE\}?"
-        match = _find_line_index(pattern)
-        assert match is not None, (
-            "POLARIS_CATALOG must default to ${MANIFEST_WAREHOUSE}, not a hardcoded value"
+        direct_pattern = r"POLARIS_CATALOG=.*\$\{POLARIS_CATALOG:-\$\{?MANIFEST_WAREHOUSE\}?"
+        helper_pattern = r"POLARIS_CATALOG=.*\$\{POLARIS_CATALOG:-\$\(get_polaris_catalog_name\)\}"
+        direct_match = _find_line_index(direct_pattern)
+        helper_match = _find_line_index(helper_pattern)
+        assert direct_match is not None or helper_match is not None, (
+            "POLARIS_CATALOG must default via manifest-derived wiring "
+            "(${MANIFEST_WAREHOUSE} or get_polaris_catalog_name()), not a hardcoded value"
         )
 
     def test_polaris_catalog_not_hardcoded_floe_e2e(self) -> None:
@@ -187,6 +211,32 @@ class TestPolarisClientIdDefault:
             f"POLARIS_CLIENT_ID still uses hardcoded 'demo-admin' as default "
             f"(line {match + 1 if match is not None else '?'}). "
             "Must use ${MANIFEST_OAUTH_CLIENT_ID} instead."
+        )
+
+
+# ---------------------------------------------------------------------------
+# AC-2.4b: Polaris auth wiring must come from manifest-derived helper path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.requirement("ARC-002")
+class TestPolarisAuthHelperWiring:
+    """Verify test-e2e.sh reuses the Polaris helper instead of hardcoding scope."""
+
+    def test_sources_polaris_auth_helper(self) -> None:
+        pattern = r"source\s+\"\$\{SCRIPT_DIR\}/polaris-auth\.sh\""
+        match = _find_line_index(pattern)
+        assert match is not None, "test-e2e.sh must source testing/ci/polaris-auth.sh"
+
+    def test_uses_get_polaris_token_helper(self) -> None:
+        pattern = r"POLARIS_TOKEN=.*get_polaris_token"
+        match = _find_line_index(pattern)
+        assert match is not None, "test-e2e.sh must acquire OAuth tokens via get_polaris_token()"
+
+    def test_no_inline_hardcoded_scope_in_token_request(self) -> None:
+        assert "scope=PRINCIPAL_ROLE:ALL" not in _script_content, (
+            "test-e2e.sh must not hardcode the Polaris OAuth scope; "
+            "it should flow from manifest-derived configuration."
         )
 
 

@@ -13,6 +13,11 @@
 global:
   environment: demo
 
+dagsterDemoImage: &dagsterDemoImage
+  repository: floe-dagster-demo
+  tag: latest
+  pullPolicy: Never
+
 # Override fullname to decouple service names from Helm release name
 fullnameOverride: floe-platform
 
@@ -45,9 +50,7 @@ dagster:
   dagsterWebserver:
     replicaCount: 1
     image:
-      repository: floe-dagster-demo
-      tag: latest
-      pullPolicy: Never
+      <<: *dagsterDemoImage
     resources:
       requests:
         cpu: 100m
@@ -60,9 +63,7 @@ dagster:
   dagsterDaemon:
     enabled: true
     image:
-      repository: floe-dagster-demo
-      tag: latest
-      pullPolicy: Never
+      <<: *dagsterDemoImage
     resources:
       requests:
         cpu: 100m
@@ -80,9 +81,7 @@ dagster:
     config:
       k8sRunLauncher:
         image:
-          repository: floe-dagster-demo
-          tag: latest
-          pullPolicy: Never
+          <<: *dagsterDemoImage
         imagePullPolicy: Never
         # Resources for run pods (light for demo)
         resources:

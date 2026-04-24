@@ -28,7 +28,11 @@ import pyarrow as pa
 import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
-from testing.fixtures.credentials import get_minio_credentials
+from testing.fixtures.credentials import (
+    get_minio_credentials,
+    get_polaris_scope,
+    get_polaris_warehouse,
+)
 from testing.fixtures.polaris import (
     PolarisConfig,
     create_polaris_catalog,
@@ -43,7 +47,10 @@ def _minio_base_url() -> str:
 
 
 def _durability_polaris_config() -> PolarisConfig:
-    return PolarisConfig(warehouse=os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"))
+    return PolarisConfig(
+        warehouse=os.environ.get("POLARIS_WAREHOUSE", get_polaris_warehouse()),
+        scope=os.environ.get("POLARIS_SCOPE", get_polaris_scope()),
+    )
 
 
 def _validated_identifier(value: str, label: str) -> str:

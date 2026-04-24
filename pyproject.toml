@@ -9,7 +9,7 @@ requires-python = ">=3.10"
 
 # Development dependencies for the entire workspace
 dependencies = [
-    "pytest>=8.0",
+    "pytest>=9.0.3",
     "pytest-cov>=4.0",
     "pytest-timeout>=2.0",  # Test timeout enforcement for E2E tests
     "pytest-asyncio>=0.23",  # Async test support for alert channel plugins
@@ -94,9 +94,13 @@ prerelease = "allow"
 # constraint-dependencies sets floors without forcing resolution — if a package
 # appears in the tree, it must be at least this version.
 constraint-dependencies = [
+    "cryptography>=46.0.7",
     "diskcache>=5.6.4",
     "pillow>=12.1.1",
     "protobuf>=6.33.5",
+    "python-dotenv>=1.2.2",
+    "python-multipart>=0.0.26",
+    "rfc3161-client>=1.0.6",
 ]
 
 [tool.uv.sources]

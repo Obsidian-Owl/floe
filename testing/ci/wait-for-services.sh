@@ -9,11 +9,11 @@
 #   POD_TIMEOUT           Pod readiness timeout in seconds (default: 300)
 #   JOB_TIMEOUT           Job completion timeout in seconds (default: 180)
 #   POLARIS_URL           Polaris API URL (default: http://localhost:8181)
-#   POLARIS_CATALOG_NAME  Catalog name to verify (default: floe-e2e)
+#   POLARIS_CATALOG_NAME  Catalog name to verify (default: from FLOE_MANIFEST_PATH)
 #   MINIO_URL             MinIO API URL (default: http://localhost:9000)
-#   MINIO_BUCKET          Expected bucket name (default: floe-iceberg)
+#   MINIO_BUCKET          Expected bucket name (default: from FLOE_MANIFEST_PATH)
 #   POLARIS_CLIENT_ID     OAuth client ID (default: from MANIFEST_OAUTH_CLIENT_ID)
-#   POLARIS_CLIENT_SECRET OAuth client secret (required — no hardcoded default)
+#   POLARIS_CLIENT_SECRET OAuth client secret (default: from FLOE_MANIFEST_PATH)
 #   MINIO_USER            MinIO admin username (from env or AWS_ACCESS_KEY_ID)
 #   MINIO_PASS            MinIO admin password (from env or AWS_SECRET_ACCESS_KEY)
 
@@ -21,14 +21,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NAMESPACE="${1:-${TEST_NAMESPACE:-floe-test}}"
+export FLOE_NAMESPACE="${NAMESPACE}"
+# shellcheck source=./common.sh
+source "${SCRIPT_DIR}/common.sh"
 POD_TIMEOUT="${POD_TIMEOUT:-300}"
 JOB_TIMEOUT="${JOB_TIMEOUT:-180}"
 POLARIS_URL="${POLARIS_URL:-http://localhost:8181}"
-POLARIS_CATALOG_NAME="${POLARIS_CATALOG_NAME:-floe-e2e}"
 # Export credentials as env vars so child processes (ensure-bucket.py)
 # can read them without exposing via process arguments.
 export MINIO_USER="${MINIO_USER:-${AWS_ACCESS_KEY_ID:-}}"
 export MINIO_PASS="${MINIO_PASS:-${AWS_SECRET_ACCESS_KEY:-}}"
+floe_export_minio_credentials_from_cluster "${NAMESPACE}" || true
 
 # Validate MinIO credentials are available
 if [[ -z "${MINIO_USER}" ]]; then
@@ -45,6 +48,9 @@ fi
 # Source Polaris auth helper
 # shellcheck source=testing/ci/polaris-auth.sh
 source "$SCRIPT_DIR/polaris-auth.sh"
+eval "$(python3 "${SCRIPT_DIR}/extract-manifest-config.py" "${FLOE_MANIFEST_PATH}")"
+POLARIS_MANIFEST_PATH="${POLARIS_MANIFEST_PATH:-${FLOE_MANIFEST_PATH}}"
+POLARIS_CATALOG_NAME="${POLARIS_CATALOG_NAME:-$(get_polaris_catalog_name)}"
 
 echo "Waiting for services in namespace: ${NAMESPACE}"
 
@@ -88,7 +94,7 @@ done
 # Uses boto3 HeadBucket with credentials — anonymous curl returns 403 for both
 # existing and non-existing buckets, making it useless for detection.
 MINIO_URL="${MINIO_URL:-http://localhost:9000}"
-MINIO_BUCKET="${MINIO_BUCKET:-floe-iceberg}"
+MINIO_BUCKET="${MINIO_BUCKET:-${MANIFEST_BUCKET}}"
 echo "Verifying MinIO bucket '${MINIO_BUCKET}' exists..."
 MINIO_ATTEMPT=0
 # 30 attempts (vs 10 in test-e2e.sh): this script runs at cluster startup

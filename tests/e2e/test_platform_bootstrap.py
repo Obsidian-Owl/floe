@@ -1,4 +1,4 @@
-"""E2E tests for floe-platform Helm chart bootstrap validation.
+"""E2E tests for deployed floe-platform runtime validation.
 
 This module validates the complete platform deployment via Helm,
 ensuring all services are properly deployed, configured, and accessible.
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
 pytestmark = [
     pytest.mark.e2e,
-    pytest.mark.bootstrap,
+    pytest.mark.platform_blackbox,
 ]
 
 
@@ -71,7 +71,7 @@ def _run_kubectl(
 @pytest.mark.requirement("FR-007")
 @pytest.mark.requirement("FR-049")
 class TestPlatformBootstrap(IntegrationTestBase):
-    """E2E tests for floe-platform Helm chart bootstrap validation.
+    """E2E tests for deployed floe-platform runtime validation.
 
     Validates the complete platform deployment lifecycle:
     1. Deploy floe-platform Helm chart

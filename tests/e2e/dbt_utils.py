@@ -17,7 +17,12 @@ from urllib.parse import urlparse
 
 import boto3
 
-from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
+from testing.fixtures.credentials import (
+    get_minio_credentials,
+    get_polaris_credentials,
+    get_polaris_scope,
+    get_polaris_warehouse,
+)
 from testing.fixtures.services import ServiceEndpoint
 
 try:
@@ -75,8 +80,8 @@ def _get_polaris_catalog(*, fresh: bool = False) -> Any:
                 "type": "rest",
                 "uri": polaris_url,
                 "credential": os.environ.get("POLARIS_CREDENTIAL", default_cred),
-                "scope": "PRINCIPAL_ROLE:ALL",
-                "warehouse": os.environ.get("POLARIS_WAREHOUSE", "floe-e2e"),
+                "scope": os.environ.get("POLARIS_SCOPE", get_polaris_scope()),
+                "warehouse": os.environ.get("POLARIS_WAREHOUSE", get_polaris_warehouse()),
                 "s3.endpoint": minio_endpoint,
                 "s3.access-key-id": os.environ.get(  # pragma: allowlist secret
                     "AWS_ACCESS_KEY_ID", _minio_access

@@ -11,6 +11,7 @@ from unittest.mock import Mock
 import pytest
 
 import dbt_utils
+from testing.fixtures.credentials import get_polaris_scope, get_polaris_warehouse
 
 
 def test_clear_catalog_cache_drops_cached_catalog() -> None:
@@ -54,8 +55,8 @@ def test_get_polaris_catalog_uses_env_endpoints_without_eager_service_resolution
             "type": "rest",
             "uri": "http://example.test/api/catalog",
             "credential": "id:secret",
-            "scope": "PRINCIPAL_ROLE:ALL",
-            "warehouse": "floe-e2e",
+            "scope": get_polaris_scope(),
+            "warehouse": get_polaris_warehouse(),
             "s3.endpoint": "http://minio.test:9000",
             "s3.access-key-id": "access",
             "s3.secret-access-key": "secret",

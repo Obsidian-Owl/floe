@@ -33,8 +33,10 @@ def test_boundary_wrapper_restores_demo_image_before_waiting_for_flux() -> None:
     script = _BOUNDARY_SCRIPT.read_text()
     assert "ensure_remote_demo_image_loaded()" in script
     assert "sync_devpod_checkout" in script
-    assert "floe-dagster-demo:latest" in script
-    assert "\"KIND_CLUSTER_NAME='${FLOE_KIND_CLUSTER}' make build-demo-image\"" in script
+    assert 'local demo_image="${FLOE_DEMO_IMAGE}"' in script
+    assert "FLOE_DEMO_IMAGE_REPOSITORY='${FLOE_DEMO_IMAGE_REPOSITORY}'" in script
+    assert "FLOE_DEMO_IMAGE_TAG='${FLOE_DEMO_IMAGE_TAG}'" in script
+    assert "KIND_CLUSTER_NAME='${FLOE_KIND_CLUSTER}' make build-demo-image" in script
     assert "\"kind load docker-image '${demo_image}' --name '${FLOE_KIND_CLUSTER}'\"" in script
 
 

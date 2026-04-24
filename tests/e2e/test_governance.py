@@ -62,6 +62,16 @@ KNOWN_NON_SECRET_ENV_VARS: frozenset[str] = frozenset(
 """Env vars excluded from secret-in-template scanning (false positives)."""
 
 
+def _find_repo_root() -> Path:
+    """Find repository root by looking for pyproject.toml."""
+    current = Path(__file__).parent
+    while current != current.parent:
+        if (current / "pyproject.toml").exists():
+            return current
+        current = current.parent
+    pytest.fail("Could not find repository root (no pyproject.toml)")
+
+
 class TestGovernance(IntegrationTestBase):
     """E2E tests for platform governance and security controls.
 
@@ -448,79 +458,6 @@ class TestGovernance(IntegrationTestBase):
         except FileNotFoundError:
             pytest.fail("bandit not found. Install with: uv pip install bandit[toml]")
 
-    @pytest.mark.developer_workflow
-    @pytest.mark.e2e
-    @pytest.mark.requirement("FR-064")
-    def test_pip_audit_clean(self) -> None:
-        """Test that pip-audit finds no critical/high vulnerabilities.
-
-        Runs pip-audit (via uv-secure) on dependencies and verifies
-        no critical or high severity vulnerabilities exist.
-
-        Strategy:
-        1. Run uv-secure vulnerability scan
-        2. Parse output for CRITICAL/HIGH vulnerabilities
-        3. Fail if vulnerabilities found (excluding documented exceptions)
-        """
-        repo_root = self._find_repo_root()
-
-        # Run uv-secure with same ignore list as CI.
-        # See .pre-commit-config.yaml for justification of ignored vulns.
-        # Scan only platform lock files — devtools/ has its own dependency
-        # lifecycle and is excluded from platform security governance.
-        lock_files = [
-            str(p)
-            for p in repo_root.rglob("uv.lock")
-            if "devtools" not in str(p) and ".venv" not in str(p)
-        ]
-        if not lock_files:
-            pytest.fail(
-                "No platform uv.lock files found — security scan requires at least one "
-                "lock file in packages/ or plugins/ (devtools/ is intentionally excluded)."
-            )
-        # Load shared ignore list — single source of truth with .pre-commit-config.yaml
-        vuln_ignore_path = repo_root / ".vuln-ignore"
-        if not vuln_ignore_path.exists():
-            pytest.fail(
-                ".vuln-ignore not found at repo root — shared vulnerability ignore "
-                "list is required for E2E security governance tests."
-            )
-        ignore_ids_list = [
-            line.strip()
-            for line in vuln_ignore_path.read_text().splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        ]
-
-        cmd = [
-            "uv",
-            "run",
-            "uv-secure",
-            "--no-check-uv-tool",
-        ]
-        if ignore_ids_list:
-            cmd += ["--ignore-vulns", ",".join(ignore_ids_list)]
-        cmd += lock_files
-
-        try:
-            result = subprocess.run(
-                cmd,
-                shell=False,
-                check=False,
-                capture_output=True,
-                text=True,
-                cwd=repo_root,
-            )
-
-            # uv-secure exits with non-zero if vulnerabilities found
-            if result.returncode != 0:
-                pytest.fail(
-                    f"Vulnerability scan failed with vulnerabilities:\n"
-                    f"{result.stdout}\n{result.stderr}"
-                )
-
-        except FileNotFoundError:
-            pytest.fail("uv-secure not found. Install with: uv pip install uv-secure")
-
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-065")
     def test_secretstr_usage(self) -> None:
@@ -840,12 +777,7 @@ class TestGovernance(IntegrationTestBase):
 
     def _find_repo_root(self) -> Path:
         """Find repository root by looking for pyproject.toml."""
-        current = Path(__file__).parent
-        while current != current.parent:
-            if (current / "pyproject.toml").exists():
-                return current
-            current = current.parent
-        pytest.fail("Could not find repository root (no pyproject.toml)")
+        return _find_repo_root()
 
     def _find_chart_root(self) -> Path:
         """Find charts directory root."""
@@ -913,3 +845,79 @@ class TestGovernance(IntegrationTestBase):
         import os
 
         return os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
+
+
+class TestDependencyGovernance:
+    """Repo-aware governance checks that do not require live platform services."""
+
+    @pytest.mark.developer_workflow
+    @pytest.mark.e2e
+    @pytest.mark.requirement("FR-064")
+    def test_pip_audit_clean(self) -> None:
+        """Test that pip-audit finds no critical/high vulnerabilities.
+
+        Runs pip-audit (via uv-secure) on dependencies and verifies
+        no critical or high severity vulnerabilities exist.
+
+        Strategy:
+        1. Run uv-secure vulnerability scan
+        2. Parse output for CRITICAL/HIGH vulnerabilities
+        3. Fail if vulnerabilities found (excluding documented exceptions)
+        """
+        repo_root = _find_repo_root()
+
+        # Run uv-secure with same ignore list as CI.
+        # See .pre-commit-config.yaml for justification of ignored vulns.
+        # Scan only platform lock files — devtools/ has its own dependency
+        # lifecycle and is excluded from platform security governance.
+        lock_files = [
+            str(p)
+            for p in repo_root.rglob("uv.lock")
+            if "devtools" not in str(p) and ".venv" not in str(p)
+        ]
+        if not lock_files:
+            pytest.fail(
+                "No platform uv.lock files found — security scan requires at least one "
+                "lock file in packages/ or plugins/ (devtools/ is intentionally excluded)."
+            )
+
+        vuln_ignore_path = repo_root / ".vuln-ignore"
+        if not vuln_ignore_path.exists():
+            pytest.fail(
+                ".vuln-ignore not found at repo root — shared vulnerability ignore "
+                "list is required for E2E security governance tests."
+            )
+        ignore_ids_list = [
+            line.strip()
+            for line in vuln_ignore_path.read_text().splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+        cmd = [
+            "uv",
+            "run",
+            "uv-secure",
+            "--no-check-uv-tool",
+        ]
+        if ignore_ids_list:
+            cmd += ["--ignore-vulns", ",".join(ignore_ids_list)]
+        cmd += lock_files
+
+        try:
+            result = subprocess.run(
+                cmd,
+                shell=False,
+                check=False,
+                capture_output=True,
+                text=True,
+                cwd=repo_root,
+            )
+
+            if result.returncode != 0:
+                pytest.fail(
+                    f"Vulnerability scan failed with vulnerabilities:\n"
+                    f"{result.stdout}\n{result.stderr}"
+                )
+
+        except FileNotFoundError:
+            pytest.fail("uv-secure not found. Install with: uv pip install uv-secure")

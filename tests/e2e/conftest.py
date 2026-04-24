@@ -25,7 +25,13 @@ import pytest
 import yaml
 
 # Re-exported for backwards compatibility — other E2E files import from here.
-from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
+from testing.fixtures.credentials import (
+    get_minio_credentials,
+    get_polaris_credentials,
+    get_polaris_scope,
+    get_polaris_warehouse,
+    resolve_manifest_path,
+)
 from testing.fixtures.kubernetes import run_helm as run_helm
 from testing.fixtures.kubernetes import run_kubectl as run_kubectl
 from testing.fixtures.polling import wait_for_condition
@@ -35,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 def _read_manifest_config(manifest_path: Path | None = None) -> dict[str, str]:
-    """Read Polaris config from the demo manifest.yaml.
+    """Read Polaris config from the selected manifest path.
 
     Extracts ``plugins.catalog.config`` fields so that test fixtures do not
     carry hardcoded defaults that diverge from the canonical platform config.
@@ -44,25 +50,23 @@ def _read_manifest_config(manifest_path: Path | None = None) -> dict[str, str]:
     non-secret config (``scope``, ``warehouse``).
 
     Args:
-        manifest_path: Explicit path to manifest.yaml.  Defaults to
-            ``<repo-root>/demo/manifest.yaml``.
+        manifest_path: Explicit path to manifest.yaml. Defaults to the shared
+            manifest resolver (explicit arg, ``FLOE_MANIFEST_PATH``, then repo
+            demo manifest).
 
     Returns:
         Dict with keys ``client_id``, ``client_secret``, ``scope``, and
         ``warehouse``.  Falls back to hardcoded demo values with a warning
         when the manifest file cannot be found.
     """
-    _default_scope = "PRINCIPAL_ROLE:ALL"
-    _polaris_id, _polaris_secret = get_polaris_credentials()
+    manifest_path = resolve_manifest_path(manifest_path)
+    _polaris_id, _polaris_secret = get_polaris_credentials(manifest_path)
     _fallback: dict[str, str] = {
         "client_id": _polaris_id,
         "client_secret": _polaris_secret,  # pragma: allowlist secret
-        "scope": _default_scope,
-        "warehouse": "floe-e2e",
+        "scope": get_polaris_scope(manifest_path),
+        "warehouse": get_polaris_warehouse(manifest_path),
     }
-
-    if manifest_path is None:
-        manifest_path = Path(__file__).resolve().parents[2] / "demo" / "manifest.yaml"
 
     if not manifest_path.exists():
         warnings.warn(
