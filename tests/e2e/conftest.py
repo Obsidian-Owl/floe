@@ -39,6 +39,18 @@ from testing.fixtures.services import ServiceEndpoint, get_effective_port
 logger = logging.getLogger(__name__)
 
 
+def _read_manifest_config(manifest_path: Path | None = None) -> dict[str, str]:
+    """Read Polaris config defaults from the selected manifest path."""
+    resolved_manifest = resolve_manifest_path(manifest_path)
+    client_id, client_secret = get_polaris_credentials(resolved_manifest)
+    return {
+        "client_id": client_id,
+        "client_secret": client_secret,  # pragma: allowlist secret
+        "scope": get_polaris_scope(resolved_manifest),
+        "warehouse": get_polaris_warehouse(resolved_manifest),
+    }
+
+
 _MANIFEST_PATH = resolve_manifest_path()
 _manifest_scope: str = get_polaris_scope(_MANIFEST_PATH)
 _manifest_warehouse: str = get_polaris_warehouse(_MANIFEST_PATH)
@@ -54,7 +66,9 @@ def _resolve_polaris_credential(
     """
     credential = os.environ.get("POLARIS_CREDENTIAL")
     if credential is None:
-        client_id, client_secret = get_polaris_credentials(resolve_manifest_path(manifest_path))
+        manifest_config = _read_manifest_config(manifest_path)
+        client_id = manifest_config["client_id"]
+        client_secret = manifest_config["client_secret"]
         credential = f"{client_id}:{client_secret}"  # pragma: allowlist secret
         return credential, client_id, client_secret
 
@@ -1284,7 +1298,6 @@ _DBT_DEMO_PRODUCTS: dict[str, str] = {
 
 def _build_dbt_iceberg_profile(
     profile_name: str,
-    warehouse: str,
 ) -> str:
     """Build a dbt profiles.yml string for DuckDB + Iceberg via Polaris.
 
@@ -1300,12 +1313,12 @@ def _build_dbt_iceberg_profile(
     Referenced env vars (set by ``dbt_e2e_profile`` fixture):
         FLOE_E2E_POLARIS_ENDPOINT, FLOE_E2E_POLARIS_CLIENT_ID,
         FLOE_E2E_POLARIS_CLIENT_SECRET, FLOE_E2E_POLARIS_OAUTH2_URI,
+        FLOE_E2E_POLARIS_SCOPE, FLOE_E2E_POLARIS_WAREHOUSE,
         FLOE_E2E_S3_ENDPOINT, FLOE_E2E_S3_USE_SSL,
         AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION.
 
     Args:
         profile_name: dbt profile name (must match dbt_project.yml ``profile`` key).
-        warehouse: Polaris warehouse/catalog name (e.g. ``floe-e2e``).
 
     Returns:
         YAML string suitable for writing to ``profiles.yml``.
@@ -1326,7 +1339,7 @@ def _build_dbt_iceberg_profile(
         f"        - httpfs\n"
         f"        - iceberg\n"
         f"      attach:\n"
-        f"        - path: {warehouse}\n"
+        "        - path: \"{{ env_var('FLOE_E2E_POLARIS_WAREHOUSE') }}\"\n"
         f"          alias: ice\n"
         f"          type: iceberg\n"
         f"          options:\n"
@@ -1334,7 +1347,7 @@ def _build_dbt_iceberg_profile(
         "            CLIENT_ID: \"{{ env_var('FLOE_E2E_POLARIS_CLIENT_ID') }}\"\n"
         "            CLIENT_SECRET: \"{{ env_var('FLOE_E2E_POLARIS_CLIENT_SECRET') }}\"\n"
         "            OAUTH2_SERVER_URI: \"{{ env_var('FLOE_E2E_POLARIS_OAUTH2_URI') }}\"\n"
-        f"            OAUTH2_SCOPE: {_manifest_scope}\n"
+        "            OAUTH2_SCOPE: \"{{ env_var('FLOE_E2E_POLARIS_SCOPE') }}\"\n"
         f"            OAUTH2_GRANT_TYPE: client_credentials\n"
         f"            ACCESS_DELEGATION_MODE: none\n"
         f"      secrets:\n"
@@ -1377,6 +1390,7 @@ def dbt_e2e_profile(
     polaris_url = os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
     minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
     _, client_id, client_secret = _resolve_polaris_credential()
+    scope = os.environ.get("POLARIS_SCOPE", _manifest_scope)
     warehouse = os.environ.get("POLARIS_WAREHOUSE", _manifest_warehouse)
 
     # Derive computed values
@@ -1391,6 +1405,8 @@ def dbt_e2e_profile(
         "FLOE_E2E_POLARIS_CLIENT_ID": client_id,
         "FLOE_E2E_POLARIS_CLIENT_SECRET": client_secret,
         "FLOE_E2E_POLARIS_OAUTH2_URI": f"{polaris_url}/api/catalog/v1/oauth/tokens",
+        "FLOE_E2E_POLARIS_SCOPE": scope,
+        "FLOE_E2E_POLARIS_WAREHOUSE": warehouse,
         "FLOE_E2E_S3_ENDPOINT": s3_endpoint,
         "FLOE_E2E_S3_USE_SSL": str(s3_use_ssl).lower(),
     }
@@ -1484,7 +1500,6 @@ def dbt_e2e_profile(
             # Write E2E profile (credentials via env_var, not plaintext)
             e2e_content = _build_dbt_iceberg_profile(
                 profile_name=profile_name,
-                warehouse=warehouse,
             )
             profile_path.write_text(e2e_content)  # codeql[py/clear-text-storage-sensitive-data]
             profile_paths[product_dir] = profile_path
