@@ -106,6 +106,7 @@ else
                 DESTRUCTIVE_EXIT=1
                 break
             fi
+            # Intentional shell polling between kubectl probes while cleanup finishes.
             sleep 1
         done
     fi

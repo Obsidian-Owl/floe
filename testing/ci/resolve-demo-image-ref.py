@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -104,10 +105,7 @@ def resolve_demo_image_ref(repo_root: Path | None = None) -> dict[str, str]:
 
 
 def _shell_quote(value: str) -> str:
-    if "'" not in value:
-        return f"'{value}'"
-    escaped = value.replace("\\", "\\\\").replace("'", "\\x27")
-    return f"$'{escaped}'"
+    return shlex.quote(value)
 
 
 def _parse_args() -> argparse.Namespace:

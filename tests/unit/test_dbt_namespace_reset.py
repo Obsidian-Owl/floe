@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import sys
-from types import ModuleType
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock
 
+import dbt_utils
 import pytest
 
-import dbt_utils
-from testing.fixtures.credentials import get_polaris_scope, get_polaris_warehouse
+from testing.fixtures.credentials import (
+    get_polaris_scope,
+    get_polaris_warehouse,
+)
+
+pytestmark = pytest.mark.requirement("VAL-RESET-IDEMPOTENCY")
 
 
 def test_clear_catalog_cache_drops_cached_catalog() -> None:
+    """Clearing the cache should remove any cached catalog instance."""
     dbt_utils._catalog_cache["catalog"] = object()
 
     dbt_utils._clear_catalog_cache()
@@ -25,6 +30,7 @@ def test_clear_catalog_cache_drops_cached_catalog() -> None:
 def test_get_polaris_catalog_uses_env_endpoints_without_eager_service_resolution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Explicit env endpoints should bypass ServiceEndpoint resolution."""
     fake_catalog = object()
     pyiceberg_module = ModuleType("pyiceberg")
     load_calls: list[dict[str, object]] = []
@@ -69,6 +75,7 @@ def test_get_polaris_catalog_uses_env_endpoints_without_eager_service_resolution
 def test_get_polaris_catalog_returns_none_when_service_endpoint_resolution_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Catalog loading should fail closed when service discovery blows up."""
     pyiceberg_module = ModuleType("pyiceberg")
     pyiceberg_module.catalog = SimpleNamespace(load_catalog=lambda *args, **kwargs: object())
 
@@ -89,6 +96,7 @@ def test_get_polaris_catalog_returns_none_when_service_endpoint_resolution_fails
 def test_purge_namespace_raises_when_namespace_still_contains_tables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verification should fail if tables remain after a purge attempt."""
     fake_catalog = Mock()
     fake_catalog.list_tables.return_value = [("customer_360", "stg_customers")]
 
@@ -103,6 +111,7 @@ def test_purge_namespace_raises_when_namespace_still_contains_tables(
 def test_purge_namespace_raises_when_verified_s3_cleanup_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verified purges should surface object-store deletion errors."""
     purge_catalog = Mock()
     purge_catalog.list_tables.return_value = [("customer_360", "stg_customers")]
     table = Mock()
@@ -134,6 +143,7 @@ def test_purge_namespace_raises_when_verified_s3_cleanup_fails(
 def test_purge_namespace_raises_when_storage_endpoint_cannot_be_resolved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verified purges should fail when cleanup cannot resolve storage."""
     purge_catalog = Mock()
     purge_catalog.list_tables.return_value = [("customer_360", "stg_customers")]
     table = Mock()
@@ -163,6 +173,7 @@ def test_purge_namespace_raises_when_storage_endpoint_cannot_be_resolved(
 def test_purge_namespace_empty_namespace_succeeds_when_storage_endpoint_resolution_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Empty namespaces should not fail cleanup just because storage lookup fails."""
     purge_catalog = Mock()
     purge_catalog.list_tables.return_value = []
     verify_catalog = Mock()
@@ -185,6 +196,7 @@ def test_purge_namespace_empty_namespace_succeeds_when_storage_endpoint_resoluti
 def test_purge_namespace_raises_when_storage_location_cannot_be_resolved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Purges should fail when table storage locations cannot be determined."""
     purge_catalog = Mock()
     purge_catalog.list_tables.return_value = [("customer_360", "stg_customers")]
     purge_catalog.load_table.side_effect = RuntimeError("load failed")
@@ -207,6 +219,7 @@ def test_purge_namespace_raises_when_storage_location_cannot_be_resolved(
 def test_purge_namespace_raises_when_purge_phase_table_enumeration_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Purges should fail when table enumeration fails during cleanup."""
     purge_catalog = Mock()
     purge_catalog.list_tables.side_effect = RuntimeError("catalog boom")
     verify_catalog = Mock()
@@ -228,6 +241,7 @@ def test_purge_namespace_raises_when_purge_phase_table_enumeration_fails(
 def test_purge_namespace_uses_fresh_catalog_for_purge_and_verification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verified purges should use fresh catalog clients for both phases."""
     purge_catalog = Mock()
     purge_catalog.list_tables.return_value = []
     verify_catalog = Mock()
@@ -248,6 +262,7 @@ def test_purge_namespace_uses_fresh_catalog_for_purge_and_verification(
 def test_purge_namespace_raises_when_fresh_catalog_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verified purges should fail when a fresh catalog cannot be created."""
     def _get_catalog(*, fresh: bool = False) -> None:
         return None
 
@@ -260,6 +275,7 @@ def test_purge_namespace_raises_when_fresh_catalog_unavailable(
 def test_purge_namespace_raises_on_verification_exception(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verification exceptions should be surfaced as reset failures."""
     purge_catalog = Mock()
     purge_catalog.list_tables.return_value = []
     verification_catalog = Mock()
@@ -278,6 +294,7 @@ def test_purge_namespace_raises_on_verification_exception(
 def test_purge_namespace_treats_missing_namespace_as_reset_success(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A missing namespace should count as an already-clean reset state."""
     class FakeNoSuchNamespaceError(Exception):
         """Test-only stand-in for PyIceberg's missing namespace exception."""
 
@@ -297,6 +314,7 @@ def test_purge_namespace_treats_missing_namespace_as_reset_success(
 def test_purge_namespace_initial_missing_namespace_returns_without_verification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Initial missing namespaces should short-circuit without extra verification."""
     class FakeNoSuchNamespaceError(Exception):
         """Test-only stand-in for PyIceberg's missing namespace exception."""
 
@@ -323,6 +341,7 @@ def test_purge_namespace_initial_missing_namespace_returns_without_verification(
 def test_purge_namespace_drop_failure_still_succeeds_when_verification_is_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Drop failures should not matter once verification proves the namespace is empty."""
     purge_catalog = Mock()
     purge_catalog.list_tables.return_value = []
     purge_catalog.drop_namespace.side_effect = RuntimeError("drop failed")
@@ -342,6 +361,7 @@ def test_run_dbt_resets_raw_namespace_before_seed(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    """dbt seed should verify-reset the raw namespace before execution."""
     project_dir = tmp_path / "customer-360"
     project_dir.mkdir()
 
@@ -366,6 +386,7 @@ def test_run_dbt_resets_model_namespace_before_run(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    """dbt run should verify-reset the model namespace before execution."""
     project_dir = tmp_path / "customer-360"
     project_dir.mkdir()
 

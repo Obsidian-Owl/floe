@@ -615,7 +615,10 @@ class TestDbtPipelineResultFixtureSemantics:
         generator = fixture_func(request, project_root, {})
 
         assert next(generator) == ("customer-360", project_dir)
-        with pytest.raises(dbt_utils.NamespaceResetError, match="teardown failed for customer_360_raw"):
+        with pytest.raises(
+            dbt_utils.NamespaceResetError,
+            match="teardown failed for customer_360_raw",
+        ):
             next(generator)
 
         assert purge_calls == [

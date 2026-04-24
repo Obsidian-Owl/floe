@@ -13,6 +13,8 @@ from testing.fixtures.credentials import (
     resolve_manifest_path,
 )
 
+pytestmark = pytest.mark.requirement("VAL-MANIFEST-CONFIG")
+
 
 def _write_manifest(path: Path, content: dict[str, object]) -> Path:
     path.write_text(yaml.dump(content, default_flow_style=False))
@@ -47,12 +49,14 @@ class TestGetPolarisWarehouse:
     """Tests for get_polaris_warehouse()."""
 
     def test_reads_manifest_value(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Manifest warehouse values should feed the shared helper."""
         monkeypatch.delenv("POLARIS_WAREHOUSE", raising=False)
         manifest = _make_manifest(tmp_path, warehouse="custom-warehouse", scope="CUSTOM_SCOPE")
 
         assert get_polaris_warehouse(manifest_path=manifest) == "custom-warehouse"
 
     def test_env_override_wins(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Explicit environment configuration should override the manifest."""
         monkeypatch.setenv("POLARIS_WAREHOUSE", "env-warehouse")
         manifest = _make_manifest(tmp_path, warehouse="manifest-warehouse", scope="CUSTOM_SCOPE")
 
@@ -61,6 +65,7 @@ class TestGetPolarisWarehouse:
     def test_missing_manifest_uses_demo_default(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        """Missing manifests should fall back to the canonical demo warehouse."""
         monkeypatch.delenv("POLARIS_WAREHOUSE", raising=False)
 
         assert get_polaris_warehouse(manifest_path=tmp_path / "missing.yaml") == "floe-demo"
@@ -68,7 +73,12 @@ class TestGetPolarisWarehouse:
     def test_manifest_path_resolves_from_env(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        manifest = _make_manifest(tmp_path, warehouse="env-manifest-warehouse", scope="CUSTOM_SCOPE")
+        """The shared manifest path env var should drive warehouse resolution."""
+        manifest = _make_manifest(
+            tmp_path,
+            warehouse="env-manifest-warehouse",
+            scope="CUSTOM_SCOPE",
+        )
         monkeypatch.setenv("FLOE_MANIFEST_PATH", str(manifest))
         monkeypatch.delenv("POLARIS_WAREHOUSE", raising=False)
 
@@ -80,12 +90,14 @@ class TestGetPolarisScope:
     """Tests for get_polaris_scope()."""
 
     def test_reads_manifest_value(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Manifest scope values should feed the shared helper."""
         monkeypatch.delenv("POLARIS_SCOPE", raising=False)
         manifest = _make_manifest(tmp_path, warehouse="custom-warehouse", scope="CUSTOM_SCOPE")
 
         assert get_polaris_scope(manifest_path=manifest) == "CUSTOM_SCOPE"
 
     def test_env_override_wins(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Explicit environment scope should override the manifest value."""
         monkeypatch.setenv("POLARIS_SCOPE", "ENV_SCOPE")
         manifest = _make_manifest(tmp_path, warehouse="manifest-warehouse", scope="MANIFEST_SCOPE")
 
@@ -94,6 +106,7 @@ class TestGetPolarisScope:
     def test_missing_scope_uses_demo_default(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        """Missing manifest scope should fall back to the canonical demo scope."""
         monkeypatch.delenv("POLARIS_SCOPE", raising=False)
         manifest = _make_manifest(tmp_path, warehouse="custom-warehouse", scope=None)
 
@@ -102,7 +115,12 @@ class TestGetPolarisScope:
     def test_scope_reads_from_manifest_path_env(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        manifest = _make_manifest(tmp_path, warehouse="custom-warehouse", scope="ENV_MANIFEST_SCOPE")
+        """The shared manifest path env var should drive scope resolution."""
+        manifest = _make_manifest(
+            tmp_path,
+            warehouse="custom-warehouse",
+            scope="ENV_MANIFEST_SCOPE",
+        )
         monkeypatch.setenv("FLOE_MANIFEST_PATH", str(manifest))
         monkeypatch.delenv("POLARIS_SCOPE", raising=False)
 

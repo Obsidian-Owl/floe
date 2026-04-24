@@ -22,7 +22,6 @@ from typing import Any
 
 import httpx
 import pytest
-import yaml
 
 # Re-exported for backwards compatibility — other E2E files import from here.
 from testing.fixtures.credentials import (
@@ -40,67 +39,34 @@ from testing.fixtures.services import ServiceEndpoint, get_effective_port
 logger = logging.getLogger(__name__)
 
 
-def _read_manifest_config(manifest_path: Path | None = None) -> dict[str, str]:
-    """Read Polaris config from the selected manifest path.
+_MANIFEST_PATH = resolve_manifest_path()
+_manifest_scope: str = get_polaris_scope(_MANIFEST_PATH)
+_manifest_warehouse: str = get_polaris_warehouse(_MANIFEST_PATH)
 
-    Extracts ``plugins.catalog.config`` fields so that test fixtures do not
-    carry hardcoded defaults that diverge from the canonical platform config.
 
-    Credentials (``client_id``, ``client_secret``) are returned alongside
-    non-secret config (``scope``, ``warehouse``).
+def _resolve_polaris_credential(
+    manifest_path: Path | None = None,
+) -> tuple[str, str, str]:
+    """Return the Polaris credential string and split client values.
 
-    Args:
-        manifest_path: Explicit path to manifest.yaml. Defaults to the shared
-            manifest resolver (explicit arg, ``FLOE_MANIFEST_PATH``, then repo
-            demo manifest).
-
-    Returns:
-        Dict with keys ``client_id``, ``client_secret``, ``scope``, and
-        ``warehouse``.  Falls back to hardcoded demo values with a warning
-        when the manifest file cannot be found.
+    Resolves the default credential lazily so non-secret manifest defaults can
+    be cached at module import without tainting unrelated values.
     """
-    manifest_path = resolve_manifest_path(manifest_path)
-    _polaris_id, _polaris_secret = get_polaris_credentials(manifest_path)
-    _fallback: dict[str, str] = {
-        "client_id": _polaris_id,
-        "client_secret": _polaris_secret,  # pragma: allowlist secret
-        "scope": get_polaris_scope(manifest_path),
-        "warehouse": get_polaris_warehouse(manifest_path),
-    }
+    credential = os.environ.get("POLARIS_CREDENTIAL")
+    if credential is None:
+        client_id, client_secret = get_polaris_credentials(resolve_manifest_path(manifest_path))
+        credential = f"{client_id}:{client_secret}"  # pragma: allowlist secret
+        return credential, client_id, client_secret
 
-    if not manifest_path.exists():
-        warnings.warn(
-            f"Manifest not found at {manifest_path}; using hardcoded fallback values "
-            "for Polaris credentials and warehouse.",
-            stacklevel=2,
+    parts = credential.split(":", 1)
+    if len(parts) != 2:
+        pytest.fail(
+            "POLARIS_CREDENTIAL must be 'client_id:client_secret'; "
+            f"got a value with {len(credential)} characters and no ':' separator"
         )
-        return _fallback
 
-    raw: dict[str, Any] = yaml.safe_load(manifest_path.read_text())
-    catalog_cfg: dict[str, Any] = raw.get("plugins", {}).get("catalog", {}).get("config", {})
-    oauth2: dict[str, Any] = catalog_cfg.get("oauth2", {})
-
-    return {
-        "client_id": str(oauth2.get("client_id", _fallback["client_id"])),
-        "client_secret": str(
-            oauth2.get("client_secret", _fallback["client_secret"])
-        ),  # pragma: allowlist secret
-        "scope": str(catalog_cfg.get("scope", oauth2.get("scope", _fallback["scope"]))),
-        "warehouse": str(catalog_cfg.get("warehouse", _fallback["warehouse"])),
-    }
-
-
-_manifest_cfg: dict[str, str] = _read_manifest_config()
-
-# Separate credential string from non-secret config to break CodeQL taint
-# propagation.  CodeQL tracks _manifest_cfg as sensitive because it contains
-# client_secret; splitting ensures downstream code that only uses scope or
-# warehouse is not flagged as "clear-text logging of sensitive data".
-_manifest_credential: str = (  # pragma: allowlist secret
-    f"{_manifest_cfg['client_id']}:{_manifest_cfg['client_secret']}"
-)
-_manifest_scope: str = _manifest_cfg["scope"]
-_manifest_warehouse: str = _manifest_cfg["warehouse"]
+    client_id, client_secret = parts
+    return credential, client_id, client_secret
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -162,9 +128,6 @@ def pytest_collection_modifyitems(
         items: List of collected test items.
     """
     import inspect
-    import re
-    import warnings
-
     lane_markers = {
         "bootstrap",
         "platform_blackbox",
@@ -700,12 +663,13 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     # Demo credentials for local testing only - production uses K8s secrets
     minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
     _minio_access, _minio_secret = get_minio_credentials()
+    polaris_credential, client_id, client_secret = _resolve_polaris_credential()
     catalog = pyiceberg_catalog.load_catalog(
         "polaris",
         **{
             "type": "rest",
             "uri": f"{polaris_url}/api/catalog",
-            "credential": os.environ.get("POLARIS_CREDENTIAL", _manifest_credential),
+            "credential": polaris_credential,
             "scope": _manifest_scope,
             "warehouse": os.environ.get("POLARIS_WAREHOUSE", _manifest_warehouse),
             "s3.endpoint": minio_url,
@@ -727,8 +691,6 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     # bootstrap job's 5-step grant process: create principal role, assign
     # principal role to root, create catalog role, grant privilege,
     # assign catalog role to principal role.
-    cred = os.environ.get("POLARIS_CREDENTIAL", _manifest_credential)
-    client_id, client_secret = cred.split(":", 1)
     token_response = httpx.post(
         f"{polaris_url}/api/catalog/v1/oauth/tokens",
         data={
@@ -1414,14 +1376,7 @@ def dbt_e2e_profile(
     # so credentials are resolved at runtime, never written to disk.
     polaris_url = os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
     minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
-    cred = os.environ.get("POLARIS_CREDENTIAL", _manifest_credential)
-    parts = cred.split(":", 1)
-    if len(parts) != 2:
-        pytest.fail(
-            "POLARIS_CREDENTIAL must be 'client_id:client_secret'; "
-            f"got a value with {len(cred)} characters and no ':' separator"
-        )
-    client_id, client_secret = parts
+    _, client_id, client_secret = _resolve_polaris_credential()
     warehouse = os.environ.get("POLARIS_WAREHOUSE", _manifest_warehouse)
 
     # Derive computed values

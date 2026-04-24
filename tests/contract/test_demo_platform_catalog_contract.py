@@ -1,16 +1,22 @@
-"""Contract tests for demo manifest and test/demo chart catalog alignment."""
+"""Contract tests for demo manifest and chart catalog alignment."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEMO_MANIFEST = REPO_ROOT / "demo" / "manifest.yaml"
 VALUES_DEMO = REPO_ROOT / "charts" / "floe-platform" / "values-demo.yaml"
 VALUES_TEST = REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
+
+pytestmark = [
+    pytest.mark.contract,
+    pytest.mark.requirement("VAL-MANIFEST-CONTRACT"),
+]
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -56,8 +62,10 @@ def _assert_bootstrap_alignment(values_path: Path) -> None:
 
 
 def test_values_demo_aligns_with_demo_manifest_catalog_contract() -> None:
+    """Demo chart values should stay aligned with the demo manifest contract."""
     _assert_bootstrap_alignment(VALUES_DEMO)
 
 
 def test_values_test_aligns_with_demo_manifest_catalog_contract() -> None:
+    """Test chart values should stay aligned with the demo manifest contract."""
     _assert_bootstrap_alignment(VALUES_TEST)
