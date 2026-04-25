@@ -810,6 +810,64 @@ class TestExportDbtToIceberg:
         mock_catalog.create_table.assert_not_called()
 
     @pytest.mark.requirement("AC-4")
+    def test_export_overwrite_uses_endpoint_preserving_catalog_plugin_loader(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_with_catalog: CompiledArtifacts,
+    ) -> None:
+        """Existing table overwrite must use plugin endpoint-preserving load hook."""
+        from floe_core.plugin_types import PluginType
+
+        arrow_table = pa.table({"id": [1], "value": [10]})
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchall.return_value = [
+            ("main", "orders"),
+        ]
+        mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
+
+        mock_catalog = MagicMock()
+        mock_catalog.load_table.side_effect = AssertionError(
+            "overwrite must not bypass endpoint-preserving plugin load"
+        )
+        mock_existing_table = MagicMock()
+
+        class EndpointPreservingCatalogPlugin:
+            def __init__(self) -> None:
+                self.connect = MagicMock(return_value=mock_catalog)
+                self.load_table_with_client_endpoint = MagicMock(return_value=mock_existing_table)
+
+        registry = MagicMock()
+        catalog_plugin = EndpointPreservingCatalogPlugin()
+        storage_plugin = MagicMock()
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> object:
+            if plugin_type is PluginType.CATALOG:
+                return catalog_plugin
+            return storage_plugin
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = {}
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts_with_catalog,
+            )
+
+        catalog_plugin.load_table_with_client_endpoint.assert_called_once_with(
+            f"{SAFE_NAME}.orders"
+        )
+        mock_existing_table.overwrite.assert_called_once_with(arrow_table)
+        mock_catalog.create_table.assert_not_called()
+
+    @pytest.mark.requirement("AC-4")
     def test_export_skips_unsafe_identifiers(
         self,
         context: MagicMock,

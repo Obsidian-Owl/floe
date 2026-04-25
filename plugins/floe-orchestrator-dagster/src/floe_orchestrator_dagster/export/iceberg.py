@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from inspect import getattr_static
 from pathlib import Path
 from typing import Any, Protocol, cast, runtime_checkable
 
@@ -31,6 +32,14 @@ class WriteCapableIcebergCatalog(Protocol):
 
     def create_table(self, identifier: str, schema: Any) -> Any:
         """Create an Iceberg table."""
+        ...
+
+
+class EndpointPreservingTableLoader(Protocol):
+    """Optional catalog plugin hook for endpoint-preserving table loads."""
+
+    def load_table_with_client_endpoint(self, identifier: str) -> Any:
+        """Load an Iceberg table while preserving client-side storage endpoint config."""
         ...
 
 
@@ -70,6 +79,24 @@ def _require_write_capable_catalog(
             f"missing method(s): {missing}"
         )
     return cast(WriteCapableIcebergCatalog, catalog)
+
+
+def _load_table_for_overwrite(
+    catalog_plugin: object,
+    catalog: WriteCapableIcebergCatalog,
+    identifier: str,
+) -> Any:
+    """Load a table for overwrite using endpoint-preserving plugin hook when available."""
+    method_marker = getattr_static(
+        catalog_plugin,
+        "load_table_with_client_endpoint",
+        None,
+    )
+    method = getattr(catalog_plugin, "load_table_with_client_endpoint", None)
+    if method_marker is not None and callable(method):
+        endpoint_preserving_loader = cast(EndpointPreservingTableLoader, catalog_plugin)
+        return endpoint_preserving_loader.load_table_with_client_endpoint(identifier)
+    return catalog.load_table(identifier)
 
 
 def export_dbt_to_iceberg(
@@ -175,7 +202,11 @@ def export_dbt_to_iceberg(
 
             iceberg_id = f"{product_namespace}.{table_name}"
             try:
-                iceberg_table = catalog.load_table(iceberg_id)
+                iceberg_table = _load_table_for_overwrite(
+                    catalog_plugin,
+                    catalog,
+                    iceberg_id,
+                )
                 iceberg_table.overwrite(arrow_table)
             except NoSuchTableError:
                 iceberg_table = catalog.create_table(
