@@ -19,11 +19,15 @@ from floe_iceberg.errors import (
     SchemaEvolutionError,
     SnapshotError,
     SnapshotNotFoundError,
+    StaleTableMetadataError,
     TableAlreadyExistsError,
     TableError,
     ValidationError,
     WriteError,
+    metadata_location_from_error,
+    stale_table_metadata_error_from_exception,
 )
+from floe_iceberg.models import StaleTableRecoveryMode
 
 # =============================================================================
 # Base Exception Tests
@@ -194,6 +198,46 @@ class TestNoSuchTableError:
         error = NoSuchTableError("Test")
         assert isinstance(error, TableError)
         assert isinstance(error, IcebergError)
+
+
+class TestStaleTableMetadataError:
+    """Tests for StaleTableMetadataError exception."""
+
+    def test_includes_repair_context(self) -> None:
+        """Stale table metadata errors expose table, metadata location, and mode."""
+        error = StaleTableMetadataError(
+            "Catalog table metadata points at a missing object-store file",
+            table_identifier="customer_360.int_customer_orders",
+            metadata_location=(
+                "s3://floe-iceberg/customer_360/int_customer_orders/metadata/00001.metadata.json"
+            ),
+            recovery_mode=StaleTableRecoveryMode.STRICT,
+            original_error=RuntimeError("NotFoundException: Location does not exist"),
+        )
+
+        assert error.table_identifier == "customer_360.int_customer_orders"
+        assert error.metadata_location.endswith("00001.metadata.json")
+        assert error.recovery_mode is StaleTableRecoveryMode.STRICT
+        assert error.details["original_error_type"] == "RuntimeError"
+        assert "stale_table_metadata" in error.details["reason"]
+
+    def test_builder_extracts_non_s3_metadata_locations(self) -> None:
+        """Stale metadata diagnostics are not hardcoded to S3 locations."""
+        original_error = RuntimeError(
+            "NotFoundException: Location does not exist: "
+            "abfs://warehouse/customer_360/orders/metadata/00001.metadata.json"
+        )
+
+        error = stale_table_metadata_error_from_exception(
+            table_identifier="customer_360.orders",
+            recovery_mode=StaleTableRecoveryMode.STRICT,
+            original_error=original_error,
+        )
+
+        assert error.metadata_location == (
+            "abfs://warehouse/customer_360/orders/metadata/00001.metadata.json"
+        )
+        assert metadata_location_from_error(original_error) == error.metadata_location
 
 
 class TestNoSuchNamespaceError:
@@ -470,6 +514,13 @@ class TestExceptionHierarchy:
             TableError("test"),
             TableAlreadyExistsError("test"),
             NoSuchTableError("test"),
+            StaleTableMetadataError(
+                "test",
+                table_identifier="bronze.customers",
+                metadata_location=None,
+                recovery_mode=StaleTableRecoveryMode.STRICT,
+                original_error=RuntimeError("test"),
+            ),
             NoSuchNamespaceError("test"),
             SchemaEvolutionError("test"),
             IncompatibleSchemaChangeError("test"),
@@ -510,6 +561,15 @@ class TestExceptionHierarchy:
             except IcebergError:
                 caught = True
             assert caught, f"{exc_class.__name__} should be catchable as IcebergError"
+
+        with pytest.raises(IcebergError):
+            raise StaleTableMetadataError(
+                "Test error",
+                table_identifier="bronze.customers",
+                metadata_location=None,
+                recovery_mode=StaleTableRecoveryMode.STRICT,
+                original_error=RuntimeError("test"),
+            )
 
     @pytest.mark.requirement("FR-001")
     def test_specific_catch_before_general(self) -> None:

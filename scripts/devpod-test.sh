@@ -14,11 +14,14 @@
 #   - devpod CLI installed
 #   - Hetzner provider configured (run: make devpod-setup)
 #   - .env file with DEVPOD_HETZNER_TOKEN
+#   - current branch pushed to origin, or DEVPOD_SOURCE set explicitly
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=./devpod-source.sh
+source "${SCRIPT_DIR}/devpod-source.sh"
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -107,7 +110,11 @@ log "  First run takes ~10-15 minutes. Subsequent runs reuse the image."
 
 # Mark before provisioning so cleanup can delete a partially-provisioned VM
 WORKSPACE_CREATED=true
-devpod up "${PROJECT_ROOT}" \
+DEVPOD_SOURCE_RESOLVED="$(devpod_resolve_source "${PROJECT_ROOT}")" \
+    || { error "Failed to resolve DevPod source"; exit 1; }
+log "  Source: ${DEVPOD_SOURCE_RESOLVED}"
+devpod up "${WORKSPACE}" \
+    --source "${DEVPOD_SOURCE_RESOLVED}" \
     --id "${WORKSPACE}" \
     --provider "${PROVIDER}" \
     --devcontainer-path "${DEVCONTAINER}" \

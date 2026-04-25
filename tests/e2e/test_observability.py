@@ -323,6 +323,17 @@ def _lineage_event_job(event: dict[str, Any]) -> tuple[str | None, str | None]:
     )
 
 
+def _runtime_lineage_identity_from_events(
+    events: list[dict[str, Any]],
+) -> tuple[str, str] | None:
+    """Return the first namespace/job identity emitted by fresh lineage events."""
+    for event in events:
+        namespace, job_name = _lineage_event_job(event)
+        if namespace and job_name:
+            return namespace, job_name
+    return None
+
+
 def _lineage_event_matches_fresh_run(
     event: dict[str, Any],
     *,
@@ -361,6 +372,24 @@ def _lineage_event_matches_fresh_jobs(
     if event_job_name is not None and event_job_name not in job_names:
         return False
     return True
+
+
+@pytest.mark.developer_workflow
+def test_runtime_lineage_identity_prefers_fresh_event_job() -> None:
+    """Marquez validation should query the identity emitted by OpenLineage."""
+    event = {
+        "event": {
+            "job": {
+                "namespace": "customer-360",
+                "name": "dbt.customer_360.mart_customer_360",
+            }
+        }
+    }
+
+    assert _runtime_lineage_identity_from_events([event]) == (
+        "customer-360",
+        "dbt.customer_360.mart_customer_360",
+    )
 
 
 class TestObservability(IntegrationTestBase):
@@ -545,6 +574,21 @@ class TestObservability(IntegrationTestBase):
             namespace=runtime_namespace,
             job_name=runtime_job_name,
         )
+        lineage_events_before_response = marquez_client.get(
+            "/api/v1/events/lineage",
+            params={"limit": 100},
+        )
+        assert lineage_events_before_response.status_code == 200, (
+            "Marquez lineage events endpoint failed before runtime trigger: "
+            f"{lineage_events_before_response.status_code} - "
+            f"{lineage_events_before_response.text}"
+        )
+        lineage_events_before = lineage_events_before_response.json().get("events", [])
+        before_lineage_event_run_ids = {
+            run_id
+            for event in lineage_events_before
+            if (run_id := _lineage_event_run_id(event)) is not None
+        }
         trigger_lineage_run(
             expected_namespace=runtime_namespace,
             expected_job_name=runtime_job_name,
@@ -557,12 +601,41 @@ class TestObservability(IntegrationTestBase):
             f"Jobs endpoint failed: {jobs_response.status_code}"
         )
 
+        lineage_events_response = marquez_client.get(
+            "/api/v1/events/lineage",
+            params={"limit": 100},
+        )
+        assert lineage_events_response.status_code == 200, (
+            "Marquez lineage events endpoint failed after runtime trigger: "
+            f"{lineage_events_response.status_code} - {lineage_events_response.text}"
+        )
+        lineage_events = lineage_events_response.json().get("events", [])
+        fresh_lineage_events = [
+            event
+            for event in lineage_events
+            if (run_id := _lineage_event_run_id(event)) is not None
+            and run_id not in before_lineage_event_run_ids
+        ]
+        assert fresh_lineage_events, (
+            "OBSERVABILITY GAP: No fresh OpenLineage events found after runtime trigger.\n"
+            f"Existing event run ids before trigger: {len(before_lineage_event_run_ids)}\n"
+            "Expected the runtime trigger to emit OpenLineage events with new run ids."
+        )
+
+        event_identity = _runtime_lineage_identity_from_events(fresh_lineage_events)
+        assert event_identity is not None, (
+            "Runtime OpenLineage events were received but no job namespace/name "
+            f"could be extracted. events={fresh_lineage_events[:3]}"
+        )
+        event_namespace, event_job_name = event_identity
+
         runtime_jobs_response = marquez_client.get(
-            f"/api/v1/namespaces/{quote(runtime_namespace, safe='')}/jobs"
+            f"/api/v1/namespaces/{quote(event_namespace, safe='')}/jobs"
         )
         assert runtime_jobs_response.status_code == 200, (
-            f"Marquez runtime namespace jobs query failed for {runtime_namespace}: "
-            f"{runtime_jobs_response.status_code} - {runtime_jobs_response.text}"
+            f"Marquez runtime namespace jobs query failed for emitted namespace "
+            f"{event_namespace}: {runtime_jobs_response.status_code} - "
+            f"{runtime_jobs_response.text}"
         )
         all_jobs: list[dict[str, Any]] = runtime_jobs_response.json().get("jobs", [])
 
@@ -572,35 +645,42 @@ class TestObservability(IntegrationTestBase):
             "The platform is not emitting OpenLineage events during pipeline execution.\n"
             "Fix: Configure dbt-openlineage or Dagster OpenLineage integration to emit "
             "RunEvent.START and RunEvent.COMPLETE events.\n"
-            f"Namespace checked: {runtime_namespace}"
+            f"Namespace checked: {event_namespace}"
         )
 
         job_names = [job.get("name", "") for job in all_jobs]
-        assert runtime_job_name in job_names, (
-            "OBSERVABILITY GAP: Runtime OpenLineage job not found in Marquez.\n"
-            f"Expected namespace/job: {runtime_namespace}/{runtime_job_name}\n"
+        assert event_job_name in job_names, (
+            "OBSERVABILITY GAP: Emitted runtime OpenLineage job not found in Marquez.\n"
+            f"Emitted namespace/job: {event_namespace}/{event_job_name}\n"
+            f"Artifact-derived namespace/job used to trigger: "
+            f"{runtime_namespace}/{runtime_job_name}\n"
             f"Job names found: {job_names}\n"
-            "Expected runtime LineageResource to emit using the compiled artifact "
-            "lineage namespace and product name."
+            "Expected Marquez to expose the namespace/job from the emitted "
+            "OpenLineage event."
         )
 
-        fresh_completed_runs = _fresh_completed_runs(
+        runtime_runs = _marquez_job_runs(
             marquez_client,
-            namespace=runtime_namespace,
-            job_name=runtime_job_name,
-            before_run_ids=before_run_ids,
+            namespace=event_namespace,
+            job_name=event_job_name,
         )
-        all_runs = _marquez_job_runs(
-            marquez_client,
-            namespace=runtime_namespace,
-            job_name=runtime_job_name,
-        )
-        run_states = {_marquez_run_state(run) for run in all_runs if _marquez_run_state(run)}
+        fresh_lineage_event_run_ids = {
+            run_id
+            for event in fresh_lineage_events
+            if (run_id := _lineage_event_run_id(event)) is not None
+        }
+        fresh_completed_runs = [
+            run
+            for run in runtime_runs
+            if _marquez_run_identity_candidates(run) & fresh_lineage_event_run_ids
+            and _marquez_run_state(run) == _COMPLETED_MARQUEZ_STATE
+        ]
+        run_states = {_marquez_run_state(run) for run in runtime_runs if _marquez_run_state(run)}
         assert fresh_completed_runs, (
             "OBSERVABILITY GAP: Runtime OpenLineage did not create a fresh "
             "COMPLETED Marquez run.\n"
-            f"Namespace/job: {runtime_namespace}/{runtime_job_name}\n"
-            f"Existing run ids before trigger: {len(before_run_ids)}\n"
+            f"Emitted namespace/job: {event_namespace}/{event_job_name}\n"
+            f"Fresh event run ids: {sorted(fresh_lineage_event_run_ids)}\n"
             f"Run states found: {sorted(run_states)}\n"
             "Expected a new run with state COMPLETED."
         )

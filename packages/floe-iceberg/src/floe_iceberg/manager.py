@@ -146,7 +146,11 @@ class IcebergTableManager:
         self._fileio = self._retrieve_fileio()
 
         # Initialize helper classes for facade pattern (T034)
-        self._lifecycle = _IcebergTableLifecycle(self._catalog, self._catalog_plugin)
+        self._lifecycle = _IcebergTableLifecycle(
+            self._catalog,
+            self._catalog_plugin,
+            self._config,
+        )
         self._schema_manager = _IcebergSchemaManager(self._catalog_plugin)
         self._snapshot_manager = _IcebergSnapshotManager(self._config)
         self._compaction_manager = _IcebergCompactionManager()

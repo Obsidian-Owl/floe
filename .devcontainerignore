@@ -1,9 +1,14 @@
 # Python virtual environments (rebuilt via uv sync in postCreateCommand)
 .venv/
+**/.venv/
+devtools/agent-memory/.venv/
+packages/floe-core/.venv/
 __pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 *.egg-info/
+**/*.egg-info/
 dist/
 build/
 
@@ -12,12 +17,24 @@ build/
 
 # Test/CI artifacts
 .pytest_cache/
+**/.pytest_cache/
 .mypy_cache/
+**/.mypy_cache/
+devtools/agent-memory/.mypy_cache/
+packages/floe-core/.mypy_cache/
+plugins/floe-alert-webhook/.mypy_cache/
+plugins/floe-lineage-marquez/.mypy_cache/
+plugins/floe-network-security-k8s/.mypy_cache/
 .ruff_cache/
+**/.ruff_cache/
 .coverage
 htmlcov/
 coverage.xml
+coverage*.xml
+coverage.json
 *.gcov
+test-logs/
+test-artifacts/
 
 # IDE
 .idea/
@@ -31,6 +48,15 @@ Thumbs.db
 
 # DevPod/Demo runtime
 .demo-pids
+demo/**/logs/
+demo/customer-360/logs/
+demo/iot-telemetry/logs/
+demo/financial-risk/logs/
+demo/**/target/
+demo/customer-360/target/
+demo/iot-telemetry/target/
+demo/financial-risk/target/
+demo/**/.user.yml
 
 # Specwright work artifacts (not needed in devcontainer)
 .specwright/work/
@@ -39,6 +65,12 @@ Thumbs.db
 
 # Agent state
 .agent/
+.cognee/
+.deepeval/
+.gitnexus/
+.import_linter_cache/
+.omc/
+target/
 
 # Node modules (if any)
 node_modules/

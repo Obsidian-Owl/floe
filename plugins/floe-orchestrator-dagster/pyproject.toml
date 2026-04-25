@@ -24,6 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "floe-core>=0.1.0",
+    "floe-iceberg>=0.1.0",
     "dagster>=1.10.0,<2.0.0",
     "dagster-dbt>=0.26.0",
     "openlineage-python>=1.0.0",

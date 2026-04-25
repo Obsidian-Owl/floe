@@ -355,3 +355,22 @@ class TestHelmValuesConfig:
         values = config.to_values_dict()
         assert "fullnameOverride" in values
         assert values["fullnameOverride"] == "floe-platform"
+
+
+def test_helm_values_config_uses_manifest_resource_presets() -> None:
+    """Manifest resource presets can become Helm resourcePresets values."""
+    from floe_core.schemas.manifest import ManifestResourcePreset, ManifestResourceSpec
+
+    config = HelmValuesConfig.with_defaults(environment="dev").with_resource_presets(
+        {
+            "alpha": ManifestResourcePreset(
+                requests=ManifestResourceSpec(cpu="750m", memory="1536Mi"),
+                limits=ManifestResourceSpec(cpu="2", memory="4Gi"),
+            )
+        }
+    )
+
+    values = config.to_values_dict()
+
+    assert values["resourcePresets"]["alpha"]["requests"]["memory"] == "1536Mi"
+    assert values["resourcePresets"]["alpha"]["limits"]["memory"] == "4Gi"

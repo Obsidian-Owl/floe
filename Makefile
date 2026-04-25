@@ -378,19 +378,14 @@ check-manifests: ## Verify committed dbt manifests are not stale
 		{ echo "ERROR: Committed dbt manifests are stale. Run 'make compile-demo' and commit." >&2; exit 1; }
 	@echo "Manifests are up to date."
 
-# Plugin name exception map: manifest type → package name
-# Default convention: plugins.<category>.type: <name> → floe-<category>-<name>
-# Exception map handles non-standard names (e.g., dbt → floe-dbt-core, not floe-dbt-dbt)
-PLUGIN_NAME_MAP := dbt:floe-dbt-core
-
 # Multi-arch platform (override with: make build-demo-image DOCKER_PLATFORM=linux/arm64)
 DOCKER_PLATFORM ?= linux/amd64
 
 # Extract demo plugin list from manifest.yaml
-# - Reads plugins section, maps each to package name via convention + exception map
-# - Only includes packages that exist in the workspace (packages/ or plugins/)
-# - Always includes floe-core (all plugins depend on it) and floe-dbt-core (demo products need it)
-DEMO_PLUGINS := $(shell .venv/bin/python -c "from pathlib import Path; import yaml, os; m = yaml.safe_load(Path('$(DEMO_MANIFEST)').read_text()); plugins = m.get('plugins', {}); nm = dict(x.split(':') for x in '$(PLUGIN_NAME_MAP)'.split() if ':' in x); names = set(['floe-core', 'floe-dbt-core']); [names.add(nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type',''))) for k,v in plugins.items() if os.path.isdir('packages/'+nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type',''))) or os.path.isdir('plugins/'+nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type','')))]; print(' '.join(sorted(names)))")
+# - Reads plugin selections from the manifest schema
+# - Maps selections through local workspace entry points
+# - Includes local workspace dependency closure because Docker installs with --no-deps
+DEMO_PLUGINS := $(shell .venv/bin/python scripts/resolve-demo-plugins.py --manifest $(DEMO_MANIFEST))
 
 build-demo-image: compile-demo ## Build Dagster demo Docker image and load to Kind
 	@echo "Building Dagster demo Docker image..."
@@ -648,11 +643,17 @@ devpod-check:
 .PHONY: devpod-up
 devpod-up: devpod-check ## Create/start DevPod workspace on Hetzner
 	@echo "Starting DevPod workspace '$(DEVPOD_WORKSPACE)' on $(DEVPOD_PROVIDER)..."
-	devpod up . \
+	@DEVPOD_WORKSPACE="$(DEVPOD_WORKSPACE)" \
+		DEVPOD_PROVIDER="$(DEVPOD_PROVIDER)" \
+		DEVPOD_DEVCONTAINER="$(DEVPOD_DEVCONTAINER)" \
+		bash -c 'source scripts/devpod-source.sh; source_resolved=$$(devpod_resolve_source "$$(pwd)") || exit 1; \
+		echo "Using DevPod source: $${source_resolved}"; \
+		devpod up "$(DEVPOD_WORKSPACE)" \
+		--source "$${source_resolved}" \
 		--id "$(DEVPOD_WORKSPACE)" \
 		--provider "$(DEVPOD_PROVIDER)" \
 		--devcontainer-path "$(DEVPOD_DEVCONTAINER)" \
-		--ide none
+		--ide none'
 
 .PHONY: devpod-stop
 devpod-stop: devpod-check ## Stop DevPod workspace (preserves VM disk)

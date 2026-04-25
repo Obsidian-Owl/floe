@@ -7,7 +7,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import floe_core.plugin_registry as _plugin_registry_module
 from floe_core.plugin_types import PluginType
@@ -22,6 +22,19 @@ class IcebergOutputValidationResult:
 
     expected_table_names: list[str]
     table_names: list[str]
+
+
+RecoveryMode = Literal["strict", "repair"]
+
+
+def _parse_recovery_mode(value: str | None) -> RecoveryMode:
+    """Parse Iceberg validation recovery mode."""
+    if value is None or value == "":
+        return "strict"
+    if value in {"strict", "repair"}:
+        return cast(RecoveryMode, value)
+    msg = f"Unsupported Iceberg validation recovery mode: {value}"
+    raise ValueError(msg)
 
 
 def _product_namespace(artifacts: CompiledArtifacts) -> str:
@@ -138,6 +151,25 @@ def validate_iceberg_outputs(
     )
 
 
+def reset_iceberg_outputs(
+    artifacts: CompiledArtifacts,
+    expected_tables: Sequence[str] | None = None,
+) -> list[str]:
+    """Drop expected Iceberg output table registrations before a materialization run."""
+    expected_table_names = expected_iceberg_tables(artifacts, expected_tables)
+    catalog = _connect_catalog_from_artifacts(artifacts)
+    dropped: list[str] = []
+    for table_name in expected_table_names:
+        try:
+            catalog.drop_table(table_name, purge_requested=False)  # type: ignore[call-arg]
+        except Exception as exc:  # noqa: BLE001 - reset should tolerate missing tables.
+            if "NoSuchTable" not in type(exc).__name__ and "not found" not in str(exc).lower():
+                raise RuntimeError(f"Failed to reset Iceberg table {table_name}: {exc}") from exc
+        else:
+            dropped.append(table_name)
+    return dropped
+
+
 def validate_iceberg_outputs_from_file(
     artifacts_path: Path,
     expected_tables: Sequence[str] | None = None,
@@ -173,16 +205,56 @@ def _main(argv: Sequence[str] | None = None) -> int:
         default=[],
         help="Expected Iceberg table name. May be repeated or comma-separated.",
     )
+    parser.add_argument(
+        "--recovery-mode",
+        choices=["strict", "repair"],
+        default="strict",
+        help="Recovery behavior used by the materialization path being validated.",
+    )
+    parser.add_argument(
+        "--reset-only",
+        action="store_true",
+        help="Drop expected Iceberg output registrations and exit without validation.",
+    )
     args = parser.parse_args(argv)
 
-    result = validate_iceberg_outputs_from_file(
-        artifacts_path=args.artifacts_path,
-        expected_tables=_parse_expected_tables(args.expected_table),
+    artifacts = CompiledArtifacts.model_validate_json(args.artifacts_path.read_text())
+    expected_tables = _parse_expected_tables(args.expected_table)
+    recovery_mode = _parse_recovery_mode(args.recovery_mode)
+    dropped_tables: list[str] = []
+    if args.reset_only:
+        dropped_tables = reset_iceberg_outputs(
+            artifacts=artifacts,
+            expected_tables=expected_tables,
+        )
+        print(
+            json.dumps(
+                {
+                    "action": "reset",
+                    "dropped_tables": dropped_tables,
+                    "expected_table_names": expected_iceberg_tables(
+                        artifacts,
+                        expected_tables,
+                    ),
+                    "recovery_mode": "reset",
+                    "table_names": [],
+                    "tables_validated": 0,
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    result = validate_iceberg_outputs(
+        artifacts=artifacts,
+        expected_tables=expected_tables,
     )
     print(
         json.dumps(
             {
+                "dropped_tables": dropped_tables,
                 "expected_table_names": result.expected_table_names,
+                "recovery_mode": recovery_mode,
                 "table_names": result.table_names,
                 "tables_validated": len(result.table_names),
             },

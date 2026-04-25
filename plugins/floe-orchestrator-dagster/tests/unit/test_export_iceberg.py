@@ -31,6 +31,7 @@ from floe_core.schemas.compiled_artifacts import (
     CompiledArtifacts,
     ObservabilityConfig,
     PluginRef,
+    ResolvedGovernance,
     ResolvedModel,
     ResolvedPlugins,
     ResolvedTransforms,
@@ -866,6 +867,73 @@ class TestExportDbtToIceberg:
         )
         mock_existing_table.overwrite.assert_called_once_with(arrow_table)
         mock_catalog.create_table.assert_not_called()
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_repairs_stale_iceberg_registration_when_configured(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_with_catalog: CompiledArtifacts,
+    ) -> None:
+        """Repair mode drops stale table registration and recreates output table."""
+        arrow_table = pa.table({"id": [1], "value": [10]})
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchall.return_value = [("main", "orders")]
+        mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
+
+        stale_error = RuntimeError(
+            "NotFoundException: Location does not exist: "
+            "s3://floe-iceberg/customer_360/orders/metadata/00001.metadata.json"
+        )
+        mock_catalog = MagicMock()
+        mock_catalog.load_table.side_effect = stale_error
+        recreated_table = MagicMock()
+        mock_catalog.create_table.return_value = recreated_table
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+        catalog_plugin.connect.return_value = mock_catalog
+        storage_plugin.get_pyiceberg_catalog_config.return_value = {
+            "s3.endpoint": "http://minio:9000"
+        }
+
+        def get_side_effect(plugin_type: object, _plugin_name: str) -> MagicMock:
+            if str(plugin_type).endswith("CATALOG"):
+                return catalog_plugin
+            return storage_plugin
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = {}
+        artifacts = artifacts_with_catalog.model_copy(
+            update={
+                "governance": ResolvedGovernance(
+                    stale_table_recovery_mode="repair",
+                )
+            }
+        )
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        catalog_plugin.drop_table.assert_called_once_with(
+            f"{SAFE_NAME}.orders",
+            purge=False,
+        )
+        mock_catalog.create_table.assert_called_once_with(
+            f"{SAFE_NAME}.orders",
+            schema=arrow_table.schema,
+        )
+        recreated_table.append.assert_called_once_with(arrow_table)
 
     @pytest.mark.requirement("AC-4")
     def test_export_skips_unsafe_identifiers(

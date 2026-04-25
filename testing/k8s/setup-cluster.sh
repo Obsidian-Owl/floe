@@ -14,6 +14,7 @@
 #   VERBOSE: Set to "true" for verbose output
 #   FLOE_FLUX_GIT_URL: Git URL for the Flux GitRepository test fixture
 #   FLOE_FLUX_GIT_BRANCH: Git branch for the Flux GitRepository fixture
+#   FLOE_REQUIRED_FLUX_GIT_BRANCH: Required GitRepository branch; fails fast on mismatch
 #
 # After setup, services are accessible via localhost:
 #   Polaris:     http://localhost:8181
@@ -501,6 +502,19 @@ resolve_flux_git_branch() {
     printf '%s\n' "main"
 }
 
+assert_flux_git_branch_matches() {
+    local actual_branch="$1"
+
+    if [[ -z "${FLOE_REQUIRED_FLUX_GIT_BRANCH:-}" ]]; then
+        return 0
+    fi
+
+    if [[ "${actual_branch}" != "${FLOE_REQUIRED_FLUX_GIT_BRANCH}" ]]; then
+        log_error "Flux branch mismatch: expected ${FLOE_REQUIRED_FLUX_GIT_BRANCH}, got ${actual_branch}"
+        return 1
+    fi
+}
+
 render_flux_manifests() {
     local flux_git_branch="$1"
     local flux_fixture_dir="${FLOE_FLUX_FIXTURE_DIR}"
@@ -546,12 +560,14 @@ render_flux_manifests() {
 
 # Deploy via Flux: apply CRDs and wait for HelmRelease readiness
 deploy_via_flux() {
+    local flux_git_branch
+    flux_git_branch=$(resolve_flux_git_branch)
+    assert_flux_git_branch_matches "${flux_git_branch}"
+
     # Ensure target namespace exists (direct Helm path uses --create-namespace,
     # but kubectl apply of namespaced CRDs requires the namespace to pre-exist)
     kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-    local flux_git_branch
-    flux_git_branch=$(resolve_flux_git_branch)
     local flux_manifest_dir
     flux_manifest_dir=$(render_flux_manifests "${flux_git_branch}")
     local apply_status=0

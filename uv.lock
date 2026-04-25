@@ -1627,6 +1627,7 @@ dependencies = [
     { name = "dagster" },
     { name = "dagster-dbt" },
     { name = "floe-core" },
+    { name = "floe-iceberg" },
     { name = "httpx" },
     { name = "openlineage-python" },
 ]
@@ -1640,6 +1641,7 @@ requires-dist = [
     { name = "dagster-k8s", marker = "extra == 'docker'", specifier = ">=1.10.0,<2.0.0" },
     { name = "dagster-webserver", marker = "extra == 'docker'", specifier = ">=1.10.0,<2.0.0" },
     { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-iceberg", specifier = ">=0.1.0" },
     { name = "httpx", specifier = ">=0.24.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "openlineage-python", specifier = ">=1.0.0" },

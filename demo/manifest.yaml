@@ -107,6 +107,10 @@ governance:
   # Minimum Iceberg snapshots to retain per table
   snapshot_keep_last: 3
 
+  # Demo/test runtime recovery for stale catalog registrations.
+  # Production manifests should normally keep the default strict mode.
+  stale_table_recovery_mode: repair
+
   # Quality gates configuration
   quality_gates:
     minimum_test_coverage: 80

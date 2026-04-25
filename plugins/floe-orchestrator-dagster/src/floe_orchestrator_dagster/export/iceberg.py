@@ -14,6 +14,11 @@ from floe_core.plugin_types import PluginType
 from floe_core.plugins.catalog import CatalogPlugin
 from floe_core.plugins.storage import StoragePlugin
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+from floe_iceberg.errors import (
+    is_stale_table_metadata_error,
+    stale_table_metadata_error_from_exception,
+)
+from floe_iceberg.models import IcebergTableManagerConfig, StaleTableRecoveryMode
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
@@ -158,6 +163,7 @@ def export_dbt_to_iceberg(
     from pyiceberg.exceptions import NoSuchTableError
 
     catalog_connection_config = storage_plugin.get_pyiceberg_catalog_config()
+    iceberg_config = IcebergTableManagerConfig.from_governance(artifacts.governance)
     catalog = _require_write_capable_catalog(
         catalog_plugin.connect(config=catalog_connection_config),
         catalog_type,
@@ -209,6 +215,33 @@ def export_dbt_to_iceberg(
                 )
                 iceberg_table.overwrite(arrow_table)
             except NoSuchTableError:
+                iceberg_table = catalog.create_table(
+                    iceberg_id,
+                    schema=arrow_table.schema,
+                )
+                iceberg_table.append(arrow_table)
+            except Exception as exc:
+                if not is_stale_table_metadata_error(exc):
+                    raise
+
+                stale_error = stale_table_metadata_error_from_exception(
+                    table_identifier=iceberg_id,
+                    recovery_mode=iceberg_config.stale_table_recovery_mode,
+                    original_error=exc,
+                )
+                if iceberg_config.stale_table_recovery_mode is StaleTableRecoveryMode.STRICT:
+                    raise stale_error from exc
+
+                context.log.warning(
+                    "Repairing stale Iceberg table registration for %s: %s",
+                    iceberg_id,
+                    stale_error.metadata_location or "unknown metadata location",
+                )
+                catalog_plugin.drop_table(iceberg_id, purge=False)
+                catalog = _require_write_capable_catalog(
+                    catalog_plugin.connect(config=catalog_connection_config),
+                    catalog_type,
+                )
                 iceberg_table = catalog.create_table(
                     iceberg_id,
                     schema=arrow_table.schema,

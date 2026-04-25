@@ -17,6 +17,9 @@ Environment overrides:
     FLOE_E2E_ARTIFACTS_PATH: In-container compiled_artifacts.json path.
     FLOE_E2E_ICEBERG_EXPECTED_TABLES: Comma-separated table names. Unqualified
         names are resolved by the helper under the compiled product namespace.
+    FLOE_E2E_ICEBERG_RECOVERY_MODE: Materialization recovery mode recorded by
+        validation. Defaults to ``strict``. Supported values are ``strict`` and
+        ``repair``.
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ _DEFAULT_NAMESPACE = "floe-test"
 _DEFAULT_DAGSTER_SELECTOR = "app.kubernetes.io/name=dagster,component=dagster-webserver"
 _DEFAULT_ARTIFACTS_PATH = "/app/demo/customer_360/compiled_artifacts.json"
 _DEFAULT_EXPECTED_TABLES = "mart_customer_360"
+_DEFAULT_RECOVERY_MODE = "strict"
 _KUBECTL_TIMEOUT_SECONDS = 30
 
 
@@ -106,6 +110,7 @@ def test_demo_iceberg_outputs_exist_in_deployed_catalog() -> None:
         "FLOE_E2E_ICEBERG_EXPECTED_TABLES",
         _DEFAULT_EXPECTED_TABLES,
     )
+    recovery_mode = os.environ.get("FLOE_E2E_ICEBERG_RECOVERY_MODE", _DEFAULT_RECOVERY_MODE)
 
     pod_name = _find_dagster_pod(namespace=namespace, selector=selector)
     command = [
@@ -127,6 +132,8 @@ def test_demo_iceberg_outputs_exist_in_deployed_catalog() -> None:
             artifacts_path,
             "--expected-table",
             expected_tables,
+            "--recovery-mode",
+            recovery_mode,
         ]
     )
 
@@ -138,6 +145,8 @@ def test_demo_iceberg_outputs_exist_in_deployed_catalog() -> None:
 
     validation = _parse_validation_stdout(result.stdout)
     expected_count = len([table for table in expected_tables.split(",") if table.strip()])
+    assert validation["recovery_mode"] == recovery_mode
+    assert set(validation["table_names"]) == set(validation["expected_table_names"])
     assert validation["tables_validated"] == expected_count
 
 

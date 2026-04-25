@@ -203,6 +203,7 @@ def _resolve_governance(
         data_retention_days=manifest_governance.data_retention_days,
         default_ttl_hours=manifest_governance.default_ttl_hours,
         snapshot_keep_last=manifest_governance.snapshot_keep_last,
+        stale_table_recovery_mode=manifest_governance.stale_table_recovery_mode,
     )
 
     if resolved.default_ttl_hours is not None or resolved.snapshot_keep_last is not None:

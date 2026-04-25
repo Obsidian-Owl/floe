@@ -135,7 +135,7 @@ RUN pip install --no-cache-dir \
 RUN pip check
 
 # Smoke test: verify core imports resolve and PyIceberg PUT fix present
-RUN python -c "import dagster; import floe_core; import dagster_webserver; import dagster_k8s" \
+RUN python -c "import dagster; import floe_core; import floe_iceberg; import dagster_webserver; import dagster_k8s" \
  && python -c "from pyiceberg.catalog.rest import HttpMethod; assert 'PUT' in HttpMethod.__members__"
 
 # =============================================================================

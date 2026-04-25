@@ -428,6 +428,10 @@ class ResolvedGovernance(BaseModel):
         le=100,
         description="Minimum Iceberg snapshots to retain per table",
     )
+    stale_table_recovery_mode: Literal["strict", "repair"] | None = Field(
+        default=None,
+        description="Configured stale Iceberg metadata recovery mode for runtimes",
+    )
 
 
 class ObservabilityConfig(BaseModel):

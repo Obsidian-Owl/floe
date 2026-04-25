@@ -30,6 +30,7 @@ Requirements:
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -46,6 +47,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DOCKERFILE = REPO_ROOT / "docker" / "dagster-demo" / "Dockerfile"
 DOCKERIGNORE = REPO_ROOT / ".dockerignore"
 MAKEFILE = REPO_ROOT / "Makefile"
+DEMO_PLUGIN_RESOLVER = REPO_ROOT / "scripts" / "resolve-demo-plugins.py"
+DEMO_MANIFEST = REPO_ROOT / "demo" / "manifest.yaml"
 
 # The three demo products: disk name (hyphenated) -> container name (underscore)
 DEMO_PRODUCTS: dict[str, str] = {
@@ -805,6 +808,16 @@ class TestDockerfileBuildStage:
             "to verify core packages are importable."
         )
 
+    @pytest.mark.requirement("WU12-AC1")
+    def test_build_stage_smoke_test_imports_iceberg_runtime_package(self) -> None:
+        """Verify the demo image validates the Iceberg runtime package import."""
+        content = _read_dockerfile_raw()
+
+        assert "import floe_iceberg" in content, (
+            "Dockerfile smoke test must import floe_iceberg so missing enforced "
+            "Iceberg runtime packages fail during image build, not Dagster startup."
+        )
+
 
 class TestDockerfileRuntimeStage:
     """Verify the runtime stage is minimal with no build tools."""
@@ -1278,6 +1291,66 @@ class TestMakefileBuildDemoImage:
         )
         assert "resolve-demo-image-ref.py" in content, (
             "Makefile must derive the demo image tag from testing/ci/resolve-demo-image-ref.py."
+        )
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_build_demo_image_uses_manifest_plugin_resolver(self) -> None:
+        """Verify build-demo-image derives packages from the demo manifest.
+
+        The demo image installs workspace packages with ``pip install --no-deps``,
+        so local workspace dependency closure must be resolved before passing
+        ``FLOE_PLUGINS`` to Docker. Otherwise runtime-only imports can pass unit
+        tests and fail after deployment.
+        """
+        content = _read_makefile_content()
+        assert "scripts/resolve-demo-plugins.py" in content, (
+            "Makefile must derive DEMO_PLUGINS via scripts/resolve-demo-plugins.py "
+            "so manifest-selected plugins include local workspace dependencies."
+        )
+
+
+class TestDemoPluginResolver:
+    """Validate manifest-driven demo image workspace package resolution."""
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_resolver_includes_manifest_plugins_and_local_dependency_closure(self) -> None:
+        """The demo image package list must include selected local dependencies.
+
+        ``floe-orchestrator-dagster`` imports ``floe_iceberg`` for Iceberg
+        exports. Because the Docker build installs workspace packages with
+        ``--no-deps``, the resolver must include ``floe-iceberg`` explicitly
+        via the local dependency closure.
+        """
+        result = subprocess.run(
+            [sys.executable, str(DEMO_PLUGIN_RESOLVER), "--manifest", str(DEMO_MANIFEST)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        packages = result.stdout.split()
+        assert "floe-core" in packages
+        assert "floe-orchestrator-dagster" in packages
+        assert "floe-catalog-polaris" in packages
+        assert "floe-compute-duckdb" in packages
+        assert "floe-storage-s3" in packages
+        assert "floe-dbt-core" in packages
+        assert "floe-iceberg" in packages
+        assert packages == sorted(set(packages)), (
+            "Resolver output must be sorted and deduplicated for reproducible Docker builds."
+        )
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_orchestrator_declares_floe_iceberg_runtime_dependency(self) -> None:
+        """Runtime imports must be reflected in package metadata."""
+        pyproject = tomllib.loads(
+            (REPO_ROOT / "plugins" / "floe-orchestrator-dagster" / "pyproject.toml").read_text()
+        )
+        dependencies = pyproject["project"]["dependencies"]
+
+        assert any(dep.startswith("floe-iceberg") for dep in dependencies), (
+            "floe-orchestrator-dagster imports floe_iceberg at runtime and must declare "
+            "floe-iceberg in project.dependencies."
         )
 
 

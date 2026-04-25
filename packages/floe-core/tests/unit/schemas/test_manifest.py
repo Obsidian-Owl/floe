@@ -818,6 +818,25 @@ class TestObservabilityDemoManifestLoading:
             f"'observability' should NOT be in model_extra, but found: {extra_keys}"
         )
 
+    @pytest.mark.requirement("AC-RESOURCE-PRESETS")
+    def test_demo_manifest_resource_presets_are_typed(self) -> None:
+        """resource_presets is platform configuration, not ignored model_extra."""
+        from floe_core.schemas.manifest import ManifestResourcePreset
+
+        manifest = self._load_demo_manifest()
+
+        assert manifest.resource_presets is not None
+        assert isinstance(manifest.resource_presets["large"], ManifestResourcePreset)
+        assert manifest.resource_presets["large"].limits.memory == "2Gi"
+
+    @pytest.mark.requirement("AC-RESOURCE-PRESETS")
+    def test_demo_manifest_resource_presets_not_in_model_extra(self) -> None:
+        """Runtime resource sizing must not be silently ignored."""
+        manifest = self._load_demo_manifest()
+        extra_keys = set(manifest.model_extra.keys()) if manifest.model_extra else set()
+
+        assert "resource_presets" not in extra_keys
+
 
 class TestObservabilityOptionalField:
     """Tests that PlatformManifest without observability still loads (T049).

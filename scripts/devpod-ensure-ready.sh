@@ -18,11 +18,15 @@
 #   DEVPOD_PROVIDER     Provider used for restart/create via devpod up (default: hetzner)
 #   DEVPOD_DEVCONTAINER Devcontainer path used for restart/create
 #                       (default: .devcontainer/hetzner/devcontainer.json)
+#   DEVPOD_SOURCE       Optional explicit DevPod source, otherwise origin@branch
+#   DEVPOD_GIT_REF      Optional branch/ref when deriving the Git source
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=./devpod-source.sh
+source "${SCRIPT_DIR}/devpod-source.sh"
 WORKSPACE="${DEVPOD_WORKSPACE:-floe}"
 AUTO_START="${DEVPOD_AUTO_START:-1}"
 PROVIDER="${DEVPOD_PROVIDER:-hetzner}"
@@ -60,7 +64,11 @@ if ! workspace_running; then
             fi
 
             log "Workspace '${WORKSPACE}' is not running. Starting it via devpod up..."
-            devpod up "${PROJECT_ROOT}" \
+            DEVPOD_SOURCE_RESOLVED="$(devpod_resolve_source "${PROJECT_ROOT}")" \
+                || error "Failed to resolve DevPod source"
+            log "Using source: ${DEVPOD_SOURCE_RESOLVED}"
+            devpod up "${WORKSPACE}" \
+                --source "${DEVPOD_SOURCE_RESOLVED}" \
                 --id "${WORKSPACE}" \
                 --provider "${PROVIDER}" \
                 --devcontainer-path "${DEVCONTAINER}" \
