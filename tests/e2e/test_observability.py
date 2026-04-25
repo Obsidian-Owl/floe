@@ -22,7 +22,10 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any, ClassVar
+from urllib.parse import quote
 
 import httpx
 import pytest
@@ -30,6 +33,34 @@ from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 from testing.fixtures.services import ServiceEndpoint
+
+_TERMINAL_MARQUEZ_STATES = {"COMPLETED", "FAILED"}
+
+
+def _marquez_job_runs(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+) -> list[dict[str, Any]]:
+    """Query Marquez runs for a namespace/job pair."""
+    encoded_namespace = quote(namespace, safe="")
+    encoded_job_name = quote(job_name, safe="")
+    response = marquez_client.get(
+        f"/api/v1/namespaces/{encoded_namespace}/jobs/{encoded_job_name}/runs"
+    )
+    assert response.status_code == 200, (
+        f"Marquez runs endpoint failed for {namespace}/{job_name}: "
+        f"{response.status_code} - {response.text}"
+    )
+    runs = response.json().get("runs", [])
+    assert isinstance(runs, list), f"Marquez runs should be a list, got {type(runs)}"
+    return runs
+
+
+def _marquez_run_state(run: dict[str, Any]) -> str:
+    """Return normalized Marquez run state across API response variants."""
+    return str(run.get("state") or run.get("currentState") or "").upper()
 
 
 class TestObservability(IntegrationTestBase):
@@ -144,6 +175,8 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         marquez_client: httpx.Client,
         dagster_client: Any,
+        compiled_artifacts: Callable[[Path], Any],
+        project_root: Path,
         seed_observability: None,
     ) -> None:
         """Validate that Marquez contains real OpenLineage jobs from pipeline execution.
@@ -158,6 +191,8 @@ class TestObservability(IntegrationTestBase):
             e2e_namespace: Unique namespace for test isolation.
             marquez_client: Marquez HTTP client.
             dagster_client: Dagster GraphQL client.
+            compiled_artifacts: Real compiler fixture used to resolve lineage namespace.
+            project_root: Repository root fixture.
         """
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster")
@@ -200,59 +235,59 @@ class TestObservability(IntegrationTestBase):
         verify_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}")
         assert verify_response.status_code == 200, f"Created namespace not found: {test_namespace}"
 
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+        runtime_namespace = artifacts.observability.lineage_namespace
+        runtime_job_name = artifacts.metadata.product_name
+
         # Query for REAL jobs -- not just API responds
         jobs_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}/jobs")
         assert jobs_response.status_code == 200, (
             f"Jobs endpoint failed: {jobs_response.status_code}"
         )
 
-        # Check for jobs in the default namespace (where pipeline would emit)
-        default_jobs = marquez_client.get("/api/v1/namespaces/default/jobs")
-        assert default_jobs.status_code == 200, (
-            f"Marquez default namespace jobs query failed: {default_jobs.status_code}. "
-            "Marquez API must be accessible for OpenLineage validation."
+        runtime_jobs_response = marquez_client.get(
+            f"/api/v1/namespaces/{quote(runtime_namespace, safe='')}/jobs"
         )
-        default_jobs_json = default_jobs.json()
-        all_jobs: list[dict[str, Any]] = default_jobs_json.get("jobs", [])
-
-        # Also check customer-360, floe-platform, and floe.compilation namespaces.
-        # floe.compilation is the default namespace used by the SyncLineageEmitter
-        # during compile_pipeline() — compilation-time events land there.
-        for ns_name in ("customer-360", "floe-platform", "floe.compilation"):
-            ns_jobs = marquez_client.get(f"/api/v1/namespaces/{ns_name}/jobs")
-            if ns_jobs.status_code == 200:
-                ns_jobs_json = ns_jobs.json()
-                all_jobs.extend(ns_jobs_json.get("jobs", []))
-
-        namespaces_checked = (
-            f"default, customer-360, floe-platform, floe.compilation, {test_namespace}"
+        assert runtime_jobs_response.status_code == 200, (
+            f"Marquez runtime namespace jobs query failed for {runtime_namespace}: "
+            f"{runtime_jobs_response.status_code} - {runtime_jobs_response.text}"
         )
+        all_jobs: list[dict[str, Any]] = runtime_jobs_response.json().get("jobs", [])
 
         # We need REAL OpenLineage events from pipeline execution
         assert len(all_jobs) > 0, (
-            "OBSERVABILITY GAP: No OpenLineage jobs found in any Marquez namespace.\n"
+            "OBSERVABILITY GAP: No OpenLineage jobs found in runtime namespace.\n"
             "The platform is not emitting OpenLineage events during pipeline execution.\n"
             "Fix: Configure dbt-openlineage or Dagster OpenLineage integration to emit "
             "RunEvent.START and RunEvent.COMPLETE events.\n"
-            f"Namespaces checked: {namespaces_checked}"
+            f"Namespace checked: {runtime_namespace}"
         )
 
-        # Validate jobs are from THIS pipeline (match expected product names).
-        # Runtime lineage uses dbt model unique_ids (model.customer_360.*)
-        # or Dagster asset keys — match several known prefixes.
         job_names = [job.get("name", "") for job in all_jobs]
-        has_pipeline_job = any(
-            "model." in name.lower()
-            or "stg_" in name.lower()
-            or "mart_" in name.lower()
-            or "customer" in name.lower()
-            or "pipeline" in name.lower()
-            for name in job_names
-        )
-        assert has_pipeline_job, (
-            f"OBSERVABILITY GAP: Jobs found but none match expected pipeline products.\n"
+        assert runtime_job_name in job_names, (
+            "OBSERVABILITY GAP: Runtime OpenLineage job not found in Marquez.\n"
+            f"Expected namespace/job: {runtime_namespace}/{runtime_job_name}\n"
             f"Job names found: {job_names}\n"
-            "Expected job names containing 'model.', 'stg_', 'mart_', 'customer', or 'pipeline'."
+            "Expected runtime LineageResource to emit using the compiled artifact "
+            "lineage namespace and product name."
+        )
+
+        runs = _marquez_job_runs(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_name=runtime_job_name,
+        )
+        assert len(runs) > 0, (
+            "OBSERVABILITY GAP: Runtime OpenLineage job exists but has no Marquez runs.\n"
+            f"Namespace/job: {runtime_namespace}/{runtime_job_name}"
+        )
+        run_states = {_marquez_run_state(run) for run in runs if _marquez_run_state(run)}
+        assert run_states & _TERMINAL_MARQUEZ_STATES, (
+            "OBSERVABILITY GAP: Runtime OpenLineage runs have no terminal Marquez state.\n"
+            f"Namespace/job: {runtime_namespace}/{runtime_job_name}\n"
+            f"Run states found: {sorted(run_states)}\n"
+            "Expected terminal state COMPLETED or FAILED."
         )
 
     @pytest.mark.e2e
@@ -892,6 +927,8 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         marquez_client: httpx.Client,
         dagster_client: Any,
+        compiled_artifacts: Callable[[Path], Any],
+        project_root: Path,
         seed_observability: None,
     ) -> None:
         """Validate platform emits OpenLineage events at all 4 required lifecycle points.
@@ -912,6 +949,8 @@ class TestObservability(IntegrationTestBase):
             e2e_namespace: Unique namespace for test isolation.
             marquez_client: Marquez HTTP client.
             dagster_client: Dagster GraphQL client.
+            compiled_artifacts: Real compiler fixture used to resolve lineage namespace.
+            project_root: Repository root fixture.
         """
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster")
@@ -926,21 +965,29 @@ class TestObservability(IntegrationTestBase):
         # seed_observability Phase 2 triggered a Dagster asset run for
         # stg_crm_customers, causing LineageResource to emit runtime
         # OpenLineage events to Marquez. Query those events here.
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+        runtime_namespace = artifacts.observability.lineage_namespace
+        runtime_job_name = artifacts.metadata.product_name
 
         # Query Marquez for events emitted BY the platform after compilation.
         # floe.compilation is the SyncLineageEmitter's default namespace used
         # during compile_pipeline() — compilation-time events land there.
-        namespaces_to_check = [
-            "default",
-            "customer-360",
-            "floe-platform",
-            "floe.compilation",
-        ]
+        namespaces_to_check = list(
+            dict.fromkeys(
+                [
+                    runtime_namespace,
+                    "default",
+                    "floe-platform",
+                    "floe.compilation",
+                ]
+            )
+        )
         all_jobs: list[dict[str, Any]] = []
         all_runs: list[dict[str, Any]] = []
 
         for ns_name in namespaces_to_check:
-            jobs_response = marquez_client.get(f"/api/v1/namespaces/{ns_name}/jobs")
+            jobs_response = marquez_client.get(f"/api/v1/namespaces/{quote(ns_name, safe='')}/jobs")
             if jobs_response.status_code != 200:
                 continue
             jobs = jobs_response.json().get("jobs", [])
@@ -949,7 +996,8 @@ class TestObservability(IntegrationTestBase):
             # Get runs for each job to check event types
             for job in jobs:
                 runs_response = marquez_client.get(
-                    f"/api/v1/namespaces/{ns_name}/jobs/{job['name']}/runs"
+                    f"/api/v1/namespaces/{quote(ns_name, safe='')}/jobs/"
+                    f"{quote(job['name'], safe='')}/runs"
                 )
                 if runs_response.status_code == 200:
                     runs = runs_response.json().get("runs", [])
@@ -979,7 +1027,9 @@ class TestObservability(IntegrationTestBase):
             for name in job_names
         )
         has_pipeline_job = any(
-            "pipeline" in name.lower()
+            name == runtime_job_name
+            or name == runtime_job_name.replace("-", "_")
+            or "pipeline" in name.lower()
             or "daily" in name.lower()
             or "customer" in name.lower()
             or "asset" in name.lower()

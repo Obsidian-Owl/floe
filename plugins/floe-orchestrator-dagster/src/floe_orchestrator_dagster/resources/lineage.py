@@ -366,7 +366,12 @@ class NoOpLineageResource:
 # ---------------------------------------------------------------------------
 
 
-def create_lineage_resource(lineage_ref: PluginRef, *, strict: bool = False) -> dict[str, Any]:
+def create_lineage_resource(
+    lineage_ref: PluginRef,
+    *,
+    strict: bool = False,
+    default_namespace: str | None = None,
+) -> dict[str, Any]:
     """Create a Dagster ResourceDefinition for the configured lineage backend.
 
     Loads the lineage plugin from the registry, obtains its transport config
@@ -378,6 +383,8 @@ def create_lineage_resource(lineage_ref: PluginRef, *, strict: bool = False) -> 
         lineage_ref: Resolved lineage plugin reference (type, version, config).
         strict: Raise lineage emission timeouts/failures instead of returning
             fallback/default values.
+        default_namespace: Optional compiled lineage namespace. When provided,
+            it overrides plugin fallback namespace strategy for runtime events.
 
     Returns:
         ``{"lineage": ResourceDefinition}`` where the resource yields a
@@ -390,9 +397,9 @@ def create_lineage_resource(lineage_ref: PluginRef, *, strict: bool = False) -> 
 
     transport_config: dict[str, Any] = plugin.get_transport_config()
     ns_strategy: dict[str, Any] = plugin.get_namespace_strategy()
-    default_namespace: str = ns_strategy.get("default_namespace", "default")
+    resolved_namespace = default_namespace or ns_strategy.get("default_namespace", "default")
 
-    emitter = create_emitter(transport_config, default_namespace)
+    emitter = create_emitter(transport_config, resolved_namespace)
 
     def _resource_fn(_init_context: Any) -> Any:
         resource = LineageResource(emitter=emitter, strict=strict)
@@ -408,6 +415,7 @@ def try_create_lineage_resource(
     plugins: ResolvedPlugins | None,
     *,
     strict: bool = False,
+    default_namespace: str | None = None,
 ) -> dict[str, Any]:
     """Return a lineage resource dict, always with a ``"lineage"`` key.
 
@@ -427,6 +435,7 @@ def try_create_lineage_resource(
         plugins: Resolved plugin configuration, or ``None``.
         strict: Raise lineage emission timeouts/failures for configured lineage
             backends instead of returning fallback/default values.
+        default_namespace: Optional compiled lineage namespace for runtime events.
 
     Returns:
         ``{"lineage": ResourceDefinition}`` when unconfigured or successful.
@@ -451,7 +460,11 @@ def try_create_lineage_resource(
         return {"lineage": ResourceDefinition(resource_fn=_noop_fn)}
 
     try:
-        return create_lineage_resource(lineage_backend, strict=strict)
+        return create_lineage_resource(
+            lineage_backend,
+            strict=strict,
+            default_namespace=default_namespace,
+        )
     except Exception:
         logger.exception("lineage_creation_failed")
         raise

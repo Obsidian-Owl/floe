@@ -481,7 +481,11 @@ def test_runtime_builder_alpha_policy_enables_strict_lineage(
             capability_policy=CapabilityPolicy.alpha(),
         )
 
-    mock_lineage.assert_called_once_with(artifacts.plugins, strict=True)
+    mock_lineage.assert_called_once_with(
+        artifacts.plugins,
+        strict=True,
+        default_namespace=artifacts.observability.lineage_namespace,
+    )
 
 
 # ===========================================================================

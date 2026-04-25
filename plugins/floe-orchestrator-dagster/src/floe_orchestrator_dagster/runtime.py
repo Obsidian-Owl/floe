@@ -53,6 +53,13 @@ def _has_ingestion_workloads(plugins: Any | None) -> bool:
     return len(sources) > 0
 
 
+def _lineage_namespace(artifacts: CompiledArtifacts) -> str | None:
+    """Return the compiled lineage namespace when artifacts provide one."""
+    observability = getattr(artifacts, "observability", None)
+    namespace = getattr(observability, "lineage_namespace", None)
+    return str(namespace) if namespace else None
+
+
 def _create_semantic_resources(plugins: Any | None) -> dict[str, Any]:
     """Create semantic resources through the configured semantic factory."""
     from floe_orchestrator_dagster.resources.semantic import (
@@ -161,7 +168,11 @@ def build_product_definitions(
 
     resources: dict[str, object] = {
         "dbt": ResourceDefinition(resource_fn=_dbt_resource_fn),
-        **try_create_lineage_resource(plugins, strict=policy.require_lineage),
+        **try_create_lineage_resource(
+            plugins,
+            strict=policy.require_lineage,
+            default_namespace=_lineage_namespace(artifacts),
+        ),
     }
     assets: list[Any] = [_dbt_assets_fn]
 

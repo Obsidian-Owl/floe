@@ -16,10 +16,41 @@ See Also:
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 import pytest
+
+_TERMINAL_MARQUEZ_STATES = {"COMPLETED", "FAILED"}
+
+
+def _marquez_job_runs(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+) -> list[dict[str, Any]]:
+    """Query Marquez runs for a namespace/job pair."""
+    encoded_namespace = quote(namespace, safe="")
+    encoded_job_name = quote(job_name, safe="")
+    response = marquez_client.get(
+        f"/api/v1/namespaces/{encoded_namespace}/jobs/{encoded_job_name}/runs"
+    )
+    assert response.status_code == 200, (
+        f"Marquez runs API returned {response.status_code} for "
+        f"{namespace}/{job_name}: {response.text}"
+    )
+    runs = response.json().get("runs", [])
+    assert isinstance(runs, list), f"Marquez runs should be a list, got {type(runs)}"
+    return runs
+
+
+def _marquez_run_state(run: dict[str, Any]) -> str:
+    """Return normalized Marquez run state across API response variants."""
+    return str(run.get("state") or run.get("currentState") or "").upper()
 
 
 @pytest.mark.e2e
@@ -90,6 +121,44 @@ class TestLineageRoundTrip:
         ns_data = get_response.json()
         assert ns_data.get("name") == test_namespace, (
             f"Namespace name mismatch: {ns_data.get('name')}"
+        )
+
+    @pytest.mark.requirement("AC-2.4")
+    def test_runtime_lifecycle_runs_visible_for_compiled_product(
+        self,
+        marquez_client: httpx.Client,
+        compiled_artifacts: Callable[[Path], Any],
+        project_root: Path,
+        seed_observability: None,
+    ) -> None:
+        """Verify runtime-emitted lifecycle events are visible as Marquez runs."""
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+        namespace = artifacts.observability.lineage_namespace
+        job_name = artifacts.metadata.product_name
+
+        jobs_response = marquez_client.get(f"/api/v1/namespaces/{quote(namespace, safe='')}/jobs")
+        assert jobs_response.status_code == 200, (
+            f"Marquez jobs API returned {jobs_response.status_code} for "
+            f"namespace {namespace}: {jobs_response.text}"
+        )
+        job_names = [job.get("name") for job in jobs_response.json().get("jobs", [])]
+        assert job_name in job_names, (
+            "Runtime OpenLineage job not found in Marquez.\n"
+            f"Expected namespace/job: {namespace}/{job_name}\n"
+            f"Jobs found: {job_names}"
+        )
+
+        runs = _marquez_job_runs(
+            marquez_client,
+            namespace=namespace,
+            job_name=job_name,
+        )
+        assert runs, f"Expected at least one Marquez run for {namespace}/{job_name}"
+        run_states = {_marquez_run_state(run) for run in runs if _marquez_run_state(run)}
+        assert run_states & _TERMINAL_MARQUEZ_STATES, (
+            "Runtime lineage run did not reach a terminal Marquez state.\n"
+            f"Expected COMPLETED or FAILED, found: {sorted(run_states)}"
         )
 
     @pytest.mark.requirement("AC-2.4")

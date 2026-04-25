@@ -1260,6 +1260,37 @@ class TestCreateLineageResource:
             mock_create_emitter.assert_called_once_with(transport_config, "custom-ns")
 
     @pytest.mark.requirement(AC_8)
+    def test_compiled_default_namespace_overrides_plugin_fallback(self) -> None:
+        """Test compiled artifact namespace controls runtime OpenLineage namespace."""
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+
+        mock_plugin = MagicMock()
+        transport_config = {"url": "http://marquez:5000"}
+        mock_plugin.get_transport_config.return_value = transport_config
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "plugin-default",
+        }
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(
+                f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter
+            ) as mock_create_emitter,
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            create_lineage_resource(lineage_ref, default_namespace="customer-360")
+
+        mock_create_emitter.assert_called_once_with(transport_config, "customer-360")
+
+    @pytest.mark.requirement(AC_8)
     def test_different_plugin_type_uses_correct_registry_lookup(self) -> None:
         """Test factory uses the ref.type from lineage_ref, not a hardcoded string.
 
@@ -1651,7 +1682,11 @@ class TestTryCreateLineageResourceWithBackend:
         ) as mock_create:
             result = try_create_lineage_resource(plugins)
 
-            mock_create.assert_called_once_with(lineage_ref, strict=False)
+            mock_create.assert_called_once_with(
+                lineage_ref,
+                strict=False,
+                default_namespace=None,
+            )
             assert result is expected_result, (
                 "try_create must return the result of create_lineage_resource"
             )
@@ -1680,7 +1715,11 @@ class TestTryCreateLineageResourceWithBackend:
         ) as mock_create:
             result = try_create_lineage_resource(plugins, strict=True)
 
-        mock_create.assert_called_once_with(lineage_ref, strict=True)
+        mock_create.assert_called_once_with(
+            lineage_ref,
+            strict=True,
+            default_namespace=None,
+        )
         assert result is expected_result
 
     @pytest.mark.requirement(AC_8)
