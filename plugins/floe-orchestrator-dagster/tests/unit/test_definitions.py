@@ -1,8 +1,9 @@
 """Unit tests for definition generation in DagsterOrchestratorPlugin.
 
-These tests verify the create_definitions() method behavior with various
-CompiledArtifacts inputs, including edge cases like empty transforms,
-circular dependencies, and duplicate names.
+These tests verify direct create_definitions() validation behavior with
+various CompiledArtifacts inputs. Direct plugin calls validate artifacts and
+then fail without loader-supplied project_dir; usable Dagster Definitions are
+owned by the loader/runtime builder path.
 
 Note: @pytest.mark.requirement markers are used for traceability to spec.
 """
@@ -59,7 +60,8 @@ class TestCreateDefinitionsWithValidArtifacts:
 class TestCreateDefinitionsWithEmptyTransforms:
     """Test create_definitions with empty or missing transforms.
 
-    Validates FR-005: System returns empty Definitions when no transforms exist.
+    Direct plugin calls validate artifacts but do not return usable
+    Definitions without loader-supplied project_dir.
     """
 
     @pytest.mark.requirement("FR-005")

@@ -114,9 +114,9 @@ def create_ingestion_assets(
 ) -> list[AssetsDefinition]:
     """Create Dagster asset definitions for ingestion pipelines.
 
-    Creates a wrapper asset that delegates to the ingestion plugin resource
-    at runtime. The ingestion plugin (loaded as a Dagster resource) handles
-    actual pipeline creation and execution.
+    Creates helper assets only when source configuration already contains
+    explicit executable dlt source objects. Normal compiled JSON ingestion
+    configuration is not executable yet and fails loudly.
 
     For direct dlt integration, use FloeIngestionTranslator with the
     ``@dlt_assets`` decorator instead.
@@ -125,11 +125,23 @@ def create_ingestion_assets(
         ingestion_ref: Resolved ingestion plugin reference from CompiledArtifacts.
 
     Returns:
-        List containing the ingestion runner asset definition.
+        List containing ingestion runner asset definitions.
 
     Example:
         >>> from floe_core.schemas.compiled_artifacts import PluginRef
-        >>> ref = PluginRef(type="dlt", version="0.1.0", config={})
+        >>> source = build_dlt_source_somewhere_else()
+        >>> ref = PluginRef(
+        ...     type="dlt",
+        ...     version="0.1.0",
+        ...     config={
+        ...         "sources": [{
+        ...             "name": "github_events",
+        ...             "source_type": "rest_api",
+        ...             "source_config": {"source": source},
+        ...             "destination_table": "bronze.github_events",
+        ...         }]
+        ...     },
+        ... )
         >>> assets = create_ingestion_assets(ref)
         >>> len(assets)
         1
@@ -176,6 +188,8 @@ def _source_configs(ingestion_config: Mapping[str, Any]) -> list[dict[str, Any]]
     sources = ingestion_config.get("sources")
     if sources is None:
         return [{"name": ingestion_config.get("name", "pipelines"), **dict(ingestion_config)}]
+    if not sources:
+        raise ValueError("Dagster ingestion helper requires at least one ingestion source")
     return [dict(source) for source in sources]
 
 

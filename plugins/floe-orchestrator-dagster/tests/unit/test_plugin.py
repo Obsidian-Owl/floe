@@ -7,7 +7,7 @@ Requirements Covered:
 - FR-002: Implement all abstract methods from OrchestratorPlugin ABC
 - FR-003: Plugin declares name, version, floe_api_version
 - FR-004: Plugin inherits from OrchestratorPlugin and PluginMetadata
-- FR-005: Generate valid Dagster Definitions from CompiledArtifacts
+- FR-005: Validate CompiledArtifacts and delegate to loader/runtime builder
 - FR-006: Create Dagster software-defined assets from TransformConfig
 - FR-007: Preserve dbt model dependency graph as Dagster asset dependencies
 - FR-008: Include transform metadata in asset metadata
@@ -197,8 +197,8 @@ class TestDagsterOrchestratorPluginInstantiation:
 class TestDagsterOrchestratorPluginCreateDefinitions:
     """Test create_definitions method.
 
-    Validates FR-005: System MUST generate valid Dagster Definitions
-    object from CompiledArtifacts.
+    Validates FR-005: direct calls validate/delegate but usable Dagster
+    Definitions require the loader/runtime builder with project_dir.
     Validates FR-009: System MUST validate CompiledArtifacts schema
     before generating definitions.
     """
