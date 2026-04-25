@@ -126,7 +126,7 @@ This group of requirements defines the `floe compile` workflow that transforms f
 - [ ] Runtime builder creates dbt-backed Dagster assets from `target/manifest.json`
 - [ ] Runtime builder configures required resources from CompiledArtifacts
 - [ ] Configured catalog/storage/Iceberg failures fail loudly
-- [ ] Configured ingestion fails loudly until executable dlt source construction from compiled JSON exists
+- [ ] Non-empty ingestion workload sources fail loudly until executable dlt source construction from compiled JSON exists
 - [ ] Output: Python loader shim plus product project files
 - [ ] Error if Dagster runtime config is invalid
 

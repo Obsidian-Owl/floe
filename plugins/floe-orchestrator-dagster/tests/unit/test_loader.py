@@ -278,6 +278,60 @@ def project_dir_with_ingestion_no_config(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def project_dir_with_ingestion_empty_config(tmp_path: Path) -> Path:
+    """Temporary project dir with ingestion selected and empty config."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={},
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_flat_config(tmp_path: Path) -> Path:
+    """Temporary project dir with legacy flat ingestion workload config."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "source_type": "rest_api",
+                "destination_table": "bronze.github_events",
+            },
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_sources_dict(tmp_path: Path) -> Path:
+    """Temporary project dir with malformed non-list sources config."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "sources": {
+                    "name": "github-events",
+                    "source_type": "rest_api",
+                    "destination_table": "bronze.github_events",
+                }
+            },
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
 def project_dir_with_ingestion_no_manifest(tmp_path: Path) -> Path:
     """Temporary project dir with ingestion artifacts but no dbt manifest."""
     pdir = tmp_path / "dbt_project"
@@ -924,6 +978,32 @@ def test_runtime_allows_selected_ingestion_without_config(
 
     resources = result.resources or {}
     assert "ingestion" not in resources
+
+
+def test_runtime_allows_selected_ingestion_with_empty_config(
+    project_dir_with_ingestion_empty_config: Path,
+) -> None:
+    """Selecting ingestion with empty config should not block transforms."""
+    result = load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_empty_config)
+
+    resources = result.resources or {}
+    assert "ingestion" not in resources
+
+
+def test_runtime_fails_for_flat_ingestion_workload_config(
+    project_dir_with_ingestion_flat_config: Path,
+) -> None:
+    """Legacy flat non-empty ingestion config is a workload and must fail."""
+    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+        load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_flat_config)
+
+
+def test_runtime_fails_for_non_list_ingestion_sources(
+    project_dir_with_ingestion_sources_dict: Path,
+) -> None:
+    """Malformed non-list sources config must fail loudly."""
+    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+        load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_sources_dict)
 
 
 def test_runtime_ingestion_failure_precedes_missing_manifest(

@@ -34,13 +34,21 @@ def _has_iceberg_config(artifacts: CompiledArtifacts) -> bool:
 
 
 def _has_ingestion_workloads(plugins: Any | None) -> bool:
-    """Return True when configured ingestion contains executable workload refs."""
+    """Return True when configured ingestion contains any workload config."""
     ingestion = getattr(plugins, "ingestion", None)
     config = getattr(ingestion, "config", None)
+    if config is None:
+        return False
     if not isinstance(config, dict):
+        return True
+    if not config:
         return False
     sources = config.get("sources")
-    return isinstance(sources, list) and len(sources) > 0
+    if sources is None:
+        return bool(config)
+    if not isinstance(sources, list):
+        return True
+    return len(sources) > 0
 
 
 def _create_semantic_resources(plugins: Any | None) -> dict[str, Any]:

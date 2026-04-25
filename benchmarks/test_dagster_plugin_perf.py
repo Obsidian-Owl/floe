@@ -13,10 +13,47 @@ Run with:
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pytest
+
+
+def _minimal_manifest() -> dict[str, Any]:
+    """Create a minimal dbt manifest accepted by dagster-dbt."""
+    return {
+        "metadata": {
+            "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
+            "dbt_version": "1.7.0",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "invocation_id": "benchmark-invocation",
+        },
+        "nodes": {},
+        "sources": {},
+        "exposures": {},
+        "metrics": {},
+        "groups": {},
+        "selectors": {},
+        "disabled": [],
+        "parent_map": {},
+        "child_map": {},
+        "group_map": {},
+        "semantic_models": {},
+        "unit_tests": {},
+        "saved_queries": {},
+    }
+
+
+def _write_runtime_project(tmp_path: Path, artifacts: dict[str, Any]) -> Path:
+    """Write compiled artifacts and manifest for runtime loader benchmarks."""
+    project_dir = tmp_path / "benchmark_project"
+    target_dir = project_dir / "target"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "compiled_artifacts.json").write_text(json.dumps(artifacts))
+    (target_dir / "manifest.json").write_text(json.dumps(_minimal_manifest()))
+    return project_dir
 
 
 def _create_minimal_artifacts() -> dict[str, Any]:
@@ -173,13 +210,58 @@ def test_plugin_instantiation_repeated() -> None:
 
 
 # =============================================================================
-# NFR-002: Direct Definition Validation/Delegation
+# NFR-002: Runtime Definition Generation <5s for 500 Transforms
 # =============================================================================
 
 
 @pytest.mark.benchmark
 @pytest.mark.requirement("NFR-002")
-def test_create_definitions_small() -> None:
+def test_load_product_definitions_small(tmp_path: Path) -> None:
+    """Benchmark runtime definition generation with a small pipeline."""
+    from floe_orchestrator_dagster.loader import load_product_definitions
+
+    artifacts = _create_artifacts_with_transforms(10)
+    project_dir = _write_runtime_project(tmp_path, artifacts)
+
+    _ = load_product_definitions("benchmark-pipeline", project_dir)
+
+
+@pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
+def test_load_product_definitions_medium(tmp_path: Path) -> None:
+    """Benchmark runtime definition generation with a medium pipeline."""
+    from floe_orchestrator_dagster.loader import load_product_definitions
+
+    artifacts = _create_artifacts_with_transforms(100)
+    project_dir = _write_runtime_project(tmp_path, artifacts)
+
+    _ = load_product_definitions("benchmark-pipeline", project_dir)
+
+
+@pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
+def test_load_product_definitions_large(tmp_path: Path) -> None:
+    """Benchmark runtime definition generation with a large pipeline.
+
+    NFR-002 Target: runtime Definitions generation should complete in <5s for
+    500 compiled transforms.
+    """
+    from floe_orchestrator_dagster.loader import load_product_definitions
+
+    artifacts = _create_artifacts_with_transforms(500)
+    project_dir = _write_runtime_project(tmp_path, artifacts)
+
+    _ = load_product_definitions("benchmark-pipeline", project_dir)
+
+
+# =============================================================================
+# Direct create_definitions Contract Validation
+# =============================================================================
+
+
+@pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
+def test_create_definitions_direct_failure_small() -> None:
     """Benchmark direct create_definitions validation for a small pipeline.
 
     Direct Dagster calls validate artifacts, then fail with the project_dir
@@ -195,7 +277,7 @@ def test_create_definitions_small() -> None:
 
 @pytest.mark.benchmark
 @pytest.mark.requirement("NFR-002")
-def test_create_definitions_medium() -> None:
+def test_create_definitions_direct_failure_medium() -> None:
     """Benchmark direct create_definitions validation for a medium pipeline.
 
     Typical production pipeline size.
@@ -210,7 +292,7 @@ def test_create_definitions_medium() -> None:
 
 @pytest.mark.benchmark
 @pytest.mark.requirement("NFR-002")
-def test_create_definitions_large() -> None:
+def test_create_definitions_direct_failure_large() -> None:
     """Benchmark direct create_definitions validation for a large pipeline.
 
     NFR-002 Target: Validation/delegation must complete quickly for 500 transforms.
