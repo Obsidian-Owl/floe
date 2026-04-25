@@ -248,6 +248,30 @@ def project_dir_with_ingestion(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def project_dir_with_ingestion_no_manifest(tmp_path: Path) -> Path:
+    """Temporary project dir with ingestion artifacts but no dbt manifest."""
+    pdir = tmp_path / "dbt_project"
+    pdir.mkdir(parents=True, exist_ok=True)
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "sources": [
+                    {
+                        "name": "github-events",
+                        "source_type": "rest_api",
+                        "destination_table": "bronze.github_events",
+                    }
+                ]
+            },
+        ),
+    )
+    (pdir / "compiled_artifacts.json").write_text(artifacts.model_dump_json(indent=2))
+    return pdir
+
+
+@pytest.fixture
 def empty_project_dir(tmp_path: Path) -> Path:
     """Temporary project directory with NO compiled_artifacts.json.
 
@@ -828,6 +852,14 @@ def test_runtime_fails_loudly_when_ingestion_configured(
     """Dagster ingestion runtime is blocked until source construction exists."""
     with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion)
+
+
+def test_runtime_ingestion_failure_precedes_missing_manifest(
+    project_dir_with_ingestion_no_manifest: Path,
+) -> None:
+    """Unsupported ingestion error must win before dbt manifest inspection."""
+    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+        load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_no_manifest)
 
 
 @pytest.mark.requirement("AC-5")

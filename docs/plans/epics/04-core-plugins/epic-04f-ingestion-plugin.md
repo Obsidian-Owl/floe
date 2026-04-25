@@ -217,6 +217,12 @@ class DltIngestionPlugin(IngestionPlugin):
 
 ### US4: Dagster Asset Factories (P1)
 
+> Superseded (2026-04-25 Task 2): Canonical Dagster runtime ingestion is
+> intentionally disabled until compiled JSON config can construct executable dlt
+> source objects. Configured ingestion fails loudly during runtime definition
+> loading; these asset-factory criteria are historical plan text, not current
+> implemented runtime behavior.
+
 **As a** data engineer
 **I want** Dagster assets generated from dlt sources
 **So that** ingestion is orchestrated alongside transforms

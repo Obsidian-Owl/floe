@@ -2,7 +2,7 @@
 
 This module defines the abstract base class for orchestrator plugins that
 provide job scheduling and execution. Orchestrator plugins are responsible for:
-- Creating platform-specific definitions from compiled artifacts
+- Validating compiled artifacts and delegating to platform runtime definition builders
 - Generating assets from dbt transforms
 - Providing Helm values for deploying orchestration services
 - Emitting OpenLineage events for data lineage tracking
@@ -193,14 +193,17 @@ class OrchestratorPlugin(PluginMetadata):
                 profiles, and other configuration.
 
         Returns:
-            Platform-specific definitions object (Definitions for Dagster,
-            DAG for Airflow).
+            Platform-specific definitions object when sufficient runtime
+            context is available. Dagster production runtime definitions are
+            loaded through the generated loader shim or
+            load_product_definitions(product_name, project_dir), not direct
+            calls to this method.
 
         Example:
             >>> artifacts = {"dbt_manifest": {...}, "transforms": [...]}
-            >>> definitions = plugin.create_definitions(artifacts)
-            >>> # For Dagster production runtime:
-            >>> # load_product_definitions(product_name, project_dir)
+            >>> plugin.create_definitions(artifacts)  # validates/delegates
+            >>> # Dagster production runtime:
+            >>> # definitions = load_product_definitions(product_name, project_dir)
         """
         ...
 

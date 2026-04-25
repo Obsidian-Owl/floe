@@ -55,10 +55,14 @@ class OrchestratorPlugin(ABC):
 
     @abstractmethod
     def create_definitions(self, artifacts: CompiledArtifacts) -> Any:
-        """Generate orchestrator-specific definitions from compiled artifacts.
+        """Validate compiled artifacts and delegate to runtime definition loading.
 
-        For Dagster: Returns Dagster Definitions object
-        For Airflow: Returns DAG object
+        For Dagster: Direct plugin calls validate artifacts, then require
+        the generated definitions.py loader shim or
+        load_product_definitions(product_name, project_dir) because usable
+        Definitions need compiled_artifacts.json, target/manifest.json, and
+        dbt profile/project files resolved from one product directory.
+        For Airflow: Returns DAG object when its runtime context is available.
         """
         pass
 

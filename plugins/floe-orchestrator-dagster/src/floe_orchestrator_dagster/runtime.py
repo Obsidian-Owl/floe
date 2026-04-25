@@ -64,6 +64,10 @@ def build_product_definitions(
     if project_dir is None:
         raise ValueError(_PROJECT_DIR_REQUIRED_MESSAGE)
 
+    plugins = artifacts.plugins
+    if plugins and plugins.ingestion:
+        raise ValueError(_INGESTION_RUNTIME_DISABLED_MESSAGE)
+
     manifest_path = project_dir / "target" / "manifest.json"
 
     @dbt_assets(
@@ -107,9 +111,6 @@ def build_product_definitions(
             context.log.debug("emit_complete failed: %s", _complete_exc)
 
     project_dir_str = str(project_dir)
-    plugins = artifacts.plugins
-    if plugins and plugins.ingestion:
-        raise ValueError(_INGESTION_RUNTIME_DISABLED_MESSAGE)
 
     def _dbt_resource_fn(_init_context: Any) -> Any:
         return DbtCliResource(
