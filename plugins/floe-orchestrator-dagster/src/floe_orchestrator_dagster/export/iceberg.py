@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast, runtime_checkable
 
 import floe_core.plugin_registry as _plugin_registry_module
 from floe_core.plugin_types import PluginType
@@ -13,6 +14,23 @@ from floe_core.plugins.catalog import CatalogPlugin
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+@runtime_checkable
+class WriteCapableIcebergCatalog(Protocol):
+    """Iceberg catalog operations required by configured dbt export."""
+
+    def create_namespace(self, namespace: str) -> None:
+        """Create an Iceberg namespace."""
+        ...
+
+    def load_table(self, identifier: str) -> Any:
+        """Load an Iceberg table."""
+        ...
+
+    def create_table(self, identifier: str, schema: Any) -> Any:
+        """Create an Iceberg table."""
+        ...
 
 
 @dataclass
@@ -33,6 +51,24 @@ def _is_safe_identifier(name: str) -> bool:
         True if the identifier is safe for use in SQL.
     """
     return bool(_SAFE_IDENTIFIER_RE.match(name))
+
+
+def _require_write_capable_catalog(
+    catalog: object,
+    catalog_type: str,
+) -> WriteCapableIcebergCatalog:
+    """Return catalog when it supports write operations required for export."""
+    required_methods: Sequence[str] = ("create_namespace", "load_table", "create_table")
+    missing_methods = [
+        method for method in required_methods if not callable(getattr(catalog, method, None))
+    ]
+    if missing_methods:
+        missing = ", ".join(missing_methods)
+        raise RuntimeError(
+            f"Catalog plugin {catalog_type} did not return a write-capable Iceberg catalog; "
+            f"missing method(s): {missing}"
+        )
+    return cast(WriteCapableIcebergCatalog, catalog)
 
 
 def export_dbt_to_iceberg(
@@ -93,7 +129,10 @@ def export_dbt_to_iceberg(
     from pyiceberg.exceptions import NoSuchTableError
 
     s3_config = {f"s3.{k}": v for k, v in (storage_config or {}).items()}
-    catalog = catalog_plugin.connect(config=s3_config)
+    catalog = _require_write_capable_catalog(
+        catalog_plugin.connect(config=s3_config),
+        catalog_type,
+    )
 
     product_namespace = safe_name
 

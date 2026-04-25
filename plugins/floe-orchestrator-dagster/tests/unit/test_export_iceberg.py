@@ -581,6 +581,47 @@ class TestExportDbtToIceberg:
         mock_catalog.create_namespace.assert_called_once_with(SAFE_NAME)
 
     @pytest.mark.requirement("AC-4")
+    def test_export_fails_when_catalog_lacks_write_methods(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_with_catalog: CompiledArtifacts,
+    ) -> None:
+        """Configured export requires a write-capable Iceberg catalog."""
+
+        class ReadOnlyCatalog:
+            def list_namespaces(self) -> list[tuple[str, ...]]:
+                return []
+
+            def list_tables(self, namespace: str) -> list[str]:
+                return []
+
+            def load_table(self, identifier: str) -> object:
+                return object()
+
+        mock_conn = MagicMock()
+        registry = MagicMock()
+        mock_plugin = MagicMock()
+        mock_plugin.connect.return_value = ReadOnlyCatalog()
+        registry.get.return_value = mock_plugin
+        registry.configure.return_value = {}
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn) as mock_duckdb_connect,
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            pytest.raises(RuntimeError, match="write-capable Iceberg catalog"),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts_with_catalog,
+            )
+
+        mock_duckdb_connect.assert_not_called()
+
+    @pytest.mark.requirement("AC-4")
     def test_export_namespace_non_idempotent_error_raises(
         self,
         context: MagicMock,
