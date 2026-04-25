@@ -98,17 +98,14 @@ def create_iceberg_resources(
     )
     catalog_plugin = registry.get(PluginType.CATALOG, catalog_ref.type)
 
-    # Configure catalog plugin if config provided
-    if catalog_ref.config is not None:
-        validated_catalog_config = registry.configure(
-            PluginType.CATALOG,
-            catalog_ref.type,
-            catalog_ref.config,
-        )
-        if validated_catalog_config is None:
-            raise RuntimeError(
-                f"Catalog plugin config for {catalog_ref.type} could not be validated"
-            )
+    # Configure catalog plugin even when config is omitted so cached plugin state cannot leak.
+    validated_catalog_config = registry.configure(
+        PluginType.CATALOG,
+        catalog_ref.type,
+        catalog_ref.config or {},
+    )
+    if validated_catalog_config is None:
+        raise RuntimeError(f"Catalog plugin config for {catalog_ref.type} could not be validated")
 
     # T109: Load StoragePlugin via registry
     logger.info(
@@ -117,17 +114,14 @@ def create_iceberg_resources(
     )
     storage_plugin = registry.get(PluginType.STORAGE, storage_ref.type)
 
-    # Configure storage plugin if config provided
-    if storage_ref.config is not None:
-        validated_storage_config = registry.configure(
-            PluginType.STORAGE,
-            storage_ref.type,
-            storage_ref.config,
-        )
-        if validated_storage_config is None:
-            raise RuntimeError(
-                f"Storage plugin config for {storage_ref.type} could not be validated"
-            )
+    # Configure storage plugin even when config is omitted so cached plugin state cannot leak.
+    validated_storage_config = registry.configure(
+        PluginType.STORAGE,
+        storage_ref.type,
+        storage_ref.config or {},
+    )
+    if validated_storage_config is None:
+        raise RuntimeError(f"Storage plugin config for {storage_ref.type} could not be validated")
 
     # T110: Instantiate IcebergTableManager with loaded plugins
     logger.info(

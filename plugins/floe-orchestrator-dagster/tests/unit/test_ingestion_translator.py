@@ -18,6 +18,12 @@ from dagster import AssetKey, build_op_context
 from floe_core.plugins.ingestion import IngestionResult
 
 
+class SourceLike:
+    """Small dlt-like source test double."""
+
+    resources = ()
+
+
 class TestFloeIngestionTranslator:
     """Tests for FloeIngestionTranslator asset key naming and metadata."""
 
@@ -119,7 +125,7 @@ class TestCreateIngestionAssets:
                 {
                     "name": "github-events",
                     "source_type": "rest_api",
-                    "source_config": {"source": object()},
+                    "source_config": {"source": SourceLike()},
                     "destination_table": "bronze.github_events",
                 }
             ],
@@ -182,8 +188,8 @@ class TestCreateIngestionAssets:
         """Executable source configs get one asset per source."""
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
 
-        github_source = object()
-        users_source = object()
+        github_source = SourceLike()
+        users_source = SourceLike()
         mock_ref: MagicMock = MagicMock()
         mock_ref.type = "dlt"
         mock_ref.version = "0.1.0"
@@ -273,13 +279,13 @@ class TestCreateIngestionAssets:
                 {
                     "name": "github-events",
                     "source_type": "rest_api",
-                    "source_config": {"source": object()},
+                    "source_config": {"source": SourceLike()},
                     "destination_table": "bronze.github_events",
                 },
                 {
                     "name": "github_events",
                     "source_type": "rest_api",
-                    "source_config": {"source": object()},
+                    "source_config": {"source": SourceLike()},
                     "destination_table": "bronze.github_events_copy",
                 },
             ],
@@ -296,7 +302,7 @@ class TestCreateIngestionAssets:
         mock_ref: MagicMock = MagicMock()
         mock_ref.type = "dlt"
         mock_ref.version = "0.1.0"
-        executable_source = object()
+        executable_source = SourceLike()
         mock_ref.config = {
             "source_type": "rest_api",
             "source_config": {
@@ -346,7 +352,7 @@ class TestCreateIngestionAssets:
         """Per-source assets pass write/table/schema/cursor/primary kwargs to plugins."""
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
 
-        executable_source = object()
+        executable_source = SourceLike()
         mock_ref: MagicMock = MagicMock()
         mock_ref.type = "dlt"
         mock_ref.version = "0.1.0"
@@ -422,6 +428,27 @@ class TestCreateIngestionAssets:
             create_ingestion_assets(mock_ref)
 
     @pytest.mark.requirement("4F-FR-060")
+    def test_source_asset_rejects_plain_object_source(self) -> None:
+        """Plain object() is not enough to prove executable dlt source semantics."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "users",
+                    "source_type": "rest_api",
+                    "source_config": {"source": object()},
+                    "destination_table": "bronze.users",
+                }
+            ],
+        }
+        with pytest.raises(ValueError, match="source_config.source"):
+            create_ingestion_assets(mock_ref)
+
+    @pytest.mark.requirement("4F-FR-060")
     def test_factory_asset_raises_when_ingestion_run_fails(self) -> None:
         """Failed ingestion results must fail the Dagster asset loudly."""
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
@@ -429,7 +456,7 @@ class TestCreateIngestionAssets:
         mock_ref: MagicMock = MagicMock()
         mock_ref.type = "dlt"
         mock_ref.version = "0.1.0"
-        executable_source = object()
+        executable_source = SourceLike()
         mock_ref.config = {
             "source_type": "rest_api",
             "source_config": {"source": executable_source},

@@ -200,9 +200,13 @@ def _source_configs(ingestion_config: Mapping[str, Any]) -> list[dict[str, Any]]
 def _validate_executable_source(source_config: Mapping[str, Any]) -> None:
     """Require an explicit non-JSON dlt source object before creating assets."""
     source_ref = (source_config.get("source_config") or {}).get("source")
-    if source_ref is None or isinstance(
-        source_ref,
-        str | bytes | int | float | bool | dict | list | tuple | set,
+    if (
+        source_ref is None
+        or isinstance(
+            source_ref,
+            str | bytes | int | float | bool | dict | list | tuple | set,
+        )
+        or not _is_source_like(source_ref)
     ):
         source_name = source_config.get("name", "<unnamed>")
         raise ValueError(
@@ -210,6 +214,19 @@ def _validate_executable_source(source_config: Mapping[str, Any]) -> None:
             f"executable dlt source object for source {source_name!r}; normal compiled "
             "JSON config cannot construct runnable ingestion assets yet."
         )
+
+
+def _is_source_like(source_ref: Any) -> bool:
+    """Return True for lightweight dlt-like source/resource objects."""
+    return callable(source_ref) or any(
+        hasattr(source_ref, attr)
+        for attr in (
+            "__iter__",
+            "resources",
+            "with_resources",
+            "selected_resources",
+        )
+    )
 
 
 def _safe_source_name(source_name: str) -> str:

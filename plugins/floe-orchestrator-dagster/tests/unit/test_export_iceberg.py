@@ -151,6 +151,15 @@ def artifacts_with_catalog() -> CompiledArtifacts:
 
 
 @pytest.fixture
+def artifacts_with_catalog_none_config() -> CompiledArtifacts:
+    """CompiledArtifacts with configured catalog/storage refs and config=None."""
+    return _make_artifacts(
+        catalog=PluginRef(type="polaris", version="0.1.0", config=None),
+        storage=PluginRef(type="s3", version="1.0.0", config=None),
+    )
+
+
+@pytest.fixture
 def artifacts_no_catalog() -> CompiledArtifacts:
     """CompiledArtifacts with no catalog plugin."""
     return _make_artifacts(catalog=None, storage=None)
@@ -395,6 +404,44 @@ class TestExportDbtToIceberg:
             "s3",
             {"endpoint": "http://minio:9000", "access-key-id": "test"},
         )
+        catalog_plugin.connect.assert_not_called()
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_configures_none_configs_as_empty_dict(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_with_catalog_none_config: CompiledArtifacts,
+    ) -> None:
+        """Configured catalog/storage refs with config=None are validated as {}."""
+        from floe_core.plugin_types import PluginType
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
+            if plugin_type is PluginType.CATALOG:
+                return catalog_plugin
+            return storage_plugin
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = {}
+
+        with (
+            patch.object(Path, "exists", return_value=False),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            pytest.raises(RuntimeError, match=EXPECTED_DUCKDB_PATH),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts_with_catalog_none_config,
+            )
+
+        registry.configure.assert_any_call(PluginType.CATALOG, "polaris", {})
+        registry.configure.assert_any_call(PluginType.STORAGE, "s3", {})
         catalog_plugin.connect.assert_not_called()
 
     @pytest.mark.requirement("AC-4")

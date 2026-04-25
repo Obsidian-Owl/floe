@@ -58,23 +58,21 @@ def export_dbt_to_iceberg(
     storage_type = artifacts.plugins.storage.type
     # configure() validates config and applies it to the cached plugin instance.
     # get() then returns that configured instance for the runtime connection.
-    if catalog_config is not None:
-        validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config)
-        if validated_config is None:
-            raise RuntimeError(f"Catalog plugin config for {catalog_type} could not be validated")
+    validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config or {})
+    if validated_config is None:
+        raise RuntimeError(f"Catalog plugin config for {catalog_type} could not be validated")
     catalog_plugin = registry.get(PluginType.CATALOG, catalog_type)
 
     # Force storage plugin loading/configuration on the export path so invalid
     # storage config cannot reuse stale cached plugin state.
     registry.get(PluginType.STORAGE, storage_type)
-    if storage_config is not None:
-        validated_storage_config = registry.configure(
-            PluginType.STORAGE,
-            storage_type,
-            storage_config,
-        )
-        if validated_storage_config is None:
-            raise RuntimeError(f"Storage plugin config for {storage_type} could not be validated")
+    validated_storage_config = registry.configure(
+        PluginType.STORAGE,
+        storage_type,
+        storage_config or {},
+    )
+    if validated_storage_config is None:
+        raise RuntimeError(f"Storage plugin config for {storage_type} could not be validated")
 
     if not Path(duckdb_path).exists():
         raise RuntimeError(f"Configured Iceberg export DuckDB file not found: {duckdb_path}")

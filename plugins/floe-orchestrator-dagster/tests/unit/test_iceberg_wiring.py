@@ -118,8 +118,9 @@ class TestCreateIcebergResourcesFullWiring:
             assert result == {"iceberg": mock_io_manager}
 
     @pytest.mark.requirement("004d-FR-115")
-    def test_create_iceberg_resources_skips_configure_without_config(self) -> None:
-        """Test that registry.configure() is not called when config is None."""
+    def test_create_iceberg_resources_configures_none_config_as_empty_dict(self) -> None:
+        """Configured plugin refs with config=None are validated with empty dict."""
+        from floe_core.plugin_types import PluginType
         from floe_core.schemas.compiled_artifacts import PluginRef
 
         from floe_orchestrator_dagster.resources.iceberg import create_iceberg_resources
@@ -139,14 +140,16 @@ class TestCreateIcebergResourcesFullWiring:
             mock_registry = MagicMock()
             mock_get_registry.return_value = mock_registry
             mock_registry.get.side_effect = [MagicMock(), MagicMock()]
+            mock_registry.configure.return_value = {}
             mock_table_manager_cls.return_value = MagicMock()
             mock_create_io_manager.return_value = MagicMock()
 
             # Execute
             create_iceberg_resources(catalog_ref=catalog_ref, storage_ref=storage_ref)
 
-            # Verify configure NOT called
-            mock_registry.configure.assert_not_called()
+            assert mock_registry.configure.call_count == 2
+            mock_registry.configure.assert_any_call(PluginType.CATALOG, "mock-catalog", {})
+            mock_registry.configure.assert_any_call(PluginType.STORAGE, "mock-storage", {})
 
     @pytest.mark.requirement("004d-FR-115")
     def test_create_iceberg_resources_configures_empty_dict_configs(self) -> None:
