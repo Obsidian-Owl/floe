@@ -4,18 +4,18 @@ This module provides the DagsterOrchestratorPlugin implementation that enables
 Dagster as the orchestration platform for floe data pipelines. The plugin
 implements the OrchestratorPlugin ABC and provides:
 
-- Generation of Dagster Definitions from CompiledArtifacts
+- Validation of CompiledArtifacts before runtime loading
 - Creation of software-defined assets from dbt transforms
 - Helm values for K8s deployment of Dagster services
 - OpenLineage event emission for data lineage tracking
 - Cron-based job scheduling with timezone support
 
 Example:
-    >>> from floe_orchestrator_dagster import DagsterOrchestratorPlugin
-    >>> plugin = DagsterOrchestratorPlugin()
-    >>> plugin.name
-    'dagster'
-    >>> definitions = plugin.create_definitions(compiled_artifacts)
+    Runtime Definitions are loaded through the generated definitions.py shim,
+    which calls load_product_definitions(product_name, project_dir). Direct
+    create_definitions() calls validate artifacts but require the loader path
+    because dbt manifest, profiles.yml, and compiled_artifacts.json are
+    resolved from a single product directory.
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
     and asset creation.
 
     Key Features:
-        - Generates Dagster Definitions from CompiledArtifacts
+        - Validates CompiledArtifacts before runtime loading
         - Creates software-defined assets with dependency preservation
         - Provides Helm values for K8s deployment
         - Emits OpenLineage events for data lineage
@@ -92,7 +92,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         >>> plugin = DagsterOrchestratorPlugin()
         >>> plugin.name
         'dagster'
-        >>> definitions = plugin.create_definitions(compiled_artifacts)
+        >>> # Runtime definitions are created via load_product_definitions(...)
 
     See Also:
         - OrchestratorPlugin: Abstract base class defining the interface
@@ -202,8 +202,10 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 or project_dir is not supplied by the runtime loader.
 
         Example:
-            >>> definitions = plugin.create_definitions(compiled_artifacts)
-            >>> # Returns Dagster Definitions with assets from dbt models
+            >>> plugin.create_definitions(compiled_artifacts)
+            Traceback (most recent call last):
+            ...
+            ValueError: Dagster runtime definitions require project_dir...
 
         Requirements:
             FR-005: Generate valid Dagster Definitions from CompiledArtifacts
@@ -264,11 +266,11 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         self,
         plugins: Any | None,
     ) -> dict[str, Any]:
-        """Create semantic layer resources from resolved plugins configuration.
+        """Deprecated compatibility wrapper for semantic resource creation.
 
-        Attempts to load the semantic layer plugin and create a resource.
-        Returns empty dict if the plugin is not configured or if plugin
-        loading fails.
+        The canonical runtime path now wires semantic resources and assets in
+        ``floe_orchestrator_dagster.runtime.build_product_definitions``.
+        This helper remains for existing low-level tests and callers.
 
         Args:
             plugins: ResolvedPlugins from CompiledArtifacts, or None.
@@ -290,10 +292,11 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         self,
         plugins: Any | None,
     ) -> dict[str, Any]:
-        """Create ingestion resources from resolved plugins configuration.
+        """Deprecated compatibility wrapper for ingestion resource creation.
 
-        Attempts to load the ingestion plugin and create a resource.
-        Returns empty dict if the plugin is not configured.
+        The canonical runtime path now wires ingestion resources and assets in
+        ``floe_orchestrator_dagster.runtime.build_product_definitions``.
+        This helper remains for existing low-level tests and callers.
 
         Args:
             plugins: ResolvedPlugins from CompiledArtifacts, or None.

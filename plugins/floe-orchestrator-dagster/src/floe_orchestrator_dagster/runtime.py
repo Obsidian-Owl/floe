@@ -15,6 +15,36 @@ from floe_orchestrator_dagster.export.iceberg import export_dbt_to_iceberg
 from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
 
+_PROJECT_DIR_REQUIRED_MESSAGE = (
+    "Dagster runtime definitions require project_dir so dbt manifest, profiles.yml, "
+    "and compiled_artifacts.json are resolved from one product directory; use the "
+    "generated definitions.py loader/shim path for runtime definitions."
+)
+
+
+def _has_iceberg_config(artifacts: CompiledArtifacts) -> bool:
+    """Return True when both catalog and storage plugins are configured."""
+    plugins = artifacts.plugins
+    return bool(plugins and plugins.catalog and plugins.storage)
+
+
+def _create_semantic_resources(plugins: Any | None) -> dict[str, Any]:
+    """Create semantic resources through the configured semantic factory."""
+    from floe_orchestrator_dagster.resources.semantic import (
+        try_create_semantic_resources,
+    )
+
+    return try_create_semantic_resources(plugins)
+
+
+def _create_ingestion_resources(plugins: Any | None) -> dict[str, Any]:
+    """Create ingestion resources through the configured ingestion factory."""
+    from floe_orchestrator_dagster.resources.ingestion import (
+        try_create_ingestion_resources,
+    )
+
+    return try_create_ingestion_resources(plugins)
+
 
 def build_product_definitions(
     *,
@@ -36,7 +66,7 @@ def build_product_definitions(
         ValueError: If project_dir is not supplied.
     """
     if project_dir is None:
-        raise ValueError("Dagster runtime definitions require project_dir")
+        raise ValueError(_PROJECT_DIR_REQUIRED_MESSAGE)
 
     manifest_path = project_dir / "target" / "manifest.json"
 
@@ -72,7 +102,7 @@ def build_product_definitions(
                 context.log.debug("emit_fail failed: %s", _fail_exc)
             raise
 
-        if artifacts.plugins and artifacts.plugins.catalog:
+        if _has_iceberg_config(artifacts):
             export_dbt_to_iceberg(context, product_name, project_dir, artifacts)
 
         try:
@@ -93,8 +123,29 @@ def build_product_definitions(
         "dbt": ResourceDefinition(resource_fn=_dbt_resource_fn),
         **try_create_lineage_resource(plugins),
     }
+    assets: list[Any] = [_dbt_assets_fn]
 
-    if plugins and plugins.catalog:
+    if plugins and plugins.semantic:
+        semantic_resources = _create_semantic_resources(plugins)
+        resources.update(semantic_resources)
+        if "semantic_layer" in semantic_resources:
+            from floe_orchestrator_dagster.assets.semantic_sync import (
+                sync_semantic_schemas,
+            )
+
+            assets.append(sync_semantic_schemas)
+
+    if plugins and plugins.ingestion:
+        ingestion_resources = _create_ingestion_resources(plugins)
+        resources.update(ingestion_resources)
+        if "ingestion" in ingestion_resources:
+            from floe_orchestrator_dagster.assets.ingestion import (
+                create_ingestion_assets,
+            )
+
+            assets.extend(create_ingestion_assets(plugins.ingestion))
+
+    if _has_iceberg_config(artifacts):
 
         def _iceberg_resource_fn(_init_context: Any) -> Any:
             result = try_create_iceberg_resources(
@@ -106,6 +157,6 @@ def build_product_definitions(
         resources["iceberg"] = ResourceDefinition(resource_fn=_iceberg_resource_fn)
 
     return Definitions(
-        assets=[_dbt_assets_fn],
+        assets=assets,
         resources=resources,
     )

@@ -63,12 +63,16 @@ FAKE_RUN_ID = uuid4()
 def _make_artifacts(
     catalog: PluginRef | None = None,
     storage: PluginRef | None = None,
+    ingestion: PluginRef | None = None,
+    semantic: PluginRef | None = None,
 ) -> CompiledArtifacts:
     """Build a minimal valid CompiledArtifacts with optional catalog/storage.
 
     Args:
         catalog: Optional catalog PluginRef.
         storage: Optional storage PluginRef.
+        ingestion: Optional ingestion PluginRef.
+        semantic: Optional semantic layer PluginRef.
 
     Returns:
         A valid CompiledArtifacts instance.
@@ -109,6 +113,8 @@ def _make_artifacts(
             orchestrator=PluginRef(type="dagster", version="1.5.0"),
             catalog=catalog,
             storage=storage,
+            ingestion=ingestion,
+            semantic=semantic,
         ),
         transforms=ResolvedTransforms(
             models=[ResolvedModel(name="stg_customers", compute="duckdb")],
@@ -190,6 +196,40 @@ def project_dir_with_iceberg(tmp_path: Path) -> Path:
     artifacts = _make_artifacts(
         catalog=PluginRef(type="polaris", version="0.1.0", config={}),
         storage=PluginRef(type="s3", version="1.0.0", config={}),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_catalog_only(tmp_path: Path) -> Path:
+    """Temporary project dir with catalog but no storage plugin configured."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        catalog=PluginRef(type="polaris", version="0.1.0", config={}),
+        storage=None,
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_semantic(tmp_path: Path) -> Path:
+    """Temporary project dir with semantic layer plugin configured."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        semantic=PluginRef(type="cube", version="0.1.0", config={}),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion(tmp_path: Path) -> Path:
+    """Temporary project dir with ingestion plugin configured."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(type="dlt", version="0.1.0", config={}),
     )
     _write_artifacts_and_manifest(pdir, artifacts)
     return pdir
@@ -301,6 +341,19 @@ def test_definitions_no_iceberg_when_unconfigured(project_dir: Path) -> None:
     resources = result.resources or {}
     assert "iceberg" not in resources, (
         "Iceberg resource must be absent when catalog/storage are not configured"
+    )
+
+
+@pytest.mark.requirement("AC-3")
+def test_definitions_no_iceberg_when_catalog_without_storage(
+    project_dir_with_catalog_only: Path,
+) -> None:
+    """Catalog-only artifacts must not register an unusable iceberg resource."""
+    result = load_product_definitions(PRODUCT_NAME, project_dir_with_catalog_only)
+
+    resources = result.resources or {}
+    assert "iceberg" not in resources, (
+        "Iceberg resource must be absent unless both catalog and storage are configured"
     )
 
 
@@ -473,6 +526,23 @@ def _extract_dbt_assets_fn(definitions: Definitions) -> Any:
     return asset_def
 
 
+def _asset_names(definitions: Definitions) -> set[str]:
+    """Collect asset key names from single-asset and multi-asset definitions."""
+    names: set[str] = set()
+    for asset_def in definitions.assets or []:
+        keys = getattr(asset_def, "keys", None)
+        if keys:
+            names.update(key.path[-1] for key in keys)
+        else:
+            try:
+                names.add(asset_def.key.path[-1])
+            except Exception:
+                # Empty dbt manifests can produce a multi-asset definition
+                # without single-asset key access; optional assets are checked below.
+                continue
+    return names
+
+
 def _make_mock_context_with_lineage() -> tuple[MagicMock, MagicMock]:
     """Create a mock Dagster context with a mock lineage resource.
 
@@ -628,6 +698,26 @@ def test_dbt_assets_calls_iceberg_export_after_dbt(
 
 
 @pytest.mark.requirement("AC-5")
+def test_dbt_assets_iceberg_export_not_called_with_catalog_only(
+    project_dir_with_catalog_only: Path,
+) -> None:
+    """Catalog-only artifacts must not attempt export without storage."""
+    with patch(_EXPORT_FN) as mock_export:
+        definitions = load_product_definitions(PRODUCT_NAME, project_dir_with_catalog_only)
+        asset_fn = _extract_dbt_assets_fn(definitions)
+
+        context, lineage = _make_mock_context_with_lineage()
+        mock_dbt = context.resources.dbt
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = MagicMock(return_value=iter([]))
+        mock_dbt.cli.return_value.stream.return_value = mock_stream
+
+        list(asset_fn(context))
+
+        mock_export.assert_not_called()
+
+
+@pytest.mark.requirement("AC-5")
 def test_dbt_assets_iceberg_export_not_called_on_failure(
     project_dir_with_iceberg: Path,
 ) -> None:
@@ -644,6 +734,42 @@ def test_dbt_assets_iceberg_export_not_called_on_failure(
             list(asset_fn(context))
 
         mock_export.assert_not_called()
+
+
+def test_runtime_includes_semantic_resource_and_asset_when_configured(
+    project_dir_with_semantic: Path,
+) -> None:
+    """Semantic plugin config must wire runtime resource and sync asset."""
+    semantic_resource = MagicMock()
+
+    with patch(
+        f"{_RUNTIME_MODULE}._create_semantic_resources",
+        return_value={"semantic_layer": semantic_resource},
+    ):
+        result = load_product_definitions(PRODUCT_NAME, project_dir_with_semantic)
+
+    resources = result.resources or {}
+    asset_names = _asset_names(result)
+    assert resources["semantic_layer"] is semantic_resource
+    assert "sync_semantic_schemas" in asset_names
+
+
+def test_runtime_includes_ingestion_resource_and_asset_when_configured(
+    project_dir_with_ingestion: Path,
+) -> None:
+    """Ingestion plugin config must wire runtime resource and ingestion asset."""
+    ingestion_resource = MagicMock()
+
+    with patch(
+        f"{_RUNTIME_MODULE}._create_ingestion_resources",
+        return_value={"ingestion": ingestion_resource},
+    ):
+        result = load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion)
+
+    resources = result.resources or {}
+    asset_names = _asset_names(result)
+    assert resources["ingestion"] is ingestion_resource
+    assert "run_ingestion_pipelines" in asset_names
 
 
 @pytest.mark.requirement("AC-5")

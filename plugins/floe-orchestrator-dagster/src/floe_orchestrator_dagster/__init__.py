@@ -2,22 +2,19 @@
 
 This package provides the Dagster orchestrator plugin implementation that enables
 Dagster as the orchestration platform for floe data pipelines. The plugin
-generates Dagster Definitions from CompiledArtifacts and provides Helm values
-for K8s deployment.
+validates CompiledArtifacts, while runtime Dagster Definitions are loaded
+through the generated definitions.py shim and product directory loader.
 
 Key Features:
-    - Generates Dagster Definitions from CompiledArtifacts
+    - Loads Dagster Definitions from compiled product directories
     - Creates software-defined assets from dbt transforms
     - Provides Helm values for K8s deployment
     - Emits OpenLineage events for data lineage
     - Supports cron-based scheduling with timezone support
 
 Example:
-    >>> from floe_orchestrator_dagster import DagsterOrchestratorPlugin
-    >>> plugin = DagsterOrchestratorPlugin()
-    >>> plugin.name
-    'dagster'
-    >>> definitions = plugin.create_definitions(compiled_artifacts)
+    >>> from floe_orchestrator_dagster.loader import load_product_definitions
+    >>> definitions = load_product_definitions("customer-360", project_dir)
 
 Entry Point:
     This plugin is registered via entry point `floe.orchestrators = dagster`
