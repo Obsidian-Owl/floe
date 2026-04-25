@@ -38,6 +38,7 @@ from floe_core.schemas import CompiledArtifacts
 from pydantic import ValidationError as PydanticValidationError
 
 from floe_orchestrator_dagster.lineage_extraction import extract_dbt_model_lineage
+from floe_orchestrator_dagster.runtime import build_product_definitions
 from floe_orchestrator_dagster.tracing import (
     ATTR_ASSET_COUNT,
     TRACER_NAME,
@@ -183,23 +184,22 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
     def create_definitions(self, artifacts: dict[str, Any]) -> Any:
         """Generate Dagster Definitions from CompiledArtifacts.
 
-        Creates a Dagster Definitions object containing assets, jobs, resources,
-        and schedules based on the compiled data product configuration.
-
         The method first validates the artifacts against the CompiledArtifacts
-        schema, then extracts transforms and creates Dagster assets preserving
-        the dependency graph. If catalog and storage plugins are configured,
-        it also wires IcebergIOManager as the "iceberg" resource.
+        schema, then delegates to the shared runtime builder. The runtime
+        builder requires a dbt project directory, so direct plugin calls fail
+        fast until routed through the generated definitions.py loader path.
 
         Args:
             artifacts: CompiledArtifacts dictionary containing dbt manifest,
                 profiles, transforms, and other configuration.
 
         Returns:
-            Dagster Definitions object ready for deployment.
+            Dagster Definitions object ready for deployment when the runtime
+            builder is supplied a project directory.
 
         Raises:
-            ValueError: If artifacts validation fails with actionable message.
+            ValueError: If artifacts validation fails with actionable message
+                or project_dir is not supplied by the runtime loader.
 
         Example:
             >>> definitions = plugin.create_definitions(compiled_artifacts)
@@ -208,83 +208,27 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         Requirements:
             FR-005: Generate valid Dagster Definitions from CompiledArtifacts
             FR-009: Validate CompiledArtifacts schema
-            T108: Extract catalog/storage config from CompiledArtifacts
-            T111: Wire IcebergIOManager into Definitions resources
         """
-        from dagster import Definitions
-
         tracer = get_tracer()
         with orchestrator_span(tracer, "create_definitions") as span:
             # Validate artifacts against CompiledArtifacts schema (FR-009)
             validated = self._validate_artifacts(artifacts)
-
-            # Extract transforms from validated artifacts
-            if validated.transforms is None:
-                logger.warning("No transforms found in artifacts, returning empty Definitions")
-                span.set_attribute(ATTR_ASSET_COUNT, 0)
-                return Definitions(assets=[])
-
-            # Get models list from transforms
-            models = validated.transforms.models
-            if not models:
-                logger.warning("No models found in transforms, returning empty Definitions")
-                span.set_attribute(ATTR_ASSET_COUNT, 0)
-                return Definitions(assets=[])
-
-            # Convert ResolvedModel to TransformConfig objects
-            transform_configs = self._models_to_transform_configs(
-                [model.model_dump() for model in models]
-            )
-
-            # Create assets from transforms
-            assets = self.create_assets_from_transforms(transform_configs)
-
-            # T108-T111: Wire Iceberg resources if catalog and storage are configured
-            resources = self._create_iceberg_resources(validated.plugins, validated.governance)
-
-            # AC-11: Wire lineage resources (always returns {"lineage": ...})
-            lineage_resources = self._create_lineage_resources(validated.plugins)
-            resources.update(lineage_resources)
-
-            # T047-T049: Wire semantic layer resources and asset if semantic plugin is configured
-            semantic_resources = self._create_semantic_resources(validated.plugins)
-            resources.update(semantic_resources)
-
-            if "semantic_layer" in semantic_resources:
-                from floe_orchestrator_dagster.assets.semantic_sync import (
-                    sync_semantic_schemas,
-                )
-
-                assets.append(sync_semantic_schemas)
-
-            # T035: Wire ingestion resources if ingestion plugin is configured
-            ingestion_resources = self._create_ingestion_resources(validated.plugins)
-            resources.update(ingestion_resources)
-
-            # T034: Wire ingestion assets if ingestion resource is available
-            if "ingestion" in resources and validated.plugins and validated.plugins.ingestion:
-                from floe_orchestrator_dagster.assets.ingestion import (
-                    create_ingestion_assets,
-                )
-
-                ingestion_assets = create_ingestion_assets(validated.plugins.ingestion)
-                assets.extend(ingestion_assets)
-
-            span.set_attribute(ATTR_ASSET_COUNT, len(assets))
+            model_count = len(validated.transforms.models) if validated.transforms else 0
+            span.set_attribute(ATTR_ASSET_COUNT, model_count)
 
             logger.info(
-                "Created Dagster Definitions",
+                "Delegating Dagster Definitions creation to runtime builder",
                 extra={
-                    "asset_count": len(assets),
-                    "model_count": len(models),
-                    "has_iceberg": "iceberg" in resources,
-                    "has_lineage": "lineage" in resources,
-                    "has_semantic_layer": "semantic_layer" in resources,
-                    "has_ingestion": "ingestion" in resources,
+                    "model_count": model_count,
+                    "product_name": validated.metadata.product_name,
                 },
             )
 
-            return Definitions(assets=assets, resources=resources if resources else {})
+            return build_product_definitions(
+                product_name=validated.metadata.product_name,
+                artifacts=validated,
+                project_dir=None,
+            )
 
     def _create_iceberg_resources(
         self,

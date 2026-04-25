@@ -150,67 +150,32 @@ class TestCreateIcebergResourcesFullWiring:
 
 
 class TestCreateDefinitionsWithIcebergResources:
-    """Test create_definitions() returns Definitions with Iceberg resource.
+    """Test direct create_definitions() delegates to runtime project loading.
 
-    Validates T116: create_definitions() returns Definitions with "iceberg" resource.
+    Runtime resource wiring is exercised through the loader path. Direct plugin
+    calls validate artifacts but require the project directory supplied by the
+    generated runtime shim.
     """
 
     @pytest.mark.requirement("004d-FR-116")
-    def test_create_definitions_includes_iceberg_resource(
+    def test_create_definitions_with_iceberg_requires_project_dir(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
         valid_compiled_artifacts_with_iceberg: dict[str, Any],
     ) -> None:
-        """Test that create_definitions() includes "iceberg" resource when plugins configured.
-
-        Validates:
-        - _create_iceberg_resources() is called with plugins
-        - Returned Definitions has resources dict with "iceberg" key
-        """
-        from dagster import Definitions
-
-        mock_io_manager = MagicMock()
-
-        with patch(
-            "floe_orchestrator_dagster.resources.iceberg.try_create_iceberg_resources"
-        ) as mock_try_create:
-            mock_try_create.return_value = {"iceberg": mock_io_manager}
-
-            # Execute
-            result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_iceberg)
-
-            # Verify result is Definitions
-            assert isinstance(result, Definitions)
-
-            # Verify resources dict has "iceberg" key
-            assert isinstance(result.resources, dict)
-            assert "iceberg" in result.resources
-            assert result.resources["iceberg"] == mock_io_manager
+        """Test direct create_definitions requires project_dir for Iceberg runtime wiring."""
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts_with_iceberg)
 
     @pytest.mark.requirement("004d-FR-116")
-    def test_create_definitions_with_iceberg_and_assets(
+    def test_create_definitions_with_iceberg_and_assets_requires_project_dir(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
         valid_compiled_artifacts_with_iceberg: dict[str, Any],
     ) -> None:
-        """Test that create_definitions() includes both assets and Iceberg resource."""
-        from dagster import Definitions
-
-        mock_io_manager = MagicMock()
-
-        with patch(
-            "floe_orchestrator_dagster.resources.iceberg.try_create_iceberg_resources"
-        ) as mock_try_create:
-            mock_try_create.return_value = {"iceberg": mock_io_manager}
-
-            # Execute
-            result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_iceberg)
-
-            # Verify has both assets and resources
-            assert isinstance(result, Definitions)
-            assert len(result.assets) > 0
-            assert isinstance(result.resources, dict)
-            assert "iceberg" in result.resources
+        """Test direct create_definitions does not synthesize Iceberg-backed assets."""
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts_with_iceberg)
 
 
 class TestGracefulDegradation:
@@ -324,21 +289,9 @@ class TestGracefulDegradation:
         dagster_plugin: DagsterOrchestratorPlugin,
         valid_compiled_artifacts: dict[str, Any],
     ) -> None:
-        """Test create_definitions() omits "iceberg" resource when plugins not configured.
-
-        Uses valid_compiled_artifacts fixture which has no catalog or storage.
-        """
-        from dagster import Definitions
-
-        # Execute with artifacts that have no catalog/storage
-        result = dagster_plugin.create_definitions(valid_compiled_artifacts)
-
-        # Verify result is Definitions
-        assert isinstance(result, Definitions)
-
-        # Verify resources is empty or doesn't contain "iceberg"
-        if result.resources:
-            assert "iceberg" not in result.resources
+        """Test direct create_definitions requires project_dir without Iceberg plugins."""
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts)
 
 
 class TestGovernanceThreading:

@@ -18,6 +18,7 @@ Requirements Covered:
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 import pytest
 from floe_core.plugins.orchestrator import OrchestratorPlugin
@@ -82,10 +83,8 @@ class TestDagsterOrchestratorPluginABCCompliance:
     ) -> None:
         """Test plugin implements create_definitions method."""
         # ABC compliance already validated by isinstance check above
-        from dagster import Definitions
-
-        result = dagster_plugin.create_definitions(valid_compiled_artifacts)
-        assert isinstance(result, Definitions)
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts)
 
     @pytest.mark.requirement("SC-001")
     def test_create_assets_from_transforms_callable(
@@ -183,18 +182,36 @@ class TestDagsterOrchestratorPluginCreateDefinitions:
     before generating definitions.
     """
 
+    def test_create_definitions_delegates_to_runtime_builder(
+        self,
+        dagster_plugin: DagsterOrchestratorPlugin,
+        valid_compiled_artifacts: dict[str, Any],
+    ) -> None:
+        with patch("floe_orchestrator_dagster.plugin.build_product_definitions") as build:
+            sentinel = object()
+            build.return_value = sentinel
+
+            result = dagster_plugin.create_definitions(valid_compiled_artifacts)
+
+        assert result is sentinel
+        build.assert_called_once()
+        call = build.call_args.kwargs
+        assert (
+            call["artifacts"].metadata.product_name
+            == valid_compiled_artifacts["metadata"]["product_name"]
+        )
+        assert call["product_name"] == valid_compiled_artifacts["metadata"]["product_name"]
+        assert call["project_dir"] is None
+
     @pytest.mark.requirement("FR-005")
     def test_create_definitions_with_valid_artifacts(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
         valid_compiled_artifacts: Any,
     ) -> None:
-        """Test create_definitions succeeds with valid CompiledArtifacts."""
-        from dagster import Definitions
-
-        result = dagster_plugin.create_definitions(valid_compiled_artifacts)
-
-        assert isinstance(result, Definitions)
+        """Test direct create_definitions requires the runtime project directory."""
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts)
 
     @pytest.mark.requirement("FR-005")
     def test_create_definitions_with_multiple_models(
@@ -202,15 +219,9 @@ class TestDagsterOrchestratorPluginCreateDefinitions:
         dagster_plugin: DagsterOrchestratorPlugin,
         valid_compiled_artifacts_with_models: Any,
     ) -> None:
-        """Test create_definitions creates assets for multiple models."""
-        from dagster import Definitions
-
-        result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_models)
-
-        assert isinstance(result, Definitions)
-        # Verify definitions were created - check that assets are accessible
-        # The number of models in the fixture is 3
-        assert len(result.assets) == 3
+        """Test direct create_definitions does not synthesize per-model assets."""
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts_with_models)
 
 
 class TestDagsterOrchestratorPluginValidation:

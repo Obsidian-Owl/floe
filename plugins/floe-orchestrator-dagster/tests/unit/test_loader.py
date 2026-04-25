@@ -47,10 +47,11 @@ from floe_orchestrator_dagster.loader import load_product_definitions
 PRODUCT_NAME = "customer-360"
 SAFE_NAME = "customer_360"
 _LOADER_MODULE = "floe_orchestrator_dagster.loader"
-_ICEBERG_FACTORY = f"{_LOADER_MODULE}.try_create_iceberg_resources"
-_LINEAGE_FACTORY = f"{_LOADER_MODULE}.try_create_lineage_resource"
-_EXPORT_FN = f"{_LOADER_MODULE}.export_dbt_to_iceberg"
-_TRACE_BUILDER = f"{_LOADER_MODULE}.TraceCorrelationFacetBuilder"
+_RUNTIME_MODULE = "floe_orchestrator_dagster.runtime"
+_ICEBERG_FACTORY = f"{_RUNTIME_MODULE}.try_create_iceberg_resources"
+_LINEAGE_FACTORY = f"{_RUNTIME_MODULE}.try_create_lineage_resource"
+_EXPORT_FN = f"{_RUNTIME_MODULE}.export_dbt_to_iceberg"
+_TRACE_BUILDER = f"{_RUNTIME_MODULE}.TraceCorrelationFacetBuilder"
 FAKE_RUN_ID = uuid4()
 
 
@@ -204,6 +205,24 @@ def empty_project_dir(tmp_path: Path) -> Path:
     pdir = tmp_path / "dbt_project"
     pdir.mkdir(parents=True, exist_ok=True)
     return pdir
+
+
+def test_loader_delegates_to_runtime_builder(project_dir: Path) -> None:
+    artifacts_path = project_dir / "compiled_artifacts.json"
+    expected_artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
+
+    with patch("floe_orchestrator_dagster.loader.build_product_definitions") as build:
+        sentinel = MagicMock(spec=Definitions)
+        build.return_value = sentinel
+
+        result = load_product_definitions(PRODUCT_NAME, project_dir)
+
+    assert result is sentinel
+    build.assert_called_once()
+    call = build.call_args.kwargs
+    assert call["product_name"] == PRODUCT_NAME
+    assert call["project_dir"] == project_dir
+    assert call["artifacts"] == expected_artifacts
 
 
 # ===========================================================================
