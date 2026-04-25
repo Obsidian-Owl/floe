@@ -448,7 +448,8 @@ class OrchestratorPlugin(PluginMetadata):
             - Spec 2b-compilation-pipeline: floe-core provides DATA, plugins own code
 
         See Also:
-            - create_definitions(): Runtime definitions from artifacts
+            - create_definitions(): Validates artifacts and delegates to
+              platform runtime definition loading
             - specs/2b-compilation-pipeline/spec.md: Technology ownership boundaries
         """
         ...

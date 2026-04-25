@@ -339,7 +339,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             Dictionary with "lineage" key always present.
 
         Requirements:
-            AC-11: Wire lineage resource into create_definitions()
+            AC-11: Wire lineage resource through the runtime builder / loader path
         """
         from floe_orchestrator_dagster.resources.lineage import (
             try_create_lineage_resource,
