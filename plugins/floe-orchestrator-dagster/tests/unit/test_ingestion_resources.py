@@ -11,6 +11,7 @@ Requirements:
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -162,6 +163,28 @@ def test_create_ingestion_resources_configures_plugin() -> None:
 
 
 @pytest.mark.requirement("4F-FR-059")
+def test_create_ingestion_resources_configures_empty_dict() -> None:
+    """Explicit empty config must still activate plugin validation."""
+    mock_plugin = MagicMock()
+    mock_plugin.name = "dlt"
+    mock_plugin.version = "0.1.0"
+    ingestion_ref = PluginRef(type="dlt", version="0.1.0", config={})
+
+    with patch("floe_core.plugin_registry.get_registry") as mock_get_registry:
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = mock_plugin
+        mock_get_registry.return_value = mock_registry
+
+        create_ingestion_resources(ingestion_ref)
+
+    mock_registry.configure.assert_called_once_with(
+        PluginType.INGESTION,
+        "dlt",
+        {},
+    )
+
+
+@pytest.mark.requirement("4F-FR-059")
 def test_ingestion_resource_calls_startup_and_shutdown() -> None:
     """Ingestion Dagster resource activates and tears down configured plugins."""
     mock_plugin = MagicMock()
@@ -186,6 +209,32 @@ def test_ingestion_resource_calls_startup_and_shutdown() -> None:
     with pytest.raises(StopIteration):
         next(resource_iter)
     mock_plugin.shutdown.assert_called_once()
+
+
+@pytest.mark.requirement("4F-FR-059")
+def test_ingestion_resource_logs_shutdown_errors(caplog: pytest.LogCaptureFixture) -> None:
+    """Shutdown failures are logged without being raised from resource teardown."""
+    mock_plugin = MagicMock()
+    mock_plugin.name = "dlt"
+    mock_plugin.version = "0.1.0"
+    mock_plugin.shutdown.side_effect = RuntimeError("shutdown exploded")
+    ingestion_ref = PluginRef(type="dlt", version="0.1.0", config=None)
+
+    with patch("floe_core.plugin_registry.get_registry") as mock_get_registry:
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = mock_plugin
+        mock_get_registry.return_value = mock_registry
+        resources = create_ingestion_resources(ingestion_ref)
+
+    resource_def = resources["ingestion"]
+    resource_iter = resource_def.resource_fn(MagicMock())
+    next(resource_iter)
+
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(StopIteration):
+            next(resource_iter)
+
+    assert "ingestion_shutdown_failed" in caplog.text
 
 
 @pytest.mark.requirement("AC-4")

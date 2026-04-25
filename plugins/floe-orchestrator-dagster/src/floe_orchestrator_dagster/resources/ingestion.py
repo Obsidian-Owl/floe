@@ -74,8 +74,8 @@ def create_ingestion_resources(
     )
     ingestion_plugin = registry.get(PluginType.INGESTION, ingestion_ref.type)
 
-    # Configure ingestion plugin if config provided
-    if ingestion_ref.config:
+    # Configure ingestion plugin when config is explicitly present, even if empty.
+    if ingestion_ref.config is not None:
         registry.configure(PluginType.INGESTION, ingestion_ref.type, ingestion_ref.config)
 
     def _ingestion_resource(_init_context: Any) -> Any:
@@ -87,7 +87,10 @@ def create_ingestion_resources(
             yield ingestion_plugin
         finally:
             if callable(shutdown):
-                shutdown()
+                try:
+                    shutdown()
+                except Exception:
+                    logger.exception("ingestion_shutdown_failed")
 
     logger.info(
         "Ingestion resources created",

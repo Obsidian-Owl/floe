@@ -20,6 +20,11 @@ _PROJECT_DIR_REQUIRED_MESSAGE = (
     "and compiled_artifacts.json are resolved from one product directory; use the "
     "generated definitions.py loader/shim path for runtime definitions."
 )
+_INGESTION_RUNTIME_DISABLED_MESSAGE = (
+    "Dagster ingestion runtime is not enabled because compiled JSON config cannot yet "
+    "construct executable dlt source objects; implement a source-construction layer "
+    "before enabling ingestion assets."
+)
 
 
 def _has_iceberg_config(artifacts: CompiledArtifacts) -> bool:
@@ -35,15 +40,6 @@ def _create_semantic_resources(plugins: Any | None) -> dict[str, Any]:
     )
 
     return try_create_semantic_resources(plugins)
-
-
-def _create_ingestion_resources(plugins: Any | None) -> dict[str, Any]:
-    """Create ingestion resources through the configured ingestion factory."""
-    from floe_orchestrator_dagster.resources.ingestion import (
-        try_create_ingestion_resources,
-    )
-
-    return try_create_ingestion_resources(plugins)
 
 
 def build_product_definitions(
@@ -112,6 +108,8 @@ def build_product_definitions(
 
     project_dir_str = str(project_dir)
     plugins = artifacts.plugins
+    if plugins and plugins.ingestion:
+        raise ValueError(_INGESTION_RUNTIME_DISABLED_MESSAGE)
 
     def _dbt_resource_fn(_init_context: Any) -> Any:
         return DbtCliResource(
@@ -143,16 +141,6 @@ def build_product_definitions(
                     ],
                 )
             )
-
-    if plugins and plugins.ingestion:
-        ingestion_resources = _create_ingestion_resources(plugins)
-        resources.update(ingestion_resources)
-        if "ingestion" in ingestion_resources:
-            from floe_orchestrator_dagster.assets.ingestion import (
-                create_ingestion_assets,
-            )
-
-            assets.extend(create_ingestion_assets(plugins.ingestion))
 
     if _has_iceberg_config(artifacts):
 

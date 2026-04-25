@@ -18,7 +18,7 @@ class OrchestratorPlugin(ABC):
     """Interface for orchestration platforms (Dagster, Airflow, etc.).
 
     Responsibilities:
-    - Generate orchestrator-specific definitions from CompiledArtifacts
+    - Validate and delegate CompiledArtifacts to the runtime definitions path
     - Create assets/tasks from dbt transforms
     - Emit OpenLineage events for data lineage
     - Schedule jobs for recurring execution
@@ -31,16 +31,21 @@ class OrchestratorPlugin(ABC):
 
     @abstractmethod
     def create_definitions(self, artifacts: "CompiledArtifacts") -> Any:
-        """Generate orchestrator-specific definitions from compiled artifacts.
+        """Validate compiled artifacts and delegate to runtime definition loading.
 
-        For Dagster: Returns Dagster Definitions object
+        For Dagster: Direct calls validate artifacts, then require the
+        loader/runtime builder path because usable Definitions need a
+        product project_dir containing compiled_artifacts.json,
+        target/manifest.json, profiles.yml, and dbt_project.yml.
+        Generated definitions.py files should be thin shims that call
+        load_product_definitions(product_name, project_dir).
         For Airflow: Returns DAG object
 
         Args:
             artifacts: CompiledArtifacts from floe-core compilation
 
         Returns:
-            Platform-specific definitions object
+            Platform-specific definitions object when runtime context is available
         """
         pass
 

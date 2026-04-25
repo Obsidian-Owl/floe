@@ -1,4 +1,4 @@
-"""Integration tests for ingestion orchestrator runtime wiring (T032)."""
+"""Integration tests for blocked ingestion orchestrator runtime wiring (T032)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
 
 import pytest
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
@@ -113,8 +112,8 @@ class TestIngestionWiringIntegration:
 
     @pytest.mark.integration
     @pytest.mark.requirement("4F-FR-059")
-    def test_definitions_include_ingestion_resource(self, tmp_path: Path) -> None:
-        """Loader-path Definitions include ingestion resource and asset when configured."""
+    def test_definitions_fail_loudly_with_ingestion_configured(self, tmp_path: Path) -> None:
+        """Loader-path Definitions reject ingestion until source construction exists."""
         from floe_orchestrator_dagster.loader import load_product_definitions
 
         artifacts = _compiled_artifacts(
@@ -138,19 +137,9 @@ class TestIngestionWiringIntegration:
             },
         )
         project_dir = _write_project(tmp_path, artifacts)
-        ingestion_resource = MagicMock()
 
-        with patch(
-            "floe_orchestrator_dagster.runtime._create_ingestion_resources",
-            return_value={"ingestion": ingestion_resource},
-        ):
-            definitions = load_product_definitions("ingestion-test-pipeline", project_dir)
-
-        assert definitions.resources["ingestion"] is ingestion_resource
-        assert _asset_names(definitions) >= {
-            "run_ingestion_github_events",
-            "run_ingestion_warehouse_users",
-        }
+        with pytest.raises(ValueError, match="Dagster ingestion runtime is not enabled"):
+            load_product_definitions("ingestion-test-pipeline", project_dir)
 
     @pytest.mark.integration
     @pytest.mark.requirement("4F-FR-063")
@@ -164,4 +153,4 @@ class TestIngestionWiringIntegration:
         definitions = load_product_definitions("ingestion-test-pipeline", project_dir)
 
         assert "ingestion" not in definitions.resources
-        assert "run_ingestion_pipelines" not in _asset_names(definitions)
+        assert not any(name.startswith("run_ingestion_") for name in _asset_names(definitions))

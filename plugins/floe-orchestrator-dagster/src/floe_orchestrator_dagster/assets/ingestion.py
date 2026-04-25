@@ -143,12 +143,19 @@ def create_ingestion_assets(
     ingestion_config = ingestion_ref.config or {}
     source_configs = _source_configs(ingestion_config)
     assets: list[AssetsDefinition] = []
+    asset_names: set[str] = set()
 
     for source_config in source_configs:
+        asset_name = f"run_ingestion_{_safe_source_name(str(source_config['name']))}"
+        if asset_name in asset_names:
+            raise ValueError(f"normalized ingestion asset name collision: {asset_name}")
+        asset_names.add(asset_name)
+        _validate_executable_source(source_config)
         assets.append(
             _create_ingestion_asset(
                 ingestion_type=ingestion_type,
                 ingestion_version=ingestion_version,
+                asset_name=asset_name,
                 source_config=source_config,
             )
         )
@@ -172,6 +179,21 @@ def _source_configs(ingestion_config: Mapping[str, Any]) -> list[dict[str, Any]]
     return [dict(source) for source in sources]
 
 
+def _validate_executable_source(source_config: Mapping[str, Any]) -> None:
+    """Require an explicit non-JSON dlt source object before creating assets."""
+    source_ref = (source_config.get("source_config") or {}).get("source")
+    if source_ref is None or isinstance(
+        source_ref,
+        str | bytes | int | float | bool | dict | list | tuple | set,
+    ):
+        source_name = source_config.get("name", "<unnamed>")
+        raise ValueError(
+            "Dagster ingestion helper requires source_config.source to contain an "
+            f"executable dlt source object for source {source_name!r}; normal compiled "
+            "JSON config cannot construct runnable ingestion assets yet."
+        )
+
+
 def _safe_source_name(source_name: str) -> str:
     """Return a Dagster-safe deterministic source name."""
     safe_name = _UNSAFE_ASSET_NAME_CHARS.sub("_", source_name).strip("_")
@@ -191,10 +213,10 @@ def _create_ingestion_asset(
     *,
     ingestion_type: str,
     ingestion_version: str,
+    asset_name: str,
     source_config: dict[str, Any],
 ) -> AssetsDefinition:
     source_name = str(source_config["name"])
-    asset_name = f"run_ingestion_{_safe_source_name(source_name)}"
 
     @asset(
         name=asset_name,

@@ -822,22 +822,12 @@ def test_runtime_semantic_asset_depends_on_compiled_model_assets(
     assert AssetKey("stg_customers") in semantic_asset.dependency_keys
 
 
-def test_runtime_includes_ingestion_resource_and_asset_when_configured(
+def test_runtime_fails_loudly_when_ingestion_configured(
     project_dir_with_ingestion: Path,
 ) -> None:
-    """Ingestion plugin config must wire runtime resource and ingestion asset."""
-    ingestion_resource = MagicMock()
-
-    with patch(
-        f"{_RUNTIME_MODULE}._create_ingestion_resources",
-        return_value={"ingestion": ingestion_resource},
-    ):
-        result = load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion)
-
-    resources = result.resources or {}
-    asset_names = _asset_names(result)
-    assert resources["ingestion"] is ingestion_resource
-    assert "run_ingestion_github_events" in asset_names
+    """Dagster ingestion runtime is blocked until source construction exists."""
+    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+        load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion)
 
 
 @pytest.mark.requirement("AC-5")
