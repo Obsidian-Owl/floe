@@ -142,8 +142,12 @@ class LineageResource:
             job_facets: Optional job-level facets.
 
         Returns:
-            The UUID identifying this lineage run.  On failure a fresh UUID is
-            returned so callers always receive a valid handle.
+            The UUID identifying this lineage run. In non-strict mode, emission
+            failures return a fresh UUID so callers receive a valid handle.
+
+        Raises:
+            RuntimeError: If strict mode is enabled and emission fails or returns
+                an invalid run identifier.
         """
         if self._closed:
             logger.warning("lineage_resource_closed: emit_start called after close")
