@@ -248,6 +248,19 @@ class TestCreateIngestionAssets:
             create_ingestion_assets(mock_ref)
 
     @pytest.mark.requirement("4F-FR-060")
+    def test_factory_rejects_empty_config(self) -> None:
+        """Empty config must not synthesize a fake flat ingestion source."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {}
+
+        with pytest.raises(ValueError, match="requires sources or explicit executable source"):
+            create_ingestion_assets(mock_ref)
+
+    @pytest.mark.requirement("4F-FR-060")
     def test_factory_rejects_normalized_source_name_collisions(self) -> None:
         """Source names that normalize to the same asset key must fail loudly."""
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets

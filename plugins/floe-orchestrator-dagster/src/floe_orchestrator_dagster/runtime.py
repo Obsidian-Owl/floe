@@ -43,9 +43,12 @@ def _has_ingestion_workloads(plugins: Any | None) -> bool:
         return True
     if not config:
         return False
-    sources = config.get("sources")
+    keys = set(config)
+    if keys != {"sources"}:
+        return True
+    sources = config["sources"]
     if sources is None:
-        return bool(config)
+        return False
     if not isinstance(sources, list):
         return True
     return len(sources) > 0

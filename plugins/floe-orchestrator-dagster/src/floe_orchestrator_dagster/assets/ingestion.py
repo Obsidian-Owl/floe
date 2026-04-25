@@ -185,6 +185,10 @@ def create_ingestion_assets(
 
 def _source_configs(ingestion_config: Mapping[str, Any]) -> list[dict[str, Any]]:
     """Extract source configs from real sources[] or legacy flat config."""
+    if not ingestion_config:
+        raise ValueError(
+            "Dagster ingestion helper requires sources or explicit executable source config"
+        )
     sources = ingestion_config.get("sources")
     if sources is None:
         return [{"name": ingestion_config.get("name", "pipelines"), **dict(ingestion_config)}]

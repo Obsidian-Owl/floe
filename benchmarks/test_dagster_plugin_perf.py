@@ -21,8 +21,43 @@ from typing import Any
 import pytest
 
 
-def _minimal_manifest() -> dict[str, Any]:
-    """Create a minimal dbt manifest accepted by dagster-dbt."""
+def _manifest_for_artifacts(artifacts: dict[str, Any]) -> dict[str, Any]:
+    """Create a dbt manifest with one model node per compiled transform."""
+    package_name = "benchmark_pipeline"
+    models = artifacts["transforms"]["models"]
+    model_ids = {model["name"]: f"model.{package_name}.{model['name']}" for model in models}
+    nodes = {}
+    parent_map = {}
+    child_map = {unique_id: [] for unique_id in model_ids.values()}
+
+    for model in models:
+        name = model["name"]
+        unique_id = model_ids[name]
+        parent_ids = [
+            model_ids[parent_name]
+            for parent_name in model.get("depends_on", [])
+            if parent_name in model_ids
+        ]
+        nodes[unique_id] = {
+            "resource_type": "model",
+            "unique_id": unique_id,
+            "package_name": package_name,
+            "name": name,
+            "alias": name,
+            "database": "benchmark",
+            "schema": "main",
+            "relation_name": f"benchmark.main.{name}",
+            "path": f"models/{name}.sql",
+            "original_file_path": f"models/{name}.sql",
+            "fqn": [package_name, name],
+            "tags": model.get("tags", []),
+            "depends_on": {"nodes": parent_ids, "macros": []},
+            "config": {"materialized": "view"},
+        }
+        parent_map[unique_id] = parent_ids
+        for parent_id in parent_ids:
+            child_map[parent_id].append(unique_id)
+
     return {
         "metadata": {
             "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
@@ -30,15 +65,15 @@ def _minimal_manifest() -> dict[str, Any]:
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "invocation_id": "benchmark-invocation",
         },
-        "nodes": {},
+        "nodes": nodes,
         "sources": {},
         "exposures": {},
         "metrics": {},
         "groups": {},
         "selectors": {},
         "disabled": [],
-        "parent_map": {},
-        "child_map": {},
+        "parent_map": parent_map,
+        "child_map": child_map,
         "group_map": {},
         "semantic_models": {},
         "unit_tests": {},
@@ -52,7 +87,7 @@ def _write_runtime_project(tmp_path: Path, artifacts: dict[str, Any]) -> Path:
     target_dir = project_dir / "target"
     target_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "compiled_artifacts.json").write_text(json.dumps(artifacts))
-    (target_dir / "manifest.json").write_text(json.dumps(_minimal_manifest()))
+    (target_dir / "manifest.json").write_text(json.dumps(_manifest_for_artifacts(artifacts)))
     return project_dir
 
 
