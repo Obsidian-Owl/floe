@@ -34,7 +34,7 @@ from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 from testing.base_classes.integration_test_base import IntegrationTestBase
 from testing.fixtures.services import ServiceEndpoint
 
-_TERMINAL_MARQUEZ_STATES = {"COMPLETED", "FAILED"}
+_COMPLETED_MARQUEZ_STATE = "COMPLETED"
 
 
 def _marquez_job_runs(
@@ -42,6 +42,7 @@ def _marquez_job_runs(
     *,
     namespace: str,
     job_name: str,
+    allow_missing: bool = False,
 ) -> list[dict[str, Any]]:
     """Query Marquez runs for a namespace/job pair."""
     encoded_namespace = quote(namespace, safe="")
@@ -49,6 +50,8 @@ def _marquez_job_runs(
     response = marquez_client.get(
         f"/api/v1/namespaces/{encoded_namespace}/jobs/{encoded_job_name}/runs"
     )
+    if allow_missing and response.status_code == 404:
+        return []
     assert response.status_code == 200, (
         f"Marquez runs endpoint failed for {namespace}/{job_name}: "
         f"{response.status_code} - {response.text}"
@@ -61,6 +64,53 @@ def _marquez_job_runs(
 def _marquez_run_state(run: dict[str, Any]) -> str:
     """Return normalized Marquez run state across API response variants."""
     return str(run.get("state") or run.get("currentState") or "").upper()
+
+
+def _marquez_run_identity(run: dict[str, Any]) -> str:
+    """Return a stable identity for comparing Marquez runs across snapshots."""
+    for key in ("id", "runId", "run_id"):
+        value = run.get(key)
+        if value:
+            return str(value)
+    return str(run)
+
+
+def _marquez_run_id_snapshot(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+) -> set[str]:
+    """Return current Marquez run identities without requiring the job to exist."""
+    return {
+        _marquez_run_identity(run)
+        for run in _marquez_job_runs(
+            marquez_client,
+            namespace=namespace,
+            job_name=job_name,
+            allow_missing=True,
+        )
+    }
+
+
+def _fresh_completed_runs(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+    before_run_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Return runs that appeared after the snapshot and completed successfully."""
+    return [
+        run
+        for run in _marquez_job_runs(
+            marquez_client,
+            namespace=namespace,
+            job_name=job_name,
+        )
+        if _marquez_run_identity(run) not in before_run_ids
+        and _marquez_run_state(run) == _COMPLETED_MARQUEZ_STATE
+    ]
 
 
 class TestObservability(IntegrationTestBase):
@@ -177,7 +227,7 @@ class TestObservability(IntegrationTestBase):
         dagster_client: Any,
         compiled_artifacts: Callable[[Path], Any],
         project_root: Path,
-        seed_observability: None,
+        trigger_lineage_run: Callable[[], None],
     ) -> None:
         """Validate that Marquez contains real OpenLineage jobs from pipeline execution.
 
@@ -193,6 +243,7 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
             compiled_artifacts: Real compiler fixture used to resolve lineage namespace.
             project_root: Repository root fixture.
+            trigger_lineage_run: Callable that triggers one fresh runtime lineage run.
         """
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster")
@@ -239,6 +290,12 @@ class TestObservability(IntegrationTestBase):
         artifacts = compiled_artifacts(spec_path)
         runtime_namespace = artifacts.observability.lineage_namespace
         runtime_job_name = artifacts.metadata.product_name
+        before_run_ids = _marquez_run_id_snapshot(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_name=runtime_job_name,
+        )
+        trigger_lineage_run()
 
         # Query for REAL jobs -- not just API responds
         jobs_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}/jobs")
@@ -273,21 +330,25 @@ class TestObservability(IntegrationTestBase):
             "lineage namespace and product name."
         )
 
-        runs = _marquez_job_runs(
+        fresh_completed_runs = _fresh_completed_runs(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_name=runtime_job_name,
+            before_run_ids=before_run_ids,
+        )
+        all_runs = _marquez_job_runs(
             marquez_client,
             namespace=runtime_namespace,
             job_name=runtime_job_name,
         )
-        assert len(runs) > 0, (
-            "OBSERVABILITY GAP: Runtime OpenLineage job exists but has no Marquez runs.\n"
-            f"Namespace/job: {runtime_namespace}/{runtime_job_name}"
-        )
-        run_states = {_marquez_run_state(run) for run in runs if _marquez_run_state(run)}
-        assert run_states & _TERMINAL_MARQUEZ_STATES, (
-            "OBSERVABILITY GAP: Runtime OpenLineage runs have no terminal Marquez state.\n"
+        run_states = {_marquez_run_state(run) for run in all_runs if _marquez_run_state(run)}
+        assert fresh_completed_runs, (
+            "OBSERVABILITY GAP: Runtime OpenLineage did not create a fresh "
+            "COMPLETED Marquez run.\n"
             f"Namespace/job: {runtime_namespace}/{runtime_job_name}\n"
+            f"Existing run ids before trigger: {len(before_run_ids)}\n"
             f"Run states found: {sorted(run_states)}\n"
-            "Expected terminal state COMPLETED or FAILED."
+            "Expected a new run with state COMPLETED."
         )
 
     @pytest.mark.e2e
@@ -929,7 +990,7 @@ class TestObservability(IntegrationTestBase):
         dagster_client: Any,
         compiled_artifacts: Callable[[Path], Any],
         project_root: Path,
-        seed_observability: None,
+        trigger_lineage_run: Callable[[], None],
     ) -> None:
         """Validate platform emits OpenLineage events at all 4 required lifecycle points.
 
@@ -951,6 +1012,7 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
             compiled_artifacts: Real compiler fixture used to resolve lineage namespace.
             project_root: Repository root fixture.
+            trigger_lineage_run: Callable that triggers one fresh runtime lineage run.
         """
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster")
@@ -969,6 +1031,12 @@ class TestObservability(IntegrationTestBase):
         artifacts = compiled_artifacts(spec_path)
         runtime_namespace = artifacts.observability.lineage_namespace
         runtime_job_name = artifacts.metadata.product_name
+        before_run_ids = _marquez_run_id_snapshot(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_name=runtime_job_name,
+        )
+        trigger_lineage_run()
 
         # Query Marquez for events emitted BY the platform after compilation.
         # floe.compilation is the SyncLineageEmitter's default namespace used
@@ -1057,6 +1125,20 @@ class TestObservability(IntegrationTestBase):
             "Expected: Jobs with 'pipeline', 'daily', 'customer', or 'asset' in the name "
             "for pipeline-level emission.\n"
             "Fix: Emit RunEvent.START and RunEvent.COMPLETE for pipeline execution."
+        )
+
+        fresh_completed_runs = _fresh_completed_runs(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_name=runtime_job_name,
+            before_run_ids=before_run_ids,
+        )
+        assert fresh_completed_runs, (
+            "EMISSION GAP: Pipeline runtime did not create a fresh COMPLETED "
+            "Marquez run.\n"
+            f"Expected namespace/job: {runtime_namespace}/{runtime_job_name}\n"
+            f"Existing run ids before trigger: {len(before_run_ids)}\n"
+            f"Run states found: {sorted(run_states)}"
         )
 
         # Validate START and COMPLETE events were received by Marquez.

@@ -1197,6 +1197,19 @@ def _trigger_lineage_run(
         logger.info("seed_observability: Marquez lineage ingestion confirmed")
 
 
+@pytest.fixture
+def trigger_lineage_run(
+    marquez_client: httpx.Client,
+    wait_for_service: Callable[..., None],
+) -> Callable[[], None]:
+    """Return a callable that triggers one fresh runtime lineage run."""
+
+    def _trigger() -> None:
+        _trigger_lineage_run(wait_for_service, marquez_client)
+
+    return _trigger
+
+
 @pytest.fixture(scope="session")
 def seed_observability(
     marquez_client: httpx.Client,

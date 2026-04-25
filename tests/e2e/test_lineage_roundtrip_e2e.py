@@ -24,7 +24,7 @@ from urllib.parse import quote
 import httpx
 import pytest
 
-_TERMINAL_MARQUEZ_STATES = {"COMPLETED", "FAILED"}
+_COMPLETED_MARQUEZ_STATE = "COMPLETED"
 
 
 def _marquez_job_runs(
@@ -32,6 +32,7 @@ def _marquez_job_runs(
     *,
     namespace: str,
     job_name: str,
+    allow_missing: bool = False,
 ) -> list[dict[str, Any]]:
     """Query Marquez runs for a namespace/job pair."""
     encoded_namespace = quote(namespace, safe="")
@@ -39,6 +40,8 @@ def _marquez_job_runs(
     response = marquez_client.get(
         f"/api/v1/namespaces/{encoded_namespace}/jobs/{encoded_job_name}/runs"
     )
+    if allow_missing and response.status_code == 404:
+        return []
     assert response.status_code == 200, (
         f"Marquez runs API returned {response.status_code} for "
         f"{namespace}/{job_name}: {response.text}"
@@ -51,6 +54,53 @@ def _marquez_job_runs(
 def _marquez_run_state(run: dict[str, Any]) -> str:
     """Return normalized Marquez run state across API response variants."""
     return str(run.get("state") or run.get("currentState") or "").upper()
+
+
+def _marquez_run_identity(run: dict[str, Any]) -> str:
+    """Return a stable identity for comparing Marquez runs across snapshots."""
+    for key in ("id", "runId", "run_id"):
+        value = run.get(key)
+        if value:
+            return str(value)
+    return str(run)
+
+
+def _marquez_run_id_snapshot(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+) -> set[str]:
+    """Return current Marquez run identities without requiring the job to exist."""
+    return {
+        _marquez_run_identity(run)
+        for run in _marquez_job_runs(
+            marquez_client,
+            namespace=namespace,
+            job_name=job_name,
+            allow_missing=True,
+        )
+    }
+
+
+def _fresh_completed_runs(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+    before_run_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Return runs that appeared after the snapshot and completed successfully."""
+    return [
+        run
+        for run in _marquez_job_runs(
+            marquez_client,
+            namespace=namespace,
+            job_name=job_name,
+        )
+        if _marquez_run_identity(run) not in before_run_ids
+        and _marquez_run_state(run) == _COMPLETED_MARQUEZ_STATE
+    ]
 
 
 @pytest.mark.e2e
@@ -129,13 +179,20 @@ class TestLineageRoundTrip:
         marquez_client: httpx.Client,
         compiled_artifacts: Callable[[Path], Any],
         project_root: Path,
-        seed_observability: None,
+        trigger_lineage_run: Callable[[], None],
     ) -> None:
         """Verify runtime-emitted lifecycle events are visible as Marquez runs."""
         spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
         artifacts = compiled_artifacts(spec_path)
         namespace = artifacts.observability.lineage_namespace
         job_name = artifacts.metadata.product_name
+
+        before_run_ids = _marquez_run_id_snapshot(
+            marquez_client,
+            namespace=namespace,
+            job_name=job_name,
+        )
+        trigger_lineage_run()
 
         jobs_response = marquez_client.get(f"/api/v1/namespaces/{quote(namespace, safe='')}/jobs")
         assert jobs_response.status_code == 200, (
@@ -149,16 +206,19 @@ class TestLineageRoundTrip:
             f"Jobs found: {job_names}"
         )
 
-        runs = _marquez_job_runs(
+        fresh_completed_runs = _fresh_completed_runs(
             marquez_client,
             namespace=namespace,
             job_name=job_name,
+            before_run_ids=before_run_ids,
         )
-        assert runs, f"Expected at least one Marquez run for {namespace}/{job_name}"
-        run_states = {_marquez_run_state(run) for run in runs if _marquez_run_state(run)}
-        assert run_states & _TERMINAL_MARQUEZ_STATES, (
-            "Runtime lineage run did not reach a terminal Marquez state.\n"
-            f"Expected COMPLETED or FAILED, found: {sorted(run_states)}"
+        all_runs = _marquez_job_runs(marquez_client, namespace=namespace, job_name=job_name)
+        run_states = {_marquez_run_state(run) for run in all_runs if _marquez_run_state(run)}
+        assert fresh_completed_runs, (
+            "Runtime lineage run did not create a fresh COMPLETED Marquez run.\n"
+            f"Expected namespace/job: {namespace}/{job_name}\n"
+            f"Existing run ids before trigger: {len(before_run_ids)}\n"
+            f"Run states after trigger: {sorted(run_states)}"
         )
 
     @pytest.mark.requirement("AC-2.4")
