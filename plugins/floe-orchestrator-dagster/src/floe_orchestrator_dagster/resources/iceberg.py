@@ -100,7 +100,15 @@ def create_iceberg_resources(
 
     # Configure catalog plugin if config provided
     if catalog_ref.config is not None:
-        registry.configure(PluginType.CATALOG, catalog_ref.type, catalog_ref.config)
+        validated_catalog_config = registry.configure(
+            PluginType.CATALOG,
+            catalog_ref.type,
+            catalog_ref.config,
+        )
+        if validated_catalog_config is None:
+            raise RuntimeError(
+                f"Catalog plugin config for {catalog_ref.type} could not be validated"
+            )
 
     # T109: Load StoragePlugin via registry
     logger.info(
@@ -111,7 +119,15 @@ def create_iceberg_resources(
 
     # Configure storage plugin if config provided
     if storage_ref.config is not None:
-        registry.configure(PluginType.STORAGE, storage_ref.type, storage_ref.config)
+        validated_storage_config = registry.configure(
+            PluginType.STORAGE,
+            storage_ref.type,
+            storage_ref.config,
+        )
+        if validated_storage_config is None:
+            raise RuntimeError(
+                f"Storage plugin config for {storage_ref.type} could not be validated"
+            )
 
     # T110: Instantiate IcebergTableManager with loaded plugins
     logger.info(
