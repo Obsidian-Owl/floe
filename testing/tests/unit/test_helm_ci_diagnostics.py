@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any, cast
 
 import yaml
 
@@ -13,7 +15,7 @@ DIAGNOSTICS = ROOT / "testing" / "ci" / "helm_diagnostics.sh"
 
 def _load_workflow() -> dict[str, object]:
     with WORKFLOW.open() as handle:
-        return yaml.safe_load(handle)
+        return cast(dict[str, object], yaml.safe_load(handle))
 
 
 def test_helm_ci_invokes_shared_diagnostics_on_install_failure() -> None:
@@ -44,7 +46,7 @@ def test_helm_diagnostics_script_collects_dagster_marquez_and_events() -> None:
 
 def test_helm_ci_has_integration_test_job() -> None:
     workflow = _load_workflow()
-    jobs = workflow["jobs"]
+    jobs = cast(Mapping[str, Mapping[str, Any]], workflow["jobs"])
 
     integration_jobs = [
         job for job in jobs.values() if "Integration Test" in str(job.get("name", ""))

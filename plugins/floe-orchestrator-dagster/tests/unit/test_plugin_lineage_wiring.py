@@ -166,10 +166,17 @@ class TestCreateDefinitionsCallsTryCreateLineageResource:
         captured_plugins: list[Any] = []
 
         captured_strict: list[bool] = []
+        captured_namespaces: list[str | None] = []
 
-        def capture_plugins(plugins: Any, *, strict: bool = False) -> dict[str, Any]:
+        def capture_plugins(
+            plugins: Any,
+            *,
+            strict: bool = False,
+            default_namespace: str | None = None,
+        ) -> dict[str, Any]:
             captured_plugins.append(plugins)
             captured_strict.append(strict)
+            captured_namespaces.append(default_namespace)
             return {"lineage": MagicMock()}
 
         with patch(
@@ -184,6 +191,9 @@ class TestCreateDefinitionsCallsTryCreateLineageResource:
             f"got {type(captured_plugins[0]).__name__}"
         )
         assert captured_strict == [False]
+        assert captured_namespaces == [
+            valid_compiled_artifacts["observability"]["lineage_namespace"]
+        ]
 
 
 class TestCreateDefinitionsLineageResourceWhenNoPlugins:
@@ -287,10 +297,17 @@ class TestCreateDefinitionsLineageResourceWhenNoPlugins:
         captured_args: list[Any] = []
 
         captured_strict: list[bool] = []
+        captured_namespaces: list[str | None] = []
 
-        def capture_call(plugins: Any, *, strict: bool = False) -> dict[str, Any]:
+        def capture_call(
+            plugins: Any,
+            *,
+            strict: bool = False,
+            default_namespace: str | None = None,
+        ) -> dict[str, Any]:
             captured_args.append(plugins)
             captured_strict.append(strict)
+            captured_namespaces.append(default_namespace)
             return {"lineage": MagicMock()}
 
         with patch(
@@ -305,6 +322,9 @@ class TestCreateDefinitionsLineageResourceWhenNoPlugins:
         # plugins=None is acceptable; the factory handles it
         # The key assertion is that the factory IS called (above)
         assert captured_strict == [False]
+        assert captured_namespaces == [
+            artifacts_without_plugins["observability"]["lineage_namespace"]
+        ]
 
 
 class TestDBTResourceKeysIncludesLineage:

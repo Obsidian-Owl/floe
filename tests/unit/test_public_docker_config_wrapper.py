@@ -92,6 +92,43 @@ def test_public_docker_wrapper_defaults_builds_to_classic_engine(tmp_path: Path)
 
 
 @pytest.mark.requirement("AC-2")
+def test_public_docker_wrapper_preserves_active_context_in_isolated_config(
+    tmp_path: Path,
+) -> None:
+    """Isolated auth config must not discard non-default Docker contexts."""
+    source_config = tmp_path / "source-docker-config"
+    (source_config / "contexts").mkdir(parents=True)
+
+    fake_docker = tmp_path / "docker"
+    fake_docker.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "$1 $2" == "context show" ]]; then\n'
+        "  printf 'orbstack\\n'\n"
+        "  exit 0\n"
+        "fi\n"
+        "printf 'DOCKER_CONFIG=%s\\n' \"${DOCKER_CONFIG}\"\n"
+        "printf 'CONFIG_JSON=%s\\n' \"$(tr -d '\\n' < \"${DOCKER_CONFIG}/config.json\")\"\n"
+        'if [[ -e "${DOCKER_CONFIG}/contexts" ]]; then\n'
+        "  printf 'CONTEXTS_PRESENT=1\\n'\n"
+        "fi\n"
+    )
+    fake_docker.chmod(0o755)
+
+    result = _run_wrapper(
+        "docker",
+        "build",
+        env={
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "DOCKER_CONFIG": str(source_config),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert 'CONFIG_JSON={"auths":{},"currentContext":"orbstack"}' in result.stdout
+    assert "CONTEXTS_PRESENT=1" in result.stdout
+
+
+@pytest.mark.requirement("AC-2")
 def test_build_demo_image_uses_public_docker_wrapper() -> None:
     """The demo image build must not depend on ambient Docker helper state."""
     makefile = _MAKEFILE_PATH.read_text()

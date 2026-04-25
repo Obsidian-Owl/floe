@@ -17,6 +17,8 @@ CONFIG_MODE="${FLOE_PUBLIC_DOCKER_CONFIG_MODE:-isolated}"
 CONFIG_DIR="${FLOE_PUBLIC_DOCKER_CONFIG_DIR:-}"
 BUILD_ENGINE="${FLOE_PUBLIC_DOCKER_BUILD_ENGINE:-classic}"
 TEMP_CONFIG_DIR=""
+SOURCE_DOCKER_CONFIG="${DOCKER_CONFIG:-${HOME}/.docker}"
+ACTIVE_DOCKER_CONTEXT=""
 
 cleanup() {
     if [[ -n "${TEMP_CONFIG_DIR}" ]]; then
@@ -46,15 +48,34 @@ case "${BUILD_ENGINE}" in
         ;;
 esac
 
+if [[ "${CONFIG_MODE}" == "isolated" && "${1:-}" == "docker" && -z "${DOCKER_HOST:-}" ]]; then
+    ACTIVE_DOCKER_CONTEXT="$(docker context show 2>/dev/null || true)"
+fi
+
+write_isolated_config() {
+    local target_dir="$1"
+
+    if [[ -n "${ACTIVE_DOCKER_CONTEXT}" ]]; then
+        printf '{"auths":{},"currentContext":"%s"}\n' "${ACTIVE_DOCKER_CONTEXT}" > "${target_dir}/config.json"
+        if [[ -d "${SOURCE_DOCKER_CONFIG}/contexts" && ! -e "${target_dir}/contexts" ]]; then
+            ln -s "${SOURCE_DOCKER_CONFIG}/contexts" "${target_dir}/contexts"
+        fi
+    else
+        printf '{"auths":{}}\n' > "${target_dir}/config.json"
+    fi
+}
+
 if [[ -n "${CONFIG_DIR}" ]]; then
     mkdir -p "${CONFIG_DIR}"
     if [[ ! -f "${CONFIG_DIR}/config.json" ]]; then
-        printf '{"auths":{}}\n' > "${CONFIG_DIR}/config.json"
+        write_isolated_config "${CONFIG_DIR}"
+    elif [[ -n "${ACTIVE_DOCKER_CONTEXT}" && -d "${SOURCE_DOCKER_CONFIG}/contexts" && ! -e "${CONFIG_DIR}/contexts" ]]; then
+        ln -s "${SOURCE_DOCKER_CONFIG}/contexts" "${CONFIG_DIR}/contexts"
     fi
     export DOCKER_CONFIG="${CONFIG_DIR}"
 elif [[ "${CONFIG_MODE}" == "isolated" ]]; then
     TEMP_CONFIG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/floe-public-docker.XXXXXX")"
-    printf '{"auths":{}}\n' > "${TEMP_CONFIG_DIR}/config.json"
+    write_isolated_config "${TEMP_CONFIG_DIR}"
     export DOCKER_CONFIG="${TEMP_CONFIG_DIR}"
 fi
 
