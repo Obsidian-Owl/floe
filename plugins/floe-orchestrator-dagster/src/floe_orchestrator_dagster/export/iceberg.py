@@ -39,9 +39,6 @@ def export_dbt_to_iceberg(
         project_dir: Path to the dbt project directory.
         artifacts: Parsed CompiledArtifacts object (not read from disk).
     """
-    import duckdb
-    from pyiceberg.exceptions import NoSuchTableError
-
     if artifacts.plugins is None or artifacts.plugins.catalog is None:
         context.log.info("No catalog plugin configured — skipping Iceberg export")
         return
@@ -49,6 +46,9 @@ def export_dbt_to_iceberg(
     if artifacts.plugins.storage is None:
         context.log.info("No storage plugin configured — skipping Iceberg export")
         return
+
+    import duckdb
+    from pyiceberg.exceptions import NoSuchTableError
 
     safe_name = product_name.replace("-", "_")
     duckdb_path = f"/tmp/{safe_name}.duckdb"

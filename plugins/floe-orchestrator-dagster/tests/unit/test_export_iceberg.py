@@ -19,6 +19,7 @@ crossing; all assertions verify behavioral outcomes.
 
 from __future__ import annotations
 
+import builtins
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -405,11 +406,18 @@ class TestExportDbtToIceberg:
         project_dir: Path,
         artifacts_catalog_only: CompiledArtifacts,
     ) -> None:
-        """Catalog-only artifacts MUST skip before registry or catalog connection work."""
+        """Catalog-only artifacts MUST skip before optional export dependencies load."""
+        real_import = builtins.__import__
+
+        def fail_optional_export_imports(name: str, *args: object, **kwargs: object) -> object:
+            if name == "duckdb" or name.startswith("pyiceberg"):
+                raise AssertionError(f"optional export dependency imported: {name}")
+            return real_import(name, *args, **kwargs)
+
         with (
-            patch.object(Path, "exists", return_value=True),
-            patch("duckdb.connect") as mock_connect,
+            patch.object(Path, "exists", return_value=True) as mock_exists,
             patch("floe_core.plugin_registry.get_registry") as mock_get_registry,
+            patch("builtins.__import__", side_effect=fail_optional_export_imports),
         ):
             export_dbt_to_iceberg(
                 context=context,
@@ -418,7 +426,7 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_catalog_only,
             )
 
-        mock_connect.assert_not_called()
+        mock_exists.assert_not_called()
         mock_get_registry.assert_not_called()
         context.log.info.assert_called()
 
