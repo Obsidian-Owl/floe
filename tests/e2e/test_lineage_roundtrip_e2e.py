@@ -62,6 +62,12 @@ def _marquez_run_identity(run: dict[str, Any]) -> str:
         value = run.get(key)
         if value:
             return str(value)
+    nested_run = run.get("run")
+    if isinstance(nested_run, dict):
+        for key in ("runId", "id", "run_id"):
+            value = nested_run.get(key)
+            if value:
+                return str(value)
     return str(run)
 
 
