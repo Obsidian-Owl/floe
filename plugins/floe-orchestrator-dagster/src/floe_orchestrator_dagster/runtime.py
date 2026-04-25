@@ -33,6 +33,16 @@ def _has_iceberg_config(artifacts: CompiledArtifacts) -> bool:
     return bool(plugins and plugins.catalog and plugins.storage)
 
 
+def _has_ingestion_workloads(plugins: Any | None) -> bool:
+    """Return True when configured ingestion contains executable workload refs."""
+    ingestion = getattr(plugins, "ingestion", None)
+    config = getattr(ingestion, "config", None)
+    if not isinstance(config, dict):
+        return False
+    sources = config.get("sources")
+    return isinstance(sources, list) and len(sources) > 0
+
+
 def _create_semantic_resources(plugins: Any | None) -> dict[str, Any]:
     """Create semantic resources through the configured semantic factory."""
     from floe_orchestrator_dagster.resources.semantic import (
@@ -65,7 +75,7 @@ def build_product_definitions(
         raise ValueError(_PROJECT_DIR_REQUIRED_MESSAGE)
 
     plugins = artifacts.plugins
-    if plugins and plugins.ingestion:
+    if _has_ingestion_workloads(plugins):
         raise ValueError(_INGESTION_RUNTIME_DISABLED_MESSAGE)
 
     manifest_path = project_dir / "target" / "manifest.json"
@@ -95,15 +105,14 @@ def build_product_definitions(
 
         try:
             yield from dbt.cli(["build"], context=context).stream()
+            if _has_iceberg_config(artifacts):
+                export_dbt_to_iceberg(context, product_name, project_dir, artifacts)
         except Exception as exc:
             try:
                 lineage.emit_fail(run_id, product_name, error_message=type(exc).__name__)
             except Exception as _fail_exc:
                 context.log.debug("emit_fail failed: %s", _fail_exc)
             raise
-
-        if _has_iceberg_config(artifacts):
-            export_dbt_to_iceberg(context, product_name, project_dir, artifacts)
 
         try:
             lineage.emit_complete(run_id, product_name)

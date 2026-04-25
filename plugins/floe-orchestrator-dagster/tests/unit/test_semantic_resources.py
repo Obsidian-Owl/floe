@@ -159,6 +159,48 @@ def test_create_semantic_resources_configures_plugin() -> None:
 
 
 @pytest.mark.requirement("T047")
+def test_create_semantic_resources_configures_empty_dict() -> None:
+    """Empty semantic config dict must still be validated by registry.configure."""
+    mock_plugin = MagicMock()
+    mock_plugin.name = "cube"
+    mock_plugin.version = "0.1.0"
+    semantic_ref = PluginRef(type="cube", version="0.1.0", config={})
+
+    with patch("floe_core.plugin_registry.get_registry") as mock_get_registry:
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = mock_plugin
+        mock_registry.configure.return_value = {}
+        mock_get_registry.return_value = mock_registry
+
+        resources = create_semantic_resources(semantic_ref)
+
+        mock_registry.configure.assert_called_once_with(
+            PluginType.SEMANTIC_LAYER,
+            "cube",
+            {},
+        )
+        assert resources["semantic_layer"] == mock_plugin
+
+
+@pytest.mark.requirement("T047")
+def test_create_semantic_resources_configure_returning_none_raises() -> None:
+    """Configured semantic validation returning None must fail loudly."""
+    mock_plugin = MagicMock()
+    mock_plugin.name = "cube"
+    mock_plugin.version = "0.1.0"
+    semantic_ref = PluginRef(type="cube", version="0.1.0", config={})
+
+    with patch("floe_core.plugin_registry.get_registry") as mock_get_registry:
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = mock_plugin
+        mock_registry.configure.return_value = None
+        mock_get_registry.return_value = mock_registry
+
+        with pytest.raises(RuntimeError, match="Semantic plugin config for cube"):
+            create_semantic_resources(semantic_ref)
+
+
+@pytest.mark.requirement("T047")
 def test_try_create_semantic_resources_handles_plugin_loading_error() -> None:
     """Test try_create_semantic_resources raises when plugin loading fails."""
     # Create ResolvedPlugins with semantic plugin

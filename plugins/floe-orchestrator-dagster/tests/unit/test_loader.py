@@ -248,6 +248,36 @@ def project_dir_with_ingestion(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def project_dir_with_ingestion_no_sources(tmp_path: Path) -> Path:
+    """Temporary project dir with ingestion selected but no workload sources."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={"sources": []},
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_no_config(tmp_path: Path) -> Path:
+    """Temporary project dir with ingestion selected and no config."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config=None,
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
 def project_dir_with_ingestion_no_manifest(tmp_path: Path) -> Path:
     """Temporary project dir with ingestion artifacts but no dbt manifest."""
     pdir = tmp_path / "dbt_project"
@@ -785,6 +815,28 @@ def test_dbt_assets_iceberg_export_not_called_on_failure(
         mock_export.assert_not_called()
 
 
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_iceberg_export_failure_emits_lineage_fail(
+    project_dir_with_iceberg: Path,
+) -> None:
+    """Post-dbt export failure must emit lineage fail and not complete."""
+    with patch(_EXPORT_FN, side_effect=RuntimeError("export failed")):
+        definitions = load_product_definitions(PRODUCT_NAME, project_dir_with_iceberg)
+        asset_fn = _extract_dbt_assets_fn(definitions)
+
+        context, lineage = _make_mock_context_with_lineage()
+        mock_dbt = context.resources.dbt
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = MagicMock(return_value=iter([]))
+        mock_dbt.cli.return_value.stream.return_value = mock_stream
+
+        with pytest.raises(RuntimeError, match="export failed"):
+            list(asset_fn(context))
+
+        lineage.emit_fail.assert_called_once()
+        lineage.emit_complete.assert_not_called()
+
+
 def test_runtime_includes_semantic_resource_and_asset_when_configured(
     project_dir_with_semantic: Path,
 ) -> None:
@@ -852,6 +904,26 @@ def test_runtime_fails_loudly_when_ingestion_configured(
     """Dagster ingestion runtime is blocked until source construction exists."""
     with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion)
+
+
+def test_runtime_allows_selected_ingestion_without_sources(
+    project_dir_with_ingestion_no_sources: Path,
+) -> None:
+    """Selecting ingestion without workload sources should not block transforms."""
+    result = load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_no_sources)
+
+    resources = result.resources or {}
+    assert "ingestion" not in resources
+
+
+def test_runtime_allows_selected_ingestion_without_config(
+    project_dir_with_ingestion_no_config: Path,
+) -> None:
+    """Selecting ingestion without config should not block transforms."""
+    result = load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_no_config)
+
+    resources = result.resources or {}
+    assert "ingestion" not in resources
 
 
 def test_runtime_ingestion_failure_precedes_missing_manifest(
