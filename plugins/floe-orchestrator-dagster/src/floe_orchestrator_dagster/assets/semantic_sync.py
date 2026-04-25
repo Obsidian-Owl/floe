@@ -31,7 +31,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from dagster import asset
+from dagster import AssetKey, asset
 from floe_core.telemetry.tracer_factory import get_tracer as _get_tracer
 
 logger = logging.getLogger(__name__)
@@ -116,12 +116,14 @@ def create_sync_semantic_schemas_asset(
     *,
     manifest_path: Path,
     output_dir: Path,
+    deps: list[AssetKey] | None = None,
 ) -> Any:
     """Create a semantic schema sync asset bound to product runtime paths.
 
     Args:
         manifest_path: dbt manifest path for the product project directory.
         output_dir: Semantic schema output directory for the product.
+        deps: Optional upstream dbt model asset keys that must materialize first.
 
     Returns:
         Dagster asset definition that reads the semantic plugin from
@@ -132,6 +134,7 @@ def create_sync_semantic_schemas_asset(
         name="sync_semantic_schemas",
         description="Synchronize semantic layer schemas from dbt manifest",
         required_resource_keys={"semantic_layer"},
+        deps=deps or [],
     )
     def _sync_semantic_schemas_asset(context) -> list[str]:  # noqa: ANN001
         return _sync_semantic_schemas(

@@ -170,6 +170,37 @@ class TestCreateIngestionAssets:
         assert "ingestion" in asset_def.required_resource_keys
 
     @pytest.mark.requirement("4F-FR-060")
+    def test_factory_creates_one_asset_per_configured_source(self) -> None:
+        """Real dlt config uses sources[], and each source gets an execution asset."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "github-events",
+                    "source_type": "rest_api",
+                    "destination_table": "bronze.github_events",
+                },
+                {
+                    "name": "warehouse_users",
+                    "source_type": "sql_database",
+                    "destination_table": "bronze.users",
+                },
+            ],
+        }
+
+        assets = create_ingestion_assets(mock_ref)
+
+        assert len(assets) == 2
+        assert {asset_def.key.path[-1] for asset_def in assets} == {
+            "run_ingestion_github_events",
+            "run_ingestion_warehouse_users",
+        }
+
+    @pytest.mark.requirement("4F-FR-060")
     def test_factory_asset_runs_ingestion_pipeline(self) -> None:
         """Materializing the asset must create and run the ingestion pipeline."""
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
@@ -204,8 +235,106 @@ class TestCreateIngestionAssets:
         assert config.destination_table == "raw.example"
         assert config.write_mode == "replace"
         assert config.schema_contract == "freeze"
-        ingestion_plugin.run.assert_called_once_with(pipeline)
+        ingestion_plugin.run.assert_called_once_with(
+            pipeline,
+            write_disposition="replace",
+            table_name="example",
+            schema_contract="freeze",
+            cursor_field=None,
+            primary_key=None,
+        )
         assert output is result
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_source_asset_runs_pipeline_with_source_specific_kwargs(self) -> None:
+        """Per-source assets pass write/table/schema/cursor/primary kwargs to plugins."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        executable_source = object()
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "orders-api",
+                    "source_type": "rest_api",
+                    "source_config": {
+                        "url": "https://example.test/orders",
+                        "source": executable_source,
+                    },
+                    "destination_table": "bronze.orders",
+                    "write_mode": "merge",
+                    "schema_contract": "freeze",
+                    "cursor_field": "updated_at",
+                    "primary_key": ["id"],
+                }
+            ],
+        }
+        ingestion_plugin = MagicMock()
+        ingestion_plugin.name = "dlt"
+        ingestion_plugin.version = "0.1.0"
+        pipeline = object()
+        result = IngestionResult(success=True, rows_loaded=5)
+        ingestion_plugin.create_pipeline.return_value = pipeline
+        ingestion_plugin.run.return_value = result
+
+        asset_def = create_ingestion_assets(mock_ref)[0]
+        context = build_op_context(resources={"ingestion": ingestion_plugin})
+
+        output = asset_def(context)
+
+        config = ingestion_plugin.create_pipeline.call_args.args[0]
+        assert config.source_type == "rest_api"
+        assert config.source_config == {
+            "url": "https://example.test/orders",
+            "source": executable_source,
+        }
+        assert config.destination_table == "bronze.orders"
+        assert config.write_mode == "merge"
+        assert config.schema_contract == "freeze"
+        ingestion_plugin.run.assert_called_once_with(
+            pipeline,
+            write_disposition="merge",
+            table_name="orders",
+            schema_contract="freeze",
+            cursor_field="updated_at",
+            primary_key=["id"],
+            source=executable_source,
+        )
+        assert output is result
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_source_asset_does_not_invent_dlt_source_object(self) -> None:
+        """The asset omits source unless source_config explicitly supplies one."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "users",
+                    "source_type": "rest_api",
+                    "source_config": {"url": "https://example.test/users"},
+                    "destination_table": "bronze.users",
+                }
+            ],
+        }
+        ingestion_plugin = MagicMock()
+        ingestion_plugin.name = "dlt"
+        ingestion_plugin.version = "0.1.0"
+        ingestion_plugin.create_pipeline.return_value = object()
+        ingestion_plugin.run.return_value = IngestionResult(success=True)
+
+        asset_def = create_ingestion_assets(mock_ref)[0]
+        context = build_op_context(resources={"ingestion": ingestion_plugin})
+
+        asset_def(context)
+
+        run_kwargs = ingestion_plugin.run.call_args.kwargs
+        assert "source" not in run_kwargs
 
     @pytest.mark.requirement("4F-FR-060")
     def test_factory_asset_raises_when_ingestion_run_fails(self) -> None:
@@ -236,4 +365,11 @@ class TestCreateIngestionAssets:
             asset_def(context)
 
         ingestion_plugin.create_pipeline.assert_called_once()
-        ingestion_plugin.run.assert_called_once_with(pipeline)
+        ingestion_plugin.run.assert_called_once_with(
+            pipeline,
+            write_disposition="append",
+            table_name="example",
+            schema_contract="evolve",
+            cursor_field=None,
+            primary_key=None,
+        )

@@ -26,7 +26,7 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from dagster import Definitions, ResourceDefinition, build_op_context
+from dagster import AssetKey, Definitions, ResourceDefinition, build_op_context
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
@@ -229,7 +229,19 @@ def project_dir_with_ingestion(tmp_path: Path) -> Path:
     """Temporary project dir with ingestion plugin configured."""
     pdir = tmp_path / "dbt_project"
     artifacts = _make_artifacts(
-        ingestion=PluginRef(type="dlt", version="0.1.0", config={}),
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "sources": [
+                    {
+                        "name": "github-events",
+                        "source_type": "rest_api",
+                        "destination_table": "bronze.github_events",
+                    }
+                ]
+            },
+        ),
     )
     _write_artifacts_and_manifest(pdir, artifacts)
     return pdir
@@ -789,6 +801,27 @@ def test_runtime_semantic_asset_uses_project_dir_paths(project_dir_with_semantic
     )
 
 
+def test_runtime_semantic_asset_depends_on_compiled_model_assets(
+    project_dir_with_semantic: Path,
+) -> None:
+    """Semantic sync must run after compiled dbt model assets."""
+    semantic_resource = MagicMock()
+
+    with patch(
+        f"{_RUNTIME_MODULE}._create_semantic_resources",
+        return_value={"semantic_layer": semantic_resource},
+    ):
+        result = load_product_definitions(PRODUCT_NAME, project_dir_with_semantic)
+
+    semantic_asset = next(
+        asset_def
+        for asset_def in result.assets or []
+        if AssetKey("sync_semantic_schemas") in getattr(asset_def, "keys", set())
+    )
+
+    assert AssetKey("stg_customers") in semantic_asset.dependency_keys
+
+
 def test_runtime_includes_ingestion_resource_and_asset_when_configured(
     project_dir_with_ingestion: Path,
 ) -> None:
@@ -804,7 +837,7 @@ def test_runtime_includes_ingestion_resource_and_asset_when_configured(
     resources = result.resources or {}
     asset_names = _asset_names(result)
     assert resources["ingestion"] is ingestion_resource
-    assert "run_ingestion_pipelines" in asset_names
+    assert "run_ingestion_github_events" in asset_names
 
 
 @pytest.mark.requirement("AC-5")

@@ -25,6 +25,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from dagster import ResourceDefinition
+
 if TYPE_CHECKING:
     from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
@@ -76,6 +78,17 @@ def create_ingestion_resources(
     if ingestion_ref.config:
         registry.configure(PluginType.INGESTION, ingestion_ref.type, ingestion_ref.config)
 
+    def _ingestion_resource(_init_context: Any) -> Any:
+        startup = getattr(ingestion_plugin, "startup", None)
+        shutdown = getattr(ingestion_plugin, "shutdown", None)
+        if callable(startup):
+            startup()
+        try:
+            yield ingestion_plugin
+        finally:
+            if callable(shutdown):
+                shutdown()
+
     logger.info(
         "Ingestion resources created",
         extra={
@@ -84,7 +97,7 @@ def create_ingestion_resources(
         },
     )
 
-    return {"ingestion": ingestion_plugin}
+    return {"ingestion": ResourceDefinition(resource_fn=_ingestion_resource)}
 
 
 def try_create_ingestion_resources(

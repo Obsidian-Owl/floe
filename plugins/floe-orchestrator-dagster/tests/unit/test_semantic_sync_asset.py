@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from dagster import build_op_context
+from dagster import AssetKey, build_op_context
 
 
 @pytest.mark.requirement("T049")
@@ -255,3 +255,22 @@ def test_sync_semantic_schemas_factory_closes_over_runtime_paths(tmp_path: Path)
     call_args = mock_plugin.sync_from_dbt_manifest.call_args
     assert call_args.kwargs["manifest_path"] == manifest_path
     assert call_args.kwargs["output_dir"] == output_dir
+
+
+@pytest.mark.requirement("T049")
+def test_sync_semantic_schemas_factory_declares_model_dependencies(tmp_path: Path) -> None:
+    """Factory-created semantic sync assets can depend on dbt model assets."""
+    from floe_orchestrator_dagster.assets.semantic_sync import (
+        create_sync_semantic_schemas_asset,
+    )
+
+    sync_asset = create_sync_semantic_schemas_asset(
+        manifest_path=tmp_path / "target" / "manifest.json",
+        output_dir=tmp_path / "cube" / "schema",
+        deps=[AssetKey("stg_customers"), AssetKey("fct_orders")],
+    )
+
+    assert sync_asset.dependency_keys == {
+        AssetKey("stg_customers"),
+        AssetKey("fct_orders"),
+    }

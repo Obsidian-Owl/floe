@@ -118,7 +118,24 @@ class TestIngestionWiringIntegration:
         from floe_orchestrator_dagster.loader import load_product_definitions
 
         artifacts = _compiled_artifacts(
-            ingestion={"type": "dlt", "version": "0.1.0", "config": {}},
+            ingestion={
+                "type": "dlt",
+                "version": "0.1.0",
+                "config": {
+                    "sources": [
+                        {
+                            "name": "github-events",
+                            "source_type": "rest_api",
+                            "destination_table": "bronze.github_events",
+                        },
+                        {
+                            "name": "warehouse_users",
+                            "source_type": "sql_database",
+                            "destination_table": "bronze.users",
+                        },
+                    ]
+                },
+            },
         )
         project_dir = _write_project(tmp_path, artifacts)
         ingestion_resource = MagicMock()
@@ -130,7 +147,10 @@ class TestIngestionWiringIntegration:
             definitions = load_product_definitions("ingestion-test-pipeline", project_dir)
 
         assert definitions.resources["ingestion"] is ingestion_resource
-        assert "run_ingestion_pipelines" in _asset_names(definitions)
+        assert _asset_names(definitions) >= {
+            "run_ingestion_github_events",
+            "run_ingestion_warehouse_users",
+        }
 
     @pytest.mark.integration
     @pytest.mark.requirement("4F-FR-063")

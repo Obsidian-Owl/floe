@@ -17,6 +17,7 @@ See Also:
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
     from floe_core.schemas.compiled_artifacts import PluginRef
 
 logger = logging.getLogger(__name__)
+_UNSAFE_ASSET_NAME_CHARS = re.compile(r"[^a-zA-Z0-9_]")
 
 
 class FloeIngestionTranslator:
@@ -139,50 +141,17 @@ def create_ingestion_assets(
     ingestion_type = ingestion_ref.type
     ingestion_version = ingestion_ref.version
     ingestion_config = ingestion_ref.config or {}
+    source_configs = _source_configs(ingestion_config)
+    assets: list[AssetsDefinition] = []
 
-    @asset(
-        name="run_ingestion_pipelines",
-        required_resource_keys=frozenset({"ingestion"}),
-        description=(
-            f"Execute ingestion pipelines via {ingestion_type} plugin. "
-            "Delegates to the IngestionPlugin resource for pipeline "
-            "creation and execution."
-        ),
-        metadata={
-            "ingestion_type": ingestion_type,
-            "ingestion_version": ingestion_version,
-        },
-    )
-    def _run_ingestion(context) -> Any:  # noqa: ANN001
-        """Execute ingestion pipelines via the ingestion plugin resource.
-
-        The ingestion plugin is loaded as a Dagster resource by
-        create_ingestion_resources(). This asset triggers pipeline
-        execution at materialization time.
-
-        Args:
-            context: Dagster AssetExecutionContext. Type hint omitted
-                due to Dagster limitations with future annotations.
-        """
-        ingestion_plugin = context.resources.ingestion
-        context.log.info(
-            f"Ingestion asset triggered via {ingestion_plugin.name} v{ingestion_plugin.version}"
+    for source_config in source_configs:
+        assets.append(
+            _create_ingestion_asset(
+                ingestion_type=ingestion_type,
+                ingestion_version=ingestion_version,
+                source_config=source_config,
+            )
         )
-        config = IngestionConfig(
-            source_type=ingestion_config["source_type"],
-            source_config=ingestion_config.get("source_config", {}),
-            destination_table=ingestion_config.get("destination_table", ""),
-            write_mode=ingestion_config.get("write_mode", "append"),
-            schema_contract=ingestion_config.get("schema_contract", "evolve"),
-        )
-        pipeline = ingestion_plugin.create_pipeline(config)
-        result = ingestion_plugin.run(pipeline)
-
-        if not result.success:
-            errors = ", ".join(str(error) for error in result.errors) or "unknown error"
-            raise RuntimeError(f"Ingestion pipeline failed: {errors}")
-
-        return result
 
     logger.info(
         "Created ingestion assets",
@@ -192,7 +161,91 @@ def create_ingestion_assets(
         },
     )
 
-    return [_run_ingestion]
+    return assets
+
+
+def _source_configs(ingestion_config: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Extract source configs from real sources[] or legacy flat config."""
+    sources = ingestion_config.get("sources")
+    if sources is None:
+        return [{"name": ingestion_config.get("name", "pipelines"), **dict(ingestion_config)}]
+    return [dict(source) for source in sources]
+
+
+def _safe_source_name(source_name: str) -> str:
+    """Return a Dagster-safe deterministic source name."""
+    safe_name = _UNSAFE_ASSET_NAME_CHARS.sub("_", source_name).strip("_")
+    if not safe_name:
+        return "source"
+    if safe_name[0].isdigit():
+        return f"source_{safe_name}"
+    return safe_name
+
+
+def _table_name(destination_table: str) -> str:
+    """Extract the physical table name from a namespace-qualified table."""
+    return destination_table.rsplit(".", 1)[-1]
+
+
+def _create_ingestion_asset(
+    *,
+    ingestion_type: str,
+    ingestion_version: str,
+    source_config: dict[str, Any],
+) -> AssetsDefinition:
+    source_name = str(source_config["name"])
+    asset_name = f"run_ingestion_{_safe_source_name(source_name)}"
+
+    @asset(
+        name=asset_name,
+        required_resource_keys=frozenset({"ingestion"}),
+        description=(
+            f"Execute ingestion source {source_name} via {ingestion_type} plugin. "
+            "Delegates to the IngestionPlugin resource for pipeline creation and execution."
+        ),
+        metadata={
+            "ingestion_type": ingestion_type,
+            "ingestion_version": ingestion_version,
+            "source_name": source_name,
+            "source_type": source_config.get("source_type", ""),
+            "destination_table": source_config.get("destination_table", ""),
+        },
+    )
+    def _run_ingestion_source(context) -> Any:  # noqa: ANN001
+        """Execute one configured ingestion source via the ingestion plugin resource."""
+        ingestion_plugin = context.resources.ingestion
+        context.log.info(
+            f"Ingestion asset {asset_name} triggered via "
+            f"{ingestion_plugin.name} v{ingestion_plugin.version}"
+        )
+        config = IngestionConfig(
+            source_type=source_config["source_type"],
+            source_config=source_config.get("source_config") or {},
+            destination_table=source_config["destination_table"],
+            write_mode=source_config.get("write_mode", "append"),
+            schema_contract=source_config.get("schema_contract", "evolve"),
+        )
+        pipeline = ingestion_plugin.create_pipeline(config)
+        run_kwargs = {
+            "write_disposition": config.write_mode,
+            "table_name": _table_name(config.destination_table),
+            "schema_contract": config.schema_contract,
+            "cursor_field": source_config.get("cursor_field"),
+            "primary_key": source_config.get("primary_key"),
+        }
+        source = config.source_config.get("source")
+        if source is not None:
+            run_kwargs["source"] = source
+
+        result = ingestion_plugin.run(pipeline, **run_kwargs)
+
+        if not result.success:
+            errors = ", ".join(str(error) for error in getattr(result, "errors", []))
+            raise RuntimeError(f"Ingestion pipeline failed: {errors or 'unknown error'}")
+
+        return result
+
+    return _run_ingestion_source
 
 
 __all__ = [

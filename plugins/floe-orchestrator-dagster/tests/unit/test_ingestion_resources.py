@@ -14,6 +14,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from dagster import ResourceDefinition
 from floe_core.plugin_types import PluginType
 from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
 
@@ -53,7 +54,7 @@ def test_create_ingestion_resources_returns_valid_dict() -> None:
 
         # Verify the resources dict
         assert "ingestion" in resources
-        assert resources["ingestion"] == mock_plugin
+        assert isinstance(resources["ingestion"], ResourceDefinition)
 
         # Verify registry was called correctly
         mock_registry.get.assert_called_once_with(PluginType.INGESTION, "dlt")
@@ -119,7 +120,7 @@ def test_try_create_ingestion_resources_with_ingestion_plugin() -> None:
 
         # Verify the resources dict
         assert "ingestion" in resources
-        assert resources["ingestion"] == mock_plugin
+        assert isinstance(resources["ingestion"], ResourceDefinition)
 
 
 @pytest.mark.requirement("4F-FR-059")
@@ -157,7 +158,34 @@ def test_create_ingestion_resources_configures_plugin() -> None:
             config_dict,
         )
 
-        assert resources["ingestion"] == mock_plugin
+        assert isinstance(resources["ingestion"], ResourceDefinition)
+
+
+@pytest.mark.requirement("4F-FR-059")
+def test_ingestion_resource_calls_startup_and_shutdown() -> None:
+    """Ingestion Dagster resource activates and tears down configured plugins."""
+    mock_plugin = MagicMock()
+    mock_plugin.name = "dlt"
+    mock_plugin.version = "0.1.0"
+    ingestion_ref = PluginRef(type="dlt", version="0.1.0", config=None)
+
+    with patch("floe_core.plugin_registry.get_registry") as mock_get_registry:
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = mock_plugin
+        mock_get_registry.return_value = mock_registry
+
+        resources = create_ingestion_resources(ingestion_ref)
+
+    resource_def = resources["ingestion"]
+    assert isinstance(resource_def, ResourceDefinition)
+
+    resource_iter = resource_def.resource_fn(MagicMock())
+    assert next(resource_iter) is mock_plugin
+    mock_plugin.startup.assert_called_once()
+
+    with pytest.raises(StopIteration):
+        next(resource_iter)
+    mock_plugin.shutdown.assert_called_once()
 
 
 @pytest.mark.requirement("AC-4")

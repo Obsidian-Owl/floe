@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
-from dagster import Definitions, ResourceDefinition
+from dagster import AssetKey, Definitions, ResourceDefinition
 from dagster_dbt import DbtCliResource, dbt_assets
 from floe_core.lineage.facets import TraceCorrelationFacetBuilder
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
@@ -137,6 +137,10 @@ def build_product_definitions(
                 create_sync_semantic_schemas_asset(
                     manifest_path=project_dir / "target" / "manifest.json",
                     output_dir=project_dir / "cube" / "schema",
+                    deps=[
+                        AssetKey(model.name)
+                        for model in getattr(getattr(artifacts, "transforms", None), "models", [])
+                    ],
                 )
             )
 
