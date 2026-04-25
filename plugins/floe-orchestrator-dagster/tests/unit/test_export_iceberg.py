@@ -116,6 +116,15 @@ def _make_context() -> MagicMock:
     return ctx
 
 
+def _configure_mock_duckdb_table(
+    mock_conn: MagicMock,
+    table_name: str = "customers",
+) -> None:
+    """Configure a DuckDB mock with one non-empty exportable table."""
+    mock_conn.execute.return_value.fetchall.return_value = [("main", table_name)]
+    mock_conn.execute.return_value.fetch_arrow_table.return_value = pa.table({"id": [1]})
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -201,7 +210,7 @@ class TestExportDbtToIceberg:
         the Path.exists() check or duckdb.connect() call.
         """
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []
+        _configure_mock_duckdb_table(mock_conn)
 
         with (
             patch("duckdb.connect", return_value=mock_conn) as mock_duckdb_connect,
@@ -269,7 +278,7 @@ class TestExportDbtToIceberg:
         )
 
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []
+        _configure_mock_duckdb_table(mock_conn)
         mock_catalog = MagicMock()
 
         registry = MagicMock()
@@ -315,7 +324,7 @@ class TestExportDbtToIceberg:
         disk, the mock will record it.
         """
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []
+        _configure_mock_duckdb_table(mock_conn)
 
         registry = MagicMock()
         mock_plugin = MagicMock()
@@ -404,6 +413,42 @@ class TestExportDbtToIceberg:
             "s3",
             {"endpoint": "http://minio:9000", "access-key-id": "test"},
         )
+        catalog_plugin.connect.assert_not_called()
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_fails_when_catalog_configured_but_duckdb_file_missing(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_with_catalog: CompiledArtifacts,
+    ) -> None:
+        """Configured Iceberg export must fail loudly when DuckDB output is absent."""
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+
+        from floe_core.plugin_types import PluginType
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
+            if plugin_type is PluginType.CATALOG:
+                return catalog_plugin
+            return storage_plugin
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = {}
+
+        with (
+            patch.object(Path, "exists", return_value=False),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            pytest.raises(RuntimeError, match="DuckDB output file is missing"),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts_with_catalog,
+            )
+
         catalog_plugin.connect.assert_not_called()
 
     @pytest.mark.requirement("AC-4")
@@ -508,7 +553,7 @@ class TestExportDbtToIceberg:
     ) -> None:
         """Function MUST call create_namespace with the derived safe_name."""
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []
+        _configure_mock_duckdb_table(mock_conn)
         mock_catalog = MagicMock()
 
         registry = MagicMock()
@@ -635,6 +680,46 @@ class TestExportDbtToIceberg:
         )
 
     @pytest.mark.requirement("AC-4")
+    def test_export_returns_written_table_count(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_with_catalog: CompiledArtifacts,
+    ) -> None:
+        """Configured export result must prove which Iceberg tables were written."""
+        arrow_table = pa.table({"id": [1, 2, 3]})
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchall.return_value = [
+            ("main", "customers"),
+        ]
+        mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
+
+        mock_catalog = MagicMock()
+        mock_existing_table = MagicMock()
+        mock_catalog.load_table.return_value = mock_existing_table
+
+        registry = MagicMock()
+        mock_plugin = MagicMock()
+        mock_plugin.connect.return_value = mock_catalog
+        registry.get.return_value = mock_plugin
+        registry.configure.return_value = {}
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+        ):
+            result = export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts_with_catalog,
+            )
+
+        assert result.tables_written == 1
+        assert result.table_names == [f"{SAFE_NAME}.customers"]
+
+    @pytest.mark.requirement("AC-4")
     def test_export_overwrites_existing_iceberg_table(
         self,
         context: MagicMock,
@@ -750,7 +835,7 @@ class TestExportDbtToIceberg:
         project_dir: Path,
         artifacts_with_catalog: CompiledArtifacts,
     ) -> None:
-        """Tables with 0 rows MUST be skipped -- no Iceberg write should occur."""
+        """Configured export must fail when all candidate tables are empty."""
         empty_table = pa.table({"id": pa.array([], type=pa.int64())})
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = [
@@ -773,6 +858,7 @@ class TestExportDbtToIceberg:
                 "floe_core.plugin_registry.get_registry",
                 return_value=registry,
             ),
+            pytest.raises(RuntimeError, match="Configured Iceberg export wrote no tables"),
         ):
             export_dbt_to_iceberg(
                 context=context,
@@ -812,7 +898,7 @@ class TestExportDbtToIceberg:
         )
 
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []
+        _configure_mock_duckdb_table(mock_conn)
 
         registry = MagicMock()
         mock_plugin = MagicMock()
@@ -867,7 +953,7 @@ class TestExportDbtToIceberg:
         )
 
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []
+        _configure_mock_duckdb_table(mock_conn)
 
         registry = MagicMock()
         catalog_plugin = MagicMock()
@@ -1028,7 +1114,7 @@ class TestExportDbtToIceberg:
     ) -> None:
         """DuckDB connection MUST be closed after export, even on success."""
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []
+        _configure_mock_duckdb_table(mock_conn)
 
         registry = MagicMock()
         mock_plugin = MagicMock()
@@ -1097,7 +1183,7 @@ class TestExportDbtToIceberg:
     ) -> None:
         """DuckDB MUST be opened in read-only mode to prevent accidental writes."""
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []
+        _configure_mock_duckdb_table(mock_conn)
 
         registry = MagicMock()
         mock_plugin = MagicMock()

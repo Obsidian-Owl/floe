@@ -125,7 +125,16 @@ def build_product_definitions(
         try:
             yield from dbt.cli(["build"], context=context).stream()
             if _has_iceberg_config(artifacts):
-                export_dbt_to_iceberg(context, product_name, project_dir, artifacts)
+                export_result = export_dbt_to_iceberg(
+                    context,
+                    product_name,
+                    project_dir,
+                    artifacts,
+                )
+                if export_result.tables_written == 0:
+                    raise RuntimeError(
+                        f"Configured Iceberg export wrote no tables for product {product_name}"
+                    )
         except Exception as exc:
             try:
                 lineage.emit_fail(run_id, product_name, error_message=type(exc).__name__)

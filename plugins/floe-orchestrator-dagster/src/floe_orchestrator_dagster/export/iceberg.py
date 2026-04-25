@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,14 @@ from floe_core.plugin_types import PluginType
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+@dataclass
+class IcebergExportResult:
+    """Result proving the Iceberg export wrote concrete table outputs."""
+
+    tables_written: int
+    table_names: list[str]
 
 
 def _is_safe_identifier(name: str) -> bool:
@@ -30,7 +39,7 @@ def export_dbt_to_iceberg(
     product_name: str,
     project_dir: Path,
     artifacts: CompiledArtifacts,
-) -> None:
+) -> IcebergExportResult:
     """Export dbt model outputs from DuckDB to Iceberg tables.
 
     Args:
@@ -41,11 +50,11 @@ def export_dbt_to_iceberg(
     """
     if artifacts.plugins is None or artifacts.plugins.catalog is None:
         context.log.info("No catalog plugin configured — skipping Iceberg export")
-        return
+        return IcebergExportResult(tables_written=0, table_names=[])
 
     if artifacts.plugins.storage is None:
         context.log.info("No storage plugin configured — skipping Iceberg export")
-        return
+        return IcebergExportResult(tables_written=0, table_names=[])
 
     safe_name = product_name.replace("-", "_")
     duckdb_path = f"/tmp/{safe_name}.duckdb"
@@ -75,7 +84,9 @@ def export_dbt_to_iceberg(
         raise RuntimeError(f"Storage plugin config for {storage_type} could not be validated")
 
     if not Path(duckdb_path).exists():
-        raise RuntimeError(f"Configured Iceberg export DuckDB file not found: {duckdb_path}")
+        raise RuntimeError(
+            f"DuckDB output file is missing for configured Iceberg export: {duckdb_path}"
+        )
 
     import duckdb
     from pyiceberg.exceptions import NoSuchTableError
@@ -97,6 +108,7 @@ def export_dbt_to_iceberg(
 
     conn = duckdb.connect(duckdb_path, read_only=True)
     try:
+        table_names: list[str] = []
         tables_df = conn.execute(
             "SELECT table_schema, table_name FROM information_schema.tables "
             "WHERE table_schema NOT IN ('information_schema', 'pg_catalog')"
@@ -129,10 +141,20 @@ def export_dbt_to_iceberg(
                     schema=arrow_table.schema,
                 )
                 iceberg_table.append(arrow_table)
+            table_names.append(iceberg_id)
             context.log.info(
                 "Exported %s to Iceberg (%d rows)",
                 table_name,
                 arrow_table.num_rows,
             )
+
+        if not table_names:
+            raise RuntimeError(
+                f"Configured Iceberg export wrote no tables for product {product_name}"
+            )
+        return IcebergExportResult(
+            tables_written=len(table_names),
+            table_names=table_names,
+        )
     finally:
         conn.close()

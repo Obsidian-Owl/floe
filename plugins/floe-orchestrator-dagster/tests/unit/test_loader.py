@@ -1050,6 +1050,32 @@ def test_dbt_assets_calls_iceberg_export_after_dbt(
 
 
 @pytest.mark.requirement("AC-5")
+def test_dbt_assets_fails_when_iceberg_export_reports_zero_tables(
+    project_dir_with_iceberg: Path,
+) -> None:
+    """Runtime must reject configured Iceberg export results with no tables."""
+    zero_result = MagicMock()
+    zero_result.tables_written = 0
+    zero_result.table_names = []
+
+    with patch(_EXPORT_FN, return_value=zero_result):
+        definitions = load_product_definitions(PRODUCT_NAME, project_dir_with_iceberg)
+        asset_fn = _extract_dbt_assets_fn(definitions)
+
+        context, lineage = _make_mock_context_with_lineage()
+        mock_dbt = context.resources.dbt
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = MagicMock(return_value=iter([]))
+        mock_dbt.cli.return_value.stream.return_value = mock_stream
+
+        with pytest.raises(RuntimeError, match="Configured Iceberg export wrote no tables"):
+            list(asset_fn(context))
+
+        lineage.emit_fail.assert_called_once()
+        lineage.emit_complete.assert_not_called()
+
+
+@pytest.mark.requirement("AC-5")
 def test_dbt_assets_iceberg_export_not_called_with_catalog_only(
     project_dir_with_catalog_only: Path,
 ) -> None:
