@@ -32,16 +32,16 @@ OrchestratorPlugin defines the interface for all orchestration engines (Dagster,
 
 ### REQ-022: OrchestratorPlugin Definition Creation **[New]**
 
-**Requirement**: OrchestratorPlugin.create_definitions() MUST generate platform-specific definitions from CompiledArtifacts that pass platform validation.
+**Requirement**: OrchestratorPlugin.create_definitions() MUST validate CompiledArtifacts and delegate to the platform runtime definition path. For Dagster, usable runtime Definitions require `project_dir` and MUST be loaded through the generated `definitions.py` shim or `load_product_definitions(product_name, project_dir)`.
 
-**Rationale**: Bridges floe-core compilation to orchestration platform assets/jobs.
+**Rationale**: Bridges floe-core compilation to orchestration runtime assets/jobs without maintaining a divergent direct plugin path.
 
 **Acceptance Criteria**:
-- [ ] Accepts CompiledArtifacts as input
-- [ ] Returns platform-specific definitions (Dagster Definitions, Airflow DAG, etc.)
-- [ ] All dbt models converted to platform assets via create_assets_from_transforms()
-- [ ] All schedules and sensors converted to platform triggers
-- [ ] Asset lineage preserved from artifacts
+- [ ] Direct plugin calls validate CompiledArtifacts and fail clearly when required runtime context is missing
+- [ ] Dagster runtime definitions are built through the loader/runtime builder with one product `project_dir`
+- [ ] Generated Dagster `definitions.py` is a thin shim that calls `load_product_definitions(product_name, project_dir)`
+- [ ] Product directory contains `compiled_artifacts.json`, `target/manifest.json`, and dbt profile/project files resolved together
+- [ ] Asset lineage is preserved by the runtime path
 
 **Enforcement**: Asset generation tests, lineage validation tests
 **Test Coverage**: `tests/integration/test_orchestrator_definition_creation.py`
