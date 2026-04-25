@@ -148,6 +148,76 @@ class TestCreateIcebergResourcesFullWiring:
             # Verify configure NOT called
             mock_registry.configure.assert_not_called()
 
+    @pytest.mark.requirement("004d-FR-115")
+    def test_create_iceberg_resources_configures_empty_dict_configs(self) -> None:
+        """Test empty dict configs are validated instead of skipped as falsy."""
+        from floe_core.plugin_types import PluginType
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.iceberg import create_iceberg_resources
+
+        catalog_ref = PluginRef(type="mock-catalog", version="1.0.0", config={})
+        storage_ref = PluginRef(type="mock-storage", version="1.0.0", config={})
+
+        with (
+            patch("floe_core.plugin_registry.get_registry") as mock_get_registry,
+            patch("floe_iceberg.IcebergTableManager") as mock_table_manager_cls,
+            patch(
+                "floe_orchestrator_dagster.io_manager.create_iceberg_io_manager"
+            ) as mock_create_io_manager,
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.side_effect = [MagicMock(), MagicMock()]
+            mock_table_manager_cls.return_value = MagicMock()
+            mock_create_io_manager.return_value = MagicMock()
+
+            create_iceberg_resources(catalog_ref=catalog_ref, storage_ref=storage_ref)
+
+            assert mock_registry.configure.call_count == 2
+            mock_registry.configure.assert_any_call(PluginType.CATALOG, "mock-catalog", {})
+            mock_registry.configure.assert_any_call(PluginType.STORAGE, "mock-storage", {})
+
+    @pytest.mark.requirement("004d-FR-115")
+    @pytest.mark.parametrize(
+        ("failing_plugin_type", "expected_message"),
+        [("catalog", "invalid catalog config"), ("storage", "invalid storage config")],
+    )
+    def test_create_iceberg_resources_configure_exception_propagates(
+        self,
+        failing_plugin_type: str,
+        expected_message: str,
+    ) -> None:
+        """Test configured plugin validation failures propagate loudly."""
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.iceberg import create_iceberg_resources
+
+        catalog_ref = PluginRef(type="mock-catalog", version="1.0.0", config={})
+        storage_ref = PluginRef(type="mock-storage", version="1.0.0", config={})
+
+        def configure_side_effect(plugin_type: Any, _plugin_name: str, _config: Any) -> None:
+            if plugin_type.name.lower() == failing_plugin_type:
+                raise ValueError(expected_message)
+
+        with (
+            patch("floe_core.plugin_registry.get_registry") as mock_get_registry,
+            patch("floe_iceberg.IcebergTableManager") as mock_table_manager_cls,
+            patch(
+                "floe_orchestrator_dagster.io_manager.create_iceberg_io_manager"
+            ) as mock_create_io_manager,
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.side_effect = [MagicMock(), MagicMock()]
+            mock_registry.configure.side_effect = configure_side_effect
+
+            with pytest.raises(ValueError, match=expected_message):
+                create_iceberg_resources(catalog_ref=catalog_ref, storage_ref=storage_ref)
+
+            mock_table_manager_cls.assert_not_called()
+            mock_create_io_manager.assert_not_called()
+
 
 class TestCreateDefinitionsWithIcebergResources:
     """Test direct create_definitions() delegates to runtime project loading.

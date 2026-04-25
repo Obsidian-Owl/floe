@@ -99,7 +99,7 @@ def create_iceberg_resources(
     catalog_plugin = registry.get(PluginType.CATALOG, catalog_ref.type)
 
     # Configure catalog plugin if config provided
-    if catalog_ref.config:
+    if catalog_ref.config is not None:
         registry.configure(PluginType.CATALOG, catalog_ref.type, catalog_ref.config)
 
     # T109: Load StoragePlugin via registry
@@ -110,7 +110,7 @@ def create_iceberg_resources(
     storage_plugin = registry.get(PluginType.STORAGE, storage_ref.type)
 
     # Configure storage plugin if config provided
-    if storage_ref.config:
+    if storage_ref.config is not None:
         registry.configure(PluginType.STORAGE, storage_ref.type, storage_ref.config)
 
     # T110: Instantiate IcebergTableManager with loaded plugins
