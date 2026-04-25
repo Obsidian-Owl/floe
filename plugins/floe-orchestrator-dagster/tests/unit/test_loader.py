@@ -65,6 +65,7 @@ def _make_artifacts(
     storage: PluginRef | None = None,
     ingestion: PluginRef | None = None,
     semantic: PluginRef | None = None,
+    lineage_backend: PluginRef | None = None,
 ) -> CompiledArtifacts:
     """Build a minimal valid CompiledArtifacts with optional catalog/storage.
 
@@ -73,6 +74,7 @@ def _make_artifacts(
         storage: Optional storage PluginRef.
         ingestion: Optional ingestion PluginRef.
         semantic: Optional semantic layer PluginRef.
+        lineage_backend: Optional lineage backend PluginRef.
 
     Returns:
         A valid CompiledArtifacts instance.
@@ -115,6 +117,7 @@ def _make_artifacts(
             storage=storage,
             ingestion=ingestion,
             semantic=semantic,
+            lineage_backend=lineage_backend,
         ),
         transforms=ResolvedTransforms(
             models=[ResolvedModel(name="stg_customers", compute="duckdb")],
@@ -196,6 +199,23 @@ def project_dir_with_iceberg(tmp_path: Path) -> Path:
     artifacts = _make_artifacts(
         catalog=PluginRef(type="polaris", version="0.1.0", config={}),
         storage=PluginRef(type="s3", version="1.0.0", config={}),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_alpha_capabilities(tmp_path: Path) -> Path:
+    """Temporary project dir with all alpha-required capability plugins configured."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        catalog=PluginRef(type="polaris", version="0.1.0", config={}),
+        storage=PluginRef(type="s3", version="1.0.0", config={}),
+        lineage_backend=PluginRef(
+            type="marquez",
+            version="0.1.0",
+            config={"url": "http://marquez:5000"},
+        ),
     )
     _write_artifacts_and_manifest(pdir, artifacts)
     return pdir
@@ -418,6 +438,50 @@ def test_loader_delegates_to_runtime_builder(project_dir: Path) -> None:
     assert call["product_name"] == PRODUCT_NAME
     assert call["project_dir"] == project_dir
     assert call["artifacts"] == expected_artifacts
+
+
+def test_runtime_builder_alpha_policy_rejects_missing_capabilities(project_dir: Path) -> None:
+    """Alpha policy must fail before building definitions with missing capabilities."""
+    from floe_orchestrator_dagster.capabilities import (
+        AlphaCapabilityError,
+        CapabilityPolicy,
+    )
+    from floe_orchestrator_dagster.runtime import build_product_definitions
+
+    artifacts_path = project_dir / "compiled_artifacts.json"
+    artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
+
+    with pytest.raises(AlphaCapabilityError, match="catalog"):
+        build_product_definitions(
+            product_name=PRODUCT_NAME,
+            artifacts=artifacts,
+            project_dir=project_dir,
+            capability_policy=CapabilityPolicy.alpha(),
+        )
+
+
+def test_runtime_builder_alpha_policy_enables_strict_lineage(
+    project_dir_with_alpha_capabilities: Path,
+) -> None:
+    """Alpha policy must wire lineage resources in strict mode."""
+    from floe_orchestrator_dagster.capabilities import CapabilityPolicy
+    from floe_orchestrator_dagster.runtime import build_product_definitions
+
+    artifacts_path = project_dir_with_alpha_capabilities / "compiled_artifacts.json"
+    artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
+
+    with patch(
+        _LINEAGE_FACTORY,
+        return_value={"lineage": ResourceDefinition.hardcoded_resource(MagicMock())},
+    ) as mock_lineage:
+        build_product_definitions(
+            product_name=PRODUCT_NAME,
+            artifacts=artifacts,
+            project_dir=project_dir_with_alpha_capabilities,
+            capability_policy=CapabilityPolicy.alpha(),
+        )
+
+    mock_lineage.assert_called_once_with(artifacts.plugins, strict=True)
 
 
 # ===========================================================================

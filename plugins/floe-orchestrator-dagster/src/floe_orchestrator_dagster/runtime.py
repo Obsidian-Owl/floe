@@ -11,6 +11,7 @@ from dagster_dbt import DbtCliResource, dbt_assets
 from floe_core.lineage.facets import TraceCorrelationFacetBuilder
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
+from floe_orchestrator_dagster.capabilities import CapabilityPolicy
 from floe_orchestrator_dagster.export.iceberg import export_dbt_to_iceberg
 from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
@@ -66,6 +67,7 @@ def build_product_definitions(
     product_name: str,
     artifacts: CompiledArtifacts,
     project_dir: Path | None,
+    capability_policy: CapabilityPolicy | None = None,
 ) -> Definitions:
     """Build Dagster definitions for a compiled floe product.
 
@@ -82,6 +84,9 @@ def build_product_definitions(
     """
     if project_dir is None:
         raise ValueError(_PROJECT_DIR_REQUIRED_MESSAGE)
+
+    policy = capability_policy or CapabilityPolicy.default()
+    policy.validate_required_plugins(artifacts.plugins)
 
     plugins = artifacts.plugins
     if _has_ingestion_workloads(plugins):
@@ -138,7 +143,7 @@ def build_product_definitions(
 
     resources: dict[str, object] = {
         "dbt": ResourceDefinition(resource_fn=_dbt_resource_fn),
-        **try_create_lineage_resource(plugins),
+        **try_create_lineage_resource(plugins, strict=policy.require_lineage),
     }
     assets: list[Any] = [_dbt_assets_fn]
 

@@ -538,6 +538,7 @@ class TestLineageResourceErrorHandling:
 
             assert isinstance(result, UUID), "emit_start must return a UUID even on timeout"
             future.cancel.assert_called_once()
+            mock_submit.call_args[0][0].close()
         finally:
             resource.close()
 
@@ -561,6 +562,7 @@ class TestLineageResourceErrorHandling:
 
             warning_records = [r for r in caplog.records if r.levelno >= logging.WARNING]
             assert len(warning_records) > 0, "Timeout must produce a warning log"
+            mock_submit.call_args[0][0].close()
         finally:
             resource.close()
 
@@ -624,6 +626,59 @@ class TestLineageResourceErrorHandling:
             resource.close()
 
     @pytest.mark.requirement(AC_6)
+    def test_strict_emit_start_timeout_raises_runtime_error(
+        self,
+        mock_emitter: MagicMock,
+    ) -> None:
+        """Test strict mode raises when lineage emission times out."""
+        from floe_orchestrator_dagster.resources.lineage import LineageResource
+
+        async def emit_start(*args: Any, **kwargs: Any) -> UUID:
+            return uuid4()
+
+        mock_emitter.emit_start = emit_start
+        resource = LineageResource(emitter=mock_emitter, strict=True)
+        try:
+            with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
+                future = MagicMock(spec=Future)
+                future.result.side_effect = TimeoutError("timed out")
+                mock_submit.return_value = future
+
+                with pytest.raises(RuntimeError, match="Lineage emission timed out"):
+                    resource.emit_start(JOB_NAME)
+
+            future.cancel.assert_called_once()
+            mock_submit.call_args[0][0].close()
+        finally:
+            resource.close()
+
+    @pytest.mark.requirement(AC_6)
+    def test_strict_emit_complete_exception_raises_runtime_error(
+        self,
+        mock_emitter: MagicMock,
+    ) -> None:
+        """Test strict mode raises when lineage emission fails."""
+        from floe_orchestrator_dagster.resources.lineage import LineageResource
+
+        async def emit_complete(*args: Any, **kwargs: Any) -> None:
+            return None
+
+        mock_emitter.emit_complete = emit_complete
+        resource = LineageResource(emitter=mock_emitter, strict=True)
+        try:
+            with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
+                future = MagicMock(spec=Future)
+                future.result.side_effect = RuntimeError("transport down")
+                mock_submit.return_value = future
+
+                with pytest.raises(RuntimeError, match="Lineage emission failed: RuntimeError"):
+                    resource.emit_complete(uuid4(), JOB_NAME)
+
+            mock_submit.call_args[0][0].close()
+        finally:
+            resource.close()
+
+    @pytest.mark.requirement(AC_6)
     def test_emit_start_uses_5s_timeout(self, mock_emitter: MagicMock) -> None:
         """Test emit_start blocks with a 5-second timeout on the future.
 
@@ -650,6 +705,7 @@ class TestLineageResourceErrorHandling:
                 assert timeout_val == pytest.approx(5.0), (
                     f"emit_start must use 5s timeout, got {timeout_val}"
                 )
+                mock_submit.call_args[0][0].close()
         finally:
             resource.close()
 
@@ -668,7 +724,14 @@ class TestLineageResourceConcurrency:
         num_threads = 20
         # Generate distinct UUIDs for each call
         expected_ids = [uuid4() for _ in range(num_threads)]
-        mock_emitter.emit_start = AsyncMock(side_effect=expected_ids)
+        id_iter = iter(expected_ids)
+        id_lock = threading.Lock()
+
+        async def emit_start(*args: Any, **kwargs: Any) -> UUID:
+            with id_lock:
+                return next(id_iter)
+
+        mock_emitter.emit_start = emit_start
 
         resource = LineageResource(emitter=mock_emitter)
         try:
@@ -707,7 +770,14 @@ class TestLineageResourceConcurrency:
 
         num_threads = 20
         expected_ids = [uuid4() for _ in range(num_threads)]
-        mock_emitter.emit_start = AsyncMock(side_effect=expected_ids)
+        id_iter = iter(expected_ids)
+        id_lock = threading.Lock()
+
+        async def emit_start(*args: Any, **kwargs: Any) -> UUID:
+            with id_lock:
+                return next(id_iter)
+
+        mock_emitter.emit_start = emit_start
 
         resource = LineageResource(emitter=mock_emitter)
         try:
@@ -737,7 +807,10 @@ class TestLineageResourceConcurrency:
         """
         from floe_orchestrator_dagster.resources.lineage import LineageResource
 
-        mock_emitter.emit_start = AsyncMock(return_value=uuid4())
+        async def emit_start(*args: Any, **kwargs: Any) -> UUID:
+            return uuid4()
+
+        mock_emitter.emit_start = emit_start
         resource = LineageResource(emitter=mock_emitter)
         try:
             errors: list[Exception | None] = [None] * 30
@@ -1162,6 +1235,46 @@ class TestCreateLineageResource:
             f"Value must be ResourceDefinition, got {type(result['lineage'])}"
         )
 
+    @pytest.mark.requirement(AC_10)
+    def test_strict_mode_is_passed_to_lineage_resource(self) -> None:
+        """Test create_lineage_resource passes strict mode into LineageResource."""
+        import types
+
+        from dagster import build_init_resource_context
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_transport_config.return_value = {"url": "http://marquez:5000"}
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "test-ns",
+        }
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            result = create_lineage_resource(lineage_ref, strict=True)
+
+        resource_instance = result["lineage"].resource_fn(build_init_resource_context())
+
+        if not isinstance(resource_instance, types.GeneratorType):
+            pytest.fail(f"Resource function must be a generator, got {type(resource_instance)}")
+
+        yielded = next(resource_instance)
+        try:
+            assert yielded._strict is True
+        finally:
+            resource_instance.close()
+
 
 class TestCreateLineageResourceGeneratorTeardown:
     """Tests for Dagster @resource generator teardown — AC-10.
@@ -1450,10 +1563,37 @@ class TestTryCreateLineageResourceWithBackend:
         ) as mock_create:
             result = try_create_lineage_resource(plugins)
 
-            mock_create.assert_called_once_with(lineage_ref)
+            mock_create.assert_called_once_with(lineage_ref, strict=False)
             assert result is expected_result, (
                 "try_create must return the result of create_lineage_resource"
             )
+
+    @pytest.mark.requirement(AC_8)
+    def test_with_lineage_backend_passes_strict_to_create_lineage_resource(self) -> None:
+        """Test strict mode is forwarded to the concrete lineage resource factory."""
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        from floe_orchestrator_dagster.resources.lineage import (
+            try_create_lineage_resource,
+        )
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            lineage_backend=lineage_ref,
+        )
+
+        expected_result = {"lineage": MagicMock()}
+
+        with patch(
+            f"{_LINEAGE_MODULE}.create_lineage_resource",
+            return_value=expected_result,
+        ) as mock_create:
+            result = try_create_lineage_resource(plugins, strict=True)
+
+        mock_create.assert_called_once_with(lineage_ref, strict=True)
+        assert result is expected_result
 
     @pytest.mark.requirement(AC_8)
     def test_with_lineage_backend_passes_exact_ref(self) -> None:

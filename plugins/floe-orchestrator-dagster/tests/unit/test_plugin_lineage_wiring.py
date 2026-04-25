@@ -165,8 +165,11 @@ class TestCreateDefinitionsCallsTryCreateLineageResource:
 
         captured_plugins: list[Any] = []
 
-        def capture_plugins(plugins: Any) -> dict[str, Any]:
+        captured_strict: list[bool] = []
+
+        def capture_plugins(plugins: Any, *, strict: bool = False) -> dict[str, Any]:
             captured_plugins.append(plugins)
+            captured_strict.append(strict)
             return {"lineage": MagicMock()}
 
         with patch(
@@ -180,6 +183,7 @@ class TestCreateDefinitionsCallsTryCreateLineageResource:
             f"try_create_lineage_resource must receive a ResolvedPlugins instance, "
             f"got {type(captured_plugins[0]).__name__}"
         )
+        assert captured_strict == [False]
 
 
 class TestCreateDefinitionsLineageResourceWhenNoPlugins:
@@ -282,8 +286,11 @@ class TestCreateDefinitionsLineageResourceWhenNoPlugins:
         """
         captured_args: list[Any] = []
 
-        def capture_call(plugins: Any) -> dict[str, Any]:
+        captured_strict: list[bool] = []
+
+        def capture_call(plugins: Any, *, strict: bool = False) -> dict[str, Any]:
             captured_args.append(plugins)
+            captured_strict.append(strict)
             return {"lineage": MagicMock()}
 
         with patch(
@@ -297,6 +304,7 @@ class TestCreateDefinitionsLineageResourceWhenNoPlugins:
         )
         # plugins=None is acceptable; the factory handles it
         # The key assertion is that the factory IS called (above)
+        assert captured_strict == [False]
 
 
 class TestDBTResourceKeysIncludesLineage:

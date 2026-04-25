@@ -55,13 +55,15 @@ class LineageResource:
             to the background loop.
     """
 
-    def __init__(self, emitter: LineageEmitter) -> None:
+    def __init__(self, emitter: LineageEmitter, *, strict: bool = False) -> None:
         """Initialise the resource and start the background event loop thread.
 
         Args:
             emitter: The async LineageEmitter to delegate to.
+            strict: Raise lineage emission failures instead of returning fallbacks.
         """
         self._emitter = emitter
+        self._strict = strict
         self._closed = False
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
@@ -92,12 +94,16 @@ class LineageResource:
                 "lineage_emit_timeout",
                 extra={"timeout": _EMIT_TIMEOUT},
             )
+            if self._strict:
+                raise RuntimeError(f"Lineage emission timed out after {_EMIT_TIMEOUT}s") from None
             return default
         except Exception as exc:
             logger.warning(
                 "lineage_emit_error",
                 extra={"error_type": type(exc).__name__},
             )
+            if self._strict:
+                raise RuntimeError(f"Lineage emission failed: {type(exc).__name__}") from exc
             return default
 
     # ------------------------------------------------------------------
@@ -348,7 +354,7 @@ class NoOpLineageResource:
 # ---------------------------------------------------------------------------
 
 
-def create_lineage_resource(lineage_ref: PluginRef) -> dict[str, Any]:
+def create_lineage_resource(lineage_ref: PluginRef, *, strict: bool = False) -> dict[str, Any]:
     """Create a Dagster ResourceDefinition for the configured lineage backend.
 
     Loads the lineage plugin from the registry, obtains its transport config
@@ -358,6 +364,7 @@ def create_lineage_resource(lineage_ref: PluginRef) -> dict[str, Any]:
 
     Args:
         lineage_ref: Resolved lineage plugin reference (type, version, config).
+        strict: Raise lineage emission failures instead of returning fallbacks.
 
     Returns:
         ``{"lineage": ResourceDefinition}`` where the resource yields a
@@ -375,7 +382,7 @@ def create_lineage_resource(lineage_ref: PluginRef) -> dict[str, Any]:
     emitter = create_emitter(transport_config, default_namespace)
 
     def _resource_fn(_init_context: Any) -> Any:
-        resource = LineageResource(emitter=emitter)
+        resource = LineageResource(emitter=emitter, strict=strict)
         try:
             yield resource
         finally:
@@ -386,6 +393,8 @@ def create_lineage_resource(lineage_ref: PluginRef) -> dict[str, Any]:
 
 def try_create_lineage_resource(
     plugins: ResolvedPlugins | None,
+    *,
+    strict: bool = False,
 ) -> dict[str, Any]:
     """Return a lineage resource dict, always with a ``"lineage"`` key.
 
@@ -400,6 +409,7 @@ def try_create_lineage_resource(
 
     Args:
         plugins: Resolved plugin configuration, or ``None``.
+        strict: Raise lineage emission failures for configured lineage backends.
 
     Returns:
         ``{"lineage": ResourceDefinition}`` when unconfigured or successful.
@@ -424,7 +434,7 @@ def try_create_lineage_resource(
         return {"lineage": ResourceDefinition(resource_fn=_noop_fn)}
 
     try:
-        return create_lineage_resource(lineage_backend)
+        return create_lineage_resource(lineage_backend, strict=strict)
     except Exception:
         logger.exception("lineage_creation_failed")
         raise
