@@ -115,27 +115,26 @@ This group of requirements defines the `floe compile` workflow that transforms f
 
 ---
 
-### REQ-144: Dagster Configuration Generation from CompiledArtifacts **[New]**
+### REQ-144: Dagster Runtime Loader Configuration from CompiledArtifacts **[Updated 2026-04-25]**
 
-**Requirement**: System MUST generate Dagster configuration (definitions, assets, schedules, resources) from CompiledArtifacts, ready for `dagster dev` or K8s deployment.
+**Requirement**: System MUST generate a Dagster runtime loader configuration from CompiledArtifacts and product project files. Usable Dagster `Definitions` MUST be loaded through the generated `definitions.py` shim or `load_product_definitions(product_name, project_dir)` so `compiled_artifacts.json`, `target/manifest.json`, dbt profiles, and dbt project files resolve from one product directory.
 
-**Rationale**: Enables Dagster to orchestrate compiled data products without custom Python code.
+**Rationale**: Enables Dagster to orchestrate compiled data products without product-specific executable Python code while preserving one canonical runtime path.
 
 **Acceptance Criteria**:
-- [ ] Generate Dagster Definitions object with assets
-- [ ] Create @asset for each dbt model
-- [ ] Create @asset for each external source
-- [ ] Create @schedule for each product schedule
-- [ ] Create @sensor for triggers/webhooks
-- [ ] Configure resources (catalog, compute, storage)
-- [ ] Output: Python module or YAML manifest
-- [ ] Error if Dagster config invalid
+- [ ] Generated `definitions.py` is a thin loader shim
+- [ ] Runtime builder creates dbt-backed Dagster assets from `target/manifest.json`
+- [ ] Runtime builder configures required resources from CompiledArtifacts
+- [ ] Configured catalog/storage/Iceberg failures fail loudly
+- [ ] Configured ingestion fails loudly until executable dlt source construction from compiled JSON exists
+- [ ] Output: Python loader shim plus product project files
+- [ ] Error if Dagster runtime config is invalid
 
 **Enforcement**:
-- Dagster configuration tests
-- Asset generation tests
-- Schedule generation tests
+- Dagster runtime loader tests
+- Core-to-Dagster contract tests
 - Resource configuration tests
+- Demo/runtime validation tests
 
 **Constraints**:
 - MUST generate valid Dagster config

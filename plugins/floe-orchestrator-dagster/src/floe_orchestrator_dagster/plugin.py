@@ -211,7 +211,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             ValueError: Dagster runtime definitions require project_dir...
 
         Requirements:
-            FR-005: Generate valid Dagster Definitions from CompiledArtifacts
+            FR-005: Validate artifacts and delegate to the runtime builder
             FR-009: Validate CompiledArtifacts schema
         """
         tracer = get_tracer()
