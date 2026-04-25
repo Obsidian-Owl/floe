@@ -19,6 +19,7 @@ import warnings
 from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 import pytest
@@ -938,6 +939,114 @@ query RunStatus($runId: ID!) {
 }
 """
 
+_COMPLETED_MARQUEZ_STATE = "COMPLETED"
+
+
+def _marquez_job_runs(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+    allow_missing: bool = False,
+) -> list[dict[str, Any]]:
+    """Query Marquez runs for a namespace/job pair."""
+    encoded_namespace = quote(namespace, safe="")
+    encoded_job_name = quote(job_name, safe="")
+    response = marquez_client.get(
+        f"/api/v1/namespaces/{encoded_namespace}/jobs/{encoded_job_name}/runs",
+        timeout=10.0,
+    )
+    if allow_missing and response.status_code == 404:
+        return []
+    if response.status_code != 200:
+        return []
+    runs = response.json().get("runs", [])
+    return runs if isinstance(runs, list) else []
+
+
+def _marquez_run_state(run: dict[str, Any]) -> str:
+    """Return normalized Marquez run state across API response variants."""
+    return str(run.get("state") or run.get("currentState") or "").upper()
+
+
+def _marquez_run_identity(run: dict[str, Any]) -> str:
+    """Return a stable identity for comparing Marquez runs across snapshots."""
+    for key in ("id", "runId", "run_id"):
+        value = run.get(key)
+        if value:
+            return str(value)
+    return str(run)
+
+
+def _marquez_run_id_snapshot(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+) -> set[str]:
+    """Return current Marquez run identities without requiring the job to exist."""
+    return {
+        _marquez_run_identity(run)
+        for run in _marquez_job_runs(
+            marquez_client,
+            namespace=namespace,
+            job_name=job_name,
+            allow_missing=True,
+        )
+    }
+
+
+def _fresh_completed_marquez_runs(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+    before_run_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Return fresh COMPLETED Marquez runs for the expected namespace/job."""
+    return [
+        run
+        for run in _marquez_job_runs(
+            marquez_client,
+            namespace=namespace,
+            job_name=job_name,
+            allow_missing=True,
+        )
+        if _marquez_run_identity(run) not in before_run_ids
+        and _marquez_run_state(run) == _COMPLETED_MARQUEZ_STATE
+    ]
+
+
+def _wait_for_fresh_completed_marquez_run(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+    before_run_ids: set[str],
+) -> bool:
+    """Wait until Marquez ingests a fresh COMPLETED run for the expected job."""
+
+    def _has_fresh_completed_run() -> bool:
+        try:
+            return bool(
+                _fresh_completed_marquez_runs(
+                    marquez_client,
+                    namespace=namespace,
+                    job_name=job_name,
+                    before_run_ids=before_run_ids,
+                )
+            )
+        except Exception:  # noqa: BLE001
+            return False
+
+    return wait_for_condition(
+        _has_fresh_completed_run,
+        timeout=60.0,
+        interval=3.0,
+        description=f"Marquez fresh COMPLETED run for {namespace}/{job_name}",
+        raise_on_timeout=False,
+    )
+
 
 def _discover_repo_for_asset(
     dagster_url: str,
@@ -1019,12 +1128,17 @@ def _discover_repo_for_asset(
 def _trigger_lineage_run(
     wait_for_service: Callable[..., None],
     marquez_client: httpx.Client,
+    *,
+    expected_namespace: str | None = None,
+    expected_job_name: str | None = None,
+    before_run_ids: set[str] | None = None,
 ) -> None:
     """Trigger a Dagster asset run to emit runtime OpenLineage events.
 
     Triggers materialization of the ``stg_crm_customers`` asset in the
     customer-360 product, polls for run completion, then waits for Marquez
-    to ingest the emitted lineage events.
+    to ingest the emitted lineage events when the caller provides the
+    expected artifact-derived namespace and job.
 
     This function is best-effort: failures are logged as warnings rather
     than raising so that tests not dependent on lineage data are unaffected.
@@ -1032,8 +1146,19 @@ def _trigger_lineage_run(
     Args:
         wait_for_service: Service readiness polling helper.
         marquez_client: Marquez HTTP client (used to poll for lineage ingestion).
+        expected_namespace: Artifact-derived Marquez namespace to wait for.
+        expected_job_name: Artifact-derived Marquez job to wait for.
+        before_run_ids: Run identities captured before triggering the Dagster run.
     """
     dagster_url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
+    run_ids_before = before_run_ids
+    if expected_namespace and expected_job_name and run_ids_before is None:
+        run_ids_before = _marquez_run_id_snapshot(
+            marquez_client,
+            namespace=expected_namespace,
+            job_name=expected_job_name,
+        )
+
     try:
         wait_for_service(
             f"{dagster_url}/server_info",
@@ -1168,44 +1293,57 @@ def _trigger_lineage_run(
 
     logger.info("seed_observability: lineage run %s completed successfully", run_id)
 
-    # Wait for Marquez to ingest the emitted OpenLineage events.
-    def _marquez_has_lineage() -> bool:
-        """Return True when Marquez has at least one job from the seeded run."""
-        try:
-            for ns in ("default", "floe-platform", "customer-360"):
-                resp = marquez_client.get(f"/api/v1/namespaces/{ns}/jobs", timeout=10.0)
-                if resp.status_code == 200:
-                    jobs = resp.json().get("jobs", [])
-                    if len(jobs) > 0:
-                        return True
-            return False
-        except Exception:  # noqa: BLE001
-            return False
+    if not expected_namespace or not expected_job_name:
+        logger.info(
+            "seed_observability: no expected Marquez namespace/job supplied; "
+            "skipping lineage ingestion confirmation"
+        )
+        return
 
-    ingested = wait_for_condition(
-        _marquez_has_lineage,
-        timeout=30.0,
-        interval=3.0,
-        description="Marquez to ingest lineage events",
-        raise_on_timeout=False,
+    if run_ids_before is None:
+        run_ids_before = set()
+
+    ingested = _wait_for_fresh_completed_marquez_run(
+        marquez_client,
+        namespace=expected_namespace,
+        job_name=expected_job_name,
+        before_run_ids=run_ids_before,
     )
     if not ingested:
         logger.warning(
-            "seed_observability: Marquez lineage ingestion not confirmed within 30s; continuing"
+            "seed_observability: fresh COMPLETED Marquez run for %s/%s not confirmed "
+            "within 60s; continuing",
+            expected_namespace,
+            expected_job_name,
         )
     else:
-        logger.info("seed_observability: Marquez lineage ingestion confirmed")
+        logger.info(
+            "seed_observability: fresh COMPLETED Marquez run confirmed for %s/%s",
+            expected_namespace,
+            expected_job_name,
+        )
 
 
 @pytest.fixture
 def trigger_lineage_run(
     marquez_client: httpx.Client,
     wait_for_service: Callable[..., None],
-) -> Callable[[], None]:
+) -> Callable[..., None]:
     """Return a callable that triggers one fresh runtime lineage run."""
 
-    def _trigger() -> None:
-        _trigger_lineage_run(wait_for_service, marquez_client)
+    def _trigger(
+        *,
+        expected_namespace: str | None = None,
+        expected_job_name: str | None = None,
+        before_run_ids: set[str] | None = None,
+    ) -> None:
+        _trigger_lineage_run(
+            wait_for_service,
+            marquez_client,
+            expected_namespace=expected_namespace,
+            expected_job_name=expected_job_name,
+            before_run_ids=before_run_ids,
+        )
 
     return _trigger
 
@@ -1267,6 +1405,7 @@ def seed_observability(
         # ------------------------------------------------------------------
         # Phase 1: Compile each demo product to emit OTel spans to Jaeger.
         # ------------------------------------------------------------------
+        customer_360_artifacts: Any | None = None
         for product in demo_products:
             reset_telemetry()
             os.environ["OTEL_SERVICE_NAME"] = product
@@ -1274,7 +1413,9 @@ def seed_observability(
             ensure_telemetry_initialized()
 
             spec_path = root / "demo" / product / "floe.yaml"
-            compile_pipeline(spec_path, manifest_path)
+            artifacts = compile_pipeline(spec_path, manifest_path)
+            if product == "customer-360":
+                customer_360_artifacts = artifacts
 
         # Flush and shut down the final provider to avoid leaking the
         # BatchSpanProcessor background thread and gRPC connection.
@@ -1299,7 +1440,24 @@ def seed_observability(
     # ----------------------------------------------------------------------
     # This is best-effort: a warning is logged on failure rather than
     # pytest.fail(), so tests that only rely on OTel spans are not blocked.
-    _trigger_lineage_run(wait_for_service, marquez_client)
+    if customer_360_artifacts is None:
+        _trigger_lineage_run(wait_for_service, marquez_client)
+        return
+
+    runtime_namespace = customer_360_artifacts.observability.lineage_namespace
+    runtime_job_name = customer_360_artifacts.metadata.product_name
+    before_run_ids = _marquez_run_id_snapshot(
+        marquez_client,
+        namespace=runtime_namespace,
+        job_name=runtime_job_name,
+    )
+    _trigger_lineage_run(
+        wait_for_service,
+        marquez_client,
+        expected_namespace=runtime_namespace,
+        expected_job_name=runtime_job_name,
+        before_run_ids=before_run_ids,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -179,7 +179,7 @@ class TestLineageRoundTrip:
         marquez_client: httpx.Client,
         compiled_artifacts: Callable[[Path], Any],
         project_root: Path,
-        trigger_lineage_run: Callable[[], None],
+        trigger_lineage_run: Callable[..., None],
     ) -> None:
         """Verify runtime-emitted lifecycle events are visible as Marquez runs."""
         spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
@@ -192,7 +192,11 @@ class TestLineageRoundTrip:
             namespace=namespace,
             job_name=job_name,
         )
-        trigger_lineage_run()
+        trigger_lineage_run(
+            expected_namespace=namespace,
+            expected_job_name=job_name,
+            before_run_ids=before_run_ids,
+        )
 
         jobs_response = marquez_client.get(f"/api/v1/namespaces/{quote(namespace, safe='')}/jobs")
         assert jobs_response.status_code == 200, (

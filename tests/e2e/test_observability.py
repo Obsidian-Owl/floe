@@ -75,6 +75,24 @@ def _marquez_run_identity(run: dict[str, Any]) -> str:
     return str(run)
 
 
+def _marquez_run_identity_candidates(run: dict[str, Any]) -> set[str]:
+    """Return all run id variants Marquez may expose for one run."""
+    candidates: set[str] = set()
+    for key in ("id", "runId", "run_id"):
+        value = run.get(key)
+        if value:
+            candidates.add(str(value))
+
+    nested_run = run.get("run")
+    if isinstance(nested_run, dict):
+        for key in ("id", "runId", "run_id"):
+            value = nested_run.get(key)
+            if value:
+                candidates.add(str(value))
+
+    return candidates
+
+
 def _marquez_run_id_snapshot(
     marquez_client: httpx.Client,
     *,
@@ -111,6 +129,78 @@ def _fresh_completed_runs(
         if _marquez_run_identity(run) not in before_run_ids
         and _marquez_run_state(run) == _COMPLETED_MARQUEZ_STATE
     ]
+
+
+def _lineage_event_payload(event: dict[str, Any]) -> dict[str, Any]:
+    """Return the OpenLineage event payload across Marquez response variants."""
+    for key in ("event", "lineageEvent", "openLineageEvent"):
+        payload = event.get(key)
+        if isinstance(payload, dict):
+            return payload
+    return event
+
+
+def _lineage_event_type(event: dict[str, Any]) -> str:
+    """Return normalized OpenLineage eventType across response variants."""
+    payload = _lineage_event_payload(event)
+    return str(event.get("eventType") or payload.get("eventType") or "").upper()
+
+
+def _lineage_event_run_id(event: dict[str, Any]) -> str | None:
+    """Return the OpenLineage run id from a Marquez events API item."""
+    payload = _lineage_event_payload(event)
+    run = payload.get("run") or event.get("run")
+    if isinstance(run, dict):
+        for key in ("runId", "run_id", "id"):
+            value = run.get(key)
+            if value:
+                return str(value)
+
+    for key in ("runId", "run_id", "runUuid", "runUUID"):
+        value = event.get(key) or payload.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+def _lineage_event_job(event: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Return (namespace, job name) from a Marquez events API item."""
+    payload = _lineage_event_payload(event)
+    job = payload.get("job") or event.get("job")
+    if isinstance(job, dict):
+        namespace = job.get("namespace") or job.get("namespaceName")
+        name = job.get("name") or job.get("jobName")
+        return (
+            str(namespace) if namespace else None,
+            str(name) if name else None,
+        )
+
+    namespace = event.get("namespace") or event.get("jobNamespace")
+    name = event.get("jobName") or event.get("job")
+    return (
+        str(namespace) if namespace else None,
+        str(name) if name else None,
+    )
+
+
+def _lineage_event_matches_fresh_run(
+    event: dict[str, Any],
+    *,
+    namespace: str,
+    job_name: str,
+    fresh_run_ids: set[str],
+) -> bool:
+    """Return whether an events API item can be tied to the fresh runtime run."""
+    event_run_id = _lineage_event_run_id(event)
+    if event_run_id is None or event_run_id not in fresh_run_ids:
+        return False
+
+    event_namespace, event_job_name = _lineage_event_job(event)
+    if event_namespace is not None and event_namespace != namespace:
+        return False
+    if event_job_name is not None and event_job_name != job_name:
+        return False
+    return True
 
 
 class TestObservability(IntegrationTestBase):
@@ -227,7 +317,7 @@ class TestObservability(IntegrationTestBase):
         dagster_client: Any,
         compiled_artifacts: Callable[[Path], Any],
         project_root: Path,
-        trigger_lineage_run: Callable[[], None],
+        trigger_lineage_run: Callable[..., None],
     ) -> None:
         """Validate that Marquez contains real OpenLineage jobs from pipeline execution.
 
@@ -295,7 +385,11 @@ class TestObservability(IntegrationTestBase):
             namespace=runtime_namespace,
             job_name=runtime_job_name,
         )
-        trigger_lineage_run()
+        trigger_lineage_run(
+            expected_namespace=runtime_namespace,
+            expected_job_name=runtime_job_name,
+            before_run_ids=before_run_ids,
+        )
 
         # Query for REAL jobs -- not just API responds
         jobs_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}/jobs")
@@ -990,7 +1084,7 @@ class TestObservability(IntegrationTestBase):
         dagster_client: Any,
         compiled_artifacts: Callable[[Path], Any],
         project_root: Path,
-        trigger_lineage_run: Callable[[], None],
+        trigger_lineage_run: Callable[..., None],
     ) -> None:
         """Validate platform emits OpenLineage events at all 4 required lifecycle points.
 
@@ -1036,7 +1130,11 @@ class TestObservability(IntegrationTestBase):
             namespace=runtime_namespace,
             job_name=runtime_job_name,
         )
-        trigger_lineage_run()
+        trigger_lineage_run(
+            expected_namespace=runtime_namespace,
+            expected_job_name=runtime_job_name,
+            before_run_ids=before_run_ids,
+        )
 
         # Query Marquez for events emitted BY the platform after compilation.
         # floe.compilation is the SyncLineageEmitter's default namespace used
@@ -1141,25 +1239,46 @@ class TestObservability(IntegrationTestBase):
             f"Run states found: {sorted(run_states)}"
         )
 
-        # Validate START and COMPLETE events were received by Marquez.
+        fresh_run_ids: set[str] = set()
+        for run in fresh_completed_runs:
+            fresh_run_ids.update(_marquez_run_identity_candidates(run))
+
+        # Validate START and COMPLETE evidence for the fresh runtime run.
         # Per-model emission pairs are back-to-back synchronous, so Marquez
         # may only surface the terminal COMPLETED run state (the intermediate
-        # START state is too brief to observe via the runs API). Instead,
-        # query the lineage events API which returns individual OpenLineage
-        # events with their eventType field — this is a stronger check.
+        # START state is too brief to observe via the runs API). Prefer the
+        # lineage events API only when its event metadata can be tied to the
+        # fresh run id/namespace/job. Global event types are diagnostic only:
+        # stale events from another run do not prove this runtime run emitted.
         events_response = marquez_client.get("/api/v1/events/lineage", params={"limit": 100})
+        scoped_event_types: set[str] = set()
+        global_event_types: set[str] = set()
         if events_response.status_code == 200:
             events = events_response.json().get("events", [])
-            event_types = {e.get("eventType", "").upper() for e in events if e.get("eventType")}
-            has_start = "START" in event_types
-            has_complete = "COMPLETE" in event_types
-        else:
-            # Fallback to run states if events API unavailable (older Marquez)
-            has_start = "RUNNING" in run_states or "NEW" in run_states or "START" in run_states
-            has_complete = "COMPLETED" in run_states or "COMPLETE" in run_states
+            global_event_types = {_lineage_event_type(e) for e in events if _lineage_event_type(e)}
+            scoped_event_types = {
+                _lineage_event_type(e)
+                for e in events
+                if _lineage_event_type(e)
+                and _lineage_event_matches_fresh_run(
+                    e,
+                    namespace=runtime_namespace,
+                    job_name=runtime_job_name,
+                    fresh_run_ids=fresh_run_ids,
+                )
+            }
+
+        fresh_run_started = any(run.get("startedAt") for run in fresh_completed_runs)
+        fresh_run_completed = bool(fresh_completed_runs)
+        has_start = "START" in scoped_event_types or fresh_run_started
+        has_complete = "COMPLETE" in scoped_event_types or fresh_run_completed
 
         event_types_display = (
-            sorted(event_types)
+            (
+                f"scoped={sorted(scoped_event_types)}, "
+                f"global={sorted(global_event_types)} "
+                "(global types are not used as fresh-run proof)"
+            )
             if events_response.status_code == 200
             else "N/A (events API unavailable)"
         )
