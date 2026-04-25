@@ -733,16 +733,128 @@ class TestExportDbtToIceberg:
             )
 
         # Verify the specific URI from artifacts was passed to configure
-        registry.configure.assert_called_once()
-        config_arg = registry.configure.call_args
-        # The config dict passed must contain our specific URI
-        actual_config = (
-            config_arg[0][2] if len(config_arg[0]) > 2 else config_arg[1].get("config", {})
+        from floe_core.plugin_types import PluginType
+
+        registry.configure.assert_any_call(
+            PluginType.CATALOG,
+            "polaris",
+            {"uri": specific_uri},
         )
+        catalog_call = next(
+            call for call in registry.configure.call_args_list if call.args[0] is PluginType.CATALOG
+        )
+        actual_config = catalog_call.args[2]
         assert actual_config.get("uri") == specific_uri, (
             f"Expected catalog config URI '{specific_uri}', got '{actual_config}'. "
             "Function must read catalog config from artifacts parameter."
         )
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_configures_catalog_and_storage_before_connect(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+    ) -> None:
+        """Catalog and storage configs MUST be validated before catalog connect."""
+        from floe_core.plugin_types import PluginType
+
+        artifacts = _make_artifacts(
+            catalog=PluginRef(type="polaris", version="0.1.0", config={}),
+            storage=PluginRef(type="s3", version="1.0.0", config={}),
+        )
+
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchall.return_value = []
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
+            if plugin_type is PluginType.CATALOG:
+                return catalog_plugin
+            return storage_plugin
+
+        def connect_side_effect(*_args: object, **_kwargs: object) -> MagicMock:
+            registry.configure.assert_any_call(PluginType.CATALOG, "polaris", {})
+            registry.configure.assert_any_call(PluginType.STORAGE, "s3", {})
+            return MagicMock()
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = {}
+        catalog_plugin.connect.side_effect = connect_side_effect
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        assert registry.configure.call_count == 2
+        catalog_plugin.connect.assert_called_once()
+
+    @pytest.mark.requirement("AC-4")
+    @pytest.mark.parametrize(
+        ("failing_plugin_type", "expected_message"),
+        [("catalog", "invalid catalog config"), ("storage", "invalid storage config")],
+    )
+    def test_export_configure_validation_exception_propagates(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        failing_plugin_type: str,
+        expected_message: str,
+    ) -> None:
+        """Configured catalog/storage validation failures MUST propagate."""
+        from floe_core.plugin_types import PluginType
+
+        artifacts = _make_artifacts(
+            catalog=PluginRef(type="polaris", version="0.1.0", config={}),
+            storage=PluginRef(type="s3", version="1.0.0", config={}),
+        )
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
+            if plugin_type is PluginType.CATALOG:
+                return catalog_plugin
+            return storage_plugin
+
+        def configure_side_effect(
+            plugin_type: PluginType,
+            _plugin_name: str,
+            _config: dict[str, object],
+        ) -> dict[str, object]:
+            if plugin_type.name.lower() == failing_plugin_type:
+                raise ValueError(expected_message)
+            return {}
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.side_effect = configure_side_effect
+
+        with (
+            patch("duckdb.connect") as mock_duckdb_connect,
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            pytest.raises(ValueError, match=expected_message),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        catalog_plugin.connect.assert_not_called()
+        mock_duckdb_connect.assert_not_called()
 
     @pytest.mark.requirement("AC-4")
     def test_export_closes_duckdb_connection_on_success(

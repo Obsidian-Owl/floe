@@ -60,22 +60,31 @@ def export_dbt_to_iceberg(
         )
         return
 
-    catalog_config = artifacts.plugins.catalog.config or {}
-    storage_config = artifacts.plugins.storage.config or {}
+    catalog_config = artifacts.plugins.catalog.config
+    storage_config = artifacts.plugins.storage.config
 
     registry = _plugin_registry_module.get_registry()
     catalog_type = artifacts.plugins.catalog.type
+    storage_type = artifacts.plugins.storage.type
     # configure() validates config and applies it to the cached plugin instance.
     # get() then returns that configured instance for the runtime connection.
-    validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config)
-    if validated_config is None:
-        context.log.warning(
-            "Catalog plugin config for %s could not be validated — skipping Iceberg export",
-            catalog_type,
-        )
-        return
+    if catalog_config is not None:
+        validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config)
+        if validated_config is None:
+            context.log.warning(
+                "Catalog plugin config for %s could not be validated — skipping Iceberg export",
+                catalog_type,
+            )
+            return
     catalog_plugin = registry.get(PluginType.CATALOG, catalog_type)
-    s3_config = {f"s3.{k}": v for k, v in storage_config.items()}
+
+    # Force storage plugin loading/configuration on the export path so invalid
+    # storage config cannot reuse stale cached plugin state.
+    registry.get(PluginType.STORAGE, storage_type)
+    if storage_config is not None:
+        registry.configure(PluginType.STORAGE, storage_type, storage_config)
+
+    s3_config = {f"s3.{k}": v for k, v in (storage_config or {}).items()}
     catalog = catalog_plugin.connect(config=s3_config)
 
     product_namespace = safe_name

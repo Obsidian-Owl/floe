@@ -243,7 +243,7 @@ class TestCreateDefinitionsLineageResourceWhenNoPlugins:
     ) -> None:
         """Test lineage resource is still present when artifacts have no plugins.
 
-        Even when plugins=None, create_definitions() MUST still call
+        Even when plugins=None, build_product_definitions() MUST still call
         try_create_lineage_resource (which returns a NoOp resource), so
         assets that require "lineage" resource key can still execute.
         """
