@@ -32,6 +32,19 @@ _DBT_UTILS_PATH = _REPO_ROOT / "tests" / "e2e" / "dbt_utils.py"
 # of silently swallowing FileNotFoundError downstream (AC-2 fail-fast guard).
 assert _DBT_UTILS_PATH.exists(), f"dbt_utils.py not found at {_DBT_UTILS_PATH}"
 
+
+@pytest.fixture(autouse=True)
+def _use_explicit_minio_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep purge unit tests from performing Kubernetes DNS autodetection."""
+    mock_s3 = MagicMock()
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = []
+    mock_s3.get_paginator.return_value = mock_paginator
+
+    monkeypatch.setenv("MINIO_ENDPOINT", "http://localhost:9000")
+    monkeypatch.setattr("boto3.client", lambda *_args, **_kwargs: mock_s3)
+
+
 # ---------------------------------------------------------------------------
 # Helpers: load the module under test
 # ---------------------------------------------------------------------------
