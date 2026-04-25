@@ -21,8 +21,13 @@ def test_alpha_profile_requires_catalog_storage_and_lineage() -> None:
         lineage_backend=None,
     )
 
-    with pytest.raises(AlphaCapabilityError, match="catalog"):
+    with pytest.raises(AlphaCapabilityError) as exc_info:
         policy.validate_required_plugins(plugins)
+
+    message = str(exc_info.value)
+    assert "catalog" in message
+    assert "storage" in message
+    assert "lineage_backend" in message
 
 
 def test_non_alpha_profile_allows_unconfigured_lineage() -> None:

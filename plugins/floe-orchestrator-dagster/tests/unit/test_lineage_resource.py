@@ -199,6 +199,39 @@ class TestLineageResourceEmitStart:
         finally:
             resource.close()
 
+    @pytest.mark.requirement(AC_1)
+    def test_emit_start_non_strict_invalid_return_uses_fallback(
+        self, mock_emitter: MagicMock
+    ) -> None:
+        """Test non-strict mode returns a fallback UUID for invalid START results."""
+        from floe_orchestrator_dagster.resources.lineage import LineageResource
+
+        mock_emitter.emit_start = AsyncMock(return_value="not-a-uuid")
+
+        resource = LineageResource(emitter=mock_emitter)
+        try:
+            result = resource.emit_start(JOB_NAME)
+
+            assert isinstance(result, UUID)
+        finally:
+            resource.close()
+
+    @pytest.mark.requirement(AC_1)
+    def test_emit_start_strict_invalid_return_raises_runtime_error(
+        self, mock_emitter: MagicMock
+    ) -> None:
+        """Test strict mode rejects non-UUID START results as contract failures."""
+        from floe_orchestrator_dagster.resources.lineage import LineageResource
+
+        mock_emitter.emit_start = AsyncMock(return_value="not-a-uuid")
+
+        resource = LineageResource(emitter=mock_emitter, strict=True)
+        try:
+            with pytest.raises(RuntimeError, match="invalid START run id"):
+                resource.emit_start(JOB_NAME)
+        finally:
+            resource.close()
+
 
 class TestLineageResourceEmitComplete:
     """Tests for LineageResource.emit_complete — AC-2."""

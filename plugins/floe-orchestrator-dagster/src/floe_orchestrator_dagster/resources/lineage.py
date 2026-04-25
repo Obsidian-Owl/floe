@@ -158,6 +158,10 @@ class LineageResource:
         )
         if isinstance(result, UUID):
             return result
+        if self._strict:
+            raise RuntimeError(
+                f"Lineage emitter returned invalid START run id: {type(result).__name__}"
+            )
         return fallback
 
     def emit_complete(
