@@ -42,6 +42,14 @@ def export_dbt_to_iceberg(
     import duckdb
     from pyiceberg.exceptions import NoSuchTableError
 
+    if artifacts.plugins is None or artifacts.plugins.catalog is None:
+        context.log.info("No catalog plugin configured — skipping Iceberg export")
+        return
+
+    if artifacts.plugins.storage is None:
+        context.log.info("No storage plugin configured — skipping Iceberg export")
+        return
+
     safe_name = product_name.replace("-", "_")
     duckdb_path = f"/tmp/{safe_name}.duckdb"
 
@@ -52,12 +60,8 @@ def export_dbt_to_iceberg(
         )
         return
 
-    if artifacts.plugins is None or artifacts.plugins.catalog is None:
-        context.log.info("No catalog plugin configured — skipping Iceberg export")
-        return
-
     catalog_config = artifacts.plugins.catalog.config or {}
-    storage_config = (artifacts.plugins.storage.config or {}) if artifacts.plugins.storage else {}
+    storage_config = artifacts.plugins.storage.config or {}
 
     registry = _plugin_registry_module.get_registry()
     catalog_type = artifacts.plugins.catalog.type

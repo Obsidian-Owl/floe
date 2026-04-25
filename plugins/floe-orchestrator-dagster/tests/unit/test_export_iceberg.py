@@ -155,6 +155,19 @@ def artifacts_no_catalog() -> CompiledArtifacts:
     return _make_artifacts(catalog=None, storage=None)
 
 
+@pytest.fixture
+def artifacts_catalog_only() -> CompiledArtifacts:
+    """CompiledArtifacts with catalog but no storage plugin."""
+    return _make_artifacts(
+        catalog=PluginRef(
+            type="polaris",
+            version="0.1.0",
+            config={"uri": "http://polaris:8181"},
+        ),
+        storage=None,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -384,6 +397,30 @@ class TestExportDbtToIceberg:
 
         # Must NOT connect to DuckDB (no point if no catalog)
         mock_connect.assert_not_called()
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_skips_when_catalog_configured_without_storage(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_catalog_only: CompiledArtifacts,
+    ) -> None:
+        """Catalog-only artifacts MUST skip before registry or catalog connection work."""
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch("duckdb.connect") as mock_connect,
+            patch("floe_core.plugin_registry.get_registry") as mock_get_registry,
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts_catalog_only,
+            )
+
+        mock_connect.assert_not_called()
+        mock_get_registry.assert_not_called()
+        context.log.info.assert_called()
 
     @pytest.mark.requirement("AC-4")
     def test_export_creates_namespace(
@@ -655,6 +692,11 @@ class TestExportDbtToIceberg:
                 type="polaris",
                 version="0.1.0",
                 config={"uri": specific_uri},
+            ),
+            storage=PluginRef(
+                type="s3",
+                version="1.0.0",
+                config={"endpoint": "http://minio:9000"},
             ),
         )
 
