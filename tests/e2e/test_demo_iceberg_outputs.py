@@ -4,6 +4,10 @@ The test shells into the deployed Dagster environment and runs the packaged
 validation helper there, so catalog/storage endpoints and credentials are the
 ones from the deployed compiled artifacts.
 
+This validates deployed catalog state after materialization. Fresh run triggering
+is intentionally left to the Task 6 E2E orchestration path rather than
+duplicating a Dagster launch client here.
+
 Environment overrides:
     FLOE_E2E_NAMESPACE: Kubernetes namespace. Defaults to the existing local
         E2E convention, ``floe-test``.
@@ -28,6 +32,7 @@ _DEFAULT_NAMESPACE = "floe-test"
 _DEFAULT_DAGSTER_SELECTOR = "app.kubernetes.io/name=dagster,component=dagster-webserver"
 _DEFAULT_ARTIFACTS_PATH = "/app/demo/customer_360/compiled_artifacts.json"
 _DEFAULT_EXPECTED_TABLES = "mart_customer_360"
+_KUBECTL_TIMEOUT_SECONDS = 30
 
 
 def _run_kubectl(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -37,7 +42,18 @@ def _run_kubectl(args: list[str]) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         check=False,
         text=True,
+        timeout=_KUBECTL_TIMEOUT_SECONDS,
     )
+
+
+def _parse_validation_stdout(stdout: str) -> dict[str, Any]:
+    """Parse the helper's last JSON stdout line, tolerating preceding logs."""
+    for line in reversed(stdout.splitlines()):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        return json.loads(stripped)
+    raise AssertionError("Validation helper produced no JSON output")
 
 
 def _find_dagster_pod(namespace: str, selector: str) -> str:
@@ -120,6 +136,14 @@ def test_demo_iceberg_outputs_exist_in_deployed_catalog() -> None:
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
 
-    validation = json.loads(result.stdout)
+    validation = _parse_validation_stdout(result.stdout)
     expected_count = len([table for table in expected_tables.split(",") if table.strip()])
     assert validation["tables_validated"] == expected_count
+
+
+@pytest.mark.developer_workflow
+def test_parse_validation_stdout_reads_last_json_line() -> None:
+    """Helper stdout parser tolerates logs before the JSON result."""
+    assert _parse_validation_stdout('log line\n{"tables_validated": 1}\n') == {
+        "tables_validated": 1
+    }

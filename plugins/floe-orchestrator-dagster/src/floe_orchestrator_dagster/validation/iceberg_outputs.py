@@ -7,10 +7,12 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 import floe_core.plugin_registry as _plugin_registry_module
 from floe_core.plugin_types import PluginType
+from floe_core.plugins.catalog import Catalog, CatalogPlugin
+from floe_core.plugins.storage import FileIO, StoragePlugin
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
 
@@ -51,11 +53,13 @@ def expected_iceberg_tables(
     """
     namespace = _product_namespace(artifacts)
     if expected_tables is None:
+        if artifacts.transforms is None:
+            raise RuntimeError("CompiledArtifacts has no transforms for Iceberg output validation")
         expected_tables = [model.name for model in artifacts.transforms.models]
     return [_qualify_table(namespace, table_name) for table_name in expected_tables]
 
 
-def _connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> Any:
+def _connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> tuple[Catalog, FileIO]:
     """Connect to the configured catalog using catalog/storage plugin config."""
     plugins = artifacts.plugins
     if plugins is None or plugins.catalog is None:
@@ -74,7 +78,7 @@ def _connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> Any:
     )
     if validated_catalog_config is None:
         raise RuntimeError(f"Catalog plugin config for {catalog_ref.type} could not be validated")
-    catalog_plugin = registry.get(PluginType.CATALOG, catalog_ref.type)
+    catalog_plugin = cast(CatalogPlugin, registry.get(PluginType.CATALOG, catalog_ref.type))
 
     validated_storage_config = registry.configure(
         PluginType.STORAGE,
@@ -83,10 +87,10 @@ def _connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> Any:
     )
     if validated_storage_config is None:
         raise RuntimeError(f"Storage plugin config for {storage_ref.type} could not be validated")
+    storage_plugin = cast(StoragePlugin, registry.get(PluginType.STORAGE, storage_ref.type))
 
-    storage_config = storage_ref.config or {}
-    storage_connection_config = {f"s3.{key}": value for key, value in storage_config.items()}
-    return catalog_plugin.connect(config=storage_connection_config)
+    fileio = storage_plugin.get_pyiceberg_fileio()
+    return catalog_plugin.connect(config={}), fileio
 
 
 def validate_iceberg_outputs(
@@ -111,7 +115,9 @@ def validate_iceberg_outputs(
     if not expected_table_names:
         raise RuntimeError("No expected Iceberg tables were derived from CompiledArtifacts")
 
-    catalog = _connect_catalog_from_artifacts(artifacts)
+    # Construct FileIO through StoragePlugin to validate storage config without
+    # assuming backend-specific catalog connection keys.
+    catalog, _storage_fileio = _connect_catalog_from_artifacts(artifacts)
 
     loaded_tables: list[str] = []
     load_errors: dict[str, str] = {}

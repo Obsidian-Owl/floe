@@ -102,10 +102,10 @@ def build_product_definitions(
         name=f"{product_name.replace('-', '_')}_dbt_assets",
         required_resource_keys={"dbt", "lineage"},
     )
-    def _dbt_assets_fn(context) -> object:  # type: ignore[misc]
+    def _dbt_assets_fn(context) -> object:  # type: ignore[no-untyped-def]
         """Run dbt build with lineage emission."""
-        dbt = context.resources.dbt  # type: ignore[union-attr]
-        lineage = context.resources.lineage  # type: ignore[union-attr]
+        dbt = context.resources.dbt
+        lineage = context.resources.lineage
         run_id: UUID | None = None
 
         run_facets: dict[str, object] = {}

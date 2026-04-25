@@ -5,10 +5,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import floe_core.plugin_registry as _plugin_registry_module
 from floe_core.plugin_types import PluginType
+from floe_core.plugins.catalog import CatalogPlugin
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -70,7 +71,7 @@ def export_dbt_to_iceberg(
     validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config or {})
     if validated_config is None:
         raise RuntimeError(f"Catalog plugin config for {catalog_type} could not be validated")
-    catalog_plugin = registry.get(PluginType.CATALOG, catalog_type)
+    catalog_plugin = cast(CatalogPlugin, registry.get(PluginType.CATALOG, catalog_type))
 
     # Force storage plugin loading/configuration on the export path so invalid
     # storage config cannot reuse stale cached plugin state.
