@@ -152,11 +152,13 @@ def try_create_iceberg_resources(
     plugins: ResolvedPlugins | None,
     governance: ResolvedGovernance | None = None,
 ) -> dict[str, Any]:
-    """Attempt to create Iceberg resources, returning empty dict on failure.
+    """Attempt to create Iceberg resources for the runtime builder.
 
-    This is the safe entry point called by create_definitions(). It handles
-    the case where catalog or storage plugins are not configured (both are
-    optional in CompiledArtifacts) and catches plugin loading errors gracefully.
+    This is the deferred resource entry point used by the Dagster runtime
+    builder/loader path. It returns ``{}`` only when catalog or storage plugins
+    are not configured in CompiledArtifacts. If catalog and storage are
+    configured but plugin loading or resource construction fails, the exception
+    is logged and re-raised so broken runtime configuration fails loudly.
 
     Args:
         plugins: Resolved plugin selections from CompiledArtifacts.
@@ -165,12 +167,14 @@ def try_create_iceberg_resources(
             Used to derive Iceberg table lifecycle properties (TTL, snapshot retention).
 
     Returns:
-        Dictionary with "iceberg" key if successful, empty dict otherwise.
+        Dictionary with "iceberg" key if successful, empty dict only when
+        catalog or storage is unconfigured.
 
     Example:
         >>> resources = try_create_iceberg_resources(artifacts.plugins)
-        >>> # Returns {} if catalog or storage not configured
+        >>> # Returns {} if catalog or storage is not configured
         >>> # Returns {"iceberg": IcebergIOManager} if both are available
+        >>> # Re-raises if configured plugin/resource construction fails
     """
     if plugins is None:
         logger.warning("iceberg_not_configured")

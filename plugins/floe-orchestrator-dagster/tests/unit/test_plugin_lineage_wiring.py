@@ -5,7 +5,7 @@ into the runtime Definitions resources dict, and that assets created by
 _create_asset_for_transform() declare "lineage" in required_resource_keys.
 
 Requirements Covered:
-- AC-11: Lineage resource wiring into create_definitions()
+- AC-11: Lineage resource wiring through the runtime builder / loader path
 """
 
 from __future__ import annotations

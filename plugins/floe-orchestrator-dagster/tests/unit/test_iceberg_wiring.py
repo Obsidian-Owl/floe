@@ -297,11 +297,10 @@ class TestGracefulDegradation:
 class TestGovernanceThreading:
     """Test governance parameter threading through the Iceberg resource call chain.
 
-    Validates AC-5 (T4): create_definitions() → _create_iceberg_resources() →
-    try_create_iceberg_resources() → create_iceberg_resources() MUST accept and
-    thread an optional governance parameter. create_iceberg_resources() MUST call
-    IcebergTableManagerConfig.from_governance(governance) and pass the resulting
-    config to IcebergTableManager(config=config).
+    Validates AC-5 (T4): the runtime builder/loader passes governance into
+    try_create_iceberg_resources(), and create_iceberg_resources() threads it
+    into IcebergTableManagerConfig.from_governance(governance) before passing
+    the resulting config to IcebergTableManager(config=config).
     """
 
     @pytest.mark.requirement("AC-5-happy-path")
