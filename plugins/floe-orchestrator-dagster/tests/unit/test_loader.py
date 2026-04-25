@@ -332,6 +332,22 @@ def project_dir_with_ingestion_sources_dict(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def project_dir_with_ingestion_sources_none_no_manifest(tmp_path: Path) -> Path:
+    """Temporary project dir with malformed sources=None and no dbt manifest."""
+    pdir = tmp_path / "dbt_project"
+    pdir.mkdir(parents=True, exist_ok=True)
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={"sources": None},
+        ),
+    )
+    (pdir / "compiled_artifacts.json").write_text(artifacts.model_dump_json(indent=2))
+    return pdir
+
+
+@pytest.fixture
 def project_dir_with_ingestion_empty_sources_and_flat_keys(tmp_path: Path) -> Path:
     """Temporary project dir with empty sources plus legacy workload keys."""
     pdir = tmp_path / "dbt_project"
@@ -1023,6 +1039,14 @@ def test_runtime_fails_for_non_list_ingestion_sources(
     """Malformed non-list sources config must fail loudly."""
     with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_sources_dict)
+
+
+def test_runtime_fails_for_sources_none_before_missing_manifest(
+    project_dir_with_ingestion_sources_none_no_manifest: Path,
+) -> None:
+    """Explicit sources=None is malformed and fails before manifest inspection."""
+    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+        load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_sources_none_no_manifest)
 
 
 def test_runtime_fails_for_empty_sources_with_other_workload_keys(
