@@ -21,6 +21,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from dagster import AssetKey, asset
+from floe_core.plugins.ingestion import IngestionConfig
 
 if TYPE_CHECKING:
     from dagster import AssetsDefinition
@@ -137,6 +138,7 @@ def create_ingestion_assets(
     """
     ingestion_type = ingestion_ref.type
     ingestion_version = ingestion_ref.version
+    ingestion_config = ingestion_ref.config or {}
 
     @asset(
         name="run_ingestion_pipelines",
@@ -151,7 +153,7 @@ def create_ingestion_assets(
             "ingestion_version": ingestion_version,
         },
     )
-    def _run_ingestion(context) -> None:  # noqa: ANN001
+    def _run_ingestion(context) -> Any:  # noqa: ANN001
         """Execute ingestion pipelines via the ingestion plugin resource.
 
         The ingestion plugin is loaded as a Dagster resource by
@@ -166,6 +168,21 @@ def create_ingestion_assets(
         context.log.info(
             f"Ingestion asset triggered via {ingestion_plugin.name} v{ingestion_plugin.version}"
         )
+        config = IngestionConfig(
+            source_type=ingestion_config["source_type"],
+            source_config=ingestion_config.get("source_config", {}),
+            destination_table=ingestion_config.get("destination_table", ""),
+            write_mode=ingestion_config.get("write_mode", "append"),
+            schema_contract=ingestion_config.get("schema_contract", "evolve"),
+        )
+        pipeline = ingestion_plugin.create_pipeline(config)
+        result = ingestion_plugin.run(pipeline)
+
+        if not result.success:
+            errors = ", ".join(str(error) for error in result.errors) or "unknown error"
+            raise RuntimeError(f"Ingestion pipeline failed: {errors}")
+
+        return result
 
     logger.info(
         "Created ingestion assets",

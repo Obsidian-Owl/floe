@@ -164,8 +164,9 @@ class OrchestratorPlugin(PluginMetadata):
         ...         return "1.0"
         ...
         ...     def create_definitions(self, artifacts: dict) -> Any:
-        ...         from dagster import Definitions
-        ...         return Definitions(assets=[...])
+        ...         # Validate compiled artifacts and delegate to the
+        ...         # orchestrator-specific runtime builder.
+        ...         ...
         ...
         ...     # ... other methods
 
@@ -176,11 +177,16 @@ class OrchestratorPlugin(PluginMetadata):
 
     @abstractmethod
     def create_definitions(self, artifacts: dict[str, Any]) -> Any:
-        """Generate orchestrator-specific definitions from compiled artifacts.
+        """Compile artifacts into orchestrator-specific runtime definitions.
 
-        Creates the main orchestration definition object for the platform.
-        For Dagster, this returns a Definitions object. For Airflow, this
-        returns a DAG object.
+        This hook validates and translates CompiledArtifacts into the
+        platform's runtime definition object. Some orchestrators need
+        additional runtime context beyond the artifact dictionary. The Dagster
+        plugin, for example, requires a product ``project_dir`` so
+        ``manifest.json``, ``profiles.yml``, and ``compiled_artifacts.json``
+        are resolved from one directory; production Dagster definitions should
+        therefore be loaded through the generated ``definitions.py`` loader
+        shim rather than by calling this method directly.
 
         Args:
             artifacts: CompiledArtifacts dictionary containing dbt manifest,
@@ -193,8 +199,8 @@ class OrchestratorPlugin(PluginMetadata):
         Example:
             >>> artifacts = {"dbt_manifest": {...}, "transforms": [...]}
             >>> definitions = plugin.create_definitions(artifacts)
-            >>> # For Dagster: returns Dagster Definitions
-            >>> # For Airflow: returns Airflow DAG
+            >>> # For Dagster production runtime:
+            >>> # load_product_definitions(product_name, project_dir)
         """
         ...
 

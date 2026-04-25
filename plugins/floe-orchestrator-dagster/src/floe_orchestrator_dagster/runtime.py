@@ -130,10 +130,15 @@ def build_product_definitions(
         resources.update(semantic_resources)
         if "semantic_layer" in semantic_resources:
             from floe_orchestrator_dagster.assets.semantic_sync import (
-                sync_semantic_schemas,
+                create_sync_semantic_schemas_asset,
             )
 
-            assets.append(sync_semantic_schemas)
+            assets.append(
+                create_sync_semantic_schemas_asset(
+                    manifest_path=project_dir / "target" / "manifest.json",
+                    output_dir=project_dir / "cube" / "schema",
+                )
+            )
 
     if plugins and plugins.ingestion:
         ingestion_resources = _create_ingestion_resources(plugins)

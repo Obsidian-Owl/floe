@@ -26,7 +26,7 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from dagster import Definitions, ResourceDefinition
+from dagster import Definitions, ResourceDefinition, build_op_context
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
@@ -526,6 +526,19 @@ def _extract_dbt_assets_fn(definitions: Definitions) -> Any:
     return asset_def
 
 
+def _extract_asset_fn_by_op_name(definitions: Definitions, op_name: str) -> Any:
+    """Extract an asset compute function by Dagster op name."""
+    for asset_def in definitions.assets or []:
+        op = getattr(asset_def, "op", None)
+        if op is None or op.name != op_name:
+            continue
+        compute_fn = op.compute_fn
+        if hasattr(compute_fn, "decorated_fn"):
+            return compute_fn.decorated_fn
+        return compute_fn
+    raise AssertionError(f"No asset found with op name {op_name!r}")
+
+
 def _asset_names(definitions: Definitions) -> set[str]:
     """Collect asset key names from single-asset and multi-asset definitions."""
     names: set[str] = set()
@@ -752,6 +765,28 @@ def test_runtime_includes_semantic_resource_and_asset_when_configured(
     asset_names = _asset_names(result)
     assert resources["semantic_layer"] is semantic_resource
     assert "sync_semantic_schemas" in asset_names
+
+
+def test_runtime_semantic_asset_uses_project_dir_paths(project_dir_with_semantic: Path) -> None:
+    """Runtime semantic sync asset must use paths inside the product project_dir."""
+    semantic_resource = MagicMock()
+    semantic_resource.sync_from_dbt_manifest.return_value = []
+
+    with patch(
+        f"{_RUNTIME_MODULE}._create_semantic_resources",
+        return_value={"semantic_layer": semantic_resource},
+    ):
+        result = load_product_definitions(PRODUCT_NAME, project_dir_with_semantic)
+
+    sync_fn = _extract_asset_fn_by_op_name(result, "sync_semantic_schemas")
+    context = build_op_context(resources={"semantic_layer": semantic_resource})
+
+    sync_fn(context)
+
+    semantic_resource.sync_from_dbt_manifest.assert_called_once_with(
+        manifest_path=project_dir_with_semantic / "target" / "manifest.json",
+        output_dir=project_dir_with_semantic / "cube" / "schema",
+    )
 
 
 def test_runtime_includes_ingestion_resource_and_asset_when_configured(

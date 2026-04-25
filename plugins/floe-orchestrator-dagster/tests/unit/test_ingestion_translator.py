@@ -14,7 +14,8 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from dagster import AssetKey
+from dagster import AssetKey, build_op_context
+from floe_core.plugins.ingestion import IngestionResult
 
 
 class TestFloeIngestionTranslator:
@@ -167,3 +168,72 @@ class TestCreateIngestionAssets:
         asset_def = assets[0]
 
         assert "ingestion" in asset_def.required_resource_keys
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_factory_asset_runs_ingestion_pipeline(self) -> None:
+        """Materializing the asset must create and run the ingestion pipeline."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "source_type": "rest_api",
+            "source_config": {"url": "https://example.test/api"},
+            "destination_table": "raw.example",
+            "write_mode": "replace",
+            "schema_contract": "freeze",
+        }
+        ingestion_plugin = MagicMock()
+        ingestion_plugin.name = "dlt"
+        ingestion_plugin.version = "0.1.0"
+        pipeline = object()
+        result = IngestionResult(success=True, rows_loaded=12, duration_seconds=1.5)
+        ingestion_plugin.create_pipeline.return_value = pipeline
+        ingestion_plugin.run.return_value = result
+
+        asset_def = create_ingestion_assets(mock_ref)[0]
+        context = build_op_context(resources={"ingestion": ingestion_plugin})
+
+        output = asset_def(context)
+
+        ingestion_plugin.create_pipeline.assert_called_once()
+        config = ingestion_plugin.create_pipeline.call_args.args[0]
+        assert config.source_type == "rest_api"
+        assert config.source_config == {"url": "https://example.test/api"}
+        assert config.destination_table == "raw.example"
+        assert config.write_mode == "replace"
+        assert config.schema_contract == "freeze"
+        ingestion_plugin.run.assert_called_once_with(pipeline)
+        assert output is result
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_factory_asset_raises_when_ingestion_run_fails(self) -> None:
+        """Failed ingestion results must fail the Dagster asset loudly."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "source_type": "rest_api",
+            "destination_table": "raw.example",
+        }
+        ingestion_plugin = MagicMock()
+        ingestion_plugin.name = "dlt"
+        ingestion_plugin.version = "0.1.0"
+        pipeline = object()
+        ingestion_plugin.create_pipeline.return_value = pipeline
+        ingestion_plugin.run.return_value = IngestionResult(
+            success=False,
+            errors=["source auth failed"],
+        )
+
+        asset_def = create_ingestion_assets(mock_ref)[0]
+        context = build_op_context(resources={"ingestion": ingestion_plugin})
+
+        with pytest.raises(RuntimeError, match="source auth failed"):
+            asset_def(context)
+
+        ingestion_plugin.create_pipeline.assert_called_once()
+        ingestion_plugin.run.assert_called_once_with(pipeline)
