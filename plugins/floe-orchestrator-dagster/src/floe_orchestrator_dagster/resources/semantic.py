@@ -77,17 +77,14 @@ def create_semantic_resources(
     )
     semantic_plugin = registry.get(PluginType.SEMANTIC_LAYER, semantic_ref.type)
 
-    # Configure semantic plugin if config provided
-    if semantic_ref.config is not None:
-        validated_config = registry.configure(
-            PluginType.SEMANTIC_LAYER,
-            semantic_ref.type,
-            semantic_ref.config,
-        )
-        if validated_config is None:
-            raise RuntimeError(
-                f"Semantic plugin config for {semantic_ref.type} could not be validated"
-            )
+    # Configure even when config is omitted so cached plugin state cannot leak.
+    validated_config = registry.configure(
+        PluginType.SEMANTIC_LAYER,
+        semantic_ref.type,
+        semantic_ref.config or {},
+    )
+    if validated_config is None:
+        raise RuntimeError(f"Semantic plugin config for {semantic_ref.type} could not be validated")
 
     logger.info(
         "Semantic layer resources created",

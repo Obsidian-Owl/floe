@@ -183,6 +183,30 @@ def test_create_semantic_resources_configures_empty_dict() -> None:
 
 
 @pytest.mark.requirement("T047")
+def test_create_semantic_resources_configures_none_as_empty_dict() -> None:
+    """Configured semantic refs with config=None must validate with empty dict."""
+    mock_plugin = MagicMock()
+    mock_plugin.name = "cube"
+    mock_plugin.version = "0.1.0"
+    semantic_ref = PluginRef(type="cube", version="0.1.0", config=None)
+
+    with patch("floe_core.plugin_registry.get_registry") as mock_get_registry:
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = mock_plugin
+        mock_registry.configure.return_value = {}
+        mock_get_registry.return_value = mock_registry
+
+        resources = create_semantic_resources(semantic_ref)
+
+        mock_registry.configure.assert_called_once_with(
+            PluginType.SEMANTIC_LAYER,
+            "cube",
+            {},
+        )
+        assert resources["semantic_layer"] == mock_plugin
+
+
+@pytest.mark.requirement("T047")
 def test_create_semantic_resources_configure_returning_none_raises() -> None:
     """Configured semantic validation returning None must fail loudly."""
     mock_plugin = MagicMock()
