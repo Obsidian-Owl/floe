@@ -93,11 +93,7 @@ def export_dbt_to_iceberg(
         if "AlreadyExists" in exc_name or "already exists" in str(exc).lower():
             context.log.debug("Namespace %s already exists", product_namespace)
         else:
-            context.log.warning(
-                "Namespace %s creation failed: %s",
-                product_namespace,
-                exc_name,
-            )
+            raise
 
     conn = duckdb.connect(duckdb_path, read_only=True)
     try:

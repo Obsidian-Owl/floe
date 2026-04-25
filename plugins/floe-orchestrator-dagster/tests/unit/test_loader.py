@@ -926,6 +926,28 @@ def test_dbt_assets_iceberg_export_failure_emits_lineage_fail(
         lineage.emit_complete.assert_not_called()
 
 
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_namespace_export_failure_emits_lineage_fail(
+    project_dir_with_iceberg: Path,
+) -> None:
+    """Namespace creation failures during export must not emit lineage complete."""
+    with patch(_EXPORT_FN, side_effect=RuntimeError("permission denied")):
+        definitions = load_product_definitions(PRODUCT_NAME, project_dir_with_iceberg)
+        asset_fn = _extract_dbt_assets_fn(definitions)
+
+        context, lineage = _make_mock_context_with_lineage()
+        mock_dbt = context.resources.dbt
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = MagicMock(return_value=iter([]))
+        mock_dbt.cli.return_value.stream.return_value = mock_stream
+
+        with pytest.raises(RuntimeError, match="permission denied"):
+            list(asset_fn(context))
+
+        lineage.emit_fail.assert_called_once()
+        lineage.emit_complete.assert_not_called()
+
+
 def test_runtime_includes_semantic_resource_and_asset_when_configured(
     project_dir_with_semantic: Path,
 ) -> None:

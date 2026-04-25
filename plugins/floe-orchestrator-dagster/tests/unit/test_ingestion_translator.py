@@ -449,6 +449,46 @@ class TestCreateIngestionAssets:
             create_ingestion_assets(mock_ref)
 
     @pytest.mark.requirement("4F-FR-060")
+    def test_source_asset_rejects_missing_source_type(self) -> None:
+        """Source configs must declare source_type before assets are returned."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "users",
+                    "source_config": {"source": SourceLike()},
+                    "destination_table": "bronze.users",
+                }
+            ],
+        }
+        with pytest.raises(ValueError, match="source_type"):
+            create_ingestion_assets(mock_ref)
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_source_asset_rejects_missing_destination_table(self) -> None:
+        """Source configs must declare destination_table before assets are returned."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "users",
+                    "source_type": "rest_api",
+                    "source_config": {"source": SourceLike()},
+                }
+            ],
+        }
+        with pytest.raises(ValueError, match="destination_table"):
+            create_ingestion_assets(mock_ref)
+
+    @pytest.mark.requirement("4F-FR-060")
     def test_factory_asset_raises_when_ingestion_run_fails(self) -> None:
         """Failed ingestion results must fail the Dagster asset loudly."""
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets

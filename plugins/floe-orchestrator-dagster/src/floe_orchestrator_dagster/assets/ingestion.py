@@ -162,6 +162,7 @@ def create_ingestion_assets(
         if asset_name in asset_names:
             raise ValueError(f"normalized ingestion asset name collision: {asset_name}")
         asset_names.add(asset_name)
+        _validate_required_source_fields(source_config)
         _validate_executable_source(source_config)
         assets.append(
             _create_ingestion_asset(
@@ -195,6 +196,16 @@ def _source_configs(ingestion_config: Mapping[str, Any]) -> list[dict[str, Any]]
     if not sources:
         raise ValueError("Dagster ingestion helper requires at least one ingestion source")
     return [dict(source) for source in sources]
+
+
+def _validate_required_source_fields(source_config: Mapping[str, Any]) -> None:
+    """Require fields needed to construct IngestionConfig before returning assets."""
+    source_name = source_config.get("name", "<unnamed>")
+    for field_name in ("source_type", "destination_table"):
+        if not source_config.get(field_name):
+            raise ValueError(
+                f"Dagster ingestion helper requires {field_name} for source {source_name!r}"
+            )
 
 
 def _validate_executable_source(source_config: Mapping[str, Any]) -> None:

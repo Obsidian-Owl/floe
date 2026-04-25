@@ -290,14 +290,14 @@ def test_load_product_definitions_large(tmp_path: Path) -> None:
 
 
 # =============================================================================
-# Direct create_definitions Contract Validation
+# Direct create_definitions Failure-Contract Validation
 # =============================================================================
 
 
 @pytest.mark.benchmark
 @pytest.mark.requirement("NFR-002")
 def test_create_definitions_direct_failure_small() -> None:
-    """Benchmark direct create_definitions validation for a small pipeline.
+    """Benchmark direct create_definitions failure-contract validation.
 
     Direct Dagster calls validate artifacts, then fail with the project_dir
     contract. Usable runtime Definitions are loaded through the loader shim.
@@ -313,9 +313,9 @@ def test_create_definitions_direct_failure_small() -> None:
 @pytest.mark.benchmark
 @pytest.mark.requirement("NFR-002")
 def test_create_definitions_direct_failure_medium() -> None:
-    """Benchmark direct create_definitions validation for a medium pipeline.
+    """Benchmark direct create_definitions failure-contract validation.
 
-    Typical production pipeline size.
+    Uses a typical production pipeline size.
     """
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
@@ -328,9 +328,10 @@ def test_create_definitions_direct_failure_medium() -> None:
 @pytest.mark.benchmark
 @pytest.mark.requirement("NFR-002")
 def test_create_definitions_direct_failure_large() -> None:
-    """Benchmark direct create_definitions validation for a large pipeline.
+    """Benchmark direct create_definitions failure-contract validation.
 
-    NFR-002 Target: Validation/delegation must complete quickly for 500 transforms.
+    This is not the runtime Definitions generation benchmark; it only measures
+    validation before the expected project_dir failure for 500 transforms.
     """
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
@@ -386,8 +387,8 @@ def test_create_assets_from_transforms_large() -> None:
 def test_artifacts_validation_overhead() -> None:
     """Benchmark CompiledArtifacts validation overhead.
 
-    Measures Pydantic validation cost in direct create_definitions before it
-    fails with the Dagster project_dir runtime contract.
+    Measures Pydantic validation cost in direct create_definitions before the
+    expected Dagster project_dir failure contract.
     """
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
