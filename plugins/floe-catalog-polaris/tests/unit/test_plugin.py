@@ -33,6 +33,7 @@ def _create_test_config() -> PolarisCatalogConfig:
             client_secret="test-secret",
             token_url="https://auth.example.com/oauth/token",
         ),
+        max_retries=0,
     )
 
 
