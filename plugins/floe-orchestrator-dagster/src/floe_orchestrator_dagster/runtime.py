@@ -115,6 +115,8 @@ def build_product_definitions(
         try:
             run_id = lineage.emit_start(product_name, run_facets=run_facets or None)
         except Exception:
+            if policy.require_lineage:
+                raise
             run_id = uuid4()
 
         try:
@@ -125,12 +127,16 @@ def build_product_definitions(
             try:
                 lineage.emit_fail(run_id, product_name, error_message=type(exc).__name__)
             except Exception as _fail_exc:
+                if policy.require_lineage:
+                    raise
                 context.log.debug("emit_fail failed: %s", _fail_exc)
             raise
 
         try:
             lineage.emit_complete(run_id, product_name)
         except Exception as _complete_exc:
+            if policy.require_lineage:
+                raise
             context.log.debug("emit_complete failed: %s", _complete_exc)
 
     project_dir_str = str(project_dir)

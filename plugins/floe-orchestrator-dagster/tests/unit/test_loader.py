@@ -910,6 +910,126 @@ def test_dbt_assets_emit_complete_not_called_on_failure(
 
 
 @pytest.mark.requirement("AC-5")
+def test_dbt_assets_default_lineage_start_failure_remains_best_effort(
+    project_dir: Path,
+) -> None:
+    """Default runtime must continue dbt execution when emit_start fails."""
+    definitions = load_product_definitions(PRODUCT_NAME, project_dir)
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, lineage = _make_mock_context_with_lineage()
+    lineage.emit_start.side_effect = RuntimeError("lineage start failed")
+    mock_dbt = context.resources.dbt
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = MagicMock(return_value=iter([]))
+    mock_dbt.cli.return_value.stream.return_value = mock_stream
+
+    list(asset_fn(context))
+
+    mock_dbt.cli.assert_called_once_with(["build"], context=context)
+    lineage.emit_complete.assert_called_once()
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_strict_lineage_start_failure_escapes(
+    project_dir_with_alpha_capabilities: Path,
+) -> None:
+    """Strict runtime must fail asset execution when emit_start fails."""
+    from floe_orchestrator_dagster.capabilities import CapabilityPolicy
+    from floe_orchestrator_dagster.runtime import build_product_definitions
+
+    artifacts_path = project_dir_with_alpha_capabilities / "compiled_artifacts.json"
+    artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
+    with patch(
+        _LINEAGE_FACTORY,
+        return_value={"lineage": ResourceDefinition.hardcoded_resource(MagicMock())},
+    ):
+        definitions = build_product_definitions(
+            product_name=PRODUCT_NAME,
+            artifacts=artifacts,
+            project_dir=project_dir_with_alpha_capabilities,
+            capability_policy=CapabilityPolicy.alpha(),
+        )
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, lineage = _make_mock_context_with_lineage()
+    lineage.emit_start.side_effect = RuntimeError("lineage start failed")
+
+    with (
+        patch(_EXPORT_FN),
+        pytest.raises(RuntimeError, match="lineage start failed"),
+    ):
+        list(asset_fn(context))
+
+    context.resources.dbt.cli.assert_not_called()
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_strict_lineage_complete_failure_escapes(
+    project_dir_with_alpha_capabilities: Path,
+) -> None:
+    """Strict runtime must fail asset execution when emit_complete fails."""
+    from floe_orchestrator_dagster.capabilities import CapabilityPolicy
+    from floe_orchestrator_dagster.runtime import build_product_definitions
+
+    artifacts_path = project_dir_with_alpha_capabilities / "compiled_artifacts.json"
+    artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
+    with patch(
+        _LINEAGE_FACTORY,
+        return_value={"lineage": ResourceDefinition.hardcoded_resource(MagicMock())},
+    ):
+        definitions = build_product_definitions(
+            product_name=PRODUCT_NAME,
+            artifacts=artifacts,
+            project_dir=project_dir_with_alpha_capabilities,
+            capability_policy=CapabilityPolicy.alpha(),
+        )
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, lineage = _make_mock_context_with_lineage()
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = MagicMock(return_value=iter([]))
+    context.resources.dbt.cli.return_value.stream.return_value = mock_stream
+    lineage.emit_complete.side_effect = RuntimeError("lineage complete failed")
+
+    with (
+        patch(_EXPORT_FN),
+        pytest.raises(RuntimeError, match="lineage complete failed"),
+    ):
+        list(asset_fn(context))
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_strict_lineage_fail_failure_escapes_original_error(
+    project_dir_with_alpha_capabilities: Path,
+) -> None:
+    """Strict runtime must fail with emit_fail errors when failure lineage fails."""
+    from floe_orchestrator_dagster.capabilities import CapabilityPolicy
+    from floe_orchestrator_dagster.runtime import build_product_definitions
+
+    artifacts_path = project_dir_with_alpha_capabilities / "compiled_artifacts.json"
+    artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
+    with patch(
+        _LINEAGE_FACTORY,
+        return_value={"lineage": ResourceDefinition.hardcoded_resource(MagicMock())},
+    ):
+        definitions = build_product_definitions(
+            product_name=PRODUCT_NAME,
+            artifacts=artifacts,
+            project_dir=project_dir_with_alpha_capabilities,
+            capability_policy=CapabilityPolicy.alpha(),
+        )
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, lineage = _make_mock_context_with_lineage()
+    context.resources.dbt.cli.return_value.stream.side_effect = RuntimeError("dbt failed")
+    lineage.emit_fail.side_effect = RuntimeError("lineage fail failed")
+
+    with pytest.raises(RuntimeError, match="lineage fail failed"):
+        list(asset_fn(context))
+
+
+@pytest.mark.requirement("AC-5")
 def test_dbt_assets_calls_iceberg_export_after_dbt(
     project_dir_with_iceberg: Path,
 ) -> None:
