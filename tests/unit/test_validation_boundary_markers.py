@@ -120,6 +120,21 @@ def test_pytest_collection_modifyitems_defaults_and_preserves_lane_ordering() ->
     assert items[3].marker_names.count("platform_blackbox") == 1
 
 
+def test_pytest_collection_modifyitems_defaults_unmarked_e2e_paths() -> None:
+    """Unmarked tests under tests/e2e should still enter the platform lane."""
+    config = _FakeConfig()
+    items = [
+        _FakeItem("tests/e2e/test_asset_discovery.py::test_discovers_assets", []),
+        _FakeItem("tests/unit/test_non_e2e.py::test_non_e2e", []),
+    ]
+
+    _load_e2e_conftest().pytest_collection_modifyitems(config, items)
+
+    assert items[0].marker_names.count("e2e") == 1
+    assert items[0].marker_names.count("platform_blackbox") == 1
+    assert items[1].marker_names == []
+
+
 def test_selected_items_require_smoke_check_for_platform_blackbox() -> None:
     """Platform-blackbox selections should trigger the smoke check."""
     items = [

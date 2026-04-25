@@ -41,21 +41,7 @@ _FLOE_REPO_ROOT="$(cd "${_FLOE_COMMON_DIR}/../.." && pwd)"
 
 if [[ -z "${FLOE_DEMO_IMAGE_REPOSITORY:-}" || -z "${FLOE_DEMO_IMAGE_TAG:-}" || -z "${FLOE_DEMO_IMAGE:-}" ]]; then
     if command -v python3 >/dev/null 2>&1; then
-        if [[ -z "${FLOE_DEMO_IMAGE_REPOSITORY:-}" ]]; then
-            FLOE_DEMO_IMAGE_REPOSITORY="$(
-                python3 "${_FLOE_COMMON_DIR}/resolve-demo-image-ref.py" --field repository
-            )"
-        fi
-        if [[ -z "${FLOE_DEMO_IMAGE_TAG:-}" ]]; then
-            FLOE_DEMO_IMAGE_TAG="$(
-                python3 "${_FLOE_COMMON_DIR}/resolve-demo-image-ref.py" --field tag
-            )"
-        fi
-        if [[ -z "${FLOE_DEMO_IMAGE:-}" ]]; then
-            FLOE_DEMO_IMAGE="$(
-                python3 "${_FLOE_COMMON_DIR}/resolve-demo-image-ref.py" --field ref
-            )"
-        fi
+        eval "$(python3 "${_FLOE_COMMON_DIR}/resolve-demo-image-ref.py" --field exports)"
     fi
 fi
 : "${FLOE_DEMO_IMAGE_REPOSITORY:=floe-dagster-demo}"

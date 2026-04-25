@@ -24,13 +24,13 @@ LOCAL_HOOKS_PATH="$(git config --local --get core.hooksPath || true)"
 # Create hooks directory if it doesn't exist
 mkdir -p "$HOOKS_DIR"
 
-if [ -n "$GLOBAL_HOOKS_PATH" ] && [ "$GLOBAL_HOOKS_PATH" != "$HOOKS_DIR" ]; then
+if [[ -n "$GLOBAL_HOOKS_PATH" && "$GLOBAL_HOOKS_PATH" != "$HOOKS_DIR" ]]; then
     echo "Overriding global core.hooksPath for this repository:"
     echo "  global: $GLOBAL_HOOKS_PATH"
     echo "  local:  $HOOKS_DIR"
 fi
 
-if [ "$LOCAL_HOOKS_PATH" != "$HOOKS_DIR" ]; then
+if [[ "$LOCAL_HOOKS_PATH" != "$HOOKS_DIR" ]]; then
     git config --local core.hooksPath "$HOOKS_DIR"
 fi
 
@@ -40,7 +40,7 @@ HOOKS_TO_INSTALL="pre-commit post-commit pre-push post-merge"
 NEEDS_BACKUP=false
 
 for hook in $HOOKS_TO_INSTALL; do
-    if [ -f "$HOOKS_DIR/$hook" ]; then
+    if [[ -f "$HOOKS_DIR/$hook" ]]; then
         # Check if it's our hook (contains our marker)
         if ! grep -q "Installed by: scripts/setup-hooks.sh" "$HOOKS_DIR/$hook" 2>/dev/null; then
             NEEDS_BACKUP=true
@@ -49,10 +49,10 @@ for hook in $HOOKS_TO_INSTALL; do
     fi
 done
 
-if [ "$NEEDS_BACKUP" = true ]; then
+if [[ "$NEEDS_BACKUP" = true ]]; then
     mkdir -p "$BACKUP_DIR"
     for hook in $HOOKS_TO_INSTALL; do
-        if [ -f "$HOOKS_DIR/$hook" ]; then
+        if [[ -f "$HOOKS_DIR/$hook" ]]; then
             if ! grep -q "Installed by: scripts/setup-hooks.sh" "$HOOKS_DIR/$hook" 2>/dev/null; then
                 cp "$HOOKS_DIR/$hook" "$BACKUP_DIR/$hook"
                 echo "Backed up existing $hook to $BACKUP_DIR/"

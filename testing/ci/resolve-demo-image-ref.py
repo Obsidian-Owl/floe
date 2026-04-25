@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 DEFAULT_REPOSITORY = "floe-dagster-demo"
+MAX_HASH_FILE_SIZE = 50 * 1024 * 1024
 IGNORED_UNTRACKED_PREFIXES = (
     ".git/",
     ".venv/",
@@ -86,6 +87,11 @@ def _compute_default_tag(repo_root: Path) -> str:
         rel_path = path.relative_to(repo_root).as_posix()
         hasher.update(rel_path.encode("utf-8"))
         hasher.update(b"\0")
+        file_size = path.stat().st_size
+        if file_size > MAX_HASH_FILE_SIZE:
+            hasher.update(f"size:{file_size}".encode())
+            hasher.update(b"\0")
+            continue
         hasher.update(path.read_bytes())
         hasher.update(b"\0")
 

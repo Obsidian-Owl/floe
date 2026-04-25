@@ -26,11 +26,15 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _manifest_catalog_config() -> dict[str, Any]:
-    return _load_yaml(DEMO_MANIFEST)["plugins"]["catalog"]["config"]
+    config = _load_yaml(DEMO_MANIFEST)["plugins"]["catalog"]["config"]
+    assert isinstance(config, dict)
+    return config
 
 
 def _manifest_storage_config() -> dict[str, Any]:
-    return _load_yaml(DEMO_MANIFEST)["plugins"]["storage"]["config"]
+    config = _load_yaml(DEMO_MANIFEST)["plugins"]["storage"]["config"]
+    assert isinstance(config, dict)
+    return config
 
 
 def _assert_bootstrap_alignment(values_path: Path) -> None:

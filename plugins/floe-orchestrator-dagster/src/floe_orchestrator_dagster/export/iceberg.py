@@ -61,6 +61,8 @@ def export_dbt_to_iceberg(
 
     registry = _plugin_registry_module.get_registry()
     catalog_type = artifacts.plugins.catalog.type
+    # configure() validates config and applies it to the cached plugin instance.
+    # get() then returns that configured instance for the runtime connection.
     validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config)
     if validated_config is None:
         context.log.warning(

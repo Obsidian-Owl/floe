@@ -152,8 +152,12 @@ def pytest_collection_modifyitems(
 
     for item in items:
         item_markers = {mark.name for mark in item.iter_markers()}
-        if "e2e" not in item_markers:
+        is_e2e_item = "e2e" in item_markers or item.nodeid.startswith("tests/e2e/")
+        if not is_e2e_item:
             continue
+        if "e2e" not in item_markers:
+            item.add_marker(pytest.mark.e2e)
+            item_markers.add("e2e")
         if item_markers.isdisjoint(lane_markers):
             item.add_marker(pytest.mark.platform_blackbox)
 
