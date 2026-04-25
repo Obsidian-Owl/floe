@@ -21,6 +21,7 @@ import asyncio
 import importlib
 import logging
 import threading
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -53,6 +54,8 @@ class LineageResource:
     Args:
         emitter: An async LineageEmitter instance whose methods are dispatched
             to the background loop.
+        strict: When True, lineage emission timeouts and failures raise
+            RuntimeError instead of returning fallback/default values.
     """
 
     def __init__(self, emitter: LineageEmitter, *, strict: bool = False) -> None:
@@ -76,7 +79,8 @@ class LineageResource:
     def _run_coroutine(self, coro: Any, *, default: Any = None) -> Any:
         """Submit *coro* to the background loop and block until it completes.
 
-        Returns the coroutine's result, or *default* on timeout/exception.
+        Returns the coroutine's result, or *default* on timeout/exception when
+        strict mode is disabled. In strict mode, failures raise RuntimeError.
 
         Args:
             coro: Awaitable coroutine to submit.
@@ -88,7 +92,7 @@ class LineageResource:
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         try:
             return future.result(timeout=_EMIT_TIMEOUT)
-        except TimeoutError:
+        except (TimeoutError, FutureTimeoutError):
             future.cancel()
             logger.warning(
                 "lineage_emit_timeout",
@@ -368,7 +372,8 @@ def create_lineage_resource(lineage_ref: PluginRef, *, strict: bool = False) -> 
 
     Args:
         lineage_ref: Resolved lineage plugin reference (type, version, config).
-        strict: Raise lineage emission failures instead of returning fallbacks.
+        strict: Raise lineage emission timeouts/failures instead of returning
+            fallback/default values.
 
     Returns:
         ``{"lineage": ResourceDefinition}`` where the resource yields a
@@ -405,6 +410,9 @@ def try_create_lineage_resource(
     When *plugins* is ``None`` or its ``lineage_backend`` is ``None``, returns
     a :class:`NoOpLineageResource` wrapped in a Dagster ``ResourceDefinition``.
     When ``lineage_backend`` is set, delegates to :func:`create_lineage_resource`.
+    The ``strict`` flag is used by capability policy enforcement: optional
+    lineage remains best-effort, while required lineage raises on emission
+    timeout or failure.
 
     Unlike the iceberg counterpart this function NEVER returns an empty dict —
     it always returns ``{"lineage": <resource>}`` when unconfigured.  If
@@ -413,7 +421,8 @@ def try_create_lineage_resource(
 
     Args:
         plugins: Resolved plugin configuration, or ``None``.
-        strict: Raise lineage emission failures for configured lineage backends.
+        strict: Raise lineage emission timeouts/failures for configured lineage
+            backends instead of returning fallback/default values.
 
     Returns:
         ``{"lineage": ResourceDefinition}`` when unconfigured or successful.

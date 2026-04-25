@@ -22,6 +22,7 @@ import asyncio
 import logging
 import threading
 from concurrent.futures import Future
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
@@ -600,6 +601,33 @@ class TestLineageResourceErrorHandling:
             resource.close()
 
     @pytest.mark.requirement(AC_6)
+    def test_emit_start_concurrent_future_timeout_returns_uuid(
+        self,
+        mock_emitter: MagicMock,
+    ) -> None:
+        """Test Python 3.10 Future timeout returns fallback UUID and cancels."""
+        from floe_orchestrator_dagster.resources.lineage import LineageResource
+
+        async def emit_start(*args: Any, **kwargs: Any) -> UUID:
+            return uuid4()
+
+        mock_emitter.emit_start = emit_start
+        resource = LineageResource(emitter=mock_emitter)
+        try:
+            with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
+                future = MagicMock(spec=Future)
+                future.result.side_effect = FutureTimeoutError("timed out")
+                mock_submit.return_value = future
+
+                result = resource.emit_start(JOB_NAME)
+
+            assert isinstance(result, UUID), "non-strict timeout must return fallback UUID"
+            future.cancel.assert_called_once()
+            mock_submit.call_args[0][0].close()
+        finally:
+            resource.close()
+
+    @pytest.mark.requirement(AC_6)
     def test_emit_start_exception_returns_uuid(self, mock_emitter: MagicMock) -> None:
         """Test emit_start returns a UUID when the coroutine raises an exception."""
         from floe_orchestrator_dagster.resources.lineage import LineageResource
@@ -675,6 +703,33 @@ class TestLineageResourceErrorHandling:
             with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
                 future = MagicMock(spec=Future)
                 future.result.side_effect = TimeoutError("timed out")
+                mock_submit.return_value = future
+
+                with pytest.raises(RuntimeError, match="Lineage emission timed out"):
+                    resource.emit_start(JOB_NAME)
+
+            future.cancel.assert_called_once()
+            mock_submit.call_args[0][0].close()
+        finally:
+            resource.close()
+
+    @pytest.mark.requirement(AC_6)
+    def test_strict_emit_start_concurrent_future_timeout_raises_runtime_error(
+        self,
+        mock_emitter: MagicMock,
+    ) -> None:
+        """Test Python 3.10 Future timeout raises timeout-specific strict error."""
+        from floe_orchestrator_dagster.resources.lineage import LineageResource
+
+        async def emit_start(*args: Any, **kwargs: Any) -> UUID:
+            return uuid4()
+
+        mock_emitter.emit_start = emit_start
+        resource = LineageResource(emitter=mock_emitter, strict=True)
+        try:
+            with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
+                future = MagicMock(spec=Future)
+                future.result.side_effect = FutureTimeoutError("timed out")
                 mock_submit.return_value = future
 
                 with pytest.raises(RuntimeError, match="Lineage emission timed out"):

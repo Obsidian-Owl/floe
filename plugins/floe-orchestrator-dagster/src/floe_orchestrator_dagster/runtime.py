@@ -75,6 +75,9 @@ def build_product_definitions(
         product_name: Name of the data product.
         artifacts: Validated compiled artifacts for the data product.
         project_dir: dbt project directory containing target/manifest.json.
+        capability_policy: Optional policy controlling whether optional
+            capabilities such as lineage are best-effort or strict. Defaults
+            to the platform default policy when omitted.
 
     Returns:
         Dagster Definitions with dbt assets and runtime resources.
