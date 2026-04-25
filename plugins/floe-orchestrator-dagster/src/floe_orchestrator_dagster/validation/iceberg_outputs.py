@@ -12,7 +12,7 @@ from typing import cast
 import floe_core.plugin_registry as _plugin_registry_module
 from floe_core.plugin_types import PluginType
 from floe_core.plugins.catalog import Catalog, CatalogPlugin
-from floe_core.plugins.storage import FileIO, StoragePlugin
+from floe_core.plugins.storage import StoragePlugin
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
 
@@ -59,7 +59,7 @@ def expected_iceberg_tables(
     return [_qualify_table(namespace, table_name) for table_name in expected_tables]
 
 
-def _connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> tuple[Catalog, FileIO]:
+def _connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> Catalog:
     """Connect to the configured catalog using catalog/storage plugin config."""
     plugins = artifacts.plugins
     if plugins is None or plugins.catalog is None:
@@ -89,8 +89,8 @@ def _connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> tuple[Catal
         raise RuntimeError(f"Storage plugin config for {storage_ref.type} could not be validated")
     storage_plugin = cast(StoragePlugin, registry.get(PluginType.STORAGE, storage_ref.type))
 
-    fileio = storage_plugin.get_pyiceberg_fileio()
-    return catalog_plugin.connect(config={}), fileio
+    catalog_connection_config = storage_plugin.get_pyiceberg_catalog_config()
+    return catalog_plugin.connect(config=catalog_connection_config)
 
 
 def validate_iceberg_outputs(
@@ -115,9 +115,8 @@ def validate_iceberg_outputs(
     if not expected_table_names:
         raise RuntimeError("No expected Iceberg tables were derived from CompiledArtifacts")
 
-    # Construct FileIO through StoragePlugin to validate storage config without
-    # assuming backend-specific catalog connection keys.
-    catalog, _storage_fileio = _connect_catalog_from_artifacts(artifacts)
+    # Let StoragePlugin own backend-specific PyIceberg catalog keys.
+    catalog = _connect_catalog_from_artifacts(artifacts)
 
     loaded_tables: list[str] = []
     load_errors: dict[str, str] = {}

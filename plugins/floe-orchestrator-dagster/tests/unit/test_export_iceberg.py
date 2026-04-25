@@ -1030,6 +1030,61 @@ class TestExportDbtToIceberg:
         catalog_plugin.connect.assert_called_once()
 
     @pytest.mark.requirement("AC-4")
+    def test_export_passes_storage_catalog_config_to_catalog_connect(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+    ) -> None:
+        """Export must connect catalog with config produced by StoragePlugin."""
+        from floe_core.plugin_types import PluginType
+
+        artifacts = _make_artifacts(
+            catalog=PluginRef(type="polaris", version="0.1.0", config={}),
+            storage=PluginRef(
+                type="s3",
+                version="1.0.0",
+                config={"endpoint": "http://minio:9000", "path_style_access": True},
+            ),
+        )
+        catalog_config = {
+            "s3.endpoint": "http://minio:9000",
+            "s3.path-style-access": "true",
+        }
+
+        mock_conn = MagicMock()
+        _configure_mock_duckdb_table(mock_conn)
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+        mock_catalog = MagicMock()
+        catalog_plugin.connect.return_value = mock_catalog
+        storage_plugin.get_pyiceberg_catalog_config.return_value = catalog_config
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
+            if plugin_type is PluginType.CATALOG:
+                return catalog_plugin
+            return storage_plugin
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = {}
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        storage_plugin.get_pyiceberg_catalog_config.assert_called_once_with()
+        catalog_plugin.connect.assert_called_once_with(config=catalog_config)
+
+    @pytest.mark.requirement("AC-4")
     @pytest.mark.parametrize(
         ("failing_plugin_type", "expected_message"),
         [("catalog", "invalid catalog config"), ("storage", "invalid storage config")],

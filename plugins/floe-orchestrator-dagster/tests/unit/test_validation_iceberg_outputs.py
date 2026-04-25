@@ -75,8 +75,8 @@ def test_expected_iceberg_tables_fails_when_transforms_missing() -> None:
         expected_iceberg_tables(artifacts)
 
 
-def test_validate_iceberg_outputs_uses_storage_plugin_fileio_contract() -> None:
-    """Validation must use StoragePlugin contract, not hand-built S3 config mapping."""
+def test_validate_iceberg_outputs_passes_storage_catalog_config_to_catalog() -> None:
+    """Validation must pass StoragePlugin catalog config into catalog.connect()."""
     artifacts = _make_artifacts(
         transforms=ResolvedTransforms(
             models=[ResolvedModel(name="mart_customer_360", compute="duckdb")],
@@ -87,10 +87,13 @@ def test_validate_iceberg_outputs_uses_storage_plugin_fileio_contract() -> None:
     storage_plugin = MagicMock()
     catalog = MagicMock()
     table = MagicMock()
-    fileio = MagicMock()
+    catalog_config = {
+        "s3.endpoint": "http://minio:9000",
+        "s3.path-style-access": "true",
+    }
     catalog_plugin.connect.return_value = catalog
     catalog.load_table.return_value = table
-    storage_plugin.get_pyiceberg_fileio.return_value = fileio
+    storage_plugin.get_pyiceberg_catalog_config.return_value = catalog_config
     registry = MagicMock()
 
     def get_side_effect(plugin_type: PluginType, _name: str) -> MagicMock:
@@ -104,7 +107,8 @@ def test_validate_iceberg_outputs_uses_storage_plugin_fileio_contract() -> None:
     with patch("floe_core.plugin_registry.get_registry", return_value=registry):
         result = validate_iceberg_outputs(artifacts)
 
-    catalog_plugin.connect.assert_called_once_with(config={})
-    storage_plugin.get_pyiceberg_fileio.assert_called_once_with()
+    catalog_plugin.connect.assert_called_once_with(config=catalog_config)
+    storage_plugin.get_pyiceberg_catalog_config.assert_called_once_with()
+    storage_plugin.get_pyiceberg_fileio.assert_not_called()
     catalog.load_table.assert_called_once_with("customer_360.mart_customer_360")
     assert result.table_names == ["customer_360.mart_customer_360"]

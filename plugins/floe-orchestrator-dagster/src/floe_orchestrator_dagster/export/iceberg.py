@@ -11,6 +11,7 @@ from typing import Any, Protocol, cast, runtime_checkable
 import floe_core.plugin_registry as _plugin_registry_module
 from floe_core.plugin_types import PluginType
 from floe_core.plugins.catalog import CatalogPlugin
+from floe_core.plugins.storage import StoragePlugin
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -119,6 +120,7 @@ def export_dbt_to_iceberg(
     )
     if validated_storage_config is None:
         raise RuntimeError(f"Storage plugin config for {storage_type} could not be validated")
+    storage_plugin = cast(StoragePlugin, registry.get(PluginType.STORAGE, storage_type))
 
     if not Path(duckdb_path).exists():
         raise RuntimeError(
@@ -128,9 +130,9 @@ def export_dbt_to_iceberg(
     import duckdb
     from pyiceberg.exceptions import NoSuchTableError
 
-    s3_config = {f"s3.{k}": v for k, v in (storage_config or {}).items()}
+    catalog_connection_config = storage_plugin.get_pyiceberg_catalog_config()
     catalog = _require_write_capable_catalog(
-        catalog_plugin.connect(config=s3_config),
+        catalog_plugin.connect(config=catalog_connection_config),
         catalog_type,
     )
 
