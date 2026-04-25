@@ -182,20 +182,23 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             raise ValueError(error_message) from e
 
     def create_definitions(self, artifacts: dict[str, Any]) -> Any:
-        """Generate Dagster Definitions from CompiledArtifacts.
+        """Validate artifacts and delegate to Dagster runtime definition loading.
 
         The method first validates the artifacts against the CompiledArtifacts
-        schema, then delegates to the shared runtime builder. The runtime
-        builder requires a dbt project directory, so direct plugin calls fail
-        fast until routed through the generated definitions.py loader path.
+        schema, then delegates to the shared runtime builder without a project
+        directory. Direct plugin calls therefore fail fast with the
+        project_dir contract. Usable Dagster Definitions come from
+        load_product_definitions(product_name, project_dir), the generated
+        definitions.py shim, or direct runtime builder calls supplied with a
+        project_dir.
 
         Args:
             artifacts: CompiledArtifacts dictionary containing dbt manifest,
                 profiles, transforms, and other configuration.
 
         Returns:
-            Dagster Definitions object ready for deployment when the runtime
-            builder is supplied a project directory.
+            Dagster Definitions only when called through a loader/runtime path
+            that supplies project_dir.
 
         Raises:
             ValueError: If artifacts validation fails with actionable message
@@ -240,15 +243,18 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         """Create Iceberg resources from resolved plugins configuration.
 
         Attempts to load catalog and storage plugins and create an
-        IcebergIOManager resource. Returns empty dict if either plugin
-        is not configured or if plugin loading fails.
+        IcebergIOManager resource. Returns ``{}`` only when catalog or storage
+        plugins are unconfigured. Configured-but-broken plugin loading or
+        resource construction is re-raised so runtime configuration fails
+        loudly.
 
         Args:
             plugins: ResolvedPlugins from CompiledArtifacts, or None.
             governance: ResolvedGovernance from CompiledArtifacts, or None.
 
         Returns:
-            Dictionary with "iceberg" key if successful, empty dict otherwise.
+            Dictionary with "iceberg" key if successful, empty dict only when
+            catalog or storage is unconfigured.
 
         Requirements:
             T108: Extract catalog/storage config

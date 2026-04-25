@@ -241,7 +241,9 @@ class DltIngestionPlugin(IngestionPlugin):
 
 1. **dlt is default but pluggable** - Airbyte can be substituted
 2. **Iceberg-native destination** - No intermediate staging
-3. **Dagster integration** - dlt runs as Dagster assets
+3. **Dagster integration** - Historical/future plan only: canonical Dagster
+   runtime currently fails loudly for configured ingestion until compiled JSON
+   config can construct executable dlt source objects.
 4. **Incremental by default** - Uses dlt's incremental loading
 
 ### dlt vs Airbyte Trade-offs
