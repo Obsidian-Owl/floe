@@ -5,7 +5,7 @@ Tests verify that export_dbt_to_iceberg():
 - Derives duckdb_path from product_name (safe_name conversion)
 - Derives product_namespace from product_name (safe_name conversion)
 - Does NOT re-read compiled_artifacts.json from disk
-- Handles missing DuckDB file gracefully
+- Raises for missing DuckDB output when catalog+storage export is configured
 - Handles missing catalog plugin gracefully
 - Creates namespace in Iceberg catalog
 - Writes non-empty DuckDB tables to Iceberg
@@ -344,20 +344,40 @@ class TestExportDbtToIceberg:
             )
 
     @pytest.mark.requirement("AC-4")
-    def test_export_skips_when_duckdb_missing(
+    def test_configured_export_validates_plugins_before_missing_duckdb_failure(
         self,
         context: MagicMock,
         project_dir: Path,
         artifacts_with_catalog: CompiledArtifacts,
     ) -> None:
-        """When DuckDB file does not exist, function MUST return without
-        error and log a warning. It must NOT attempt duckdb.connect().
-        """
+        """Configured export validates catalog/storage before failing on missing DuckDB."""
+        from floe_core.plugin_types import PluginType
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
+            if plugin_type is PluginType.CATALOG:
+                return catalog_plugin
+            return storage_plugin
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = {}
+
+        real_import = builtins.__import__
+
+        def fail_optional_export_imports(name: str, *args: object, **kwargs: object) -> object:
+            if name == "duckdb" or name.startswith("pyiceberg"):
+                raise AssertionError(f"optional export dependency imported: {name}")
+            return real_import(name, *args, **kwargs)
+
         with (
             patch.object(Path, "exists", return_value=False),
-            patch("duckdb.connect") as mock_connect,
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch("builtins.__import__", side_effect=fail_optional_export_imports),
+            pytest.raises(RuntimeError, match=EXPECTED_DUCKDB_PATH),
         ):
-            # Should not raise
             export_dbt_to_iceberg(
                 context=context,
                 product_name=PRODUCT_NAME,
@@ -365,15 +385,17 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        # Must NOT attempt to connect to DuckDB
-        mock_connect.assert_not_called()
-
-        # Must log a warning about missing DuckDB
-        context.log.warning.assert_called()
-        warning_msg = str(context.log.warning.call_args)
-        assert "duckdb" in warning_msg.lower() or "DuckDB" in warning_msg, (
-            "Warning message must mention DuckDB file not found"
+        registry.configure.assert_any_call(
+            PluginType.CATALOG,
+            "polaris",
+            {"uri": "http://polaris:8181"},
         )
+        registry.configure.assert_any_call(
+            PluginType.STORAGE,
+            "s3",
+            {"endpoint": "http://minio:9000", "access-key-id": "test"},
+        )
+        catalog_plugin.connect.assert_not_called()
 
     @pytest.mark.requirement("AC-4")
     def test_export_skips_when_no_catalog_configured(
@@ -845,6 +867,66 @@ class TestExportDbtToIceberg:
             patch.object(Path, "exists", return_value=True),
             patch("floe_core.plugin_registry.get_registry", return_value=registry),
             pytest.raises(ValueError, match=expected_message),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        catalog_plugin.connect.assert_not_called()
+        mock_duckdb_connect.assert_not_called()
+
+    @pytest.mark.requirement("AC-4")
+    @pytest.mark.parametrize(
+        ("none_plugin_type", "expected_message"),
+        [
+            ("catalog", "Catalog plugin config for polaris"),
+            ("storage", "Storage plugin config for s3"),
+        ],
+    )
+    def test_export_configure_returning_none_raises_runtime_error(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        none_plugin_type: str,
+        expected_message: str,
+    ) -> None:
+        """Configured catalog/storage validation returning None MUST fail loudly."""
+        from floe_core.plugin_types import PluginType
+
+        artifacts = _make_artifacts(
+            catalog=PluginRef(type="polaris", version="0.1.0", config={}),
+            storage=PluginRef(type="s3", version="1.0.0", config={}),
+        )
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
+            if plugin_type is PluginType.CATALOG:
+                return catalog_plugin
+            return storage_plugin
+
+        def configure_side_effect(
+            plugin_type: PluginType,
+            _plugin_name: str,
+            _config: dict[str, object],
+        ) -> dict[str, object] | None:
+            if plugin_type.name.lower() == none_plugin_type:
+                return None
+            return {}
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.side_effect = configure_side_effect
+
+        with (
+            patch("duckdb.connect") as mock_duckdb_connect,
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            pytest.raises(RuntimeError, match=expected_message),
         ):
             export_dbt_to_iceberg(
                 context=context,
