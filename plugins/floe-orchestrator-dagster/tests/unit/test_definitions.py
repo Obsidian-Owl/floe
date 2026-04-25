@@ -19,53 +19,41 @@ if TYPE_CHECKING:
 
 
 class TestCreateDefinitionsWithValidArtifacts:
-    """Test create_definitions with valid CompiledArtifacts inputs.
+    """Test direct create_definitions with valid CompiledArtifacts inputs.
 
-    Validates FR-005: System MUST generate valid Dagster Definitions
-    object from CompiledArtifacts.
+    Direct plugin calls validate artifacts, then require the runtime loader
+    path to supply project_dir before Definitions can be built.
     """
 
     @pytest.mark.requirement("FR-005")
-    def test_create_definitions_returns_definitions_object(
+    def test_create_definitions_requires_project_dir(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
         valid_compiled_artifacts: dict[str, Any],
     ) -> None:
-        """Test create_definitions returns a Dagster Definitions object."""
-        from dagster import Definitions
-
-        result = dagster_plugin.create_definitions(valid_compiled_artifacts)
-
-        assert isinstance(result, Definitions)
+        """Test direct create_definitions requires runtime project_dir."""
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts)
 
     @pytest.mark.requirement("FR-005")
-    def test_create_definitions_creates_assets_from_models(
+    def test_create_definitions_with_models_requires_project_dir(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
         valid_compiled_artifacts_with_models: dict[str, Any],
     ) -> None:
-        """Test create_definitions creates assets for all models."""
-        from dagster import Definitions
-
-        result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_models)
-
-        assert isinstance(result, Definitions)
-        assert len(result.assets) > 0
+        """Test direct create_definitions does not synthesize model assets."""
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts_with_models)
 
     @pytest.mark.requirement("FR-005")
-    def test_create_definitions_preserves_model_count(
+    def test_create_definitions_with_multiple_models_requires_project_dir(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
         valid_compiled_artifacts_with_models: dict[str, Any],
     ) -> None:
-        """Test create_definitions creates correct number of assets."""
-        from dagster import Definitions
-
-        result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_models)
-
-        # Fixture has 3 models - verify assets were created
-        assert isinstance(result, Definitions)
-        assert len(result.assets) == 3
+        """Test direct create_definitions keeps the runtime-loader contract."""
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts_with_models)
 
 
 class TestCreateDefinitionsWithEmptyTransforms:
@@ -80,16 +68,13 @@ class TestCreateDefinitionsWithEmptyTransforms:
         dagster_plugin: DagsterOrchestratorPlugin,
         valid_compiled_artifacts: dict[str, Any],
     ) -> None:
-        """Test create_definitions handles missing transforms field."""
-        from dagster import Definitions
-
+        """Test valid artifacts with no transforms still require project_dir."""
         # Remove transforms to trigger empty path (but keep valid structure)
         artifacts = deepcopy(valid_compiled_artifacts)
         artifacts["transforms"] = None
 
-        result = dagster_plugin.create_definitions(artifacts)
-
-        assert isinstance(result, Definitions)
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(artifacts)
 
     @pytest.mark.requirement("FR-005")
     def test_create_definitions_with_empty_models_list(
@@ -168,36 +153,29 @@ class TestCreateDefinitionsEdgeCases:
     def test_circular_dependencies_are_accepted(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
-        valid_compiled_artifacts: dict[str, Any],
     ) -> None:
-        """Test that circular dependencies in models are accepted.
+        """Test helper accepts circular dependencies.
 
         Note: Dagster (not the plugin) handles circular dependency detection.
-        The plugin should accept any valid CompiledArtifacts structure.
+        The helper should accept any valid transform structure.
         dbt is responsible for detecting circular dependencies during compilation.
         """
-        artifacts = deepcopy(valid_compiled_artifacts)
-        # Create circular dependency: A -> B -> A
-        artifacts["transforms"]["models"] = [
-            {"name": "model_a", "compute": "duckdb", "depends_on": ["model_b"]},
-            {"name": "model_b", "compute": "duckdb", "depends_on": ["model_a"]},
+        from floe_core.plugins.orchestrator import TransformConfig
+
+        transforms = [
+            TransformConfig(name="model_a", compute="duckdb", depends_on=["model_b"]),
+            TransformConfig(name="model_b", compute="duckdb", depends_on=["model_a"]),
         ]
 
-        # The plugin should accept this - Dagster will handle the circular deps
-        # at materialize time, not at definition creation time
-        from dagster import Definitions
-
-        result = dagster_plugin.create_definitions(artifacts)
-        assert isinstance(result, Definitions)
-        assert len(result.assets) == 2
+        assets = dagster_plugin.create_assets_from_transforms(transforms)
+        assert len(assets) == 2
 
     @pytest.mark.requirement("FR-005")
     def test_duplicate_transform_names_create_separate_assets(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
-        valid_compiled_artifacts: dict[str, Any],
     ) -> None:
-        """Test that duplicate transform names create separate asset objects.
+        """Test helper creates separate asset objects for duplicate names.
 
         Note: Dagster creates separate asset definitions for each model,
         even if they have the same name. The duplicate would be detected
@@ -205,83 +183,71 @@ class TestCreateDefinitionsEdgeCases:
         creation time. This is expected behavior - the plugin creates
         assets as requested, and Dagster handles validation later.
         """
-        artifacts = deepcopy(valid_compiled_artifacts)
-        # Create duplicate names
-        artifacts["transforms"]["models"] = [
-            {"name": "duplicate_model", "compute": "duckdb"},
-            {"name": "duplicate_model", "compute": "duckdb"},
+        from floe_core.plugins.orchestrator import TransformConfig
+
+        transforms = [
+            TransformConfig(name="duplicate_model", compute="duckdb"),
+            TransformConfig(name="duplicate_model", compute="duckdb"),
         ]
 
-        # Plugin creates the assets - Dagster validates at load time
-        from dagster import Definitions
-
-        result = dagster_plugin.create_definitions(artifacts)
-        assert isinstance(result, Definitions)
-        # Both assets are created (validation happens at load time)
-        assert len(result.assets) == 2
+        assets = dagster_plugin.create_assets_from_transforms(transforms)
+        assert len(assets) == 2
 
     @pytest.mark.requirement("FR-007")
     def test_model_with_nonexistent_dependency_accepted(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
-        valid_compiled_artifacts: dict[str, Any],
     ) -> None:
-        """Test that models can reference dependencies not in the artifact.
+        """Test helper accepts dependencies not in the artifact.
 
         External dependencies (like sources) are valid - Dagster will resolve
         them at materialize time.
         """
-        artifacts = deepcopy(valid_compiled_artifacts)
-        artifacts["transforms"]["models"] = [
-            {
-                "name": "model_with_external_dep",
-                "compute": "duckdb",
-                "depends_on": ["external_source"],
-            },
+        from floe_core.plugins.orchestrator import TransformConfig
+
+        transforms = [
+            TransformConfig(
+                name="model_with_external_dep",
+                compute="duckdb",
+                depends_on=["external_source"],
+            ),
         ]
 
-        # Should succeed - external deps are allowed
-        from dagster import Definitions
-
-        result = dagster_plugin.create_definitions(artifacts)
-        assert isinstance(result, Definitions)
-        assert len(result.assets) == 1
+        assets = dagster_plugin.create_assets_from_transforms(transforms)
+        assert len(assets) == 1
 
     @pytest.mark.requirement("FR-007")
     def test_model_with_many_dependencies(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
-        valid_compiled_artifacts: dict[str, Any],
     ) -> None:
-        """Test model with many dependencies is handled correctly."""
-        artifacts = deepcopy(valid_compiled_artifacts)
-        # Create a model with many dependencies
+        """Test helper handles a model with many dependencies."""
+        from floe_core.plugins.orchestrator import TransformConfig
+
         deps = [f"source_{i}" for i in range(10)]
-        artifacts["transforms"]["models"] = [
-            {"name": "model_with_many_deps", "compute": "duckdb", "depends_on": deps},
+        transforms = [
+            TransformConfig(
+                name="model_with_many_deps",
+                compute="duckdb",
+                depends_on=deps,
+            ),
         ]
 
-        from dagster import Definitions
-
-        result = dagster_plugin.create_definitions(artifacts)
-        assert isinstance(result, Definitions)
-        assert len(result.assets) == 1
+        assets = dagster_plugin.create_assets_from_transforms(transforms)
+        assert len(assets) == 1
 
     @pytest.mark.requirement("FR-006")
     def test_model_names_with_special_characters(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
-        valid_compiled_artifacts: dict[str, Any],
     ) -> None:
-        """Test model names with underscores are handled correctly."""
-        artifacts = deepcopy(valid_compiled_artifacts)
-        artifacts["transforms"]["models"] = [
-            {"name": "stg_customers_v2", "compute": "duckdb"},
-            {"name": "fct_orders_2024", "compute": "duckdb"},
+        """Test helper handles model names with underscores."""
+        from floe_core.plugins.orchestrator import TransformConfig
+
+        transforms = [
+            TransformConfig(name="stg_customers_v2", compute="duckdb"),
+            TransformConfig(name="fct_orders_2024", compute="duckdb"),
         ]
 
-        from dagster import Definitions
-
-        result = dagster_plugin.create_definitions(artifacts)
-        assert isinstance(result, Definitions)
-        assert len(result.assets) == 2
+        assets = dagster_plugin.create_assets_from_transforms(transforms)
+        assert len(assets) == 2

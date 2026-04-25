@@ -27,6 +27,27 @@ if TYPE_CHECKING:
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
 
+def test_create_definitions_delegates_to_runtime_builder(
+    dagster_plugin: DagsterOrchestratorPlugin,
+    valid_compiled_artifacts: dict[str, Any],
+) -> None:
+    with patch("floe_orchestrator_dagster.plugin.build_product_definitions") as build:
+        sentinel = object()
+        build.return_value = sentinel
+
+        result = dagster_plugin.create_definitions(valid_compiled_artifacts)
+
+    assert result is sentinel
+    build.assert_called_once()
+    call = build.call_args.kwargs
+    assert (
+        call["artifacts"].metadata.product_name
+        == valid_compiled_artifacts["metadata"]["product_name"]
+    )
+    assert call["product_name"] == valid_compiled_artifacts["metadata"]["product_name"]
+    assert call["project_dir"] is None
+
+
 class TestDagsterOrchestratorPluginMetadata:
     """Test plugin metadata properties.
 
@@ -181,27 +202,6 @@ class TestDagsterOrchestratorPluginCreateDefinitions:
     Validates FR-009: System MUST validate CompiledArtifacts schema
     before generating definitions.
     """
-
-    def test_create_definitions_delegates_to_runtime_builder(
-        self,
-        dagster_plugin: DagsterOrchestratorPlugin,
-        valid_compiled_artifacts: dict[str, Any],
-    ) -> None:
-        with patch("floe_orchestrator_dagster.plugin.build_product_definitions") as build:
-            sentinel = object()
-            build.return_value = sentinel
-
-            result = dagster_plugin.create_definitions(valid_compiled_artifacts)
-
-        assert result is sentinel
-        build.assert_called_once()
-        call = build.call_args.kwargs
-        assert (
-            call["artifacts"].metadata.product_name
-            == valid_compiled_artifacts["metadata"]["product_name"]
-        )
-        assert call["product_name"] == valid_compiled_artifacts["metadata"]["product_name"]
-        assert call["project_dir"] is None
 
     @pytest.mark.requirement("FR-005")
     def test_create_definitions_with_valid_artifacts(
