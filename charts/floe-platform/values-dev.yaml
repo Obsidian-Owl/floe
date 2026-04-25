@@ -17,6 +17,11 @@ global:
   imagePullSecrets: []
   storageClass: ""
 
+dagsterDemoImage: &dagsterDemoImage
+  repository: floe-dagster-demo
+  tag: latest
+  pullPolicy: Never
+
 # Override fullname to decouple service names from Helm release name
 fullnameOverride: floe-platform
 
@@ -46,9 +51,7 @@ dagster:
     config:
       k8sRunLauncher:
         image:
-          repository: floe-dagster-demo
-          tag: latest
-          pullPolicy: Never
+          <<: *dagsterDemoImage
         imagePullPolicy: Never
         resources:
           requests:

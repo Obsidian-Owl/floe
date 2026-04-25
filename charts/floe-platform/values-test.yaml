@@ -29,6 +29,11 @@ global:
     # compatibility, and the newer Bitnami chart blocks renders without this.
     allowInsecureImages: true
 
+dagsterDemoImage: &dagsterDemoImage
+  repository: floe-dagster-demo
+  tag: latest
+  pullPolicy: Never
+
 # =============================================================================
 # Namespace Configuration
 # =============================================================================
@@ -74,9 +79,7 @@ dagster:
   dagsterWebserver:
     replicaCount: 1
     image:
-      repository: floe-dagster-demo
-      tag: latest
-      pullPolicy: Never
+      <<: *dagsterDemoImage
     service:
       type: ClusterIP
       port: 3000
@@ -100,9 +103,7 @@ dagster:
         memory: 1536Mi
   dagsterDaemon:
     image:
-      repository: floe-dagster-demo
-      tag: latest
-      pullPolicy: Never
+      <<: *dagsterDemoImage
     resources:
       requests:
         cpu: 100m
@@ -117,9 +118,7 @@ dagster:
     config:
       k8sRunLauncher:
         image:
-          repository: floe-dagster-demo
-          tag: latest
-          pullPolicy: Never
+          <<: *dagsterDemoImage
         imagePullPolicy: Never
         # Run pods execute dbt which writes to /app/demo/*/target/ and other
         # project directories. readOnlyRootFilesystem is not practical for
@@ -180,7 +179,9 @@ polaris:
       secretKey: "minioadmin123"  # pragma: allowlist secret
   bootstrap:
     enabled: true
-    catalogName: "floe-e2e"
+    # Keep the test platform aligned with demo/manifest.yaml so the deployed
+    # platform simulates the same user-configured catalog contract.
+    catalogName: "floe-demo"
     defaultBaseLocation: "s3://floe-iceberg"
     allowedLocations:
       - "s3://floe-iceberg"

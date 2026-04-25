@@ -17,7 +17,7 @@ Only rendered when .Values.tests.enabled is true. Apply via:
 {{- include "floe-platform.testJob" (dict
     "context" .
     "suite" "e2e"
-    "pytestMarker" "not destructive"
+    "pytestMarker" "platform_blackbox and not destructive"
     "serviceAccount" (include "floe-platform.testRunner.saName" .)
     "artifactPrefix" "e2e"
     ) }}

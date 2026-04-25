@@ -255,7 +255,8 @@ helm-test: ## Run Helm tests (requires deployed release, RELEASE=name, NAMESPACE
 .PHONY: helm-install-dev
 helm-install-dev: helm-deps ## Install floe-platform for development
 	@echo "Installing floe-platform for development..."
-	@uv run floe platform deploy --env dev --chart charts/floe-platform
+	@uv run floe platform deploy --env dev --chart charts/floe-platform \
+		$(DEMO_IMAGE_HELM_SET_ARGS)
 
 .PHONY: helm-uninstall
 helm-uninstall: ## Uninstall floe-platform (NAMESPACE=ns required)
@@ -277,7 +278,8 @@ helm-integration-test: helm-deps ## Run Helm integration tests in Kind cluster
 	@# Install charts via floe platform deploy
 	@echo "Installing floe-platform chart..."
 	@uv run floe platform deploy --env dev --chart charts/floe-platform \
-		--namespace floe-test --timeout 5m
+		--namespace floe-test --timeout 5m \
+		$(DEMO_IMAGE_HELM_SET_ARGS)
 	@# Run Helm tests
 	@echo "Running Helm tests..."
 	@helm test floe-platform --namespace floe-test --timeout 5m
@@ -286,7 +288,8 @@ helm-integration-test: helm-deps ## Run Helm integration tests in Kind cluster
 .PHONY: helm-install-test
 helm-install-test: helm-deps ## Install floe-platform with test values (requires Kind cluster)
 	@echo "Installing floe-platform with test configuration..."
-	@uv run floe platform deploy --env test --chart charts/floe-platform
+	@uv run floe platform deploy --env test --chart charts/floe-platform \
+		$(DEMO_IMAGE_HELM_SET_ARGS)
 	@echo "Installing floe-jobs with test configuration..."
 	@helm upgrade --install floe-jobs-test charts/floe-jobs \
 		--namespace floe-test \
@@ -297,7 +300,8 @@ helm-install-test: helm-deps ## Install floe-platform with test values (requires
 .PHONY: helm-upgrade-test
 helm-upgrade-test: helm-deps ## Upgrade floe-platform test installation
 	@echo "Upgrading floe-platform test installation..."
-	@uv run floe platform deploy --env test --chart charts/floe-platform
+	@uv run floe platform deploy --env test --chart charts/floe-platform \
+		$(DEMO_IMAGE_HELM_SET_ARGS)
 	@helm upgrade floe-jobs-test charts/floe-jobs \
 		--namespace floe-test \
 		--values charts/floe-jobs/values-test.yaml \
@@ -330,6 +334,18 @@ helm-test-infra: ## Verify test infrastructure is healthy
 
 .PHONY: compile-demo build-demo-image demo demo-local demo-stop
 
+DEMO_MANIFEST ?= demo/manifest.yaml
+DEMO_IMAGE_REPOSITORY ?= floe-dagster-demo
+DEMO_IMAGE_TAG ?= $(shell python3 testing/ci/resolve-demo-image-ref.py --field tag)
+DEMO_IMAGE_REF ?= $(DEMO_IMAGE_REPOSITORY):$(DEMO_IMAGE_TAG)
+DEMO_IMAGE_HELM_SET_ARGS = \
+	--set dagster.dagsterWebserver.image.repository=$(DEMO_IMAGE_REPOSITORY) \
+	--set dagster.dagsterWebserver.image.tag=$(DEMO_IMAGE_TAG) \
+	--set dagster.dagsterDaemon.image.repository=$(DEMO_IMAGE_REPOSITORY) \
+	--set dagster.dagsterDaemon.image.tag=$(DEMO_IMAGE_TAG) \
+	--set dagster.runLauncher.config.k8sRunLauncher.image.repository=$(DEMO_IMAGE_REPOSITORY) \
+	--set dagster.runLauncher.config.k8sRunLauncher.image.tag=$(DEMO_IMAGE_TAG)
+
 compile-demo: ## Compile dbt models and generate Dagster definitions for all demo products
 	@echo "Compiling dbt models for all demo products..."
 	@# Local-only defaults for dbt compile — real environments must override via env vars.
@@ -349,7 +365,7 @@ compile-demo: ## Compile dbt models and generate Dagster definitions for all dem
 		echo "Generating definitions for $$product..."; \
 		uv run floe platform compile \
 			--spec demo/$$product/floe.yaml \
-			--manifest demo/manifest.yaml \
+			--manifest $(DEMO_MANIFEST) \
 			--output demo/$$product/compiled_artifacts.json \
 			--generate-definitions || exit 1; \
 	done
@@ -374,31 +390,34 @@ DOCKER_PLATFORM ?= linux/amd64
 # - Reads plugins section, maps each to package name via convention + exception map
 # - Only includes packages that exist in the workspace (packages/ or plugins/)
 # - Always includes floe-core (all plugins depend on it) and floe-dbt-core (demo products need it)
-DEMO_PLUGINS := $(shell .venv/bin/python -c "from pathlib import Path; import yaml, os; m = yaml.safe_load(Path('demo/manifest.yaml').read_text()); plugins = m.get('plugins', {}); nm = dict(x.split(':') for x in '$(PLUGIN_NAME_MAP)'.split() if ':' in x); names = set(['floe-core', 'floe-dbt-core']); [names.add(nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type',''))) for k,v in plugins.items() if os.path.isdir('packages/'+nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type',''))) or os.path.isdir('plugins/'+nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type','')))]; print(' '.join(sorted(names)))")
+DEMO_PLUGINS := $(shell .venv/bin/python -c "from pathlib import Path; import yaml, os; m = yaml.safe_load(Path('$(DEMO_MANIFEST)').read_text()); plugins = m.get('plugins', {}); nm = dict(x.split(':') for x in '$(PLUGIN_NAME_MAP)'.split() if ':' in x); names = set(['floe-core', 'floe-dbt-core']); [names.add(nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type',''))) for k,v in plugins.items() if os.path.isdir('packages/'+nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type',''))) or os.path.isdir('plugins/'+nm.get(v.get('type',''), 'floe-'+k+'-'+v.get('type','')))]; print(' '.join(sorted(names)))")
 
 build-demo-image: compile-demo ## Build Dagster demo Docker image and load to Kind
 	@echo "Building Dagster demo Docker image..."
 	@echo "  Plugins: $(DEMO_PLUGINS)"
 	@echo "  Platform: $(DOCKER_PLATFORM)"
+	@echo "  Image: $(DEMO_IMAGE_REF)"
 	@scripts/with-public-docker-config.sh docker build -f docker/dagster-demo/Dockerfile \
 		--build-arg FLOE_PLUGINS="$(DEMO_PLUGINS)" \
 		--platform $(DOCKER_PLATFORM) \
-		-t floe-dagster-demo:latest .
+		-t $(DEMO_IMAGE_REF) .
 	@echo "Loading image to Kind cluster..."
-	@kind load docker-image floe-dagster-demo:latest --name $${KIND_CLUSTER_NAME:-floe-test}
+	@bash -lc 'source testing/ci/common.sh && floe_kind_evict_image "$(DEMO_IMAGE_REF)" "$${KIND_CLUSTER_NAME:-floe-test}"'
+	@kind load docker-image $(DEMO_IMAGE_REF) --name $${KIND_CLUSTER_NAME:-floe-test}
 	@echo "Demo image built and loaded to Kind successfully!"
 
 demo: ## Deploy demo via DevPod (requires running DevPod workspace)
 	@echo "=== Starting floe Platform Demo (DevPod) ==="
 	@scripts/devpod-ensure-ready.sh
 	@echo "Building demo image inside DevPod..."
-	@devpod ssh "$(DEVPOD_WORKSPACE)" -- "cd /workspace && make build-demo-image"
+	@devpod ssh "$(DEVPOD_WORKSPACE)" -- "cd /workspace && FLOE_DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) FLOE_DEMO_IMAGE_TAG=$(DEMO_IMAGE_TAG) make build-demo-image"
 	@echo "Updating Helm chart dependencies..."
 	@helm dependency update charts/floe-platform
 	@echo "Deploying Helm chart via tunneled kubectl..."
 	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config uv run floe platform deploy \
 		--env dev --chart ./charts/floe-platform \
-		--values ./charts/floe-platform/values-demo.yaml
+		--values ./charts/floe-platform/values-demo.yaml \
+		$(DEMO_IMAGE_HELM_SET_ARGS)
 	@echo "Starting port-forwards..."
 	@if [ -f .demo-pids ]; then \
 		kill $$(cat .demo-pids) 2>/dev/null || true; \
@@ -439,7 +458,8 @@ demo-local: build-demo-image ## Deploy demo locally (requires local Kind cluster
 	$(MAKE) kind-up
 	@echo "Installing floe-platform Helm chart with demo overrides..."
 	@uv run floe platform deploy --env dev --chart ./charts/floe-platform \
-		--values ./charts/floe-platform/values-demo.yaml
+		--values ./charts/floe-platform/values-demo.yaml \
+		$(DEMO_IMAGE_HELM_SET_ARGS)
 	@echo "=== Demo Ready ==="
 	@echo "Dagster UI:    http://localhost:3000"
 	@echo "Polaris:       http://localhost:8181"

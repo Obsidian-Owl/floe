@@ -47,7 +47,9 @@ make check
 
 ## K8s-Native Testing
 
-**All integration and E2E tests run in Kubernetes** (Kind cluster locally, managed K8s in CI/prod).
+**Integration tests and deployed-product validation lanes run in Kubernetes.**
+Host-side validation still exists for bootstrap/admin workflows and repo-aware
+checks that cannot run correctly from inside an in-cluster test Job.
 
 ### Why K8s-Native?
 
@@ -65,7 +67,10 @@ make check
 | Unit | Host (`uv run pytest`) | None (mocks only) |
 | Contract | Host (`uv run pytest`) | None |
 | **Integration** | **Kind cluster (K8s)** | Polaris, PostgreSQL, S3 (LocalStack) |
-| **E2E** | **Kind cluster (K8s)** | Full platform stack |
+| **E2E bootstrap** | **Host (local machine or DevPod workspace)** | Real `helm`, `kubectl`, cluster access |
+| **E2E platform_blackbox** | **Kind cluster (K8s Job)** | Full deployed platform stack |
+| **E2E developer_workflow** | **Host (local machine or DevPod workspace)** | Repo metadata (`.git`, `.gitignore`, `.vuln-ignore`) plus any required tools |
+| **E2E destructive** | **Kind cluster (K8s Job, gated)** | Full deployed platform stack with disruptive operations |
 
 ---
 
@@ -119,30 +124,59 @@ tests/
 | **Unit** | `tests/unit/` | Host (pytest, fast) | None (mocks) | None |
 | **Contract** | `tests/contract/` | Host (pytest, fast) | None | `@pytest.mark.contract` |
 | **Integration** | `tests/integration/` | Kind (K8s) | Real services | `@pytest.mark.integration`<br>`@pytest.mark.requirement()` |
-| **E2E** | `tests/e2e/` | Kind (K8s) | Full platform | `@pytest.mark.e2e`<br>`@pytest.mark.requirement()` |
+| **E2E** | `tests/e2e/` | Host or Kind, depending on validation lane | Varies by lane | `@pytest.mark.e2e`<br>lane marker (`bootstrap`, `platform_blackbox`, `developer_workflow`, `destructive`)<br>`@pytest.mark.requirement()` |
 
 ---
 
 ## Running Tests
 
-### E2E Tests (DevPod — Default)
+### Validation Lanes
 
-E2E tests default to running against a DevPod workspace on Hetzner:
+- `contract`: host-side structural and cross-package validation
+- `bootstrap`: host-side admin/deployment validation with real `helm` and `kubectl`
+- `platform_blackbox`: standard in-cluster product validation under least-privilege RBAC
+- `developer_workflow`: host-side repo-aware checks (`.git`, `.gitignore`, `.vuln-ignore`)
+- `destructive`: gated in-cluster disruptive validation after standard product pass
+
+### E2E Validation (DevPod + Hetzner or local Kind)
+
+`tests/e2e` is no longer a single execution lane. The standard deployed-product
+lane runs in-cluster, while bootstrap/admin and repo-aware checks run host-side
+in the local environment or inside the DevPod workspace.
 
 ```bash
-# E2E tests via DevPod (default — requires running workspace)
+# Standard deployed-product validation in-cluster
 make test-e2e
 
-# E2E tests locally (requires local Kind cluster)
-make test-e2e-local
+# Full lane orchestration: bootstrap -> platform_blackbox -> developer_workflow -> destructive
+make test-e2e-full
+
+# Legacy host port-forwarded runner
+make test-e2e-host
+
+# Run host-side lanes directly
+./testing/ci/test-bootstrap-validation.sh
+./testing/ci/test-developer-workflow.sh
 ```
 
-`make test-e2e` calls `scripts/devpod-ensure-ready.sh` to validate the workspace is running and the K8s API tunnel is established, then runs tests with `KUBECONFIG=~/.kube/devpod-floe.config`. The test script (`testing/ci/test-e2e.sh`) creates its own kubectl port-forwards through the tunneled K8s API — no SSH service tunnels needed.
+`make test-e2e` runs `testing/ci/test-e2e-cluster.sh`, which submits the
+standard `platform_blackbox and not destructive` suite as a Kubernetes Job.
+When `DEVPOD_WORKSPACE` is set and the current kube context is not already
+usable, the runner validates the DevPod workspace and reuses the synced
+`~/.kube/devpod-floe.config`. Otherwise it runs against the current local Kind
+cluster.
 
-If you don't have a DevPod workspace, start one first:
+`make test-e2e-full` runs `testing/ci/test-e2e-full.sh`, which executes the
+host-side `bootstrap` lane first, then the standard in-cluster
+`platform_blackbox` lane, always runs the host-side `developer_workflow` lane,
+and only runs the gated `destructive` lane after bootstrap + platform success
+unless `FORCE_DESTRUCTIVE=true`.
+
+If you use DevPod on Hetzner, start the workspace before running the validation
+flow:
 ```bash
 make devpod-up     # Create/start workspace on Hetzner
-make test-e2e      # Run E2E tests
+make test-e2e-full # Run the full validation flow
 make devpod-stop   # Stop workspace when done (preserves disk)
 ```
 
@@ -414,10 +448,12 @@ This runs automatically on workspace start and is idempotent.
 
 ### Running Tests Remotely
 
-From your **local machine** (not inside DevPod), the default targets use the remote cluster:
+From your **local machine** (not inside DevPod), the lane runners can target the
+remote DevPod Kind cluster:
 
 ```bash
-make test-e2e           # E2E tests via DevPod (validates workspace, tunnels kubectl)
+make test-e2e           # Standard in-cluster platform_blackbox lane
+make test-e2e-full      # Full multi-lane validation flow
 make demo               # Deploy demo via DevPod with port-forwards
 make demo-stop          # Stop demo port-forwards
 ```
@@ -426,7 +462,9 @@ Inside the DevPod workspace (via `make devpod-ssh`), tests run against the local
 
 ```bash
 make test-unit          # Unit tests (no K8s needed)
-make test-e2e-local     # E2E tests against local Kind
+make test-e2e           # Standard in-cluster platform_blackbox lane
+./testing/ci/test-bootstrap-validation.sh
+./testing/ci/test-developer-workflow.sh
 make test               # All tests
 ```
 
@@ -856,7 +894,11 @@ Available markers (defined in `pyproject.toml`):
 | `slow` | Tests taking > 1 second | `@pytest.mark.slow` |
 | `integration` | Require external services (K8s) | `@pytest.mark.integration` |
 | `contract` | Cross-package validation | `@pytest.mark.contract` |
-| `e2e` | End-to-end pipeline tests | `@pytest.mark.e2e` |
+| `e2e` | End-to-end validation tests | `@pytest.mark.e2e` |
+| `bootstrap` | Host-side bootstrap/admin validation | `@pytest.mark.bootstrap` |
+| `platform_blackbox` | Standard in-cluster product validation | `@pytest.mark.platform_blackbox` |
+| `developer_workflow` | Host-side repo-aware validation | `@pytest.mark.developer_workflow` |
+| `destructive` | In-cluster disruptive validation | `@pytest.mark.destructive` |
 | `requirement` | Links test to requirement | `@pytest.mark.requirement("9c-FR-001")` |
 
 ### Running by Marker
@@ -870,6 +912,15 @@ uv run pytest -m integration -v
 
 # Only contract tests
 uv run pytest -m contract -v
+
+# Only host-side bootstrap validation
+uv run pytest tests/e2e -m bootstrap -v
+
+# Only host-side developer workflow validation
+uv run pytest tests/e2e -m developer_workflow -v
+
+# Only standard in-cluster product validation
+uv run pytest tests/e2e -m platform_blackbox -v
 
 # Exclude integration and slow
 uv run pytest -m "not integration and not slow" -v
@@ -1003,4 +1054,6 @@ kubectl wait --for=condition=ready pod -l app=polaris --timeout=120s
 
 ---
 
-**Remember**: All integration and E2E tests run in Kubernetes for production parity. Use `/sw-verify` before every PR.
+**Remember**: Keep product validation in Kubernetes, keep bootstrap and
+repo-aware checks in their host-side lanes, and use `/sw-verify` before every
+PR.

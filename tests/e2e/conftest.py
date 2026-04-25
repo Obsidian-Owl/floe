@@ -22,10 +22,15 @@ from typing import Any
 
 import httpx
 import pytest
-import yaml
 
 # Re-exported for backwards compatibility — other E2E files import from here.
-from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
+from testing.fixtures.credentials import (
+    get_minio_credentials,
+    get_polaris_credentials,
+    get_polaris_scope,
+    get_polaris_warehouse,
+    resolve_manifest_path,
+)
 from testing.fixtures.kubernetes import run_helm as run_helm
 from testing.fixtures.kubernetes import run_kubectl as run_kubectl
 from testing.fixtures.polling import wait_for_condition
@@ -35,68 +40,47 @@ logger = logging.getLogger(__name__)
 
 
 def _read_manifest_config(manifest_path: Path | None = None) -> dict[str, str]:
-    """Read Polaris config from the demo manifest.yaml.
-
-    Extracts ``plugins.catalog.config`` fields so that test fixtures do not
-    carry hardcoded defaults that diverge from the canonical platform config.
-
-    Credentials (``client_id``, ``client_secret``) are returned alongside
-    non-secret config (``scope``, ``warehouse``).
-
-    Args:
-        manifest_path: Explicit path to manifest.yaml.  Defaults to
-            ``<repo-root>/demo/manifest.yaml``.
-
-    Returns:
-        Dict with keys ``client_id``, ``client_secret``, ``scope``, and
-        ``warehouse``.  Falls back to hardcoded demo values with a warning
-        when the manifest file cannot be found.
-    """
-    _default_scope = "PRINCIPAL_ROLE:ALL"
-    _polaris_id, _polaris_secret = get_polaris_credentials()
-    _fallback: dict[str, str] = {
-        "client_id": _polaris_id,
-        "client_secret": _polaris_secret,  # pragma: allowlist secret
-        "scope": _default_scope,
-        "warehouse": "floe-e2e",
-    }
-
-    if manifest_path is None:
-        manifest_path = Path(__file__).resolve().parents[2] / "demo" / "manifest.yaml"
-
-    if not manifest_path.exists():
-        warnings.warn(
-            f"Manifest not found at {manifest_path}; using hardcoded fallback values "
-            "for Polaris credentials and warehouse.",
-            stacklevel=2,
-        )
-        return _fallback
-
-    raw: dict[str, Any] = yaml.safe_load(manifest_path.read_text())
-    catalog_cfg: dict[str, Any] = raw.get("plugins", {}).get("catalog", {}).get("config", {})
-    oauth2: dict[str, Any] = catalog_cfg.get("oauth2", {})
-
+    """Read Polaris config defaults from the selected manifest path."""
+    resolved_manifest = resolve_manifest_path(manifest_path)
+    client_id, client_secret = get_polaris_credentials(resolved_manifest)
     return {
-        "client_id": str(oauth2.get("client_id", _fallback["client_id"])),
-        "client_secret": str(
-            oauth2.get("client_secret", _fallback["client_secret"])
-        ),  # pragma: allowlist secret
-        "scope": str(catalog_cfg.get("scope", oauth2.get("scope", _fallback["scope"]))),
-        "warehouse": str(catalog_cfg.get("warehouse", _fallback["warehouse"])),
+        "client_id": client_id,
+        "client_secret": client_secret,  # pragma: allowlist secret
+        "scope": get_polaris_scope(resolved_manifest),
+        "warehouse": get_polaris_warehouse(resolved_manifest),
     }
 
 
-_manifest_cfg: dict[str, str] = _read_manifest_config()
+_MANIFEST_PATH = resolve_manifest_path()
+_manifest_scope: str = get_polaris_scope(_MANIFEST_PATH)
+_manifest_warehouse: str = get_polaris_warehouse(_MANIFEST_PATH)
 
-# Separate credential string from non-secret config to break CodeQL taint
-# propagation.  CodeQL tracks _manifest_cfg as sensitive because it contains
-# client_secret; splitting ensures downstream code that only uses scope or
-# warehouse is not flagged as "clear-text logging of sensitive data".
-_manifest_credential: str = (  # pragma: allowlist secret
-    f"{_manifest_cfg['client_id']}:{_manifest_cfg['client_secret']}"
-)
-_manifest_scope: str = _manifest_cfg["scope"]
-_manifest_warehouse: str = _manifest_cfg["warehouse"]
+
+def _resolve_polaris_credential(
+    manifest_path: Path | None = None,
+) -> tuple[str, str, str]:
+    """Return the Polaris credential string and split client values.
+
+    Resolves the default credential lazily so non-secret manifest defaults can
+    be cached at module import without tainting unrelated values.
+    """
+    credential = os.environ.get("POLARIS_CREDENTIAL")
+    if credential is None:
+        manifest_config = _read_manifest_config(manifest_path)
+        client_id = manifest_config["client_id"]
+        client_secret = manifest_config["client_secret"]
+        credential = f"{client_id}:{client_secret}"  # pragma: allowlist secret
+        return credential, client_id, client_secret
+
+    parts = credential.split(":", 1)
+    if len(parts) != 2:
+        pytest.fail(
+            "POLARIS_CREDENTIAL must be 'client_id:client_secret'; "
+            f"got a value with {len(credential)} characters and no ':' separator"
+        )
+
+    client_id, client_secret = parts
+    return credential, client_id, client_secret
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -108,6 +92,18 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
         "destructive: mark test as destructive (helm upgrade, pod kill — requires elevated RBAC)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "bootstrap: mark test as bootstrap/admin validation",
+    )
+    config.addinivalue_line(
+        "markers",
+        "platform_blackbox: mark test as deployed in-cluster product validation",
+    )
+    config.addinivalue_line(
+        "markers",
+        "developer_workflow: mark test as repo-aware host validation",
     )
 
     # Configure pytest-rerunfailures for E2E infrastructure resilience.
@@ -146,8 +142,24 @@ def pytest_collection_modifyitems(
         items: List of collected test items.
     """
     import inspect
-    import re
-    import warnings
+
+    lane_markers = {
+        "bootstrap",
+        "platform_blackbox",
+        "developer_workflow",
+        "destructive",
+    }
+
+    for item in items:
+        item_markers = {mark.name for mark in item.iter_markers()}
+        is_e2e_item = "e2e" in item_markers or item.nodeid.startswith("tests/e2e/")
+        if not is_e2e_item:
+            continue
+        if "e2e" not in item_markers:
+            item.add_marker(pytest.mark.e2e)
+            item_markers.add("e2e")
+        if item_markers.isdisjoint(lane_markers):
+            item.add_marker(pytest.mark.platform_blackbox)
 
     # Reorder: move destructive (pod-killing) tests to the end
     destructive_module = "test_service_failure_resilience_e2e"
@@ -224,8 +236,22 @@ def pytest_collection_modifyitems(
         print("=" * 70)
 
 
+def _selected_items_require_infrastructure_smoke_check(items: list[pytest.Item]) -> bool:
+    """Return whether the selected session needs live platform smoke checks.
+
+    The smoke check is only relevant when the selected items include tests in
+    lanes that require deployed platform connectivity.
+    """
+    required_markers = {"platform_blackbox", "destructive"}
+    for item in items:
+        item_markers = {mark.name for mark in item.iter_markers()}
+        if not item_markers.isdisjoint(required_markers):
+            return True
+    return False
+
+
 @pytest.fixture(scope="session", autouse=True)
-def infrastructure_smoke_check() -> None:
+def infrastructure_smoke_check(request: pytest.FixtureRequest) -> None:
     """Abort test session if core infrastructure is unreachable.
 
     Checks TCP connectivity to Dagster, Polaris, and MinIO before any
@@ -233,6 +259,9 @@ def infrastructure_smoke_check() -> None:
     the session with a clear message instead of producing 72+ ERRORs.
     """
     import socket
+
+    if not _selected_items_require_infrastructure_smoke_check(request.session.items):
+        return
 
     smoke_endpoints = {
         "Dagster": ServiceEndpoint("dagster-webserver"),
@@ -653,12 +682,13 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     # Demo credentials for local testing only - production uses K8s secrets
     minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
     _minio_access, _minio_secret = get_minio_credentials()
+    polaris_credential, client_id, client_secret = _resolve_polaris_credential()
     catalog = pyiceberg_catalog.load_catalog(
         "polaris",
         **{
             "type": "rest",
             "uri": f"{polaris_url}/api/catalog",
-            "credential": os.environ.get("POLARIS_CREDENTIAL", _manifest_credential),
+            "credential": polaris_credential,
             "scope": _manifest_scope,
             "warehouse": os.environ.get("POLARIS_WAREHOUSE", _manifest_warehouse),
             "s3.endpoint": minio_url,
@@ -680,8 +710,6 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
     # bootstrap job's 5-step grant process: create principal role, assign
     # principal role to root, create catalog role, grant privilege,
     # assign catalog role to principal role.
-    cred = os.environ.get("POLARIS_CREDENTIAL", _manifest_credential)
-    client_id, client_secret = cred.split(":", 1)
     token_response = httpx.post(
         f"{polaris_url}/api/catalog/v1/oauth/tokens",
         data={
@@ -1275,7 +1303,6 @@ _DBT_DEMO_PRODUCTS: dict[str, str] = {
 
 def _build_dbt_iceberg_profile(
     profile_name: str,
-    warehouse: str,
 ) -> str:
     """Build a dbt profiles.yml string for DuckDB + Iceberg via Polaris.
 
@@ -1291,12 +1318,12 @@ def _build_dbt_iceberg_profile(
     Referenced env vars (set by ``dbt_e2e_profile`` fixture):
         FLOE_E2E_POLARIS_ENDPOINT, FLOE_E2E_POLARIS_CLIENT_ID,
         FLOE_E2E_POLARIS_CLIENT_SECRET, FLOE_E2E_POLARIS_OAUTH2_URI,
+        FLOE_E2E_POLARIS_SCOPE, FLOE_E2E_POLARIS_WAREHOUSE,
         FLOE_E2E_S3_ENDPOINT, FLOE_E2E_S3_USE_SSL,
         AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION.
 
     Args:
         profile_name: dbt profile name (must match dbt_project.yml ``profile`` key).
-        warehouse: Polaris warehouse/catalog name (e.g. ``floe-e2e``).
 
     Returns:
         YAML string suitable for writing to ``profiles.yml``.
@@ -1317,7 +1344,7 @@ def _build_dbt_iceberg_profile(
         f"        - httpfs\n"
         f"        - iceberg\n"
         f"      attach:\n"
-        f"        - path: {warehouse}\n"
+        "        - path: \"{{ env_var('FLOE_E2E_POLARIS_WAREHOUSE') }}\"\n"
         f"          alias: ice\n"
         f"          type: iceberg\n"
         f"          options:\n"
@@ -1325,7 +1352,7 @@ def _build_dbt_iceberg_profile(
         "            CLIENT_ID: \"{{ env_var('FLOE_E2E_POLARIS_CLIENT_ID') }}\"\n"
         "            CLIENT_SECRET: \"{{ env_var('FLOE_E2E_POLARIS_CLIENT_SECRET') }}\"\n"
         "            OAUTH2_SERVER_URI: \"{{ env_var('FLOE_E2E_POLARIS_OAUTH2_URI') }}\"\n"
-        f"            OAUTH2_SCOPE: {_manifest_scope}\n"
+        "            OAUTH2_SCOPE: \"{{ env_var('FLOE_E2E_POLARIS_SCOPE') }}\"\n"
         f"            OAUTH2_GRANT_TYPE: client_credentials\n"
         f"            ACCESS_DELEGATION_MODE: none\n"
         f"      secrets:\n"
@@ -1367,14 +1394,8 @@ def dbt_e2e_profile(
     # so credentials are resolved at runtime, never written to disk.
     polaris_url = os.environ.get("POLARIS_URL", ServiceEndpoint("polaris").url)
     minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
-    cred = os.environ.get("POLARIS_CREDENTIAL", _manifest_credential)
-    parts = cred.split(":", 1)
-    if len(parts) != 2:
-        pytest.fail(
-            "POLARIS_CREDENTIAL must be 'client_id:client_secret'; "
-            f"got a value with {len(cred)} characters and no ':' separator"
-        )
-    client_id, client_secret = parts
+    _, client_id, client_secret = _resolve_polaris_credential()
+    scope = os.environ.get("POLARIS_SCOPE", _manifest_scope)
     warehouse = os.environ.get("POLARIS_WAREHOUSE", _manifest_warehouse)
 
     # Derive computed values
@@ -1389,6 +1410,8 @@ def dbt_e2e_profile(
         "FLOE_E2E_POLARIS_CLIENT_ID": client_id,
         "FLOE_E2E_POLARIS_CLIENT_SECRET": client_secret,
         "FLOE_E2E_POLARIS_OAUTH2_URI": f"{polaris_url}/api/catalog/v1/oauth/tokens",
+        "FLOE_E2E_POLARIS_SCOPE": scope,
+        "FLOE_E2E_POLARIS_WAREHOUSE": warehouse,
         "FLOE_E2E_S3_ENDPOINT": s3_endpoint,
         "FLOE_E2E_S3_USE_SSL": str(s3_use_ssl).lower(),
     }
@@ -1482,7 +1505,6 @@ def dbt_e2e_profile(
             # Write E2E profile (credentials via env_var, not plaintext)
             e2e_content = _build_dbt_iceberg_profile(
                 profile_name=profile_name,
-                warehouse=warehouse,
             )
             profile_path.write_text(e2e_content)  # codeql[py/clear-text-storage-sensitive-data]
             profile_paths[product_dir] = profile_path
@@ -1556,11 +1578,12 @@ def dbt_pipeline_result(
     product_name = product.replace("-", "_")
     namespace_raw = f"{product_name}_raw"
     namespace_models = product_name
+    primary_error: BaseException | None = None
 
     try:
         # Purge stale data from any prior run (P36: cleanup at setup)
-        _purge_iceberg_namespace(namespace_raw)
-        _purge_iceberg_namespace(namespace_models)
+        _purge_iceberg_namespace(namespace_raw, verify_empty=True)
+        _purge_iceberg_namespace(namespace_models, verify_empty=True)
 
         # Run dbt seed to load reference data
         seed_result = run_dbt(["seed"], project_dir)
@@ -1573,7 +1596,24 @@ def dbt_pipeline_result(
             pytest.fail(f"dbt run failed for {product}:\n{run_result.stderr[-500:]}")
 
         yield (product, project_dir)
+    except BaseException as exc:
+        primary_error = exc
+        raise
     finally:
         # Clean up Iceberg namespaces to prevent resource leaks
-        _purge_iceberg_namespace(namespace_raw)
-        _purge_iceberg_namespace(namespace_models)
+        teardown_error: Exception | None = None
+        for namespace in (namespace_raw, namespace_models):
+            try:
+                _purge_iceberg_namespace(namespace, verify_empty=True)
+            except Exception as exc:
+                if primary_error is None:
+                    if teardown_error is None:
+                        teardown_error = exc
+                    continue
+                logger.error(
+                    "Suppressed teardown reset failure for %s after primary dbt/test failure: %s",
+                    namespace,
+                    exc,
+                )
+        if primary_error is None and teardown_error is not None:
+            raise teardown_error

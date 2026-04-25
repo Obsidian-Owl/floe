@@ -16,6 +16,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytestmark = [pytest.mark.developer_workflow]
+
 # ---------------------------------------------------------------------------
 # AC-2: Demo profiles remain untouched; generated profiles written to
 #        correct location

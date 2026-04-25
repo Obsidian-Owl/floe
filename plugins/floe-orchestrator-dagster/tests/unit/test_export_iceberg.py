@@ -251,12 +251,9 @@ class TestExportDbtToIceberg:
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin_instance = MagicMock()
-        mock_plugin_instance.connect.return_value = mock_catalog
+        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
-        # Make type(mock_plugin)(...) return the configured instance
-        type(mock_plugin).__call__ = MagicMock(return_value=mock_plugin_instance)
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -300,11 +297,9 @@ class TestExportDbtToIceberg:
         registry = MagicMock()
         mock_plugin = MagicMock()
         mock_catalog = MagicMock()
-        mock_plugin_instance = MagicMock()
-        mock_plugin_instance.connect.return_value = mock_catalog
+        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
-        type(mock_plugin).__call__ = MagicMock(return_value=mock_plugin_instance)
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -404,11 +399,9 @@ class TestExportDbtToIceberg:
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin_instance = MagicMock()
-        mock_plugin_instance.connect.return_value = mock_catalog
+        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
-        type(mock_plugin).__call__ = MagicMock(return_value=mock_plugin_instance)
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -425,6 +418,7 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
+        mock_plugin.assert_not_called()
         mock_catalog.create_namespace.assert_called_once_with(SAFE_NAME)
 
     @pytest.mark.requirement("AC-4")
@@ -459,11 +453,9 @@ class TestExportDbtToIceberg:
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin_instance = MagicMock()
-        mock_plugin_instance.connect.return_value = mock_catalog
+        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
-        type(mock_plugin).__call__ = MagicMock(return_value=mock_plugin_instance)
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -516,11 +508,9 @@ class TestExportDbtToIceberg:
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin_instance = MagicMock()
-        mock_plugin_instance.connect.return_value = mock_catalog
+        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
-        type(mock_plugin).__call__ = MagicMock(return_value=mock_plugin_instance)
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -572,11 +562,9 @@ class TestExportDbtToIceberg:
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin_instance = MagicMock()
-        mock_plugin_instance.connect.return_value = mock_catalog
+        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
-        type(mock_plugin).__call__ = MagicMock(return_value=mock_plugin_instance)
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -626,11 +614,9 @@ class TestExportDbtToIceberg:
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin_instance = MagicMock()
-        mock_plugin_instance.connect.return_value = mock_catalog
+        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
-        type(mock_plugin).__call__ = MagicMock(return_value=mock_plugin_instance)
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -677,11 +663,9 @@ class TestExportDbtToIceberg:
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin_instance = MagicMock()
-        mock_plugin_instance.connect.return_value = MagicMock()
+        mock_plugin.connect.return_value = MagicMock()
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
-        type(mock_plugin).__call__ = MagicMock(return_value=mock_plugin_instance)
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -723,11 +707,9 @@ class TestExportDbtToIceberg:
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin_instance = MagicMock()
-        mock_plugin_instance.connect.return_value = MagicMock()
+        mock_plugin.connect.return_value = MagicMock()
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
-        type(mock_plugin).__call__ = MagicMock(return_value=mock_plugin_instance)
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -759,11 +741,9 @@ class TestExportDbtToIceberg:
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin_instance = MagicMock()
-        mock_plugin_instance.connect.return_value = MagicMock()
+        mock_plugin.connect.return_value = MagicMock()
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
-        type(mock_plugin).__call__ = MagicMock(return_value=mock_plugin_instance)
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -796,11 +776,9 @@ class TestExportDbtToIceberg:
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin_instance = MagicMock()
-        mock_plugin_instance.connect.return_value = MagicMock()
+        mock_plugin.connect.return_value = MagicMock()
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
-        type(mock_plugin).__call__ = MagicMock(return_value=mock_plugin_instance)
 
         with (
             patch("duckdb.connect", return_value=mock_conn) as mock_duckdb_connect,

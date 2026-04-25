@@ -20,7 +20,10 @@ Test types:
 from __future__ import annotations
 
 import ast
+import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -51,6 +54,16 @@ def _parse_conftest() -> ast.Module:
     except SyntaxError as exc:
         pytest.fail(f"conftest.py has syntax error: {exc}")
         raise  # unreachable, satisfies mypy
+
+
+def _load_runtime_conftest_module() -> Any:
+    """Load tests/e2e/conftest.py as a standalone module for runtime tests."""
+    spec = importlib.util.spec_from_file_location("floe_e2e_conftest_runtime", _CONFTEST_PATH)
+    assert spec is not None, "Could not create import spec for tests/e2e/conftest.py"
+    assert spec.loader is not None, "Could not load tests/e2e/conftest.py"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _find_function_def(tree: ast.Module, name: str) -> ast.FunctionDef | None:
@@ -212,6 +225,28 @@ def _finally_calls_function(func: ast.FunctionDef, callee_name: str) -> bool:
                     return True
                 if isinstance(callee, ast.Attribute) and callee.attr == callee_name:
                     return True
+    return False
+
+
+def _collect_purge_calls(
+    statements: list[ast.stmt],
+) -> list[ast.Call]:
+    """Collect _purge_iceberg_namespace calls from a statement list."""
+    calls: list[ast.Call] = []
+    for node in ast.walk(ast.Module(body=statements, type_ignores=[])):
+        if not isinstance(node, ast.Call):
+            continue
+        callee = node.func
+        if isinstance(callee, ast.Name) and callee.id == "_purge_iceberg_namespace":
+            calls.append(node)
+    return calls
+
+
+def _call_has_keyword_bool(call: ast.Call, keyword: str, value: bool) -> bool:
+    """Return whether a call sets a bool keyword to the expected value."""
+    for kw in call.keywords:
+        if kw.arg == keyword and isinstance(kw.value, ast.Constant) and kw.value.value is value:
+            return True
     return False
 
 
@@ -416,6 +451,48 @@ class TestDbtPipelineResultFixtureSemantics:
         )
 
     @pytest.mark.requirement("AC-1")
+    def test_setup_purges_use_verified_reset(self) -> None:
+        """Setup purges must verify both raw and model namespaces are empty."""
+        tree = _parse_conftest()
+        func = _find_function_def(tree, "dbt_pipeline_result")
+        assert func is not None, "Function 'dbt_pipeline_result' not found."
+
+        setup_calls: list[ast.Call] = []
+        for node in func.body:
+            if isinstance(node, ast.Try):
+                setup_calls = _collect_purge_calls(node.body)
+                break
+
+        assert len(setup_calls) == 2, (
+            "dbt_pipeline_result setup must call _purge_iceberg_namespace twice "
+            "for raw and model namespaces before running dbt."
+        )
+        assert all(_call_has_keyword_bool(call, "verify_empty", True) for call in setup_calls), (
+            "All setup _purge_iceberg_namespace calls must pass verify_empty=True."
+        )
+
+    @pytest.mark.requirement("AC-1")
+    def test_teardown_purges_use_verified_reset(self) -> None:
+        """Teardown purges must verify both raw and model namespaces are empty."""
+        tree = _parse_conftest()
+        func = _find_function_def(tree, "dbt_pipeline_result")
+        assert func is not None, "Function 'dbt_pipeline_result' not found."
+
+        teardown_calls: list[ast.Call] = []
+        for node in func.body:
+            if isinstance(node, ast.Try):
+                teardown_calls = _collect_purge_calls(node.finalbody)
+                break
+
+        assert teardown_calls, (
+            "dbt_pipeline_result teardown must call _purge_iceberg_namespace in finally "
+            "for raw and model namespace cleanup."
+        )
+        assert all(_call_has_keyword_bool(call, "verify_empty", True) for call in teardown_calls), (
+            "All teardown _purge_iceberg_namespace calls must pass verify_empty=True."
+        )
+
+    @pytest.mark.requirement("AC-1")
     def test_yield_inside_try_block(self) -> None:
         """yield must be inside a try block, not outside it.
 
@@ -439,3 +516,178 @@ class TestDbtPipelineResultFixtureSemantics:
             "The yield must be within try so that finally cleanup executes "
             "after the test module completes."
         )
+
+    @pytest.mark.requirement("AC-1")
+    @pytest.mark.parametrize("phase", ["setup", "test_body"])
+    def test_runtime_teardown_reset_failure_does_not_mask_primary_failure(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        phase: str,
+    ) -> None:
+        """Teardown reset errors must not replace an earlier dbt or test failure."""
+        import dbt_utils
+
+        runtime_conftest = _load_runtime_conftest_module()
+        fixture_func = runtime_conftest.dbt_pipeline_result.__wrapped__
+
+        project_root = tmp_path
+        project_dir = project_root / "demo" / "customer-360"
+        project_dir.mkdir(parents=True)
+        request = SimpleNamespace(param="customer-360")
+        log_messages: list[str] = []
+        purge_calls: list[str] = []
+
+        def _record_error(message: str, *args: object) -> None:
+            log_messages.append(message % args if args else message)
+
+        def _purge(namespace: str, verify_empty: bool = False, retries: int = 3) -> None:
+            del retries
+            purge_calls.append(f"{namespace}:{verify_empty}")
+            if len(purge_calls) > 2:
+                raise dbt_utils.NamespaceResetError(f"teardown failed for {namespace}")
+
+        def _run_dbt(args: list[str], project_dir_arg: Path) -> SimpleNamespace:
+            assert project_dir_arg == project_dir
+            if phase == "setup" and args == ["seed"]:
+                return SimpleNamespace(returncode=1, stdout="", stderr="seed exploded")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(runtime_conftest.logger, "error", _record_error)
+        monkeypatch.setattr(dbt_utils, "_purge_iceberg_namespace", _purge)
+        monkeypatch.setattr(dbt_utils, "run_dbt", _run_dbt)
+
+        generator = fixture_func(request, project_root, {})
+
+        if phase == "setup":
+            with pytest.raises(pytest.fail.Exception, match="dbt seed failed"):
+                next(generator)
+        else:
+            assert next(generator) == ("customer-360", project_dir)
+            with pytest.raises(RuntimeError, match="test body failed"):
+                generator.throw(RuntimeError("test body failed"))
+
+        assert len(log_messages) == 2, (
+            "Teardown NamespaceResetError should be logged for both namespaces "
+            "when a primary failure already exists."
+        )
+        assert all("Suppressed teardown reset failure" in message for message in log_messages), (
+            "Suppressed teardown reset failures must be surfaced in logs."
+        )
+        assert purge_calls == [
+            "customer_360_raw:True",
+            "customer_360:True",
+            "customer_360_raw:True",
+            "customer_360:True",
+        ]
+
+    @pytest.mark.requirement("AC-1")
+    def test_runtime_teardown_attempts_both_namespaces_before_raising_reset_error(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Without a prior primary failure, teardown should try both namespaces then raise."""
+        import dbt_utils
+
+        runtime_conftest = _load_runtime_conftest_module()
+        fixture_func = runtime_conftest.dbt_pipeline_result.__wrapped__
+
+        project_root = tmp_path
+        project_dir = project_root / "demo" / "customer-360"
+        project_dir.mkdir(parents=True)
+        request = SimpleNamespace(param="customer-360")
+        purge_calls: list[str] = []
+
+        def _purge(namespace: str, verify_empty: bool = False, retries: int = 3) -> None:
+            del retries
+            purge_calls.append(f"{namespace}:{verify_empty}")
+            if len(purge_calls) == 3:
+                raise dbt_utils.NamespaceResetError(f"teardown failed for {namespace}")
+
+        def _run_dbt(args: list[str], project_dir_arg: Path) -> SimpleNamespace:
+            assert project_dir_arg == project_dir
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(dbt_utils, "_purge_iceberg_namespace", _purge)
+        monkeypatch.setattr(dbt_utils, "run_dbt", _run_dbt)
+
+        generator = fixture_func(request, project_root, {})
+
+        assert next(generator) == ("customer-360", project_dir)
+        with pytest.raises(
+            dbt_utils.NamespaceResetError,
+            match="teardown failed for customer_360_raw",
+        ):
+            next(generator)
+
+        assert purge_calls == [
+            "customer_360_raw:True",
+            "customer_360:True",
+            "customer_360_raw:True",
+            "customer_360:True",
+        ], "Teardown must attempt both namespaces before raising the first reset error."
+
+    @pytest.mark.requirement("AC-1")
+    @pytest.mark.parametrize("phase", ["setup", "test_body"])
+    def test_runtime_raw_teardown_exception_does_not_mask_primary_failure(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        phase: str,
+    ) -> None:
+        """Raw teardown exceptions must not replace an earlier dbt or test failure."""
+        import dbt_utils
+
+        runtime_conftest = _load_runtime_conftest_module()
+        fixture_func = runtime_conftest.dbt_pipeline_result.__wrapped__
+
+        project_root = tmp_path
+        project_dir = project_root / "demo" / "customer-360"
+        project_dir.mkdir(parents=True)
+        request = SimpleNamespace(param="customer-360")
+        log_messages: list[str] = []
+        purge_calls: list[str] = []
+
+        def _record_error(message: str, *args: object) -> None:
+            log_messages.append(message % args if args else message)
+
+        def _purge(namespace: str, verify_empty: bool = False, retries: int = 3) -> None:
+            del retries
+            purge_calls.append(f"{namespace}:{verify_empty}")
+            if len(purge_calls) > 2:
+                raise RuntimeError(f"raw teardown failure for {namespace}")
+
+        def _run_dbt(args: list[str], project_dir_arg: Path) -> SimpleNamespace:
+            assert project_dir_arg == project_dir
+            if phase == "setup" and args == ["seed"]:
+                return SimpleNamespace(returncode=1, stdout="", stderr="seed exploded")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(runtime_conftest.logger, "error", _record_error)
+        monkeypatch.setattr(dbt_utils, "_purge_iceberg_namespace", _purge)
+        monkeypatch.setattr(dbt_utils, "run_dbt", _run_dbt)
+
+        generator = fixture_func(request, project_root, {})
+
+        if phase == "setup":
+            with pytest.raises(pytest.fail.Exception, match="dbt seed failed"):
+                next(generator)
+        else:
+            assert next(generator) == ("customer-360", project_dir)
+            with pytest.raises(RuntimeError, match="test body failed"):
+                generator.throw(RuntimeError("test body failed"))
+
+        assert len(log_messages) == 2, (
+            "Raw teardown exceptions should be logged for both namespaces when "
+            "a primary failure already exists."
+        )
+        assert all("Suppressed teardown reset failure" in message for message in log_messages), (
+            "Suppressed raw teardown failures must be surfaced in logs."
+        )
+        assert purge_calls == [
+            "customer_360_raw:True",
+            "customer_360:True",
+            "customer_360_raw:True",
+            "customer_360:True",
+        ]

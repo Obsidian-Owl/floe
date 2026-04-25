@@ -1262,6 +1262,24 @@ class TestMakefileBuildDemoImage:
             f"build-demo-image must depend on compile-demo. Found prerequisites: {prereqs}"
         )
 
+    @pytest.mark.requirement("WU11-AC6")
+    def test_build_demo_image_uses_explicit_demo_image_ref_variable(self) -> None:
+        """Verify build-demo-image tags and loads the shared demo image ref.
+
+        The Makefile should not hardcode ``floe-dagster-demo:latest`` in the
+        recipe body anymore. It should use the shared image-ref variables so
+        build, Kind load, and deploy flows stay aligned.
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "build-demo-image")
+        assert "$(DEMO_IMAGE_REF)" in body, (
+            "build-demo-image must use the shared $(DEMO_IMAGE_REF) variable "
+            "for docker build and kind load."
+        )
+        assert "resolve-demo-image-ref.py" in content, (
+            "Makefile must derive the demo image tag from testing/ci/resolve-demo-image-ref.py."
+        )
+
 
 # ============================================================
 # T62: Makefile Demo Chain Tests (AC-11.6)
@@ -1354,6 +1372,28 @@ class TestMakefileDemoChain:
             f"demo target must still deploy via Helm (upgrade/install) or "
             f"'floe platform deploy'. Recipe body:\n{body}"
         )
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_repo_owned_deploy_targets_pass_demo_image_override(self) -> None:
+        """Repo-owned deploy targets must pass the shared demo image override.
+
+        This keeps local/test/demo deploys on the same explicit image ref that
+        ``build-demo-image`` produced, instead of falling back to a mutable tag
+        baked into values files.
+        """
+        content = _read_makefile_content()
+        for target in (
+            "helm-install-dev",
+            "helm-install-test",
+            "helm-upgrade-test",
+            "demo",
+            "demo-local",
+        ):
+            body = _extract_target_body(content, target)
+            assert "$(DEMO_IMAGE_HELM_SET_ARGS)" in body, (
+                f"{target} must pass $(DEMO_IMAGE_HELM_SET_ARGS) so the chart "
+                "deploys the explicit demo image ref."
+            )
 
 
 # ============================================================

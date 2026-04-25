@@ -1,19 +1,19 @@
-"""E2E test: Full Platform Deployment Verification (AC-2.1).
+"""E2E test: Full platform blackbox deployment verification (AC-2.1).
 
 Validates that the floe-platform Helm chart deploys correctly and all services
 are healthy and accessible via their real health endpoints.
 
-This test uses the port-forward pattern (AD-2) — services are accessed via
-localhost URLs set up by `make test-e2e`. No IntegrationTestBase, no dual-mode
-networking, no custom TCP health checks.
+This test belongs to the deployed-product validation lane. It can run inside
+the in-cluster validation runner or under the legacy host harness when that
+runner has already established the required local service bridges.
 
 Workflow:
     helm install floe-platform → wait for pods → verify all services healthy
 
 Prerequisites:
     - Kind cluster running: make kind-up
-    - Platform deployed: make helm-install-test
-    - Port-forwards active: make test-e2e (manages lifecycle)
+    - Platform deployed: make helm-install-test or the in-cluster validation job
+    - Service reachability established by the chosen validation runner
 
 See Also:
     - .specwright/work/test-hardening-audit/spec.md: AC-2.1
@@ -37,6 +37,12 @@ from tests.e2e.conftest import run_helm, run_kubectl
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.platform_blackbox,
+]
 
 
 # K8s namespace — set by test-e2e.sh or default to floe-test

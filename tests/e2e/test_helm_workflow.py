@@ -29,6 +29,12 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
 
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.bootstrap,
+]
+
+
 def _run_command(
     cmd: list[str],
     timeout: int = 900,
@@ -236,8 +242,14 @@ class TestHelmWorkflow:
     @pytest.fixture(autouse=True)
     def check_cluster(self) -> None:
         """Verify kubectl access to cluster."""
-        result = _kubectl(["cluster-info"])
-        if result.returncode != 0:
+        cluster_ready = wait_for_condition(
+            lambda: _kubectl(["cluster-info"]).returncode == 0,
+            timeout=20.0,
+            interval=2.0,
+            description="kubectl cluster-info to succeed",
+            raise_on_timeout=False,
+        )
+        if not cluster_ready:
             pytest.fail("Kubernetes cluster not available.\nStart cluster with: make kind-up")
 
     @pytest.mark.requirement("E2E-001")

@@ -21,8 +21,21 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WEEKLY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "weekly.yml"
+CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+UV_SECURITY_ACTION = REPO_ROOT / ".github" / "actions" / "uv-security-audit" / "action.yml"
+PRE_COMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
+SETUP_HOOKS = REPO_ROOT / "scripts" / "setup-hooks.sh"
 CUBE_STORE_DOCKERFILE = REPO_ROOT / "docker" / "cube-store" / "Dockerfile"
 VALUES_TEST = REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
+
+
+def _local_pre_commit_hooks() -> dict[str, dict[str, object]]:
+    config = yaml.safe_load(PRE_COMMIT_CONFIG.read_text())
+    hooks: dict[str, dict[str, object]] = {}
+    for repo in config["repos"]:
+        if repo["repo"] == "local":
+            hooks.update({hook["id"]: hook for hook in repo["hooks"]})
+    return hooks
 
 
 class TestWeeklyWorkflow:
@@ -257,6 +270,60 @@ class TestValuesTestJobs:
             "values-test.yaml must keep tests.enabled=false so chart test Jobs "
             "remain opt-in via testing/ci/common.sh rendering."
         )
+
+
+class TestLocalHookAlignment:
+    """Structural validation for local pre-push and CI alignment."""
+
+    @pytest.mark.requirement("VAL-HOOKS")
+    def test_pre_push_runs_ruff_format_check(self) -> None:
+        """Local pre-push must catch the same Ruff formatting failure as CI."""
+        hooks = _local_pre_commit_hooks()
+
+        assert hooks["ruff-format-check"]["entry"] == "uv run --no-sync ruff format --check ."
+        assert hooks["ruff-format-check"]["stages"] == ["pre-push"]
+
+    @pytest.mark.requirement("VAL-HOOKS")
+    def test_mutating_file_hygiene_hooks_are_pre_commit_only(self) -> None:
+        """Auto-fix hygiene hooks should not mutate files during pre-push."""
+        config = yaml.safe_load(PRE_COMMIT_CONFIG.read_text())
+        hygiene_repo = next(
+            repo
+            for repo in config["repos"]
+            if repo["repo"] == "https://github.com/pre-commit/pre-commit-hooks"
+        )
+
+        for hook in hygiene_repo["hooks"]:
+            assert hook["stages"] == ["pre-commit"], f"{hook['id']} should not run during pre-push"
+
+    @pytest.mark.requirement("VAL-HOOKS")
+    def test_pre_push_reuses_ci_scripts_for_shared_gates(self) -> None:
+        """Local pre-push should call the same reusable scripts as CI."""
+        hooks = _local_pre_commit_hooks()
+
+        assert hooks["dbt-version-contracts"]["entry"] == (
+            "./testing/ci/validate-dbt-version-requirements.sh"
+        )
+        assert hooks["uv-secure"]["entry"] == "./testing/ci/uv-security-audit.sh"
+        assert hooks["pytest-unit"]["entry"] == "./testing/ci/test-unit.sh"
+        assert hooks["pytest-contract"]["entry"] == "./testing/ci/test-contract.sh"
+
+    @pytest.mark.requirement("VAL-HOOKS")
+    def test_ci_reuses_local_hook_scripts_for_shared_gates(self) -> None:
+        """CI should invoke the same scripts used by local pre-push."""
+        ci_text = CI_WORKFLOW.read_text()
+        action_text = UV_SECURITY_ACTION.read_text()
+
+        assert "./testing/ci/validate-dbt-version-requirements.sh" in ci_text
+        assert "./testing/ci/uv-security-audit.sh" in action_text
+
+    @pytest.mark.requirement("VAL-HOOKS")
+    def test_setup_hooks_overrides_global_hooks_path_locally(self) -> None:
+        """Hook setup should make repo-local hooks win over global hook managers."""
+        setup_text = SETUP_HOOKS.read_text()
+
+        assert "git config --local core.hooksPath" in setup_text
+        assert "git config --global --get core.hooksPath" in setup_text
 
 
 class TestCubeStoreRollbackPath:

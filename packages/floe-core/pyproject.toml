@@ -53,7 +53,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
+    "pytest>=9.0.3",
     "pytest-cov>=4.0",
     "pytest-asyncio>=0.23",  # Async test support for contract monitoring (3D-T002)
     "mypy>=1.8",
@@ -98,6 +98,13 @@ select = [
 [tool.uv]
 # sigstore requires betterproto which only has pre-release versions (8B-T001)
 prerelease = "allow"
+constraint-dependencies = [
+    "cryptography>=46.0.7",
+    "python-dotenv>=1.2.2",
+    "python-multipart>=0.0.26",
+    "pytest>=9.0.3",
+    "rfc3161-client>=1.0.6",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

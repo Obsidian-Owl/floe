@@ -65,10 +65,12 @@ sync_devpod_checkout() {
 }
 
 ensure_remote_demo_image_loaded() {
-    local demo_image="floe-dagster-demo:latest"
+    local demo_image="${FLOE_DEMO_IMAGE}"
 
     if remote_image_present "${demo_image}"; then
         info "Remote demo image '${demo_image}' is present. Reloading it into Kind..."
+        devpod_remote_command \
+            "source '${DEVPOD_REMOTE_WORKDIR}/testing/ci/common.sh' && floe_kind_evict_image '${demo_image}' '${FLOE_KIND_CLUSTER}'"
         devpod_remote_command \
             "kind load docker-image '${demo_image}' --name '${FLOE_KIND_CLUSTER}'"
         return 0
@@ -77,7 +79,7 @@ ensure_remote_demo_image_loaded() {
     sync_devpod_checkout
     info "Remote demo image '${demo_image}' is missing. Rebuilding it in the DevPod workspace..."
     devpod_remote_command \
-        "KIND_CLUSTER_NAME='${FLOE_KIND_CLUSTER}' make build-demo-image"
+        "FLOE_DEMO_IMAGE_REPOSITORY='${FLOE_DEMO_IMAGE_REPOSITORY}' FLOE_DEMO_IMAGE_TAG='${FLOE_DEMO_IMAGE_TAG}' KIND_CLUSTER_NAME='${FLOE_KIND_CLUSTER}' make build-demo-image"
 }
 
 ensure_remote_test_runner_image_loaded() {

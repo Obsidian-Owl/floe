@@ -19,6 +19,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck source=./common.sh
 source "${SCRIPT_DIR}/common.sh"
+# shellcheck source=./polaris-auth.sh
+source "${SCRIPT_DIR}/polaris-auth.sh"
 
 # Configuration
 KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
@@ -29,6 +31,7 @@ COLLECT_LOGS="${COLLECT_LOGS:-true}"
 # can read them without exposing via process arguments.
 export MINIO_USER="${MINIO_USER:-${AWS_ACCESS_KEY_ID:-}}"
 export MINIO_PASS="${MINIO_PASS:-${AWS_SECRET_ACCESS_KEY:-}}"
+floe_export_minio_credentials_from_cluster "${TEST_NAMESPACE}" || true
 
 # Pre-compute platform service names from the chart release name.
 # No literal `floe-platform-*` strings may appear below this line.
@@ -54,8 +57,11 @@ fi
 
 cd "${PROJECT_ROOT}"
 
-# Extract config from manifest.yaml — sets MANIFEST_BUCKET, MANIFEST_REGION, etc.
-eval "$(python3 "${SCRIPT_DIR}/extract-manifest-config.py" "${PROJECT_ROOT}/demo/manifest.yaml")"
+# Extract config from the selected manifest — sets MANIFEST_BUCKET,
+# MANIFEST_REGION, etc. The demo lane passes its manifest explicitly.
+export FLOE_MANIFEST_PATH="${FLOE_MANIFEST_PATH:-${PROJECT_ROOT}/demo/manifest.yaml}"
+eval "$(python3 "${SCRIPT_DIR}/extract-manifest-config.py" "${FLOE_MANIFEST_PATH}")"
+POLARIS_MANIFEST_PATH="${POLARIS_MANIFEST_PATH:-${FLOE_MANIFEST_PATH}}"
 
 # Validate namespace format (K8s DNS label: lowercase alphanumeric + hyphens)
 if [[ ! "${TEST_NAMESPACE}" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
@@ -441,9 +447,11 @@ while true; do
 done
 
 # Verify Polaris catalog exists (defense-in-depth for bootstrap job failures)
-POLARIS_CATALOG="${POLARIS_CATALOG:-${MANIFEST_WAREHOUSE}}"
+POLARIS_CATALOG="${POLARIS_CATALOG:-$(get_polaris_catalog_name)}"
 POLARIS_CLIENT_ID="${POLARIS_CLIENT_ID:-${MANIFEST_OAUTH_CLIENT_ID}}"
-POLARIS_CLIENT_SECRET="${POLARIS_CLIENT_SECRET:-}"
+POLARIS_SCOPE="${POLARIS_SCOPE:-$(get_polaris_scope)}"
+export POLARIS_WAREHOUSE="${POLARIS_WAREHOUSE:-${POLARIS_CATALOG}}"
+export POLARIS_SCOPE
 
 # Validate catalog name to prevent URL injection
 if [[ ! "${POLARIS_CATALOG}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
@@ -453,14 +461,7 @@ fi
 
 echo "Verifying Polaris catalog '${POLARIS_CATALOG}'..."
 
-# Acquire OAuth token — pipe credentials via stdin (-d @-) to avoid
-# exposing them in process arguments (visible in ps aux).
-POLARIS_TOKEN=$(printf 'grant_type=client_credentials&client_id=%s&client_secret=%s&scope=PRINCIPAL_ROLE:ALL' \
-    "${POLARIS_CLIENT_ID}" "${POLARIS_CLIENT_SECRET}" | \
-    curl -s -X POST \
-    "http://localhost:8181/api/catalog/v1/oauth/tokens" \
-    -d @- \
-    2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))") || true
+POLARIS_TOKEN=$(get_polaris_token "http://localhost:8181") || true
 
 if [[ -z "${POLARIS_TOKEN}" ]]; then
     echo "ERROR: Failed to acquire Polaris OAuth token" >&2

@@ -32,13 +32,74 @@
 # Remote repo root inside the DevPod workspace. Defaults to the devcontainer
 # workspaceFolder, but stays overrideable for non-standard layouts.
 : "${DEVPOD_REMOTE_WORKDIR:=/workspace}"
+_FLOE_COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_FLOE_REPO_ROOT="$(cd "${_FLOE_COMMON_DIR}/../.." && pwd)"
+: "${FLOE_MANIFEST_PATH:=${_FLOE_REPO_ROOT}/demo/manifest.yaml}"
 
 # Flux CD version — pinned for reproducible CI installs.
 : "${FLUX_VERSION:=2.5.1}"
 
+if [[ -z "${FLOE_DEMO_IMAGE_REPOSITORY:-}" || -z "${FLOE_DEMO_IMAGE_TAG:-}" || -z "${FLOE_DEMO_IMAGE:-}" ]]; then
+    if command -v python3 >/dev/null 2>&1; then
+        eval "$(python3 "${_FLOE_COMMON_DIR}/resolve-demo-image-ref.py" --field exports)"
+    fi
+fi
+: "${FLOE_DEMO_IMAGE_REPOSITORY:=floe-dagster-demo}"
+: "${FLOE_DEMO_IMAGE_TAG:=local}"
+: "${FLOE_DEMO_IMAGE:=${FLOE_DEMO_IMAGE_REPOSITORY}:${FLOE_DEMO_IMAGE_TAG}}"
+
 export FLOE_RELEASE_NAME FLOE_NAMESPACE FLOE_KIND_CLUSTER FLOE_CHART_DIR FLOE_VALUES_FILE
 export FLOE_FLUX_FIXTURE_DIR FLOE_FLUX_GIT_URL FLOE_FLUX_GIT_BRANCH DEVPOD_REMOTE_WORKDIR
+export FLOE_MANIFEST_PATH FLOE_DEMO_IMAGE_REPOSITORY FLOE_DEMO_IMAGE_TAG FLOE_DEMO_IMAGE
 export FLUX_VERSION
+
+# floe_normalize_image_ref <image>
+# Normalizes a Docker image reference to the form containerd stores in Kind.
+floe_normalize_image_ref() {
+    local image="$1"
+    if [[ -z "${image}" ]]; then
+        echo "floe_normalize_image_ref: image argument required" >&2
+        return 2
+    fi
+    if [[ "${image}" == */* ]]; then
+        printf '%s\n' "${image}"
+        return 0
+    fi
+    printf 'docker.io/library/%s\n' "${image}"
+}
+
+# floe_kind_control_plane_name [cluster]
+# Returns the Docker container name for a Kind control-plane node.
+floe_kind_control_plane_name() {
+    local cluster="${1:-${FLOE_KIND_CLUSTER}}"
+    printf '%s-control-plane\n' "${cluster}"
+}
+
+# floe_kind_evict_image <image> [cluster]
+# Removes an image ref from the Kind node's containerd store so a subsequent
+# `kind load docker-image` cannot silently reuse a stale mutable tag.
+floe_kind_evict_image() {
+    local image="$1"
+    local cluster="${2:-${FLOE_KIND_CLUSTER}}"
+    local control_plane=""
+    local image_ref=""
+
+    if [[ -z "${image}" ]]; then
+        echo "floe_kind_evict_image: image argument required" >&2
+        return 2
+    fi
+    if ! command -v docker >/dev/null 2>&1; then
+        return 0
+    fi
+
+    control_plane="$(floe_kind_control_plane_name "${cluster}")"
+    if ! docker inspect "${control_plane}" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    image_ref="$(floe_normalize_image_ref "${image}")"
+    docker exec "${control_plane}" ctr -n k8s.io images rm "${image_ref}" >/dev/null 2>&1 || true
+}
 
 # floe_service_name <component>
 # Returns the K8s service/resource name for a platform component, derived
@@ -147,6 +208,38 @@ floe_ensure_test_artifacts_pvc() {
         || { rm -f "${rendered_pvc}"; return 1; }
 
     rm -f "${rendered_pvc}"
+}
+
+# floe_export_minio_credentials_from_cluster [namespace] [secret-name]
+# Exports MINIO_USER and MINIO_PASS from the live cluster secret when the
+# caller already knows how to reach the cluster but has not pre-exported the
+# credentials.
+floe_export_minio_credentials_from_cluster() {
+    local namespace="${1:-${FLOE_NAMESPACE}}"
+    local secret_name="${2:-$(floe_service_name minio)}"
+    local user=""
+    local password=""
+
+    if [[ -n "${MINIO_USER:-}" && -n "${MINIO_PASS:-}" ]]; then
+        return 0
+    fi
+    if ! command -v kubectl >/dev/null 2>&1; then
+        return 1
+    fi
+
+    user=$(kubectl get secret -n "${namespace}" "${secret_name}" \
+        -o go-template='{{index .data "root-user" | base64decode}}' 2>/dev/null || true)
+    password=$(kubectl get secret -n "${namespace}" "${secret_name}" \
+        -o go-template='{{index .data "root-password" | base64decode}}' 2>/dev/null || true)
+
+    if [[ -n "${user}" && -z "${MINIO_USER:-}" ]]; then
+        export MINIO_USER="${user}"
+    fi
+    if [[ -n "${password}" && -z "${MINIO_PASS:-}" ]]; then
+        export MINIO_PASS="${password}"
+    fi
+
+    [[ -n "${MINIO_USER:-}" && -n "${MINIO_PASS:-}" ]]
 }
 
 # floe_require_cluster

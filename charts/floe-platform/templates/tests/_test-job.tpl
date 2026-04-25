@@ -100,6 +100,8 @@ spec:
           env:
             - name: INTEGRATION_TEST_HOST
               value: "k8s"
+            - name: FLOE_MANIFEST_PATH
+              value: "/app/demo/manifest.yaml"
             - name: POSTGRES_HOST
               value: {{ $postgres | quote }}
             - name: POSTGRES_PORT

@@ -12,7 +12,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import SecretStr, ValidationError
 
-from testing.fixtures.credentials import get_minio_credentials
+from testing.fixtures.credentials import (
+    get_minio_credentials,
+    get_polaris_scope,
+    get_polaris_warehouse,
+)
 from testing.fixtures.polaris import (
     PolarisConfig,
     PolarisConnectionError,
@@ -31,8 +35,8 @@ class TestPolarisConfig:
         """Test default configuration values."""
         config = PolarisConfig()
         assert config.uri == f"{ServiceEndpoint('polaris').url}/api/catalog"
-        assert config.warehouse == "test_warehouse"
-        assert config.scope == "PRINCIPAL_ROLE:ALL"
+        assert config.warehouse == get_polaris_warehouse()
+        assert config.scope == get_polaris_scope()
         assert config.namespace == "floe-test"
 
     @pytest.mark.requirement("9c-FR-012")

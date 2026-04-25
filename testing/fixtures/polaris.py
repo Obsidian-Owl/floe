@@ -20,7 +20,12 @@ from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from testing.fixtures.credentials import get_minio_credentials, get_polaris_credentials
+from testing.fixtures.credentials import (
+    get_minio_credentials,
+    get_polaris_credentials,
+    get_polaris_scope,
+    get_polaris_warehouse,
+)
 from testing.fixtures.services import ServiceEndpoint
 
 if TYPE_CHECKING:
@@ -60,13 +65,9 @@ class PolarisConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     uri: str = Field(default_factory=_default_polaris_uri)
-    warehouse: str = Field(
-        default_factory=lambda: os.environ.get("POLARIS_WAREHOUSE", "test_warehouse")
-    )
+    warehouse: str = Field(default_factory=get_polaris_warehouse)
     credential: SecretStr = Field(default_factory=_default_polaris_credential)
-    scope: str = Field(
-        default_factory=lambda: os.environ.get("POLARIS_SCOPE", "PRINCIPAL_ROLE:ALL")
-    )
+    scope: str = Field(default_factory=get_polaris_scope)
     namespace: str = Field(default="floe-test")
 
     @property

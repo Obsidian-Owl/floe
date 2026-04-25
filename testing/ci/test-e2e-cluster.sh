@@ -1,5 +1,6 @@
 #!/bin/bash
-# In-cluster E2E test runner — runs tests as a K8s Job inside the Kind cluster
+# In-cluster validation runner — runs deployed-product lanes as a K8s Job inside
+# the Kind cluster.
 #
 # This eliminates host-to-cluster connectivity issues (port-forwards, SSH tunnels)
 # by running tests where the services are.
@@ -13,7 +14,8 @@
 #   SKIP_BUILD          Skip image build if set to "true" (default: false)
 #   IMAGE_LOAD_METHOD   How to load image: auto|kind|devpod|skip (default: auto)
 #   STARTUP_ONLY        Exit after proving pod startup boundary (default: false)
-#   TEST_SUITE          Test suite to run: e2e|e2e-destructive (default: e2e)
+#   TEST_SUITE          Validation suite to run: e2e (platform blackbox) |
+#                       e2e-destructive (default: e2e)
 #   LOG_TAIL_LINES      Lines to capture per pod on failure (default: 100)
 #   DEVPOD_REMOTE_WORKDIR Remote repo root inside the DevPod workspace
 #
@@ -46,7 +48,21 @@ info() { echo "[INFO] $*"; }
 error() { echo "[ERROR] $*" >&2; }
 
 devpod_workspace() {
-    printf '%s\n' "${DEVPOD_WORKSPACE:-floe}"
+    if [[ -n "${DEVPOD_WORKSPACE:-}" ]]; then
+        printf '%s\n' "${DEVPOD_WORKSPACE}"
+        return
+    fi
+
+    local first_kubeconfig=""
+    local kubeconfig_name=""
+    first_kubeconfig="${KUBECONFIG%%:*}"
+    kubeconfig_name="${first_kubeconfig##*/}"
+    if [[ "${kubeconfig_name}" =~ ^devpod-(.+)\.config$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        return
+    fi
+
+    printf '%s\n' "floe"
 }
 
 devpod_kubeconfig_path() {
@@ -57,6 +73,18 @@ devpod_kubeconfig_path() {
 
 devpod_remote_workdir() {
     printf '%s\n' "${DEVPOD_REMOTE_WORKDIR}"
+}
+
+devpod_context_configured() {
+    if [[ -n "${DEVPOD_WORKSPACE:-}" ]]; then
+        return 0
+    fi
+
+    local first_kubeconfig=""
+    local kubeconfig_name=""
+    first_kubeconfig="${KUBECONFIG%%:*}"
+    kubeconfig_name="${first_kubeconfig##*/}"
+    [[ "${kubeconfig_name}" =~ ^devpod-.+\.config$ ]]
 }
 
 ensure_devpod_ready() {
@@ -185,7 +213,8 @@ assert_startup_boundary() {
     return 1
 }
 
-# Select Job name and chart-rendered template based on TEST_SUITE
+# Select Job name and chart-rendered template based on TEST_SUITE. The standard
+# lane is the deployed-product/platform-blackbox validation that runs in-cluster.
 case "${TEST_SUITE}" in
     e2e)
         JOB_NAME="floe-test-e2e"
@@ -223,6 +252,7 @@ load_image() {
             ;;
         kind)
             info "Loading image into Kind cluster '${kind_cluster}' (IMAGE_LOAD_METHOD=kind)..."
+            floe_kind_evict_image "${image}" "${kind_cluster}"
             kind load docker-image "${image}" --name "${kind_cluster}"
             return 0
             ;;
@@ -231,6 +261,8 @@ load_image() {
             workspace=$(devpod_workspace)
             info "Loading image into DevPod workspace '${workspace}' and Kind cluster '${kind_cluster}'..."
             docker save "${image}" | devpod_remote_command "docker load"
+            devpod_remote_command \
+                "source '${DEVPOD_REMOTE_WORKDIR}/testing/ci/common.sh' && floe_kind_evict_image '${image}' '${kind_cluster}'"
             devpod_remote_command "kind load docker-image '${image}' --name '${kind_cluster}'"
             return 0
             ;;
@@ -238,15 +270,18 @@ load_image() {
             # auto: detect environment
             if command -v kind &>/dev/null && kind get clusters 2>/dev/null | grep -q "^${kind_cluster}$"; then
                 info "Loading image into Kind cluster '${kind_cluster}'..."
+                floe_kind_evict_image "${image}" "${kind_cluster}"
                 kind load docker-image "${image}" --name "${kind_cluster}"
                 return 0
             fi
 
-            if [[ -n "${DEVPOD_WORKSPACE:-}" ]]; then
+            if devpod_context_configured; then
                 local workspace
                 workspace=$(devpod_workspace)
                 info "Loading image into DevPod workspace '${workspace}' and Kind cluster '${kind_cluster}'..."
                 docker save "${image}" | devpod_remote_command "docker load"
+                devpod_remote_command \
+                    "source '${DEVPOD_REMOTE_WORKDIR}/testing/ci/common.sh' && floe_kind_evict_image '${image}' '${kind_cluster}'"
                 devpod_remote_command "kind load docker-image '${image}' --name '${kind_cluster}'"
                 return 0
             fi
@@ -269,7 +304,7 @@ fi
 
 if [[ "${IMAGE_LOAD_METHOD}" == "devpod" ]]; then
     ensure_devpod_ready
-elif [[ "${IMAGE_LOAD_METHOD}" == "auto" && -n "${DEVPOD_WORKSPACE:-}" ]]; then
+elif [[ "${IMAGE_LOAD_METHOD}" == "auto" ]] && devpod_context_configured; then
     if ! kubectl cluster-info >/dev/null 2>&1; then
         ensure_devpod_ready
     fi
