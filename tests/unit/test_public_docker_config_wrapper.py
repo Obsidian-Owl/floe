@@ -183,6 +183,15 @@ def test_chart_dependency_builds_use_public_registry_wrapper() -> None:
 
 
 @pytest.mark.requirement("AC-2")
+def test_bootstrap_helm_workflow_uses_public_registry_wrapper() -> None:
+    """Bootstrap validation must not inherit stale DevPod Helm OCI credentials."""
+    helm_workflow = (_REPO_ROOT / "tests" / "e2e" / "test_helm_workflow.py").read_text()
+
+    assert "_PUBLIC_DOCKER_CONFIG_WRAPPER" in helm_workflow
+    assert 'str(_PUBLIC_DOCKER_CONFIG_WRAPPER), "helm"' in helm_workflow
+
+
+@pytest.mark.requirement("AC-2")
 def test_env_example_documents_public_docker_config_controls() -> None:
     """The repo should surface the Docker helper override in documented config."""
     env_example = _ENV_EXAMPLE_PATH.read_text()

@@ -28,6 +28,9 @@ from testing.fixtures.polling import wait_for_condition
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_PUBLIC_DOCKER_CONFIG_WRAPPER = _REPO_ROOT / "scripts" / "with-public-docker-config.sh"
+
 
 pytestmark = [
     pytest.mark.e2e,
@@ -61,7 +64,12 @@ def _run_command(
 
 def _helm(args: list[str], timeout: int = 900) -> subprocess.CompletedProcess[str]:
     """Run a helm command."""
-    return _run_command(["helm"] + args, timeout=timeout)
+    if _PUBLIC_DOCKER_CONFIG_WRAPPER.exists():
+        return _run_command(
+            [str(_PUBLIC_DOCKER_CONFIG_WRAPPER), "helm", *args],
+            timeout=timeout,
+        )
+    return _run_command(["helm", *args], timeout=timeout)
 
 
 def _kubectl(args: list[str], timeout: int = 60) -> subprocess.CompletedProcess[str]:
