@@ -113,6 +113,31 @@ class TestPlatformDeployment:
         not in a failed or pending state.
         """
         result = run_helm(["status", "floe-platform", "-n", NAMESPACE, "-o", "json"])
+        if result.returncode != 0 and "secrets is forbidden" in result.stderr:
+            helmrelease = run_kubectl(
+                ["get", "helmrelease", "floe-platform", "-o", "json"],
+                namespace=NAMESPACE,
+            )
+            assert helmrelease.returncode == 0, (
+                "Helm status is blocked by least-privilege test-runner RBAC, "
+                "and Flux HelmRelease status could not be read.\n"
+                f"helm stderr: {result.stderr}\n"
+                f"kubectl stderr: {helmrelease.stderr}"
+            )
+
+            status = json.loads(helmrelease.stdout).get("status", {})
+            conditions = status.get("conditions", [])
+            ready = any(
+                condition.get("type") == "Ready" and condition.get("status") == "True"
+                for condition in conditions
+                if isinstance(condition, dict)
+            )
+            assert ready, (
+                "Flux HelmRelease 'floe-platform' is not Ready.\n"
+                f"status: {json.dumps(status, indent=2, sort_keys=True)}"
+            )
+            return
+
         assert result.returncode == 0, (
             f"Helm release 'floe-platform' not found in namespace {NAMESPACE}.\n"
             f"stderr: {result.stderr}\n"
@@ -402,7 +427,9 @@ class TestPlatformDeployment:
             )
 
             if result.returncode != 0:
-                services_without_endpoints.append(f"  {svc_name}: not found")
+                services_without_endpoints.append(
+                    f"  {svc_name}: endpoint query failed ({result.stderr.strip()})"
+                )
             elif not result.stdout.strip():
                 services_without_endpoints.append(f"  {svc_name}: no endpoints")
 

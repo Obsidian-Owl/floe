@@ -19,6 +19,7 @@ import httpx
 import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
+from testing.fixtures.kubernetes import run_helm_template
 from testing.fixtures.polling import wait_for_condition
 
 
@@ -174,23 +175,12 @@ class TestDemoMode(IntegrationTestBase):
 
         # 3. Verify workspace ConfigMap has code locations defined
         # This validates the Helm chart configuration is correct
-        import subprocess
-
         chart_path = project_root / "charts" / "floe-platform"
-        result = subprocess.run(
-            [
-                "helm",
-                "template",
-                "test-release",
-                str(chart_path),
-                "-f",
-                str(chart_path / "values-test.yaml"),
-            ],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
+        result = run_helm_template(
+            "test-release",
+            chart_path,
+            chart_path / "values-test.yaml",
+            timeout=120,
         )
 
         assert result.returncode == 0, f"Helm template failed: {result.stderr}"

@@ -29,6 +29,8 @@ from typing import Any
 import pytest
 import yaml
 
+pytestmark = pytest.mark.developer_workflow
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -247,7 +249,7 @@ class TestReadManifestConfigWithCustomPath:
         assert result["client_id"] == "custom-id", (
             f"Expected 'custom-id' from custom manifest, got {result['client_id']!r}"
         )
-        assert result["client_secret"] == "custom-secret", (
+        assert result["client_secret"] == "custom-secret", (  # pragma: allowlist secret
             f"Expected 'custom-secret', got {result['client_secret']!r}"
         )
         assert result["warehouse"] == "custom-warehouse", (
@@ -325,7 +327,7 @@ class TestReadManifestConfigFallback:
         assert result["client_id"] == "demo-admin", (
             f"Fallback client_id should be 'demo-admin', got {result['client_id']!r}"
         )
-        assert result["client_secret"] == "demo-secret", (
+        assert result["client_secret"] == "demo-secret", (  # pragma: allowlist secret
             f"Fallback client_secret should be 'demo-secret', got {result['client_secret']!r}"
         )
         assert result["scope"] == "PRINCIPAL_ROLE:ALL", (
@@ -512,7 +514,7 @@ class TestManifestCrossCheck:
             f"got {result['client_id']!r}. "
             "Is _read_manifest_config actually reading the file?"
         )
-        assert result["client_secret"] == "unique-test-secret-abc", (
+        assert result["client_secret"] == "unique-test-secret-abc", (  # pragma: allowlist secret
             f"Expected 'unique-test-secret-abc' from custom manifest, "
             f"got {result['client_secret']!r}. "
             "Is _read_manifest_config actually reading the file?"

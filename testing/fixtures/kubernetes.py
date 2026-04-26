@@ -31,6 +31,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
+from pathlib import Path
 from typing import NamedTuple
 
 from testing.fixtures.polling import wait_for_condition
@@ -98,6 +99,29 @@ def run_helm(
         timeout=timeout,
         check=False,
     )
+
+
+def run_helm_template(
+    release: str,
+    chart_path: Path,
+    values_path: Path | None = None,
+    timeout: int = 120,
+) -> subprocess.CompletedProcess[str]:
+    """Render a Helm chart after ensuring chart dependencies are available.
+
+    E2E tests run inside a purpose-built test-runner image where vendored
+    subcharts may not be present. Build dependencies from Chart.yaml before
+    rendering so tests validate chart metadata instead of relying on stale
+    checked-out artifacts.
+    """
+    dependency_result = run_helm(["dependency", "build", str(chart_path)], timeout=timeout)
+    if dependency_result.returncode != 0:
+        return dependency_result
+
+    args = ["template", release, str(chart_path)]
+    if values_path is not None:
+        args.extend(["-f", str(values_path)])
+    return run_helm(args, timeout=timeout)
 
 
 def get_pod_uid(label_selector: str, namespace: str) -> str | None:

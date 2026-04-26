@@ -34,6 +34,14 @@ _DEFAULT_POLARIS_WAREHOUSE = "floe-demo"
 _DEFAULT_MINIO_ACCESS_KEY = "minioadmin"
 _DEFAULT_MINIO_SECRET_KEY = "minioadmin123"  # pragma: allowlist secret  # noqa: S105
 
+DEFAULT_POLARIS_CONFIG = {
+    "client_id": _DEFAULT_POLARIS_CLIENT_ID,
+    "client_secret": _DEFAULT_POLARIS_CLIENT_SECRET,  # pragma: allowlist secret
+    "scope": _DEFAULT_POLARIS_SCOPE,
+    "warehouse": _DEFAULT_POLARIS_WAREHOUSE,
+}
+"""Canonical fallback Polaris config used only when manifest/env are unavailable."""
+
 
 def resolve_manifest_path(manifest_path: Path | None = None) -> Path:
     """Resolve the manifest path from an explicit argument, env, or repo default."""
