@@ -228,3 +228,38 @@ class TestJobsChartTemplate:
         docs = parse_yaml_documents(result.stdout)
         job_docs = [d for d in docs if d.get("kind") in ("Job", "CronJob")]
         assert len(job_docs) == 0
+
+    @pytest.mark.requirement("9b-FR-081")
+    @pytest.mark.usefixtures("helm_available")
+    def test_values_test_does_not_render_placeholder_dbt_job(self, jobs_chart_path: Path) -> None:
+        """Test values-test.yaml is install-safe for GitOps bootstrap.
+
+        Test values are used by the Flux bootstrap path. They must not create a
+        one-shot dbt Job unless a real dbt project has been supplied by the
+        manifest/demo pipeline path, otherwise Helm waits on a guaranteed
+        failing placeholder job.
+        """
+        result = subprocess.run(
+            [
+                "helm",
+                "template",
+                "floe-jobs-test",
+                str(jobs_chart_path),
+                "--namespace",
+                "floe-test",
+                "--values",
+                str(jobs_chart_path / "values-test.yaml"),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        docs = parse_yaml_documents(result.stdout)
+        dbt_jobs = [
+            d
+            for d in docs
+            if d.get("kind") == "Job" and d.get("metadata", {}).get("name") == "floe-jobs-test-dbt"
+        ]
+
+        assert dbt_jobs == []
