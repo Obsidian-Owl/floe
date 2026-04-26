@@ -274,6 +274,11 @@ def test_destructive_runner_can_manage_pre_upgrade_hook_identity_scoped() -> Non
     role = _render_role(DESTRUCTIVE_TEMPLATE)
 
     core_rules = _rules_for(role, api_group="", resource="serviceaccounts")
+    assert any("list" in _verbs(rule) for rule in core_rules), (
+        "Helm lists ServiceAccounts while preparing pre-upgrade hooks. "
+        "Kubernetes RBAC cannot make this work with resourceNames unless the "
+        "client sends a matching field selector, which Helm does not do here."
+    )
     assert any("create" in _verbs(rule) for rule in core_rules), (
         "Destructive runner must be able to create the pre-upgrade hook "
         "ServiceAccount; Kubernetes RBAC cannot scope create by resourceNames."
@@ -292,6 +297,11 @@ def test_destructive_runner_can_manage_pre_upgrade_hook_identity_scoped() -> Non
             role,
             api_group="rbac.authorization.k8s.io",
             resource=resource,
+        )
+        assert any("list" in _verbs(rule) for rule in rbac_rules), (
+            f"Helm lists {resource} while preparing pre-upgrade hooks. "
+            "Kubernetes RBAC cannot make this work with resourceNames unless the "
+            "client sends a matching field selector, which Helm does not do here."
         )
         assert any("create" in _verbs(rule) for rule in rbac_rules), (
             f"Destructive runner must be able to create pre-upgrade hook {resource}; "
@@ -331,5 +341,27 @@ def test_destructive_runner_has_read_only_networkpolicy_access_for_helm_rollback
         forbidden = _verbs(rule) & {"create", "update", "patch", "delete", "deletecollection"}
         assert not forbidden, (
             "Destructive runner NetworkPolicy access must remain read-only; "
+            f"found mutating verbs {forbidden!r} in rule {rule!r}."
+        )
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_has_read_only_pdb_access_for_helm_rollback() -> None:
+    """Destructive runner needs read-only PodDisruptionBudget access for rollback."""
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
+    rules = _rules_for(
+        role,
+        api_group="policy",
+        resource="poddisruptionbudgets",
+    )
+
+    assert any({"get", "list", "watch"}.issubset(_verbs(rule)) for rule in rules), (
+        "Destructive runner must have read-only access to PodDisruptionBudgets "
+        "so Helm rollback can inspect chart-managed PDBs."
+    )
+    for rule in rules:
+        forbidden = _verbs(rule) & {"create", "update", "patch", "delete", "deletecollection"}
+        assert not forbidden, (
+            "Destructive runner PodDisruptionBudget access must remain read-only; "
             f"found mutating verbs {forbidden!r} in rule {rule!r}."
         )
