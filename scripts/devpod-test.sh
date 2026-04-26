@@ -97,7 +97,8 @@ if ! command -v devpod >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! devpod provider list 2>/dev/null | grep -q "hetzner"; then
+provider_list="$(devpod provider list 2>/dev/null || true)"
+if [[ "${provider_list}" != *hetzner* ]]; then
     error "Hetzner provider not configured. Run: make devpod-setup"
     exit 1
 fi

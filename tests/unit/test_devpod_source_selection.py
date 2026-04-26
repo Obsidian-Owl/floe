@@ -44,6 +44,21 @@ def test_full_lifecycle_uses_devpod_source_flag() -> None:
 
 
 @pytest.mark.requirement("AC-DevPod-Git-Source")
+def test_full_lifecycle_provider_check_is_pipefail_safe() -> None:
+    """DevPod provider preflight must not use grep -q under pipefail.
+
+    Some CLI producers receive SIGPIPE when `grep -q` exits after its first
+    match. With `set -o pipefail`, that turns a successful match into a failed
+    preflight before the Hetzner workspace is even created.
+    """
+    script = _read(_DEVPOD_TEST)
+
+    assert "provider_list=" in script
+    assert "devpod provider list 2>/dev/null || true" in script
+    assert 'grep -q "hetzner"' not in script
+
+
+@pytest.mark.requirement("AC-DevPod-Git-Source")
 def test_readiness_restart_uses_same_source_selection() -> None:
     """Auto-started workspaces must use the same remote-source path."""
     script = _read(_DEVPOD_READY)
