@@ -237,7 +237,7 @@ def _run_has_nonzero_duration(run: dict[str, Any]) -> bool:
 
 
 def _parent_run_id_from_run(run: dict[str, Any]) -> str | None:
-    """Return a parentRun facet run id from a Marquez run response if exposed."""
+    """Return a parent facet run id from a Marquez run response if exposed."""
     facets: dict[str, Any] = run.get("facets") or {}
     parent_facet: dict[str, Any] | None = None
     if "parentRun" in facets:
@@ -263,12 +263,33 @@ def _parent_run_id_from_run(run: dict[str, Any]) -> str | None:
 
 
 def _parent_run_id_from_event(event: dict[str, Any]) -> str | None:
-    """Return a parentRun facet run id from an OpenLineage event if exposed."""
+    """Return a parent facet run id from an OpenLineage event if exposed."""
     payload = _lineage_event_payload(event)
     run = payload.get("run") or event.get("run")
     if not isinstance(run, dict):
         return None
     return _parent_run_id_from_run(run)
+
+
+def _parent_run_id_from_marquez_run_facets(
+    marquez_client: Any,
+    run: dict[str, Any],
+) -> str | None:
+    """Return a parent facet run id via Marquez's dedicated run facets endpoint."""
+    for run_id in sorted(_marquez_run_identity_candidates(run)):
+        response = marquez_client.get(
+            f"/api/v1/runs/{quote(run_id, safe='')}/facets",
+            params={"type": "run"},
+        )
+        if response.status_code != 200:
+            continue
+        facets = response.json().get("facets")
+        if not isinstance(facets, dict):
+            continue
+        parent_run_id = _parent_run_id_from_run({"facets": facets})
+        if parent_run_id:
+            return parent_run_id
+    return None
 
 
 def _lineage_event_payload(event: dict[str, Any]) -> dict[str, Any]:
@@ -390,6 +411,41 @@ def test_runtime_lineage_identity_prefers_fresh_event_job() -> None:
         "customer-360",
         "dbt.customer_360.mart_customer_360",
     )
+
+
+@pytest.mark.developer_workflow
+def test_parent_run_id_from_marquez_run_facets_uses_facets_endpoint() -> None:
+    """Marquez validation should use the documented run facets endpoint."""
+
+    class _Response:
+        status_code = 200
+
+        def json(self) -> dict[str, Any]:
+            return {
+                "facets": {
+                    "parent": {
+                        "run": {"runId": "parent-run-id"},
+                        "job": {"namespace": "customer-360", "name": "asset-job"},
+                    }
+                }
+            }
+
+    class _Client:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, str] | None]] = []
+
+        def get(self, path: str, params: dict[str, str] | None = None) -> _Response:
+            self.calls.append((path, params))
+            return _Response()
+
+    client = _Client()
+
+    assert _parent_run_id_from_marquez_run_facets(client, {"id": "model-run-id"}) == (
+        "parent-run-id"
+    )
+    assert client.calls == [
+        ("/api/v1/runs/model-run-id/facets", {"type": "run"}),
+    ]
 
 
 class TestObservability(IntegrationTestBase):
@@ -1557,15 +1613,17 @@ class TestObservability(IntegrationTestBase):
         )
 
         # -------------------------------------------------------------------
-        # AC-6: Per-model events carry a parentRun facet linking to the
+        # AC-6: Per-model events carry a parent facet linking to the
         #       parent Dagster asset run.
         # -------------------------------------------------------------------
-        assert any(_parent_run_id_from_run(run) for run in fresh_model_runs) or any(
-            _parent_run_id_from_event(event) for event in scoped_model_events
-        ), (
-            "PARENT FACET GAP: No fresh Marquez model runs contain a valid 'parentRun' "
+        assert any(
+            _parent_run_id_from_run(run)
+            or _parent_run_id_from_marquez_run_facets(marquez_client, run)
+            for run in fresh_model_runs
+        ) or any(_parent_run_id_from_event(event) for event in scoped_model_events), (
+            "PARENT FACET GAP: No fresh Marquez model runs contain a valid 'parent' "
             "facet with a runId.\n"
-            "Per-model dbt lineage events MUST include a parentRun facet "
+            "Per-model dbt lineage events MUST include the OpenLineage parent facet "
             "linking to the parent Dagster asset run.\n"
             f"Fresh model runs inspected: {len(fresh_model_runs)}\n"
             f"Fresh model events inspected: {len(scoped_model_events)}\n"

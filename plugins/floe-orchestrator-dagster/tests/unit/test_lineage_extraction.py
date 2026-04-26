@@ -499,7 +499,7 @@ class TestAC5ParentRunFacet:
         single_model_project: Path,
         parent_run_id: UUID,
     ) -> None:
-        """START event run.facets must contain 'parentRun' key."""
+        """START event run.facets must contain the standard 'parent' key."""
         events = extract_dbt_model_lineage(
             project_dir=single_model_project,
             parent_run_id=parent_run_id,
@@ -508,7 +508,7 @@ class TestAC5ParentRunFacet:
         )
         start_event = events[0]
         assert start_event.event_type == RunState.START
-        assert "parentRun" in start_event.run.facets
+        assert "parent" in start_event.run.facets
 
     @pytest.mark.requirement("AC-5")
     def test_parent_run_facet_contains_parent_run_id(
@@ -523,7 +523,7 @@ class TestAC5ParentRunFacet:
             parent_job_name=PARENT_JOB_NAME,
             namespace=DEFAULT_NAMESPACE,
         )
-        parent_facet = events[0].run.facets["parentRun"]
+        parent_facet = events[0].run.facets["parent"]
         assert parent_facet["run"]["runId"] == str(parent_run_id)
 
     @pytest.mark.requirement("AC-5")
@@ -539,7 +539,7 @@ class TestAC5ParentRunFacet:
             parent_job_name=PARENT_JOB_NAME,
             namespace=DEFAULT_NAMESPACE,
         )
-        parent_facet = events[0].run.facets["parentRun"]
+        parent_facet = events[0].run.facets["parent"]
         assert parent_facet["job"]["name"] == PARENT_JOB_NAME
 
     @pytest.mark.requirement("AC-5")
@@ -555,7 +555,7 @@ class TestAC5ParentRunFacet:
             parent_job_name=PARENT_JOB_NAME,
             namespace=DEFAULT_NAMESPACE,
         )
-        parent_facet = events[0].run.facets["parentRun"]
+        parent_facet = events[0].run.facets["parent"]
         assert parent_facet["job"]["namespace"] == DEFAULT_NAMESPACE
 
     @pytest.mark.requirement("AC-5")
@@ -575,7 +575,7 @@ class TestAC5ParentRunFacet:
         assert len(start_events) == 2
 
         for start_event in start_events:
-            parent_facet = start_event.run.facets["parentRun"]
+            parent_facet = start_event.run.facets["parent"]
             assert parent_facet["run"]["runId"] == str(parent_run_id)
             assert parent_facet["job"]["name"] == PARENT_JOB_NAME
             assert parent_facet["job"]["namespace"] == DEFAULT_NAMESPACE
@@ -593,7 +593,7 @@ class TestAC5ParentRunFacet:
             parent_job_name=PARENT_JOB_NAME,
             namespace=DEFAULT_NAMESPACE,
         )
-        parent_facet = events[0].run.facets["parentRun"]
+        parent_facet = events[0].run.facets["parent"]
         # ParentRunFacetBuilder sets _schemaURL
         assert "_schemaURL" in parent_facet
         assert "ParentRunFacet" in parent_facet["_schemaURL"]

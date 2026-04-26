@@ -38,6 +38,7 @@ import pytest
 import yaml
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
+from testing.fixtures.kubernetes import run_helm_template
 from testing.fixtures.services import ServiceEndpoint
 
 SENSITIVE_FIELD_PATTERNS = [
@@ -803,27 +804,21 @@ class TestGovernance(IntegrationTestBase):
         Returns:
             List of parsed YAML documents
         """
-        cmd = [
-            "helm",
-            "template",
-            "test-release",
-            str(chart_path),
-            "--skip-schema-validation",
-        ]
-        if values_path:
-            cmd.extend(["--values", str(values_path)])
-        if set_values:
-            for key, value in set_values.items():
-                cmd.extend(["--set", f"{key}={value}"])
-
         try:
-            result = subprocess.run(
-                cmd,
-                shell=False,
-                check=True,
-                capture_output=True,
-                text=True,
+            result = run_helm_template(
+                "test-release",
+                chart_path,
+                values_path=values_path,
+                set_values=set_values,
+                skip_schema_validation=True,
             )
+            if result.returncode != 0:
+                raise subprocess.CalledProcessError(
+                    result.returncode,
+                    result.args,
+                    output=result.stdout,
+                    stderr=result.stderr,
+                )
 
             documents: list[dict[str, Any]] = []
             for doc in yaml.safe_load_all(result.stdout):

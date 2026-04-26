@@ -367,20 +367,7 @@ class TestDemoMode(IntegrationTestBase):
         project_root = Path(__file__).parent.parent.parent
         chart_path = project_root / "charts" / "floe-platform"
 
-        # Render Helm templates
-        result = subprocess.run(
-            [
-                "helm",
-                "template",
-                "test-release",
-                str(chart_path),
-            ],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
+        result = run_helm_template("test-release", chart_path, timeout=60)
 
         assert result.returncode == 0, (
             f"Helm template rendering failed: {result.returncode}\nstderr: {result.stderr}"
