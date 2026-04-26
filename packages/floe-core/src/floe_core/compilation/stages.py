@@ -46,6 +46,11 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(__name__)
 
 
+def _dbt_project_name(product_name: str) -> str:
+    """Return the dbt project identifier derived from a floe product name."""
+    return re.sub(r"[^A-Za-z0-9_]", "_", product_name).strip("_") or "floe"
+
+
 class CompilationStage(str, Enum):
     """Stage in the compilation pipeline.
 
@@ -523,14 +528,17 @@ def compile_pipeline(
             # Only runs when governance config is present in the manifest
             if manifest.governance is not None:
                 synthetic_dbt_manifest: dict[str, Any] = {"nodes": {}}
+                dbt_project_name = _dbt_project_name(spec.metadata.name)
                 for model in transforms.models:
-                    node_key = f"model.floe.{model.name}"
+                    node_key = f"model.{dbt_project_name}.{model.name}"
                     synthetic_dbt_manifest["nodes"][node_key] = {
                         "name": model.name,
                         "resource_type": "model",
                         "tags": list(model.tags) if model.tags else [],
                         "depends_on": {
-                            "nodes": [f"model.floe.{d}" for d in (model.depends_on or [])]
+                            "nodes": [
+                                f"model.{dbt_project_name}.{d}" for d in (model.depends_on or [])
+                            ]
                         },
                         "description": "",
                         "columns": {},
@@ -563,8 +571,9 @@ def compile_pipeline(
             # Per-model lineage emission (non-blocking).
             # Records model presence in lineage graph during compilation;
             # execution-time events are emitted by Dagster at runtime.
+            dbt_project_name = _dbt_project_name(spec.metadata.name)
             for model in transforms.models:
-                model_job_name = f"model.floe.{model.name}"
+                model_job_name = f"model.{dbt_project_name}.{model.name}"
                 model_run_id: UUID | None = None
                 try:
                     model_run_id = emitter.emit_start(job_name=model_job_name)

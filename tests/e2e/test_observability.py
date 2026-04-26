@@ -207,15 +207,16 @@ def _fresh_completed_runs_for_jobs(
 
 def _expected_model_job_names(artifacts: Any) -> set[str]:
     """Return artifact-derived Marquez job names that can represent dbt models."""
-    product_name = artifacts.metadata.product_name.replace("-", "_")
+    product_name = str(artifacts.metadata.product_name)
+    dbt_project_name = re.sub(r"[^A-Za-z0-9_]", "_", product_name).strip("_") or "floe"
     model_names = [model.name for model in artifacts.transforms.models]
     return {
         candidate
         for model_name in model_names
         for candidate in (
             model_name,
-            f"model.floe.{model_name}",
-            f"model.{product_name}.{model_name}",
+            f"model.{dbt_project_name}.{model_name}",
+            f"{product_name}.model.{dbt_project_name}.{model_name}",
         )
     }
 
@@ -446,6 +447,28 @@ def test_parent_run_id_from_marquez_run_facets_uses_facets_endpoint() -> None:
     assert client.calls == [
         ("/api/v1/runs/model-run-id/facets", {"type": "run"}),
     ]
+
+
+@pytest.mark.developer_workflow
+def test_expected_model_job_names_include_product_scoped_runtime_identity() -> None:
+    """Runtime model job candidates include product-scoped dbt unique IDs."""
+
+    class _Model:
+        name = "stg_crm_customers"
+
+    class _Transforms:
+        models = [_Model()]
+
+    class _Metadata:
+        product_name = "customer-360"
+
+    class _Artifacts:
+        metadata = _Metadata()
+        transforms = _Transforms()
+
+    job_names = _expected_model_job_names(_Artifacts())
+
+    assert "customer-360.model.customer_360.stg_crm_customers" in job_names
 
 
 class TestObservability(IntegrationTestBase):
@@ -1556,11 +1579,25 @@ class TestObservability(IntegrationTestBase):
                     fresh_run_ids=fresh_model_run_ids,
                 )
             ]
+            runtime_model_event_run_ids: set[str] = set()
+            for run in fresh_runtime_model_runs:
+                runtime_model_event_run_ids.update(_marquez_run_identity_candidates(run))
+            scoped_runtime_model_events = [
+                e
+                for e in events
+                if _lineage_event_matches_fresh_jobs(
+                    e,
+                    namespace=runtime_namespace,
+                    job_names=model_job_names,
+                    fresh_run_ids=runtime_model_event_run_ids,
+                )
+            ]
             scoped_model_event_types = {
                 _lineage_event_type(e) for e in scoped_model_events if _lineage_event_type(e)
             }
         else:
             scoped_model_event_types = set()
+            scoped_runtime_model_events = []
 
         fresh_run_started = any(run.get("startedAt") for run in fresh_completed_runs)
         fresh_run_completed = bool(fresh_completed_runs)
@@ -1619,14 +1656,14 @@ class TestObservability(IntegrationTestBase):
         assert any(
             _parent_run_id_from_run(run)
             or _parent_run_id_from_marquez_run_facets(marquez_client, run)
-            for run in fresh_model_runs
-        ) or any(_parent_run_id_from_event(event) for event in scoped_model_events), (
+            for run in fresh_runtime_model_runs
+        ) or any(_parent_run_id_from_event(event) for event in scoped_runtime_model_events), (
             "PARENT FACET GAP: No fresh Marquez model runs contain a valid 'parent' "
             "facet with a runId.\n"
             "Per-model dbt lineage events MUST include the OpenLineage parent facet "
             "linking to the parent Dagster asset run.\n"
-            f"Fresh model runs inspected: {len(fresh_model_runs)}\n"
-            f"Fresh model events inspected: {len(scoped_model_events)}\n"
+            f"Fresh runtime model runs inspected: {len(fresh_runtime_model_runs)}\n"
+            f"Fresh runtime model events inspected: {len(scoped_runtime_model_events)}\n"
             f"Fresh model jobs inspected: {sorted(fresh_model_job_names)}\n"
             "Stale model runs from previous executions are not accepted as evidence.\n"
             "Fix: Ensure LineageResource passes parent_run_id "
