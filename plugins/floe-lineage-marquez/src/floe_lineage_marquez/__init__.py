@@ -18,7 +18,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from floe_core.plugins.lineage import LineageBackendPlugin
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator
 
 from .tracing import TRACER_NAME, get_tracer, lineage_span
 
@@ -100,10 +100,16 @@ class MarquezConfig(BaseModel):
         default=True,
         description="Whether to verify SSL certificates",
     )
+    allow_insecure_http: bool = Field(
+        default=False,
+        description=(
+            "Allow plain HTTP for non-localhost Marquez URLs. Intended for explicit "
+            "in-cluster demo/test deployments only; production should use HTTPS."
+        ),
+    )
 
-    @field_validator("url")
-    @classmethod
-    def validate_url_security(cls, v: str) -> str:
+    @model_validator(mode="after")
+    def validate_url_security(self) -> MarquezConfig:
         """Validate URL format and enforce HTTPS for non-localhost URLs.
 
         SECURITY NOTES:
@@ -114,17 +120,14 @@ class MarquezConfig(BaseModel):
             - The localhost exception is safe because loopback traffic never leaves host
             - Override with FLOE_ALLOW_INSECURE_HTTP=true for development environments
 
-        Args:
-            v: The URL to validate.
-
         Returns:
-            Validated and normalized URL.
+            Validated configuration with normalized URL.
 
         Raises:
             ValueError: If URL is HTTP and not localhost (without override).
         """
         # Strip trailing slashes for consistency
-        v = v.rstrip("/")
+        v = self.url.rstrip("/")
 
         # SECURITY: HTTP is only allowed for localhost addresses by default.
         # This is safe because loopback traffic never leaves the host.
@@ -137,29 +140,36 @@ class MarquezConfig(BaseModel):
 
             # Check if it's actually localhost (proper validation)
             if _is_localhost(hostname):
-                return v
+                self.url = v
+                return self
 
-            # Allow HTTP with explicit environment variable override
-            if os.environ.get("FLOE_ALLOW_INSECURE_HTTP", "").lower() == "true":
+            # Allow HTTP with explicit manifest config or environment override.
+            if (
+                self.allow_insecure_http
+                or os.environ.get("FLOE_ALLOW_INSECURE_HTTP", "").lower() == "true"
+            ):
                 logger.critical(
                     "INSECURE HTTP enabled for Marquez URL '%s' - "
-                    "development use only! Set FLOE_ALLOW_INSECURE_HTTP=false "
-                    "before deploying to production.",
+                    "development/test use only! Use HTTPS before deploying "
+                    "to production.",
                     hostname,
                 )
-                return v
+                self.url = v
+                return self
 
             raise ValueError(
                 f"HTTP not allowed for '{hostname}'. "
                 "url must use HTTPS for non-localhost URLs. "
                 "HTTP is only allowed for localhost development. "
-                "Set FLOE_ALLOW_INSECURE_HTTP=true to override (not recommended)."
+                "Set allow_insecure_http=true in manifest config or "
+                "FLOE_ALLOW_INSECURE_HTTP=true to override (not recommended)."
             )
 
         if not v.startswith("https://"):
             raise ValueError("url must start with https:// or http://localhost")
 
-        return v
+        self.url = v
+        return self
 
 
 class MarquezLineageBackendPlugin(LineageBackendPlugin):
@@ -194,6 +204,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
         api_key: str | None = None,
         environment: str = "prod",
         verify_ssl: bool = True,
+        allow_insecure_http: bool = False,
     ) -> None:
         """Initialize Marquez backend plugin.
 
@@ -202,25 +213,43 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
             api_key: Optional API key for authentication
             environment: Deployment environment for namespace (default: "prod")
             verify_ssl: Whether to verify SSL certificates (default: True)
+            allow_insecure_http: Allow explicit in-cluster HTTP for demo/test use.
 
         Note:
             URL validation is performed by MarquezConfig.validate_url_security().
             HTTP is only allowed for localhost. Use FLOE_ALLOW_INSECURE_HTTP=true
             to override for development environments.
         """
+        super().__init__()
         # Validate URL security using MarquezConfig validator
         validated_config = MarquezConfig(
             url=url,
             api_key=api_key,
             environment=environment,
             verify_ssl=verify_ssl,
+            allow_insecure_http=allow_insecure_http,
         )
 
         self._url = validated_config.url
         self._api_key = validated_config.api_key
         self._environment = validated_config.environment
         self._verify_ssl = validated_config.verify_ssl
+        self._allow_insecure_http = validated_config.allow_insecure_http
         self._tracer = get_tracer()
+
+    def configure(self, config: BaseModel | None) -> None:
+        """Apply validated registry configuration to runtime transport settings."""
+        super().configure(config)
+        if config is None:
+            return
+        if not isinstance(config, MarquezConfig):
+            raise TypeError(f"Expected MarquezConfig, got {type(config).__name__}")
+
+        self._url = config.url
+        self._api_key = config.api_key
+        self._environment = config.environment
+        self._verify_ssl = config.verify_ssl
+        self._allow_insecure_http = config.allow_insecure_http
 
     @property
     def name(self) -> str:

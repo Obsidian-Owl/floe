@@ -213,6 +213,48 @@ assert_startup_boundary() {
     return 1
 }
 
+wait_for_job_terminal_status() {
+    local start_time="${SECONDS}"
+    local elapsed=0
+    local remaining=0
+    local wait_slice=0
+
+    while (( (SECONDS - start_time) < JOB_TIMEOUT )); do
+        elapsed=$((SECONDS - start_time))
+        remaining=$((JOB_TIMEOUT - elapsed))
+        wait_slice=5
+        if (( remaining < wait_slice )); then
+            wait_slice="${remaining}"
+        fi
+        if (( wait_slice < 1 )); then
+            break
+        fi
+
+        if kubectl wait --for=condition=complete "job/${JOB_NAME}" \
+            -n "${TEST_NAMESPACE}" \
+            --timeout="${wait_slice}s" >/dev/null 2>&1; then
+            printf '%s\n' "complete"
+            return 0
+        fi
+
+        if kubectl wait --for=condition=failed "job/${JOB_NAME}" \
+            -n "${TEST_NAMESPACE}" \
+            --timeout=0s >/dev/null 2>&1; then
+            printf '%s\n' "failed"
+            return 0
+        fi
+    done
+
+    if kubectl wait --for=condition=failed "job/${JOB_NAME}" \
+        -n "${TEST_NAMESPACE}" \
+        --timeout=0s >/dev/null 2>&1; then
+        printf '%s\n' "failed"
+        return 0
+    fi
+
+    printf '%s\n' "timeout"
+}
+
 # Select Job name and chart-rendered template based on TEST_SUITE. The standard
 # lane is the deployed-product/platform-blackbox validation that runs in-cluster.
 case "${TEST_SUITE}" in
@@ -357,18 +399,7 @@ fi
 
 # --- Step 5: Wait for completion ---
 
-# kubectl wait returns non-zero on timeout
-if kubectl wait --for=condition=complete "job/${JOB_NAME}" \
-    -n "${TEST_NAMESPACE}" \
-    --timeout="${JOB_TIMEOUT}s" 2>/dev/null; then
-    JOB_STATUS="complete"
-elif kubectl wait --for=condition=failed "job/${JOB_NAME}" \
-    -n "${TEST_NAMESPACE}" \
-    --timeout=10s 2>/dev/null; then
-    JOB_STATUS="failed"
-else
-    JOB_STATUS="timeout"
-fi
+JOB_STATUS=$(wait_for_job_terminal_status)
 
 # --- Step 6: Extract results ---
 

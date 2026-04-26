@@ -393,6 +393,11 @@ def create_lineage_resource(
     from dagster import ResourceDefinition
 
     registry = get_registry()
+    registry.configure(
+        _PluginType.LINEAGE,
+        lineage_ref.type,
+        lineage_ref.config or {},
+    )
     plugin = registry.get(_PluginType.LINEAGE, lineage_ref.type)
 
     transport_config: dict[str, Any] = plugin.get_transport_config()

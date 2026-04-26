@@ -63,6 +63,14 @@ plugins:
       region: us-east-1
       path_style_access: true
 
+  # Lineage backend: Marquez receives runtime OpenLineage events from Dagster
+  lineage_backend:
+    type: marquez
+    version: "0.1.0"
+    config:
+      url: http://floe-platform-marquez:5000
+      allow_insecure_http: true
+
 # =============================================================================
 # Observability Configuration
 # =============================================================================

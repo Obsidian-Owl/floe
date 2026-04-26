@@ -1170,6 +1170,47 @@ class TestCreateLineageResource:
             mock_registry.get.assert_called_once_with(PluginType.LINEAGE, "marquez")
 
     @pytest.mark.requirement(AC_8)
+    def test_configures_plugin_from_lineage_ref_before_transport_config(self) -> None:
+        """Test factory applies manifest-derived plugin config before reading transport."""
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(
+            type="marquez",
+            version="1.0.0",
+            config={"url": "http://floe-platform-marquez:5000"},
+        )
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_transport_config.return_value = {
+            "type": "http",
+            "url": "http://floe-platform-marquez:5000/api/v1/lineage",
+        }
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "test-ns",
+        }
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(f"{_LINEAGE_MODULE}.create_emitter"),
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            create_lineage_resource(lineage_ref)
+
+            from floe_core.plugin_types import PluginType
+
+            mock_registry.configure.assert_called_once_with(
+                PluginType.LINEAGE,
+                "marquez",
+                {"url": "http://floe-platform-marquez:5000"},
+            )
+            mock_plugin.get_transport_config.assert_called_once()
+
+    @pytest.mark.requirement(AC_8)
     def test_calls_get_transport_config_on_plugin(self) -> None:
         """Test factory invokes plugin.get_transport_config()."""
         from floe_core.schemas.compiled_artifacts import PluginRef

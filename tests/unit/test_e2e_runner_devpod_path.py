@@ -147,3 +147,24 @@ def test_kind_load_calls_use_shared_kind_cluster_variable() -> None:
     assert "--name 'floe-test'" not in body, (
         "load_image() still hardcodes the Kind cluster name in a DevPod load path."
     )
+
+
+@pytest.mark.requirement("AC-5")
+def test_e2e_job_wait_detects_failed_condition_without_full_completion_timeout() -> None:
+    """The runner must not wait JOB_TIMEOUT before noticing a failed Job."""
+    script = _read_script()
+
+    assert "wait_for_job_terminal_status()" in script, (
+        "test-e2e-cluster.sh must centralize terminal Job status waiting."
+    )
+    assert '--timeout="${wait_slice}s"' in script, (
+        "The complete-condition wait must use short slices, not the full JOB_TIMEOUT."
+    )
+    assert 'kubectl wait --for=condition=failed "job/${JOB_NAME}"' in script, (
+        "The runner must poll the Failed condition while waiting for completion."
+    )
+    assert "--timeout=0s" in script, (
+        "Failed-condition checks should be immediate between completion wait slices."
+    )
+    assert "JOB_STATUS=$(wait_for_job_terminal_status)" in script
+    assert '--timeout="${JOB_TIMEOUT}s" 2>/dev/null; then\n    JOB_STATUS="complete"' not in script
