@@ -127,6 +127,7 @@ class LineageResource:
         self,
         job_name: str,
         *,
+        run_id: UUID | None = None,
         inputs: list[Any] | None = None,
         outputs: list[Any] | None = None,
         run_facets: dict[str, Any] | None = None,
@@ -136,6 +137,7 @@ class LineageResource:
 
         Args:
             job_name: Name of the job/asset being started.
+            run_id: Optional explicit OpenLineage run ID to use.
             inputs: Optional list of input datasets.
             outputs: Optional list of output datasets.
             run_facets: Optional run-level facets.
@@ -157,6 +159,7 @@ class LineageResource:
         result = self._run_coroutine(
             self._emitter.emit_start(
                 job_name,
+                run_id=run_id,
                 inputs=inputs,
                 outputs=outputs,
                 run_facets=run_facets,
@@ -295,6 +298,7 @@ class NoOpLineageResource:
         self,
         job_name: str,
         *,
+        run_id: UUID | None = None,
         inputs: list[Any] | None = None,
         outputs: list[Any] | None = None,
         run_facets: dict[str, Any] | None = None,
@@ -304,15 +308,16 @@ class NoOpLineageResource:
 
         Args:
             job_name: Ignored.
+            run_id: Returned when provided; otherwise ignored.
             inputs: Ignored.
             outputs: Ignored.
             run_facets: Ignored.
             job_facets: Ignored.
 
         Returns:
-            A new unique UUID.
+            The supplied run_id, or a new unique UUID.
         """
-        return uuid4()
+        return run_id or uuid4()
 
     def emit_complete(
         self,

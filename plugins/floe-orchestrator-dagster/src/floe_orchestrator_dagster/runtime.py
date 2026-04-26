@@ -13,6 +13,7 @@ from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
 from floe_orchestrator_dagster.capabilities import CapabilityPolicy
 from floe_orchestrator_dagster.export.iceberg import export_dbt_to_iceberg
+from floe_orchestrator_dagster.lineage_extraction import extract_dbt_model_lineage
 from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
 from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
 
@@ -69,6 +70,14 @@ def _create_semantic_resources(plugins: Any | None) -> dict[str, Any]:
     return try_create_semantic_resources(plugins)
 
 
+def _dagster_run_id(context: Any) -> UUID | None:
+    """Return the Dagster run id as a UUID when available."""
+    try:
+        return UUID(str(context.run.run_id))
+    except Exception:
+        return None
+
+
 def build_product_definitions(
     *,
     product_name: str,
@@ -123,7 +132,12 @@ def build_product_definitions(
         except Exception as _trace_exc:
             context.log.debug("Trace facet creation failed: %s", _trace_exc)
         try:
-            run_id = lineage.emit_start(product_name, run_facets=run_facets or None)
+            dagster_run_id = _dagster_run_id(context)
+            run_id = lineage.emit_start(
+                product_name,
+                run_id=dagster_run_id,
+                run_facets=run_facets or None,
+            )
         except Exception:
             if policy.require_lineage:
                 raise
@@ -142,6 +156,19 @@ def build_product_definitions(
                     raise RuntimeError(
                         f"Configured Iceberg export wrote no tables for product {product_name}"
                     )
+            try:
+                model_events = extract_dbt_model_lineage(
+                    project_dir,
+                    run_id,
+                    product_name,
+                    lineage.namespace,
+                )
+                for event in model_events:
+                    lineage.emit_event(event)
+            except Exception as _model_lineage_exc:
+                if policy.require_lineage:
+                    raise
+                context.log.debug("runtime model lineage emission failed: %s", _model_lineage_exc)
         except Exception as exc:
             try:
                 lineage.emit_fail(run_id, product_name, error_message=type(exc).__name__)

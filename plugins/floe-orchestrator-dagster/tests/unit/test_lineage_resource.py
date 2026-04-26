@@ -155,6 +155,18 @@ class TestLineageResourceEmitStart:
         assert kwargs.get("job_facets") is job_facets
 
     @pytest.mark.requirement(AC_1)
+    def test_emit_start_passes_explicit_run_id(
+        self, lineage_resource: Any, mock_emitter: MagicMock
+    ) -> None:
+        """Test emit_start forwards an explicit run_id to the async emitter."""
+        run_id = uuid4()
+
+        lineage_resource.emit_start(JOB_NAME, run_id=run_id)
+
+        _, kwargs = mock_emitter.emit_start.await_args
+        assert kwargs.get("run_id") == run_id
+
+    @pytest.mark.requirement(AC_1)
     def test_emit_start_returns_uuid_from_emitter_not_hardcoded(
         self, mock_emitter: MagicMock
     ) -> None:

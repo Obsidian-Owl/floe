@@ -21,6 +21,7 @@ PRODUCT_NAME = "customer-360"
 _RUNTIME_MODULE = "floe_orchestrator_dagster.runtime"
 _LINEAGE_FACTORY = f"{_RUNTIME_MODULE}.try_create_lineage_resource"
 _EXPORT_FN = f"{_RUNTIME_MODULE}.export_dbt_to_iceberg"
+_EXTRACT_LINEAGE_FN = f"{_RUNTIME_MODULE}.extract_dbt_model_lineage"
 
 
 def _write_manifest(project_dir: Path) -> None:
@@ -139,3 +140,68 @@ def test_runtime_strict_complete_emission_failure_raises_after_iceberg_success(
     dbt.cli.assert_called_once()
     mock_export.assert_called_once()
     lineage.emit_complete.assert_called_once()
+
+
+def test_runtime_emits_per_model_lineage_after_iceberg_export_with_parent_run(
+    tmp_path: Path,
+    valid_compiled_artifacts: dict[str, Any],
+) -> None:
+    """Runtime path must emit dbt model lineage linked to the Dagster run."""
+    _write_manifest(tmp_path)
+    artifacts = _with_required_capabilities(valid_compiled_artifacts)
+    dagster_run_id = uuid4()
+
+    lineage = MagicMock()
+    lineage.namespace = artifacts.observability.lineage_namespace
+    lineage.emit_start.return_value = dagster_run_id
+    extracted_event = MagicMock(name="lineage_event")
+
+    dbt_result = MagicMock()
+    dbt_result.stream.return_value = []
+    dbt = MagicMock()
+    dbt.cli.return_value = dbt_result
+    export_result = MagicMock(tables_written=1)
+    call_order: list[str] = []
+
+    def _export_side_effect(*_args: Any, **_kwargs: Any) -> Any:
+        call_order.append("export")
+        return export_result
+
+    def _extract_side_effect(*_args: Any, **_kwargs: Any) -> list[Any]:
+        call_order.append("extract")
+        return [extracted_event]
+
+    with (
+        patch(
+            _LINEAGE_FACTORY,
+            return_value={"lineage": ResourceDefinition.hardcoded_resource(lineage)},
+        ),
+        patch(_EXPORT_FN, side_effect=_export_side_effect) as mock_export,
+        patch(_EXTRACT_LINEAGE_FN, side_effect=_extract_side_effect) as mock_extract,
+    ):
+        definitions = build_product_definitions(
+            product_name=PRODUCT_NAME,
+            artifacts=artifacts,
+            project_dir=tmp_path,
+            capability_policy=CapabilityPolicy.alpha(),
+        )
+        asset_fn = _extract_dbt_assets_fn(definitions)
+        context = MagicMock()
+        context.resources.dbt = dbt
+        context.resources.lineage = lineage
+        context.run.run_id = str(dagster_run_id)
+
+        list(asset_fn(context))
+
+    lineage.emit_start.assert_called_once()
+    _, emit_start_kwargs = lineage.emit_start.call_args
+    assert emit_start_kwargs["run_id"] == dagster_run_id
+    mock_export.assert_called_once()
+    mock_extract.assert_called_once_with(
+        tmp_path,
+        dagster_run_id,
+        PRODUCT_NAME,
+        artifacts.observability.lineage_namespace,
+    )
+    lineage.emit_event.assert_called_once_with(extracted_event)
+    assert call_order == ["export", "extract"]
