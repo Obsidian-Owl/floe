@@ -154,6 +154,10 @@ def _get_effective_host(service_name: str, namespace: str) -> str:
     if global_host:
         return global_host
 
+    disable_dns_autodetect = os.environ.get("FLOE_DISABLE_SERVICE_DNS_AUTODETECT", "")
+    if disable_dns_autodetect.lower() in {"1", "true", "yes"}:
+        return "localhost"
+
     # Auto-detect: try K8s DNS first, fall back to localhost
     k8s_dns = f"{service_name}.{namespace}.svc.cluster.local"
     if _can_resolve_host(k8s_dns):

@@ -32,6 +32,10 @@ fi
 
 cd "${PROJECT_ROOT}"
 
+# Unit tests must not block on cluster DNS autodetection. Integration/E2E
+# runners leave this unset so runtime service discovery behavior is unchanged.
+export FLOE_DISABLE_SERVICE_DNS_AUTODETECT="${FLOE_DISABLE_SERVICE_DNS_AUTODETECT:-1}"
+
 echo "Running unit tests..."
 echo "Coverage threshold: ${COVERAGE_THRESHOLD}%"
 echo "Coverage report: ${COVERAGE_REPORT}"
