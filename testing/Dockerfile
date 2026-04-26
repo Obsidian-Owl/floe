@@ -12,8 +12,10 @@ FROM python:3.11-slim-bookworm AS base
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
     curl \
     git \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast package management (pinned version for reproducibility)

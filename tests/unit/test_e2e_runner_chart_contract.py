@@ -11,6 +11,7 @@ import yaml
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _TEMPLATE_PATH = _REPO_ROOT / "charts" / "floe-platform" / "templates" / "tests" / "_test-job.tpl"
 _VALUES_TEST_PATH = _REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
+_TEST_RUNNER_DOCKERFILE = _REPO_ROOT / "testing" / "Dockerfile"
 
 
 @pytest.mark.requirement("AC-5")
@@ -53,3 +54,14 @@ def test_rendered_e2e_job_uses_if_not_present_for_test_runner() -> None:
     )
     assert 'image: "floe-test-runner:latest"' in result.stdout
     assert "imagePullPolicy: IfNotPresent" in result.stdout
+
+
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_test_runner_image_installs_dbt_installer_prerequisites() -> None:
+    """The test-runner image must not rely on installer fallback downloads."""
+    dockerfile = _TEST_RUNNER_DOCKERFILE.read_text()
+
+    assert "apt-get install -y --no-install-recommends" in dockerfile
+    assert "\n    bash \\" in dockerfile
+    assert "\n    jq \\" in dockerfile
+    assert "public.cdn.getdbt.com/fs/install/install.sh" in dockerfile
