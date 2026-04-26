@@ -21,6 +21,13 @@
 #                        retained only for debugging DevPod image transport.
 #   DEVPOD_REMOTE_WORKDIR Remote repository root inside the workspace
 #                        (default: /workspace).
+#   DEVPOD_REMOTE_E2E_TIMEOUT Remote E2E timeout in seconds (default: 7200).
+#   DEVPOD_REMOTE_POLL_INTERVAL Remote E2E polling interval in seconds
+#                        (default: 20).
+#   DEVPOD_REMOTE_POLL_FAILURE_LIMIT Consecutive DevPod poll failures tolerated
+#                        before aborting (default: 30).
+#   DEVPOD_UP_RECOVERY_TIMEOUT Seconds to poll workspace status after a
+#                        transport-level `devpod up` failure (default: 600).
 
 set -euo pipefail
 
@@ -43,6 +50,15 @@ NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 PROVIDER="${DEVPOD_PROVIDER:-hetzner}"
 DEVPOD_E2E_EXECUTION="${DEVPOD_E2E_EXECUTION:-remote}"
 DEVPOD_REMOTE_WORKDIR="${DEVPOD_REMOTE_WORKDIR:-/workspace}"
+DEVPOD_REMOTE_RUN_ROOT="${DEVPOD_REMOTE_RUN_ROOT:-/tmp/floe-devpod-e2e}"
+DEVPOD_REMOTE_E2E_TIMEOUT="${DEVPOD_REMOTE_E2E_TIMEOUT:-7200}"
+DEVPOD_REMOTE_POLL_INTERVAL="${DEVPOD_REMOTE_POLL_INTERVAL:-20}"
+DEVPOD_REMOTE_POLL_FAILURE_LIMIT="${DEVPOD_REMOTE_POLL_FAILURE_LIMIT:-30}"
+DEVPOD_UP_RECOVERY_TIMEOUT="${DEVPOD_UP_RECOVERY_TIMEOUT:-600}"
+DEVPOD_UP_RECOVERY_INTERVAL="${DEVPOD_UP_RECOVERY_INTERVAL:-15}"
+REMOTE_RUN_ID="run-$(date -u '+%Y%m%dT%H%M%SZ')-$$"
+REMOTE_RUN_DIR="${DEVPOD_REMOTE_RUN_ROOT}/${REMOTE_RUN_ID}"
+LOCAL_REMOTE_ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts/devpod-${REMOTE_RUN_ID}"
 
 # Track whether we created the workspace (for cleanup decisions)
 WORKSPACE_CREATED=false
@@ -56,6 +72,26 @@ log() {
 
 error() {
     echo "[devpod-test] $(date '+%H:%M:%S') ERROR: $*" >&2
+}
+
+shell_quote() {
+    printf '%q' "$1"
+}
+
+devpod_remote_bash() {
+    local script="$1"
+    local escaped_script
+    escaped_script="$(shell_quote "${script}")"
+    devpod ssh "${WORKSPACE}" \
+        --start-services=false \
+        --workdir "${DEVPOD_REMOTE_WORKDIR}" \
+        --command "bash -lc ${escaped_script}"
+}
+
+workspace_running() {
+    local status
+    status="$(devpod status "${WORKSPACE}" 2>&1 || true)"
+    [[ "${status}" =~ [Rr]unning ]]
 }
 
 # ─── Cleanup (cost-safety guarantee) ─────────────────────────────────────────
@@ -99,6 +135,197 @@ if [[ ! "${WORKSPACE}" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]]; then
     exit 1
 fi
 
+if [[ ! "${DEVPOD_REMOTE_E2E_TIMEOUT}" =~ ^[0-9]+$ ]] || [[ "${DEVPOD_REMOTE_E2E_TIMEOUT}" -lt 1 ]]; then
+    error "Invalid DEVPOD_REMOTE_E2E_TIMEOUT='${DEVPOD_REMOTE_E2E_TIMEOUT}'"
+    exit 1
+fi
+
+if [[ ! "${DEVPOD_REMOTE_POLL_INTERVAL}" =~ ^[0-9]+$ ]] || [[ "${DEVPOD_REMOTE_POLL_INTERVAL}" -lt 1 ]]; then
+    error "Invalid DEVPOD_REMOTE_POLL_INTERVAL='${DEVPOD_REMOTE_POLL_INTERVAL}'"
+    exit 1
+fi
+
+if [[ ! "${DEVPOD_REMOTE_POLL_FAILURE_LIMIT}" =~ ^[0-9]+$ ]] || [[ "${DEVPOD_REMOTE_POLL_FAILURE_LIMIT}" -lt 1 ]]; then
+    error "Invalid DEVPOD_REMOTE_POLL_FAILURE_LIMIT='${DEVPOD_REMOTE_POLL_FAILURE_LIMIT}'"
+    exit 1
+fi
+
+if [[ ! "${DEVPOD_UP_RECOVERY_TIMEOUT}" =~ ^[0-9]+$ ]] || [[ "${DEVPOD_UP_RECOVERY_TIMEOUT}" -lt 1 ]]; then
+    error "Invalid DEVPOD_UP_RECOVERY_TIMEOUT='${DEVPOD_UP_RECOVERY_TIMEOUT}'"
+    exit 1
+fi
+
+if [[ ! "${DEVPOD_UP_RECOVERY_INTERVAL}" =~ ^[0-9]+$ ]] || [[ "${DEVPOD_UP_RECOVERY_INTERVAL}" -lt 1 ]]; then
+    error "Invalid DEVPOD_UP_RECOVERY_INTERVAL='${DEVPOD_UP_RECOVERY_INTERVAL}'"
+    exit 1
+fi
+
+recover_workspace_after_up_failure() {
+    local deadline=$((SECONDS + DEVPOD_UP_RECOVERY_TIMEOUT))
+    log "devpod up returned failure; checking whether workspace '${WORKSPACE}' is running before cleanup..."
+
+    while (( SECONDS < deadline )); do
+        workspace_running && return 0
+        log "  Workspace not running yet; retrying status in ${DEVPOD_UP_RECOVERY_INTERVAL}s"
+        sleep "${DEVPOD_UP_RECOVERY_INTERVAL}"
+    done
+
+    return 1
+}
+
+provision_workspace() {
+    if devpod up "${WORKSPACE}" \
+        --source "${DEVPOD_SOURCE_RESOLVED}" \
+        --id "${WORKSPACE}" \
+        --provider "${PROVIDER}" \
+        --devcontainer-path "${DEVCONTAINER}" \
+        --ide none; then
+        return 0
+    fi
+
+    recover_workspace_after_up_failure
+}
+
+start_remote_e2e_run() {
+    local run_dir_q
+    local workdir_q
+    local remote_script
+    run_dir_q="$(shell_quote "${REMOTE_RUN_DIR}")"
+    workdir_q="$(shell_quote "${DEVPOD_REMOTE_WORKDIR}")"
+
+    remote_script=$(cat <<REMOTE_SCRIPT
+set -euo pipefail
+run_dir=${run_dir_q}
+workdir=${workdir_q}
+mkdir -p "\${run_dir}/artifacts"
+rm -f "\${run_dir}/exit-code" "\${run_dir}/output.log" "\${run_dir}/nohup.log"
+cat > "\${run_dir}/run.sh" <<'REMOTE_RUN'
+#!/usr/bin/env bash
+set +e
+mkdir -p "\${FLOE_REMOTE_RUN_DIR}/artifacts"
+{
+    echo "[remote-e2e] started at \$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    echo "[remote-e2e] workdir=\${FLOE_REMOTE_WORKDIR}"
+    cd "\${FLOE_REMOTE_WORKDIR}"
+    IMAGE_LOAD_METHOD=kind make test-e2e
+} > "\${FLOE_REMOTE_RUN_DIR}/output.log" 2>&1
+rc=\$?
+cp -a "\${FLOE_REMOTE_WORKDIR}/test-artifacts/." "\${FLOE_REMOTE_RUN_DIR}/artifacts/" 2>/dev/null || true
+echo "[remote-e2e] finished at \$(date -u '+%Y-%m-%dT%H:%M:%SZ') exit=\${rc}" >> "\${FLOE_REMOTE_RUN_DIR}/output.log"
+echo "\${rc}" > "\${FLOE_REMOTE_RUN_DIR}/exit-code"
+exit 0
+REMOTE_RUN
+chmod +x "\${run_dir}/run.sh"
+FLOE_REMOTE_WORKDIR="\${workdir}" FLOE_REMOTE_RUN_DIR="\${run_dir}" \
+    nohup bash "\${run_dir}/run.sh" > "\${run_dir}/nohup.log" 2>&1 < /dev/null &
+echo \$! > "\${run_dir}/pid"
+printf '%s\n' "\${run_dir}"
+REMOTE_SCRIPT
+)
+
+    devpod_remote_bash "${remote_script}"
+}
+
+poll_remote_e2e_run() {
+    local deadline=$((SECONDS + DEVPOD_REMOTE_E2E_TIMEOUT))
+    local poll_failures=0
+    local poll_output=""
+    local poll_script=""
+    local run_dir_q
+    run_dir_q="$(shell_quote "${REMOTE_RUN_DIR}")"
+
+    poll_script=$(cat <<REMOTE_SCRIPT
+set -euo pipefail
+run_dir=${run_dir_q}
+if [[ -f "\${run_dir}/exit-code" ]]; then
+    printf 'complete:%s\n' "\$(cat "\${run_dir}/exit-code")"
+    exit 0
+fi
+if [[ -f "\${run_dir}/pid" ]] && kill -0 "\$(cat "\${run_dir}/pid")" 2>/dev/null; then
+    printf 'running\n'
+    exit 0
+fi
+printf 'lost\n'
+exit 0
+REMOTE_SCRIPT
+)
+
+    while (( SECONDS < deadline )); do
+        if poll_output="$(devpod_remote_bash "${poll_script}" 2>&1)"; then
+            poll_failures=0
+            case "${poll_output}" in
+                complete:*)
+                    printf '%s\n' "${poll_output#complete:}"
+                    return 0
+                    ;;
+                running)
+                    log "  Remote E2E still running (${SECONDS}s elapsed, artifacts: ${REMOTE_RUN_DIR})"
+                    ;;
+                lost)
+                    error "Remote E2E process is no longer running and no exit-code was written"
+                    return 3
+                    ;;
+                *)
+                    error "Unexpected remote E2E poll response: ${poll_output}"
+                    ;;
+            esac
+        else
+            poll_failures=$((poll_failures + 1))
+            error "Remote E2E poll failed (${poll_failures}/${DEVPOD_REMOTE_POLL_FAILURE_LIMIT}): ${poll_output}"
+            if (( poll_failures >= DEVPOD_REMOTE_POLL_FAILURE_LIMIT )); then
+                return 4
+            fi
+        fi
+        sleep "${DEVPOD_REMOTE_POLL_INTERVAL}"
+    done
+
+    error "Remote E2E timed out after ${DEVPOD_REMOTE_E2E_TIMEOUT}s"
+    return 2
+}
+
+fetch_remote_e2e_artifacts() {
+    local run_parent
+    local run_name
+    local parent_q
+    local name_q
+    mkdir -p "${LOCAL_REMOTE_ARTIFACTS_DIR}"
+
+    run_parent="$(dirname "${REMOTE_RUN_DIR}")"
+    run_name="$(basename "${REMOTE_RUN_DIR}")"
+    parent_q="$(shell_quote "${run_parent}")"
+    name_q="$(shell_quote "${run_name}")"
+
+    if devpod_remote_bash "cd ${parent_q} && tar -czf - ${name_q}" \
+        | tar -xzf - -C "${LOCAL_REMOTE_ARTIFACTS_DIR}" --strip-components=1; then
+        log "Remote E2E artifacts saved to ${LOCAL_REMOTE_ARTIFACTS_DIR}"
+    else
+        error "Failed to fetch remote E2E artifact bundle from ${REMOTE_RUN_DIR}"
+    fi
+}
+
+run_remote_e2e_detached() {
+    local remote_dir=""
+    local exit_code=""
+
+    log "Starting detached remote E2E run in ${REMOTE_RUN_DIR}..."
+    remote_dir="$(start_remote_e2e_run)" || return 1
+    log "Remote E2E started: ${remote_dir}"
+
+    if exit_code="$(poll_remote_e2e_run)"; then
+        fetch_remote_e2e_artifacts || true
+        if [[ -f "${LOCAL_REMOTE_ARTIFACTS_DIR}/output.log" ]]; then
+            log "--- Remote E2E output (last 30 lines) ---"
+            tail -30 "${LOCAL_REMOTE_ARTIFACTS_DIR}/output.log" >&2 || true
+            log "--- End remote E2E output ---"
+        fi
+        return "${exit_code}"
+    fi
+
+    exit_code=$?
+    fetch_remote_e2e_artifacts || true
+    return "${exit_code}"
+}
+
 # ─── Pre-flight checks ───────────────────────────────────────────────────────
 
 if ! command -v devpod >/dev/null 2>&1; then
@@ -123,12 +350,7 @@ WORKSPACE_CREATED=true
 DEVPOD_SOURCE_RESOLVED="$(devpod_resolve_source "${PROJECT_ROOT}")" \
     || { error "Failed to resolve DevPod source"; exit 1; }
 log "  Source: ${DEVPOD_SOURCE_RESOLVED}"
-devpod up "${WORKSPACE}" \
-    --source "${DEVPOD_SOURCE_RESOLVED}" \
-    --id "${WORKSPACE}" \
-    --provider "${PROVIDER}" \
-    --devcontainer-path "${DEVCONTAINER}" \
-    --ide none \
+provision_workspace \
     || { error "Failed to provision workspace"; exit 1; }
 log "Workspace provisioned"
 
@@ -188,10 +410,7 @@ set +e
 case "${DEVPOD_E2E_EXECUTION}" in
     remote)
         log "Running E2E inside DevPod workspace '${WORKSPACE}' (workdir: ${DEVPOD_REMOTE_WORKDIR})..."
-        devpod ssh "${WORKSPACE}" \
-            --start-services=false \
-            --workdir "${DEVPOD_REMOTE_WORKDIR}" \
-            --command "IMAGE_LOAD_METHOD=kind make test-e2e"
+        run_remote_e2e_detached
         TEST_EXIT_CODE=$?
         ;;
     local)

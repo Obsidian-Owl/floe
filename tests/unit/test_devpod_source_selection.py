@@ -38,9 +38,22 @@ def test_full_lifecycle_uses_devpod_source_flag() -> None:
 
     assert 'source "${SCRIPT_DIR}/devpod-source.sh"' in script
     assert 'devpod_resolve_source "${PROJECT_ROOT}"' in script
+    assert "provision_workspace()" in script
     assert 'devpod up "${WORKSPACE}"' in script
     assert '--source "${DEVPOD_SOURCE_RESOLVED}"' in script
     assert 'devpod up "${PROJECT_ROOT}"' not in script
+
+
+@pytest.mark.requirement("AC-DevPod-Git-Source")
+def test_full_lifecycle_recovers_if_devpod_up_transport_drops() -> None:
+    """A dropped `devpod up` channel must not immediately destroy a ready VM."""
+    script = _read(_DEVPOD_TEST)
+
+    assert "recover_workspace_after_up_failure()" in script
+    assert 'DEVPOD_UP_RECOVERY_TIMEOUT="${DEVPOD_UP_RECOVERY_TIMEOUT:-600}"' in script
+    assert "workspace_running && return 0" in script
+    assert "recover_workspace_after_up_failure" in script
+    assert 'error "Failed to provision workspace"' in script
 
 
 @pytest.mark.requirement("AC-DevPod-Git-Source")
@@ -66,9 +79,26 @@ def test_full_lifecycle_runs_e2e_inside_devpod_by_default() -> None:
     assert 'DEVPOD_E2E_EXECUTION="${DEVPOD_E2E_EXECUTION:-remote}"' in script
     assert 'case "${DEVPOD_E2E_EXECUTION}" in' in script
     assert "remote)" in script
-    assert 'devpod ssh "${WORKSPACE}"' in script
+    assert "run_remote_e2e_detached" in script
+    assert "start_remote_e2e_run" in script
+    assert "poll_remote_e2e_run" in script
+    assert "fetch_remote_e2e_artifacts" in script
     assert '--workdir "${DEVPOD_REMOTE_WORKDIR}"' in script
-    assert '--command "IMAGE_LOAD_METHOD=kind make test-e2e"' in script
+    assert "IMAGE_LOAD_METHOD=kind make test-e2e" in script
+    assert '--command "bash -lc ${escaped_script}"' in script
+
+
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_full_lifecycle_remote_e2e_is_detached_and_resumable() -> None:
+    """Remote E2E must survive a dropped long-lived DevPod SSH command."""
+    script = _read(_DEVPOD_TEST)
+
+    assert 'nohup bash "\\${run_dir}/run.sh"' in script
+    assert 'echo "\\${rc}" > "\\${FLOE_REMOTE_RUN_DIR}/exit-code"' in script
+    assert "poll_failures=$((poll_failures + 1))" in script
+    assert "DEVPOD_REMOTE_POLL_FAILURE_LIMIT" in script
+    assert "DEVPOD_REMOTE_E2E_TIMEOUT" in script
+    assert "test-artifacts/devpod-${REMOTE_RUN_ID}" in script
 
 
 @pytest.mark.requirement("AC-DevPod-Remote-E2E")
