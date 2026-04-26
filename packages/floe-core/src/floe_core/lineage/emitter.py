@@ -147,6 +147,14 @@ class LineageEmitter:
         """Close the underlying transport and release resources."""
         self.transport.close()
 
+    async def flush(self) -> None:
+        """Wait for the underlying transport to deliver queued events."""
+        await self.transport.flush()
+
+    async def close_async(self) -> None:
+        """Drain and close the underlying transport."""
+        await self.transport.close_async()
+
 
 def create_emitter(
     transport_config: dict[str, Any] | None = None,

@@ -172,6 +172,7 @@ def build_product_definitions(
         except Exception as exc:
             try:
                 lineage.emit_fail(run_id, product_name, error_message=type(exc).__name__)
+                lineage.flush()
             except Exception as _fail_exc:
                 if policy.require_lineage:
                     raise
@@ -180,6 +181,7 @@ def build_product_definitions(
 
         try:
             lineage.emit_complete(run_id, product_name)
+            lineage.flush()
         except Exception as _complete_exc:
             if policy.require_lineage:
                 raise

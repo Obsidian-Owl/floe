@@ -204,4 +204,5 @@ def test_runtime_emits_per_model_lineage_after_iceberg_export_with_parent_run(
         artifacts.observability.lineage_namespace,
     )
     lineage.emit_event.assert_called_once_with(extracted_event)
+    lineage.flush.assert_called_once()
     assert call_order == ["export", "extract"]

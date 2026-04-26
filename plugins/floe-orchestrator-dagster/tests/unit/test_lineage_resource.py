@@ -71,6 +71,8 @@ def mock_emitter() -> MagicMock:
     emitter.emit_start = AsyncMock(return_value=start_id)
     emitter.emit_complete = AsyncMock(return_value=None)
     emitter.emit_fail = AsyncMock(return_value=None)
+    emitter.flush = AsyncMock(return_value=None)
+    emitter.close_async = AsyncMock(return_value=None)
     emitter.close = MagicMock()
 
     return emitter
@@ -423,13 +425,22 @@ class TestLineageResourceClose:
     """Tests for close() — AC-5."""
 
     @pytest.mark.requirement(AC_5)
-    def test_close_calls_emitter_close(
+    def test_flush_calls_emitter_flush(
         self, lineage_resource: Any, mock_emitter: MagicMock
     ) -> None:
-        """Test close() calls emitter.close() to drain the transport."""
+        """Test flush() drains queued transport events."""
+        lineage_resource.flush()
+
+        mock_emitter.flush.assert_awaited_once()
+
+    @pytest.mark.requirement(AC_5)
+    def test_close_calls_emitter_close_async(
+        self, lineage_resource: Any, mock_emitter: MagicMock
+    ) -> None:
+        """Test close() calls emitter.close_async() to drain the transport."""
         lineage_resource.close()
 
-        mock_emitter.close.assert_called_once()
+        mock_emitter.close_async.assert_awaited_once()
 
     @pytest.mark.requirement(AC_5)
     def test_close_stops_background_loop(self, lineage_resource: Any) -> None:
@@ -511,9 +522,9 @@ class TestLineageResourceClose:
         lineage_resource.close()
         lineage_resource.close()
 
-        # emitter.close should be called at most once (idempotent)
-        assert mock_emitter.close.call_count <= 1, (
-            f"emitter.close called {mock_emitter.close.call_count} times; "
+        # emitter.close_async should be called at most once (idempotent)
+        assert mock_emitter.close_async.await_count <= 1, (
+            f"emitter.close_async called {mock_emitter.close_async.await_count} times; "
             "close() must be idempotent"
         )
 

@@ -256,6 +256,18 @@ class LineageResource:
         if asyncio.iscoroutine(result):
             self._run_coroutine(result)
 
+    def flush(self) -> None:
+        """Block until queued lineage events have been delivered."""
+        if self._closed:
+            return
+
+        flush = getattr(self._emitter, "flush", None)
+        if flush is None:
+            return
+        result = flush()
+        if asyncio.iscoroutine(result):
+            self._run_coroutine(result)
+
     def close(self) -> None:
         """Drain the emitter, stop the background loop, and join the thread.
 
@@ -265,7 +277,13 @@ class LineageResource:
             return
         self._closed = True
 
-        self._emitter.close()
+        close_async = getattr(self._emitter, "close_async", None)
+        if close_async is not None:
+            result = close_async()
+            if asyncio.iscoroutine(result):
+                self._run_coroutine(result)
+        else:
+            self._emitter.close()
         self._loop.call_soon_threadsafe(self._loop.stop)
         self._thread.join(timeout=_EMIT_TIMEOUT)
         if self._thread.is_alive():
@@ -361,6 +379,9 @@ class NoOpLineageResource:
         Args:
             event: Ignored.
         """
+
+    def flush(self) -> None:
+        """No-op. Safe to call multiple times."""
 
     def close(self) -> None:
         """No-op. Safe to call multiple times."""
