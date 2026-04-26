@@ -58,6 +58,51 @@ def test_full_lifecycle_provider_check_is_pipefail_safe() -> None:
     assert 'grep -q "hetzner"' not in script
 
 
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_full_lifecycle_runs_e2e_inside_devpod_by_default() -> None:
+    """Full lifecycle validation must not stream local E2E images by default."""
+    script = _read(_DEVPOD_TEST)
+
+    assert 'DEVPOD_E2E_EXECUTION="${DEVPOD_E2E_EXECUTION:-remote}"' in script
+    assert 'case "${DEVPOD_E2E_EXECUTION}" in' in script
+    assert "remote)" in script
+    assert 'devpod ssh "${WORKSPACE}"' in script
+    assert '--workdir "${DEVPOD_REMOTE_WORKDIR}"' in script
+    assert '--command "IMAGE_LOAD_METHOD=kind make test-e2e"' in script
+
+
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_full_lifecycle_keeps_local_e2e_as_explicit_fallback() -> None:
+    """The old host-driven E2E path must be opt-in, not the default path."""
+    script = _read(_DEVPOD_TEST)
+
+    assert "local)" in script
+    assert 'make -C "${PROJECT_ROOT}" test-e2e KUBECONFIG="${KUBECONFIG_PATH}"' in script
+    assert "DEVPOD_E2E_EXECUTION=local" in script
+
+
+@pytest.mark.requirement("AC-DevPod-Health-Gate")
+def test_full_lifecycle_health_gate_counts_captured_pod_rows() -> None:
+    """Pod health arithmetic must operate on normalized numeric counts."""
+    script = _read(_DEVPOD_TEST)
+
+    assert 'POD_ROWS="$(kubectl --kubeconfig="${KUBECONFIG_PATH}" get pods' in script
+    assert 'TOTAL="$(printf' in script
+    assert "sed '/^[[:space:]]*$/d'" in script
+    assert 'UNHEALTHY="$(printf' in script
+    assert "wc -l | tr -d ' ' || echo \"0\"" not in script
+
+
+@pytest.mark.requirement("AC-DevPod-Cleanup")
+def test_full_lifecycle_cleanup_disarms_trap_before_deleting_workspace() -> None:
+    """Signal-triggered cleanup must not run again via the EXIT trap."""
+    script = _read(_DEVPOD_TEST)
+    cleanup_start = script.index("cleanup() {")
+    delete_start = script.index('if [[ "${WORKSPACE_CREATED}" == "true" ]]; then')
+
+    assert "trap - EXIT INT TERM" in script[cleanup_start:delete_start]
+
+
 @pytest.mark.requirement("AC-DevPod-Git-Source")
 def test_readiness_restart_uses_same_source_selection() -> None:
     """Auto-started workspaces must use the same remote-source path."""

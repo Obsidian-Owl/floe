@@ -15,6 +15,12 @@
 #   - Hetzner provider configured (run: make devpod-setup)
 #   - .env file with DEVPOD_HETZNER_TOKEN
 #   - current branch pushed to origin, or DEVPOD_SOURCE set explicitly
+#
+# Environment:
+#   DEVPOD_E2E_EXECUTION remote|local (default: remote). The local fallback is
+#                        retained only for debugging DevPod image transport.
+#   DEVPOD_REMOTE_WORKDIR Remote repository root inside the workspace
+#                        (default: /workspace).
 
 set -euo pipefail
 
@@ -35,6 +41,8 @@ KUBECONFIG_PATH="${HOME}/.kube/devpod-${WORKSPACE}.config"
 HEALTH_TIMEOUT="${DEVPOD_HEALTH_TIMEOUT:-120}"
 NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 PROVIDER="${DEVPOD_PROVIDER:-hetzner}"
+DEVPOD_E2E_EXECUTION="${DEVPOD_E2E_EXECUTION:-remote}"
+DEVPOD_REMOTE_WORKDIR="${DEVPOD_REMOTE_WORKDIR:-/workspace}"
 
 # Track whether we created the workspace (for cleanup decisions)
 WORKSPACE_CREATED=false
@@ -54,6 +62,7 @@ error() {
 
 cleanup() {
     local exit_code=$?
+    trap - EXIT INT TERM
     log "Cleanup triggered (exit code: ${exit_code})"
 
     # Kill SSH tunnels (best-effort)
@@ -135,10 +144,13 @@ ELAPSED=0
 INTERVAL=10
 while [[ ${ELAPSED} -lt ${HEALTH_TIMEOUT} ]]; do
     # Count non-healthy pods (not Running and not Completed)
-    UNHEALTHY=$(kubectl --kubeconfig="${KUBECONFIG_PATH}" get pods -n "${NAMESPACE}" --no-headers 2>/dev/null \
-        | grep -Ecv " Running | Completed " || true)
-    TOTAL=$(kubectl --kubeconfig="${KUBECONFIG_PATH}" get pods -n "${NAMESPACE}" --no-headers 2>/dev/null \
-        | wc -l | tr -d ' ' || echo "0")
+    POD_ROWS="$(kubectl --kubeconfig="${KUBECONFIG_PATH}" get pods -n "${NAMESPACE}" --no-headers 2>/dev/null || true)"
+    TOTAL="$(printf '%s\n' "${POD_ROWS}" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+    if [[ "${TOTAL}" -eq 0 ]]; then
+        UNHEALTHY=0
+    else
+        UNHEALTHY="$(printf '%s\n' "${POD_ROWS}" | grep -Ecv " Running | Completed " || true)"
+    fi
 
     if [[ "${TOTAL}" -gt 0 ]] && [[ "${UNHEALTHY}" -eq 0 ]]; then
         log "All ${TOTAL} pods healthy"
@@ -173,8 +185,25 @@ log "Step 4/5: Running E2E tests..."
 
 # Run tests and capture exit code (don't let set -e kill us)
 set +e
-make -C "${PROJECT_ROOT}" test-e2e KUBECONFIG="${KUBECONFIG_PATH}"
-TEST_EXIT_CODE=$?
+case "${DEVPOD_E2E_EXECUTION}" in
+    remote)
+        log "Running E2E inside DevPod workspace '${WORKSPACE}' (workdir: ${DEVPOD_REMOTE_WORKDIR})..."
+        devpod ssh "${WORKSPACE}" \
+            --start-services=false \
+            --workdir "${DEVPOD_REMOTE_WORKDIR}" \
+            --command "IMAGE_LOAD_METHOD=kind make test-e2e"
+        TEST_EXIT_CODE=$?
+        ;;
+    local)
+        log "Running E2E from local host (DEVPOD_E2E_EXECUTION=local). This may stream large images over DevPod transport."
+        make -C "${PROJECT_ROOT}" test-e2e KUBECONFIG="${KUBECONFIG_PATH}"
+        TEST_EXIT_CODE=$?
+        ;;
+    *)
+        error "Invalid DEVPOD_E2E_EXECUTION='${DEVPOD_E2E_EXECUTION}'. Use: remote|local"
+        TEST_EXIT_CODE=2
+        ;;
+esac
 set -e
 
 if [[ ${TEST_EXIT_CODE} -eq 0 ]]; then
