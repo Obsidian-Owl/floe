@@ -111,6 +111,32 @@ def test_full_lifecycle_keeps_local_e2e_as_explicit_fallback() -> None:
     assert "DEVPOD_E2E_EXECUTION=local" in script
 
 
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_full_lifecycle_skips_tunnels_for_remote_e2e_by_default() -> None:
+    """Remote E2E must not depend on host-side service SSH tunnels."""
+    script = _read(_DEVPOD_TEST)
+
+    assert 'DEVPOD_ENABLE_REMOTE_TUNNELS="${DEVPOD_ENABLE_REMOTE_TUNNELS:-0}"' in script
+    assert "establish_service_tunnels()" in script
+    assert "Skipping service port tunnels for remote E2E" in script
+    assert 'if [[ "${DEVPOD_ENABLE_REMOTE_TUNNELS}" == "1" ]]; then' in script
+    assert "Failed to establish optional remote SSH tunnels" in script
+
+
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_full_lifecycle_requires_tunnels_for_local_e2e() -> None:
+    """Local E2E still requires tunnels because it runs from the host."""
+    script = _read(_DEVPOD_TEST)
+
+    local_case_start = script.index("local)")
+    invalid_case_start = script.index("*)", local_case_start)
+    local_case = script[local_case_start:invalid_case_start]
+
+    assert 'bash "${SCRIPT_DIR}/devpod-tunnels.sh"' in local_case
+    assert 'error "Failed to establish SSH tunnels"' in local_case
+    assert "Skipping service port tunnels for remote E2E" not in local_case
+
+
 @pytest.mark.requirement("AC-DevPod-Health-Gate")
 def test_full_lifecycle_health_gate_counts_captured_pod_rows() -> None:
     """Pod health arithmetic must operate on normalized numeric counts."""
@@ -163,5 +189,6 @@ def test_env_documents_remote_source_controls() -> None:
         "DEVPOD_SOURCE",
         "DEVPOD_GIT_REF",
         "DEVPOD_ALLOW_LOCAL_SOURCE",
+        "DEVPOD_ENABLE_REMOTE_TUNNELS",
     ):
         assert variable in env_example

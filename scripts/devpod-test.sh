@@ -28,6 +28,9 @@
 #                        before aborting (default: 30).
 #   DEVPOD_UP_RECOVERY_TIMEOUT Seconds to poll workspace status after a
 #                        transport-level `devpod up` failure (default: 600).
+#   DEVPOD_ENABLE_REMOTE_TUNNELS Set to 1 to establish host service tunnels
+#                        before remote E2E. Default 0 because remote tests run
+#                        inside the DevPod workspace network.
 
 set -euo pipefail
 
@@ -56,6 +59,7 @@ DEVPOD_REMOTE_POLL_INTERVAL="${DEVPOD_REMOTE_POLL_INTERVAL:-20}"
 DEVPOD_REMOTE_POLL_FAILURE_LIMIT="${DEVPOD_REMOTE_POLL_FAILURE_LIMIT:-30}"
 DEVPOD_UP_RECOVERY_TIMEOUT="${DEVPOD_UP_RECOVERY_TIMEOUT:-600}"
 DEVPOD_UP_RECOVERY_INTERVAL="${DEVPOD_UP_RECOVERY_INTERVAL:-15}"
+DEVPOD_ENABLE_REMOTE_TUNNELS="${DEVPOD_ENABLE_REMOTE_TUNNELS:-0}"
 REMOTE_RUN_ID="run-$(date -u '+%Y%m%dT%H%M%SZ')-$$"
 REMOTE_RUN_DIR="${DEVPOD_REMOTE_RUN_ROOT}/${REMOTE_RUN_ID}"
 LOCAL_REMOTE_ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts/devpod-${REMOTE_RUN_ID}"
@@ -157,6 +161,11 @@ fi
 
 if [[ ! "${DEVPOD_UP_RECOVERY_INTERVAL}" =~ ^[0-9]+$ ]] || [[ "${DEVPOD_UP_RECOVERY_INTERVAL}" -lt 1 ]]; then
     error "Invalid DEVPOD_UP_RECOVERY_INTERVAL='${DEVPOD_UP_RECOVERY_INTERVAL}'"
+    exit 1
+fi
+
+if [[ "${DEVPOD_ENABLE_REMOTE_TUNNELS}" != "0" && "${DEVPOD_ENABLE_REMOTE_TUNNELS}" != "1" ]]; then
+    error "Invalid DEVPOD_ENABLE_REMOTE_TUNNELS='${DEVPOD_ENABLE_REMOTE_TUNNELS}'. Use: 0|1"
     exit 1
 fi
 
@@ -326,6 +335,31 @@ run_remote_e2e_detached() {
     return "${exit_code}"
 }
 
+establish_service_tunnels() {
+    case "${DEVPOD_E2E_EXECUTION}" in
+        remote)
+            if [[ "${DEVPOD_ENABLE_REMOTE_TUNNELS}" == "1" ]]; then
+                log "Establishing optional service port tunnels for remote E2E..."
+                bash "${SCRIPT_DIR}/devpod-tunnels.sh" \
+                    || { error "Failed to establish optional remote SSH tunnels"; exit 1; }
+                log "Tunnels established"
+            else
+                log "Skipping service port tunnels for remote E2E (DEVPOD_ENABLE_REMOTE_TUNNELS=0)"
+            fi
+            ;;
+        local)
+            log "Establishing service port tunnels for local E2E..."
+            bash "${SCRIPT_DIR}/devpod-tunnels.sh" \
+                || { error "Failed to establish SSH tunnels"; exit 1; }
+            log "Tunnels established"
+            ;;
+        *)
+            error "Invalid DEVPOD_E2E_EXECUTION='${DEVPOD_E2E_EXECUTION}'. Use: remote|local"
+            exit 1
+            ;;
+    esac
+}
+
 # ─── Pre-flight checks ───────────────────────────────────────────────────────
 
 if ! command -v devpod >/dev/null 2>&1; then
@@ -392,14 +426,10 @@ if [[ ${ELAPSED} -ge ${HEALTH_TIMEOUT} ]]; then
     exit 1
 fi
 
-# ─── Step 3: Establish tunnels ───────────────────────────────────────────────
+# ─── Step 3: Establish tunnels when required ─────────────────────────────────
 
-log "Step 3/5: Establishing service port tunnels..."
-
-bash "${SCRIPT_DIR}/devpod-tunnels.sh" \
-    || { error "Failed to establish SSH tunnels"; exit 1; }
-
-log "Tunnels established"
+log "Step 3/5: Preparing service access..."
+establish_service_tunnels
 
 # ─── Step 4: Run E2E tests ───────────────────────────────────────────────────
 
