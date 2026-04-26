@@ -35,6 +35,12 @@
       "minimum": 1,
       "description": "Minimum number of Iceberg snapshots to retain per table"
     },
+    "stale_table_recovery_mode": {
+      "type": ["string", "null"],
+      "enum": ["strict", "repair", null],
+      "default": null,
+      "description": "How runtimes handle catalog table registrations that point at missing Iceberg metadata files"
+    },
     "naming": {
       "$ref": "#/$defs/NamingConfig",
       "description": "Naming convention configuration"

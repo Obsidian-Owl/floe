@@ -49,6 +49,7 @@ EXPECTED_SCALAR_FIELDS: frozenset[str] = frozenset(
         "data_retention_days",
         "default_ttl_hours",
         "snapshot_keep_last",
+        "stale_table_recovery_mode",
     }
 )
 """The concrete scalar governance fields today.
