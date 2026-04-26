@@ -37,6 +37,7 @@ DESTRUCTIVE_TEMPLATE = "templates/tests/rbac-destructive.yaml"
 
 # Helm 3 stores release state in secrets with this name prefix.
 HELM_RELEASE_PREFIX = "sh.helm.release.v1."
+HELM_PRE_UPGRADE_HOOK_NAME = "floe-platform-pre-upgrade"
 
 
 def _render_role(template: str) -> dict[str, Any]:
@@ -87,6 +88,11 @@ def _render_role(template: str) -> dict[str, Any]:
 
 def _secrets_rules(role: dict[str, Any]) -> list[dict[str, Any]]:
     """Return every rule entry that targets the core `secrets` resource."""
+    return _rules_for(role, api_group="", resource="secrets")
+
+
+def _rules_for(role: dict[str, Any], *, api_group: str, resource: str) -> list[dict[str, Any]]:
+    """Return every rule entry for a specific apiGroup/resource pair."""
     rules_any: Any = role.get("rules") or []
     assert isinstance(rules_any, list), "Role.rules must be a list"
     rules: list[Any] = cast("list[Any]", rules_any)
@@ -101,9 +107,25 @@ def _secrets_rules(role: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         api_groups: list[Any] = cast("list[Any]", api_groups_any)
         resources: list[Any] = cast("list[Any]", resources_any)
-        if "" in api_groups and "secrets" in resources:
+        if api_group in api_groups and resource in resources:
             out.append(rule)
     return out
+
+
+def _verbs(rule: dict[str, Any]) -> set[str]:
+    """Return normalized string verbs from an RBAC rule."""
+    verbs_any: Any = rule.get("verbs") or []
+    assert isinstance(verbs_any, list), f"Role rule verbs must be a list: {rule!r}"
+    return {v for v in cast("list[Any]", verbs_any) if isinstance(v, str)}
+
+
+def _resource_names(rule: dict[str, Any]) -> list[str]:
+    """Return normalized string resourceNames from an RBAC rule."""
+    resource_names_any: Any = rule.get("resourceNames") or []
+    assert isinstance(resource_names_any, list), (
+        f"Role rule resourceNames must be a list when present: {rule!r}"
+    )
+    return [n for n in cast("list[Any]", resource_names_any) if isinstance(n, str)]
 
 
 # =========================================================================
@@ -238,3 +260,76 @@ def test_destructive_runner_does_not_grant_unscoped_mutation() -> None:
                 f"AC-9 violation: rule grants update/delete on secrets "
                 f"without resourceNames scoping; rule: {rule!r}"
             )
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_can_manage_pre_upgrade_hook_identity_scoped() -> None:
+    """Destructive runner may manage only the chart's pre-upgrade hook identity.
+
+    Helm executes the destructive upgrade test as the destructive test-runner
+    ServiceAccount. The chart's pre-upgrade hook is annotated with
+    `before-hook-creation`, so Helm must delete and recreate the hook
+    ServiceAccount, Role, and RoleBinding during `helm upgrade`.
+    """
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
+
+    core_rules = _rules_for(role, api_group="", resource="serviceaccounts")
+    assert any("create" in _verbs(rule) for rule in core_rules), (
+        "Destructive runner must be able to create the pre-upgrade hook "
+        "ServiceAccount; Kubernetes RBAC cannot scope create by resourceNames."
+    )
+    assert any(
+        {"get", "delete"}.issubset(_verbs(rule))
+        and _resource_names(rule) == [HELM_PRE_UPGRADE_HOOK_NAME]
+        for rule in core_rules
+    ), (
+        "Destructive runner must be able to get/delete only the pre-upgrade "
+        f"hook ServiceAccount {HELM_PRE_UPGRADE_HOOK_NAME!r}."
+    )
+
+    for resource in ("roles", "rolebindings"):
+        rbac_rules = _rules_for(
+            role,
+            api_group="rbac.authorization.k8s.io",
+            resource=resource,
+        )
+        assert any("create" in _verbs(rule) for rule in rbac_rules), (
+            f"Destructive runner must be able to create pre-upgrade hook {resource}; "
+            "Kubernetes RBAC cannot scope create by resourceNames."
+        )
+        assert any(
+            {"get", "delete"}.issubset(_verbs(rule))
+            and _resource_names(rule) == [HELM_PRE_UPGRADE_HOOK_NAME]
+            for rule in rbac_rules
+        ), (
+            "Destructive runner must be able to get/delete only the pre-upgrade "
+            f"hook {resource} {HELM_PRE_UPGRADE_HOOK_NAME!r}."
+        )
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_has_read_only_networkpolicy_access_for_helm_rollback() -> None:
+    """Destructive runner needs read-only NetworkPolicy access for Helm rollback.
+
+    The chart renders NetworkPolicies in test values. When a Helm upgrade
+    fails and `--rollback-on-failure` runs, Helm reads rendered resources to
+    restore release state. Missing read access leaves the release stuck in
+    `failed`, masking the original failure and breaking downstream tests.
+    """
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
+    rules = _rules_for(
+        role,
+        api_group="networking.k8s.io",
+        resource="networkpolicies",
+    )
+
+    assert any({"get", "list", "watch"}.issubset(_verbs(rule)) for rule in rules), (
+        "Destructive runner must have read-only access to NetworkPolicies so "
+        "Helm rollback can inspect chart-managed policies."
+    )
+    for rule in rules:
+        forbidden = _verbs(rule) & {"create", "update", "patch", "delete", "deletecollection"}
+        assert not forbidden, (
+            "Destructive runner NetworkPolicy access must remain read-only; "
+            f"found mutating verbs {forbidden!r} in rule {rule!r}."
+        )

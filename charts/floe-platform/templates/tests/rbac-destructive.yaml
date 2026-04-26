@@ -53,7 +53,32 @@ rules:
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
     verbs: ["get", "list", "watch"]
-  # Secrets: split by verb for least privilege (security-hardening AC-9).
+  # Helm pre-upgrade hook identity. The chart's hook uses
+  # before-hook-creation, so Helm must delete and recreate these resources
+  # during destructive upgrade tests. K8s RBAC cannot scope create by name.
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    resourceNames:
+      - "{{ include "floe-platform.fullname" . }}-pre-upgrade"
+    verbs: ["get", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["create"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    resourceNames:
+      - "{{ include "floe-platform.fullname" . }}-pre-upgrade"
+    verbs: ["get", "delete"]
+  # Helm rollback reads chart-managed NetworkPolicies while restoring release
+  # state. Keep this read-only; destructive tests should not mutate policies
+  # directly.
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  # Helm release state: split by verb for least privilege (security-hardening AC-9).
   # Read path: list/watch required for Helm release enumeration.
   - apiGroups: [""]
     resources: ["secrets"]
