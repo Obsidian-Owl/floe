@@ -239,7 +239,9 @@ poll_remote_e2e_run() {
     local deadline=$((SECONDS + DEVPOD_REMOTE_E2E_TIMEOUT))
     local poll_failures=0
     local poll_output=""
+    local poll_status=0
     local poll_script=""
+    local poll_state=""
     local run_dir_q
     run_dir_q="$(shell_quote "${REMOTE_RUN_DIR}")"
 
@@ -260,11 +262,17 @@ REMOTE_SCRIPT
 )
 
     while (( SECONDS < deadline )); do
-        if poll_output="$(devpod_remote_bash "${poll_script}" 2>&1)"; then
+        set +e
+        poll_output="$(devpod_remote_bash "${poll_script}" 2>&1)"
+        poll_status=$?
+        set -e
+        poll_state="$(printf '%s\n' "${poll_output}" | grep -E '^(complete:[0-9]+|running|lost)$' | tail -1 || true)"
+
+        if [[ -n "${poll_state}" ]]; then
             poll_failures=0
-            case "${poll_output}" in
+            case "${poll_state}" in
                 complete:*)
-                    printf '%s\n' "${poll_output#complete:}"
+                    printf '%s\n' "${poll_state#complete:}"
                     return 0
                     ;;
                 running)
@@ -278,6 +286,8 @@ REMOTE_SCRIPT
                     error "Unexpected remote E2E poll response: ${poll_output}"
                     ;;
             esac
+        elif [[ "${poll_status}" -eq 0 ]]; then
+            error "Unexpected remote E2E poll response: ${poll_output}"
         else
             poll_failures=$((poll_failures + 1))
             error "Remote E2E poll failed (${poll_failures}/${DEVPOD_REMOTE_POLL_FAILURE_LIMIT}): ${poll_output}"

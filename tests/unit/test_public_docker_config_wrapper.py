@@ -49,6 +49,22 @@ def test_public_docker_wrapper_defaults_to_isolated_config() -> None:
 
 
 @pytest.mark.requirement("AC-2")
+def test_public_docker_wrapper_defaults_to_isolated_helm_registry_config() -> None:
+    """Helm OCI dependency pulls must not inherit stale Docker credential helpers."""
+    result = _run_wrapper(
+        "python",
+        "-c",
+        (
+            "import os, pathlib; "
+            "config = pathlib.Path(os.environ['HELM_REGISTRY_CONFIG']); "
+            "print(config.read_text().strip())"
+        ),
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == '{"auths":{}}'
+
+
+@pytest.mark.requirement("AC-2")
 def test_public_docker_wrapper_can_inherit_existing_config() -> None:
     """Callers must be able to opt out when they intentionally need custom auth."""
     inherited_dir = _REPO_ROOT / ".tmp-test-docker-config"
@@ -155,6 +171,15 @@ def test_ci_test_runner_builds_use_public_docker_wrapper() -> None:
         "scripts/with-public-docker-config.sh docker build -t "
         '"${IMAGE_NAME}" -f testing/Dockerfile .'
     ) in integration_script
+
+
+@pytest.mark.requirement("AC-2")
+def test_chart_dependency_builds_use_public_registry_wrapper() -> None:
+    """Helm OCI chart dependencies should bypass ambient DevPod credential helpers."""
+    common_script = (_REPO_ROOT / "testing" / "ci" / "common.sh").read_text()
+
+    assert "floe_public_registry_command()" in common_script
+    assert 'floe_public_registry_command helm dependency build "${FLOE_CHART_DIR}"' in common_script
 
 
 @pytest.mark.requirement("AC-2")

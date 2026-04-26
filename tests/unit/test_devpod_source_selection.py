@@ -102,6 +102,18 @@ def test_full_lifecycle_remote_e2e_is_detached_and_resumable() -> None:
 
 
 @pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_full_lifecycle_parses_remote_poll_payload_when_devpod_exits_nonzero() -> None:
+    """DevPod can append tunnel errors after a valid remote poll payload."""
+    script = _read(_DEVPOD_TEST)
+
+    assert "poll_status=$?" in script
+    assert "poll_state=" in script
+    assert "grep -E '^(complete:[0-9]+|running|lost)$'" in script
+    assert 'case "${poll_state}" in' in script
+    assert "printf '%s\\n' \"${poll_state#complete:}\"" in script
+
+
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
 def test_full_lifecycle_keeps_local_e2e_as_explicit_fallback() -> None:
     """The old host-driven E2E path must be opt-in, not the default path."""
     script = _read(_DEVPOD_TEST)

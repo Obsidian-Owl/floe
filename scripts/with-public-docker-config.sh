@@ -19,6 +19,7 @@ BUILD_ENGINE="${FLOE_PUBLIC_DOCKER_BUILD_ENGINE:-classic}"
 TEMP_CONFIG_DIR=""
 SOURCE_DOCKER_CONFIG="${DOCKER_CONFIG:-${HOME}/.docker}"
 ACTIVE_DOCKER_CONTEXT=""
+HELM_REGISTRY_CONFIG_WRITTEN=""
 
 cleanup() {
     if [[ -n "${TEMP_CONFIG_DIR}" ]]; then
@@ -65,6 +66,13 @@ write_isolated_config() {
     fi
 }
 
+write_isolated_helm_registry_config() {
+    local target_file="$1"
+    mkdir -p "$(dirname "${target_file}")"
+    printf '{"auths":{}}\n' > "${target_file}"
+    HELM_REGISTRY_CONFIG_WRITTEN="${target_file}"
+}
+
 if [[ -n "${CONFIG_DIR}" ]]; then
     mkdir -p "${CONFIG_DIR}"
     if [[ ! -f "${CONFIG_DIR}/config.json" ]]; then
@@ -73,10 +81,18 @@ if [[ -n "${CONFIG_DIR}" ]]; then
         ln -s "${SOURCE_DOCKER_CONFIG}/contexts" "${CONFIG_DIR}/contexts"
     fi
     export DOCKER_CONFIG="${CONFIG_DIR}"
+    if [[ "${CONFIG_MODE}" == "isolated" && -z "${HELM_REGISTRY_CONFIG:-}" ]]; then
+        write_isolated_helm_registry_config "${CONFIG_DIR}/helm-registry-config.json"
+        export HELM_REGISTRY_CONFIG="${HELM_REGISTRY_CONFIG_WRITTEN}"
+    fi
 elif [[ "${CONFIG_MODE}" == "isolated" ]]; then
     TEMP_CONFIG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/floe-public-docker.XXXXXX")"
     write_isolated_config "${TEMP_CONFIG_DIR}"
     export DOCKER_CONFIG="${TEMP_CONFIG_DIR}"
+    if [[ -z "${HELM_REGISTRY_CONFIG:-}" ]]; then
+        write_isolated_helm_registry_config "${TEMP_CONFIG_DIR}/helm-registry-config.json"
+        export HELM_REGISTRY_CONFIG="${HELM_REGISTRY_CONFIG_WRITTEN}"
+    fi
 fi
 
 if [[ "${1:-}" == "docker" && "${2:-}" == "build" ]]; then
