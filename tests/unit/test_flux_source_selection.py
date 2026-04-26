@@ -121,3 +121,46 @@ def test_deploy_via_flux_accepts_explicit_branch_match(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert "rendered_branch=feature-worktree" in result.stdout
+
+
+def test_render_flux_manifests_injects_demo_image_without_python_yaml(
+    tmp_path: Path,
+) -> None:
+    """Flux image overrides must not depend on system Python packages.
+
+    The Hetzner DevPod bootstrap environment has Python but not necessarily
+    PyYAML. If rendering relies on ``import yaml``, the image override is
+    skipped and Flux deploys the stale ``floe-dagster-demo:latest`` value.
+    """
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    fake_python = fake_bin / "python3"
+    fake_python.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo 'python3 must not be required for Flux image injection' >&2\n"
+        "exit 127\n"
+    )
+    fake_python.chmod(0o755)
+
+    result = _run_setup_function(
+        textwrap.dedent(
+            f"""\
+            export PATH="{fake_bin}:$PATH"
+            FLOE_FLUX_FIXTURE_DIR="{_REPO_ROOT / "testing" / "k8s" / "flux"}"
+
+            rendered_dir="$(render_flux_manifests "feature-worktree")"
+            trap 'rm -rf "$rendered_dir"' EXIT
+
+            grep -q 'tag: "local"' "$rendered_dir/helmrelease-platform.yaml"
+            grep -q 'repository: "floe-dagster-demo"' "$rendered_dir/helmrelease-platform.yaml"
+            if grep -q 'python3 must not be required' \\
+                "$rendered_dir/helmrelease-platform.yaml"; then
+                exit 99
+            fi
+            """
+        ),
+        tmp_path,
+        required_branch="feature-worktree",
+    )
+
+    assert result.returncode == 0, result.stderr

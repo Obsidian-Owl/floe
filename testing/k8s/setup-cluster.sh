@@ -67,37 +67,54 @@ log_error() {
 
 inject_demo_image_values() {
     local manifest_path="$1"
-    python3 - "${manifest_path}" "${FLOE_DEMO_IMAGE_REPOSITORY}" "${FLOE_DEMO_IMAGE_TAG}" <<'PY'
-from pathlib import Path
-import sys
+    local rendered_path
+    local repository
+    local tag
 
-import yaml
+    rendered_path=$(mktemp "${TMPDIR:-/tmp}/floe-helmrelease.XXXXXX")
+    repository=$(yaml_quote "${FLOE_DEMO_IMAGE_REPOSITORY}")
+    tag=$(yaml_quote "${FLOE_DEMO_IMAGE_TAG}")
 
-manifest_path = Path(sys.argv[1])
-repository = sys.argv[2]
-tag = sys.argv[3]
+    awk -v repository="${repository}" -v tag="${tag}" '
+        BEGIN { injected = 0 }
+        /^spec:[[:space:]]*$/ && injected == 0 {
+            print
+            print "  values:"
+            print "    dagster:"
+            print "      dagsterWebserver:"
+            print "        image:"
+            print "          repository: " repository
+            print "          tag: " tag
+            print "      dagsterDaemon:"
+            print "        image:"
+            print "          repository: " repository
+            print "          tag: " tag
+            print "      runLauncher:"
+            print "        config:"
+            print "          k8sRunLauncher:"
+            print "            image:"
+            print "              repository: " repository
+            print "              tag: " tag
+            injected = 1
+            next
+        }
+        { print }
+        END { if (injected == 0) exit 42 }
+    ' "${manifest_path}" >"${rendered_path}" || {
+        local status=$?
+        rm -f "${rendered_path}"
+        log_error "Failed to inject demo image values into Flux HelmRelease: ${manifest_path}"
+        return "${status}"
+    }
 
-raw = yaml.safe_load(manifest_path.read_text()) or {}
-spec = raw.setdefault("spec", {})
-values = spec.setdefault("values", {})
-dagster = values.setdefault("dagster", {})
+    mv "${rendered_path}" "${manifest_path}"
+}
 
-for component in ("dagsterWebserver", "dagsterDaemon"):
-    image = dagster.setdefault(component, {}).setdefault("image", {})
-    image["repository"] = repository
-    image["tag"] = tag
-
-run_image = (
-    dagster.setdefault("runLauncher", {})
-    .setdefault("config", {})
-    .setdefault("k8sRunLauncher", {})
-    .setdefault("image", {})
-)
-run_image["repository"] = repository
-run_image["tag"] = tag
-
-manifest_path.write_text(yaml.safe_dump(raw, sort_keys=False))
-PY
+yaml_quote() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    printf '"%s"' "${value}"
 }
 
 # Check prerequisites
