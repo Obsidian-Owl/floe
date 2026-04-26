@@ -55,10 +55,12 @@ rules:
     verbs: ["get", "list", "watch"]
   # Helm pre-upgrade hook identity. The chart's hook uses
   # before-hook-creation, so Helm must delete and recreate these resources
-  # during destructive upgrade tests. K8s RBAC cannot scope create by name.
+  # during destructive upgrade tests. Helm also watches hook resources and
+  # reads chart-managed resources during rollback. K8s RBAC cannot scope
+  # create by name.
   - apiGroups: [""]
     resources: ["serviceaccounts"]
-    verbs: ["list"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["serviceaccounts"]
     verbs: ["create"]
@@ -66,10 +68,10 @@ rules:
     resources: ["serviceaccounts"]
     resourceNames:
       - "{{ include "floe-platform.fullname" . }}-pre-upgrade"
-    verbs: ["get", "delete"]
+    verbs: ["delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "rolebindings"]
-    verbs: ["list"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "rolebindings"]
     verbs: ["create"]
@@ -77,7 +79,7 @@ rules:
     resources: ["roles", "rolebindings"]
     resourceNames:
       - "{{ include "floe-platform.fullname" . }}-pre-upgrade"
-    verbs: ["get", "delete"]
+    verbs: ["delete"]
   # Helm rollback reads chart-managed NetworkPolicies while restoring release
   # state. Keep this read-only; destructive tests should not mutate policies
   # directly.

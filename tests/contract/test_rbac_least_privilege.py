@@ -128,6 +128,45 @@ def _resource_names(rule: dict[str, Any]) -> list[str]:
     return [n for n in cast("list[Any]", resource_names_any) if isinstance(n, str)]
 
 
+def _assert_read_only_chart_management_access(
+    role: dict[str, Any],
+    *,
+    api_group: str,
+    resource: str,
+) -> None:
+    """Assert Helm can inspect chart-managed resources without mutating them."""
+    rules = _rules_for(role, api_group=api_group, resource=resource)
+    assert any({"get", "list", "watch"}.issubset(_verbs(rule)) for rule in rules), (
+        f"Destructive runner must have get/list/watch on {resource} so Helm "
+        "can wait on hooks and inspect chart-managed resources during rollback."
+    )
+    for rule in rules:
+        if {"get", "list", "watch"}.issubset(_verbs(rule)):
+            forbidden = _verbs(rule) & {"update", "patch", "delete", "deletecollection"}
+            assert not forbidden, (
+                f"Destructive runner {resource} chart-management access must "
+                f"remain read-only; found mutating verbs {forbidden!r} in "
+                f"rule {rule!r}."
+            )
+
+
+def _assert_scoped_hook_delete(
+    role: dict[str, Any],
+    *,
+    api_group: str,
+    resource: str,
+) -> None:
+    """Assert only the chart's pre-upgrade hook resource can be deleted."""
+    rules = _rules_for(role, api_group=api_group, resource=resource)
+    assert any(
+        "delete" in _verbs(rule) and _resource_names(rule) == [HELM_PRE_UPGRADE_HOOK_NAME]
+        for rule in rules
+    ), (
+        "Destructive runner must be able to delete only the pre-upgrade hook "
+        f"{resource} {HELM_PRE_UPGRADE_HOOK_NAME!r}."
+    )
+
+
 # =========================================================================
 # AC-8: Standard test runner — read-only, no list/watch on secrets
 # =========================================================================
@@ -273,47 +312,37 @@ def test_destructive_runner_can_manage_pre_upgrade_hook_identity_scoped() -> Non
     """
     role = _render_role(DESTRUCTIVE_TEMPLATE)
 
-    core_rules = _rules_for(role, api_group="", resource="serviceaccounts")
-    assert any("list" in _verbs(rule) for rule in core_rules), (
-        "Helm lists ServiceAccounts while preparing pre-upgrade hooks. "
-        "Kubernetes RBAC cannot make this work with resourceNames unless the "
-        "client sends a matching field selector, which Helm does not do here."
+    _assert_read_only_chart_management_access(
+        role,
+        api_group="",
+        resource="serviceaccounts",
     )
+    core_rules = _rules_for(role, api_group="", resource="serviceaccounts")
     assert any("create" in _verbs(rule) for rule in core_rules), (
         "Destructive runner must be able to create the pre-upgrade hook "
         "ServiceAccount; Kubernetes RBAC cannot scope create by resourceNames."
     )
-    assert any(
-        {"get", "delete"}.issubset(_verbs(rule))
-        and _resource_names(rule) == [HELM_PRE_UPGRADE_HOOK_NAME]
-        for rule in core_rules
-    ), (
-        "Destructive runner must be able to get/delete only the pre-upgrade "
-        f"hook ServiceAccount {HELM_PRE_UPGRADE_HOOK_NAME!r}."
-    )
+    _assert_scoped_hook_delete(role, api_group="", resource="serviceaccounts")
 
     for resource in ("roles", "rolebindings"):
+        _assert_read_only_chart_management_access(
+            role,
+            api_group="rbac.authorization.k8s.io",
+            resource=resource,
+        )
         rbac_rules = _rules_for(
             role,
             api_group="rbac.authorization.k8s.io",
             resource=resource,
         )
-        assert any("list" in _verbs(rule) for rule in rbac_rules), (
-            f"Helm lists {resource} while preparing pre-upgrade hooks. "
-            "Kubernetes RBAC cannot make this work with resourceNames unless the "
-            "client sends a matching field selector, which Helm does not do here."
-        )
         assert any("create" in _verbs(rule) for rule in rbac_rules), (
             f"Destructive runner must be able to create pre-upgrade hook {resource}; "
             "Kubernetes RBAC cannot scope create by resourceNames."
         )
-        assert any(
-            {"get", "delete"}.issubset(_verbs(rule))
-            and _resource_names(rule) == [HELM_PRE_UPGRADE_HOOK_NAME]
-            for rule in rbac_rules
-        ), (
-            "Destructive runner must be able to get/delete only the pre-upgrade "
-            f"hook {resource} {HELM_PRE_UPGRADE_HOOK_NAME!r}."
+        _assert_scoped_hook_delete(
+            role,
+            api_group="rbac.authorization.k8s.io",
+            resource=resource,
         )
 
 
