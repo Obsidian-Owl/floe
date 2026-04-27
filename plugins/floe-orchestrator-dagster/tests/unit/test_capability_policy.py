@@ -13,6 +13,7 @@ from floe_orchestrator_dagster.capabilities import (
 
 @pytest.mark.requirement("ALPHA-CAPABILITY")
 def test_alpha_profile_requires_catalog_storage_and_lineage() -> None:
+    """Alpha profile must fail fast when required platform capabilities are absent."""
     policy = CapabilityPolicy.alpha()
     plugins = ResolvedPlugins(
         compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -33,6 +34,7 @@ def test_alpha_profile_requires_catalog_storage_and_lineage() -> None:
 
 @pytest.mark.requirement("ALPHA-CAPABILITY")
 def test_non_alpha_profile_allows_unconfigured_lineage() -> None:
+    """Default policy keeps non-alpha profiles backward compatible with partial config."""
     policy = CapabilityPolicy.default()
     plugins = ResolvedPlugins(
         compute=PluginRef(type="duckdb", version="0.9.0"),
@@ -47,6 +49,7 @@ def test_non_alpha_profile_allows_unconfigured_lineage() -> None:
 
 @pytest.mark.requirement("ALPHA-CAPABILITY")
 def test_alpha_profile_accepts_all_required_plugins() -> None:
+    """Alpha policy accepts manifests that configure catalog, storage, and lineage."""
     policy = CapabilityPolicy.alpha()
     plugins = ResolvedPlugins(
         compute=PluginRef(type="duckdb", version="0.9.0"),

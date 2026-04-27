@@ -6,12 +6,12 @@ to ensure GovernanceConfig scalar fields stay synchronized with ResolvedGovernan
 
 Task: T5
 Acceptance Criteria:
-    - AC-6: COMPILED_ARTIFACTS_VERSION is "0.9.0"
+    - AC-6: COMPILED_ARTIFACTS_VERSION is "0.10.0"
     - AC-7: Old JSON without lifecycle fields deserializes correctly
     - AC-9: ResolvedGovernance has all lifecycle fields; drift detection
 
 Contract Guarantees:
-1. COMPILED_ARTIFACTS_VERSION == "0.9.0" (contract-level assertion)
+1. COMPILED_ARTIFACTS_VERSION == "0.10.0" (contract-level assertion)
 2. CompiledArtifacts JSON without default_ttl_hours/snapshot_keep_last -> both None
 3. ResolvedGovernance contains every scalar field from GovernanceConfig
 4. Adding a new scalar field to GovernanceConfig without mirroring in
@@ -209,24 +209,24 @@ def _make_minimal_artifacts_dict() -> dict[str, Any]:
 
 
 class TestCompiledArtifactsVersionContract:
-    """Contract: COMPILED_ARTIFACTS_VERSION must be exactly 0.9.0."""
+    """Contract: COMPILED_ARTIFACTS_VERSION must be exactly 0.10.0."""
 
     @pytest.mark.requirement("T5-AC-6")
-    def test_compiled_artifacts_version_is_0_9_0(self) -> None:
-        """AC-6: COMPILED_ARTIFACTS_VERSION MUST be '0.9.0'.
+    def test_compiled_artifacts_version_is_0_10_0(self) -> None:
+        """AC-6: COMPILED_ARTIFACTS_VERSION MUST be '0.10.0'.
 
         This is a contract-level assertion that locks the version constant.
         If the version changes, this test must be updated deliberately --
         never silently.
         """
-        assert COMPILED_ARTIFACTS_VERSION == "0.9.0", (
+        assert COMPILED_ARTIFACTS_VERSION == "0.10.0", (
             f"COMPILED_ARTIFACTS_VERSION is {COMPILED_ARTIFACTS_VERSION!r}, "
-            "expected '0.9.0'. If this is intentional, update this contract test."
+            "expected '0.10.0'. If this is intentional, update this contract test."
         )
 
     @pytest.mark.requirement("T5-AC-6")
-    def test_default_version_on_new_artifacts_is_0_9_0(self) -> None:
-        """AC-6: A new CompiledArtifacts instance defaults to version '0.9.0'.
+    def test_default_version_on_new_artifacts_is_0_10_0(self) -> None:
+        """AC-6: A new CompiledArtifacts instance defaults to version '0.10.0'.
 
         Ensures the constant is actually wired into the schema default,
         not just defined but unused.
@@ -247,7 +247,7 @@ class TestCompiledArtifactsVersionContract:
             inheritance_chain=[],
             observability=_make_observability(),
         )
-        assert artifacts.version == "0.9.0"
+        assert artifacts.version == "0.10.0"
 
 
 # ===========================================================================

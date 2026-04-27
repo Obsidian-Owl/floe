@@ -57,6 +57,15 @@ def test_full_lifecycle_recovers_if_devpod_up_transport_drops() -> None:
 
 
 @pytest.mark.requirement("AC-DevPod-Git-Source")
+def test_workspace_running_rejects_not_running_status() -> None:
+    """DevPod recovery must not treat 'Not running' as a healthy workspace."""
+    script = _read(_DEVPOD_TEST)
+
+    assert "[Rr]unning" not in script
+    assert "not[[:space:]-]+running" in script
+
+
+@pytest.mark.requirement("AC-DevPod-Git-Source")
 def test_full_lifecycle_provider_check_is_pipefail_safe() -> None:
     """DevPod provider preflight must not use grep -q under pipefail.
 

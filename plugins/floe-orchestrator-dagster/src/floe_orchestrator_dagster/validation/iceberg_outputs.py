@@ -161,7 +161,7 @@ def reset_iceberg_outputs(
     dropped: list[str] = []
     for table_name in expected_table_names:
         try:
-            catalog.drop_table(table_name, purge_requested=False)  # type: ignore[call-arg]
+            catalog.drop_table(table_name, purge=False)
         except Exception as exc:  # noqa: BLE001 - reset should tolerate missing tables.
             if "NoSuchTable" not in type(exc).__name__ and "not found" not in str(exc).lower():
                 raise RuntimeError(f"Failed to reset Iceberg table {table_name}: {exc}") from exc

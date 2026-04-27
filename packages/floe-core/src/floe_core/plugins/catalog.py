@@ -52,6 +52,10 @@ class Catalog(Protocol):
         """Load a table by identifier."""
         ...
 
+    def drop_table(self, identifier: str, purge: bool = False) -> None:
+        """Drop a table registration from the catalog."""
+        ...
+
 
 class CatalogPlugin(PluginMetadata):
     """Abstract base class for Iceberg catalog plugins.

@@ -1,4 +1,4 @@
-"""Integration tests for semantic layer runtime Definitions wiring."""
+"""Unit tests for semantic layer runtime Definitions wiring."""
 
 from __future__ import annotations
 
@@ -111,7 +111,6 @@ def _asset_names(definitions: Any) -> set[str]:
 class TestSemanticDefinitionsWiring:
     """Test semantic resources are wired into runtime Definitions."""
 
-    @pytest.mark.integration
     @pytest.mark.requirement("FR-055")
     def test_loader_definitions_include_semantic_resources(self, tmp_path: Path) -> None:
         """Loader-path Definitions include semantic_layer resource and sync asset."""
@@ -136,7 +135,6 @@ class TestSemanticDefinitionsWiring:
         assert definitions.resources["semantic_layer"] is semantic_resource
         assert "sync_semantic_schemas" in _asset_names(definitions)
 
-    @pytest.mark.integration
     @pytest.mark.requirement("FR-055")
     def test_loader_definitions_without_semantic_config_has_no_semantic_resources(
         self,

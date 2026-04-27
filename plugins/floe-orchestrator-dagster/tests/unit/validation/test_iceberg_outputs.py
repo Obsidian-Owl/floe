@@ -1,4 +1,8 @@
-"""Tests for deployed Iceberg output validation helpers."""
+"""Tests for Iceberg output validation reset and CLI helpers.
+
+The sibling ``tests/unit/test_validation_iceberg_outputs.py`` covers the
+library API for deriving and validating expected tables.
+"""
 
 from __future__ import annotations
 
@@ -105,8 +109,8 @@ def test_reset_iceberg_outputs_drops_expected_tables(monkeypatch: pytest.MonkeyP
 
     assert dropped == ["customer_360.mart_customer_360", "customer_360.int_customer_orders"]
     assert catalog.drop_table.call_args_list == [
-        call("customer_360.mart_customer_360", purge_requested=False),
-        call("customer_360.int_customer_orders", purge_requested=False),
+        call("customer_360.mart_customer_360", purge=False),
+        call("customer_360.int_customer_orders", purge=False),
     ]
 
 

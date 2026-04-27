@@ -95,7 +95,10 @@ devpod_remote_bash() {
 workspace_running() {
     local status
     status="$(devpod status "${WORKSPACE}" 2>&1 || true)"
-    [[ "${status}" =~ [Rr]unning ]]
+    if printf '%s\n' "${status}" | grep -Eiq 'not[[:space:]-]+running|stopped|failed|error'; then
+        return 1
+    fi
+    printf '%s\n' "${status}" | grep -Eiq '(^|[[:space:]])running($|[[:space:]])'
 }
 
 # ─── Cleanup (cost-safety guarantee) ─────────────────────────────────────────

@@ -1,4 +1,8 @@
-"""Unit tests for deployed Iceberg output validation helpers."""
+"""Unit tests for Iceberg output validation library API.
+
+The sibling ``tests/unit/validation/test_iceberg_outputs.py`` covers reset
+and CLI behavior for the same module.
+"""
 
 from __future__ import annotations
 

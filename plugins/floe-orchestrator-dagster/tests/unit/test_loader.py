@@ -424,6 +424,7 @@ def empty_project_dir(tmp_path: Path) -> Path:
 
 @pytest.mark.requirement("AC-1")
 def test_loader_delegates_to_runtime_builder(project_dir: Path) -> None:
+    """Loader must pass parsed artifacts and project context into runtime builder."""
     artifacts_path = project_dir / "compiled_artifacts.json"
     expected_artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
 

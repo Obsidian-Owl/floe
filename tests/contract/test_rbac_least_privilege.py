@@ -394,6 +394,55 @@ def test_destructive_runner_does_not_grant_unscoped_mutation() -> None:
 
 
 @pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_splits_read_only_pod_subresources() -> None:
+    """Pod log/status subresources must not inherit pod create/delete verbs."""
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
+
+    assert set().union(
+        *(_verbs(rule) for rule in _rules_for(role, api_group="", resource="pods/log"))
+    ) == {
+        "get",
+        "list",
+        "watch",
+    }
+    assert set().union(
+        *(_verbs(rule) for rule in _rules_for(role, api_group="", resource="pods/status"))
+    ) == {
+        "get",
+        "list",
+        "watch",
+        "patch",
+        "update",
+    }
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_limits_events_to_read_only() -> None:
+    """Destructive test runner reads events but must not mutate them."""
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
+    assert set().union(
+        *(_verbs(rule) for rule in _rules_for(role, api_group="", resource="events"))
+    ) == {
+        "get",
+        "list",
+        "watch",
+    }
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_limits_jobs_status_to_status_verbs() -> None:
+    """Job status subresource must not inherit job create/delete/list/watch verbs."""
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
+    assert set().union(
+        *(_verbs(rule) for rule in _rules_for(role, api_group="batch", resource="jobs/status"))
+    ) == {
+        "get",
+        "patch",
+        "update",
+    }
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
 def test_destructive_runner_can_manage_pre_upgrade_hook_identity_scoped() -> None:
     """Destructive runner may manage only the chart's pre-upgrade hook identity.
 

@@ -80,6 +80,19 @@ def _generate_code(
         return Path(output_path).read_text()
 
 
+@pytest.mark.requirement("SEC-DAGSTER-CODEGEN")
+def test_generated_entry_point_rejects_unsafe_product_name(
+    dagster_plugin: DagsterOrchestratorPlugin,
+) -> None:
+    """Generated Python must reject product names that can break out of strings."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with pytest.raises(ValueError, match="Invalid product_name"):
+            dagster_plugin.generate_entry_point_code(
+                product_name='bad"; import os; #',
+                output_dir=tmpdir,
+            )
+
+
 class TestThinLoaderImport:
     """AC-7: Generated code must import load_product_definitions."""
 
@@ -173,13 +186,11 @@ class TestProductNameInterpolation:
 
     @pytest.mark.requirement("AC-8")
     def test_product_name_with_dots(self, dagster_plugin: DagsterOrchestratorPlugin) -> None:
-        """Product name containing dots is passed through literally."""
+        """Product name containing dots is rejected before source generation."""
         name = "org.team.pipeline"
-        code = _generate_code(dagster_plugin, product_name=name)
-        expected = f'defs = load_product_definitions("{name}", PROJECT_DIR)'
-        assert expected in code, (
-            f"Product name with dots '{name}' not interpolated correctly. Actual code:\n{code}"
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with pytest.raises(ValueError, match="Invalid product_name"):
+                dagster_plugin.generate_entry_point_code(product_name=name, output_dir=tmpdir)
 
     @pytest.mark.requirement("AC-8")
     def test_different_product_names_produce_different_code(
