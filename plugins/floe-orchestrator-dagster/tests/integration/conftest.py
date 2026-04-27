@@ -373,8 +373,8 @@ def real_table_manager(
 ) -> Any:
     """Create real IcebergTableManager with real plugins.
 
-    Passes catalog_connection_config to override the default memory://
-    fallback in IcebergTableManager._connect_to_catalog().
+    Passes catalog_connection_config explicitly so PyIceberg table loads use
+    the same Polaris and MinIO settings as the configured plugins.
 
     S3 credentials are included so PyIceberg can write to MinIO.
     When tests run inside K8s (Option B), hostnames resolve natively
@@ -382,8 +382,8 @@ def real_table_manager(
     """
     from floe_iceberg import IcebergTableManager, IcebergTableManagerConfig
 
-    # Build catalog connection config with explicit OAuth2 server URI
-    # to avoid PyIceberg's memory:// fallback (pyiceberg#10537)
+    # Build catalog connection config with explicit OAuth2 server URI and
+    # client-side S3 settings for endpoint-preserving table loads.
     oauth2_server_uri = (
         polaris_config.uri.replace("/api/catalog", "") + "/api/catalog/v1/oauth/tokens"
     )

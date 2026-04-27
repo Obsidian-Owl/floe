@@ -194,8 +194,8 @@ class IcebergTableManager:
     def _connect_to_catalog(self) -> Catalog:
         """Connect to the catalog via CatalogPlugin.
 
-        Uses config.catalog_connection_config if provided, otherwise uses
-        minimal default config for testing compatibility.
+        Uses config.catalog_connection_config if provided, otherwise lets the
+        catalog plugin use its configured defaults.
 
         Returns:
             Connected PyIceberg Catalog instance.
@@ -205,16 +205,10 @@ class IcebergTableManager:
         """
         self._log.debug("connecting_to_catalog")
 
-        # Use config override if provided, otherwise use minimal defaults
-        # for testing compatibility (e.g., in-memory catalog for unit tests)
         if self._config.catalog_connection_config is not None:
             connect_config: dict[str, Any] = dict(self._config.catalog_connection_config)
         else:
-            # Default config for testing - production should configure via plugins
-            connect_config = {
-                "uri": "memory://",
-                "warehouse": "default",
-            }
+            connect_config = {}
 
         catalog = self._catalog_plugin.connect(connect_config)
 

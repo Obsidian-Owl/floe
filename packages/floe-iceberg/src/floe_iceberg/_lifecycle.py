@@ -411,10 +411,7 @@ class _IcebergTableLifecycle:
         if self._config.catalog_connection_config is not None:
             connect_config: dict[str, Any] = dict(self._config.catalog_connection_config)
         else:
-            connect_config = {
-                "uri": "memory://",
-                "warehouse": "default",
-            }
+            connect_config = {}
         self._catalog = self._catalog_plugin.connect(connect_config)
 
     def _table_schema_to_dict(self, table_schema: Any) -> dict[str, Any]:

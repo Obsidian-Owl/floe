@@ -234,6 +234,31 @@ class TestIcebergTableLifecycleCreate:
         assert "bronze.customers" in mock_catalog_plugin._tables
 
     @pytest.mark.requirement("FR-012")
+    def test_create_table_if_not_exists_repair_reconnects_with_plugin_defaults(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+        sample_table_config: Any,
+    ) -> None:
+        """Repair mode must not inject memory catalog defaults when config is unset."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import IcebergTableManagerConfig
+
+        mock_catalog_plugin.create_namespace("bronze", {})
+        mock_catalog_plugin._tables["bronze.customers"] = {"schema": {}, "properties": {}}
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+            config=IcebergTableManagerConfig(stale_table_recovery_mode="repair"),
+        )
+        manager._catalog = _StaleLoadCatalog()
+        manager._lifecycle._catalog = manager._catalog
+
+        manager.create_table(sample_table_config, if_not_exists=True)
+
+        assert mock_catalog_plugin.connect_config == {}
+
+    @pytest.mark.requirement("FR-012")
     def test_create_table_in_nonexistent_namespace_raises(
         self,
         lifecycle_manager: Any,
