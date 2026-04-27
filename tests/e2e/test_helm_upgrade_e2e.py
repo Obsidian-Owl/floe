@@ -160,7 +160,7 @@ class TestHelmUpgrade:
                     "global.annotations.e2e-test-revision=upgrade-test",
                     *image_overrides,
                     "--rollback-on-failure",
-                    "--wait",
+                    "--wait=legacy",
                     "--timeout",
                     "8m",
                 ],

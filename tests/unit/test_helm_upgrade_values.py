@@ -296,15 +296,38 @@ class TestUpgradeCommandStructure:
 
     @pytest.mark.requirement("AC-3")
     def test_upgrade_command_has_wait_flag(self, upgrade_test_code: str) -> None:
-        """The upgrade command must include ``--wait`` for reliable upgrades.
+        """The upgrade command must include a Helm wait flag for reliable upgrades.
 
-        The ``--wait`` flag ensures Helm waits for all resources to be ready
-        before returning. Removing this would make the upgrade test unreliable.
+        The wait flag ensures Helm waits for resources to be ready before
+        returning. Removing this would make the upgrade test unreliable.
         """
-        has_wait = bool(re.search(r'["\']--wait["\']', upgrade_test_code))
+        has_wait = bool(re.search(r'["\']--wait(?:=legacy)?["\']', upgrade_test_code))
         assert has_wait, (
-            "test_helm_upgrade_succeeds does not contain '--wait' flag. "
+            "test_helm_upgrade_succeeds does not contain a Helm wait flag. "
             "The upgrade command must wait for resources to be ready."
+        )
+
+    @pytest.mark.requirement("AC-2.9")
+    def test_upgrade_command_uses_legacy_wait_strategy_for_helm4(
+        self,
+        upgrade_test_code: str,
+    ) -> None:
+        """The destructive upgrade must avoid Helm 4 watcher false negatives.
+
+        Helm 4 defaults ``--rollback-on-failure`` to the watcher wait strategy.
+        In the in-cluster destructive lane that watcher reported a healthy
+        ``cube-api`` deployment as ``Unknown`` and left the release in
+        rollback. The upgrade test should use Helm's legacy readiness waiter
+        explicitly.
+        """
+        assert '"--wait=legacy"' in upgrade_test_code or "'--wait=legacy'" in upgrade_test_code, (
+            "test_helm_upgrade_succeeds must use '--wait=legacy'. Helm 4 "
+            "--rollback-on-failure defaults to watcher wait, which produced "
+            "false Deployment Unknown readiness during the destructive lane."
+        )
+        assert '"--wait"' not in upgrade_test_code and "'--wait'" not in upgrade_test_code, (
+            "test_helm_upgrade_succeeds must not use bare '--wait' because "
+            "Helm 4 rollback-on-failure defaults bare wait to watcher."
         )
 
     @pytest.mark.requirement("AC-3")
