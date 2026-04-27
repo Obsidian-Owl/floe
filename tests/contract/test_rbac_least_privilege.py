@@ -34,6 +34,7 @@ import yaml
 CHART_DIR = Path(__file__).resolve().parents[2] / "charts" / "floe-platform"
 STANDARD_TEMPLATE = "templates/tests/rbac-standard.yaml"
 DESTRUCTIVE_TEMPLATE = "templates/tests/rbac-destructive.yaml"
+PRE_UPGRADE_HOOK_TEMPLATE = "templates/hooks/pre-upgrade-statefulset-cleanup.yaml"
 
 # Helm 3 stores release state in secrets with this name prefix.
 HELM_RELEASE_PREFIX = "sh.helm.release.v1."
@@ -59,6 +60,8 @@ def _render_role(template: str) -> dict[str, Any]:
             "template",
             "floe-platform",
             str(CHART_DIR),
+            "-f",
+            str(CHART_DIR / "values-test.yaml"),
             "--set",
             "tests.enabled=true",
             "-s",
@@ -74,7 +77,52 @@ def _render_role(template: str) -> dict[str, Any]:
             f"stdout: {result.stdout}\nstderr: {result.stderr}"
         )
 
-    docs = list(yaml.safe_load_all(result.stdout))
+    roles = _roles_from_yaml(result.stdout, template)
+    assert len(roles) == 1, f"Expected exactly one Role in rendered {template}, found {len(roles)}"
+    return roles[0]
+
+
+def _render_roles(template: str) -> list[dict[str, Any]]:
+    """Render a template from the chart and return all Role docs."""
+    if shutil.which("helm") is None:
+        pytest.fail(
+            "helm CLI not available on PATH — required to render test RBAC "
+            "for least-privilege contract verification."
+        )
+
+    args = [
+        "helm",
+        "template",
+        "floe-platform",
+        str(CHART_DIR),
+        "-f",
+        str(CHART_DIR / "values-test.yaml"),
+        "--set",
+        "tests.enabled=true",
+    ]
+    # Helm does not support selecting hook templates with --show-only reliably,
+    # so render the full chart and filter the Role documents by metadata below.
+    if not template.startswith("templates/hooks/"):
+        args.extend(["-s", template])
+
+    result = subprocess.run(
+        args,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.fail(
+            f"helm template rendering failed for {template}:\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+    return _roles_from_yaml(result.stdout, template)
+
+
+def _roles_from_yaml(rendered_yaml: str, template: str) -> list[dict[str, Any]]:
+    """Parse rendered YAML and return Role documents."""
+    docs = list(yaml.safe_load_all(rendered_yaml))
     roles: list[dict[str, Any]] = []
     for doc_any in docs:
         if not isinstance(doc_any, dict):
@@ -82,8 +130,8 @@ def _render_role(template: str) -> dict[str, Any]:
         doc: dict[str, Any] = cast("dict[str, Any]", doc_any)
         if doc.get("kind") == "Role":
             roles.append(doc)
-    assert len(roles) == 1, f"Expected exactly one Role in rendered {template}, found {len(roles)}"
-    return roles[0]
+    assert roles, f"Expected at least one Role in rendered {template}, found none"
+    return roles
 
 
 def _secrets_rules(role: dict[str, Any]) -> list[dict[str, Any]]:
@@ -347,11 +395,49 @@ def test_destructive_runner_can_manage_pre_upgrade_hook_identity_scoped() -> Non
 
 
 @pytest.mark.requirement("security-hardening-AC-9")
-def test_destructive_runner_has_read_only_networkpolicy_access_for_helm_rollback() -> None:
-    """Destructive runner needs read-only NetworkPolicy access for Helm rollback.
+def test_destructive_runner_can_grant_pre_upgrade_hook_role_without_escalation() -> None:
+    """Destructive runner must already hold permissions granted by hook Roles.
+
+    Kubernetes rejects Role creation when a ServiceAccount attempts to grant
+    permissions it does not already hold. Helm creates the pre-upgrade hook
+    Role during `helm upgrade`, so the destructive runner must cover the hook
+    Role's statefulsets verbs or upgrades fail before the chart is applied.
+    """
+    destructive_role = _render_role(DESTRUCTIVE_TEMPLATE)
+    hook_roles = [
+        role
+        for role in _render_roles(PRE_UPGRADE_HOOK_TEMPLATE)
+        if role.get("metadata", {}).get("name") == HELM_PRE_UPGRADE_HOOK_NAME
+    ]
+    assert hook_roles, f"Expected rendered hook Role {HELM_PRE_UPGRADE_HOOK_NAME!r}"
+
+    for hook_role in hook_roles:
+        for hook_rule in cast("list[dict[str, Any]]", hook_role.get("rules") or []):
+            api_groups = cast("list[str]", hook_rule.get("apiGroups") or [])
+            resources = cast("list[str]", hook_rule.get("resources") or [])
+            required_verbs = _verbs(hook_rule)
+            for api_group in api_groups:
+                for resource in resources:
+                    destructive_rules = _rules_for(
+                        destructive_role,
+                        api_group=api_group,
+                        resource=resource,
+                    )
+                    available_verbs = set().union(*(_verbs(rule) for rule in destructive_rules))
+                    assert required_verbs.issubset(available_verbs), (
+                        "Destructive runner cannot create the pre-upgrade hook "
+                        "Role without RBAC escalation. Missing verbs "
+                        f"{required_verbs - available_verbs!r} for "
+                        f"{api_group or 'core'}/{resource}."
+                    )
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_has_limited_networkpolicy_patch_access_for_helm_rollback() -> None:
+    """Destructive runner needs limited NetworkPolicy patch access for Helm rollback.
 
     The chart renders NetworkPolicies in test values. When a Helm upgrade
-    fails and `--rollback-on-failure` runs, Helm reads rendered resources to
+    fails and `--rollback-on-failure` runs, Helm patches rendered resources to
     restore release state. Missing read access leaves the release stuck in
     `failed`, masking the original failure and breaking downstream tests.
     """
@@ -362,21 +448,22 @@ def test_destructive_runner_has_read_only_networkpolicy_access_for_helm_rollback
         resource="networkpolicies",
     )
 
-    assert any({"get", "list", "watch"}.issubset(_verbs(rule)) for rule in rules), (
-        "Destructive runner must have read-only access to NetworkPolicies so "
-        "Helm rollback can inspect chart-managed policies."
+    assert any({"get", "list", "watch", "patch"}.issubset(_verbs(rule)) for rule in rules), (
+        "Destructive runner must have get/list/watch/patch access to "
+        "NetworkPolicies so Helm rollback can restore chart-managed policies."
     )
     for rule in rules:
-        forbidden = _verbs(rule) & {"create", "update", "patch", "delete", "deletecollection"}
+        forbidden = _verbs(rule) & {"create", "update", "delete", "deletecollection"}
         assert not forbidden, (
-            "Destructive runner NetworkPolicy access must remain read-only; "
+            "Destructive runner NetworkPolicy rollback access must not create, "
+            "update, or delete policies; "
             f"found mutating verbs {forbidden!r} in rule {rule!r}."
         )
 
 
 @pytest.mark.requirement("security-hardening-AC-9")
-def test_destructive_runner_has_read_only_pdb_access_for_helm_rollback() -> None:
-    """Destructive runner needs read-only PodDisruptionBudget access for rollback."""
+def test_destructive_runner_has_limited_pdb_patch_access_for_helm_rollback() -> None:
+    """Destructive runner needs limited PodDisruptionBudget patch access for rollback."""
     role = _render_role(DESTRUCTIVE_TEMPLATE)
     rules = _rules_for(
         role,
@@ -384,13 +471,32 @@ def test_destructive_runner_has_read_only_pdb_access_for_helm_rollback() -> None
         resource="poddisruptionbudgets",
     )
 
-    assert any({"get", "list", "watch"}.issubset(_verbs(rule)) for rule in rules), (
-        "Destructive runner must have read-only access to PodDisruptionBudgets "
-        "so Helm rollback can inspect chart-managed PDBs."
+    assert any({"get", "list", "watch", "patch"}.issubset(_verbs(rule)) for rule in rules), (
+        "Destructive runner must have get/list/watch/patch access to "
+        "PodDisruptionBudgets so Helm rollback can restore chart-managed PDBs."
     )
     for rule in rules:
-        forbidden = _verbs(rule) & {"create", "update", "patch", "delete", "deletecollection"}
+        forbidden = _verbs(rule) & {"create", "update", "delete", "deletecollection"}
         assert not forbidden, (
-            "Destructive runner PodDisruptionBudget access must remain read-only; "
+            "Destructive runner PodDisruptionBudget rollback access must not "
+            "create, update, or delete PDBs; "
             f"found mutating verbs {forbidden!r} in rule {rule!r}."
+        )
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_has_limited_service_patch_access_for_helm_rollback() -> None:
+    """Destructive runner needs limited Service patch access for rollback."""
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
+    rules = _rules_for(role, api_group="", resource="services")
+
+    assert any({"get", "list", "watch", "patch"}.issubset(_verbs(rule)) for rule in rules), (
+        "Destructive runner must have get/list/watch/patch access to Services "
+        "so Helm rollback can restore chart-managed Services."
+    )
+    for rule in rules:
+        forbidden = _verbs(rule) & {"create", "update", "delete", "deletecollection"}
+        assert not forbidden, (
+            "Destructive runner Service rollback access must not create, update, "
+            f"or delete Services; found mutating verbs {forbidden!r} in rule {rule!r}."
         )
