@@ -370,6 +370,141 @@ class TestExportDbtToIceberg:
             )
 
     @pytest.mark.requirement("AC-4")
+    def test_export_rejects_non_duckdb_active_target_without_fallback_to_dev(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+    ) -> None:
+        """Iceberg export must use only the active dbt target for DuckDB output."""
+        artifacts = _make_artifacts(
+            catalog=PluginRef(
+                type="polaris",
+                version="0.1.0",
+                config={"uri": "http://polaris:8181"},
+            ),
+            storage=PluginRef(
+                type="s3",
+                version="1.0.0",
+                config={"endpoint": "http://minio:9000", "access-key-id": "test"},
+            ),
+            dbt_profiles={
+                PRODUCT_NAME: {
+                    "target": "prod",
+                    "outputs": {
+                        "prod": {
+                            "type": "snowflake",
+                            "account": "example",
+                        },
+                        "dev": {
+                            "type": "duckdb",
+                            "path": "/tmp/stale-dev-output.duckdb",
+                        },
+                    },
+                }
+            },
+        )
+
+        with (
+            patch("duckdb.connect") as mock_duckdb_connect,
+            pytest.raises(RuntimeError, match="active dbt target 'prod'.*DuckDB"),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        mock_duckdb_connect.assert_not_called()
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_rejects_missing_active_target_without_fallback_to_dev(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+    ) -> None:
+        """Configured export fails when the active target is absent from outputs."""
+        artifacts = _make_artifacts(
+            catalog=PluginRef(
+                type="polaris",
+                version="0.1.0",
+                config={"uri": "http://polaris:8181"},
+            ),
+            storage=PluginRef(
+                type="s3",
+                version="1.0.0",
+                config={"endpoint": "http://minio:9000", "access-key-id": "test"},
+            ),
+            dbt_profiles={
+                PRODUCT_NAME: {
+                    "target": "prod",
+                    "outputs": {
+                        "dev": {
+                            "type": "duckdb",
+                            "path": "/tmp/stale-dev-output.duckdb",
+                        },
+                    },
+                }
+            },
+        )
+
+        with (
+            patch("duckdb.connect") as mock_duckdb_connect,
+            pytest.raises(RuntimeError, match="Active dbt target 'prod'.*not found"),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        mock_duckdb_connect.assert_not_called()
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_rejects_profile_without_active_target(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+    ) -> None:
+        """Configured export requires an explicit active dbt profile target."""
+        artifacts = _make_artifacts(
+            catalog=PluginRef(
+                type="polaris",
+                version="0.1.0",
+                config={"uri": "http://polaris:8181"},
+            ),
+            storage=PluginRef(
+                type="s3",
+                version="1.0.0",
+                config={"endpoint": "http://minio:9000", "access-key-id": "test"},
+            ),
+            dbt_profiles={
+                PRODUCT_NAME: {
+                    "outputs": {
+                        "dev": {
+                            "type": "duckdb",
+                            "path": "/tmp/stale-dev-output.duckdb",
+                        },
+                    },
+                }
+            },
+        )
+
+        with (
+            patch("duckdb.connect") as mock_duckdb_connect,
+            pytest.raises(RuntimeError, match="must declare an active dbt target"),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        mock_duckdb_connect.assert_not_called()
+
+    @pytest.mark.requirement("AC-4")
     def test_export_derives_namespace_from_product_name(
         self,
         context: MagicMock,

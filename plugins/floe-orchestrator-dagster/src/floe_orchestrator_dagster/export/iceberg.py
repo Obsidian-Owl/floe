@@ -151,27 +151,40 @@ def _resolve_duckdb_path_from_profiles(
             f"product {product_name}."
         )
 
-    target_names: list[str] = []
     target = profile.get("target")
-    if isinstance(target, str) and target in outputs:
-        target_names.append(target)
-    if "dev" in outputs and "dev" not in target_names:
-        target_names.append("dev")
-    target_names.extend(
-        name for name in outputs if isinstance(name, str) and name not in target_names
-    )
+    if not isinstance(target, str) or not target:
+        raise RuntimeError(
+            "CompiledArtifacts.dbt_profiles must declare an active dbt target for "
+            f"configured Iceberg export of product {product_name}."
+        )
 
-    for target_name in target_names:
-        output = outputs.get(target_name)
-        if not isinstance(output, dict) or output.get("type") != "duckdb":
-            continue
-        raw_path = output.get("path")
-        if isinstance(raw_path, str) and raw_path:
-            return _duckdb_profile_path(raw_path, project_dir, product_name)
+    if target not in outputs:
+        raise RuntimeError(
+            f"Active dbt target '{target}' was not found in compiled dbt outputs for "
+            f"configured Iceberg export of product {product_name}."
+        )
+
+    output = outputs.get(target)
+    if not isinstance(output, dict):
+        raise RuntimeError(
+            f"Active dbt target '{target}' is not a dbt output object for configured "
+            f"Iceberg export of product {product_name}."
+        )
+
+    output_type = output.get("type")
+    if output_type != "duckdb":
+        raise RuntimeError(
+            f"Configured Iceberg export requires active dbt target '{target}' for "
+            f"product {product_name} to be DuckDB; got {output_type!r}."
+        )
+
+    raw_path = output.get("path")
+    if isinstance(raw_path, str) and raw_path:
+        return _duckdb_profile_path(raw_path, project_dir, product_name)
 
     raise RuntimeError(
-        "CompiledArtifacts.dbt_profiles does not contain a DuckDB output with a "
-        f"file-backed path for configured Iceberg export of product {product_name}."
+        f"Active DuckDB dbt target '{target}' does not define a file-backed path for "
+        f"configured Iceberg export of product {product_name}."
     )
 
 
