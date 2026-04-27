@@ -76,30 +76,51 @@ inject_demo_image_values() {
     tag=$(yaml_quote "${FLOE_DEMO_IMAGE_TAG}")
 
     awk -v repository="${repository}" -v tag="${tag}" '
-        BEGIN { injected = 0 }
+        function print_image_values(indent) {
+            print indent "dagster:"
+            print indent "  dagsterWebserver:"
+            print indent "    image:"
+            print indent "      repository: " repository
+            print indent "      tag: " tag
+            print indent "  dagsterDaemon:"
+            print indent "    image:"
+            print indent "      repository: " repository
+            print indent "      tag: " tag
+            print indent "  runLauncher:"
+            print indent "    config:"
+            print indent "      k8sRunLauncher:"
+            print indent "        image:"
+            print indent "          repository: " repository
+            print indent "          tag: " tag
+        }
+
+        BEGIN { injected = 0; in_spec = 0 }
         /^spec:[[:space:]]*$/ && injected == 0 {
             print
-            print "  values:"
-            print "    dagster:"
-            print "      dagsterWebserver:"
-            print "        image:"
-            print "          repository: " repository
-            print "          tag: " tag
-            print "      dagsterDaemon:"
-            print "        image:"
-            print "          repository: " repository
-            print "          tag: " tag
-            print "      runLauncher:"
-            print "        config:"
-            print "          k8sRunLauncher:"
-            print "            image:"
-            print "              repository: " repository
-            print "              tag: " tag
+            in_spec = 1
+            next
+        }
+        in_spec == 1 && /^  values:[[:space:]]*$/ && injected == 0 {
+            print
+            print_image_values("    ")
             injected = 1
             next
         }
+        in_spec == 1 && /^[^[:space:]]/ && injected == 0 {
+            print "  values:"
+            print_image_values("    ")
+            injected = 1
+            in_spec = 0
+        }
         { print }
-        END { if (injected == 0) exit 42 }
+        END {
+            if (in_spec == 1 && injected == 0) {
+                print "  values:"
+                print_image_values("    ")
+                injected = 1
+            }
+            if (injected == 0) exit 42
+        }
     ' "${manifest_path}" >"${rendered_path}" || {
         local status=$?
         rm -f "${rendered_path}"
