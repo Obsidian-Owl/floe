@@ -104,6 +104,77 @@ def _load_table_for_overwrite(
     return catalog.load_table(identifier)
 
 
+def _duckdb_profile_path(raw_path: str, project_dir: Path, product_name: str) -> str:
+    """Return a file-backed DuckDB path resolved from dbt profile config."""
+    if raw_path == ":memory:":
+        raise RuntimeError(
+            "Configured Iceberg export requires a file-backed DuckDB profile path "
+            f"for product {product_name}; got ':memory:'."
+        )
+    path = Path(raw_path)
+    if path.is_absolute():
+        return raw_path
+    return str((project_dir / path).resolve())
+
+
+def _resolve_duckdb_path_from_profiles(
+    artifacts: CompiledArtifacts,
+    product_name: str,
+    project_dir: Path,
+) -> str:
+    """Resolve the DuckDB database path from compiled dbt profiles."""
+    profiles = artifacts.dbt_profiles
+    if not isinstance(profiles, dict) or not profiles:
+        raise RuntimeError(
+            "CompiledArtifacts.dbt_profiles is required to resolve the DuckDB output "
+            f"path for configured Iceberg export of product {product_name}."
+        )
+
+    profile = profiles.get(product_name)
+    if profile is None:
+        metadata_product_name = getattr(getattr(artifacts, "metadata", None), "product_name", None)
+        if isinstance(metadata_product_name, str):
+            profile = profiles.get(metadata_product_name)
+    if profile is None and len(profiles) == 1:
+        profile = next(iter(profiles.values()))
+
+    if not isinstance(profile, dict):
+        raise RuntimeError(
+            "CompiledArtifacts.dbt_profiles does not contain a profile object for "
+            f"product {product_name}."
+        )
+
+    outputs = profile.get("outputs")
+    if not isinstance(outputs, dict) or not outputs:
+        raise RuntimeError(
+            "CompiledArtifacts.dbt_profiles does not contain dbt outputs for "
+            f"product {product_name}."
+        )
+
+    target_names: list[str] = []
+    target = profile.get("target")
+    if isinstance(target, str) and target in outputs:
+        target_names.append(target)
+    if "dev" in outputs and "dev" not in target_names:
+        target_names.append("dev")
+    target_names.extend(
+        name for name in outputs if isinstance(name, str) and name not in target_names
+    )
+
+    for target_name in target_names:
+        output = outputs.get(target_name)
+        if not isinstance(output, dict) or output.get("type") != "duckdb":
+            continue
+        raw_path = output.get("path")
+        if isinstance(raw_path, str) and raw_path:
+            return _duckdb_profile_path(raw_path, project_dir, product_name)
+
+    raise RuntimeError(
+        "CompiledArtifacts.dbt_profiles does not contain a DuckDB output with a "
+        f"file-backed path for configured Iceberg export of product {product_name}."
+    )
+
+
 def export_dbt_to_iceberg(
     context: Any,
     product_name: str,
@@ -127,7 +198,11 @@ def export_dbt_to_iceberg(
         return IcebergExportResult(tables_written=0, table_names=[])
 
     safe_name = product_name.replace("-", "_")
-    duckdb_path = f"/tmp/{safe_name}.duckdb"
+    duckdb_path = _resolve_duckdb_path_from_profiles(
+        artifacts=artifacts,
+        product_name=product_name,
+        project_dir=project_dir,
+    )
 
     catalog_config = artifacts.plugins.catalog.config
     storage_config = artifacts.plugins.storage.config

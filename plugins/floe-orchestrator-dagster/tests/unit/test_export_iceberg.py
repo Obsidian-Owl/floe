@@ -2,7 +2,7 @@
 
 Tests verify that export_dbt_to_iceberg():
 - Accepts context, product_name, project_dir, and artifacts parameters
-- Derives duckdb_path from product_name (safe_name conversion)
+- Derives duckdb_path from compiled dbt profile config
 - Derives product_namespace from product_name (safe_name conversion)
 - Does NOT re-read compiled_artifacts.json from disk
 - Raises for missing DuckDB output when catalog+storage export is configured
@@ -52,16 +52,29 @@ EXPECTED_DUCKDB_PATH = f"/tmp/{SAFE_NAME}.duckdb"
 def _make_artifacts(
     catalog: PluginRef | None = None,
     storage: PluginRef | None = None,
+    dbt_profiles: dict[str, object] | None = None,
 ) -> CompiledArtifacts:
     """Build a minimal valid CompiledArtifacts with optional catalog/storage.
 
     Args:
         catalog: Optional catalog PluginRef.
         storage: Optional storage PluginRef.
+        dbt_profiles: Optional compiled dbt profiles content.
 
     Returns:
         A valid CompiledArtifacts instance.
     """
+    profiles = dbt_profiles or {
+        PRODUCT_NAME: {
+            "target": "dev",
+            "outputs": {
+                "dev": {
+                    "type": "duckdb",
+                    "path": EXPECTED_DUCKDB_PATH,
+                }
+            },
+        }
+    }
     return CompiledArtifacts(
         version="0.5.0",
         metadata=CompilationMetadata(
@@ -103,6 +116,7 @@ def _make_artifacts(
             models=[ResolvedModel(name="stg_customers", compute="duckdb")],
             default_compute="duckdb",
         ),
+        dbt_profiles=profiles,
     )
 
 
@@ -197,55 +211,162 @@ class TestExportDbtToIceberg:
     """Tests for export_dbt_to_iceberg function (AC-4)."""
 
     @pytest.mark.requirement("AC-4")
-    def test_export_derives_duckdb_path_from_product_name(
+    def test_export_resolves_duckdb_path_from_compiled_dbt_profile(
         self,
         context: MagicMock,
         project_dir: Path,
-        artifacts_with_catalog: CompiledArtifacts,
     ) -> None:
-        """DuckDB path MUST be /tmp/{safe_name}.duckdb where safe_name
-        replaces hyphens with underscores in product_name.
-
-        A sloppy implementation might hardcode the path or ignore
-        product_name. We verify the exact path is used by intercepting
-        the Path.exists() check or duckdb.connect() call.
-        """
+        """DuckDB path must come from compiled dbt profile config, not convention."""
+        custom_duckdb_path = "/var/floe/custom-output.duckdb"
+        artifacts = _make_artifacts(
+            catalog=PluginRef(
+                type="polaris",
+                version="0.1.0",
+                config={"uri": "http://polaris:8181"},
+            ),
+            storage=PluginRef(
+                type="s3",
+                version="1.0.0",
+                config={"endpoint": "http://minio:9000", "access-key-id": "test"},
+            ),
+            dbt_profiles={
+                PRODUCT_NAME: {
+                    "target": "custom",
+                    "outputs": {
+                        "custom": {
+                            "type": "duckdb",
+                            "path": custom_duckdb_path,
+                        }
+                    },
+                }
+            },
+        )
         mock_conn = MagicMock()
         _configure_mock_duckdb_table(mock_conn)
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        registry.get.return_value = catalog_plugin
+        registry.configure.return_value = {}
 
         with (
             patch("duckdb.connect", return_value=mock_conn) as mock_duckdb_connect,
             patch.object(Path, "exists", return_value=True),
             patch(
                 "floe_core.plugin_registry.get_registry",
-                return_value=MagicMock(),
+                return_value=registry,
             ),
         ):
-            # Set up registry mock chain
-            registry = MagicMock()
-            catalog_plugin = MagicMock()
-            catalog_instance = MagicMock()
-            catalog_instance.create_namespace = MagicMock()
-            registry.get.return_value = catalog_plugin
-            registry.configure.return_value = {}
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
 
-            with patch(
-                "floe_core.plugin_registry.get_registry",
-                return_value=registry,
-            ):
-                export_dbt_to_iceberg(
-                    context=context,
-                    product_name=PRODUCT_NAME,
-                    project_dir=project_dir,
-                    artifacts=artifacts_with_catalog,
-                )
+        mock_duckdb_connect.assert_called_once()
+        actual_path = mock_duckdb_connect.call_args[0][0]
+        assert actual_path == custom_duckdb_path
 
-            # Assert duckdb.connect was called with the correctly derived path
-            mock_duckdb_connect.assert_called_once()
-            actual_path = mock_duckdb_connect.call_args[0][0]
-            assert actual_path == EXPECTED_DUCKDB_PATH, (
-                f"Expected DuckDB path '{EXPECTED_DUCKDB_PATH}', got '{actual_path}'. "
-                "Function must derive path from product_name with hyphen-to-underscore."
+    @pytest.mark.requirement("AC-4")
+    def test_export_resolves_relative_duckdb_profile_path_under_project_dir(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+    ) -> None:
+        """Relative DuckDB profile paths must resolve against the dbt project dir."""
+        relative_path = "target/custom.duckdb"
+        artifacts = _make_artifacts(
+            catalog=PluginRef(
+                type="polaris",
+                version="0.1.0",
+                config={"uri": "http://polaris:8181"},
+            ),
+            storage=PluginRef(
+                type="s3",
+                version="1.0.0",
+                config={"endpoint": "http://minio:9000", "access-key-id": "test"},
+            ),
+            dbt_profiles={
+                PRODUCT_NAME: {
+                    "target": "dev",
+                    "outputs": {
+                        "dev": {
+                            "type": "duckdb",
+                            "path": relative_path,
+                        }
+                    },
+                }
+            },
+        )
+        mock_conn = MagicMock()
+        _configure_mock_duckdb_table(mock_conn)
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        registry.get.return_value = catalog_plugin
+        registry.configure.return_value = {}
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn) as mock_duckdb_connect,
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        mock_duckdb_connect.assert_called_once_with(
+            str((project_dir / relative_path).resolve()),
+            read_only=True,
+        )
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_rejects_memory_duckdb_profile_for_configured_iceberg_export(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+    ) -> None:
+        """Iceberg export requires persisted DuckDB output, not an in-memory profile."""
+        artifacts = _make_artifacts(
+            catalog=PluginRef(
+                type="polaris",
+                version="0.1.0",
+                config={"uri": "http://polaris:8181"},
+            ),
+            storage=PluginRef(
+                type="s3",
+                version="1.0.0",
+                config={"endpoint": "http://minio:9000", "access-key-id": "test"},
+            ),
+            dbt_profiles={
+                PRODUCT_NAME: {
+                    "target": "dev",
+                    "outputs": {
+                        "dev": {
+                            "type": "duckdb",
+                            "path": ":memory:",
+                        }
+                    },
+                }
+            },
+        )
+        registry = MagicMock()
+        registry.get.return_value = MagicMock()
+        registry.configure.return_value = {}
+
+        with (
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            pytest.raises(RuntimeError, match="file-backed DuckDB profile path"),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
             )
 
     @pytest.mark.requirement("AC-4")

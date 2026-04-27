@@ -123,6 +123,19 @@ def test_full_lifecycle_parses_remote_poll_payload_when_devpod_exits_nonzero() -
 
 
 @pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_remote_poll_stdout_is_reserved_for_exit_code() -> None:
+    """Remote polling progress must not corrupt captured numeric exit code."""
+    script = _read(_DEVPOD_TEST)
+    poll_start = script.index("poll_remote_e2e_run() {")
+    fetch_start = script.index("fetch_remote_e2e_artifacts()", poll_start)
+    poll_function = script[poll_start:fetch_start]
+
+    assert "echo \"[devpod-test] $(date '+%H:%M:%S') $*\" >&2" in script
+    assert 'log "  Remote E2E still running' in poll_function
+    assert "printf '%s\\n' \"${poll_state#complete:}\"" in poll_function
+
+
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
 def test_full_lifecycle_keeps_local_e2e_as_explicit_fallback() -> None:
     """The old host-driven E2E path must be opt-in, not the default path."""
     script = _read(_DEVPOD_TEST)
