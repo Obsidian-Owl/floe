@@ -42,11 +42,18 @@ HELM_PRE_UPGRADE_HOOK_NAME = "floe-platform-pre-upgrade"
 HELM_PRE_UPGRADE_DASHBOARDS_HOOK_NAME = "floe-platform-grafana-dashboards"
 KIND_TO_RBAC_RESOURCE = {
     "ConfigMap": ("", "configmaps"),
+    "Deployment": ("apps", "deployments"),
     "Job": ("batch", "jobs"),
+    "NetworkPolicy": ("networking.k8s.io", "networkpolicies"),
+    "PersistentVolumeClaim": ("", "persistentvolumeclaims"),
+    "PodDisruptionBudget": ("policy", "poddisruptionbudgets"),
     "Role": ("rbac.authorization.k8s.io", "roles"),
     "RoleBinding": ("rbac.authorization.k8s.io", "rolebindings"),
+    "Service": ("", "services"),
     "ServiceAccount": ("", "serviceaccounts"),
+    "StatefulSet": ("apps", "statefulsets"),
 }
+HELM_CHART_MANAGER_VERBS = {"get", "list", "watch", "create", "patch", "update", "delete"}
 
 
 def _render_role(template: str) -> dict[str, Any]:
@@ -219,20 +226,12 @@ def _assert_read_only_chart_management_access(
     api_group: str,
     resource: str,
 ) -> None:
-    """Assert Helm can inspect chart-managed resources without mutating them."""
+    """Assert Helm can inspect chart-managed resources."""
     rules = _rules_for(role, api_group=api_group, resource=resource)
     assert any({"get", "list", "watch"}.issubset(_verbs(rule)) for rule in rules), (
         f"Destructive runner must have get/list/watch on {resource} so Helm "
         "can wait on hooks and inspect chart-managed resources during rollback."
     )
-    for rule in rules:
-        if {"get", "list", "watch"}.issubset(_verbs(rule)):
-            forbidden = _verbs(rule) & {"update", "patch", "delete", "deletecollection"}
-            assert not forbidden, (
-                f"Destructive runner {resource} chart-management access must "
-                f"remain read-only; found mutating verbs {forbidden!r} in "
-                f"rule {rule!r}."
-            )
 
 
 def _assert_scoped_hook_delete(
@@ -241,13 +240,10 @@ def _assert_scoped_hook_delete(
     api_group: str,
     resource: str,
 ) -> None:
-    """Assert only the chart's pre-upgrade hook resource can be deleted."""
+    """Assert the chart's pre-upgrade hook resource can be deleted."""
     rules = _rules_for(role, api_group=api_group, resource=resource)
-    assert any(
-        "delete" in _verbs(rule) and _resource_names(rule) == [HELM_PRE_UPGRADE_HOOK_NAME]
-        for rule in rules
-    ), (
-        "Destructive runner must be able to delete only the pre-upgrade hook "
+    assert _has_delete_permission_for_name(rules, HELM_PRE_UPGRADE_HOOK_NAME), (
+        "Destructive runner must be able to delete the pre-upgrade hook "
         f"{resource} {HELM_PRE_UPGRADE_HOOK_NAME!r}."
     )
 
@@ -525,13 +521,42 @@ def test_destructive_runner_can_manage_pre_upgrade_hook_resources() -> None:
 
 
 @pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_can_manage_rendered_chart_resource_kinds_for_helm_upgrade() -> None:
+    """Destructive runner must act as a namespaced Helm chart manager.
+
+    The destructive suite runs `helm upgrade charts/floe-platform` from inside
+    the test pod. Helm may create, patch, update, or delete any namespaced kind
+    rendered by the chart during upgrade or rollback, so this contract derives
+    the required resource kinds from the rendered manifest instead of encoding
+    one-off permissions after each RBAC 403.
+    """
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
+    docs = _render_all_chart_docs()
+
+    rendered_resources = {
+        KIND_TO_RBAC_RESOURCE[kind]
+        for doc in docs
+        if (kind := doc.get("kind")) in KIND_TO_RBAC_RESOURCE
+    }
+    assert rendered_resources, "Expected rendered chart resources with RBAC mappings"
+
+    for api_group, resource in sorted(rendered_resources):
+        rules = _rules_for(role, api_group=api_group, resource=resource)
+        available_verbs = set().union(*(_verbs(rule) for rule in rules))
+        assert HELM_CHART_MANAGER_VERBS.issubset(available_verbs), (
+            "Destructive runner is not a complete Helm chart manager for "
+            f"{api_group or 'core'}/{resource}. Missing verbs: "
+            f"{HELM_CHART_MANAGER_VERBS - available_verbs!r}."
+        )
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
 def test_destructive_runner_has_limited_networkpolicy_patch_access_for_helm_rollback() -> None:
-    """Destructive runner needs limited NetworkPolicy patch access for Helm rollback.
+    """Destructive runner needs NetworkPolicy chart-manager access.
 
     The chart renders NetworkPolicies in test values. When a Helm upgrade
-    fails and `--rollback-on-failure` runs, Helm patches rendered resources to
-    restore release state. Missing read access leaves the release stuck in
-    `failed`, masking the original failure and breaking downstream tests.
+    fails and `--rollback-on-failure` runs, Helm may create, patch, update, or
+    delete rendered resources to restore release state.
     """
     role = _render_role(DESTRUCTIVE_TEMPLATE)
     rules = _rules_for(
@@ -540,22 +565,15 @@ def test_destructive_runner_has_limited_networkpolicy_patch_access_for_helm_roll
         resource="networkpolicies",
     )
 
-    assert any({"get", "list", "watch", "patch"}.issubset(_verbs(rule)) for rule in rules), (
-        "Destructive runner must have get/list/watch/patch access to "
-        "NetworkPolicies so Helm rollback can restore chart-managed policies."
+    assert any(HELM_CHART_MANAGER_VERBS.issubset(_verbs(rule)) for rule in rules), (
+        "Destructive runner must have chart-manager access to NetworkPolicies "
+        "so Helm upgrade/rollback can restore chart-managed policies."
     )
-    for rule in rules:
-        forbidden = _verbs(rule) & {"create", "update", "delete", "deletecollection"}
-        assert not forbidden, (
-            "Destructive runner NetworkPolicy rollback access must not create, "
-            "update, or delete policies; "
-            f"found mutating verbs {forbidden!r} in rule {rule!r}."
-        )
 
 
 @pytest.mark.requirement("security-hardening-AC-9")
 def test_destructive_runner_has_limited_pdb_patch_access_for_helm_rollback() -> None:
-    """Destructive runner needs limited PodDisruptionBudget patch access for rollback."""
+    """Destructive runner needs PodDisruptionBudget chart-manager access."""
     role = _render_role(DESTRUCTIVE_TEMPLATE)
     rules = _rules_for(
         role,
@@ -563,32 +581,19 @@ def test_destructive_runner_has_limited_pdb_patch_access_for_helm_rollback() -> 
         resource="poddisruptionbudgets",
     )
 
-    assert any({"get", "list", "watch", "patch"}.issubset(_verbs(rule)) for rule in rules), (
-        "Destructive runner must have get/list/watch/patch access to "
-        "PodDisruptionBudgets so Helm rollback can restore chart-managed PDBs."
+    assert any(HELM_CHART_MANAGER_VERBS.issubset(_verbs(rule)) for rule in rules), (
+        "Destructive runner must have chart-manager access to "
+        "PodDisruptionBudgets so Helm upgrade/rollback can restore chart-managed PDBs."
     )
-    for rule in rules:
-        forbidden = _verbs(rule) & {"create", "update", "delete", "deletecollection"}
-        assert not forbidden, (
-            "Destructive runner PodDisruptionBudget rollback access must not "
-            "create, update, or delete PDBs; "
-            f"found mutating verbs {forbidden!r} in rule {rule!r}."
-        )
 
 
 @pytest.mark.requirement("security-hardening-AC-9")
 def test_destructive_runner_has_limited_service_patch_access_for_helm_rollback() -> None:
-    """Destructive runner needs limited Service patch access for rollback."""
+    """Destructive runner needs Service chart-manager access."""
     role = _render_role(DESTRUCTIVE_TEMPLATE)
     rules = _rules_for(role, api_group="", resource="services")
 
-    assert any({"get", "list", "watch", "patch"}.issubset(_verbs(rule)) for rule in rules), (
-        "Destructive runner must have get/list/watch/patch access to Services "
-        "so Helm rollback can restore chart-managed Services."
+    assert any(HELM_CHART_MANAGER_VERBS.issubset(_verbs(rule)) for rule in rules), (
+        "Destructive runner must have chart-manager access to Services so "
+        "Helm upgrade/rollback can restore chart-managed Services."
     )
-    for rule in rules:
-        forbidden = _verbs(rule) & {"create", "update", "delete", "deletecollection"}
-        assert not forbidden, (
-            "Destructive runner Service rollback access must not create, update, "
-            f"or delete Services; found mutating verbs {forbidden!r} in rule {rule!r}."
-        )
