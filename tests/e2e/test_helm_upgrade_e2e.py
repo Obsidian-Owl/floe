@@ -66,6 +66,7 @@ class TestHelmUpgrade:
     """
 
     @pytest.mark.requirement("AC-2.9")
+    @pytest.mark.timeout(1260)
     def test_helm_upgrade_succeeds(self, flux_suspended: None) -> None:  # noqa: F811
         """Verify helm upgrade completes without error.
 

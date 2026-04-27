@@ -21,6 +21,7 @@ Requirements:
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -329,4 +330,51 @@ class TestUpgradeCommandStructure:
             "test_helm_upgrade_succeeds contains '--install' flag. "
             "The upgrade test must validate the pure upgrade path, not "
             "fall back to install if the release doesn't exist."
+        )
+
+
+class TestUpgradeTimeoutEnvelope:
+    """Validate pytest does not interrupt Helm before Helm can settle state."""
+
+    @pytest.mark.requirement("AC-2.9")
+    def test_pytest_timeout_exceeds_helm_upgrade_and_recovery_budget(
+        self,
+        upgrade_file_raw: str,
+    ) -> None:
+        """The destructive upgrade test needs an outer timeout above Helm budgets.
+
+        ``test_helm_upgrade_succeeds`` runs ``helm upgrade --timeout 8m`` and
+        may run a 5-minute recovery rollback in ``finally``. A global 300s
+        pytest-timeout interrupts Helm mid-transaction and leaves the release
+        in ``pending-rollback``.
+        """
+        tree = ast.parse(upgrade_file_raw)
+        upgrade_test = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "test_helm_upgrade_succeeds"
+        )
+
+        timeout_seconds: int | None = None
+        for decorator in upgrade_test.decorator_list:
+            if not isinstance(decorator, ast.Call):
+                continue
+            if (
+                isinstance(decorator.func, ast.Attribute)
+                and decorator.func.attr == "timeout"
+                and isinstance(decorator.func.value, ast.Attribute)
+                and decorator.func.value.attr == "mark"
+            ):
+                first_arg = decorator.args[0] if decorator.args else None
+                if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, int):
+                    timeout_seconds = first_arg.value
+
+        assert timeout_seconds is not None, (
+            "test_helm_upgrade_succeeds must declare @pytest.mark.timeout(...) "
+            "so the global 300s timeout cannot interrupt Helm mid-upgrade."
+        )
+        assert timeout_seconds >= 1260, (
+            "test_helm_upgrade_succeeds pytest timeout must exceed the 8m Helm "
+            "upgrade budget plus the 5m recovery rollback budget and scheduling "
+            f"headroom; got {timeout_seconds}s."
         )
