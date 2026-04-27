@@ -46,13 +46,18 @@ rules:
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
   - apiGroups: [""]
     resources: ["events"]
-    verbs: ["get", "list", "watch"]
+    # The upstream Dagster subchart Role grants event mutation verbs. Helm
+    # refuses to patch that Role unless the in-cluster upgrade identity already
+    # has every granted verb, so destructive tests must retain this superset.
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
   - apiGroups: ["batch"]
     resources: ["jobs/status"]
-    verbs: ["get", "patch", "update"]
+    # Includes list/watch because the upstream Dagster subchart Role grants
+    # them and Kubernetes RBAC escalation checks require a superset.
+    verbs: ["get", "list", "watch", "patch", "update"]
   - apiGroups: [""]
     resources: ["services"]
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]

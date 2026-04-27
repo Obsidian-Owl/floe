@@ -418,27 +418,39 @@ def test_destructive_runner_splits_read_only_pod_subresources() -> None:
 
 @pytest.mark.requirement("security-hardening-AC-9")
 def test_destructive_runner_limits_events_to_read_only() -> None:
-    """Destructive test runner reads events but must not mutate them."""
+    """Destructive runner keeps event verbs aligned with rendered Dagster Role.
+
+    The upstream Dagster chart grants event mutation verbs. Because destructive
+    tests run ``helm upgrade`` in-cluster, Kubernetes rejects Role patching
+    unless the acting identity already holds every verb in that rendered Role.
+    """
     role = _render_role(DESTRUCTIVE_TEMPLATE)
     assert set().union(
         *(_verbs(rule) for rule in _rules_for(role, api_group="", resource="events"))
     ) == {
+        "create",
+        "delete",
+        "deletecollection",
         "get",
         "list",
+        "patch",
+        "update",
         "watch",
     }
 
 
 @pytest.mark.requirement("security-hardening-AC-9")
 def test_destructive_runner_limits_jobs_status_to_status_verbs() -> None:
-    """Job status subresource must not inherit job create/delete/list/watch verbs."""
+    """Job status keeps only verbs needed by status access and Dagster Role patching."""
     role = _render_role(DESTRUCTIVE_TEMPLATE)
     assert set().union(
         *(_verbs(rule) for rule in _rules_for(role, api_group="batch", resource="jobs/status"))
     ) == {
         "get",
+        "list",
         "patch",
         "update",
+        "watch",
     }
 
 
