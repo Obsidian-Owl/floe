@@ -477,6 +477,46 @@ def test_destructive_runner_can_grant_pre_upgrade_hook_role_without_escalation()
 
 
 @pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_can_grant_all_rendered_chart_roles_without_escalation() -> None:
+    """Destructive runner must already hold permissions granted by rendered Roles.
+
+    Kubernetes rejects Role create/update/patch when the acting identity would
+    grant permissions it does not already hold. The destructive test pod runs
+    ``helm upgrade`` in-cluster, so it must hold a superset of every chart Role
+    Helm may patch during upgrade.
+    """
+    destructive_role = _render_role(DESTRUCTIVE_TEMPLATE)
+    destructive_name = destructive_role["metadata"]["name"]
+    rendered_roles = [
+        role
+        for role in _render_all_chart_docs()
+        if role.get("kind") == "Role" and role.get("metadata", {}).get("name") != destructive_name
+    ]
+    assert rendered_roles, "Expected chart to render Roles besides the destructive runner"
+
+    for rendered_role in rendered_roles:
+        role_name = rendered_role.get("metadata", {}).get("name")
+        for rendered_rule in cast("list[dict[str, Any]]", rendered_role.get("rules") or []):
+            api_groups = cast("list[str]", rendered_rule.get("apiGroups") or [])
+            resources = cast("list[str]", rendered_rule.get("resources") or [])
+            required_verbs = _verbs(rendered_rule)
+            for api_group in api_groups:
+                for resource in resources:
+                    destructive_rules = _rules_for(
+                        destructive_role,
+                        api_group=api_group,
+                        resource=resource,
+                    )
+                    available_verbs = set().union(*(_verbs(rule) for rule in destructive_rules))
+                    assert required_verbs.issubset(available_verbs), (
+                        "Destructive runner cannot patch rendered Role "
+                        f"{role_name!r} without RBAC escalation. Missing verbs "
+                        f"{required_verbs - available_verbs!r} for "
+                        f"{api_group or 'core'}/{resource}."
+                    )
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
 def test_destructive_runner_can_manage_pre_upgrade_hook_resources() -> None:
     """Destructive runner must manage rendered pre-upgrade hook resources.
 
