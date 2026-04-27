@@ -174,6 +174,32 @@ def test_ci_test_runner_builds_use_public_docker_wrapper() -> None:
 
 
 @pytest.mark.requirement("AC-2")
+def test_e2e_runner_resolves_chart_dependencies_before_image_build() -> None:
+    """Clean remote E2E images must include Helm chart dependencies.
+
+    The destructive E2E suite runs `helm upgrade charts/floe-platform` inside
+    the test-runner pod. A clean Git checkout only has local subcharts; remote
+    dependencies must be vendored before Docker copies `charts/` into the image.
+    """
+    e2e_script = (_REPO_ROOT / "testing" / "ci" / "test-e2e-cluster.sh").read_text()
+
+    dependency_build = e2e_script.find("floe_ensure_chart_dependencies")
+    image_build = e2e_script.find(
+        'scripts/with-public-docker-config.sh docker build -t "${IMAGE_NAME}"'
+    )
+
+    assert dependency_build != -1, (
+        "test-e2e-cluster.sh must explicitly vendor Helm chart dependencies "
+        "before building the test-runner image."
+    )
+    assert image_build != -1, "test-e2e-cluster.sh must build the test-runner image."
+    assert dependency_build < image_build, (
+        "Helm chart dependencies must be resolved before Docker copies charts/ "
+        "into floe-test-runner:latest."
+    )
+
+
+@pytest.mark.requirement("AC-2")
 def test_chart_dependency_builds_use_public_registry_wrapper() -> None:
     """Helm OCI chart dependencies should bypass ambient DevPod credential helpers."""
     common_script = (_REPO_ROOT / "testing" / "ci" / "common.sh").read_text()

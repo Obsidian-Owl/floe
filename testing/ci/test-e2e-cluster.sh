@@ -354,6 +354,9 @@ fi
 
 floe_require_cluster
 
+info "Ensuring Helm chart dependencies are present before building test runner image..."
+floe_ensure_chart_dependencies
+
 # --- Step 1: Build test runner image ---
 
 if [[ "${IMAGE_LOAD_METHOD}" == "skip" ]]; then
