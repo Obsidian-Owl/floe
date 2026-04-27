@@ -51,7 +51,7 @@ devpod_assert_remote_ref_exists() {
     local remote="${1:?remote required}"
     local ref="${2:?ref required}"
 
-    git ls-remote --exit-code --heads "${remote}" "${ref}" >/dev/null 2>&1
+    git ls-remote --exit-code "${remote}" "${ref}" >/dev/null 2>&1
 }
 
 devpod_resolve_source() {
@@ -75,12 +75,12 @@ devpod_resolve_source() {
     fi
 
     if ! ref="$(devpod_git_branch "${project_root}")" || [[ -z "${ref}" || "${ref}" == "HEAD" ]]; then
-        devpod_source_error "Cannot resolve a branch ref. Set DEVPOD_GIT_REF or DEVPOD_SOURCE."
+        devpod_source_error "Cannot resolve a Git ref. Set DEVPOD_GIT_REF or DEVPOD_SOURCE."
         return 1
     fi
 
     if ! devpod_assert_remote_ref_exists "${remote}" "${ref}"; then
-        devpod_source_error "Remote branch '${ref}' is not available on '${remote}'. Push it or set DEVPOD_SOURCE."
+        devpod_source_error "Remote ref '${ref}' is not available on '${remote}'. Push it or set DEVPOD_SOURCE."
         return 1
     fi
 

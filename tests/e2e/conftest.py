@@ -27,7 +27,6 @@ import yaml
 
 # Re-exported for backwards compatibility — other E2E files import from here.
 from testing.fixtures.credentials import (
-    DEFAULT_POLARIS_CONFIG,
     get_minio_credentials,
     get_polaris_credentials,
     get_polaris_scope,
@@ -46,7 +45,6 @@ def _read_manifest_config(manifest_path: Path | None = None) -> dict[str, str]:
     """Read Polaris config defaults from the selected manifest path."""
     if manifest_path is not None:
         resolved_manifest = resolve_manifest_path(manifest_path)
-        fallback = dict(DEFAULT_POLARIS_CONFIG)
 
         if not resolved_manifest.is_file():
             warnings.warn(
@@ -54,7 +52,7 @@ def _read_manifest_config(manifest_path: Path | None = None) -> dict[str, str]:
                 RuntimeWarning,
                 stacklevel=2,
             )
-            return fallback
+            return _read_polaris_config_with_env_precedence(resolved_manifest)
 
         try:
             raw = yaml.safe_load(resolved_manifest.read_text())
@@ -65,7 +63,7 @@ def _read_manifest_config(manifest_path: Path | None = None) -> dict[str, str]:
                 RuntimeWarning,
                 stacklevel=2,
             )
-            return fallback
+            return _read_polaris_config_with_env_precedence(resolved_manifest)
 
         if not isinstance(raw, dict):
             warnings.warn(
@@ -74,21 +72,9 @@ def _read_manifest_config(manifest_path: Path | None = None) -> dict[str, str]:
                 RuntimeWarning,
                 stacklevel=2,
             )
-            return fallback
+            return _read_polaris_config_with_env_precedence(resolved_manifest)
 
-        plugins = raw.get("plugins", {})
-        catalog = plugins.get("catalog", {}) if isinstance(plugins, dict) else {}
-        config = catalog.get("config", {}) if isinstance(catalog, dict) else {}
-        config = config if isinstance(config, dict) else {}
-        oauth2 = config.get("oauth2", {})
-        oauth2 = oauth2 if isinstance(oauth2, dict) else {}
-
-        return {
-            "client_id": str(oauth2.get("client_id", fallback["client_id"])),
-            "client_secret": str(oauth2.get("client_secret", fallback["client_secret"])),
-            "scope": str(config.get("scope", oauth2.get("scope", fallback["scope"]))),
-            "warehouse": str(config.get("warehouse", fallback["warehouse"])),
-        }
+        return _read_polaris_config_with_env_precedence(resolved_manifest)
 
     resolved_manifest = resolve_manifest_path(manifest_path)
     if not resolved_manifest.is_file():
@@ -97,6 +83,11 @@ def _read_manifest_config(manifest_path: Path | None = None) -> dict[str, str]:
             RuntimeWarning,
             stacklevel=2,
         )
+    return _read_polaris_config_with_env_precedence(resolved_manifest)
+
+
+def _read_polaris_config_with_env_precedence(resolved_manifest: Path) -> dict[str, str]:
+    """Read Polaris config through shared env-first credential helpers."""
     client_id, client_secret = get_polaris_credentials(resolved_manifest)
     return {
         "client_id": client_id,

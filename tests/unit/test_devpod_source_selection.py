@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import shlex
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -18,6 +21,30 @@ def _read(path: Path) -> str:
     return path.read_text()
 
 
+def _run_source_helper(
+    *,
+    project_root: Path,
+    remote: Path,
+    ref: str,
+) -> subprocess.CompletedProcess[str]:
+    """Resolve a DevPod source using the real shell helper against a test remote."""
+    script = (
+        f"source {shlex.quote(str(_SOURCE_HELPER))}; "
+        f"devpod_resolve_source {shlex.quote(str(project_root))}"
+    )
+    return subprocess.run(
+        ["bash", "-lc", script],
+        check=False,
+        env={
+            **os.environ,
+            "DEVPOD_GIT_REMOTE": str(remote),
+            "DEVPOD_GIT_REF": ref,
+        },
+        text=True,
+        capture_output=True,
+    )
+
+
 @pytest.mark.requirement("AC-DevPod-Git-Source")
 def test_source_helper_defaults_to_remote_git_branch() -> None:
     """DevPod source resolution must avoid local worktree upload by default."""
@@ -25,10 +52,54 @@ def test_source_helper_defaults_to_remote_git_branch() -> None:
 
     assert "DEVPOD_SOURCE" in helper
     assert "DEVPOD_ALLOW_LOCAL_SOURCE" in helper
-    assert "git ls-remote --exit-code --heads" in helper
+    assert "git ls-remote --exit-code" in helper
+    assert "git ls-remote --exit-code --heads" not in helper
     assert "git:%s@%s" in helper
     assert "printf '%s\\n' \"${project_root}\"" in helper
-    assert "Remote branch" in helper
+    assert "Remote ref" in helper
+
+
+@pytest.mark.requirement("AC-DevPod-Git-Source")
+def test_source_helper_accepts_tag_refs(tmp_path: Path) -> None:
+    """DEVPOD_GIT_REF must accept pushed tags for reproducible DevPod runs."""
+    worktree = tmp_path / "worktree"
+    remote = tmp_path / "remote.git"
+    worktree.mkdir()
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True)
+    subprocess.run(["git", "-C", str(worktree), "init"], check=True)
+    subprocess.run(
+        ["git", "-C", str(worktree), "config", "user.email", "test@example.com"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(worktree), "config", "user.name", "Test User"], check=True)
+    (worktree / "README.md").write_text("test\n")
+    subprocess.run(["git", "-C", str(worktree), "add", "README.md"], check=True)
+    subprocess.run(["git", "-C", str(worktree), "commit", "-m", "initial"], check=True)
+    subprocess.run(["git", "-C", str(worktree), "tag", "v1.0.0"], check=True)
+    subprocess.run(["git", "-C", str(worktree), "remote", "add", "origin", str(remote)], check=True)
+    subprocess.run(
+        ["git", "-C", str(worktree), "push", "origin", "HEAD:main", "v1.0.0"],
+        check=True,
+    )
+
+    result = _run_source_helper(project_root=worktree, remote=remote, ref="v1.0.0")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f"git:{str(remote).removesuffix('.git')}@v1.0.0"
+
+
+@pytest.mark.requirement("AC-DevPod-Git-Source")
+def test_source_helper_rejects_missing_refs(tmp_path: Path) -> None:
+    """Missing branch/tag refs must fail before provisioning Hetzner resources."""
+    remote = tmp_path / "remote.git"
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True)
+
+    result = _run_source_helper(project_root=project_root, remote=remote, ref="missing-ref")
+
+    assert result.returncode == 1
+    assert "Remote ref 'missing-ref' is not available" in result.stderr
 
 
 @pytest.mark.requirement("AC-DevPod-Git-Source")

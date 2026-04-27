@@ -570,3 +570,38 @@ class TestEnvVarOverridePrecedence:
             "conftest.py must still check POLARIS_WAREHOUSE env var "
             "for override precedence (AC-3 condition 4)."
         )
+
+    @pytest.mark.requirement("AC-3")
+    def test_custom_manifest_keeps_env_credential_precedence(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Explicit manifest paths must still let POLARIS_* credentials win."""
+        manifest = tmp_path / "manifest.yaml"
+        manifest.write_text(
+            textwrap.dedent("""\
+                plugins:
+                  catalog:
+                    config:
+                      warehouse: manifest-warehouse
+                      oauth2:
+                        client_id: manifest-id
+                        client_secret: manifest-secret
+                        scope: MANIFEST_SCOPE:READ
+            """)
+        )
+        monkeypatch.setenv("POLARIS_CLIENT_ID", "env-id")
+        monkeypatch.setenv("POLARIS_CLIENT_SECRET", "env-secret")  # pragma: allowlist secret
+        monkeypatch.setenv("POLARIS_SCOPE", "ENV_SCOPE:ALL")
+        monkeypatch.setenv("POLARIS_WAREHOUSE", "env-warehouse")
+
+        fn = _import_read_manifest_config()
+        result = fn(manifest_path=manifest)
+
+        assert result == {
+            "client_id": "env-id",
+            "client_secret": "env-secret",  # pragma: allowlist secret
+            "scope": "ENV_SCOPE:ALL",
+            "warehouse": "env-warehouse",
+        }
