@@ -112,6 +112,19 @@ def test_load_image_scopes_devpod_transport_to_devpod_paths_only() -> None:
 
 
 @pytest.mark.requirement("AC-3")
+def test_devpod_remote_image_commands_shell_quote_interpolated_values() -> None:
+    """Remote image-load commands must not interpolate user-configurable values raw."""
+    script = _read_script()
+
+    assert "shell_quote()" in script
+    assert 'common_sh_q="$(shell_quote "${DEVPOD_REMOTE_WORKDIR}/testing/ci/common.sh")"' in script
+    assert 'image_q="$(shell_quote "${image}")"' in script
+    assert 'kind_cluster_q="$(shell_quote "${kind_cluster}")"' in script
+    assert "source '${DEVPOD_REMOTE_WORKDIR}/testing/ci/common.sh'" not in script
+    assert "floe_kind_evict_image '${image}' '${kind_cluster}'" not in script
+
+
+@pytest.mark.requirement("AC-3")
 def test_devpod_workspace_defaults_from_kubeconfig_when_env_unset() -> None:
     """The runner must infer the workspace name from a synced DevPod kubeconfig."""
     script = _read_script()
@@ -137,9 +150,11 @@ def test_kind_load_calls_use_shared_kind_cluster_variable() -> None:
         "load_image() should contain exactly four kind load docker-image calls "
         "(kind, devpod, auto-kind, and auto-devpod paths)."
     )
-    assert all("${kind_cluster}" in line for line in kind_load_lines), (
+    assert all(
+        "${kind_cluster}" in line or "${kind_cluster_q}" in line for line in kind_load_lines
+    ), (
         "Every kind load docker-image call in load_image() must use the shared "
-        "${kind_cluster} variable."
+        "${kind_cluster} variable or its shell-quoted derivative."
     )
     assert '--name "floe-test"' not in body, (
         "load_image() still hardcodes the Kind cluster name in a load path."

@@ -114,6 +114,10 @@ devpod_remote_command() {
         --command "${command}"
 }
 
+shell_quote() {
+    printf '%q' "$1"
+}
+
 # extract_pod_logs — collect pod logs and K8s events on failure for debugging
 extract_pod_logs() {
     mkdir -p "${ARTIFACTS_DIR}/pod-logs"
@@ -286,6 +290,12 @@ load_image() {
     local image="$1"
     local method="${IMAGE_LOAD_METHOD}"
     local kind_cluster="${FLOE_KIND_CLUSTER}"
+    local common_sh_q
+    local image_q
+    local kind_cluster_q
+    common_sh_q="$(shell_quote "${DEVPOD_REMOTE_WORKDIR}/testing/ci/common.sh")"
+    image_q="$(shell_quote "${image}")"
+    kind_cluster_q="$(shell_quote "${kind_cluster}")"
 
     case "${method}" in
         skip)
@@ -304,8 +314,8 @@ load_image() {
             info "Loading image into DevPod workspace '${workspace}' and Kind cluster '${kind_cluster}'..."
             docker save "${image}" | devpod_remote_command "docker load"
             devpod_remote_command \
-                "source '${DEVPOD_REMOTE_WORKDIR}/testing/ci/common.sh' && floe_kind_evict_image '${image}' '${kind_cluster}'"
-            devpod_remote_command "kind load docker-image '${image}' --name '${kind_cluster}'"
+                "source ${common_sh_q} && floe_kind_evict_image ${image_q} ${kind_cluster_q}"
+            devpod_remote_command "kind load docker-image ${image_q} --name ${kind_cluster_q}"
             return 0
             ;;
         *)
@@ -323,8 +333,8 @@ load_image() {
                 info "Loading image into DevPod workspace '${workspace}' and Kind cluster '${kind_cluster}'..."
                 docker save "${image}" | devpod_remote_command "docker load"
                 devpod_remote_command \
-                    "source '${DEVPOD_REMOTE_WORKDIR}/testing/ci/common.sh' && floe_kind_evict_image '${image}' '${kind_cluster}'"
-                devpod_remote_command "kind load docker-image '${image}' --name '${kind_cluster}'"
+                    "source ${common_sh_q} && floe_kind_evict_image ${image_q} ${kind_cluster_q}"
+                devpod_remote_command "kind load docker-image ${image_q} --name ${kind_cluster_q}"
                 return 0
             fi
 
