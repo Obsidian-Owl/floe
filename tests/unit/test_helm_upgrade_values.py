@@ -22,7 +22,9 @@ Requirements:
 from __future__ import annotations
 
 import ast
+import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -378,3 +380,83 @@ class TestUpgradeTimeoutEnvelope:
             "upgrade budget plus the 5m recovery rollback budget and scheduling "
             f"headroom; got {timeout_seconds}s."
         )
+
+
+class TestRuntimeImageOverrides:
+    """Validate upgrade replays only runtime image values from the current release."""
+
+    @pytest.mark.requirement("AC-2.9")
+    def test_runtime_dagster_image_overrides_are_derived_from_helm_values(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The upgrade must preserve the manifest-selected demo image tag.
+
+        DevPod/Kind loads the built demo image by its generated tag and uses
+        ``imagePullPolicy: Never``. If the upgrade falls back to the test
+        values file's ``latest`` tag, pods cannot start and Helm waits until
+        timeout.
+        """
+        from tests.e2e import test_helm_upgrade_e2e as upgrade_module
+
+        helm_values = {
+            "dagster": {
+                "dagsterWebserver": {
+                    "image": {
+                        "repository": "registry.example/floe-dagster-demo",
+                        "tag": "abc123-dirty",
+                    },
+                },
+                "dagsterDaemon": {
+                    "image": {
+                        "repository": "registry.example/floe-dagster-demo",
+                        "tag": "abc123-dirty",
+                    },
+                },
+                "runLauncher": {
+                    "config": {
+                        "k8sRunLauncher": {
+                            "image": {
+                                "repository": "registry.example/floe-dagster-demo",
+                                "tag": "abc123-dirty",
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        calls: list[list[str]] = []
+
+        def fake_run_helm(args: list[str]) -> subprocess.CompletedProcess[str]:
+            calls.append(args)
+            return subprocess.CompletedProcess(
+                args=args,
+                returncode=0,
+                stdout=json.dumps(helm_values),
+                stderr="",
+            )
+
+        monkeypatch.setattr(upgrade_module, "run_helm", fake_run_helm)
+
+        overrides = upgrade_module._current_dagster_image_overrides(
+            release="floe-platform",
+            namespace="floe-test",
+        )
+
+        assert calls == [
+            ["get", "values", "floe-platform", "-n", "floe-test", "--all", "-o", "json"],
+        ]
+        assert overrides == [
+            "--set-string",
+            "dagster.dagsterWebserver.image.repository=registry.example/floe-dagster-demo",
+            "--set-string",
+            "dagster.dagsterWebserver.image.tag=abc123-dirty",
+            "--set-string",
+            "dagster.dagsterDaemon.image.repository=registry.example/floe-dagster-demo",
+            "--set-string",
+            "dagster.dagsterDaemon.image.tag=abc123-dirty",
+            "--set-string",
+            "dagster.runLauncher.config.k8sRunLauncher.image.repository=registry.example/floe-dagster-demo",
+            "--set-string",
+            "dagster.runLauncher.config.k8sRunLauncher.image.tag=abc123-dirty",
+        ]
