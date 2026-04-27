@@ -36,6 +36,7 @@ ENTRY_POINT_GROUPS = {
     "lineage_backend": "floe.lineage_backends",
     "identity": "floe.identity",
     "dbt": "floe.dbt",
+    "quality": "floe.quality",
 }
 
 PACKAGE_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+")
@@ -95,6 +96,18 @@ def _local_dependencies(package_name: str, metadata: dict[str, dict[str, Any]]) 
     return local.intersection(metadata.keys())
 
 
+def _selected_plugin_name(category: str, selection: object) -> str | None:
+    """Return the configured plugin name for a manifest plugin selection."""
+    if category == "quality":
+        plugin_name = getattr(selection, "provider", None)
+    else:
+        plugin_name = getattr(selection, "type", None)
+
+    if plugin_name is None:
+        return None
+    return str(plugin_name)
+
+
 def _selected_plugin_packages(
     manifest: PlatformManifest,
     entry_points: dict[tuple[str, str], str],
@@ -105,14 +118,14 @@ def _selected_plugin_packages(
         selection = getattr(manifest.plugins, category, None)
         if selection is None:
             continue
-        plugin_type = getattr(selection, "type", None)
-        if plugin_type is None:
+        plugin_name = _selected_plugin_name(category, selection)
+        if plugin_name is None:
             continue
 
-        package_name = entry_points.get((group, str(plugin_type)))
+        package_name = entry_points.get((group, plugin_name))
         if package_name is None:
             raise SystemExit(
-                f"No workspace package found for manifest plugin {category}.{plugin_type} "
+                f"No workspace package found for manifest plugin {category}.{plugin_name} "
                 f"in entry point group {group}."
             )
         selected.add(package_name)

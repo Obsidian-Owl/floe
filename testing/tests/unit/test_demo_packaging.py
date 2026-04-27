@@ -1341,6 +1341,26 @@ class TestDemoPluginResolver:
         )
 
     @pytest.mark.requirement("WU11-AC6")
+    def test_resolver_includes_manifest_quality_provider(self, tmp_path: Path) -> None:
+        """The demo image package list must include the selected quality provider."""
+        manifest = yaml.safe_load(DEMO_MANIFEST.read_text())
+        manifest.setdefault("plugins", {})["quality"] = {
+            "provider": "great_expectations",
+        }
+        manifest_path = tmp_path / "manifest-with-quality.yaml"
+        manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False))
+
+        result = subprocess.run(
+            [sys.executable, str(DEMO_PLUGIN_RESOLVER), "--manifest", str(manifest_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        packages = result.stdout.split()
+        assert "floe-quality-gx" in packages
+
+    @pytest.mark.requirement("WU11-AC6")
     def test_orchestrator_declares_floe_iceberg_runtime_dependency(self) -> None:
         """Runtime imports must be reflected in package metadata."""
         pyproject = tomllib.loads(
