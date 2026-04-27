@@ -414,6 +414,56 @@ class TestSuspendHelmrelease:
         ]
 
     @pytest.mark.requirement("AC-2")
+    def test_rejects_invalid_helmrelease_name_before_kubectl_patch(
+        self,
+        mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
+    ) -> None:
+        """Fallback patch path must reject malformed Kubernetes resource names."""
+        from testing.fixtures.flux import suspend_helmrelease
+
+        mock_shutil_which.return_value = None
+
+        with pytest.raises(ValueError, match="Invalid Kubernetes resource name"):
+            suspend_helmrelease("floe-platform;rm", _DEFAULT_NAMESPACE)
+
+        mock_subprocess.assert_not_called()
+
+    @pytest.mark.requirement("AC-2")
+    def test_rejects_invalid_namespace_before_kubectl_patch(
+        self,
+        mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
+    ) -> None:
+        """Fallback patch path must reject malformed Kubernetes namespaces."""
+        from testing.fixtures.flux import suspend_helmrelease
+
+        mock_shutil_which.return_value = None
+
+        with pytest.raises(ValueError, match="Invalid Kubernetes namespace"):
+            suspend_helmrelease(_DEFAULT_RELEASE_NAME, "../floe-test")
+
+        mock_subprocess.assert_not_called()
+
+    @pytest.mark.requirement("AC-2")
+    def test_allows_dns_subdomain_helmrelease_name_for_kubectl_patch(
+        self,
+        mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
+    ) -> None:
+        """HelmRelease names may be DNS subdomains while namespaces are DNS labels."""
+        from testing.fixtures.flux import suspend_helmrelease
+
+        mock_shutil_which.return_value = None
+        mock_subprocess.return_value = _make_completed_process(returncode=0)
+
+        result = suspend_helmrelease("floe.platform", _DEFAULT_NAMESPACE)
+
+        assert result is True
+        actual_args: list[str] = mock_subprocess.call_args[0][0]
+        assert actual_args[3] == "floe.platform"
+
+    @pytest.mark.requirement("AC-2")
     def test_logs_info_when_falling_back_to_kubectl_patch(
         self,
         mock_subprocess: MagicMock,

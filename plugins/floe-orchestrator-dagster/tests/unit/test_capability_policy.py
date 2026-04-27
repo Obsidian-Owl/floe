@@ -11,6 +11,7 @@ from floe_orchestrator_dagster.capabilities import (
 )
 
 
+@pytest.mark.requirement("ALPHA-CAPABILITY")
 def test_alpha_profile_requires_catalog_storage_and_lineage() -> None:
     policy = CapabilityPolicy.alpha()
     plugins = ResolvedPlugins(
@@ -30,6 +31,7 @@ def test_alpha_profile_requires_catalog_storage_and_lineage() -> None:
     assert "lineage_backend" in message
 
 
+@pytest.mark.requirement("ALPHA-CAPABILITY")
 def test_non_alpha_profile_allows_unconfigured_lineage() -> None:
     policy = CapabilityPolicy.default()
     plugins = ResolvedPlugins(
@@ -43,6 +45,7 @@ def test_non_alpha_profile_allows_unconfigured_lineage() -> None:
     policy.validate_required_plugins(plugins)
 
 
+@pytest.mark.requirement("ALPHA-CAPABILITY")
 def test_alpha_profile_accepts_all_required_plugins() -> None:
     policy = CapabilityPolicy.alpha()
     plugins = ResolvedPlugins(

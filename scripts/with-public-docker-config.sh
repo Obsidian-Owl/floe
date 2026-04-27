@@ -57,7 +57,28 @@ write_isolated_config() {
     local target_dir="$1"
 
     if [[ -n "${ACTIVE_DOCKER_CONTEXT}" ]]; then
-        printf '{"auths":{},"currentContext":"%s"}\n' "${ACTIVE_DOCKER_CONTEXT}" > "${target_dir}/config.json"
+        if command -v python3 >/dev/null 2>&1; then
+            ACTIVE_DOCKER_CONTEXT_JSON="${ACTIVE_DOCKER_CONTEXT}" python3 - <<'PY' > "${target_dir}/config.json"
+import json
+import os
+import sys
+
+json.dump(
+    {"auths": {}, "currentContext": os.environ["ACTIVE_DOCKER_CONTEXT_JSON"]},
+    sys.stdout,
+    separators=(",", ":"),
+)
+sys.stdout.write("\n")
+PY
+        elif command -v jq >/dev/null 2>&1; then
+            jq -cn --arg ctx "${ACTIVE_DOCKER_CONTEXT}" '{"auths":{},"currentContext":$ctx}' \
+                > "${target_dir}/config.json"
+        elif [[ "${ACTIVE_DOCKER_CONTEXT}" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+            printf '{"auths":{},"currentContext":"%s"}\n' "${ACTIVE_DOCKER_CONTEXT}" > "${target_dir}/config.json"
+        else
+            echo "Active Docker context contains characters that require JSON escaping; install python3 or jq." >&2
+            exit 2
+        fi
         if [[ -d "${SOURCE_DOCKER_CONFIG}/contexts" && ! -e "${target_dir}/contexts" ]]; then
             ln -s "${SOURCE_DOCKER_CONFIG}/contexts" "${target_dir}/contexts"
         fi

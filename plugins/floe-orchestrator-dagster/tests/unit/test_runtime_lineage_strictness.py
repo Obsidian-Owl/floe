@@ -76,6 +76,7 @@ def _with_required_capabilities(artifacts_dict: dict[str, Any]) -> CompiledArtif
     return CompiledArtifacts.model_validate(data)
 
 
+@pytest.mark.requirement("ALPHA-LINEAGE")
 def test_runtime_default_policy_passes_lineage_strict_false(
     tmp_path: Path,
     valid_compiled_artifacts: dict[str, Any],
@@ -101,6 +102,7 @@ def test_runtime_default_policy_passes_lineage_strict_false(
     )
 
 
+@pytest.mark.requirement("ALPHA-LINEAGE")
 def test_runtime_strict_complete_emission_failure_raises_after_iceberg_success(
     tmp_path: Path,
     valid_compiled_artifacts: dict[str, Any],
@@ -142,6 +144,7 @@ def test_runtime_strict_complete_emission_failure_raises_after_iceberg_success(
     lineage.emit_complete.assert_called_once()
 
 
+@pytest.mark.requirement("ALPHA-LINEAGE")
 def test_runtime_emits_per_model_lineage_after_iceberg_export_with_parent_run(
     tmp_path: Path,
     valid_compiled_artifacts: dict[str, Any],

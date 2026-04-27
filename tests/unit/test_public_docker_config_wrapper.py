@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -142,6 +143,41 @@ def test_public_docker_wrapper_preserves_active_context_in_isolated_config(
     assert result.returncode == 0, result.stderr
     assert 'CONFIG_JSON={"auths":{},"currentContext":"orbstack"}' in result.stdout
     assert "CONTEXTS_PRESENT=1" in result.stdout
+
+
+@pytest.mark.requirement("AC-2")
+def test_public_docker_wrapper_json_escapes_active_context(tmp_path: Path) -> None:
+    """Docker context names must be serialized as JSON, not interpolated text."""
+    source_config = tmp_path / "source-docker-config"
+    (source_config / "contexts").mkdir(parents=True)
+
+    fake_docker = tmp_path / "docker"
+    fake_docker.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "$1 $2" == "context show" ]]; then\n'
+        "  printf 'orb\"stack\\\\prod\\n'\n"
+        "  exit 0\n"
+        "fi\n"
+        "python - <<'PY'\n"
+        "import json, os, pathlib\n"
+        "config = pathlib.Path(os.environ['DOCKER_CONFIG']) / 'config.json'\n"
+        "print(json.dumps(json.loads(config.read_text()), sort_keys=True))\n"
+        "PY\n"
+    )
+    fake_docker.chmod(0o755)
+
+    result = _run_wrapper(
+        "docker",
+        "build",
+        env={
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "DOCKER_CONFIG": str(source_config),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    config = json.loads(result.stdout.strip())
+    assert config == {"auths": {}, "currentContext": 'orb"stack\\prod'}
 
 
 @pytest.mark.requirement("AC-2")

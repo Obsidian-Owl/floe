@@ -67,6 +67,7 @@ def _make_artifacts(*, transforms: ResolvedTransforms | None = None) -> Compiled
     )
 
 
+@pytest.mark.requirement("ALPHA-ICEBERG")
 def test_expected_iceberg_tables_fails_when_transforms_missing() -> None:
     """Deriving default expected tables requires compiled transform metadata."""
     artifacts = _make_artifacts(transforms=None)
@@ -75,6 +76,7 @@ def test_expected_iceberg_tables_fails_when_transforms_missing() -> None:
         expected_iceberg_tables(artifacts)
 
 
+@pytest.mark.requirement("ALPHA-ICEBERG")
 def test_validate_iceberg_outputs_passes_storage_catalog_config_to_catalog() -> None:
     """Validation must pass StoragePlugin catalog config into catalog.connect()."""
     artifacts = _make_artifacts(

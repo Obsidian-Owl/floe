@@ -27,12 +27,32 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 
 import pytest
 
 logger = logging.getLogger(__name__)
+_KUBERNETES_DNS_LABEL_RE = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+_KUBERNETES_DNS_SUBDOMAIN_RE = re.compile(
+    r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?"
+    r"(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+)
+
+
+def _validate_kubernetes_resource_name(value: str) -> str:
+    """Validate a Kubernetes DNS-subdomain style resource name."""
+    if not value or len(value) > 253 or _KUBERNETES_DNS_SUBDOMAIN_RE.fullmatch(value) is None:
+        raise ValueError(f"Invalid Kubernetes resource name: {value!r}")
+    return value
+
+
+def _validate_kubernetes_namespace(value: str) -> str:
+    """Validate a Kubernetes namespace DNS label."""
+    if not value or len(value) > 63 or _KUBERNETES_DNS_LABEL_RE.fullmatch(value) is None:
+        raise ValueError(f"Invalid Kubernetes namespace: {value!r}")
+    return value
 
 
 def is_flux_managed(name: str, namespace: str) -> bool:
@@ -50,6 +70,8 @@ def is_flux_managed(name: str, namespace: str) -> bool:
     Returns:
         True if the HelmRelease exists, False otherwise.
     """
+    name = _validate_kubernetes_resource_name(name)
+    namespace = _validate_kubernetes_namespace(namespace)
     result = subprocess.run(
         ["kubectl", "get", "helmrelease", name, "-n", namespace],
         capture_output=True,
@@ -70,6 +92,8 @@ def _patch_helmrelease_suspend(name: str, namespace: str, suspend: bool) -> bool
     Returns:
         True if the patch command succeeded, False otherwise.
     """
+    name = _validate_kubernetes_resource_name(name)
+    namespace = _validate_kubernetes_namespace(namespace)
     action = "suspend" if suspend else "resume"
     payload = '{"spec":{"suspend":true}}' if suspend else '{"spec":{"suspend":false}}'
     cmd = [
@@ -126,6 +150,8 @@ def suspend_helmrelease(name: str, namespace: str) -> bool:
     Returns:
         True if the suspend command succeeded, False otherwise.
     """
+    name = _validate_kubernetes_resource_name(name)
+    namespace = _validate_kubernetes_namespace(namespace)
     if shutil.which("flux") is None:
         return _patch_helmrelease_suspend(name, namespace, suspend=True)
 
@@ -163,6 +189,8 @@ def resume_helmrelease(name: str, namespace: str) -> bool:
     Returns:
         True if the resume command succeeded, False otherwise.
     """
+    name = _validate_kubernetes_resource_name(name)
+    namespace = _validate_kubernetes_namespace(namespace)
     if shutil.which("flux") is None:
         return _patch_helmrelease_suspend(name, namespace, suspend=False)
 

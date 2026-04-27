@@ -151,6 +151,7 @@ def test_demo_iceberg_outputs_exist_in_deployed_catalog() -> None:
 
 
 @pytest.mark.developer_workflow
+@pytest.mark.requirement("ALPHA-ICEBERG")
 def test_parse_validation_stdout_reads_last_json_line() -> None:
     """Helper stdout parser tolerates logs before the JSON result."""
     assert _parse_validation_stdout('log line\n{"tables_validated": 1}\n') == {

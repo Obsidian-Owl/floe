@@ -73,6 +73,7 @@ def _make_artifacts(*, model_names: list[str] | None = None) -> CompiledArtifact
     )
 
 
+@pytest.mark.requirement("ALPHA-ICEBERG")
 def test_parse_recovery_mode_defaults_to_strict() -> None:
     """Validation is strict unless caller opts into materialization repair."""
     assert _parse_recovery_mode(None) == "strict"
@@ -80,17 +81,20 @@ def test_parse_recovery_mode_defaults_to_strict() -> None:
 
 
 @pytest.mark.parametrize("value", ["strict", "repair"])
+@pytest.mark.requirement("ALPHA-ICEBERG")
 def test_parse_recovery_mode_accepts_supported_modes(value: str) -> None:
     """Supported modes are explicit and stable."""
     assert _parse_recovery_mode(value) == value
 
 
+@pytest.mark.requirement("ALPHA-ICEBERG")
 def test_parse_recovery_mode_rejects_unknown_value() -> None:
     """Unknown recovery modes fail before catalog mutation."""
     with pytest.raises(ValueError, match="Unsupported Iceberg validation recovery mode"):
         _parse_recovery_mode("reset")
 
 
+@pytest.mark.requirement("ALPHA-ICEBERG")
 def test_reset_iceberg_outputs_drops_expected_tables(monkeypatch: pytest.MonkeyPatch) -> None:
     """Reset mode drops expected output registrations before validation."""
     artifacts = _make_artifacts(model_names=["mart_customer_360", "int_customer_orders"])
@@ -106,6 +110,7 @@ def test_reset_iceberg_outputs_drops_expected_tables(monkeypatch: pytest.MonkeyP
     ]
 
 
+@pytest.mark.requirement("ALPHA-ICEBERG")
 def test_reset_iceberg_outputs_tolerates_missing_tables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -120,6 +125,7 @@ def test_reset_iceberg_outputs_tolerates_missing_tables(
     assert dropped == ["customer_360.mart_customer_360"]
 
 
+@pytest.mark.requirement("ALPHA-ICEBERG")
 def test_main_reset_only_drops_without_validating_and_prints_diagnostics(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

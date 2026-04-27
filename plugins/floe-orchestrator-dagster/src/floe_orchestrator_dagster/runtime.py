@@ -118,6 +118,8 @@ def build_product_definitions(
         name=f"{product_name.replace('-', '_')}_dbt_assets",
         required_resource_keys={"dbt", "lineage"},
     )
+    # Dagster's @dbt_assets decorator wraps this callable dynamically, and the
+    # concrete context type is not stable enough for strict annotation here.
     def _dbt_assets_fn(context) -> object:  # type: ignore[no-untyped-def]
         """Run dbt build with lineage emission."""
         dbt = context.resources.dbt
@@ -130,7 +132,7 @@ def build_product_definitions(
             if trace_facet is not None:
                 run_facets["traceCorrelation"] = trace_facet
         except Exception as _trace_exc:
-            context.log.debug("Trace facet creation failed: %s", _trace_exc)
+            context.log.warning("Trace facet creation failed: %s", _trace_exc)
         try:
             dagster_run_id = _dagster_run_id(context)
             run_id = lineage.emit_start(
@@ -138,9 +140,10 @@ def build_product_definitions(
                 run_id=dagster_run_id,
                 run_facets=run_facets or None,
             )
-        except Exception:
+        except Exception as _start_exc:
             if policy.require_lineage:
                 raise
+            context.log.warning("emit_start failed; using fallback run id: %s", _start_exc)
             run_id = uuid4()
 
         try:
@@ -168,7 +171,10 @@ def build_product_definitions(
             except Exception as _model_lineage_exc:
                 if policy.require_lineage:
                     raise
-                context.log.debug("runtime model lineage emission failed: %s", _model_lineage_exc)
+                context.log.warning(
+                    "runtime model lineage emission failed: %s",
+                    _model_lineage_exc,
+                )
         except Exception as exc:
             try:
                 lineage.emit_fail(run_id, product_name, error_message=type(exc).__name__)
@@ -176,7 +182,7 @@ def build_product_definitions(
             except Exception as _fail_exc:
                 if policy.require_lineage:
                     raise
-                context.log.debug("emit_fail failed: %s", _fail_exc)
+                context.log.warning("emit_fail failed: %s", _fail_exc)
             raise
 
         try:
@@ -185,7 +191,7 @@ def build_product_definitions(
         except Exception as _complete_exc:
             if policy.require_lineage:
                 raise
-            context.log.debug("emit_complete failed: %s", _complete_exc)
+            context.log.warning("emit_complete failed: %s", _complete_exc)
 
     project_dir_str = str(project_dir)
 

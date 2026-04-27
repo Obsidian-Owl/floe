@@ -7,6 +7,8 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SETUP_SCRIPT = _REPO_ROOT / "testing" / "k8s" / "setup-cluster.sh"
 
@@ -58,6 +60,7 @@ def _run_setup_function(
     )
 
 
+@pytest.mark.requirement("AC-2")
 def test_resolve_flux_git_branch_uses_explicit_flux_branch(tmp_path: Path) -> None:
     """FLOE_REQUIRED_FLUX_GIT_BRANCH guards but does not select the branch."""
     result = _run_setup_function("resolve_flux_git_branch", tmp_path)
@@ -66,6 +69,7 @@ def test_resolve_flux_git_branch_uses_explicit_flux_branch(tmp_path: Path) -> No
     assert result.stdout.strip() == "feature-worktree"
 
 
+@pytest.mark.requirement("AC-2")
 def test_deploy_via_flux_rejects_explicit_branch_mismatch(tmp_path: Path) -> None:
     """Remote validation fails before deploy when Flux branch drifts."""
     result = _run_setup_function(
@@ -89,6 +93,7 @@ def test_deploy_via_flux_rejects_explicit_branch_mismatch(tmp_path: Path) -> Non
     assert "kubectl should not be called" not in result.stderr
 
 
+@pytest.mark.requirement("AC-2")
 def test_deploy_via_flux_accepts_explicit_branch_match(tmp_path: Path) -> None:
     """Matching selected and required branches render Flux manifests normally."""
     result = _run_setup_function(
@@ -123,6 +128,7 @@ def test_deploy_via_flux_accepts_explicit_branch_match(tmp_path: Path) -> None:
     assert "rendered_branch=feature-worktree" in result.stdout
 
 
+@pytest.mark.requirement("AC-2")
 def test_render_flux_manifests_injects_demo_image_without_python_yaml(
     tmp_path: Path,
 ) -> None:

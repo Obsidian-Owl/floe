@@ -422,6 +422,7 @@ def empty_project_dir(tmp_path: Path) -> Path:
     return pdir
 
 
+@pytest.mark.requirement("AC-1")
 def test_loader_delegates_to_runtime_builder(project_dir: Path) -> None:
     artifacts_path = project_dir / "compiled_artifacts.json"
     expected_artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
@@ -440,6 +441,7 @@ def test_loader_delegates_to_runtime_builder(project_dir: Path) -> None:
     assert call["artifacts"] == expected_artifacts
 
 
+@pytest.mark.requirement("ALPHA-CAPABILITY")
 def test_runtime_builder_alpha_policy_rejects_missing_capabilities(project_dir: Path) -> None:
     """Alpha policy must fail before building definitions with missing capabilities."""
     from floe_orchestrator_dagster.capabilities import (
@@ -460,6 +462,7 @@ def test_runtime_builder_alpha_policy_rejects_missing_capabilities(project_dir: 
         )
 
 
+@pytest.mark.requirement("ALPHA-LINEAGE")
 def test_runtime_builder_alpha_policy_enables_strict_lineage(
     project_dir_with_alpha_capabilities: Path,
 ) -> None:
@@ -1162,6 +1165,7 @@ def test_dbt_assets_namespace_export_failure_emits_lineage_fail(
         lineage.emit_complete.assert_not_called()
 
 
+@pytest.mark.requirement("AC-5")
 def test_runtime_includes_semantic_resource_and_asset_when_configured(
     project_dir_with_semantic: Path,
 ) -> None:
@@ -1180,6 +1184,7 @@ def test_runtime_includes_semantic_resource_and_asset_when_configured(
     assert "sync_semantic_schemas" in asset_names
 
 
+@pytest.mark.requirement("AC-5")
 def test_runtime_semantic_asset_uses_project_dir_paths(project_dir_with_semantic: Path) -> None:
     """Runtime semantic sync asset must use paths inside the product project_dir."""
     semantic_resource = MagicMock()
@@ -1202,6 +1207,7 @@ def test_runtime_semantic_asset_uses_project_dir_paths(project_dir_with_semantic
     )
 
 
+@pytest.mark.requirement("AC-5")
 def test_runtime_semantic_asset_depends_on_compiled_model_assets(
     project_dir_with_semantic: Path,
 ) -> None:
@@ -1223,6 +1229,7 @@ def test_runtime_semantic_asset_depends_on_compiled_model_assets(
     assert AssetKey("stg_customers") in semantic_asset.dependency_keys
 
 
+@pytest.mark.requirement("AC-5")
 def test_runtime_fails_loudly_when_ingestion_configured(
     project_dir_with_ingestion: Path,
 ) -> None:
@@ -1231,6 +1238,7 @@ def test_runtime_fails_loudly_when_ingestion_configured(
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion)
 
 
+@pytest.mark.requirement("AC-5")
 def test_runtime_allows_selected_ingestion_without_sources(
     project_dir_with_ingestion_no_sources: Path,
 ) -> None:
@@ -1241,6 +1249,7 @@ def test_runtime_allows_selected_ingestion_without_sources(
     assert "ingestion" not in resources
 
 
+@pytest.mark.requirement("AC-5")
 def test_runtime_allows_selected_ingestion_without_config(
     project_dir_with_ingestion_no_config: Path,
 ) -> None:
@@ -1251,6 +1260,7 @@ def test_runtime_allows_selected_ingestion_without_config(
     assert "ingestion" not in resources
 
 
+@pytest.mark.requirement("AC-5")
 def test_runtime_allows_selected_ingestion_with_empty_config(
     project_dir_with_ingestion_empty_config: Path,
 ) -> None:
@@ -1261,6 +1271,7 @@ def test_runtime_allows_selected_ingestion_with_empty_config(
     assert "ingestion" not in resources
 
 
+@pytest.mark.requirement("AC-5")
 def test_runtime_fails_for_flat_ingestion_workload_config(
     project_dir_with_ingestion_flat_config: Path,
 ) -> None:
@@ -1269,6 +1280,7 @@ def test_runtime_fails_for_flat_ingestion_workload_config(
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_flat_config)
 
 
+@pytest.mark.requirement("AC-5")
 def test_runtime_fails_for_non_list_ingestion_sources(
     project_dir_with_ingestion_sources_dict: Path,
 ) -> None:
@@ -1277,6 +1289,7 @@ def test_runtime_fails_for_non_list_ingestion_sources(
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_sources_dict)
 
 
+@pytest.mark.requirement("AC-5")
 def test_runtime_fails_for_sources_none_before_missing_manifest(
     project_dir_with_ingestion_sources_none_no_manifest: Path,
 ) -> None:
@@ -1285,6 +1298,7 @@ def test_runtime_fails_for_sources_none_before_missing_manifest(
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_sources_none_no_manifest)
 
 
+@pytest.mark.requirement("AC-5")
 def test_runtime_fails_for_empty_sources_with_other_workload_keys(
     project_dir_with_ingestion_empty_sources_and_flat_keys: Path,
 ) -> None:
@@ -1296,6 +1310,7 @@ def test_runtime_fails_for_empty_sources_with_other_workload_keys(
         )
 
 
+@pytest.mark.requirement("AC-5")
 def test_runtime_ingestion_failure_precedes_missing_manifest(
     project_dir_with_ingestion_no_manifest: Path,
 ) -> None:
@@ -1366,6 +1381,8 @@ def test_dbt_assets_emit_start_uses_fallback_uuid_on_failure(
 
     # dbt.cli must still have been called
     mock_dbt.cli.assert_called()
+    context.log.warning.assert_called()
+    assert "emit_start failed" in context.log.warning.call_args_list[0].args[0]
 
     # emit_complete must be called with a UUID (the fallback)
     lineage.emit_complete.assert_called_once()
@@ -1375,6 +1392,28 @@ def test_dbt_assets_emit_start_uses_fallback_uuid_on_failure(
     assert isinstance(run_id_arg, UUID), (
         f"emit_complete run_id should be a UUID (fallback), got {type(run_id_arg).__name__}"
     )
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_warns_when_best_effort_emit_complete_fails(
+    project_dir: Path,
+) -> None:
+    """Non-strict lineage completion failures must be visible to operators."""
+    definitions = load_product_definitions(PRODUCT_NAME, project_dir)
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, lineage = _make_mock_context_with_lineage()
+    lineage.emit_complete.side_effect = RuntimeError("lineage service down")
+
+    mock_dbt = context.resources.dbt
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = MagicMock(return_value=iter([]))
+    mock_dbt.cli.return_value.stream.return_value = mock_stream
+
+    list(asset_fn(context))
+
+    context.log.warning.assert_called()
+    assert "emit_complete failed" in context.log.warning.call_args_list[-1].args[0]
 
 
 @pytest.mark.requirement("AC-5")

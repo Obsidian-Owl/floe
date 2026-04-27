@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEVCONTAINER_IGNORE = REPO_ROOT / ".devcontainerignore"
 
@@ -16,6 +18,7 @@ def _ignore_patterns() -> set[str]:
     }
 
 
+@pytest.mark.requirement("AC-2")
 def test_devcontainerignore_excludes_nested_python_caches_and_virtualenvs() -> None:
     """DevPod must not upload package-local caches or virtualenvs to Hetzner."""
     patterns = _ignore_patterns()
@@ -29,6 +32,7 @@ def test_devcontainerignore_excludes_nested_python_caches_and_virtualenvs() -> N
     assert "plugins/floe-alert-webhook/.mypy_cache/" in patterns
 
 
+@pytest.mark.requirement("AC-2")
 def test_devcontainerignore_excludes_generated_runtime_artifacts() -> None:
     """Remote context should exclude generated logs, coverage, and test artifacts."""
     patterns = _ignore_patterns()
@@ -42,6 +46,7 @@ def test_devcontainerignore_excludes_generated_runtime_artifacts() -> None:
     assert "demo/customer-360/target/" in patterns
 
 
+@pytest.mark.requirement("AC-2")
 def test_devcontainerignore_excludes_local_tool_state() -> None:
     """Local agent/search/index state should not be uploaded to DevPod."""
     patterns = _ignore_patterns()
