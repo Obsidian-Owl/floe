@@ -59,12 +59,62 @@ def is_flux_managed(name: str, namespace: str) -> bool:
     return result.returncode == 0
 
 
+def _patch_helmrelease_suspend(name: str, namespace: str, suspend: bool) -> bool:
+    """Patch Flux HelmRelease ``spec.suspend`` using kubectl.
+
+    Args:
+        name: Name of the HelmRelease to patch.
+        namespace: Kubernetes namespace containing the HelmRelease.
+        suspend: Desired ``spec.suspend`` value.
+
+    Returns:
+        True if the patch command succeeded, False otherwise.
+    """
+    action = "suspend" if suspend else "resume"
+    payload = '{"spec":{"suspend":true}}' if suspend else '{"spec":{"suspend":false}}'
+    cmd = [
+        "kubectl",
+        "patch",
+        "helmrelease",
+        name,
+        "-n",
+        namespace,
+        "--type=merge",
+        "-p",
+        payload,
+    ]
+    logger.info(
+        "flux CLI not found on PATH; using kubectl patch to %s HelmRelease %s/%s",
+        action,
+        namespace,
+        name,
+    )
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        logger.warning(
+            "kubectl patch helmrelease failed: cmd=%s returncode=%d stderr=%s",
+            cmd,
+            result.returncode,
+            result.stderr,
+        )
+        return False
+
+    return True
+
+
 def suspend_helmrelease(name: str, namespace: str) -> bool:
     """Suspend Flux reconciliation for a HelmRelease.
 
     First checks that the ``flux`` CLI is available on PATH via
-    ``shutil.which``. If the CLI is not found, logs a warning and
-    returns False without attempting the subprocess call.
+    ``shutil.which``. If the CLI is not found, falls back to patching
+    ``spec.suspend=true`` through ``kubectl`` so in-cluster test runners do
+    not need to ship the Flux CLI binary.
 
     On non-zero returncode, logs a warning that includes the command,
     returncode, and stderr (P56 compliance) and returns False.
@@ -77,12 +127,7 @@ def suspend_helmrelease(name: str, namespace: str) -> bool:
         True if the suspend command succeeded, False otherwise.
     """
     if shutil.which("flux") is None:
-        logger.warning(
-            "flux CLI not found on PATH; skipping suspend of HelmRelease %s/%s",
-            namespace,
-            name,
-        )
-        return False
+        return _patch_helmrelease_suspend(name, namespace, suspend=True)
 
     cmd = ["flux", "suspend", "helmrelease", name, "-n", namespace]
     result = subprocess.run(
@@ -118,6 +163,9 @@ def resume_helmrelease(name: str, namespace: str) -> bool:
     Returns:
         True if the resume command succeeded, False otherwise.
     """
+    if shutil.which("flux") is None:
+        return _patch_helmrelease_suspend(name, namespace, suspend=False)
+
     cmd = ["flux", "resume", "helmrelease", name, "-n", namespace]
     result = subprocess.run(
         cmd,

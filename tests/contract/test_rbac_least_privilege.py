@@ -591,6 +591,30 @@ def test_destructive_runner_can_manage_rendered_chart_resource_kinds_for_helm_up
 
 
 @pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_can_suspend_flux_helmrelease_for_direct_helm_upgrade() -> None:
+    """Destructive runner must suspend Flux before direct Helm operations.
+
+    The destructive Helm upgrade test runs inside the cluster and may not have
+    the ``flux`` CLI installed. It uses ``kubectl patch helmrelease`` as the
+    portable path, so RBAC must allow patch/update on namespace-local
+    HelmRelease resources.
+    """
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
+    rules = _rules_for(
+        role,
+        api_group="helm.toolkit.fluxcd.io",
+        resource="helmreleases",
+    )
+    available_verbs = set().union(*(_verbs(rule) for rule in rules))
+
+    assert {"get", "list", "watch", "patch", "update"}.issubset(available_verbs), (
+        "Destructive runner must be able to inspect and suspend Flux "
+        "HelmReleases before direct Helm upgrade tests. Missing verbs: "
+        f"{ {'get', 'list', 'watch', 'patch', 'update'} - available_verbs!r}."
+    )
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
 def test_destructive_runner_has_limited_networkpolicy_patch_access_for_helm_rollback() -> None:
     """Destructive runner needs NetworkPolicy chart-manager access.
 
