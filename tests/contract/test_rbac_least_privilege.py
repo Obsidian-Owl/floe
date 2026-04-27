@@ -39,6 +39,14 @@ PRE_UPGRADE_HOOK_TEMPLATE = "templates/hooks/pre-upgrade-statefulset-cleanup.yam
 # Helm 3 stores release state in secrets with this name prefix.
 HELM_RELEASE_PREFIX = "sh.helm.release.v1."
 HELM_PRE_UPGRADE_HOOK_NAME = "floe-platform-pre-upgrade"
+HELM_PRE_UPGRADE_DASHBOARDS_HOOK_NAME = "floe-platform-grafana-dashboards"
+KIND_TO_RBAC_RESOURCE = {
+    "ConfigMap": ("", "configmaps"),
+    "Job": ("batch", "jobs"),
+    "Role": ("rbac.authorization.k8s.io", "roles"),
+    "RoleBinding": ("rbac.authorization.k8s.io", "rolebindings"),
+    "ServiceAccount": ("", "serviceaccounts"),
+}
 
 
 def _render_role(template: str) -> dict[str, Any]:
@@ -134,6 +142,35 @@ def _roles_from_yaml(rendered_yaml: str, template: str) -> list[dict[str, Any]]:
     return roles
 
 
+def _render_all_chart_docs() -> list[dict[str, Any]]:
+    """Render the test chart values and return every Kubernetes document."""
+    result = subprocess.run(
+        [
+            "helm",
+            "template",
+            "floe-platform",
+            str(CHART_DIR),
+            "-f",
+            str(CHART_DIR / "values-test.yaml"),
+            "--set",
+            "tests.enabled=true",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.fail(
+            f"helm template rendering failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+    return [
+        cast("dict[str, Any]", doc)
+        for doc in yaml.safe_load_all(result.stdout)
+        if isinstance(doc, dict)
+    ]
+
+
 def _secrets_rules(role: dict[str, Any]) -> list[dict[str, Any]]:
     """Return every rule entry that targets the core `secrets` resource."""
     return _rules_for(role, api_group="", resource="secrets")
@@ -213,6 +250,17 @@ def _assert_scoped_hook_delete(
         "Destructive runner must be able to delete only the pre-upgrade hook "
         f"{resource} {HELM_PRE_UPGRADE_HOOK_NAME!r}."
     )
+
+
+def _has_delete_permission_for_name(rules: list[dict[str, Any]], resource_name: str) -> bool:
+    """Return whether any rule can delete the given resource name."""
+    for rule in rules:
+        if "delete" not in _verbs(rule):
+            continue
+        names = _resource_names(rule)
+        if not names or resource_name in names:
+            return True
+    return False
 
 
 # =========================================================================
@@ -430,6 +478,50 @@ def test_destructive_runner_can_grant_pre_upgrade_hook_role_without_escalation()
                         f"{required_verbs - available_verbs!r} for "
                         f"{api_group or 'core'}/{resource}."
                     )
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_can_manage_pre_upgrade_hook_resources() -> None:
+    """Destructive runner must manage rendered pre-upgrade hook resources.
+
+    Helm deletes/recreates and watches hook resources during upgrade. If the
+    runner cannot manage every rendered pre-upgrade hook resource, the failure
+    surfaces as an opaque Helm upgrade RBAC error.
+    """
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
+    docs = _render_all_chart_docs()
+    pre_upgrade_hooks: list[dict[str, Any]] = []
+    for doc in docs:
+        metadata_any = doc.get("metadata") or {}
+        if not isinstance(metadata_any, dict):
+            continue
+        metadata: dict[str, Any] = cast("dict[str, Any]", metadata_any)
+        annotations_any = metadata.get("annotations") or {}
+        if not isinstance(annotations_any, dict):
+            continue
+        annotations: dict[str, Any] = cast("dict[str, Any]", annotations_any)
+        if "pre-upgrade" in str(annotations.get("helm.sh/hook", "")):
+            pre_upgrade_hooks.append(doc)
+    assert pre_upgrade_hooks, "Expected at least one rendered pre-upgrade hook resource"
+
+    for hook in pre_upgrade_hooks:
+        kind = hook.get("kind")
+        if kind not in KIND_TO_RBAC_RESOURCE:
+            continue
+        api_group, resource = KIND_TO_RBAC_RESOURCE[kind]
+        name = hook.get("metadata", {}).get("name")
+        assert isinstance(name, str) and name, f"Hook {kind} must have a metadata.name"
+        rules = _rules_for(role, api_group=api_group, resource=resource)
+        assert any({"get", "list", "watch"}.issubset(_verbs(rule)) for rule in rules), (
+            f"Destructive runner must watch pre-upgrade hook {kind} {name!r}."
+        )
+        assert any("create" in _verbs(rule) for rule in rules), (
+            f"Destructive runner must create pre-upgrade hook {kind} {name!r}; "
+            "Kubernetes RBAC cannot scope create by resourceNames."
+        )
+        assert _has_delete_permission_for_name(rules, name), (
+            f"Destructive runner must delete pre-upgrade hook {kind} {name!r}."
+        )
 
 
 @pytest.mark.requirement("security-hardening-AC-9")
