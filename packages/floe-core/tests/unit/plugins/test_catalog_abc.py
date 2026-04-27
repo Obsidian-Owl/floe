@@ -435,4 +435,7 @@ def _create_mock_catalog() -> Catalog:
             _ = identifier
             return {"mock": "table"}
 
+        def drop_table(self, identifier: str, purge: bool = False) -> None:
+            _ = identifier, purge
+
     return MockCatalog()
