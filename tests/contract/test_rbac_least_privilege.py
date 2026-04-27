@@ -615,6 +615,26 @@ def test_destructive_runner_can_suspend_flux_helmrelease_for_direct_helm_upgrade
 
 
 @pytest.mark.requirement("security-hardening-AC-9")
+def test_destructive_runner_can_read_replicasets_for_helm_legacy_wait() -> None:
+    """Destructive runner must read ReplicaSets for Helm legacy readiness.
+
+    ReplicaSets are controller-created, not rendered by the chart, so the
+    rendered-manifest chart-manager contract cannot derive this permission.
+    Helm's legacy waiter lists ReplicaSets while evaluating Deployment rollout
+    readiness during ``helm upgrade --wait=legacy``.
+    """
+    role = _render_role(DESTRUCTIVE_TEMPLATE)
+    rules = _rules_for(role, api_group="apps", resource="replicasets")
+    available_verbs = set().union(*(_verbs(rule) for rule in rules))
+
+    assert {"get", "list", "watch"}.issubset(available_verbs), (
+        "Destructive runner must get/list/watch apps/replicasets so Helm "
+        "legacy wait can evaluate Deployment readiness. Missing verbs: "
+        f"{ {'get', 'list', 'watch'} - available_verbs!r}."
+    )
+
+
+@pytest.mark.requirement("security-hardening-AC-9")
 def test_destructive_runner_has_limited_networkpolicy_patch_access_for_helm_rollback() -> None:
     """Destructive runner needs NetworkPolicy chart-manager access.
 
