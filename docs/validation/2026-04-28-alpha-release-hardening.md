@@ -16,6 +16,12 @@
 | #264 dependency audit | `./testing/ci/uv-security-audit.sh` | PASS | Root, floe-core, and agent-memory lockfiles report no unignored vulnerabilities; `diskcache` no-fix advisory explicitly accepted for devtool-only agent-memory |
 | #264 lockfile consistency | `uv lock --check`; `cd packages/floe-core && uv lock --check`; `cd devtools/agent-memory && uv lock --check` | PASS | All three lockfiles are current with their project metadata |
 | #214 demo artifact lineage guard | `make compile-demo`; `uv run pytest testing/ci/tests/test_validate_demo_compiled_artifacts.py testing/ci/tests/test_render_demo_image_values.py testing/ci/tests/test_helm_ci_demo_image_wiring.py -q` | PASS | Demo generation now fails if generated `compiled_artifacts.json` does not preserve `plugins.lineage_backend` from `demo/manifest.yaml`; generated local demo artifacts resolve Marquez |
+| Lint | `make lint` | PASS | Ruff check and format check passed |
+| Typecheck | `make typecheck` | PASS | mypy strict passed for `packages/ testing/` |
+| Unit tests | `make test-unit` | PASS | 9974 passed, 1 skipped, 1 xfailed; coverage 87.64% |
+| Helm lint | `make helm-lint` | PASS | `floe-platform` and `floe-jobs` linted successfully |
+| Helm schema validation | `make helm-validate` | PASS | kubeconform validated production defaults and test values |
+| Helm unit tests | `make helm-test-unit` | PASS | 16 suites, 171 tests passed |
 
 ## Decisions
 

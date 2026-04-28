@@ -17,7 +17,7 @@ spec.loader.exec_module(validate_demo_compiled_artifacts)
 
 
 def _write_manifest(path: Path) -> dict[str, object]:
-    lineage_backend = {
+    lineage_backend: dict[str, object] = {
         "type": "marquez",
         "version": "0.1.0",
         "config": {
