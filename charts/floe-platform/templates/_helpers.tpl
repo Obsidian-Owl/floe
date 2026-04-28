@@ -212,9 +212,11 @@ Marquez component name.
 
 {{/*
 Dagster webserver service name.
+The upstream Dagster subchart prefixes resources with .Release.Name, not the
+parent chart fullnameOverride.
 */}}
 {{- define "floe-platform.dagster.webserverName" -}}
-{{- printf "%s-dagster-webserver" (include "floe-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- printf "%s-dagster-webserver" .Release.Name | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*

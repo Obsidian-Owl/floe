@@ -492,7 +492,13 @@ jobs:
 
       - name: Run Helm tests
         run: |
+          set +e
           helm test floe-test --namespace floe-test --timeout 5m
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            testing/ci/helm_diagnostics.sh floe-test floe-test
+          fi
+          exit "$status"
 
       - name: Get pod status on failure
         if: failure()

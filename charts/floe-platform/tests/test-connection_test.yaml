@@ -47,6 +47,9 @@ tests:
       - matchRegex:
           path: spec.containers[0].command[2]
           pattern: "curl.*server_info"
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: 'DAGSTER_URL="http://.*-dagster-webserver:80"'
 
   - it: MinIO test should curl /minio/health/live endpoint
     set:
@@ -61,6 +64,32 @@ tests:
       - matchRegex:
           path: spec.containers[0].command[2]
           pattern: "curl.*minio/health/live"
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: 'MINIO_URL="http://floe-platform-minio:9000"'
+
+  - it: test connection should use parent helper service names under fullnameOverride
+    set:
+      dagster.enabled: true
+      polaris.enabled: true
+      postgresql.enabled: true
+      minio.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.containers[2].command[2]
+          pattern: 'PG_HOST="floe-platform-postgresql"'
+      - matchRegex:
+          path: spec.containers[2].command[2]
+          pattern: 'PG_PORT="5432"'
+      - matchRegex:
+          path: spec.containers[3].command[2]
+          pattern: 'MINIO_URL="http://floe-platform-minio:9000"'
+      - notMatchRegex:
+          path: spec.containers[2].command[2]
+          pattern: 'PG_HOST=".*-test-postgresql"'
+      - notMatchRegex:
+          path: spec.containers[3].command[2]
+          pattern: 'MINIO_URL="http://.*-test-minio:9000"'
 
   # --- Fallback container when all services disabled ---
   - it: should have exactly one no-op container when all services disabled

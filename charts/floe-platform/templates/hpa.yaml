@@ -15,7 +15,7 @@ Requirements:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "floe-platform.fullname" . }}-dagster-webserver
+  name: {{ include "floe-platform.dagster.webserverName" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "floe-platform.labels" . | nindent 4 }}
@@ -24,7 +24,7 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ .Release.Name }}-dagster-webserver
+    name: {{ include "floe-platform.dagster.webserverName" . }}
   minReplicas: {{ .Values.autoscaling.dagster.minReplicas | default 1 }}
   maxReplicas: {{ .Values.autoscaling.dagster.maxReplicas | default 5 }}
   metrics:
