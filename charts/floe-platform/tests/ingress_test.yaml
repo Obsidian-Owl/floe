@@ -1,0 +1,35 @@
+# Verifies ingress backends follow service helpers instead of stale literals.
+suite: ingress
+templates:
+  - templates/ingress.yaml
+tests:
+  - it: routes Dagster ingress to the default webserver service port
+    set:
+      ingress.enabled: true
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-dagster-webserver
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 80
+
+  - it: routes Dagster ingress to an overridden webserver service port
+    set:
+      ingress.enabled: true
+      dagster.dagsterWebserver.service.port: 3000
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: RELEASE-NAME-dagster-webserver
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 3000
+
+  - it: ignores stale per-path ports for Dagster ingress
+    values:
+      - fixtures/ingress-stale-dagster-port.yaml
+    asserts:
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 80

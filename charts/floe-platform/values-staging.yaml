@@ -164,7 +164,6 @@ ingress:
         - path: /
           pathType: Prefix
           service: dagster-webserver
-          port: 3000
   tls:
     - secretName: floe-staging-tls
       hosts:
