@@ -36,6 +36,7 @@ Expected modifications:
 - `testing/ci/render-demo-image-values.py` - new helper that renders Helm value overrides for every Dagster demo image consumer.
 - `testing/ci/tests/test_render_demo_image_values.py` - unit tests for generated image override values.
 - `testing/ci/tests/test_helm_ci_demo_image_wiring.py` - regression tests proving Helm CI builds/loads and passes the generated image override before install.
+- `testing/ci/test-unit.sh` - include CI helper regression tests in the normal unit-test lane.
 - `packages/floe-core/src/floe_core/lineage/transport.py` - add sync `verify_ssl` parity.
 - `packages/floe-core/src/floe_core/lineage/emitter.py` - pass `verify_ssl` into sync HTTP transport.
 - `packages/floe-core/tests/unit/lineage/test_sync_transport.py` - sync transport TLS behavior tests.
@@ -129,7 +130,9 @@ Expected: one docs-only commit.
 
 - Create: `testing/ci/render-demo-image-values.py`
 - Create: `testing/ci/tests/test_render_demo_image_values.py`
+- Create: `testing/ci/tests/test_helm_ci_demo_image_wiring.py`
 - Modify: `.github/workflows/helm-ci.yaml`
+- Modify: `testing/ci/test-unit.sh`
 
 - [ ] **Step 1: Write failing tests for the Helm image override renderer**
 
@@ -366,7 +369,29 @@ uv run pytest testing/ci/tests/test_render_demo_image_values.py testing/ci/tests
 
 Expected: PASS.
 
-- [ ] **Step 9: Run Helm render with generated overrides**
+- [ ] **Step 9: Wire CI helper regression tests into the unit lane**
+
+Modify `testing/ci/test-unit.sh` so `testing/ci/tests` is included when present:
+
+```bash
+# Include CI helper regression tests used by workflow and shell-script gates.
+if [[ -d "testing/ci/tests" ]]; then
+    echo "  Found: testing/ci/tests"
+    UNIT_TEST_PATHS="${UNIT_TEST_PATHS} testing/ci/tests"
+fi
+```
+
+- [ ] **Step 10: Prove unit-test discovery includes the new tests**
+
+Run:
+
+```bash
+COVERAGE_THRESHOLD=0 ./testing/ci/test-unit.sh --collect-only -q | rg 'testing/ci/tests/test_(render_demo_image_values|helm_ci_demo_image_wiring).py'
+```
+
+Expected: both Task 2 test modules are collected.
+
+- [ ] **Step 11: Run Helm render with generated overrides**
 
 Run:
 
@@ -383,12 +408,12 @@ helm template floe-test charts/floe-platform \
 
 Expected: rendered Dagster webserver, daemon, and run launcher image values use the resolved tag, not `latest`.
 
-- [ ] **Step 10: Commit #265 fix**
+- [ ] **Step 12: Commit #265 fix**
 
 Run:
 
 ```bash
-git add .github/workflows/helm-ci.yaml testing/ci/render-demo-image-values.py testing/ci/tests/test_render_demo_image_values.py testing/ci/tests/test_helm_ci_demo_image_wiring.py
+git add .github/workflows/helm-ci.yaml testing/ci/render-demo-image-values.py testing/ci/tests/test_render_demo_image_values.py testing/ci/tests/test_helm_ci_demo_image_wiring.py testing/ci/test-unit.sh
 git commit -m "ci: load resolved Dagster demo image for Helm integration"
 ```
 
@@ -1112,7 +1137,7 @@ Expected: release workflow runs on the tag and creates a prerelease because the 
 
 Use fresh workers with disjoint ownership:
 
-- Worker A owns #265: `.github/workflows/helm-ci.yaml`, `testing/ci/render-demo-image-values.py`, `testing/ci/tests/test_render_demo_image_values.py`, `testing/ci/tests/test_helm_ci_demo_image_wiring.py`.
+- Worker A owns #265: `.github/workflows/helm-ci.yaml`, `testing/ci/render-demo-image-values.py`, `testing/ci/tests/test_render_demo_image_values.py`, `testing/ci/tests/test_helm_ci_demo_image_wiring.py`, `testing/ci/test-unit.sh`.
 - Worker B owns #260: lineage transport/emitter files and unit tests.
 - Worker C owns #264: lockfile updates, `uv-security-audit.sh`, and security evidence.
 - Worker D owns release documentation and evidence updates.
