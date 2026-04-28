@@ -1,0 +1,9 @@
+ingress:
+  enabled: true
+  hosts:
+    - host: floe.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: dagster-webserver
+          port: 9999

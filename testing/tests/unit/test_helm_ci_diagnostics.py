@@ -19,7 +19,9 @@ def _load_workflow() -> dict[str, object]:
         return cast(dict[str, object], yaml.safe_load(handle))
 
 
+@pytest.mark.requirement("9b-FR-084")
 def test_helm_ci_invokes_shared_diagnostics_on_install_failure() -> None:
+    """Verify install failures invoke shared Helm diagnostics before cleanup."""
     workflow_text = WORKFLOW.read_text()
 
     assert "testing/ci/helm_diagnostics.sh floe-test floe-test" in workflow_text
@@ -29,6 +31,7 @@ def test_helm_ci_invokes_shared_diagnostics_on_install_failure() -> None:
 
 @pytest.mark.requirement("9b-FR-084")
 def test_helm_ci_invokes_shared_diagnostics_on_helm_test_failure() -> None:
+    """Verify Helm test failures preserve diagnostics and propagate failure."""
     workflow_text = WORKFLOW.read_text()
 
     run_helm_tests_section = workflow_text.split("- name: Run Helm tests", maxsplit=1)[1]
@@ -42,7 +45,9 @@ def test_helm_ci_invokes_shared_diagnostics_on_helm_test_failure() -> None:
     assert 'exit "$status"' in run_helm_tests_section
 
 
+@pytest.mark.requirement("9b-FR-084")
 def test_helm_diagnostics_script_collects_dagster_marquez_and_events() -> None:
+    """Verify diagnostics include platform pods, events, and Helm state."""
     script = DIAGNOSTICS.read_text()
 
     required_fragments = [
@@ -63,7 +68,9 @@ def test_helm_diagnostics_script_collects_dagster_marquez_and_events() -> None:
         assert fragment in script, f"Missing diagnostic fragment: {fragment}"
 
 
+@pytest.mark.requirement("9b-FR-084")
 def test_helm_diagnostics_collects_helm_test_logs_per_container() -> None:
+    """Verify Helm test pod logs are collected for every container."""
     script = DIAGNOSTICS.read_text()
 
     assert "Helm test pod logs" in script
@@ -71,7 +78,9 @@ def test_helm_diagnostics_collects_helm_test_logs_per_container() -> None:
     assert '-c "$container"' in script
 
 
+@pytest.mark.requirement("9b-FR-084")
 def test_helm_ci_has_integration_test_job() -> None:
+    """Verify Helm CI keeps the Kind-backed integration test job."""
     workflow = _load_workflow()
     jobs = cast(Mapping[str, Mapping[str, Any]], workflow["jobs"])
 

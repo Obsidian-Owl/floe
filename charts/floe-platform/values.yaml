@@ -855,7 +855,6 @@ ingress:
         - path: /
           pathType: Prefix
           service: dagster-webserver
-          port: 3000
 
   # TLS configuration
   tls: []
