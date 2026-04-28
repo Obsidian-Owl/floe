@@ -16,11 +16,24 @@ cd "${PROJECT_ROOT}"
 
 echo "Running uv-secure with ignores: ${IGNORE_VULNS}"
 
+uv_secure_reported_vulnerabilities() {
+    grep -Eq "Vulnerable:[[:space:]]*[1-9][0-9]*" <<< "$1"
+}
+
+uv_secure_invocation_failed() {
+    grep -Eiq "(Failed to spawn|No such file or directory|not found|ModuleNotFoundError|ImportError)" <<< "$1"
+}
+
 output="$(uv run --no-sync uv-secure --no-check-uv-tool --ignore-vulns "${IGNORE_VULNS}" . 2>&1)" || {
     exit_code=$?
     echo "${output}"
 
-    if echo "${output}" | grep -q "Vulnerable:" && ! echo "${output}" | grep -q "Vulnerable: 0"; then
+    if uv_secure_invocation_failed "${output}"; then
+        echo "uv-secure invocation or configuration failed" >&2
+        exit 1
+    fi
+
+    if uv_secure_reported_vulnerabilities "${output}"; then
         echo "Vulnerabilities detected" >&2
         exit 1
     fi
