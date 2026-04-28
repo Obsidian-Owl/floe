@@ -424,8 +424,8 @@ jobs:
           eval "$(python3 testing/ci/resolve-demo-image-ref.py --field exports)"
           echo "FLOE_DEMO_IMAGE=${FLOE_DEMO_IMAGE}"
           FLOE_KIND_CLUSTER=helm-test KIND_CLUSTER_NAME=helm-test \
-            FLOE_DEMO_IMAGE_REPOSITORY="${FLOE_DEMO_IMAGE_REPOSITORY}" \
-            FLOE_DEMO_IMAGE_TAG="${FLOE_DEMO_IMAGE_TAG}" \
+            DEMO_IMAGE_REPOSITORY="${FLOE_DEMO_IMAGE_REPOSITORY}" \
+            DEMO_IMAGE_TAG="${FLOE_DEMO_IMAGE_TAG}" \
             make build-demo-image
           python3 testing/ci/render-demo-image-values.py \
             --repository "${FLOE_DEMO_IMAGE_REPOSITORY}" \

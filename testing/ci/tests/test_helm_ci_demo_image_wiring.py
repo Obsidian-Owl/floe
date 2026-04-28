@@ -17,6 +17,16 @@ def test_helm_ci_builds_demo_image_before_installing_test_values() -> None:
     assert build_index < install_index, "demo image must be loaded before Helm install"
 
 
+def test_helm_ci_builds_demo_image_with_make_env_names() -> None:
+    workflow = WORKFLOW.read_text()
+
+    assert (
+        'DEMO_IMAGE_REPOSITORY="${FLOE_DEMO_IMAGE_REPOSITORY}" \\\n'
+        '            DEMO_IMAGE_TAG="${FLOE_DEMO_IMAGE_TAG}" \\\n'
+        "            make build-demo-image"
+    ) in workflow
+
+
 def test_helm_ci_passes_generated_demo_image_values_to_install_and_diff() -> None:
     workflow = WORKFLOW.read_text()
     values_sequence = (
