@@ -31,6 +31,7 @@ from uuid import UUID
 
 import structlog
 
+from floe_core.compilation.naming import dbt_project_name
 from floe_core.plugin_metadata import PluginMetadata
 from floe_core.plugin_types import PluginType
 from floe_core.telemetry.tracing import create_span
@@ -48,7 +49,7 @@ logger = structlog.get_logger(__name__)
 
 def _dbt_project_name(product_name: str) -> str:
     """Return the dbt project identifier derived from a floe product name."""
-    return re.sub(r"[^A-Za-z0-9_]", "_", product_name).strip("_") or "floe"
+    return dbt_project_name(product_name)
 
 
 class CompilationStage(str, Enum):

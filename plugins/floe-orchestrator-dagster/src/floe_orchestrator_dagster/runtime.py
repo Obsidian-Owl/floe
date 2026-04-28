@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 import yaml
 from dagster import AssetKey, Definitions, ResourceDefinition
 from dagster_dbt import DbtCliResource, dbt_assets
+from floe_core.compilation.naming import dbt_project_name
 from floe_core.lineage.facets import TraceCorrelationFacetBuilder
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
@@ -65,8 +66,8 @@ def _lineage_namespace(artifacts: CompiledArtifacts) -> str | None:
 
 
 def _safe_product_name(product_name: str) -> str:
-    """Return the dbt-safe product/profile name used by demo projects."""
-    return product_name.replace("-", "_")
+    """Return the dbt-safe product/profile name used at compile time."""
+    return dbt_project_name(product_name)
 
 
 def _prepare_duckdb_output_directories(

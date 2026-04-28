@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 WORKFLOW = Path(".github/workflows/helm-ci.yaml")
@@ -55,6 +56,7 @@ def _assert_values_override_after_test_values(command: str) -> None:
     assert test_values_index < override_values_index
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_helm_ci_builds_demo_image_before_installing_test_values() -> None:
     workflow = WORKFLOW.read_text()
     build_index = workflow.find("make build-demo-image")
@@ -65,6 +67,7 @@ def test_helm_ci_builds_demo_image_before_installing_test_values() -> None:
     assert build_index < install_index, "demo image must be loaded before Helm install"
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_helm_ci_installs_python_dependencies_before_building_demo_image() -> None:
     step_names = _integration_step_names()
 
@@ -76,9 +79,12 @@ def test_helm_ci_installs_python_dependencies_before_building_demo_image() -> No
     assert setup_python_index < build_index
     assert setup_uv_index < build_index
     assert sync_index < build_index
-    assert _integration_step_command("Install dependencies") == "uv sync --all-extras --dev"
+    assert _integration_step_command("Install dependencies") == (
+        "uv sync --all-extras --dev --frozen"
+    )
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_helm_ci_builds_demo_image_with_make_env_names() -> None:
     command = _integration_step_command("Build and load Dagster demo image")
 
@@ -89,13 +95,18 @@ def test_helm_ci_builds_demo_image_with_make_env_names() -> None:
     assert 'FLOE_DEMO_IMAGE_TAG="${FLOE_DEMO_IMAGE_TAG}"' not in command
 
 
-def test_helm_ci_path_filters_include_demo_image_helper_tests() -> None:
+@pytest.mark.requirement("ALPHA-HARDENING")
+def test_helm_ci_path_filters_include_demo_image_build_inputs_and_helper_tests() -> None:
     workflow = WORKFLOW.read_text()
 
     assert "testing/ci/render-demo-image-values.py" in workflow
+    assert "testing/ci/resolve-demo-image-ref.py" in workflow
+    assert "docker/dagster-demo/**" in workflow
+    assert "Makefile" in workflow
     assert "testing/ci/tests/**" in workflow
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_helm_ci_passes_generated_demo_image_values_to_install_and_diff() -> None:
     build_command = _integration_step_command("Build and load Dagster demo image")
     diff_command = _integration_step_command(

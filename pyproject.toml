@@ -77,7 +77,7 @@ dependencies = [
 # uv export --all-packages --extra docker needs the extra at workspace root.
 docker = [
     "dagster-webserver>=1.10.0,<2.0.0",
-    "dagster-postgres>=0.28.0,<1.0.0",
+    "dagster-postgres>=0.29.0,<1.0.0",
     "dagster-k8s>=0.29.0,<1.0.0",
 ]
 

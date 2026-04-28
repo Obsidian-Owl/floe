@@ -5,10 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_prepare_compiled_profiles_dir_uses_compiled_artifacts_without_overwriting_project(
     tmp_path: Path,
     valid_compiled_artifacts: dict[str, Any],
@@ -63,6 +65,7 @@ def test_prepare_compiled_profiles_dir_uses_compiled_artifacts_without_overwriti
     assert generated["customer_360"]["outputs"]["dev"]["path"] == ("/tmp/floe/customer_360.duckdb")
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_prepare_compiled_profiles_dir_creates_duckdb_parent_directories(
     tmp_path: Path,
     valid_compiled_artifacts: dict[str, Any],
@@ -102,6 +105,7 @@ def test_prepare_compiled_profiles_dir_creates_duckdb_parent_directories(
     assert duckdb_path.parent.is_dir()
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_prepare_compiled_profiles_dir_resolves_relative_duckdb_paths_under_project_dir(
     tmp_path: Path,
     valid_compiled_artifacts: dict[str, Any],
@@ -136,3 +140,41 @@ def test_prepare_compiled_profiles_dir_resolves_relative_duckdb_paths_under_proj
     )
 
     assert (project_dir / "runtime-data").is_dir()
+
+
+@pytest.mark.requirement("ALPHA-HARDENING")
+def test_prepare_compiled_profiles_dir_aliases_compile_time_dbt_project_name(
+    tmp_path: Path,
+    valid_compiled_artifacts: dict[str, Any],
+) -> None:
+    """Runtime alias must match compile-time dbt project/profile normalization."""
+    from floe_orchestrator_dagster.runtime import prepare_compiled_profiles_dir
+
+    project_dir = tmp_path / "customer-360-"
+    project_dir.mkdir()
+
+    artifact_payload = dict(valid_compiled_artifacts)
+    artifact_payload["metadata"] = {
+        **artifact_payload["metadata"],
+        "product_name": "customer-360-",
+    }
+    artifact_payload["dbt_profiles"] = {
+        "customer-360-": {
+            "target": "dev",
+            "outputs": {
+                "dev": {
+                    "type": "duckdb",
+                    "path": str(tmp_path / "customer_360.duckdb"),
+                }
+            },
+        }
+    }
+    artifacts = CompiledArtifacts.model_validate(artifact_payload)
+
+    profiles_dir = prepare_compiled_profiles_dir(
+        artifacts=artifacts,
+        project_dir=project_dir,
+    )
+
+    generated = yaml.safe_load((profiles_dir / "profiles.yml").read_text(encoding="utf-8"))
+    assert "customer_360" in generated

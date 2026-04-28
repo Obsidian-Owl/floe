@@ -70,6 +70,7 @@ def _write_product(
     )
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_validate_artifacts_accepts_manifest_lineage_backend_for_all_products(
     tmp_path: Path,
 ) -> None:
@@ -83,6 +84,7 @@ def test_validate_artifacts_accepts_manifest_lineage_backend_for_all_products(
     validate_demo_compiled_artifacts.validate_artifacts(manifest_path, demo_dir)
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_validate_artifacts_rejects_stale_null_lineage_backend(tmp_path: Path) -> None:
     manifest_path = tmp_path / "manifest.yaml"
     demo_dir = tmp_path / "demo"
@@ -94,6 +96,7 @@ def test_validate_artifacts_rejects_stale_null_lineage_backend(tmp_path: Path) -
         validate_demo_compiled_artifacts.validate_artifacts(manifest_path, demo_dir)
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_validate_artifacts_rejects_missing_compiled_artifact(tmp_path: Path) -> None:
     manifest_path = tmp_path / "manifest.yaml"
     demo_dir = tmp_path / "demo"
@@ -106,6 +109,7 @@ def test_validate_artifacts_rejects_missing_compiled_artifact(tmp_path: Path) ->
         validate_demo_compiled_artifacts.validate_artifacts(manifest_path, demo_dir)
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_validate_artifacts_rejects_in_memory_duckdb_when_iceberg_export_enabled(
     tmp_path: Path,
 ) -> None:
@@ -119,6 +123,26 @@ def test_validate_artifacts_rejects_in_memory_duckdb_when_iceberg_export_enabled
         validate_demo_compiled_artifacts.validate_artifacts(manifest_path, demo_dir)
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
+def test_validate_artifacts_rejects_dropped_storage_plugin_when_manifest_enables_iceberg(
+    tmp_path: Path,
+) -> None:
+    manifest_path = tmp_path / "manifest.yaml"
+    demo_dir = tmp_path / "demo"
+    demo_dir.mkdir()
+    lineage_backend = _write_manifest(manifest_path)
+    _write_product(demo_dir, "customer-360", lineage_backend)
+
+    artifact_path = demo_dir / "customer-360" / "compiled_artifacts.json"
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    del artifact["plugins"]["storage"]
+    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="storage"):
+        validate_demo_compiled_artifacts.validate_artifacts(manifest_path, demo_dir)
+
+
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_compile_demo_runs_artifact_validator_after_generation() -> None:
     makefile = Path("Makefile").read_text(encoding="utf-8")
     compile_demo = makefile.split("compile-demo:", 1)[1].split(".PHONY: check-manifests", 1)[0]

@@ -186,10 +186,22 @@ def test_full_lifecycle_skips_heavy_poststart_setup_during_provision() -> None:
         "The Hetzner postStartCommand must expose an explicit skip control so "
         "the full lifecycle harness can keep `devpod up` lightweight."
     )
-    assert "--workspace-env FLOE_DEVPOD_SKIP_POSTSTART_SETUP=1" in script, (
-        "scripts/devpod-test.sh must skip heavyweight postStart setup while "
-        "provisioning; the detached remote E2E phase owns Kind/test execution."
+    provision_workspace = re.search(
+        r"provision_workspace\(\) \{(.*?)recover_workspace_after_up_failure",
+        script,
+        re.DOTALL,
     )
+    assert provision_workspace is not None, "provision_workspace function not found"
+    provision_body = provision_workspace.group(1)
+    assert 'if [[ "${DEVPOD_E2E_EXECUTION}" == "remote" ]]' in provision_body
+    assert "workspace_env_args=(--workspace-env FLOE_DEVPOD_SKIP_POSTSTART_SETUP=1)" in (
+        provision_body
+    ), (
+        "scripts/devpod-test.sh must skip heavyweight postStart setup only when "
+        "remote E2E owns detached Kind/test execution."
+    )
+    assert '"${workspace_env_args[@]}"' in provision_body
+    assert "--workspace-env FLOE_DEVPOD_SKIP_POSTSTART_SETUP=1 \\" not in provision_body
     env_example = _read(_ENV_EXAMPLE)
     assert "FLOE_DEVPOD_SKIP_POSTSTART_SETUP=0" in env_example, (
         ".env.example must document the postStart skip escape hatch for manual DevPod debugging."

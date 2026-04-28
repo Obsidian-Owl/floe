@@ -19,14 +19,20 @@ on:
     paths:
       - 'charts/**'
       - '.github/workflows/helm-ci.yaml'
+      - 'Makefile'
+      - 'docker/dagster-demo/**'
       - 'testing/ci/render-demo-image-values.py'
+      - 'testing/ci/resolve-demo-image-ref.py'
       - 'testing/ci/tests/**'
   pull_request:
     branches: [main]
     paths:
       - 'charts/**'
       - '.github/workflows/helm-ci.yaml'
+      - 'Makefile'
+      - 'docker/dagster-demo/**'
       - 'testing/ci/render-demo-image-values.py'
+      - 'testing/ci/resolve-demo-image-ref.py'
       - 'testing/ci/tests/**'
 
 concurrency:
@@ -420,7 +426,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Install dependencies
-        run: uv sync --all-extras --dev
+        run: uv sync --all-extras --dev --frozen
 
       - name: Create Kind cluster
         uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1

@@ -186,12 +186,17 @@ recover_workspace_after_up_failure() {
 }
 
 provision_workspace() {
+    local workspace_env_args=()
+    if [[ "${DEVPOD_E2E_EXECUTION}" == "remote" ]]; then
+        workspace_env_args=(--workspace-env FLOE_DEVPOD_SKIP_POSTSTART_SETUP=1)
+    fi
+
     if devpod up "${WORKSPACE}" \
         --source "${DEVPOD_SOURCE_RESOLVED}" \
         --id "${WORKSPACE}" \
         --provider "${PROVIDER}" \
         --devcontainer-path "${DEVCONTAINER}" \
-        --workspace-env FLOE_DEVPOD_SKIP_POSTSTART_SETUP=1 \
+        "${workspace_env_args[@]}" \
         --ide none; then
         return 0
     fi

@@ -34,6 +34,21 @@ def _has_plugin(plugins: dict[str, Any], name: str) -> bool:
     return isinstance(plugin, dict) and bool(plugin.get("type"))
 
 
+def _require_artifact_plugin_when_manifest_enables(
+    *,
+    artifact_path: Path,
+    artifact_plugins: dict[str, Any],
+    manifest_plugins: dict[str, Any],
+    name: str,
+) -> None:
+    """Fail if a compiled artifact dropped a plugin selected by the manifest."""
+    if _has_plugin(manifest_plugins, name) and not _has_plugin(artifact_plugins, name):
+        raise SystemExit(
+            f"{artifact_path} is missing plugin {name!r} selected by the platform manifest. "
+            "Regenerate with `make compile-demo`."
+        )
+
+
 def _validate_file_backed_duckdb_profile(
     artifact_path: Path,
     artifact: dict[str, Any],
@@ -98,6 +113,19 @@ def validate_artifacts(manifest_path: Path, demo_dir: Path) -> None:
                 f"expected {expected_lineage_backend!r} from {manifest_path}. "
                 "Regenerate with `make compile-demo`."
             )
+
+        _require_artifact_plugin_when_manifest_enables(
+            artifact_path=artifact_path,
+            artifact_plugins=artifact_plugins,
+            manifest_plugins=plugins,
+            name="catalog",
+        )
+        _require_artifact_plugin_when_manifest_enables(
+            artifact_path=artifact_path,
+            artifact_plugins=artifact_plugins,
+            manifest_plugins=plugins,
+            name="storage",
+        )
 
         artifact_enables_iceberg_export = _has_plugin(artifact_plugins, "catalog") and _has_plugin(
             artifact_plugins,

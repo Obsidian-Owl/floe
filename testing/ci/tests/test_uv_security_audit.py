@@ -6,6 +6,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "testing" / "ci" / "uv-security-audit.sh"
 
@@ -34,6 +36,7 @@ def _run_audit_with_fake_uv(
     )
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_uv_security_audit_fails_when_uv_secure_cannot_spawn(tmp_path: Path) -> None:
     result = _run_audit_with_fake_uv(
         tmp_path,
@@ -48,6 +51,7 @@ exit 2
     assert "uv-secure invocation or configuration failed" in result.stderr
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_uv_security_audit_fails_for_positive_vulnerability_count(tmp_path: Path) -> None:
     result = _run_audit_with_fake_uv(
         tmp_path,
@@ -61,6 +65,7 @@ exit 2
     assert "Vulnerabilities detected" in result.stderr
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_uv_security_audit_allows_warning_exit_without_invocation_or_vulnerability_error(
     tmp_path: Path,
 ) -> None:
@@ -76,6 +81,7 @@ exit 2
     assert "uv-secure returned warnings (exit code 2)" in result.stderr
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_uv_security_audit_fails_closed_when_scanner_crashes_without_vulnerabilities(
     tmp_path: Path,
 ) -> None:
@@ -93,6 +99,7 @@ exit 3
     assert "uv-secure scanner crashed" in result.stderr
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_uv_security_audit_retries_transient_scanner_crash(tmp_path: Path) -> None:
     state_file = tmp_path / "attempts"
     result = _run_audit_with_fake_uv(

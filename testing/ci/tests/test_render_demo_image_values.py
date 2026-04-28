@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
 import yaml
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "render-demo-image-values.py"
@@ -14,6 +15,7 @@ render_demo_image_values = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(render_demo_image_values)
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_render_demo_image_values_sets_all_dagster_image_consumers() -> None:
     rendered = render_demo_image_values.render_values(
         repository="floe-dagster-demo",
@@ -37,21 +39,15 @@ def test_render_demo_image_values_sets_all_dagster_image_consumers() -> None:
     )
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_render_demo_image_values_rejects_empty_repository() -> None:
-    try:
+    with pytest.raises(SystemExit, match="repository cannot be empty"):
         render_demo_image_values.render_values(repository="", tag="abc", pull_policy="Never")
-    except SystemExit as exc:
-        assert "repository cannot be empty" in str(exc)
-    else:
-        raise AssertionError("empty repository must fail")
 
 
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_render_demo_image_values_rejects_empty_tag() -> None:
-    try:
+    with pytest.raises(SystemExit, match="tag cannot be empty"):
         render_demo_image_values.render_values(
             repository="floe-dagster-demo", tag="", pull_policy="Never"
         )
-    except SystemExit as exc:
-        assert "tag cannot be empty" in str(exc)
-    else:
-        raise AssertionError("empty tag must fail")
