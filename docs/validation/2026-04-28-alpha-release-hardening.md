@@ -18,5 +18,6 @@
 
 ## Decisions
 
-- Pending.
 - 2026-04-28: Accepted `GHSA-w8v5-vhqr-4h9v` for `diskcache` 5.6.3 because no patched version is available and the dependency is confined to the optional agent-memory devtool, not runtime platform images. Revisit before beta or when a patched release exists.
+- 2026-04-28: #214 remains a release-review validation item, not a static alpha blocker. The issue body's root cause is stale on this branch: generated demo definitions now call `load_product_definitions(...)`, and the runtime loader path wires a real lineage resource plus pipeline START/COMPLETE and per-model lineage event emission. Do not close #214 until DevPod + Hetzner E2E proves Marquez exposes fresh pipeline and dbt model lifecycle evidence.
+- 2026-04-28: #263 remains real architecture debt, but is not blocking `v0.1.0-alpha.1` because the alpha validation profile intentionally includes Iceberg/floe-iceberg and no failing production path is currently known for that profile. Keep it open as release-review/post-alpha architecture work; promote it only if alpha validation requires `floe-orchestrator-dagster` to run without `floe-iceberg` installed when Iceberg export is disabled.
