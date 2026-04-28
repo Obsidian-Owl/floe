@@ -498,6 +498,27 @@ class TestDockerfilePipOperations:
                 f"Workspace package pip install must use --no-deps. Line: {pip_line}"
             )
 
+    @pytest.mark.requirement("WU12-AC5")
+    def test_dockerfile_has_no_unlocked_dependency_installs(self) -> None:
+        """Only uv-exported requirements and no-deps workspace installs are allowed."""
+        pip_install_lines = [
+            line
+            for line in _read_dockerfile_lines()
+            if line.upper().startswith("RUN") and "pip install" in line.lower()
+        ]
+
+        assert pip_install_lines, "Dockerfile must install Python dependencies in the build stage."
+        for line in pip_install_lines:
+            installs_locked_requirements = (
+                "--require-hashes" in line and "-r requirements.txt" in line
+            )
+            installs_workspace_package = "--no-deps" in line and '"$dir"' in line
+            assert installs_locked_requirements or installs_workspace_package, (
+                "Dockerfile must not run dependency-resolving pip installs after uv export. "
+                "Put runtime dependencies in package/root metadata and uv.lock instead. "
+                f"Offending line: {line}"
+            )
+
 
 class TestDockerignoreExists:
     """Verify .dockerignore exists at the repository root."""
@@ -2296,11 +2317,13 @@ class TestGeneratedDefinitions:
 # ============================================================
 
 ORCHESTRATOR_PYPROJECT = REPO_ROOT / "plugins" / "floe-orchestrator-dagster" / "pyproject.toml"
+ROOT_PYPROJECT = REPO_ROOT / "pyproject.toml"
+STORAGE_S3_PYPROJECT = REPO_ROOT / "plugins" / "floe-storage-s3" / "pyproject.toml"
 
 # Required packages in the [project.optional-dependencies] docker group
 REQUIRED_DOCKER_EXTRAS: list[str] = [
     "dagster-webserver",
-    "dagster-daemon",
+    "dagster-postgres",
     "dagster-k8s",
 ]
 
@@ -2317,7 +2340,7 @@ class TestOrchestratorDockerExtras:
         assert "docker" in opt_deps, (
             "floe-orchestrator-dagster pyproject.toml must have a "
             "'docker' optional-dependencies group for Dagster runtime deps "
-            "(webserver, daemon, k8s). Found groups: "
+            "(webserver, postgres, k8s). Found groups: "
             f"{list(opt_deps.keys())}"
         )
 
@@ -2333,7 +2356,7 @@ class TestOrchestratorDockerExtras:
 
     @pytest.mark.requirement("WU12-AC3")
     def test_base_orchestrator_does_not_include_docker_deps(self) -> None:
-        """Base dependencies MUST NOT include webserver/daemon/k8s (BC for AC-12.3)."""
+        """Base dependencies MUST NOT include Docker runtime deps (BC for AC-12.3)."""
         data: dict[str, Any] = tomllib.loads(ORCHESTRATOR_PYPROJECT.read_text())
         base_deps: list[str] = data.get("project", {}).get("dependencies", [])
         base_names = [re.split(r"[><=!~;]", dep.strip())[0].strip() for dep in base_deps]
@@ -2342,3 +2365,51 @@ class TestOrchestratorDockerExtras:
                 f"'{pkg}' must be in docker extras ONLY, not base dependencies. "
                 f"Base deps: {base_deps}"
             )
+
+
+class TestDemoImageLockedRuntimeDependencies:
+    """Validate demo image runtime deps are supplied by metadata and uv.lock."""
+
+    @pytest.mark.requirement("WU12-AC3")
+    def test_dockerfile_does_not_hardcode_dagster_runtime_versions(self) -> None:
+        """Dagster runtime versions must come from uv.lock, not Docker ARG literals."""
+        content = _read_dockerfile_raw()
+
+        forbidden_fragments = [
+            "ARG DAGSTER_VERSION",
+            "ARG DAGSTER_POSTGRES_VERSION",
+            "dagster-webserver==${DAGSTER_VERSION}",
+            "dagster-postgres==${DAGSTER_POSTGRES_VERSION}",
+            "dagster-k8s==${DAGSTER_POSTGRES_VERSION}",
+            "dagster==${DAGSTER_VERSION}",
+        ]
+        for fragment in forbidden_fragments:
+            assert fragment not in content, (
+                "Demo image must not override the locked Dagster dependency set with "
+                f"hardcoded Dockerfile installs. Found: {fragment}"
+            )
+
+    @pytest.mark.requirement("WU12-AC3")
+    @pytest.mark.parametrize("package", REQUIRED_DOCKER_EXTRAS)
+    def test_workspace_docker_extra_exports_runtime_package(self, package: str) -> None:
+        """The root docker extra is the dependency source used by Docker uv export."""
+        data: dict[str, Any] = tomllib.loads(ROOT_PYPROJECT.read_text())
+        docker_deps: list[str] = data["project"]["optional-dependencies"].get("docker", [])
+        dep_names = [re.split(r"[><=!~;]", dep.strip())[0].strip() for dep in docker_deps]
+
+        assert package in dep_names, (
+            f"Root docker extra must include '{package}' because Dockerfile uses "
+            "`uv export --all-packages --extra docker` from the workspace root. "
+            f"Found: {docker_deps}"
+        )
+
+    @pytest.mark.requirement("WU12-AC3")
+    def test_s3_storage_declares_pyiceberg_s3_fileio_dependency(self) -> None:
+        """S3 FileIO support must be a plugin dependency, not a Dockerfile install."""
+        data: dict[str, Any] = tomllib.loads(STORAGE_S3_PYPROJECT.read_text())
+        dependencies: list[str] = data["project"]["dependencies"]
+
+        assert any(dep.startswith("pyiceberg[s3fs]") for dep in dependencies), (
+            "floe-storage-s3 uses pyiceberg.io.fsspec.FsspecFileIO and must declare "
+            "the pyiceberg[s3fs] extra so Docker and non-Docker installs get S3 FileIO."
+        )

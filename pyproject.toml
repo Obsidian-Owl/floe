@@ -78,6 +78,7 @@ dependencies = [
 docker = [
     "dagster-webserver>=1.10.0,<2.0.0",
     "dagster-postgres>=0.28.0,<1.0.0",
+    "dagster-k8s>=0.29.0,<1.0.0",
 ]
 
 [tool.uv]
@@ -101,6 +102,8 @@ constraint-dependencies = [
     "python-dotenv>=1.2.2",
     "python-multipart>=0.0.26",
     "rfc3161-client>=1.0.6",
+    "sqlalchemy>=2.0,<2.1",
+    "wrapt>=2.1.2,<2.2.0",
 ]
 
 [tool.uv.sources]
