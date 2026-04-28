@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -26,6 +27,7 @@ def test_helm_ci_invokes_shared_diagnostics_on_install_failure() -> None:
     assert "--cleanup-on-fail" not in workflow_text
 
 
+@pytest.mark.requirement("9b-FR-084")
 def test_helm_ci_invokes_shared_diagnostics_on_helm_test_failure() -> None:
     workflow_text = WORKFLOW.read_text()
 
