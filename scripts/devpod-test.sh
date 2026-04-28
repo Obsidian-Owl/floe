@@ -98,7 +98,7 @@ workspace_running() {
     if printf '%s\n' "${status}" | grep -Eiq 'not[[:space:]-]+running|stopped|failed|error'; then
         return 1
     fi
-    printf '%s\n' "${status}" | grep -Eiq '(^|[[:space:]])running($|[[:space:]])'
+    printf '%s\n' "${status}" | grep -Eiq '(^|[^[:alpha:]])running([^[:alpha:]]|$)'
 }
 
 # ─── Cleanup (cost-safety guarantee) ─────────────────────────────────────────
@@ -191,6 +191,7 @@ provision_workspace() {
         --id "${WORKSPACE}" \
         --provider "${PROVIDER}" \
         --devcontainer-path "${DEVCONTAINER}" \
+        --workspace-env FLOE_DEVPOD_SKIP_POSTSTART_SETUP=1 \
         --ide none; then
         return 0
     fi

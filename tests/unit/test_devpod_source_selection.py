@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -161,6 +162,39 @@ def test_workspace_running_rejects_not_running_status() -> None:
 
     assert "[Rr]unning" not in script
     assert "not[[:space:]-]+running" in script
+
+
+@pytest.mark.requirement("AC-DevPod-Git-Source")
+def test_workspace_running_accepts_quoted_running_status() -> None:
+    """DevPod recovery must accept the current CLI's quoted Running status."""
+    script = _read(_DEVPOD_TEST)
+
+    assert re.search(r"\[\^\[:alpha:\]\]\)running\(\[\^\[:alpha:\]\]\|\$\)", script), (
+        "workspace_running must match DevPod status output such as "
+        "\"Workspace 'floe' is 'Running'\". A whitespace-only boundary misses "
+        "the quoted status and destroys a usable workspace after transport drops."
+    )
+
+
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_full_lifecycle_skips_heavy_poststart_setup_during_provision() -> None:
+    """Heavy Kind/E2E setup must run detached, not inside `devpod up`."""
+    script = _read(_DEVPOD_TEST)
+    post_start = _read(_REPO_ROOT / ".devcontainer" / "hetzner" / "postStartCommand.sh")
+
+    assert "FLOE_DEVPOD_SKIP_POSTSTART_SETUP" in post_start, (
+        "The Hetzner postStartCommand must expose an explicit skip control so "
+        "the full lifecycle harness can keep `devpod up` lightweight."
+    )
+    assert "--workspace-env FLOE_DEVPOD_SKIP_POSTSTART_SETUP=1" in script, (
+        "scripts/devpod-test.sh must skip heavyweight postStart setup while "
+        "provisioning; the detached remote E2E phase owns Kind/test execution."
+    )
+    env_example = _read(_ENV_EXAMPLE)
+    assert "FLOE_DEVPOD_SKIP_POSTSTART_SETUP=0" in env_example, (
+        ".env.example must document the postStart skip escape hatch for manual DevPod debugging."
+    )
+    assert "Set to 1 to skip automatic Kind/platform setup" in env_example
 
 
 @pytest.mark.requirement("AC-DevPod-Git-Source")

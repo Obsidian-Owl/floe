@@ -23,6 +23,11 @@ log() {
     echo "[$(date '+%H:%M:%S')] $*"
 }
 
+if [[ "${FLOE_DEVPOD_SKIP_POSTSTART_SETUP:-0}" == "1" ]]; then
+    log "Skipping Kind/platform setup because FLOE_DEVPOD_SKIP_POSTSTART_SETUP=1"
+    exit 0
+fi
+
 # ─── Wait for Docker daemon (docker-outside-of-docker feature) ───────────────
 #
 # The docker-outside-of-docker devcontainer feature starts dockerd in the
