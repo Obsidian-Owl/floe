@@ -134,6 +134,13 @@ class FieldType(str, Enum):
     BINARY = "binary"
 
 
+class StaleTableRecoveryMode(str, Enum):
+    """How to handle catalog tables whose metadata files are missing."""
+
+    STRICT = "strict"
+    REPAIR = "repair"
+
+
 class PartitionTransform(str, Enum):
     """Iceberg partition transform functions.
 
@@ -1194,6 +1201,14 @@ class IcebergTableManagerConfig(BaseModel):
         },
         description="Default table properties for new tables",
     )
+    stale_table_recovery_mode: StaleTableRecoveryMode = Field(
+        default=StaleTableRecoveryMode.STRICT,
+        description=(
+            "How to handle catalog table registrations that point at missing "
+            "Iceberg metadata files. strict fails; repair drops and recreates "
+            "the broken registration when creating with if_not_exists=True."
+        ),
+    )
 
     # Connection configuration (overrides catalog plugin defaults)
     # Used primarily for testing - production should configure via plugins
@@ -1244,6 +1259,10 @@ class IcebergTableManagerConfig(BaseModel):
 
         kwargs: dict[str, Any] = {}
         extra_props: dict[str, str] = {}
+
+        stale_table_recovery_mode = getattr(governance, "stale_table_recovery_mode", None)
+        if stale_table_recovery_mode is not None:
+            kwargs["stale_table_recovery_mode"] = stale_table_recovery_mode
 
         snapshot_keep_last = getattr(governance, "snapshot_keep_last", None)
         if snapshot_keep_last is not None:
@@ -1298,6 +1317,7 @@ __all__ = [
     "DEFAULT_TARGET_FILE_SIZE_BYTES",
     # Enumerations
     "FieldType",
+    "StaleTableRecoveryMode",
     "PartitionTransform",
     "SchemaChangeType",
     "WriteMode",

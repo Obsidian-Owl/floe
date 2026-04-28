@@ -40,6 +40,36 @@ class TestDeployCommand:
         (chart / "values-test.yaml").write_text(yaml.dump({"global": {"environment": "test"}}))
         return chart
 
+    @pytest.fixture
+    def manifest_with_resource_presets(self, tmp_path: Path) -> Path:
+        """Create a platform manifest with custom resource presets."""
+        manifest = tmp_path / "manifest.yaml"
+        manifest.write_text(
+            yaml.safe_dump(
+                {
+                    "apiVersion": "floe.dev/v1",
+                    "kind": "Manifest",
+                    "metadata": {
+                        "name": "test-platform",
+                        "version": "1.0.0",
+                        "owner": "platform@example.com",
+                    },
+                    "plugins": {
+                        "compute": {"type": "duckdb"},
+                        "orchestrator": {"type": "dagster"},
+                    },
+                    "resource_presets": {
+                        "small": {
+                            "requests": {"cpu": "111m", "memory": "222Mi"},
+                            "limits": {"cpu": "333m", "memory": "444Mi"},
+                        }
+                    },
+                },
+                sort_keys=False,
+            )
+        )
+        return manifest
+
     @pytest.mark.requirement("FR-018")
     def test_dry_run_prints_command(self, runner: CliRunner, chart_dir: Path) -> None:
         """Test --dry-run prints helm command without executing."""
@@ -126,6 +156,61 @@ class TestDeployCommand:
         )
         assert result.exit_code == 0
         assert "replicas: 3" in result.output
+
+    @pytest.mark.requirement("AC-RESOURCE-PRESETS")
+    def test_dry_run_uses_manifest_resource_presets(
+        self,
+        runner: CliRunner,
+        chart_dir: Path,
+        manifest_with_resource_presets: Path,
+    ) -> None:
+        """Test manifest resource presets are used in generated Helm values."""
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--manifest",
+                str(manifest_with_resource_presets),
+                "--dry-run",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Loading platform manifest:" in result.output
+        assert "cpu: 111m" in result.output
+        assert "memory: 222Mi" in result.output
+        assert "cpu: 333m" in result.output
+        assert "memory: 444Mi" in result.output
+
+    @pytest.mark.requirement("AC-RESOURCE-PRESETS")
+    def test_dry_run_falls_back_when_default_manifest_missing(
+        self,
+        runner: CliRunner,
+        chart_dir: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test missing default demo manifest still uses built-in defaults."""
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(
+            deploy_command,
+            [
+                "--env",
+                "test",
+                "--chart",
+                str(chart_dir),
+                "--dry-run",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Generated values content:" in result.output
+        assert "resourcePresets:" in result.output
+        assert "memory: 256Mi" in result.output
 
     @pytest.mark.requirement("FR-018")
     def test_invalid_chart_path(self, runner: CliRunner, tmp_path: Path) -> None:

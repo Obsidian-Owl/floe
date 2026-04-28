@@ -207,6 +207,13 @@ class GovernanceConfig(BaseModel):
         ge=1,
         description="Minimum number of Iceberg snapshots to retain per table",
     )
+    stale_table_recovery_mode: Literal["strict", "repair"] | None = Field(
+        default=None,
+        description=(
+            "How runtimes handle catalog table registrations that point at missing "
+            "Iceberg metadata files. Production manifests should normally use strict."
+        ),
+    )
 
     # NEW in Epic 3A: Policy Enforcer configuration
     naming: NamingConfig | None = Field(
@@ -328,6 +335,44 @@ class ObservabilityManifestConfig(BaseModel):
     logging: LoggingManifestConfig = Field(
         default_factory=LoggingManifestConfig, description="Logging configuration"
     )
+
+
+class ManifestResourceSpec(BaseModel):
+    """CPU and memory resource quantities from platform manifest."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    cpu: str = Field(description="Kubernetes CPU quantity, e.g. 500m or 2")
+    memory: str = Field(description="Kubernetes memory quantity, e.g. 512Mi or 4Gi")
+
+
+class ManifestResourcePreset(BaseModel):
+    """Resource preset available to platform runtime components."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    requests: ManifestResourceSpec = Field(description="Requested CPU and memory")
+    limits: ManifestResourceSpec = Field(description="CPU and memory limits")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_flat_demo_shape(cls, data: object) -> object:
+        """Accept the current demo manifest's flat resource preset keys."""
+        if not isinstance(data, dict):
+            return data
+        flat_keys = {"cpu_request", "memory_request", "cpu_limit", "memory_limit"}
+        if not flat_keys.issubset(data):
+            return data
+        return {
+            "requests": {
+                "cpu": data["cpu_request"],
+                "memory": data["memory_request"],
+            },
+            "limits": {
+                "cpu": data["cpu_limit"],
+                "memory": data["memory_limit"],
+            },
+        }
 
 
 class PlatformManifest(BaseModel):
@@ -452,6 +497,10 @@ class PlatformManifest(BaseModel):
         default=None,
         description="Observability configuration (tracing, lineage, logging)",
     )
+    resource_presets: dict[str, ManifestResourcePreset] | None = Field(
+        default=None,
+        description="Named runtime resource presets for generated platform deployment values",
+    )
 
     @model_validator(mode="after")
     def validate_scope_constraints(self) -> PlatformManifest:
@@ -552,6 +601,8 @@ __all__ = [
     "GovernanceConfig",
     "LineageManifestConfig",
     "LoggingManifestConfig",
+    "ManifestResourcePreset",
+    "ManifestResourceSpec",
     "ManifestScope",
     "ObservabilityManifestConfig",
     "PlatformManifest",

@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from dagster import build_op_context
+from dagster import AssetKey, build_op_context
 
 
 @pytest.mark.requirement("T049")
@@ -31,8 +31,7 @@ def test_sync_delegates_to_semantic_plugin() -> None:
     # Create context using Dagster's build_op_context
     context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
-    # Call the asset - pass resource as second argument for testing
-    result = sync_semantic_schemas(context, mock_plugin)
+    result = sync_semantic_schemas(context)
 
     assert result == ["cube/schema/orders.yaml", "cube/schema/customers.yaml"]
     mock_plugin.sync_from_dbt_manifest.assert_called_once()
@@ -48,7 +47,7 @@ def test_sync_uses_default_paths_when_no_config() -> None:
 
     context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
-    sync_semantic_schemas(context, mock_plugin)
+    sync_semantic_schemas(context)
 
     call_args = mock_plugin.sync_from_dbt_manifest.call_args
     assert call_args.kwargs["manifest_path"] == Path("target/manifest.json")
@@ -70,7 +69,7 @@ def test_sync_uses_config_paths_when_provided() -> None:
 
     context = build_op_context(op_config=op_config, resources={"semantic_layer": mock_plugin})
 
-    sync_semantic_schemas(context, mock_plugin)
+    sync_semantic_schemas(context)
 
     call_args = mock_plugin.sync_from_dbt_manifest.call_args
     assert call_args.kwargs["manifest_path"] == Path("/custom/manifest.json")
@@ -88,7 +87,7 @@ def test_sync_propagates_file_not_found_error() -> None:
     context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
     with pytest.raises(FileNotFoundError, match="manifest.json not found"):
-        sync_semantic_schemas(context, mock_plugin)
+        sync_semantic_schemas(context)
 
 
 @pytest.mark.requirement("T049")
@@ -101,7 +100,7 @@ def test_sync_returns_empty_list_when_no_models() -> None:
 
     context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
-    result = sync_semantic_schemas(context, mock_plugin)
+    result = sync_semantic_schemas(context)
 
     assert result == []
 
@@ -120,7 +119,7 @@ def test_sync_converts_path_objects_to_strings() -> None:
 
     context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
-    result = sync_semantic_schemas(context, mock_plugin)
+    result = sync_semantic_schemas(context)
 
     # All results should be strings, not Path objects
     assert all(isinstance(path, str) for path in result)
@@ -152,7 +151,7 @@ def test_sync_with_otel_tracing() -> None:
 
         context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
 
-        result = sync_semantic_schemas(context, mock_plugin)
+        result = sync_semantic_schemas(context)
 
     # Verify tracer factory was called with orchestrator tracer name
     mock_get_tracer.assert_called_once_with("floe.orchestrator.semantic")
@@ -186,7 +185,7 @@ def test_sync_logs_info_messages(caplog: pytest.LogCaptureFixture) -> None:
 
     with caplog.at_level(logging.INFO):
         context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
-        sync_semantic_schemas(context, mock_plugin)
+        sync_semantic_schemas(context)
 
     # Verify structured logger
     assert any("Semantic schema sync completed" in record.message for record in caplog.records)
@@ -204,7 +203,7 @@ def test_sync_handles_partial_config() -> None:
     op_config = {"manifest_path": "/custom/manifest.json"}
     context = build_op_context(op_config=op_config, resources={"semantic_layer": mock_plugin})
 
-    sync_semantic_schemas(context, mock_plugin)
+    sync_semantic_schemas(context)
 
     call_args = mock_plugin.sync_from_dbt_manifest.call_args
     assert call_args.kwargs["manifest_path"] == Path("/custom/manifest.json")
@@ -215,8 +214,63 @@ def test_sync_handles_partial_config() -> None:
     op_config = {"output_dir": "/custom/output"}
     context = build_op_context(op_config=op_config, resources={"semantic_layer": mock_plugin})
 
-    sync_semantic_schemas(context, mock_plugin)
+    sync_semantic_schemas(context)
 
     call_args = mock_plugin.sync_from_dbt_manifest.call_args
     assert call_args.kwargs["manifest_path"] == Path("target/manifest.json")  # Default
     assert call_args.kwargs["output_dir"] == Path("/custom/output")
+
+
+@pytest.mark.requirement("T049")
+def test_sync_semantic_schemas_has_no_semantic_layer_asset_input() -> None:
+    """semantic_layer must be a resource dependency, not an asset input."""
+    from floe_orchestrator_dagster.assets.semantic_sync import sync_semantic_schemas
+
+    input_names = {input_def.name for input_def in sync_semantic_schemas.op.input_defs}
+
+    assert "semantic_layer" not in input_names
+    assert "semantic_layer" in sync_semantic_schemas.required_resource_keys
+
+
+@pytest.mark.requirement("T049")
+def test_sync_semantic_schemas_factory_closes_over_runtime_paths(tmp_path: Path) -> None:
+    """Factory-created semantic sync assets use product-specific runtime paths."""
+    from floe_orchestrator_dagster.assets.semantic_sync import (
+        create_sync_semantic_schemas_asset,
+    )
+
+    mock_plugin = MagicMock()
+    mock_plugin.sync_from_dbt_manifest.return_value = []
+    manifest_path = tmp_path / "target" / "manifest.json"
+    output_dir = tmp_path / "cube" / "schema"
+    sync_asset = create_sync_semantic_schemas_asset(
+        manifest_path=manifest_path,
+        output_dir=output_dir,
+    )
+
+    context = build_op_context(op_config=None, resources={"semantic_layer": mock_plugin})
+
+    sync_asset(context)
+
+    call_args = mock_plugin.sync_from_dbt_manifest.call_args
+    assert call_args.kwargs["manifest_path"] == manifest_path
+    assert call_args.kwargs["output_dir"] == output_dir
+
+
+@pytest.mark.requirement("T049")
+def test_sync_semantic_schemas_factory_declares_model_dependencies(tmp_path: Path) -> None:
+    """Factory-created semantic sync assets can depend on dbt model assets."""
+    from floe_orchestrator_dagster.assets.semantic_sync import (
+        create_sync_semantic_schemas_asset,
+    )
+
+    sync_asset = create_sync_semantic_schemas_asset(
+        manifest_path=tmp_path / "target" / "manifest.json",
+        output_dir=tmp_path / "cube" / "schema",
+        deps=[AssetKey("stg_customers"), AssetKey("fct_orders")],
+    )
+
+    assert sync_asset.dependency_keys == {
+        AssetKey("stg_customers"),
+        AssetKey("fct_orders"),
+    }

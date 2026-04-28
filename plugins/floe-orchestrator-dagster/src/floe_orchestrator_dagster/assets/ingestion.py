@@ -17,10 +17,12 @@ See Also:
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from dagster import AssetKey, asset
+from floe_core.plugins.ingestion import IngestionConfig
 
 if TYPE_CHECKING:
     from dagster import AssetsDefinition
@@ -28,6 +30,7 @@ if TYPE_CHECKING:
     from floe_core.schemas.compiled_artifacts import PluginRef
 
 logger = logging.getLogger(__name__)
+_UNSAFE_ASSET_NAME_CHARS = re.compile(r"[^a-zA-Z0-9_]")
 
 
 class FloeIngestionTranslator:
@@ -111,9 +114,9 @@ def create_ingestion_assets(
 ) -> list[AssetsDefinition]:
     """Create Dagster asset definitions for ingestion pipelines.
 
-    Creates a wrapper asset that delegates to the ingestion plugin resource
-    at runtime. The ingestion plugin (loaded as a Dagster resource) handles
-    actual pipeline creation and execution.
+    Creates helper assets only when source configuration already contains
+    explicit executable dlt source objects. Normal compiled JSON ingestion
+    configuration is not executable yet and fails loudly.
 
     For direct dlt integration, use FloeIngestionTranslator with the
     ``@dlt_assets`` decorator instead.
@@ -122,11 +125,23 @@ def create_ingestion_assets(
         ingestion_ref: Resolved ingestion plugin reference from CompiledArtifacts.
 
     Returns:
-        List containing the ingestion runner asset definition.
+        List containing ingestion runner asset definitions.
 
     Example:
         >>> from floe_core.schemas.compiled_artifacts import PluginRef
-        >>> ref = PluginRef(type="dlt", version="0.1.0", config={})
+        >>> source = build_dlt_source_somewhere_else()
+        >>> ref = PluginRef(
+        ...     type="dlt",
+        ...     version="0.1.0",
+        ...     config={
+        ...         "sources": [{
+        ...             "name": "github_events",
+        ...             "source_type": "rest_api",
+        ...             "source_config": {"source": source},
+        ...             "destination_table": "bronze.github_events",
+        ...         }]
+        ...     },
+        ... )
         >>> assets = create_ingestion_assets(ref)
         >>> len(assets)
         1
@@ -137,34 +152,25 @@ def create_ingestion_assets(
     """
     ingestion_type = ingestion_ref.type
     ingestion_version = ingestion_ref.version
+    ingestion_config = ingestion_ref.config or {}
+    source_configs = _source_configs(ingestion_config)
+    assets: list[AssetsDefinition] = []
+    asset_names: set[str] = set()
 
-    @asset(
-        name="run_ingestion_pipelines",
-        required_resource_keys=frozenset({"ingestion"}),
-        description=(
-            f"Execute ingestion pipelines via {ingestion_type} plugin. "
-            "Delegates to the IngestionPlugin resource for pipeline "
-            "creation and execution."
-        ),
-        metadata={
-            "ingestion_type": ingestion_type,
-            "ingestion_version": ingestion_version,
-        },
-    )
-    def _run_ingestion(context) -> None:  # noqa: ANN001
-        """Execute ingestion pipelines via the ingestion plugin resource.
-
-        The ingestion plugin is loaded as a Dagster resource by
-        create_ingestion_resources(). This asset triggers pipeline
-        execution at materialization time.
-
-        Args:
-            context: Dagster AssetExecutionContext. Type hint omitted
-                due to Dagster limitations with future annotations.
-        """
-        ingestion_plugin = context.resources.ingestion
-        context.log.info(
-            f"Ingestion asset triggered via {ingestion_plugin.name} v{ingestion_plugin.version}"
+    for source_config in source_configs:
+        asset_name = f"run_ingestion_{_safe_source_name(str(source_config['name']))}"
+        if asset_name in asset_names:
+            raise ValueError(f"normalized ingestion asset name collision: {asset_name}")
+        asset_names.add(asset_name)
+        _validate_required_source_fields(source_config)
+        _validate_executable_source(source_config)
+        assets.append(
+            _create_ingestion_asset(
+                ingestion_type=ingestion_type,
+                ingestion_version=ingestion_version,
+                asset_name=asset_name,
+                source_config=source_config,
+            )
         )
 
     logger.info(
@@ -175,7 +181,139 @@ def create_ingestion_assets(
         },
     )
 
-    return [_run_ingestion]
+    return assets
+
+
+def _source_configs(ingestion_config: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Extract source configs from real sources[] or legacy flat config."""
+    if not ingestion_config:
+        raise ValueError(
+            "Dagster ingestion helper requires sources or explicit executable source config"
+        )
+    sources = ingestion_config.get("sources")
+    if sources is None:
+        return [{"name": ingestion_config.get("name", "pipelines"), **dict(ingestion_config)}]
+    if not sources:
+        raise ValueError("Dagster ingestion helper requires at least one ingestion source")
+    return [dict(source) for source in sources]
+
+
+def _validate_required_source_fields(source_config: Mapping[str, Any]) -> None:
+    """Require fields needed to construct IngestionConfig before returning assets."""
+    source_name = source_config.get("name", "<unnamed>")
+    for field_name in ("source_type", "destination_table"):
+        if not source_config.get(field_name):
+            raise ValueError(
+                f"Dagster ingestion helper requires {field_name} for source {source_name!r}"
+            )
+
+
+def _validate_executable_source(source_config: Mapping[str, Any]) -> None:
+    """Require an explicit non-JSON dlt source object before creating assets."""
+    source_ref = (source_config.get("source_config") or {}).get("source")
+    if (
+        source_ref is None
+        or isinstance(
+            source_ref,
+            str | bytes | int | float | bool | dict | list | tuple | set,
+        )
+        or not _is_source_like(source_ref)
+    ):
+        source_name = source_config.get("name", "<unnamed>")
+        raise ValueError(
+            "Dagster ingestion helper requires source_config.source to contain an "
+            f"executable dlt source object for source {source_name!r}; normal compiled "
+            "JSON config cannot construct runnable ingestion assets yet."
+        )
+
+
+def _is_source_like(source_ref: Any) -> bool:
+    """Return True for lightweight dlt-like source/resource objects."""
+    return callable(source_ref) or any(
+        hasattr(source_ref, attr)
+        for attr in (
+            "__iter__",
+            "resources",
+            "with_resources",
+            "selected_resources",
+        )
+    )
+
+
+def _safe_source_name(source_name: str) -> str:
+    """Return a Dagster-safe deterministic source name."""
+    safe_name = _UNSAFE_ASSET_NAME_CHARS.sub("_", source_name).strip("_")
+    if not safe_name:
+        return "source"
+    if safe_name[0].isdigit():
+        return f"source_{safe_name}"
+    return safe_name
+
+
+def _table_name(destination_table: str) -> str:
+    """Extract the physical table name from a namespace-qualified table."""
+    return destination_table.rsplit(".", 1)[-1]
+
+
+def _create_ingestion_asset(
+    *,
+    ingestion_type: str,
+    ingestion_version: str,
+    asset_name: str,
+    source_config: dict[str, Any],
+) -> AssetsDefinition:
+    source_name = str(source_config["name"])
+
+    @asset(
+        name=asset_name,
+        required_resource_keys=frozenset({"ingestion"}),
+        description=(
+            f"Execute ingestion source {source_name} via {ingestion_type} plugin. "
+            "Delegates to the IngestionPlugin resource for pipeline creation and execution."
+        ),
+        metadata={
+            "ingestion_type": ingestion_type,
+            "ingestion_version": ingestion_version,
+            "source_name": source_name,
+            "source_type": source_config.get("source_type", ""),
+            "destination_table": source_config.get("destination_table", ""),
+        },
+    )
+    def _run_ingestion_source(context) -> Any:  # noqa: ANN001
+        """Execute one configured ingestion source via the ingestion plugin resource."""
+        ingestion_plugin = context.resources.ingestion
+        context.log.info(
+            f"Ingestion asset {asset_name} triggered via "
+            f"{ingestion_plugin.name} v{ingestion_plugin.version}"
+        )
+        config = IngestionConfig(
+            source_type=source_config["source_type"],
+            source_config=source_config.get("source_config") or {},
+            destination_table=source_config["destination_table"],
+            write_mode=source_config.get("write_mode", "append"),
+            schema_contract=source_config.get("schema_contract", "evolve"),
+        )
+        pipeline = ingestion_plugin.create_pipeline(config)
+        run_kwargs = {
+            "write_disposition": config.write_mode,
+            "table_name": _table_name(config.destination_table),
+            "schema_contract": config.schema_contract,
+            "cursor_field": source_config.get("cursor_field"),
+            "primary_key": source_config.get("primary_key"),
+        }
+        source = config.source_config.get("source")
+        if source is not None:
+            run_kwargs["source"] = source
+
+        result = ingestion_plugin.run(pipeline, **run_kwargs)
+
+        if not result.success:
+            errors = ", ".join(str(error) for error in getattr(result, "errors", []))
+            raise RuntimeError(f"Ingestion pipeline failed: {errors or 'unknown error'}")
+
+        return result
+
+    return _run_ingestion_source
 
 
 __all__ = [

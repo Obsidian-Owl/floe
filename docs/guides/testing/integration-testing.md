@@ -98,32 +98,28 @@ def postgres_connection():
 # tests/integration/test_dagster_assets.py
 import pytest
 from dagster import materialize
-from floe_dagster.asset_factory import create_definitions
-from floe_core.schemas import CompiledArtifacts
+from floe_orchestrator_dagster.loader import load_product_definitions
 
 class TestDagsterAssets:
-    """Integration tests for Dagster asset creation."""
+    """Integration tests for Dagster runtime loading."""
 
     def test_dbt_assets_created(self, temp_dbt_project):
-        """dbt models should be converted to Dagster assets."""
-        artifacts = CompiledArtifacts(
-            dbt_project_path=str(temp_dbt_project),
-            dbt_manifest_path=str(temp_dbt_project / "target/manifest.json"),
-            compute={"target": "duckdb"},
-            transforms=[{"type": "dbt", "path": "models/"}],
-            observability={},
+        """dbt assets should load from one compiled product directory."""
+        defs = load_product_definitions(
+            product_name="test-product",
+            project_dir=temp_dbt_project,
         )
 
-        defs = create_definitions(artifacts)
-
-        # Should have assets for each dbt model
+        # Should have assets from the dbt manifest.
         asset_keys = [a.key for a in defs.get_all_asset_specs()]
         assert len(asset_keys) > 0
 
     def test_assets_execute_successfully(self, temp_dbt_project, duckdb_path):
         """Assets should execute without errors."""
-        artifacts = create_test_artifacts(temp_dbt_project, duckdb_path)
-        defs = create_definitions(artifacts)
+        defs = load_product_definitions(
+            product_name="test-product",
+            project_dir=temp_dbt_project,
+        )
 
         result = materialize(
             defs.get_all_asset_specs(),
@@ -132,6 +128,13 @@ class TestDagsterAssets:
 
         assert result.success
 ```
+
+`temp_dbt_project` must be a product directory containing runtime files from
+the same compile context: `compiled_artifacts.json`, `target/manifest.json`,
+and the dbt project/profile files that Dagster resolves from that directory
+such as `dbt_project.yml` and `profiles.yml`. Generated `definitions.py` files
+should remain thin shims that call `load_product_definitions(product_name,
+project_dir)`.
 
 ### Full Pipeline Tests
 

@@ -19,6 +19,12 @@ from testing.fixtures.services import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _disable_service_dns_autodetect(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep service utility unit tests deterministic and offline by default."""
+    monkeypatch.setenv("FLOE_DISABLE_SERVICE_DNS_AUTODETECT", "1")
+
+
 class TestServiceEndpoint:
     """Tests for ServiceEndpoint dataclass."""
 
@@ -35,23 +41,40 @@ class TestServiceEndpoint:
         assert endpoint.namespace == "custom-ns"
 
     @pytest.mark.requirement("9c-FR-005")
-    def test_host_property(self) -> None:
+    def test_host_property(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test ServiceEndpoint generates effective host based on environment.
 
         When K8s DNS is resolvable, returns K8s DNS name.
         When not resolvable (running on host), returns localhost.
         """
+        monkeypatch.delenv("FLOE_DISABLE_SERVICE_DNS_AUTODETECT", raising=False)
         endpoint = ServiceEndpoint("polaris", 8181, "floe-test")
         # Mock K8s DNS resolution to return True so we get K8s DNS name
         with patch("testing.fixtures.services._can_resolve_host", return_value=True):
             assert endpoint.host == "polaris.floe-test.svc.cluster.local"
 
     @pytest.mark.requirement("9c-FR-005")
-    def test_host_property_falls_back_to_localhost(self) -> None:
+    def test_host_property_falls_back_to_localhost(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Test ServiceEndpoint falls back to localhost when K8s DNS not resolvable."""
+        monkeypatch.delenv("FLOE_DISABLE_SERVICE_DNS_AUTODETECT", raising=False)
         endpoint = ServiceEndpoint("polaris", 8181, "floe-test")
         with patch("testing.fixtures.services._can_resolve_host", return_value=False):
             assert endpoint.host == "localhost"
+
+    @pytest.mark.requirement("9c-FR-005")
+    def test_host_property_can_disable_dns_autodetection(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Unit runners can force localhost without attempting K8s DNS resolution."""
+        monkeypatch.setenv("FLOE_DISABLE_SERVICE_DNS_AUTODETECT", "1")
+        endpoint = ServiceEndpoint("polaris", 8181, "floe-test")
+        with patch("testing.fixtures.services._can_resolve_host") as mock_resolve:
+            assert endpoint.host == "localhost"
+        mock_resolve.assert_not_called()
 
     @pytest.mark.requirement("9c-FR-005")
     def test_k8s_host_property(self) -> None:
@@ -93,8 +116,9 @@ class TestCheckServiceHealth:
             assert result is False
 
     @pytest.mark.requirement("9c-FR-005")
-    def test_uses_custom_namespace(self) -> None:
+    def test_uses_custom_namespace(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test check_service_health uses custom namespace."""
+        monkeypatch.delenv("FLOE_DISABLE_SERVICE_DNS_AUTODETECT", raising=False)
         with (
             patch("testing.fixtures.services._can_resolve_host", return_value=True),
             patch("testing.fixtures.services._tcp_health_check") as mock_check,
@@ -140,8 +164,9 @@ class TestCheckInfrastructure:
             }
 
     @pytest.mark.requirement("9c-FR-005")
-    def test_raises_on_unhealthy_service(self) -> None:
+    def test_raises_on_unhealthy_service(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test check_infrastructure raises when service unhealthy."""
+        monkeypatch.delenv("FLOE_DISABLE_SERVICE_DNS_AUTODETECT", raising=False)
 
         def mock_check(host: str, port: int, timeout: float) -> bool:
             _ = port, timeout  # Unused in mock
@@ -162,8 +187,9 @@ class TestCheckInfrastructure:
             assert "polaris" in str(exc_info.value)
 
     @pytest.mark.requirement("9c-FR-005")
-    def test_no_raise_returns_all_statuses(self) -> None:
+    def test_no_raise_returns_all_statuses(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test check_infrastructure returns all statuses with raise_on_failure=False."""
+        monkeypatch.delenv("FLOE_DISABLE_SERVICE_DNS_AUTODETECT", raising=False)
 
         def mock_check(host: str, port: int, timeout: float) -> bool:
             _ = port, timeout  # Unused in mock

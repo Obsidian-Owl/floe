@@ -43,9 +43,17 @@ def test_ensure_ready_can_restart_a_stopped_workspace() -> None:
         "scripts/devpod-ensure-ready.sh must still detect the running state "
         "before deciding whether startup is needed."
     )
-    assert re.search(r'devpod\s+up\s+"\$\{PROJECT_ROOT\}"', script), (
-        "The readiness helper must call 'devpod up' from the repo root when a "
-        "saved workspace is stopped."
+    assert 'devpod_resolve_source "${PROJECT_ROOT}"' in script, (
+        "The readiness helper must resolve a Git-backed DevPod source before "
+        "starting a saved workspace."
+    )
+    assert re.search(r'devpod\s+up\s+"\$\{WORKSPACE\}"', script), (
+        "The readiness helper must call 'devpod up' with the workspace name "
+        "and pass the repository as --source."
+    )
+    assert '--source "${DEVPOD_SOURCE_RESOLVED}"' in script, (
+        "The readiness helper must pass the resolved source through --source "
+        "instead of uploading the local worktree."
     )
     for fragment in (
         '--id "${WORKSPACE}"',

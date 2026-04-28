@@ -22,7 +22,7 @@ Requirements Covered:
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from floe_core.plugins.storage import StoragePlugin
 
@@ -80,7 +80,7 @@ class S3StoragePlugin(StoragePlugin):
                 "s3",
                 [{"field": "_config", "message": "Plugin 's3' not configured"}],
             )
-        return self._config
+        return cast(S3StorageConfig, self._config)
 
     # =========================================================================
     # PluginMetadata abstract properties
@@ -147,21 +147,8 @@ class S3StoragePlugin(StoragePlugin):
     # StoragePlugin abstract methods
     # =========================================================================
 
-    def get_pyiceberg_fileio(self) -> FileIO:
-        """Create a PyIceberg FileIO instance for S3 storage.
-
-        Returns a FsspecFileIO configured with S3 endpoint, region,
-        and credentials. Credentials are sourced from config or
-        environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY).
-
-        Returns:
-            A PyIceberg FsspecFileIO instance configured for S3.
-
-        Raises:
-            RuntimeError: If plugin is not configured.
-        """
-        from pyiceberg.io.fsspec import FsspecFileIO
-
+    def _get_pyiceberg_s3_properties(self) -> dict[str, str]:
+        """Build PyIceberg S3 properties from validated plugin config."""
         config = self._require_config()
 
         properties: dict[str, str] = {
@@ -187,7 +174,32 @@ class S3StoragePlugin(StoragePlugin):
         if secret_key:
             properties["s3.secret-access-key"] = secret_key
 
-        return FsspecFileIO(properties=properties)
+        return properties
+
+    def get_pyiceberg_fileio(self) -> FileIO:
+        """Create a PyIceberg FileIO instance for S3 storage.
+
+        Returns a FsspecFileIO configured with S3 endpoint, region,
+        and credentials. Credentials are sourced from config or
+        environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY).
+
+        Returns:
+            A PyIceberg FsspecFileIO instance configured for S3.
+
+        Raises:
+            RuntimeError: If plugin is not configured.
+        """
+        from pyiceberg.io.fsspec import FsspecFileIO
+
+        return FsspecFileIO(properties=self._get_pyiceberg_s3_properties())
+
+    def get_pyiceberg_catalog_config(self) -> dict[str, Any]:
+        """Return PyIceberg catalog config for S3-backed table loading.
+
+        Uses the same normalized PyIceberg keys as ``get_pyiceberg_fileio()``
+        so catalog plugins do not need to know S3 manifest field names.
+        """
+        return self._get_pyiceberg_s3_properties()
 
     def get_warehouse_uri(self, namespace: str) -> str:
         """Generate warehouse URI for a namespace.

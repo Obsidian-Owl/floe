@@ -31,6 +31,8 @@ def _make_mock_transport() -> MagicMock:
     """Create a mock transport with async emit and sync close."""
     transport = MagicMock()
     transport.emit = AsyncMock()
+    transport.flush = AsyncMock()
+    transport.close_async = AsyncMock()
     transport.close = MagicMock()
     return transport
 
@@ -150,6 +152,26 @@ class TestLineageEmitter:
         emitter.close()
 
         transport.close.assert_called_once()
+
+    def test_flush_calls_transport_flush(self) -> None:
+        """flush() delegates to transport.flush()."""
+        transport = _make_mock_transport()
+        builder = EventBuilder(producer="floe", default_namespace="test")
+        emitter = LineageEmitter(transport, builder, "test")
+
+        _run(emitter.flush())
+
+        transport.flush.assert_awaited_once()
+
+    def test_close_async_calls_transport_close_async(self) -> None:
+        """close_async() drains and closes the async transport."""
+        transport = _make_mock_transport()
+        builder = EventBuilder(producer="floe", default_namespace="test")
+        emitter = LineageEmitter(transport, builder, "test")
+
+        _run(emitter.close_async())
+
+        transport.close_async.assert_awaited_once()
 
     @pytest.mark.requirement("REQ-516")
     def test_emit_start_with_facets(self) -> None:

@@ -1,0 +1,247 @@
+"""Shared Dagster runtime builder for floe data products."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+from uuid import UUID, uuid4
+
+from dagster import AssetKey, Definitions, ResourceDefinition
+from dagster_dbt import DbtCliResource, dbt_assets
+from floe_core.lineage.facets import TraceCorrelationFacetBuilder
+from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+from floe_orchestrator_dagster.capabilities import CapabilityPolicy
+from floe_orchestrator_dagster.export.iceberg import export_dbt_to_iceberg
+from floe_orchestrator_dagster.lineage_extraction import extract_dbt_model_lineage
+from floe_orchestrator_dagster.resources.iceberg import try_create_iceberg_resources
+from floe_orchestrator_dagster.resources.lineage import try_create_lineage_resource
+
+_PROJECT_DIR_REQUIRED_MESSAGE = (
+    "Dagster runtime definitions require project_dir so dbt manifest, profiles.yml, "
+    "and compiled_artifacts.json are resolved from one product directory; use the "
+    "generated definitions.py loader/shim path for runtime definitions."
+)
+_INGESTION_RUNTIME_DISABLED_MESSAGE = (
+    "Dagster ingestion runtime is not enabled because compiled JSON config cannot yet "
+    "construct executable dlt source objects; implement a source-construction layer "
+    "before enabling ingestion assets."
+)
+
+
+def _has_iceberg_config(artifacts: CompiledArtifacts) -> bool:
+    """Return True when both catalog and storage plugins are configured."""
+    plugins = artifacts.plugins
+    return bool(plugins and plugins.catalog and plugins.storage)
+
+
+def _has_ingestion_workloads(plugins: Any | None) -> bool:
+    """Return True when configured ingestion contains any workload config."""
+    ingestion = getattr(plugins, "ingestion", None)
+    config = getattr(ingestion, "config", None)
+    if config is None:
+        return False
+    if not isinstance(config, dict):
+        return True
+    if not config:
+        return False
+    keys = set(config)
+    if keys != {"sources"}:
+        return True
+    sources = config["sources"]
+    if not isinstance(sources, list):
+        return True
+    return len(sources) > 0
+
+
+def _lineage_namespace(artifacts: CompiledArtifacts) -> str | None:
+    """Return the compiled lineage namespace when artifacts provide one."""
+    observability = getattr(artifacts, "observability", None)
+    namespace = getattr(observability, "lineage_namespace", None)
+    return str(namespace) if namespace else None
+
+
+def _create_semantic_resources(plugins: Any | None) -> dict[str, Any]:
+    """Create semantic resources through the configured semantic factory."""
+    from floe_orchestrator_dagster.resources.semantic import (
+        try_create_semantic_resources,
+    )
+
+    return try_create_semantic_resources(plugins)
+
+
+def _dagster_run_id(context: Any) -> UUID | None:
+    """Return the Dagster run id as a UUID when available."""
+    try:
+        return UUID(str(context.run.run_id))
+    except Exception:
+        return None
+
+
+def build_product_definitions(
+    *,
+    product_name: str,
+    artifacts: CompiledArtifacts,
+    project_dir: Path | None,
+    capability_policy: CapabilityPolicy | None = None,
+) -> Definitions:
+    """Build Dagster definitions for a compiled floe product.
+
+    Args:
+        product_name: Name of the data product.
+        artifacts: Validated compiled artifacts for the data product.
+        project_dir: dbt project directory containing target/manifest.json.
+        capability_policy: Optional policy controlling whether optional
+            capabilities such as lineage are best-effort or strict. Defaults
+            to the platform default policy when omitted.
+
+    Returns:
+        Dagster Definitions with dbt assets and runtime resources.
+
+    Raises:
+        ValueError: If project_dir is not supplied.
+    """
+    if project_dir is None:
+        raise ValueError(_PROJECT_DIR_REQUIRED_MESSAGE)
+
+    policy = capability_policy or CapabilityPolicy.default()
+    policy.validate_required_plugins(artifacts.plugins)
+
+    plugins = artifacts.plugins
+    if _has_ingestion_workloads(plugins):
+        raise ValueError(_INGESTION_RUNTIME_DISABLED_MESSAGE)
+
+    manifest_path = project_dir / "target" / "manifest.json"
+
+    @dbt_assets(
+        manifest=manifest_path,
+        name=f"{product_name.replace('-', '_')}_dbt_assets",
+        required_resource_keys={"dbt", "lineage"},
+    )
+    # Dagster's @dbt_assets decorator wraps this callable dynamically, and the
+    # concrete context type is not stable enough for strict annotation here.
+    def _dbt_assets_fn(context) -> object:  # type: ignore[no-untyped-def]
+        """Run dbt build with lineage emission."""
+        dbt = context.resources.dbt
+        lineage = context.resources.lineage
+        run_id: UUID | None = None
+
+        run_facets: dict[str, object] = {}
+        try:
+            trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
+            if trace_facet is not None:
+                run_facets["traceCorrelation"] = trace_facet
+        except Exception as _trace_exc:
+            context.log.warning("Trace facet creation failed: %s", _trace_exc)
+        try:
+            dagster_run_id = _dagster_run_id(context)
+            run_id = lineage.emit_start(
+                product_name,
+                run_id=dagster_run_id,
+                run_facets=run_facets or None,
+            )
+        except Exception as _start_exc:
+            if policy.require_lineage:
+                raise
+            context.log.warning("emit_start failed; using fallback run id: %s", _start_exc)
+            run_id = uuid4()
+
+        try:
+            yield from dbt.cli(["build"], context=context).stream()
+            if _has_iceberg_config(artifacts):
+                export_result = export_dbt_to_iceberg(
+                    context,
+                    product_name,
+                    project_dir,
+                    artifacts,
+                )
+                if export_result.tables_written == 0:
+                    raise RuntimeError(
+                        f"Configured Iceberg export wrote no tables for product {product_name}"
+                    )
+            try:
+                model_events = extract_dbt_model_lineage(
+                    project_dir,
+                    run_id,
+                    product_name,
+                    lineage.namespace,
+                )
+                for event in model_events:
+                    lineage.emit_event(event)
+            except Exception as _model_lineage_exc:
+                if policy.require_lineage:
+                    raise
+                context.log.warning(
+                    "runtime model lineage emission failed: %s",
+                    _model_lineage_exc,
+                )
+        except Exception as exc:
+            try:
+                lineage.emit_fail(run_id, product_name, error_message=type(exc).__name__)
+                lineage.flush()
+            except Exception as _fail_exc:
+                if policy.require_lineage:
+                    raise
+                context.log.warning("emit_fail failed: %s", _fail_exc)
+            raise
+
+        try:
+            lineage.emit_complete(run_id, product_name)
+            lineage.flush()
+        except Exception as _complete_exc:
+            if policy.require_lineage:
+                raise
+            context.log.warning("emit_complete failed: %s", _complete_exc)
+
+    project_dir_str = str(project_dir)
+
+    def _dbt_resource_fn(_init_context: Any) -> Any:
+        return DbtCliResource(
+            project_dir=project_dir_str,
+            profiles_dir=project_dir_str,
+        )
+
+    resources: dict[str, object] = {
+        "dbt": ResourceDefinition(resource_fn=_dbt_resource_fn),
+        **try_create_lineage_resource(
+            plugins,
+            strict=policy.require_lineage,
+            default_namespace=_lineage_namespace(artifacts),
+        ),
+    }
+    assets: list[Any] = [_dbt_assets_fn]
+
+    if plugins and plugins.semantic:
+        semantic_resources = _create_semantic_resources(plugins)
+        resources.update(semantic_resources)
+        if "semantic_layer" in semantic_resources:
+            from floe_orchestrator_dagster.assets.semantic_sync import (
+                create_sync_semantic_schemas_asset,
+            )
+
+            assets.append(
+                create_sync_semantic_schemas_asset(
+                    manifest_path=project_dir / "target" / "manifest.json",
+                    output_dir=project_dir / "cube" / "schema",
+                    deps=[
+                        AssetKey(model.name)
+                        for model in getattr(getattr(artifacts, "transforms", None), "models", [])
+                    ],
+                )
+            )
+
+    if _has_iceberg_config(artifacts):
+
+        def _iceberg_resource_fn(_init_context: Any) -> Any:
+            result = try_create_iceberg_resources(
+                plugins,
+                governance=getattr(artifacts, "governance", None),
+            )
+            return result.get("iceberg")
+
+        resources["iceberg"] = ResourceDefinition(resource_fn=_iceberg_resource_fn)
+
+    return Definitions(
+        assets=assets,
+        resources=resources,
+    )

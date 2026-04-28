@@ -1,8 +1,8 @@
 """Tests for iceberg-purge work unit: _purge_iceberg_namespace improvements.
 
 Verifies that _purge_iceberg_namespace():
-- Uses purge_table instead of drop_table (AC-1)
-- Deletes S3 objects under the table prefix after purge (AC-2)
+- Drops catalog metadata without catalog-side purge before S3 cleanup (AC-1)
+- Deletes S3 objects under the table prefix after metadata drop (AC-2)
 - Handles S3 pagination for >1000 objects (AC-3)
 - Uses boto3 for S3 calls (AC-4)
 - Catches all cleanup exceptions as non-fatal (AC-5)
@@ -31,6 +31,19 @@ _DBT_UTILS_PATH = _REPO_ROOT / "tests" / "e2e" / "dbt_utils.py"
 # Fail-fast guard — if the path is wrong, collection fails immediately instead
 # of silently swallowing FileNotFoundError downstream (AC-2 fail-fast guard).
 assert _DBT_UTILS_PATH.exists(), f"dbt_utils.py not found at {_DBT_UTILS_PATH}"
+
+
+@pytest.fixture(autouse=True)
+def _use_explicit_minio_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep purge unit tests from performing Kubernetes DNS autodetection."""
+    mock_s3 = MagicMock()
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = []
+    mock_s3.get_paginator.return_value = mock_paginator
+
+    monkeypatch.setenv("MINIO_ENDPOINT", "http://localhost:9000")
+    monkeypatch.setattr("boto3.client", lambda *_args, **_kwargs: mock_s3)
+
 
 # ---------------------------------------------------------------------------
 # Helpers: load the module under test
@@ -73,44 +86,43 @@ def _make_mock_catalog(tables: list[tuple[str, str]]) -> MagicMock:
 
 
 # ===========================================================================
-# AC-1: purge_table replaces drop_table
+# AC-1: metadata drop precedes S3 cleanup
 # ===========================================================================
 
 
-class TestPurgeTableReplacesDropTable:
-    """Verify purge_table is called instead of drop_table."""
+class TestDropTableBeforeS3Cleanup:
+    """Verify metadata-only drop is called instead of purge_table."""
 
     @pytest.mark.requirement("AC-1")
-    def test_purge_table_called_for_each_table(self) -> None:
-        """purge_table must be invoked once per table in the namespace."""
+    def test_drop_table_called_for_each_table(self) -> None:
+        """drop_table must be invoked once per table in the namespace."""
         mod = _load_dbt_utils()
         catalog = _make_mock_catalog([("ns1", "t1"), ("ns1", "t2")])
 
         with patch.object(mod, "_get_polaris_catalog", return_value=catalog):
             mod._purge_iceberg_namespace("ns1")
 
-        # purge_table MUST be called, not drop_table
-        assert catalog.purge_table.call_count == 2, "purge_table must be called once per table"
-        catalog.purge_table.assert_any_call("ns1.t1")
-        catalog.purge_table.assert_any_call("ns1.t2")
+        assert catalog.drop_table.call_count == 2, "drop_table must be called once per table"
+        catalog.drop_table.assert_any_call("ns1.t1", purge_requested=False)
+        catalog.drop_table.assert_any_call("ns1.t2", purge_requested=False)
 
     @pytest.mark.requirement("AC-1")
-    def test_drop_table_not_called(self) -> None:
-        """drop_table must NOT be called -- purge_table replaces it."""
+    def test_purge_table_not_called(self) -> None:
+        """purge_table must NOT be called because it can orphan catalog metadata."""
         mod = _load_dbt_utils()
         catalog = _make_mock_catalog([("ns1", "t1")])
 
         with patch.object(mod, "_get_polaris_catalog", return_value=catalog):
             mod._purge_iceberg_namespace("ns1")
 
-        catalog.drop_table.assert_not_called()
+        catalog.purge_table.assert_not_called()
 
     @pytest.mark.requirement("AC-1")
-    def test_source_code_has_no_drop_table_in_purge_fn(self) -> None:
-        """Static check: _purge_iceberg_namespace must not contain drop_table calls.
+    def test_source_code_has_no_purge_table_in_purge_fn(self) -> None:
+        """Static check: _purge_iceberg_namespace must not contain purge_table calls.
 
-        This catches implementations that call purge_table AND drop_table,
-        or that only partially migrate.
+        This catches regressions that set REST ``purgeRequested=true`` and
+        then manually delete S3 after a failed catalog purge.
         """
         source = _DBT_UTILS_PATH.read_text()
         tree = ast.parse(source)
@@ -119,9 +131,8 @@ class TestPurgeTableReplacesDropTable:
             if isinstance(node, ast.FunctionDef) and node.name == "_purge_iceberg_namespace":
                 fn_source = ast.get_source_segment(source, node)
                 assert fn_source is not None
-                # Must contain purge_table
-                assert "purge_table" in fn_source, "_purge_iceberg_namespace must call purge_table"
-                # Must NOT contain drop_table (except in comments/docstrings)
+                assert "drop_table" in fn_source, "_purge_iceberg_namespace must call drop_table"
+                # Must NOT contain purge_table (except in comments/docstrings)
                 # Strip docstring and comments, then check
                 fn_lines = fn_source.split("\n")
                 code_lines = [
@@ -132,8 +143,8 @@ class TestPurgeTableReplacesDropTable:
                 # Remove triple-quoted strings
                 code_no_docstrings = re.sub(r'""".*?"""', "", code_text, flags=re.DOTALL)
                 code_no_docstrings = re.sub(r"'''.*?'''", "", code_no_docstrings, flags=re.DOTALL)
-                assert "drop_table" not in code_no_docstrings, (
-                    "_purge_iceberg_namespace must not call drop_table (use purge_table instead)"
+                assert "purge_table" not in code_no_docstrings, (
+                    "_purge_iceberg_namespace must not call purge_table"
                 )
                 break
         else:
@@ -166,21 +177,19 @@ class TestS3PrefixDeletion:
             mod._delete_s3_prefix(mock_s3, "warehouse", "ns1/t1")
 
     @pytest.mark.requirement("AC-2")
-    def test_s3_delete_called_after_purge(self) -> None:
-        """After purge_table, S3 objects under the table prefix must be deleted."""
+    def test_s3_delete_called_after_metadata_drop(self) -> None:
+        """After drop_table, S3 objects under the table prefix must be deleted."""
         mod = _load_dbt_utils()
         tables = [("ns1", "t1")]
         catalog = _make_mock_catalog(tables)
 
         # Track call order to verify S3 deletion happens
         call_order: list[str] = []
-        original_purge = catalog.purge_table
 
-        def track_purge(fqn: str) -> None:
-            call_order.append(f"purge:{fqn}")
-            return original_purge(fqn)
+        def track_drop(fqn: str, purge_requested: bool = False) -> None:
+            call_order.append(f"drop:{fqn}:{purge_requested}")
 
-        catalog.purge_table.side_effect = track_purge
+        catalog.drop_table.side_effect = track_drop
 
         # Mock boto3 S3 client
         mock_s3 = MagicMock()
@@ -409,17 +418,17 @@ class TestBoto3S3Dependency:
 
 
 class TestCleanupNonFatal:
-    """Verify that purge_table and S3 cleanup failures don't raise."""
+    """Verify that metadata drop and S3 cleanup failures don't raise."""
 
     @pytest.mark.requirement("AC-5")
-    def test_purge_table_exception_does_not_propagate(self) -> None:
-        """If purge_table raises, execution continues to next table."""
+    def test_drop_table_exception_does_not_propagate(self) -> None:
+        """If drop_table raises, execution continues to next table."""
         mod = _load_dbt_utils()
         catalog = MagicMock()
         catalog.list_tables.return_value = [("ns1", "t1"), ("ns1", "t2")]
-        # First purge fails, second succeeds
-        catalog.purge_table.side_effect = [
-            RuntimeError("purge failed"),
+        # First metadata drop fails, second succeeds.
+        catalog.drop_table.side_effect = [
+            RuntimeError("drop failed"),
             None,
         ]
 
@@ -439,9 +448,9 @@ class TestCleanupNonFatal:
             # Must not raise
             mod._purge_iceberg_namespace("ns1")
 
-        # Second table must still have purge_table attempted
-        assert catalog.purge_table.call_count == 2, (
-            "purge_table must be attempted for all tables even when one fails"
+        # Second table must still have drop_table attempted.
+        assert catalog.drop_table.call_count == 2, (
+            "drop_table must be attempted for all tables even when one fails"
         )
 
     @pytest.mark.requirement("AC-5")
@@ -449,7 +458,7 @@ class TestCleanupNonFatal:
         """If S3 cleanup raises, namespace drop still happens.
 
         This test verifies that:
-        1. purge_table is called (not drop_table)
+        1. drop_table is called without catalog-side purge
         2. S3 cleanup is attempted (boto3.client is used)
         3. When S3 cleanup raises, the function still completes
         4. Namespace drop still happens after S3 failure
@@ -472,9 +481,8 @@ class TestCleanupNonFatal:
             # Must not raise
             mod._purge_iceberg_namespace("ns1")
 
-        # purge_table must have been called (not drop_table)
-        catalog.purge_table.assert_called_once_with("ns1.t1")
-        catalog.drop_table.assert_not_called()
+        catalog.drop_table.assert_called_once_with("ns1.t1", purge_requested=False)
+        catalog.purge_table.assert_not_called()
         # boto3.client must have been called (S3 cleanup was attempted)
         mock_boto3_client.assert_called()
         # Namespace drop must still be attempted despite S3 failure
@@ -507,11 +515,11 @@ class TestCleanupNonFatal:
 
 
 class TestNamespaceDropPreserved:
-    """Verify namespace is dropped after all tables are purged."""
+    """Verify namespace is dropped after all table metadata is dropped."""
 
     @pytest.mark.requirement("AC-6")
     def test_namespace_dropped_after_all_tables(self) -> None:
-        """drop_namespace must be called after all purge_table calls complete."""
+        """drop_namespace must be called after all drop_table calls complete."""
         mod = _load_dbt_utils()
         catalog = MagicMock()
         catalog.list_tables.return_value = [("ns1", "t1"), ("ns1", "t2")]
@@ -522,13 +530,13 @@ class TestNamespaceDropPreserved:
 
         call_sequence: list[str] = []
 
-        def track_purge(fqn: str) -> None:
-            call_sequence.append(f"purge_table:{fqn}")
+        def track_drop(fqn: str, purge_requested: bool = False) -> None:
+            call_sequence.append(f"drop_table:{fqn}:{purge_requested}")
 
         def track_drop_ns(ns: str) -> None:
             call_sequence.append(f"drop_namespace:{ns}")
 
-        catalog.purge_table.side_effect = track_purge
+        catalog.drop_table.side_effect = track_drop
         catalog.drop_namespace.side_effect = track_drop_ns
 
         mock_s3 = MagicMock()
@@ -542,17 +550,17 @@ class TestNamespaceDropPreserved:
         ):
             mod._purge_iceberg_namespace("ns1")
 
-        # Verify purge_table was actually called (not vacuously true)
-        purge_indices = [i for i, c in enumerate(call_sequence) if c.startswith("purge_table:")]
-        assert len(purge_indices) == 2, (
-            f"Expected 2 purge_table calls, got {len(purge_indices)}. Sequence: {call_sequence}"
+        # Verify drop_table was actually called (not vacuously true)
+        drop_indices = [i for i, c in enumerate(call_sequence) if c.startswith("drop_table:")]
+        assert len(drop_indices) == 2, (
+            f"Expected 2 drop_table calls, got {len(drop_indices)}. Sequence: {call_sequence}"
         )
 
         # Verify ordering: purge tables first, then drop namespace
         assert "drop_namespace:ns1" in call_sequence, "drop_namespace must be called"
         ns_drop_idx = call_sequence.index("drop_namespace:ns1")
-        assert all(pi < ns_drop_idx for pi in purge_indices), (
-            f"All purge_table calls must precede drop_namespace. Sequence: {call_sequence}"
+        assert all(di < ns_drop_idx for di in drop_indices), (
+            f"All drop_table calls must precede drop_namespace. Sequence: {call_sequence}"
         )
 
     @pytest.mark.requirement("AC-6")
@@ -580,8 +588,8 @@ class TestNamespaceDropPreserved:
             mod._purge_iceberg_namespace("ns1")
 
     @pytest.mark.requirement("AC-6")
-    def test_full_sequence_purge_then_s3_then_namespace(self) -> None:
-        """Full call sequence: purge_table -> S3 delete -> drop_namespace."""
+    def test_full_sequence_drop_then_s3_then_namespace(self) -> None:
+        """Full call sequence: drop_table -> S3 delete -> drop_namespace."""
         mod = _load_dbt_utils()
         catalog = MagicMock()
         catalog.list_tables.return_value = [("ns1", "t1")]
@@ -592,13 +600,13 @@ class TestNamespaceDropPreserved:
 
         call_sequence: list[str] = []
 
-        def _track_purge(_fqn: str) -> None:
-            call_sequence.append("purge_table")
+        def _track_drop(_fqn: str, purge_requested: bool = False) -> None:
+            call_sequence.append(f"drop_table:{purge_requested}")
 
         def _track_drop_ns(_ns: str) -> None:
             call_sequence.append("drop_namespace")
 
-        catalog.purge_table.side_effect = _track_purge
+        catalog.drop_table.side_effect = _track_drop
         catalog.drop_namespace.side_effect = _track_drop_ns
 
         mock_s3 = MagicMock()
@@ -617,15 +625,15 @@ class TestNamespaceDropPreserved:
         ):
             mod._purge_iceberg_namespace("ns1")
 
-        # Expected order: purge -> s3 -> namespace drop
-        assert "purge_table" in call_sequence, "purge_table must be called"
+        # Expected order: catalog drop -> s3 -> namespace drop
+        assert "drop_table:False" in call_sequence, "drop_table must be called"
         assert "s3_list" in call_sequence, "S3 listing must be called"
         assert "drop_namespace" in call_sequence, "drop_namespace must be called"
 
-        purge_idx = call_sequence.index("purge_table")
+        drop_idx = call_sequence.index("drop_table:False")
         s3_idx = call_sequence.index("s3_list")
         ns_idx = call_sequence.index("drop_namespace")
 
-        assert purge_idx < s3_idx < ns_idx, (
-            f"Expected purge_table < s3_list < drop_namespace, got sequence: {call_sequence}"
+        assert drop_idx < s3_idx < ns_idx, (
+            f"Expected drop_table < s3_list < drop_namespace, got sequence: {call_sequence}"
         )

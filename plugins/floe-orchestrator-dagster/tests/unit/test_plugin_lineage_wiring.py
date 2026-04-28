@@ -1,44 +1,92 @@
-"""Unit tests for lineage resource wiring in DagsterOrchestratorPlugin.
+"""Unit tests for lineage resource wiring in the Dagster runtime.
 
-These tests verify that create_definitions() wires try_create_lineage_resource()
-into the Definitions resources dict, and that assets created by
+These tests verify that build_product_definitions() wires try_create_lineage_resource()
+into the runtime Definitions resources dict, and that assets created by
 _create_asset_for_transform() declare "lineage" in required_resource_keys.
 
 Requirements Covered:
-- AC-11: Lineage resource wiring into create_definitions()
+- AC-11: Lineage resource wiring through the runtime builder / loader path
 """
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+_RUNTIME_MODULE = "floe_orchestrator_dagster.runtime"
 
 if TYPE_CHECKING:
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
-_PLUGIN_MODULE = "floe_orchestrator_dagster.plugin"
-_LINEAGE_RESOURCE_MODULE = "floe_orchestrator_dagster.resources.lineage"
+
+def _write_runtime_project(tmp_path: Path, artifacts: dict[str, Any]) -> Path:
+    """Write a minimal dbt project for runtime builder tests."""
+    project_dir = tmp_path / "dbt_project"
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "compiled_artifacts.json").write_text(json.dumps(artifacts))
+
+    target_dir = project_dir / "target"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "metadata": {
+            "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
+            "dbt_version": "1.7.0",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "invocation_id": "test-invocation",
+        },
+        "nodes": {},
+        "sources": {},
+        "exposures": {},
+        "metrics": {},
+        "groups": {},
+        "selectors": {},
+        "disabled": [],
+        "parent_map": {},
+        "child_map": {},
+        "group_map": {},
+        "semantic_models": {},
+        "unit_tests": {},
+        "saved_queries": {},
+    }
+    (target_dir / "manifest.json").write_text(json.dumps(manifest))
+    return project_dir
+
+
+def _build_runtime_definitions(artifacts: dict[str, Any], tmp_path: Path) -> Any:
+    """Build runtime Definitions from validated artifacts and a real project_dir."""
+    from floe_orchestrator_dagster.runtime import build_product_definitions
+
+    validated = CompiledArtifacts.model_validate(artifacts)
+    project_dir = _write_runtime_project(tmp_path, artifacts)
+    return build_product_definitions(
+        product_name=validated.metadata.product_name,
+        artifacts=validated,
+        project_dir=project_dir,
+    )
 
 
 class TestCreateDefinitionsIncludesLineageResource:
-    """Test create_definitions() includes lineage resource in Definitions.
+    """Test runtime builder includes lineage resource in Definitions.
 
-    Validates AC-11: create_definitions() MUST call try_create_lineage_resource(plugins)
+    Validates AC-11: runtime building MUST call try_create_lineage_resource(plugins)
     and merge the result into the Definitions resources dict.
     """
 
     @pytest.mark.requirement("AC-11")
     def test_create_definitions_includes_lineage_resource(
         self,
-        dagster_plugin: DagsterOrchestratorPlugin,
+        tmp_path: Path,
         valid_compiled_artifacts: dict[str, Any],
     ) -> None:
-        """Test create_definitions returns Definitions with 'lineage' key in resources.
+        """Test runtime builder returns Definitions with 'lineage' key in resources.
 
-        When create_definitions() is called with valid artifacts, the returned
+        When runtime Definitions are built with valid artifacts, the returned
         Definitions MUST include a "lineage" key in its resources dict. This
         verifies the lineage resource is actually merged into the final
         Definitions object, not just created and discarded.
@@ -47,16 +95,16 @@ class TestCreateDefinitionsIncludesLineageResource:
 
         mock_lineage_resource = MagicMock()
 
-        with patch(f"{_LINEAGE_RESOURCE_MODULE}.try_create_lineage_resource") as mock_try_create:
+        with patch(f"{_RUNTIME_MODULE}.try_create_lineage_resource") as mock_try_create:
             mock_try_create.return_value = {"lineage": mock_lineage_resource}
 
-            result = dagster_plugin.create_definitions(valid_compiled_artifacts)
+            result = _build_runtime_definitions(valid_compiled_artifacts, tmp_path)
 
             assert isinstance(result, Definitions)
             assert isinstance(result.resources, dict)
             assert "lineage" in result.resources, (
                 "Definitions.resources must contain 'lineage' key — "
-                "create_definitions() must merge try_create_lineage_resource() "
+                "build_product_definitions() must merge try_create_lineage_resource() "
                 "result into the resources dict"
             )
             assert result.resources["lineage"] is mock_lineage_resource, (
@@ -66,15 +114,15 @@ class TestCreateDefinitionsIncludesLineageResource:
 
 
 class TestCreateDefinitionsCallsTryCreateLineageResource:
-    """Test create_definitions() calls try_create_lineage_resource with correct args.
+    """Test runtime builder calls try_create_lineage_resource with correct args.
 
-    Validates AC-11: create_definitions() MUST call try_create_lineage_resource(plugins).
+    Validates AC-11: runtime building MUST call try_create_lineage_resource(plugins).
     """
 
     @pytest.mark.requirement("AC-11")
     def test_create_definitions_calls_try_create_lineage_resource(
         self,
-        dagster_plugin: DagsterOrchestratorPlugin,
+        tmp_path: Path,
         valid_compiled_artifacts: dict[str, Any],
     ) -> None:
         """Test try_create_lineage_resource is called with the plugins from artifacts.
@@ -85,10 +133,10 @@ class TestCreateDefinitionsCallsTryCreateLineageResource:
         """
         mock_lineage_resource = MagicMock()
 
-        with patch(f"{_LINEAGE_RESOURCE_MODULE}.try_create_lineage_resource") as mock_try_create:
+        with patch(f"{_RUNTIME_MODULE}.try_create_lineage_resource") as mock_try_create:
             mock_try_create.return_value = {"lineage": mock_lineage_resource}
 
-            dagster_plugin.create_definitions(valid_compiled_artifacts)
+            _build_runtime_definitions(valid_compiled_artifacts, tmp_path)
 
             # Verify the factory was called exactly once
             mock_try_create.assert_called_once()
@@ -104,7 +152,7 @@ class TestCreateDefinitionsCallsTryCreateLineageResource:
     @pytest.mark.requirement("AC-11")
     def test_create_definitions_passes_validated_plugins_to_lineage_factory(
         self,
-        dagster_plugin: DagsterOrchestratorPlugin,
+        tmp_path: Path,
         valid_compiled_artifacts: dict[str, Any],
     ) -> None:
         """Test the plugins object passed to try_create_lineage_resource has expected structure.
@@ -117,25 +165,39 @@ class TestCreateDefinitionsCallsTryCreateLineageResource:
 
         captured_plugins: list[Any] = []
 
-        def capture_plugins(plugins: Any) -> dict[str, Any]:
+        captured_strict: list[bool] = []
+        captured_namespaces: list[str | None] = []
+
+        def capture_plugins(
+            plugins: Any,
+            *,
+            strict: bool = False,
+            default_namespace: str | None = None,
+        ) -> dict[str, Any]:
             captured_plugins.append(plugins)
+            captured_strict.append(strict)
+            captured_namespaces.append(default_namespace)
             return {"lineage": MagicMock()}
 
         with patch(
-            f"{_LINEAGE_RESOURCE_MODULE}.try_create_lineage_resource",
+            f"{_RUNTIME_MODULE}.try_create_lineage_resource",
             side_effect=capture_plugins,
         ):
-            dagster_plugin.create_definitions(valid_compiled_artifacts)
+            _build_runtime_definitions(valid_compiled_artifacts, tmp_path)
 
         assert len(captured_plugins) == 1, "try_create_lineage_resource must be called exactly once"
         assert isinstance(captured_plugins[0], ResolvedPlugins), (
             f"try_create_lineage_resource must receive a ResolvedPlugins instance, "
             f"got {type(captured_plugins[0]).__name__}"
         )
+        assert captured_strict == [False]
+        assert captured_namespaces == [
+            valid_compiled_artifacts["observability"]["lineage_namespace"]
+        ]
 
 
 class TestCreateDefinitionsLineageResourceWhenNoPlugins:
-    """Test create_definitions() still provides lineage when plugins=None.
+    """Test runtime builder still provides lineage when plugins=None.
 
     Validates AC-11: When artifacts have plugins=None, lineage resource MUST
     still be present (NoOp).
@@ -190,12 +252,12 @@ class TestCreateDefinitionsLineageResourceWhenNoPlugins:
     @pytest.mark.requirement("AC-11")
     def test_create_definitions_lineage_resource_when_no_plugins(
         self,
-        dagster_plugin: DagsterOrchestratorPlugin,
+        tmp_path: Path,
         artifacts_without_plugins: dict[str, Any],
     ) -> None:
         """Test lineage resource is still present when artifacts have no plugins.
 
-        Even when plugins=None, create_definitions() MUST still call
+        Even when plugins=None, build_product_definitions() MUST still call
         try_create_lineage_resource (which returns a NoOp resource), so
         assets that require "lineage" resource key can still execute.
         """
@@ -203,10 +265,10 @@ class TestCreateDefinitionsLineageResourceWhenNoPlugins:
 
         mock_noop_lineage = MagicMock()
 
-        with patch(f"{_LINEAGE_RESOURCE_MODULE}.try_create_lineage_resource") as mock_try_create:
+        with patch(f"{_RUNTIME_MODULE}.try_create_lineage_resource") as mock_try_create:
             mock_try_create.return_value = {"lineage": mock_noop_lineage}
 
-            result = dagster_plugin.create_definitions(artifacts_without_plugins)
+            result = _build_runtime_definitions(artifacts_without_plugins, tmp_path)
 
             assert isinstance(result, Definitions)
 
@@ -223,7 +285,7 @@ class TestCreateDefinitionsLineageResourceWhenNoPlugins:
     @pytest.mark.requirement("AC-11")
     def test_create_definitions_calls_lineage_factory_with_none_plugins(
         self,
-        dagster_plugin: DagsterOrchestratorPlugin,
+        tmp_path: Path,
         artifacts_without_plugins: dict[str, Any],
     ) -> None:
         """Test lineage factory is called with None when artifacts have no plugins.
@@ -234,21 +296,35 @@ class TestCreateDefinitionsLineageResourceWhenNoPlugins:
         """
         captured_args: list[Any] = []
 
-        def capture_call(plugins: Any) -> dict[str, Any]:
+        captured_strict: list[bool] = []
+        captured_namespaces: list[str | None] = []
+
+        def capture_call(
+            plugins: Any,
+            *,
+            strict: bool = False,
+            default_namespace: str | None = None,
+        ) -> dict[str, Any]:
             captured_args.append(plugins)
+            captured_strict.append(strict)
+            captured_namespaces.append(default_namespace)
             return {"lineage": MagicMock()}
 
         with patch(
-            f"{_LINEAGE_RESOURCE_MODULE}.try_create_lineage_resource",
+            f"{_RUNTIME_MODULE}.try_create_lineage_resource",
             side_effect=capture_call,
         ):
-            dagster_plugin.create_definitions(artifacts_without_plugins)
+            _build_runtime_definitions(artifacts_without_plugins, tmp_path)
 
         assert len(captured_args) == 1, (
             "try_create_lineage_resource must be called even when plugins is None"
         )
         # plugins=None is acceptable; the factory handles it
         # The key assertion is that the factory IS called (above)
+        assert captured_strict == [False]
+        assert captured_namespaces == [
+            artifacts_without_plugins["observability"]["lineage_namespace"]
+        ]
 
 
 class TestDBTResourceKeysIncludesLineage:
@@ -382,21 +458,21 @@ class TestAssetRequiredResourceKeysIncludesLineage:
     @pytest.mark.requirement("AC-11")
     def test_create_definitions_assets_have_lineage_resource_key(
         self,
-        dagster_plugin: DagsterOrchestratorPlugin,
+        tmp_path: Path,
         valid_compiled_artifacts: dict[str, Any],
     ) -> None:
-        """Test assets within Definitions from create_definitions() have lineage resource key.
+        """Test runtime Definitions assets have lineage resource key.
 
-        End-to-end check: not just create_assets_from_transforms in isolation,
+        Runtime check: not just create_assets_from_transforms in isolation,
         but assets as they appear in the final Definitions object returned by
-        create_definitions().
+        build_product_definitions().
         """
         mock_lineage_resource = MagicMock()
 
-        with patch(f"{_LINEAGE_RESOURCE_MODULE}.try_create_lineage_resource") as mock_try_create:
+        with patch(f"{_RUNTIME_MODULE}.try_create_lineage_resource") as mock_try_create:
             mock_try_create.return_value = {"lineage": mock_lineage_resource}
 
-            result = dagster_plugin.create_definitions(valid_compiled_artifacts)
+            result = _build_runtime_definitions(valid_compiled_artifacts, tmp_path)
 
         # valid_compiled_artifacts has 1 model (stg_customers)
         assert len(result.assets) >= 1, "Expected at least 1 asset in Definitions"
@@ -404,7 +480,7 @@ class TestAssetRequiredResourceKeysIncludesLineage:
         for asset_def in result.assets:
             required_keys = asset_def.required_resource_keys
             assert "lineage" in required_keys, (
-                f"Asset {asset_def.key} from create_definitions() must have 'lineage' "
+                f"Asset {asset_def.key} from build_product_definitions() must have 'lineage' "
                 f"in required_resource_keys, got: {required_keys}"
             )
 

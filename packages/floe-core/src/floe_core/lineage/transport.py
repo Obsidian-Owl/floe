@@ -92,6 +92,9 @@ class NoOpLineageTransport:
     async def close_async(self) -> None:
         """No-op async close."""
 
+    async def flush(self) -> None:
+        """No-op flush."""
+
 
 class ConsoleLineageTransport:
     """Transport that logs events as JSON via structlog.
@@ -125,6 +128,9 @@ class ConsoleLineageTransport:
 
     async def close_async(self) -> None:
         """No-op async close."""
+
+    async def flush(self) -> None:
+        """No-op flush."""
 
 
 class CompositeLineageTransport:
@@ -180,6 +186,17 @@ class CompositeLineageTransport:
             except Exception:
                 logger.exception(
                     "Child transport failed to close_async",
+                    extra={"transport": type(transport).__name__},
+                )
+
+    async def flush(self) -> None:
+        """Flush all child transports that support flushing."""
+        for transport in self._transports:
+            try:
+                await transport.flush()
+            except Exception:
+                logger.exception(
+                    "Child transport failed to flush",
                     extra={"transport": type(transport).__name__},
                 )
 
@@ -291,9 +308,12 @@ class HttpLineageTransport:
 
         while True:
             event = await self._async_queue.get()
-            if event is None:
-                break
-            await self._post_event(event, httpx_available)
+            try:
+                if event is None:
+                    break
+                await self._post_event(event, httpx_available)
+            finally:
+                self._async_queue.task_done()
 
     async def _post_event(self, event: LineageEvent, httpx_available: bool) -> None:
         """Post a single event via HTTP.
@@ -362,21 +382,33 @@ class HttpLineageTransport:
         except asyncio.QueueFull:
             logger.warning("Queue full during close, some events may be lost")
 
+    async def flush(self) -> None:
+        """Wait until all queued lineage events have been posted."""
+        if self._consumer_task is None:
+            return
+        await self._async_queue.join()
+
     async def close_async(self) -> None:
         """Drain queue and wait for consumer task to complete.
 
         Use this when you need to ensure all queued events are sent
         before proceeding (e.g., in tests or graceful shutdown).
         """
+        if self._closed:
+            await self.flush()
+            if self._consumer_task is not None:
+                await self._consumer_task
+            return
+
+        await self.flush()
         self._closed = True
 
-        try:
-            self._async_queue.put_nowait(None)
-        except asyncio.QueueFull:
-            logger.warning("Queue full during close, some events may be lost")
+        if self._consumer_task is None:
+            return
 
-        if self._consumer_task is not None:
-            await self._consumer_task
+        await self._async_queue.put(None)
+
+        await self._consumer_task
 
 
 class SyncNoOpTransport:

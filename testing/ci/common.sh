@@ -101,6 +101,15 @@ floe_kind_evict_image() {
     docker exec "${control_plane}" ctr -n k8s.io images rm "${image_ref}" >/dev/null 2>&1 || true
 }
 
+floe_public_registry_command() {
+    if [[ -x "${_FLOE_REPO_ROOT}/scripts/with-public-docker-config.sh" ]]; then
+        "${_FLOE_REPO_ROOT}/scripts/with-public-docker-config.sh" "$@"
+        return
+    fi
+
+    "$@"
+}
+
 # floe_service_name <component>
 # Returns the K8s service/resource name for a platform component, derived
 # from the release name. Example: floe_service_name polaris -> floe-platform-polaris
@@ -143,7 +152,7 @@ floe_ensure_chart_dependencies() {
         helm repo add --force-update "floe-${dep_name}" "${dep_repo}" >/dev/null
     done < <(printf '%s\n' "${dependency_list}" | tail -n +2)
 
-    helm dependency build "${FLOE_CHART_DIR}" >/dev/null
+    floe_public_registry_command helm dependency build "${FLOE_CHART_DIR}" >/dev/null
 }
 
 floe_render_test_job() {

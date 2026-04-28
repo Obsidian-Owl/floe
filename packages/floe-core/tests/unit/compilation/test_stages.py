@@ -1520,6 +1520,32 @@ class TestObservabilityFromManifest:
         )
 
     @pytest.mark.requirement("AC-9.6")
+    def test_compile_pipeline_resolves_demo_lineage_backend(self, spec_path: Path) -> None:
+        """Test that runtime lineage backend is selected by the demo manifest.
+
+        The OpenLineage HTTP endpoint drives compilation-time lineage emission,
+        while the lineage_backend plugin drives runtime Dagster emission. Both
+        must be present for Marquez to prove end-to-end lineage.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        demo_manifest_path = Path(__file__).resolve().parents[5] / "demo" / "manifest.yaml"
+        assert demo_manifest_path.exists(), f"Demo manifest not found at {demo_manifest_path}"
+
+        result = compile_pipeline(spec_path, demo_manifest_path)
+
+        lineage_backend = result.plugins.lineage_backend
+        assert lineage_backend is not None, (
+            "Demo manifest enables OpenLineage but does not select a lineage_backend plugin; "
+            "Dagster runtime will fall back to NoOpLineageResource."
+        )
+        assert lineage_backend.type == "marquez"
+        assert lineage_backend.config == {
+            "url": "http://floe-platform-marquez:5000",
+            "allow_insecure_http": True,
+        }
+
+    @pytest.mark.requirement("AC-9.6")
     def test_compile_pipeline_reads_lineage_transport_from_manifest(self, spec_path: Path) -> None:
         """Test that lineage transport comes from manifest.
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Generator
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -32,6 +33,7 @@ from testing.fixtures.kubernetes import (
     check_pod_ready,
     get_pod_uid,
     run_helm,
+    run_helm_template,
     run_kubectl,
 )
 
@@ -289,6 +291,142 @@ class TestRunHelm:
 
         _, kwargs = mock_subprocess.call_args
         assert kwargs.get("shell", False) is False
+
+
+class TestRunHelmTemplate:
+    """Tests for chart-driven Helm template rendering."""
+
+    @pytest.mark.requirement("AC-2.7")
+    def test_adds_chart_declared_repositories_before_dependency_build(
+        self,
+        tmp_path: Path,
+        mock_subprocess: MagicMock,
+    ) -> None:
+        """Helm repositories must be derived from Chart.yaml dependencies."""
+        chart_path = tmp_path / "chart"
+        chart_path.mkdir()
+        (chart_path / "Chart.yaml").write_text(
+            """
+apiVersion: v2
+name: test-chart
+version: 0.1.0
+dependencies:
+  - name: dagster
+    version: 1.0.0
+    repository: https://dagster-io.github.io/helm
+  - name: opentelemetry-collector
+    alias: otel
+    version: 1.0.0
+    repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+  - name: local-only
+    version: 1.0.0
+    repository: file://../local-only
+""",
+        )
+        mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="rendered", stderr=""
+        )
+
+        result = run_helm_template("test-release", chart_path, timeout=60)
+
+        assert result.returncode == 0
+        commands = [call.args[0] for call in mock_subprocess.call_args_list]
+        assert commands == [
+            [
+                "helm",
+                "repo",
+                "add",
+                "dagster",
+                "https://dagster-io.github.io/helm",
+                "--force-update",
+            ],
+            [
+                "helm",
+                "repo",
+                "add",
+                "otel",
+                "https://open-telemetry.github.io/opentelemetry-helm-charts",
+                "--force-update",
+            ],
+            ["helm", "dependency", "build", str(chart_path)],
+            ["helm", "template", "test-release", str(chart_path)],
+        ]
+
+    @pytest.mark.requirement("AC-2.7")
+    def test_returns_repo_add_failure_before_rendering(
+        self,
+        tmp_path: Path,
+        mock_subprocess: MagicMock,
+    ) -> None:
+        """Repository setup failures should be returned without template execution."""
+        chart_path = tmp_path / "chart"
+        chart_path.mkdir()
+        (chart_path / "Chart.yaml").write_text(
+            """
+apiVersion: v2
+name: test-chart
+version: 0.1.0
+dependencies:
+  - name: dagster
+    version: 1.0.0
+    repository: https://dagster-io.github.io/helm
+""",
+        )
+        expected = subprocess.CompletedProcess(
+            args=["helm", "repo", "add"],
+            returncode=1,
+            stdout="",
+            stderr="repo error",
+        )
+        mock_subprocess.return_value = expected
+
+        result = run_helm_template("test-release", chart_path)
+
+        assert result is expected
+        assert len(mock_subprocess.call_args_list) == 1
+
+    @pytest.mark.requirement("AC-2.7")
+    def test_forwards_values_set_values_and_schema_flag(
+        self,
+        tmp_path: Path,
+        mock_subprocess: MagicMock,
+    ) -> None:
+        """Template arguments should preserve caller-provided render options."""
+        chart_path = tmp_path / "chart"
+        chart_path.mkdir()
+        (chart_path / "Chart.yaml").write_text(
+            """
+apiVersion: v2
+name: test-chart
+version: 0.1.0
+""",
+        )
+        values_path = tmp_path / "values.yaml"
+        values_path.write_text("networkPolicy:\n  enabled: true\n")
+        mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="rendered", stderr=""
+        )
+
+        run_helm_template(
+            "test-release",
+            chart_path,
+            values_path=values_path,
+            set_values={"networkPolicy.enabled": "true"},
+            skip_schema_validation=True,
+        )
+
+        template_command = mock_subprocess.call_args_list[-1].args[0]
+        assert template_command == [
+            "helm",
+            "template",
+            "test-release",
+            str(chart_path),
+            "--skip-schema-validation",
+            "-f",
+            str(values_path),
+            "--set",
+            "networkPolicy.enabled=true",
+        ]
 
 
 # ---------------------------------------------------------------------------

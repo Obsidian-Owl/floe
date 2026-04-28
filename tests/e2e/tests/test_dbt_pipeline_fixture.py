@@ -27,6 +27,8 @@ from typing import Any
 
 import pytest
 
+pytestmark = pytest.mark.developer_workflow
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -61,6 +63,17 @@ def _load_runtime_conftest_module() -> Any:
     spec = importlib.util.spec_from_file_location("floe_e2e_conftest_runtime", _CONFTEST_PATH)
     assert spec is not None, "Could not create import spec for tests/e2e/conftest.py"
     assert spec.loader is not None, "Could not load tests/e2e/conftest.py"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_runtime_dbt_utils_module() -> Any:
+    """Load tests/e2e/dbt_utils.py as a standalone module for runtime tests."""
+    dbt_utils_path = _REPO_ROOT / "tests" / "e2e" / "dbt_utils.py"
+    spec = importlib.util.spec_from_file_location("floe_e2e_dbt_utils_runtime", dbt_utils_path)
+    assert spec is not None, "Could not create import spec for tests/e2e/dbt_utils.py"
+    assert spec.loader is not None, "Could not load tests/e2e/dbt_utils.py"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -580,6 +593,121 @@ class TestDbtPipelineResultFixtureSemantics:
             "customer_360_raw:True",
             "customer_360:True",
         ]
+
+
+class TestIcebergNamespacePurgeBehavior:
+    """Runtime tests for resilient Iceberg namespace cleanup."""
+
+    @pytest.mark.requirement("AC-1")
+    def test_namespace_purge_drops_catalog_metadata_before_s3_sweep(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """S3 cleanup must run only after catalog table metadata is removed."""
+        dbt_utils = _load_runtime_dbt_utils_module()
+        events: list[str] = []
+
+        class _Metadata:
+            location = "s3://floe-iceberg/customer_360/orders"
+
+        class _Table:
+            metadata = _Metadata()
+
+        class _Catalog:
+            dropped = False
+
+            def list_tables(self, namespace: str) -> list[tuple[str, str]]:
+                events.append(f"list:{namespace}")
+                if self.dropped:
+                    return []
+                return [("customer_360", "orders")]
+
+            def load_table(self, identifier: str) -> _Table:
+                events.append(f"load:{identifier}")
+                return _Table()
+
+            def drop_table(self, identifier: str, purge_requested: bool = False) -> None:
+                events.append(f"drop:{identifier}:{purge_requested}")
+                self.dropped = True
+
+            def purge_table(self, identifier: str) -> None:
+                events.append(f"purge:{identifier}")
+                raise AssertionError("purge_table must not be used for E2E namespace reset")
+
+            def drop_namespace(self, namespace: str) -> None:
+                events.append(f"drop_namespace:{namespace}")
+
+        catalog = _Catalog()
+        monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", lambda *, fresh=False: catalog)
+        monkeypatch.setattr(dbt_utils, "get_minio_credentials", lambda: ("access", "secret"))
+        monkeypatch.setenv("MINIO_ENDPOINT", "http://minio:9000")
+        monkeypatch.setattr(dbt_utils.boto3, "client", lambda *args, **kwargs: object())
+
+        def _delete_s3_prefix(s3_client: object, bucket: str, prefix: str) -> int:
+            del s3_client
+            events.append(f"s3_delete:{bucket}:{prefix}")
+            return 5
+
+        monkeypatch.setattr(dbt_utils, "_delete_s3_prefix", _delete_s3_prefix)
+
+        dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True)
+
+        assert events.index("drop:customer_360.orders:False") < events.index(
+            "s3_delete:floe-iceberg:customer_360/orders"
+        )
+        assert "purge:customer_360.orders" not in events
+
+    @pytest.mark.requirement("AC-1")
+    def test_namespace_purge_does_not_delete_s3_when_catalog_drop_fails(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Do not orphan Polaris metadata by deleting files after a failed drop."""
+        dbt_utils = _load_runtime_dbt_utils_module()
+        events: list[str] = []
+
+        class _Metadata:
+            location = "s3://floe-iceberg/customer_360/orders"
+
+        class _Table:
+            metadata = _Metadata()
+
+        class _Catalog:
+            def list_tables(self, namespace: str) -> list[tuple[str, str]]:
+                events.append(f"list:{namespace}")
+                return [("customer_360", "orders")]
+
+            def load_table(self, identifier: str) -> _Table:
+                events.append(f"load:{identifier}")
+                return _Table()
+
+            def drop_table(self, identifier: str, purge_requested: bool = False) -> None:
+                events.append(f"drop:{identifier}:{purge_requested}")
+                raise RuntimeError("drop forbidden")
+
+            def purge_table(self, identifier: str) -> None:
+                events.append(f"purge:{identifier}")
+                raise RuntimeError("purge forbidden")
+
+            def drop_namespace(self, namespace: str) -> None:
+                events.append(f"drop_namespace:{namespace}")
+
+        catalog = _Catalog()
+        monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", lambda *, fresh=False: catalog)
+        monkeypatch.setattr(dbt_utils, "get_minio_credentials", lambda: ("access", "secret"))
+        monkeypatch.setenv("MINIO_ENDPOINT", "http://minio:9000")
+        monkeypatch.setattr(dbt_utils.boto3, "client", lambda *args, **kwargs: object())
+        monkeypatch.setattr(
+            dbt_utils,
+            "_delete_s3_prefix",
+            lambda *args, **kwargs: events.append("s3_delete"),
+        )
+
+        with pytest.raises(dbt_utils.NamespaceResetError, match="Could not drop catalog table"):
+            dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
+
+        assert "drop:customer_360.orders:False" in events
+        assert "s3_delete" not in events
 
     @pytest.mark.requirement("AC-1")
     def test_runtime_teardown_attempts_both_namespaces_before_raising_reset_error(

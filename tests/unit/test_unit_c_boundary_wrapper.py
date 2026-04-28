@@ -34,10 +34,23 @@ def test_boundary_wrapper_restores_demo_image_before_waiting_for_flux() -> None:
     assert "ensure_remote_demo_image_loaded()" in script
     assert "sync_devpod_checkout" in script
     assert 'local demo_image="${FLOE_DEMO_IMAGE}"' in script
-    assert "FLOE_DEMO_IMAGE_REPOSITORY='${FLOE_DEMO_IMAGE_REPOSITORY}'" in script
-    assert "FLOE_DEMO_IMAGE_TAG='${FLOE_DEMO_IMAGE_TAG}'" in script
-    assert "KIND_CLUSTER_NAME='${FLOE_KIND_CLUSTER}' make build-demo-image" in script
-    assert "\"kind load docker-image '${demo_image}' --name '${FLOE_KIND_CLUSTER}'\"" in script
+    assert "FLOE_DEMO_IMAGE_REPOSITORY=${image_repository_q}" in script
+    assert "FLOE_DEMO_IMAGE_TAG=${image_tag_q}" in script
+    assert "KIND_CLUSTER_NAME=${kind_cluster_q} make build-demo-image" in script
+    assert '"kind load docker-image ${demo_image_q} --name ${kind_cluster_q}"' in script
+
+
+@pytest.mark.requirement("RAC-7")
+def test_boundary_wrapper_shell_quotes_remote_image_commands() -> None:
+    """Remote image repair commands must quote image, cluster, and workdir values."""
+    script = _BOUNDARY_SCRIPT.read_text()
+
+    assert "shell_quote()" in script
+    assert 'common_sh_q="$(shell_quote "${DEVPOD_REMOTE_WORKDIR}/testing/ci/common.sh")"' in script
+    assert 'demo_image_q="$(shell_quote "${demo_image}")"' in script
+    assert 'kind_cluster_q="$(shell_quote "${FLOE_KIND_CLUSTER}")"' in script
+    assert "source '${DEVPOD_REMOTE_WORKDIR}/testing/ci/common.sh'" not in script
+    assert "floe_kind_evict_image '${demo_image}' '${FLOE_KIND_CLUSTER}'" not in script
 
 
 @pytest.mark.requirement("RAC-8")

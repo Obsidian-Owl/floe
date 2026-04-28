@@ -1082,7 +1082,9 @@ tests:
   # is the number of consecutive `sh.helm.release.v1.{{ .Release.Name }}.vN`
   # secrets to pre-authorize (v1..vN). Raise if a test run executes more
   # than `helmRevisionWindow` consecutive `helm upgrade` calls on the same
-  # release before cleanup.
+  # release before cleanup. Keep this in the low hundreds at most; each
+  # increment adds another Role resourceName entry and large Roles can hit
+  # Kubernetes API object-size limits.
   destructive:
     helmRevisionWindow: 20
   # Resource requests/limits for test pods.

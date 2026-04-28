@@ -4,23 +4,24 @@ This module provides the DagsterOrchestratorPlugin implementation that enables
 Dagster as the orchestration platform for floe data pipelines. The plugin
 implements the OrchestratorPlugin ABC and provides:
 
-- Generation of Dagster Definitions from CompiledArtifacts
+- Validation of CompiledArtifacts before runtime loading
 - Creation of software-defined assets from dbt transforms
 - Helm values for K8s deployment of Dagster services
 - OpenLineage event emission for data lineage tracking
 - Cron-based job scheduling with timezone support
 
 Example:
-    >>> from floe_orchestrator_dagster import DagsterOrchestratorPlugin
-    >>> plugin = DagsterOrchestratorPlugin()
-    >>> plugin.name
-    'dagster'
-    >>> definitions = plugin.create_definitions(compiled_artifacts)
+    Runtime Definitions are loaded through the generated definitions.py shim,
+    which calls load_product_definitions(product_name, project_dir). Direct
+    create_definitions() calls validate artifacts but require the loader path
+    because dbt manifest, profiles.yml, and compiled_artifacts.json are
+    resolved from a single product directory.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -35,9 +36,11 @@ from floe_core.plugins.orchestrator import (
     ValidationResult,
 )
 from floe_core.schemas import CompiledArtifacts
+from floe_core.schemas.compiled_artifacts import PRODUCT_NAME_PATTERN
 from pydantic import ValidationError as PydanticValidationError
 
 from floe_orchestrator_dagster.lineage_extraction import extract_dbt_model_lineage
+from floe_orchestrator_dagster.runtime import build_product_definitions
 from floe_orchestrator_dagster.tracing import (
     ATTR_ASSET_COUNT,
     TRACER_NAME,
@@ -71,6 +74,7 @@ _RESOURCE_PRESETS: dict[str, ResourceSpec] = {
 
 # PERF: Pre-created frozenset for asset resource keys (avoid per-asset set creation)
 _DBT_RESOURCE_KEYS: frozenset[str] = frozenset({"dbt", "lineage"})
+_SAFE_PRODUCT_NAME_PATTERN = re.compile(PRODUCT_NAME_PATTERN)
 
 
 class DagsterOrchestratorPlugin(OrchestratorPlugin):
@@ -81,7 +85,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
     and asset creation.
 
     Key Features:
-        - Generates Dagster Definitions from CompiledArtifacts
+        - Validates CompiledArtifacts before runtime loading
         - Creates software-defined assets with dependency preservation
         - Provides Helm values for K8s deployment
         - Emits OpenLineage events for data lineage
@@ -91,7 +95,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         >>> plugin = DagsterOrchestratorPlugin()
         >>> plugin.name
         'dagster'
-        >>> definitions = plugin.create_definitions(compiled_artifacts)
+        >>> # Runtime definitions are created via load_product_definitions(...)
 
     See Also:
         - OrchestratorPlugin: Abstract base class defining the interface
@@ -181,110 +185,58 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             raise ValueError(error_message) from e
 
     def create_definitions(self, artifacts: dict[str, Any]) -> Any:
-        """Generate Dagster Definitions from CompiledArtifacts.
-
-        Creates a Dagster Definitions object containing assets, jobs, resources,
-        and schedules based on the compiled data product configuration.
+        """Validate artifacts and delegate to Dagster runtime definition loading.
 
         The method first validates the artifacts against the CompiledArtifacts
-        schema, then extracts transforms and creates Dagster assets preserving
-        the dependency graph. If catalog and storage plugins are configured,
-        it also wires IcebergIOManager as the "iceberg" resource.
+        schema, then delegates to the shared runtime builder without a project
+        directory. Direct plugin calls therefore fail fast with the
+        project_dir contract. Usable Dagster Definitions come from
+        load_product_definitions(product_name, project_dir), the generated
+        definitions.py shim, or direct runtime builder calls supplied with a
+        project_dir.
 
         Args:
             artifacts: CompiledArtifacts dictionary containing dbt manifest,
                 profiles, transforms, and other configuration.
 
         Returns:
-            Dagster Definitions object ready for deployment.
+            Dagster Definitions only when called through a loader/runtime path
+            that supplies project_dir.
 
         Raises:
-            ValueError: If artifacts validation fails with actionable message.
+            ValueError: If artifacts validation fails with actionable message
+                or project_dir is not supplied by the runtime loader.
 
         Example:
-            >>> definitions = plugin.create_definitions(compiled_artifacts)
-            >>> # Returns Dagster Definitions with assets from dbt models
+            >>> plugin.create_definitions(compiled_artifacts)
+            Traceback (most recent call last):
+            ...
+            ValueError: Dagster runtime definitions require project_dir...
 
         Requirements:
-            FR-005: Generate valid Dagster Definitions from CompiledArtifacts
+            FR-005: Validate artifacts and delegate to the runtime builder
             FR-009: Validate CompiledArtifacts schema
-            T108: Extract catalog/storage config from CompiledArtifacts
-            T111: Wire IcebergIOManager into Definitions resources
         """
-        from dagster import Definitions
-
         tracer = get_tracer()
         with orchestrator_span(tracer, "create_definitions") as span:
             # Validate artifacts against CompiledArtifacts schema (FR-009)
             validated = self._validate_artifacts(artifacts)
-
-            # Extract transforms from validated artifacts
-            if validated.transforms is None:
-                logger.warning("No transforms found in artifacts, returning empty Definitions")
-                span.set_attribute(ATTR_ASSET_COUNT, 0)
-                return Definitions(assets=[])
-
-            # Get models list from transforms
-            models = validated.transforms.models
-            if not models:
-                logger.warning("No models found in transforms, returning empty Definitions")
-                span.set_attribute(ATTR_ASSET_COUNT, 0)
-                return Definitions(assets=[])
-
-            # Convert ResolvedModel to TransformConfig objects
-            transform_configs = self._models_to_transform_configs(
-                [model.model_dump() for model in models]
-            )
-
-            # Create assets from transforms
-            assets = self.create_assets_from_transforms(transform_configs)
-
-            # T108-T111: Wire Iceberg resources if catalog and storage are configured
-            resources = self._create_iceberg_resources(validated.plugins, validated.governance)
-
-            # AC-11: Wire lineage resources (always returns {"lineage": ...})
-            lineage_resources = self._create_lineage_resources(validated.plugins)
-            resources.update(lineage_resources)
-
-            # T047-T049: Wire semantic layer resources and asset if semantic plugin is configured
-            semantic_resources = self._create_semantic_resources(validated.plugins)
-            resources.update(semantic_resources)
-
-            if "semantic_layer" in semantic_resources:
-                from floe_orchestrator_dagster.assets.semantic_sync import (
-                    sync_semantic_schemas,
-                )
-
-                assets.append(sync_semantic_schemas)
-
-            # T035: Wire ingestion resources if ingestion plugin is configured
-            ingestion_resources = self._create_ingestion_resources(validated.plugins)
-            resources.update(ingestion_resources)
-
-            # T034: Wire ingestion assets if ingestion resource is available
-            if "ingestion" in resources and validated.plugins and validated.plugins.ingestion:
-                from floe_orchestrator_dagster.assets.ingestion import (
-                    create_ingestion_assets,
-                )
-
-                ingestion_assets = create_ingestion_assets(validated.plugins.ingestion)
-                assets.extend(ingestion_assets)
-
-            span.set_attribute(ATTR_ASSET_COUNT, len(assets))
+            model_count = len(validated.transforms.models) if validated.transforms else 0
+            span.set_attribute(ATTR_ASSET_COUNT, model_count)
 
             logger.info(
-                "Created Dagster Definitions",
+                "Delegating Dagster Definitions creation to runtime builder",
                 extra={
-                    "asset_count": len(assets),
-                    "model_count": len(models),
-                    "has_iceberg": "iceberg" in resources,
-                    "has_lineage": "lineage" in resources,
-                    "has_semantic_layer": "semantic_layer" in resources,
-                    "has_ingestion": "ingestion" in resources,
+                    "model_count": model_count,
+                    "product_name": validated.metadata.product_name,
                 },
             )
 
-            return Definitions(assets=assets, resources=resources if resources else {})
+            return build_product_definitions(
+                product_name=validated.metadata.product_name,
+                artifacts=validated,
+                project_dir=None,
+            )
 
     def _create_iceberg_resources(
         self,
@@ -294,15 +246,18 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         """Create Iceberg resources from resolved plugins configuration.
 
         Attempts to load catalog and storage plugins and create an
-        IcebergIOManager resource. Returns empty dict if either plugin
-        is not configured or if plugin loading fails.
+        IcebergIOManager resource. Returns ``{}`` only when catalog or storage
+        plugins are unconfigured. Configured-but-broken plugin loading or
+        resource construction is re-raised so runtime configuration fails
+        loudly.
 
         Args:
             plugins: ResolvedPlugins from CompiledArtifacts, or None.
             governance: ResolvedGovernance from CompiledArtifacts, or None.
 
         Returns:
-            Dictionary with "iceberg" key if successful, empty dict otherwise.
+            Dictionary with "iceberg" key if successful, empty dict only when
+            catalog or storage is unconfigured.
 
         Requirements:
             T108: Extract catalog/storage config
@@ -320,11 +275,11 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         self,
         plugins: Any | None,
     ) -> dict[str, Any]:
-        """Create semantic layer resources from resolved plugins configuration.
+        """Deprecated compatibility wrapper for semantic resource creation.
 
-        Attempts to load the semantic layer plugin and create a resource.
-        Returns empty dict if the plugin is not configured or if plugin
-        loading fails.
+        The canonical runtime path now wires semantic resources and assets in
+        ``floe_orchestrator_dagster.runtime.build_product_definitions``.
+        This helper remains for existing low-level tests and callers.
 
         Args:
             plugins: ResolvedPlugins from CompiledArtifacts, or None.
@@ -346,10 +301,14 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         self,
         plugins: Any | None,
     ) -> dict[str, Any]:
-        """Create ingestion resources from resolved plugins configuration.
+        """Deprecated compatibility wrapper for ingestion resource creation.
 
-        Attempts to load the ingestion plugin and create a resource.
-        Returns empty dict if the plugin is not configured.
+        The canonical Dagster runtime currently fails loudly when ingestion is
+        configured because compiled JSON config cannot construct executable dlt
+        source objects yet. Add a source-construction layer before enabling
+        ingestion resources/assets in
+        ``floe_orchestrator_dagster.runtime.build_product_definitions``.
+        This helper remains for existing low-level tests and callers.
 
         Args:
             plugins: ResolvedPlugins from CompiledArtifacts, or None.
@@ -383,7 +342,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             Dictionary with "lineage" key always present.
 
         Requirements:
-            AC-11: Wire lineage resource into create_definitions()
+            AC-11: Wire lineage resource through the runtime builder / loader path
         """
         from floe_orchestrator_dagster.resources.lineage import (
             try_create_lineage_resource,
@@ -1129,6 +1088,12 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             - Component ownership: Dagster plugin owns Dagster code generation
             - Spec 2b-compilation-pipeline: Technology ownership boundaries
         """
+        if _SAFE_PRODUCT_NAME_PATTERN.fullmatch(product_name) is None:
+            raise ValueError(
+                "Invalid product_name for generated Dagster definitions; "
+                f"expected pattern {PRODUCT_NAME_PATTERN}"
+            )
+
         template = f'''"""Dagster definitions for {product_name} data product.
 
 AUTO-GENERATED by `floe compile` - DO NOT EDIT MANUALLY.

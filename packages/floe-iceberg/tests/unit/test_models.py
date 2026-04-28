@@ -311,6 +311,22 @@ class TestIcebergTableManagerConfig:
         assert config.min_snapshots_to_keep == 10
         assert config.default_commit_strategy == CommitStrategy.FAST_APPEND
 
+    def test_defaults_to_strict_stale_metadata_recovery(self) -> None:
+        """Production-safe default is strict failure, not automatic repair."""
+        from floe_iceberg.models import StaleTableRecoveryMode
+
+        config = IcebergTableManagerConfig()
+
+        assert config.stale_table_recovery_mode is StaleTableRecoveryMode.STRICT
+
+    def test_accepts_repair_stale_metadata_recovery(self) -> None:
+        """Demo/test callers can opt into repair mode explicitly."""
+        from floe_iceberg.models import StaleTableRecoveryMode
+
+        config = IcebergTableManagerConfig(stale_table_recovery_mode="repair")
+
+        assert config.stale_table_recovery_mode is StaleTableRecoveryMode.REPAIR
+
     @pytest.mark.requirement("FR-045")
     def test_default_table_properties(self) -> None:
         """Test default table properties are set correctly."""

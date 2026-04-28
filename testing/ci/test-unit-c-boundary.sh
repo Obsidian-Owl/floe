@@ -36,9 +36,15 @@ devpod_remote_command() {
         --command "${command}"
 }
 
+shell_quote() {
+    printf '%q' "$1"
+}
+
 remote_image_present() {
     local image_name="${1:-floe-test-runner:latest}"
-    if devpod_remote_command "docker image inspect '${image_name}' >/dev/null 2>&1"; then
+    local image_name_q
+    image_name_q="$(shell_quote "${image_name}")"
+    if devpod_remote_command "docker image inspect ${image_name_q} >/dev/null 2>&1"; then
         return 0
     fi
     return 1
@@ -66,20 +72,30 @@ sync_devpod_checkout() {
 
 ensure_remote_demo_image_loaded() {
     local demo_image="${FLOE_DEMO_IMAGE}"
+    local common_sh_q
+    local demo_image_q
+    local image_repository_q
+    local image_tag_q
+    local kind_cluster_q
+    common_sh_q="$(shell_quote "${DEVPOD_REMOTE_WORKDIR}/testing/ci/common.sh")"
+    demo_image_q="$(shell_quote "${demo_image}")"
+    image_repository_q="$(shell_quote "${FLOE_DEMO_IMAGE_REPOSITORY}")"
+    image_tag_q="$(shell_quote "${FLOE_DEMO_IMAGE_TAG}")"
+    kind_cluster_q="$(shell_quote "${FLOE_KIND_CLUSTER}")"
 
     if remote_image_present "${demo_image}"; then
         info "Remote demo image '${demo_image}' is present. Reloading it into Kind..."
         devpod_remote_command \
-            "source '${DEVPOD_REMOTE_WORKDIR}/testing/ci/common.sh' && floe_kind_evict_image '${demo_image}' '${FLOE_KIND_CLUSTER}'"
+            "source ${common_sh_q} && floe_kind_evict_image ${demo_image_q} ${kind_cluster_q}"
         devpod_remote_command \
-            "kind load docker-image '${demo_image}' --name '${FLOE_KIND_CLUSTER}'"
+            "kind load docker-image ${demo_image_q} --name ${kind_cluster_q}"
         return 0
     fi
 
     sync_devpod_checkout
     info "Remote demo image '${demo_image}' is missing. Rebuilding it in the DevPod workspace..."
     devpod_remote_command \
-        "FLOE_DEMO_IMAGE_REPOSITORY='${FLOE_DEMO_IMAGE_REPOSITORY}' FLOE_DEMO_IMAGE_TAG='${FLOE_DEMO_IMAGE_TAG}' KIND_CLUSTER_NAME='${FLOE_KIND_CLUSTER}' make build-demo-image"
+        "FLOE_DEMO_IMAGE_REPOSITORY=${image_repository_q} FLOE_DEMO_IMAGE_TAG=${image_tag_q} KIND_CLUSTER_NAME=${kind_cluster_q} make build-demo-image"
 }
 
 ensure_remote_test_runner_image_loaded() {
@@ -136,10 +152,12 @@ check_platform_ready() {
 run_remote_kind_startup() {
     check_platform_ready
     ensure_remote_test_runner_image_loaded
+    local kind_cluster_q
+    kind_cluster_q="$(shell_quote "${FLOE_KIND_CLUSTER}")"
 
     info "Loading the cached remote test-runner image into Kind..."
     devpod_remote_command \
-        "kind load docker-image 'floe-test-runner:latest' --name '${FLOE_KIND_CLUSTER}'"
+        "kind load docker-image floe-test-runner:latest --name ${kind_cluster_q}"
 
     info "Running startup-only probe from the current checkout against the remote cluster..."
     STARTUP_ONLY=true \

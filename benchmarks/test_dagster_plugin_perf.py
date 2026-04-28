@@ -13,10 +13,82 @@ Run with:
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pytest
+
+
+def _manifest_for_artifacts(artifacts: dict[str, Any]) -> dict[str, Any]:
+    """Create a dbt manifest with one model node per compiled transform."""
+    package_name = "benchmark_pipeline"
+    models = artifacts["transforms"]["models"]
+    model_ids = {model["name"]: f"model.{package_name}.{model['name']}" for model in models}
+    nodes = {}
+    parent_map = {}
+    child_map = {unique_id: [] for unique_id in model_ids.values()}
+
+    for model in models:
+        name = model["name"]
+        unique_id = model_ids[name]
+        parent_ids = [
+            model_ids[parent_name]
+            for parent_name in model.get("depends_on", [])
+            if parent_name in model_ids
+        ]
+        nodes[unique_id] = {
+            "resource_type": "model",
+            "unique_id": unique_id,
+            "package_name": package_name,
+            "name": name,
+            "alias": name,
+            "database": "benchmark",
+            "schema": "main",
+            "relation_name": f"benchmark.main.{name}",
+            "path": f"models/{name}.sql",
+            "original_file_path": f"models/{name}.sql",
+            "fqn": [package_name, name],
+            "tags": model.get("tags", []),
+            "depends_on": {"nodes": parent_ids, "macros": []},
+            "config": {"materialized": "view"},
+        }
+        parent_map[unique_id] = parent_ids
+        for parent_id in parent_ids:
+            child_map[parent_id].append(unique_id)
+
+    return {
+        "metadata": {
+            "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
+            "dbt_version": "1.7.0",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "invocation_id": "benchmark-invocation",
+        },
+        "nodes": nodes,
+        "sources": {},
+        "exposures": {},
+        "metrics": {},
+        "groups": {},
+        "selectors": {},
+        "disabled": [],
+        "parent_map": parent_map,
+        "child_map": child_map,
+        "group_map": {},
+        "semantic_models": {},
+        "unit_tests": {},
+        "saved_queries": {},
+    }
+
+
+def _write_runtime_project(tmp_path: Path, artifacts: dict[str, Any]) -> Path:
+    """Write compiled artifacts and manifest for runtime loader benchmarks."""
+    project_dir = tmp_path / "benchmark_project"
+    target_dir = project_dir / "target"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "compiled_artifacts.json").write_text(json.dumps(artifacts))
+    (target_dir / "manifest.json").write_text(json.dumps(_manifest_for_artifacts(artifacts)))
+    return project_dir
 
 
 def _create_minimal_artifacts() -> dict[str, Any]:
@@ -173,50 +245,100 @@ def test_plugin_instantiation_repeated() -> None:
 
 
 # =============================================================================
-# NFR-002: Definition Generation <5s for 500 Transforms
+# NFR-002: Runtime Definition Generation <5s for 500 Transforms
 # =============================================================================
 
 
 @pytest.mark.benchmark
 @pytest.mark.requirement("NFR-002")
-def test_create_definitions_small() -> None:
-    """Benchmark create_definitions with small pipeline (10 transforms).
+def test_load_product_definitions_small(tmp_path: Path) -> None:
+    """Benchmark runtime definition generation with a small pipeline."""
+    from floe_orchestrator_dagster.loader import load_product_definitions
 
-    Baseline measurement for small pipelines.
+    artifacts = _create_artifacts_with_transforms(10)
+    project_dir = _write_runtime_project(tmp_path, artifacts)
+
+    _ = load_product_definitions("benchmark-pipeline", project_dir)
+
+
+@pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
+def test_load_product_definitions_medium(tmp_path: Path) -> None:
+    """Benchmark runtime definition generation with a medium pipeline."""
+    from floe_orchestrator_dagster.loader import load_product_definitions
+
+    artifacts = _create_artifacts_with_transforms(100)
+    project_dir = _write_runtime_project(tmp_path, artifacts)
+
+    _ = load_product_definitions("benchmark-pipeline", project_dir)
+
+
+@pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
+def test_load_product_definitions_large(tmp_path: Path) -> None:
+    """Benchmark runtime definition generation with a large pipeline.
+
+    NFR-002 Target: runtime Definitions generation should complete in <5s for
+    500 compiled transforms.
+    """
+    from floe_orchestrator_dagster.loader import load_product_definitions
+
+    artifacts = _create_artifacts_with_transforms(500)
+    project_dir = _write_runtime_project(tmp_path, artifacts)
+
+    _ = load_product_definitions("benchmark-pipeline", project_dir)
+
+
+# =============================================================================
+# Direct create_definitions Failure-Contract Validation
+# =============================================================================
+
+
+@pytest.mark.benchmark
+@pytest.mark.requirement("NFR-002")
+def test_create_definitions_direct_failure_small() -> None:
+    """Benchmark direct create_definitions failure-contract validation.
+
+    Direct Dagster calls validate artifacts, then fail with the project_dir
+    contract. Usable runtime Definitions are loaded through the loader shim.
     """
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
     plugin = DagsterOrchestratorPlugin()
     artifacts = _create_artifacts_with_transforms(10)
-    _ = plugin.create_definitions(artifacts)
+    with pytest.raises(ValueError, match="require project_dir"):
+        plugin.create_definitions(artifacts)
 
 
 @pytest.mark.benchmark
 @pytest.mark.requirement("NFR-002")
-def test_create_definitions_medium() -> None:
-    """Benchmark create_definitions with medium pipeline (100 transforms).
+def test_create_definitions_direct_failure_medium() -> None:
+    """Benchmark direct create_definitions failure-contract validation.
 
-    Typical production pipeline size.
+    Uses a typical production pipeline size.
     """
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
     plugin = DagsterOrchestratorPlugin()
     artifacts = _create_artifacts_with_transforms(100)
-    _ = plugin.create_definitions(artifacts)
+    with pytest.raises(ValueError, match="require project_dir"):
+        plugin.create_definitions(artifacts)
 
 
 @pytest.mark.benchmark
 @pytest.mark.requirement("NFR-002")
-def test_create_definitions_large() -> None:
-    """Benchmark create_definitions with large pipeline (500 transforms).
+def test_create_definitions_direct_failure_large() -> None:
+    """Benchmark direct create_definitions failure-contract validation.
 
-    NFR-002 Target: Must complete in <5s for 500 transforms.
+    This is not the runtime Definitions generation benchmark; it only measures
+    validation before the expected project_dir failure for 500 transforms.
     """
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
     plugin = DagsterOrchestratorPlugin()
     artifacts = _create_artifacts_with_transforms(500)
-    _ = plugin.create_definitions(artifacts)
+    with pytest.raises(ValueError, match="require project_dir"):
+        plugin.create_definitions(artifacts)
 
 
 @pytest.mark.benchmark
@@ -265,13 +387,15 @@ def test_create_assets_from_transforms_large() -> None:
 def test_artifacts_validation_overhead() -> None:
     """Benchmark CompiledArtifacts validation overhead.
 
-    Measures Pydantic validation cost in create_definitions.
+    Measures Pydantic validation cost in direct create_definitions before the
+    expected Dagster project_dir failure contract.
     """
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
     plugin = DagsterOrchestratorPlugin()
     artifacts = _create_minimal_artifacts()
-    _ = plugin.create_definitions(artifacts)
+    with pytest.raises(ValueError, match="require project_dir"):
+        plugin.create_definitions(artifacts)
 
 
 @pytest.mark.benchmark

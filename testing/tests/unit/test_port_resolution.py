@@ -24,6 +24,13 @@ from testing.fixtures.services import (
     get_effective_port,
 )
 
+
+@pytest.fixture(autouse=True)
+def _disable_service_dns_autodetect(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep port-resolution unit tests deterministic and offline."""
+    monkeypatch.setenv("FLOE_DISABLE_SERVICE_DNS_AUTODETECT", "1")
+
+
 # ---------------------------------------------------------------------------
 # AC-1: SERVICE_DEFAULT_PORTS dict exists with specific entries
 # ---------------------------------------------------------------------------

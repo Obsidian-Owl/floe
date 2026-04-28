@@ -118,8 +118,9 @@ class TestCreateIcebergResourcesFullWiring:
             assert result == {"iceberg": mock_io_manager}
 
     @pytest.mark.requirement("004d-FR-115")
-    def test_create_iceberg_resources_skips_configure_without_config(self) -> None:
-        """Test that registry.configure() is not called when config is None."""
+    def test_create_iceberg_resources_configures_none_config_as_empty_dict(self) -> None:
+        """Configured plugin refs with config=None are validated with empty dict."""
+        from floe_core.plugin_types import PluginType
         from floe_core.schemas.compiled_artifacts import PluginRef
 
         from floe_orchestrator_dagster.resources.iceberg import create_iceberg_resources
@@ -139,78 +140,160 @@ class TestCreateIcebergResourcesFullWiring:
             mock_registry = MagicMock()
             mock_get_registry.return_value = mock_registry
             mock_registry.get.side_effect = [MagicMock(), MagicMock()]
+            mock_registry.configure.return_value = {}
             mock_table_manager_cls.return_value = MagicMock()
             mock_create_io_manager.return_value = MagicMock()
 
             # Execute
             create_iceberg_resources(catalog_ref=catalog_ref, storage_ref=storage_ref)
 
-            # Verify configure NOT called
-            mock_registry.configure.assert_not_called()
+            assert mock_registry.configure.call_count == 2
+            mock_registry.configure.assert_any_call(PluginType.CATALOG, "mock-catalog", {})
+            mock_registry.configure.assert_any_call(PluginType.STORAGE, "mock-storage", {})
+
+    @pytest.mark.requirement("004d-FR-115")
+    def test_create_iceberg_resources_configures_empty_dict_configs(self) -> None:
+        """Test empty dict configs are validated instead of skipped as falsy."""
+        from floe_core.plugin_types import PluginType
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.iceberg import create_iceberg_resources
+
+        catalog_ref = PluginRef(type="mock-catalog", version="1.0.0", config={})
+        storage_ref = PluginRef(type="mock-storage", version="1.0.0", config={})
+
+        with (
+            patch("floe_core.plugin_registry.get_registry") as mock_get_registry,
+            patch("floe_iceberg.IcebergTableManager") as mock_table_manager_cls,
+            patch(
+                "floe_orchestrator_dagster.io_manager.create_iceberg_io_manager"
+            ) as mock_create_io_manager,
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.side_effect = [MagicMock(), MagicMock()]
+            mock_table_manager_cls.return_value = MagicMock()
+            mock_create_io_manager.return_value = MagicMock()
+
+            create_iceberg_resources(catalog_ref=catalog_ref, storage_ref=storage_ref)
+
+            assert mock_registry.configure.call_count == 2
+            mock_registry.configure.assert_any_call(PluginType.CATALOG, "mock-catalog", {})
+            mock_registry.configure.assert_any_call(PluginType.STORAGE, "mock-storage", {})
+
+    @pytest.mark.requirement("004d-FR-115")
+    @pytest.mark.parametrize(
+        ("failing_plugin_type", "expected_message"),
+        [("catalog", "invalid catalog config"), ("storage", "invalid storage config")],
+    )
+    def test_create_iceberg_resources_configure_exception_propagates(
+        self,
+        failing_plugin_type: str,
+        expected_message: str,
+    ) -> None:
+        """Test configured plugin validation failures propagate loudly."""
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.iceberg import create_iceberg_resources
+
+        catalog_ref = PluginRef(type="mock-catalog", version="1.0.0", config={})
+        storage_ref = PluginRef(type="mock-storage", version="1.0.0", config={})
+
+        def configure_side_effect(plugin_type: Any, _plugin_name: str, _config: Any) -> dict:
+            if plugin_type.name.lower() == failing_plugin_type:
+                raise ValueError(expected_message)
+            return {}
+
+        with (
+            patch("floe_core.plugin_registry.get_registry") as mock_get_registry,
+            patch("floe_iceberg.IcebergTableManager") as mock_table_manager_cls,
+            patch(
+                "floe_orchestrator_dagster.io_manager.create_iceberg_io_manager"
+            ) as mock_create_io_manager,
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.side_effect = [MagicMock(), MagicMock()]
+            mock_registry.configure.side_effect = configure_side_effect
+
+            with pytest.raises(ValueError, match=expected_message):
+                create_iceberg_resources(catalog_ref=catalog_ref, storage_ref=storage_ref)
+
+            mock_table_manager_cls.assert_not_called()
+            mock_create_io_manager.assert_not_called()
+
+    @pytest.mark.requirement("004d-FR-115")
+    @pytest.mark.parametrize(
+        ("none_plugin_type", "expected_message"),
+        [
+            ("catalog", "Catalog plugin config for mock-catalog"),
+            ("storage", "Storage plugin config for mock-storage"),
+        ],
+    )
+    def test_create_iceberg_resources_configure_returning_none_raises(
+        self,
+        none_plugin_type: str,
+        expected_message: str,
+    ) -> None:
+        """Test configured plugin validation returning None fails loudly."""
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.iceberg import create_iceberg_resources
+
+        catalog_ref = PluginRef(type="mock-catalog", version="1.0.0", config={})
+        storage_ref = PluginRef(type="mock-storage", version="1.0.0", config={})
+
+        def configure_side_effect(plugin_type: Any, _plugin_name: str, _config: Any) -> dict | None:
+            if plugin_type.name.lower() == none_plugin_type:
+                return None
+            return {}
+
+        with (
+            patch("floe_core.plugin_registry.get_registry") as mock_get_registry,
+            patch("floe_iceberg.IcebergTableManager") as mock_table_manager_cls,
+            patch(
+                "floe_orchestrator_dagster.io_manager.create_iceberg_io_manager"
+            ) as mock_create_io_manager,
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.side_effect = [MagicMock(), MagicMock()]
+            mock_registry.configure.side_effect = configure_side_effect
+
+            with pytest.raises(RuntimeError, match=expected_message):
+                create_iceberg_resources(catalog_ref=catalog_ref, storage_ref=storage_ref)
+
+            mock_table_manager_cls.assert_not_called()
+            mock_create_io_manager.assert_not_called()
 
 
 class TestCreateDefinitionsWithIcebergResources:
-    """Test create_definitions() returns Definitions with Iceberg resource.
+    """Test direct create_definitions() delegates to runtime project loading.
 
-    Validates T116: create_definitions() returns Definitions with "iceberg" resource.
+    Runtime resource wiring is exercised through the loader path. Direct plugin
+    calls validate artifacts but require the project directory supplied by the
+    generated runtime shim.
     """
 
     @pytest.mark.requirement("004d-FR-116")
-    def test_create_definitions_includes_iceberg_resource(
+    def test_create_definitions_with_iceberg_requires_project_dir(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
         valid_compiled_artifacts_with_iceberg: dict[str, Any],
     ) -> None:
-        """Test that create_definitions() includes "iceberg" resource when plugins configured.
-
-        Validates:
-        - _create_iceberg_resources() is called with plugins
-        - Returned Definitions has resources dict with "iceberg" key
-        """
-        from dagster import Definitions
-
-        mock_io_manager = MagicMock()
-
-        with patch(
-            "floe_orchestrator_dagster.resources.iceberg.try_create_iceberg_resources"
-        ) as mock_try_create:
-            mock_try_create.return_value = {"iceberg": mock_io_manager}
-
-            # Execute
-            result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_iceberg)
-
-            # Verify result is Definitions
-            assert isinstance(result, Definitions)
-
-            # Verify resources dict has "iceberg" key
-            assert isinstance(result.resources, dict)
-            assert "iceberg" in result.resources
-            assert result.resources["iceberg"] == mock_io_manager
+        """Test direct create_definitions requires project_dir for Iceberg runtime wiring."""
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts_with_iceberg)
 
     @pytest.mark.requirement("004d-FR-116")
-    def test_create_definitions_with_iceberg_and_assets(
+    def test_create_definitions_with_iceberg_and_assets_requires_project_dir(
         self,
         dagster_plugin: DagsterOrchestratorPlugin,
         valid_compiled_artifacts_with_iceberg: dict[str, Any],
     ) -> None:
-        """Test that create_definitions() includes both assets and Iceberg resource."""
-        from dagster import Definitions
-
-        mock_io_manager = MagicMock()
-
-        with patch(
-            "floe_orchestrator_dagster.resources.iceberg.try_create_iceberg_resources"
-        ) as mock_try_create:
-            mock_try_create.return_value = {"iceberg": mock_io_manager}
-
-            # Execute
-            result = dagster_plugin.create_definitions(valid_compiled_artifacts_with_iceberg)
-
-            # Verify has both assets and resources
-            assert isinstance(result, Definitions)
-            assert len(result.assets) > 0
-            assert isinstance(result.resources, dict)
-            assert "iceberg" in result.resources
+        """Test direct create_definitions does not synthesize Iceberg-backed assets."""
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts_with_iceberg)
 
 
 class TestGracefulDegradation:
@@ -324,31 +407,18 @@ class TestGracefulDegradation:
         dagster_plugin: DagsterOrchestratorPlugin,
         valid_compiled_artifacts: dict[str, Any],
     ) -> None:
-        """Test create_definitions() omits "iceberg" resource when plugins not configured.
-
-        Uses valid_compiled_artifacts fixture which has no catalog or storage.
-        """
-        from dagster import Definitions
-
-        # Execute with artifacts that have no catalog/storage
-        result = dagster_plugin.create_definitions(valid_compiled_artifacts)
-
-        # Verify result is Definitions
-        assert isinstance(result, Definitions)
-
-        # Verify resources is empty or doesn't contain "iceberg"
-        if result.resources:
-            assert "iceberg" not in result.resources
+        """Test direct create_definitions requires project_dir without Iceberg plugins."""
+        with pytest.raises(ValueError, match="require project_dir"):
+            dagster_plugin.create_definitions(valid_compiled_artifacts)
 
 
 class TestGovernanceThreading:
     """Test governance parameter threading through the Iceberg resource call chain.
 
-    Validates AC-5 (T4): create_definitions() → _create_iceberg_resources() →
-    try_create_iceberg_resources() → create_iceberg_resources() MUST accept and
-    thread an optional governance parameter. create_iceberg_resources() MUST call
-    IcebergTableManagerConfig.from_governance(governance) and pass the resulting
-    config to IcebergTableManager(config=config).
+    Validates AC-5 (T4): the runtime builder/loader passes governance into
+    try_create_iceberg_resources(), and create_iceberg_resources() threads it
+    into IcebergTableManagerConfig.from_governance(governance) before passing
+    the resulting config to IcebergTableManager(config=config).
     """
 
     @pytest.mark.requirement("AC-5-happy-path")

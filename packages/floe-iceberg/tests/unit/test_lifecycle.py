@@ -111,6 +111,21 @@ def sample_table_config() -> Any:
     )
 
 
+class _StaleLoadCatalog:
+    """Catalog that reports table existence but fails metadata load."""
+
+    def __init__(self) -> None:
+        """Initialize stale-load catalog."""
+        self.drop_calls: list[tuple[str, bool]] = []
+
+    def load_table(self, identifier: str) -> object:
+        """Fail table loads with the PyIceberg stale metadata signature."""
+        raise RuntimeError(
+            "NotFoundException: Location does not exist: "
+            "s3://floe-iceberg/customer_360/int_customer_orders/metadata/00001.metadata.json"
+        )
+
+
 # =============================================================================
 # Table Creation Tests (T026)
 # =============================================================================
@@ -165,6 +180,83 @@ class TestIcebergTableLifecycleCreate:
 
         assert existing_table.identifier == "bronze.customers"
         assert existing_table.identifier == original_table.identifier
+
+    def test_create_table_if_not_exists_strict_raises_stale_metadata(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+        sample_table_config: Any,
+    ) -> None:
+        """Strict mode fails clearly when an existing registration is stale."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.errors import StaleTableMetadataError
+        from floe_iceberg.models import IcebergTableManagerConfig
+
+        mock_catalog_plugin.create_namespace("bronze", {})
+        mock_catalog_plugin._tables["bronze.customers"] = {"schema": {}, "properties": {}}
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+            config=IcebergTableManagerConfig(stale_table_recovery_mode="strict"),
+        )
+        manager._catalog = _StaleLoadCatalog()
+        manager._lifecycle._catalog = manager._catalog
+
+        with pytest.raises(StaleTableMetadataError) as exc_info:
+            manager.create_table(sample_table_config, if_not_exists=True)
+
+        assert exc_info.value.table_identifier == "bronze.customers"
+        assert exc_info.value.details["recovery_mode"] == "strict"
+
+    def test_create_table_if_not_exists_repair_drops_and_recreates_stale_registration(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+        sample_table_config: Any,
+    ) -> None:
+        """Repair mode drops stale catalog registration before recreating."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import IcebergTableManagerConfig
+
+        mock_catalog_plugin.create_namespace("bronze", {})
+        mock_catalog_plugin._tables["bronze.customers"] = {"schema": {}, "properties": {}}
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+            config=IcebergTableManagerConfig(stale_table_recovery_mode="repair"),
+        )
+        manager._catalog = _StaleLoadCatalog()
+        manager._lifecycle._catalog = manager._catalog
+
+        recreated = manager.create_table(sample_table_config, if_not_exists=True)
+
+        assert recreated.identifier == "bronze.customers"
+        assert "bronze.customers" in mock_catalog_plugin._tables
+
+    @pytest.mark.requirement("FR-012")
+    def test_create_table_if_not_exists_repair_reconnects_with_plugin_defaults(
+        self,
+        mock_catalog_plugin: MockCatalogPlugin,
+        mock_storage_plugin: MockStoragePlugin,
+        sample_table_config: Any,
+    ) -> None:
+        """Repair mode must not inject memory catalog defaults when config is unset."""
+        from floe_iceberg import IcebergTableManager
+        from floe_iceberg.models import IcebergTableManagerConfig
+
+        mock_catalog_plugin.create_namespace("bronze", {})
+        mock_catalog_plugin._tables["bronze.customers"] = {"schema": {}, "properties": {}}
+        manager = IcebergTableManager(
+            catalog_plugin=mock_catalog_plugin,
+            storage_plugin=mock_storage_plugin,
+            config=IcebergTableManagerConfig(stale_table_recovery_mode="repair"),
+        )
+        manager._catalog = _StaleLoadCatalog()
+        manager._lifecycle._catalog = manager._catalog
+
+        manager.create_table(sample_table_config, if_not_exists=True)
+
+        assert mock_catalog_plugin.connect_config == {}
 
     @pytest.mark.requirement("FR-012")
     def test_create_table_in_nonexistent_namespace_raises(

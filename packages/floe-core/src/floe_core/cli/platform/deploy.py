@@ -22,6 +22,8 @@ import click
 import yaml
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success, warn
+from floe_core.compilation.errors import CompilationException
+from floe_core.compilation.loader import load_manifest
 from floe_core.helm import HelmValuesConfig, HelmValuesGenerator
 from floe_core.helm.parsing import parse_set_values
 from floe_core.telemetry.sanitization import sanitize_error_message
@@ -29,6 +31,46 @@ from floe_core.telemetry.sanitization import sanitize_error_message
 # Validation patterns for user-supplied Helm/K8s arguments
 _K8S_NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?$")
 _TIMEOUT_RE = re.compile(r"^\d+[smh]?$")
+DEFAULT_MANIFEST_PATH = Path("demo/manifest.yaml")
+
+
+def _helm_config_from_manifest(
+    *,
+    environment: str,
+    manifest_path: Path | None,
+) -> HelmValuesConfig:
+    """Create Helm values config, using manifest resource presets when available."""
+    config = HelmValuesConfig.with_defaults(environment=environment)
+    path = manifest_path or DEFAULT_MANIFEST_PATH
+    is_default_manifest = manifest_path is None
+
+    if not path.exists():
+        if is_default_manifest:
+            warn(
+                "Platform manifest not found; using built-in resource presets",
+                path=str(path),
+            )
+            return config
+        error_exit(
+            "Platform manifest not found",
+            exit_code=ExitCode.FILE_NOT_FOUND,
+            path=str(path),
+        )
+
+    info(f"Loading platform manifest: {path}")
+    try:
+        manifest = load_manifest(path)
+    except CompilationException as e:
+        error_exit(
+            f"Failed to load platform manifest: {e}",
+            exit_code=ExitCode.COMPILATION_ERROR,
+        )
+
+    if not manifest.resource_presets:
+        info("No manifest resource presets found; using built-in resource presets")
+        return config
+
+    return config.with_resource_presets(manifest.resource_presets)
 
 
 @click.command(
@@ -65,6 +107,14 @@ _TIMEOUT_RE = re.compile(r"^\d+[smh]?$")
     help="Additional values files to merge. Can be repeated.",
 )
 @click.option(
+    "--manifest",
+    "-m",
+    type=click.Path(dir_okay=False, resolve_path=True, path_type=Path),
+    default=None,
+    help="Path to PlatformManifest file (default: demo/manifest.yaml if present).",
+    metavar="PATH",
+)
+@click.option(
     "--set",
     "set_values",
     multiple=True,
@@ -99,6 +149,7 @@ def deploy_command(
     chart: Path | None,
     namespace: str | None,
     values_files: tuple[Path, ...],
+    manifest: Path | None,
     set_values: tuple[str, ...],
     release_name: str,
     dry_run: bool,
@@ -115,6 +166,7 @@ def deploy_command(
         chart: Path to Helm chart directory
         namespace: Kubernetes namespace (default: floe-{env})
         values_files: Additional values files to merge
+        manifest: PlatformManifest path for resource presets
         set_values: Override values using key=value syntax
         release_name: Helm release name
         dry_run: If True, print command without executing
@@ -152,7 +204,7 @@ def deploy_command(
 
     # Create HelmValuesConfig with defaults
     info(f"Generating values for environment: {env}")
-    config = HelmValuesConfig.with_defaults(environment=env)
+    config = _helm_config_from_manifest(environment=env, manifest_path=manifest)
 
     # Create generator
     generator = HelmValuesGenerator(config)

@@ -22,7 +22,10 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any, ClassVar
+from urllib.parse import quote
 
 import httpx
 import pytest
@@ -30,6 +33,442 @@ from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 from testing.fixtures.services import ServiceEndpoint
+
+_COMPLETED_MARQUEZ_STATE = "COMPLETED"
+
+
+def _marquez_job_runs(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+    allow_missing: bool = False,
+) -> list[dict[str, Any]]:
+    """Query Marquez runs for a namespace/job pair."""
+    encoded_namespace = quote(namespace, safe="")
+    encoded_job_name = quote(job_name, safe="")
+    response = marquez_client.get(
+        f"/api/v1/namespaces/{encoded_namespace}/jobs/{encoded_job_name}/runs"
+    )
+    if allow_missing and response.status_code == 404:
+        return []
+    assert response.status_code == 200, (
+        f"Marquez runs endpoint failed for {namespace}/{job_name}: "
+        f"{response.status_code} - {response.text}"
+    )
+    runs = response.json().get("runs", [])
+    assert isinstance(runs, list), f"Marquez runs should be a list, got {type(runs)}"
+    return runs
+
+
+def _marquez_run_state(run: dict[str, Any]) -> str:
+    """Return normalized Marquez run state across API response variants."""
+    return str(run.get("state") or run.get("currentState") or "").upper()
+
+
+def _marquez_run_identity(run: dict[str, Any]) -> str:
+    """Return a stable identity for comparing Marquez runs across snapshots."""
+    for key in ("id", "runId", "run_id"):
+        value = run.get(key)
+        if value:
+            return str(value)
+    nested_run = run.get("run")
+    if isinstance(nested_run, dict):
+        for key in ("runId", "id", "run_id"):
+            value = nested_run.get(key)
+            if value:
+                return str(value)
+    return str(run)
+
+
+def _marquez_run_identity_candidates(run: dict[str, Any]) -> set[str]:
+    """Return all run id variants Marquez may expose for one run."""
+    candidates: set[str] = set()
+    for key in ("id", "runId", "run_id"):
+        value = run.get(key)
+        if value:
+            candidates.add(str(value))
+
+    nested_run = run.get("run")
+    if isinstance(nested_run, dict):
+        for key in ("id", "runId", "run_id"):
+            value = nested_run.get(key)
+            if value:
+                candidates.add(str(value))
+
+    return candidates
+
+
+def _marquez_run_id_snapshot(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+) -> set[str]:
+    """Return current Marquez run identities without requiring the job to exist."""
+    return {
+        _marquez_run_identity(run)
+        for run in _marquez_job_runs(
+            marquez_client,
+            namespace=namespace,
+            job_name=job_name,
+            allow_missing=True,
+        )
+    }
+
+
+def _marquez_namespace_jobs(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    allow_missing: bool = False,
+) -> list[dict[str, Any]]:
+    """Query Marquez jobs for one namespace."""
+    response = marquez_client.get(f"/api/v1/namespaces/{quote(namespace, safe='')}/jobs")
+    if allow_missing and response.status_code == 404:
+        return []
+    assert response.status_code == 200, (
+        f"Marquez jobs endpoint failed for {namespace}: {response.status_code} - {response.text}"
+    )
+    jobs = response.json().get("jobs", [])
+    assert isinstance(jobs, list), f"Marquez jobs should be a list, got {type(jobs)}"
+    return jobs
+
+
+def _marquez_namespace_run_snapshot(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+) -> dict[str, set[str]]:
+    """Return current run identities for every job in a namespace."""
+    snapshot: dict[str, set[str]] = {}
+    for job in _marquez_namespace_jobs(
+        marquez_client,
+        namespace=namespace,
+        allow_missing=True,
+    ):
+        job_name = job.get("name")
+        if not job_name:
+            continue
+        snapshot[str(job_name)] = _marquez_run_id_snapshot(
+            marquez_client,
+            namespace=namespace,
+            job_name=str(job_name),
+        )
+    return snapshot
+
+
+def _fresh_completed_runs(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_name: str,
+    before_run_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Return runs that appeared after the snapshot and completed successfully."""
+    return [
+        run
+        for run in _marquez_job_runs(
+            marquez_client,
+            namespace=namespace,
+            job_name=job_name,
+        )
+        if _marquez_run_identity(run) not in before_run_ids
+        and _marquez_run_state(run) == _COMPLETED_MARQUEZ_STATE
+    ]
+
+
+def _fresh_completed_runs_for_jobs(
+    marquez_client: httpx.Client,
+    *,
+    namespace: str,
+    job_names: set[str],
+    before_run_ids_by_job: dict[str, set[str]],
+) -> list[dict[str, Any]]:
+    """Return fresh completed Marquez runs for the supplied namespace/jobs."""
+    fresh_runs: list[dict[str, Any]] = []
+    for job_name in sorted(job_names):
+        before_run_ids = before_run_ids_by_job.get(job_name, set())
+        for run in _marquez_job_runs(
+            marquez_client,
+            namespace=namespace,
+            job_name=job_name,
+            allow_missing=True,
+        ):
+            if (
+                _marquez_run_identity(run) not in before_run_ids
+                and _marquez_run_state(run) == _COMPLETED_MARQUEZ_STATE
+            ):
+                run["_job_name"] = job_name
+                run["_namespace"] = namespace
+                fresh_runs.append(run)
+    return fresh_runs
+
+
+def _expected_model_job_names(artifacts: Any) -> set[str]:
+    """Return artifact-derived Marquez job names that can represent dbt models."""
+    product_name = str(artifacts.metadata.product_name)
+    dbt_project_name = re.sub(r"[^A-Za-z0-9_]", "_", product_name).strip("_") or "floe"
+    model_names = [model.name for model in artifacts.transforms.models]
+    return {
+        candidate
+        for model_name in model_names
+        for candidate in (
+            model_name,
+            f"model.{dbt_project_name}.{model_name}",
+            f"{product_name}.model.{dbt_project_name}.{model_name}",
+        )
+    }
+
+
+def _run_has_nonzero_duration(run: dict[str, Any]) -> bool:
+    """Return whether a Marquez run exposes a positive startedAt to endedAt duration."""
+    from datetime import datetime
+
+    started_at: str = run.get("startedAt", "")
+    ended_at: str = run.get("endedAt", "")
+    if not started_at or not ended_at:
+        return False
+    try:
+        start_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return False
+    return (end_dt - start_dt).total_seconds() > 0
+
+
+def _parent_run_id_from_run(run: dict[str, Any]) -> str | None:
+    """Return a parent facet run id from a Marquez run response if exposed."""
+    facets: dict[str, Any] = run.get("facets") or {}
+    parent_facet: dict[str, Any] | None = None
+    if "parentRun" in facets:
+        parent_facet = facets["parentRun"]
+    elif "parent" in facets:
+        parent_facet = facets["parent"]
+    else:
+        run_facets: dict[str, Any] = facets.get("run") or {}
+        if "parentRun" in run_facets:
+            parent_facet = run_facets["parentRun"]
+        elif "parent" in run_facets:
+            parent_facet = run_facets["parent"]
+
+    if not isinstance(parent_facet, dict):
+        return None
+    parent_run = parent_facet.get("run")
+    if isinstance(parent_run, dict):
+        parent_run_id = parent_run.get("runId") or parent_run.get("id")
+        if parent_run_id:
+            return str(parent_run_id)
+    parent_run_id = parent_facet.get("runId") or parent_facet.get("id")
+    return str(parent_run_id) if parent_run_id else None
+
+
+def _parent_run_id_from_event(event: dict[str, Any]) -> str | None:
+    """Return a parent facet run id from an OpenLineage event if exposed."""
+    payload = _lineage_event_payload(event)
+    run = payload.get("run") or event.get("run")
+    if not isinstance(run, dict):
+        return None
+    return _parent_run_id_from_run(run)
+
+
+def _parent_run_id_from_marquez_run_facets(
+    marquez_client: Any,
+    run: dict[str, Any],
+) -> str | None:
+    """Return a parent facet run id via Marquez's dedicated run facets endpoint."""
+    for run_id in sorted(_marquez_run_identity_candidates(run)):
+        response = marquez_client.get(
+            f"/api/v1/runs/{quote(run_id, safe='')}/facets",
+            params={"type": "run"},
+        )
+        if response.status_code != 200:
+            continue
+        facets = response.json().get("facets")
+        if not isinstance(facets, dict):
+            continue
+        parent_run_id = _parent_run_id_from_run({"facets": facets})
+        if parent_run_id:
+            return parent_run_id
+    return None
+
+
+def _lineage_event_payload(event: dict[str, Any]) -> dict[str, Any]:
+    """Return the OpenLineage event payload across Marquez response variants."""
+    for key in ("event", "lineageEvent", "openLineageEvent"):
+        payload = event.get(key)
+        if isinstance(payload, dict):
+            return payload
+    return event
+
+
+def _lineage_event_type(event: dict[str, Any]) -> str:
+    """Return normalized OpenLineage eventType across response variants."""
+    payload = _lineage_event_payload(event)
+    return str(event.get("eventType") or payload.get("eventType") or "").upper()
+
+
+def _lineage_event_run_id(event: dict[str, Any]) -> str | None:
+    """Return the OpenLineage run id from a Marquez events API item."""
+    payload = _lineage_event_payload(event)
+    run = payload.get("run") or event.get("run")
+    if isinstance(run, dict):
+        for key in ("runId", "run_id", "id"):
+            value = run.get(key)
+            if value:
+                return str(value)
+
+    for key in ("runId", "run_id", "runUuid", "runUUID"):
+        value = event.get(key) or payload.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+def _lineage_event_job(event: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Return (namespace, job name) from a Marquez events API item."""
+    payload = _lineage_event_payload(event)
+    job = payload.get("job") or event.get("job")
+    if isinstance(job, dict):
+        namespace = job.get("namespace") or job.get("namespaceName")
+        name = job.get("name") or job.get("jobName")
+        return (
+            str(namespace) if namespace else None,
+            str(name) if name else None,
+        )
+
+    namespace = event.get("namespace") or event.get("jobNamespace")
+    name = event.get("jobName") or event.get("job")
+    return (
+        str(namespace) if namespace else None,
+        str(name) if name else None,
+    )
+
+
+def _runtime_lineage_identity_from_events(
+    events: list[dict[str, Any]],
+) -> tuple[str, str] | None:
+    """Return the first namespace/job identity emitted by fresh lineage events."""
+    for event in events:
+        namespace, job_name = _lineage_event_job(event)
+        if namespace and job_name:
+            return namespace, job_name
+    return None
+
+
+def _lineage_event_matches_fresh_run(
+    event: dict[str, Any],
+    *,
+    namespace: str,
+    job_name: str,
+    fresh_run_ids: set[str],
+) -> bool:
+    """Return whether an events API item can be tied to the fresh runtime run."""
+    event_run_id = _lineage_event_run_id(event)
+    if event_run_id is None or event_run_id not in fresh_run_ids:
+        return False
+
+    event_namespace, event_job_name = _lineage_event_job(event)
+    if event_namespace is not None and event_namespace != namespace:
+        return False
+    if event_job_name is not None and event_job_name != job_name:
+        return False
+    return True
+
+
+def _lineage_event_matches_fresh_jobs(
+    event: dict[str, Any],
+    *,
+    namespace: str,
+    job_names: set[str],
+    fresh_run_ids: set[str],
+) -> bool:
+    """Return whether an events API item can be tied to fresh runtime jobs."""
+    event_run_id = _lineage_event_run_id(event)
+    if event_run_id is None or event_run_id not in fresh_run_ids:
+        return False
+
+    event_namespace, event_job_name = _lineage_event_job(event)
+    if event_namespace is not None and event_namespace != namespace:
+        return False
+    if event_job_name is not None and event_job_name not in job_names:
+        return False
+    return True
+
+
+@pytest.mark.developer_workflow
+def test_runtime_lineage_identity_prefers_fresh_event_job() -> None:
+    """Marquez validation should query the identity emitted by OpenLineage."""
+    event = {
+        "event": {
+            "job": {
+                "namespace": "customer-360",
+                "name": "dbt.customer_360.mart_customer_360",
+            }
+        }
+    }
+
+    assert _runtime_lineage_identity_from_events([event]) == (
+        "customer-360",
+        "dbt.customer_360.mart_customer_360",
+    )
+
+
+@pytest.mark.developer_workflow
+def test_parent_run_id_from_marquez_run_facets_uses_facets_endpoint() -> None:
+    """Marquez validation should use the documented run facets endpoint."""
+
+    class _Response:
+        status_code = 200
+
+        def json(self) -> dict[str, Any]:
+            return {
+                "facets": {
+                    "parent": {
+                        "run": {"runId": "parent-run-id"},
+                        "job": {"namespace": "customer-360", "name": "asset-job"},
+                    }
+                }
+            }
+
+    class _Client:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, str] | None]] = []
+
+        def get(self, path: str, params: dict[str, str] | None = None) -> _Response:
+            self.calls.append((path, params))
+            return _Response()
+
+    client = _Client()
+
+    assert _parent_run_id_from_marquez_run_facets(client, {"id": "model-run-id"}) == (
+        "parent-run-id"
+    )
+    assert client.calls == [
+        ("/api/v1/runs/model-run-id/facets", {"type": "run"}),
+    ]
+
+
+@pytest.mark.developer_workflow
+def test_expected_model_job_names_include_product_scoped_runtime_identity() -> None:
+    """Runtime model job candidates include product-scoped dbt unique IDs."""
+
+    class _Model:
+        name = "stg_crm_customers"
+
+    class _Transforms:
+        models = [_Model()]
+
+    class _Metadata:
+        product_name = "customer-360"
+
+    class _Artifacts:
+        metadata = _Metadata()
+        transforms = _Transforms()
+
+    job_names = _expected_model_job_names(_Artifacts())
+
+    assert "customer-360.model.customer_360.stg_crm_customers" in job_names
 
 
 class TestObservability(IntegrationTestBase):
@@ -144,7 +583,9 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         marquez_client: httpx.Client,
         dagster_client: Any,
-        seed_observability: None,
+        compiled_artifacts: Callable[[Path], Any],
+        project_root: Path,
+        trigger_lineage_run: Callable[..., None],
     ) -> None:
         """Validate that Marquez contains real OpenLineage jobs from pipeline execution.
 
@@ -158,6 +599,9 @@ class TestObservability(IntegrationTestBase):
             e2e_namespace: Unique namespace for test isolation.
             marquez_client: Marquez HTTP client.
             dagster_client: Dagster GraphQL client.
+            compiled_artifacts: Real compiler fixture used to resolve lineage namespace.
+            project_root: Repository root fixture.
+            trigger_lineage_run: Callable that triggers one fresh runtime lineage run.
         """
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster")
@@ -200,59 +644,124 @@ class TestObservability(IntegrationTestBase):
         verify_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}")
         assert verify_response.status_code == 200, f"Created namespace not found: {test_namespace}"
 
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+        runtime_namespace = artifacts.observability.lineage_namespace
+        runtime_job_name = artifacts.metadata.product_name
+        before_run_ids = _marquez_run_id_snapshot(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_name=runtime_job_name,
+        )
+        lineage_events_before_response = marquez_client.get(
+            "/api/v1/events/lineage",
+            params={"limit": 100},
+        )
+        assert lineage_events_before_response.status_code == 200, (
+            "Marquez lineage events endpoint failed before runtime trigger: "
+            f"{lineage_events_before_response.status_code} - "
+            f"{lineage_events_before_response.text}"
+        )
+        lineage_events_before = lineage_events_before_response.json().get("events", [])
+        before_lineage_event_run_ids = {
+            run_id
+            for event in lineage_events_before
+            if (run_id := _lineage_event_run_id(event)) is not None
+        }
+        trigger_lineage_run(
+            expected_namespace=runtime_namespace,
+            expected_job_name=runtime_job_name,
+            before_run_ids=before_run_ids,
+        )
+
         # Query for REAL jobs -- not just API responds
         jobs_response = marquez_client.get(f"/api/v1/namespaces/{test_namespace}/jobs")
         assert jobs_response.status_code == 200, (
             f"Jobs endpoint failed: {jobs_response.status_code}"
         )
 
-        # Check for jobs in the default namespace (where pipeline would emit)
-        default_jobs = marquez_client.get("/api/v1/namespaces/default/jobs")
-        assert default_jobs.status_code == 200, (
-            f"Marquez default namespace jobs query failed: {default_jobs.status_code}. "
-            "Marquez API must be accessible for OpenLineage validation."
+        lineage_events_response = marquez_client.get(
+            "/api/v1/events/lineage",
+            params={"limit": 100},
         )
-        default_jobs_json = default_jobs.json()
-        all_jobs: list[dict[str, Any]] = default_jobs_json.get("jobs", [])
-
-        # Also check customer-360, floe-platform, and floe.compilation namespaces.
-        # floe.compilation is the default namespace used by the SyncLineageEmitter
-        # during compile_pipeline() — compilation-time events land there.
-        for ns_name in ("customer-360", "floe-platform", "floe.compilation"):
-            ns_jobs = marquez_client.get(f"/api/v1/namespaces/{ns_name}/jobs")
-            if ns_jobs.status_code == 200:
-                ns_jobs_json = ns_jobs.json()
-                all_jobs.extend(ns_jobs_json.get("jobs", []))
-
-        namespaces_checked = (
-            f"default, customer-360, floe-platform, floe.compilation, {test_namespace}"
+        assert lineage_events_response.status_code == 200, (
+            "Marquez lineage events endpoint failed after runtime trigger: "
+            f"{lineage_events_response.status_code} - {lineage_events_response.text}"
         )
+        lineage_events = lineage_events_response.json().get("events", [])
+        fresh_lineage_events = [
+            event
+            for event in lineage_events
+            if (run_id := _lineage_event_run_id(event)) is not None
+            and run_id not in before_lineage_event_run_ids
+        ]
+        assert fresh_lineage_events, (
+            "OBSERVABILITY GAP: No fresh OpenLineage events found after runtime trigger.\n"
+            f"Existing event run ids before trigger: {len(before_lineage_event_run_ids)}\n"
+            "Expected the runtime trigger to emit OpenLineage events with new run ids."
+        )
+
+        event_identity = _runtime_lineage_identity_from_events(fresh_lineage_events)
+        assert event_identity is not None, (
+            "Runtime OpenLineage events were received but no job namespace/name "
+            f"could be extracted. events={fresh_lineage_events[:3]}"
+        )
+        event_namespace, event_job_name = event_identity
+
+        runtime_jobs_response = marquez_client.get(
+            f"/api/v1/namespaces/{quote(event_namespace, safe='')}/jobs"
+        )
+        assert runtime_jobs_response.status_code == 200, (
+            f"Marquez runtime namespace jobs query failed for emitted namespace "
+            f"{event_namespace}: {runtime_jobs_response.status_code} - "
+            f"{runtime_jobs_response.text}"
+        )
+        all_jobs: list[dict[str, Any]] = runtime_jobs_response.json().get("jobs", [])
 
         # We need REAL OpenLineage events from pipeline execution
         assert len(all_jobs) > 0, (
-            "OBSERVABILITY GAP: No OpenLineage jobs found in any Marquez namespace.\n"
+            "OBSERVABILITY GAP: No OpenLineage jobs found in runtime namespace.\n"
             "The platform is not emitting OpenLineage events during pipeline execution.\n"
             "Fix: Configure dbt-openlineage or Dagster OpenLineage integration to emit "
             "RunEvent.START and RunEvent.COMPLETE events.\n"
-            f"Namespaces checked: {namespaces_checked}"
+            f"Namespace checked: {event_namespace}"
         )
 
-        # Validate jobs are from THIS pipeline (match expected product names).
-        # Runtime lineage uses dbt model unique_ids (model.customer_360.*)
-        # or Dagster asset keys — match several known prefixes.
         job_names = [job.get("name", "") for job in all_jobs]
-        has_pipeline_job = any(
-            "model." in name.lower()
-            or "stg_" in name.lower()
-            or "mart_" in name.lower()
-            or "customer" in name.lower()
-            or "pipeline" in name.lower()
-            for name in job_names
-        )
-        assert has_pipeline_job, (
-            f"OBSERVABILITY GAP: Jobs found but none match expected pipeline products.\n"
+        assert event_job_name in job_names, (
+            "OBSERVABILITY GAP: Emitted runtime OpenLineage job not found in Marquez.\n"
+            f"Emitted namespace/job: {event_namespace}/{event_job_name}\n"
+            f"Artifact-derived namespace/job used to trigger: "
+            f"{runtime_namespace}/{runtime_job_name}\n"
             f"Job names found: {job_names}\n"
-            "Expected job names containing 'model.', 'stg_', 'mart_', 'customer', or 'pipeline'."
+            "Expected Marquez to expose the namespace/job from the emitted "
+            "OpenLineage event."
+        )
+
+        runtime_runs = _marquez_job_runs(
+            marquez_client,
+            namespace=event_namespace,
+            job_name=event_job_name,
+        )
+        fresh_lineage_event_run_ids = {
+            run_id
+            for event in fresh_lineage_events
+            if (run_id := _lineage_event_run_id(event)) is not None
+        }
+        fresh_completed_runs = [
+            run
+            for run in runtime_runs
+            if _marquez_run_identity_candidates(run) & fresh_lineage_event_run_ids
+            and _marquez_run_state(run) == _COMPLETED_MARQUEZ_STATE
+        ]
+        run_states = {_marquez_run_state(run) for run in runtime_runs if _marquez_run_state(run)}
+        assert fresh_completed_runs, (
+            "OBSERVABILITY GAP: Runtime OpenLineage did not create a fresh "
+            "COMPLETED Marquez run.\n"
+            f"Emitted namespace/job: {event_namespace}/{event_job_name}\n"
+            f"Fresh event run ids: {sorted(fresh_lineage_event_run_ids)}\n"
+            f"Run states found: {sorted(run_states)}\n"
+            "Expected a new run with state COMPLETED."
         )
 
     @pytest.mark.e2e
@@ -696,24 +1205,29 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         marquez_client: httpx.Client,
         dagster_client: Any,
-        seed_observability: None,
+        compiled_artifacts: Callable[[Path], Any],
+        project_root: Path,
+        trigger_lineage_run: Callable[..., None],
     ) -> None:
         """Validate that Marquez contains real lineage data queryable via the lineage graph API.
 
         Demands that:
-        1. At least one Marquez namespace contains real OpenLineage jobs
-        2. Lineage graph API returns data for those jobs
+        1. A fresh runtime run completes for the artifact-derived namespace/job
+        2. Lineage graph API returns data for that exact namespace/job
         3. Lineage response contains a 'graph' key with actual lineage data
 
         This test also validates port-forward stability (AC-19.3) implicitly:
-        it performs multiple sequential Marquez API calls (namespace listing,
-        per-namespace job queries, lineage graph query). If the port-forward
-        drops mid-test, these calls fail with clear connection errors.
+        it performs multiple sequential Marquez API calls (fresh run snapshot,
+        job query, lineage graph query). If the port-forward drops mid-test,
+        these calls fail with clear connection errors.
 
         Args:
             e2e_namespace: Unique namespace for test isolation.
             marquez_client: Marquez HTTP client.
             dagster_client: Dagster GraphQL client (for infrastructure check).
+            compiled_artifacts: Real compiler fixture used to resolve lineage namespace.
+            project_root: Repository root fixture.
+            trigger_lineage_run: Callable that triggers one fresh runtime lineage run.
         """
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster")
@@ -725,59 +1239,63 @@ class TestObservability(IntegrationTestBase):
                 "Run via make test-e2e or: kubectl port-forward svc/marquez 5000 -n floe-test"
             )
 
-        # Create a test namespace
-        test_ns = f"floe-lineage-{e2e_namespace}"
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        artifacts = compiled_artifacts(spec_path)
+        runtime_namespace = artifacts.observability.lineage_namespace
+        runtime_job_name = artifacts.metadata.product_name
 
-        # Create namespace
-        ns_response = marquez_client.put(
-            f"/api/v1/namespaces/{test_ns}",
-            json={
-                "ownerName": "floe-e2e",
-                "description": "Lineage graph test namespace",
-            },
+        before_run_ids = _marquez_run_id_snapshot(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_name=runtime_job_name,
         )
-        assert ns_response.status_code in (
-            200,
-            201,
-        ), f"Failed to create namespace: {ns_response.status_code}"
-
-        # Query ALL namespaces for real lineage data
-        all_ns_response = marquez_client.get("/api/v1/namespaces")
-        assert all_ns_response.status_code == 200
-        all_namespaces = all_ns_response.json().get("namespaces", [])
-
-        # Search for any namespace with actual job data
-        namespaces_with_jobs: list[str] = []
-        for ns in all_namespaces:
-            ns_name = ns["name"]
-            ns_jobs = marquez_client.get(f"/api/v1/namespaces/{ns_name}/jobs")
-            if ns_jobs.status_code == 200:
-                jobs = ns_jobs.json().get("jobs", [])
-                if len(jobs) > 0:
-                    namespaces_with_jobs.append(ns_name)
-
-        assert len(namespaces_with_jobs) > 0, (
-            "LINEAGE GAP: No namespaces contain OpenLineage jobs.\n"
-            f"Checked {len(all_namespaces)} namespaces, none have job data.\n"
-            "Fix: Configure dbt-openlineage or Dagster OpenLineage integration "
-            "to emit lineage events during pipeline execution."
+        trigger_lineage_run(
+            expected_namespace=runtime_namespace,
+            expected_job_name=runtime_job_name,
+            before_run_ids=before_run_ids,
         )
 
-        # For the namespace with jobs, verify lineage graph is queryable
-        ns_with_data = namespaces_with_jobs[0]
-        jobs_response = marquez_client.get(f"/api/v1/namespaces/{ns_with_data}/jobs")
-        first_job = jobs_response.json()["jobs"][0]
+        fresh_completed_runs = _fresh_completed_runs(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_name=runtime_job_name,
+            before_run_ids=before_run_ids,
+        )
+        all_runs = _marquez_job_runs(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_name=runtime_job_name,
+        )
+        run_states = {_marquez_run_state(run) for run in all_runs if _marquez_run_state(run)}
+        assert fresh_completed_runs, (
+            "LINEAGE GAP: Lineage graph test did not create a fresh COMPLETED "
+            "Marquez run before querying the graph.\n"
+            f"Expected namespace/job: {runtime_namespace}/{runtime_job_name}\n"
+            f"Existing run ids before trigger: {len(before_run_ids)}\n"
+            f"Run states found: {sorted(run_states)}"
+        )
 
-        # Query lineage for this job
+        runtime_jobs = _marquez_namespace_jobs(
+            marquez_client,
+            namespace=runtime_namespace,
+        )
+        runtime_job_names = [job.get("name") for job in runtime_jobs]
+        assert runtime_job_name in runtime_job_names, (
+            "LINEAGE GAP: Fresh runtime job not found in artifact-derived namespace.\n"
+            f"Expected namespace/job: {runtime_namespace}/{runtime_job_name}\n"
+            f"Job names found: {runtime_job_names}"
+        )
+
+        # Query lineage for the exact artifact-derived runtime job, not a stale global job.
         lineage_response = marquez_client.get(
             "/api/v1/lineage",
             params={
-                "nodeId": f"job:{ns_with_data}:{first_job['name']}",
+                "nodeId": f"job:{runtime_namespace}:{runtime_job_name}",
                 "depth": 3,
             },
         )
         assert lineage_response.status_code == 200, (
-            f"Lineage graph query failed for job {first_job['name']}: "
+            f"Lineage graph query failed for job {runtime_job_name}: "
             f"{lineage_response.status_code} - {lineage_response.text}"
         )
 
@@ -892,7 +1410,9 @@ class TestObservability(IntegrationTestBase):
         e2e_namespace: str,
         marquez_client: httpx.Client,
         dagster_client: Any,
-        seed_observability: None,
+        compiled_artifacts: Callable[[Path], Any],
+        project_root: Path,
+        trigger_lineage_run: Callable[..., None],
     ) -> None:
         """Validate platform emits OpenLineage events at all 4 required lifecycle points.
 
@@ -912,6 +1432,9 @@ class TestObservability(IntegrationTestBase):
             e2e_namespace: Unique namespace for test isolation.
             marquez_client: Marquez HTTP client.
             dagster_client: Dagster GraphQL client.
+            compiled_artifacts: Real compiler fixture used to resolve lineage namespace.
+            project_root: Repository root fixture.
+            trigger_lineage_run: Callable that triggers one fresh runtime lineage run.
         """
         # Check infrastructure availability - FAIL if not available
         self.check_infrastructure("dagster")
@@ -923,118 +1446,185 @@ class TestObservability(IntegrationTestBase):
                 "Run via make test-e2e or: kubectl port-forward svc/marquez 5000 -n floe-test"
             )
 
-        # seed_observability Phase 2 triggered a Dagster asset run for
-        # stg_crm_customers, causing LineageResource to emit runtime
-        # OpenLineage events to Marquez. Query those events here.
-
-        # Query Marquez for events emitted BY the platform after compilation.
-        # floe.compilation is the SyncLineageEmitter's default namespace used
-        # during compile_pipeline() — compilation-time events land there.
-        namespaces_to_check = [
-            "default",
-            "customer-360",
-            "floe-platform",
-            "floe.compilation",
-        ]
-        all_jobs: list[dict[str, Any]] = []
-        all_runs: list[dict[str, Any]] = []
-
-        for ns_name in namespaces_to_check:
-            jobs_response = marquez_client.get(f"/api/v1/namespaces/{ns_name}/jobs")
-            if jobs_response.status_code != 200:
-                continue
-            jobs = jobs_response.json().get("jobs", [])
-            all_jobs.extend(jobs)
-
-            # Get runs for each job to check event types
-            for job in jobs:
-                runs_response = marquez_client.get(
-                    f"/api/v1/namespaces/{ns_name}/jobs/{job['name']}/runs"
-                )
-                if runs_response.status_code == 200:
-                    runs = runs_response.json().get("runs", [])
-                    for run in runs:
-                        run["_job_name"] = job["name"]
-                        run["_namespace"] = ns_name
-                    all_runs.extend(runs)
-
-        # Platform must have emitted OpenLineage jobs
-        assert len(all_jobs) > 0, (
-            "EMISSION GAP: No OpenLineage jobs found after compilation.\n"
-            f"Namespaces checked: {namespaces_to_check}\n"
-            "The platform is not emitting OpenLineage events during compilation.\n"
-            "Fix: Wire OpenLineage emission into compilation stages and pipeline execution."
+        # Snapshot compilation model runs before compile_pipeline() because
+        # compilation-time model jobs land in floe.compilation. The model job
+        # names are resolved from artifacts after compilation, so this captures
+        # the whole namespace and filters to artifact-derived names later.
+        spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
+        compilation_model_namespace = "floe.compilation"
+        compilation_model_run_ids_before = _marquez_namespace_run_snapshot(
+            marquez_client,
+            namespace=compilation_model_namespace,
         )
 
-        # Validate the 4 emission points exist
-        # Look for: dbt model START, dbt model COMPLETE, pipeline START, pipeline COMPLETE
-        # Runtime job names are dbt unique_ids (e.g. "model.customer_360.stg_crm_customers")
-        # or Dagster asset keys — match on "model." prefix, staging/mart prefixes, or legacy names
-        job_names = {job.get("name", "") for job in all_jobs}
-        has_dbt_model_job = any(
-            "dbt" in name.lower()
-            or "model." in name.lower()
-            or "stg_" in name.lower()
-            or "mart_" in name.lower()
-            for name in job_names
+        artifacts = compiled_artifacts(spec_path)
+        runtime_namespace = artifacts.observability.lineage_namespace
+        runtime_job_name = artifacts.metadata.product_name
+        model_job_names = _expected_model_job_names(artifacts)
+
+        # Snapshot artifact-derived runtime jobs after compilation but before
+        # the Dagster trigger, so runtime model evidence must come from this run.
+        runtime_model_run_ids_before = _marquez_namespace_run_snapshot(
+            marquez_client,
+            namespace=runtime_namespace,
         )
-        has_pipeline_job = any(
-            "pipeline" in name.lower()
-            or "daily" in name.lower()
-            or "customer" in name.lower()
-            or "asset" in name.lower()
-            for name in job_names
+        before_run_ids = _marquez_run_id_snapshot(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_name=runtime_job_name,
+        )
+        trigger_lineage_run(
+            expected_namespace=runtime_namespace,
+            expected_job_name=runtime_job_name,
+            before_run_ids=before_run_ids,
         )
 
-        # Check run states for START and COMPLETE events
-        run_states: set[str] = set()
-        for run in all_runs:
-            current_state = run.get("state", run.get("currentState", ""))
-            if current_state:
-                run_states.add(current_state.upper())
+        fresh_completed_runs = _fresh_completed_runs(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_name=runtime_job_name,
+            before_run_ids=before_run_ids,
+        )
+        all_pipeline_runs = _marquez_job_runs(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_name=runtime_job_name,
+        )
+        run_states = {
+            _marquez_run_state(run) for run in all_pipeline_runs if _marquez_run_state(run)
+        }
+        assert fresh_completed_runs, (
+            "EMISSION GAP: Pipeline runtime did not create a fresh COMPLETED "
+            "Marquez run.\n"
+            f"Expected namespace/job: {runtime_namespace}/{runtime_job_name}\n"
+            f"Existing run ids before trigger: {len(before_run_ids)}\n"
+            f"Run states found: {sorted(run_states)}"
+        )
 
-        assert has_dbt_model_job, (
-            "EMISSION GAP: No dbt model jobs found in Marquez.\n"
-            f"Job names found: {sorted(job_names)}\n"
-            "Expected: Jobs with 'dbt', 'model.', 'stg_', or 'mart_' in the name "
-            "for per-model emission points.\n"
+        fresh_runtime_model_runs = _fresh_completed_runs_for_jobs(
+            marquez_client,
+            namespace=runtime_namespace,
+            job_names=model_job_names,
+            before_run_ids_by_job=runtime_model_run_ids_before,
+        )
+        fresh_compilation_model_runs = _fresh_completed_runs_for_jobs(
+            marquez_client,
+            namespace=compilation_model_namespace,
+            job_names=model_job_names,
+            before_run_ids_by_job=compilation_model_run_ids_before,
+        )
+        fresh_model_runs = fresh_runtime_model_runs + fresh_compilation_model_runs
+        fresh_model_job_names = {str(run.get("_job_name", "")) for run in fresh_model_runs}
+        assert fresh_model_runs, (
+            "EMISSION GAP: No fresh dbt model runs found in Marquez.\n"
+            f"Expected model job names: {sorted(model_job_names)}\n"
+            f"Runtime namespace checked: {runtime_namespace}\n"
+            f"Compilation namespace checked: {compilation_model_namespace}\n"
+            "Stale model jobs from previous runs are not accepted as evidence.\n"
             "Fix: Emit RunEvent.START and RunEvent.COMPLETE for each dbt model execution."
         )
 
-        assert has_pipeline_job, (
-            "EMISSION GAP: No pipeline-level jobs found in Marquez.\n"
-            f"Job names found: {sorted(job_names)}\n"
-            "Expected: Jobs with 'pipeline', 'daily', 'customer', or 'asset' in the name "
-            "for pipeline-level emission.\n"
-            "Fix: Emit RunEvent.START and RunEvent.COMPLETE for pipeline execution."
+        runtime_jobs = _marquez_namespace_jobs(
+            marquez_client,
+            namespace=runtime_namespace,
+        )
+        runtime_job_names = [job.get("name", "") for job in runtime_jobs]
+        assert runtime_job_name in runtime_job_names, (
+            "EMISSION GAP: No fresh pipeline-level job found in Marquez.\n"
+            f"Expected namespace/job: {runtime_namespace}/{runtime_job_name}\n"
+            f"Runtime job names found: {runtime_job_names}\n"
+            "The fresh COMPLETED run above proves this exact job, but the jobs "
+            "endpoint must also expose it for lineage graph queries."
         )
 
-        # Validate START and COMPLETE events were received by Marquez.
+        fresh_run_ids: set[str] = set()
+        for run in fresh_completed_runs:
+            fresh_run_ids.update(_marquez_run_identity_candidates(run))
+        fresh_model_run_ids: set[str] = set()
+        for run in fresh_model_runs:
+            fresh_model_run_ids.update(_marquez_run_identity_candidates(run))
+
+        # Validate START and COMPLETE evidence for the fresh runtime run.
         # Per-model emission pairs are back-to-back synchronous, so Marquez
         # may only surface the terminal COMPLETED run state (the intermediate
-        # START state is too brief to observe via the runs API). Instead,
-        # query the lineage events API which returns individual OpenLineage
-        # events with their eventType field — this is a stronger check.
+        # START state is too brief to observe via the runs API). Prefer the
+        # lineage events API only when its event metadata can be tied to the
+        # fresh run id/namespace/job. Global event types are diagnostic only:
+        # stale events from another run do not prove this runtime run emitted.
         events_response = marquez_client.get("/api/v1/events/lineage", params={"limit": 100})
+        scoped_event_types: set[str] = set()
+        global_event_types: set[str] = set()
+        scoped_model_events: list[dict[str, Any]] = []
         if events_response.status_code == 200:
             events = events_response.json().get("events", [])
-            event_types = {e.get("eventType", "").upper() for e in events if e.get("eventType")}
-            has_start = "START" in event_types
-            has_complete = "COMPLETE" in event_types
+            global_event_types = {_lineage_event_type(e) for e in events if _lineage_event_type(e)}
+            scoped_event_types = {
+                _lineage_event_type(e)
+                for e in events
+                if _lineage_event_type(e)
+                and _lineage_event_matches_fresh_run(
+                    e,
+                    namespace=runtime_namespace,
+                    job_name=runtime_job_name,
+                    fresh_run_ids=fresh_run_ids,
+                )
+            }
+            scoped_model_events = [
+                e
+                for e in events
+                if _lineage_event_matches_fresh_jobs(
+                    e,
+                    namespace=runtime_namespace,
+                    job_names=model_job_names,
+                    fresh_run_ids=fresh_model_run_ids,
+                )
+            ]
+            runtime_model_event_run_ids: set[str] = set()
+            for run in fresh_runtime_model_runs:
+                runtime_model_event_run_ids.update(_marquez_run_identity_candidates(run))
+            scoped_runtime_model_events = [
+                e
+                for e in events
+                if _lineage_event_matches_fresh_jobs(
+                    e,
+                    namespace=runtime_namespace,
+                    job_names=model_job_names,
+                    fresh_run_ids=runtime_model_event_run_ids,
+                )
+            ]
+            scoped_model_event_types = {
+                _lineage_event_type(e) for e in scoped_model_events if _lineage_event_type(e)
+            }
         else:
-            # Fallback to run states if events API unavailable (older Marquez)
-            has_start = "RUNNING" in run_states or "NEW" in run_states or "START" in run_states
-            has_complete = "COMPLETED" in run_states or "COMPLETE" in run_states
+            scoped_model_event_types = set()
+            scoped_runtime_model_events = []
+
+        fresh_run_started = any(run.get("startedAt") for run in fresh_completed_runs)
+        fresh_run_completed = bool(fresh_completed_runs)
+        fresh_model_started = any(run.get("startedAt") for run in fresh_model_runs)
+        fresh_model_completed = bool(fresh_model_runs)
+        has_pipeline_start = "START" in scoped_event_types or fresh_run_started
+        has_pipeline_complete = "COMPLETE" in scoped_event_types or fresh_run_completed
+        has_model_start = "START" in scoped_model_event_types or fresh_model_started
+        has_model_complete = "COMPLETE" in scoped_model_event_types or fresh_model_completed
 
         event_types_display = (
-            sorted(event_types)
+            (
+                f"scoped={sorted(scoped_event_types)}, "
+                f"scoped_model={sorted(scoped_model_event_types)}, "
+                f"global={sorted(global_event_types)} "
+                "(global types are not used as fresh-run proof)"
+            )
             if events_response.status_code == 200
             else "N/A (events API unavailable)"
         )
-        assert has_start and has_complete, (
+        assert (
+            has_pipeline_start and has_pipeline_complete and has_model_start and has_model_complete
+        ), (
             "EMISSION GAP: Not all lifecycle events found.\n"
             f"Event types found: {event_types_display}\n"
             f"Run states found: {sorted(run_states)}\n"
+            f"Fresh model jobs found: {sorted(fresh_model_job_names)}\n"
             "Expected both START and COMPLETE lifecycle events.\n"
             "Fix: Emit RunEvent.START at job begin "
             "and RunEvent.COMPLETE at job end.\n"
@@ -1046,69 +1636,36 @@ class TestObservability(IntegrationTestBase):
         # -------------------------------------------------------------------
         # AC-5: Runtime lineage events have meaningful (non-zero) durations.
         # -------------------------------------------------------------------
-        from datetime import datetime
-
-        duration_checked = False
-        for run in all_runs:
-            started_at: str = run.get("startedAt", "")
-            ended_at: str = run.get("endedAt", "")
-            if not started_at or not ended_at:
-                continue
-            try:
-                start_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-                end_dt = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
-                delta = (end_dt - start_dt).total_seconds()
-                if delta > 0:
-                    duration_checked = True
-                    break
-            except (ValueError, TypeError):
-                continue
-
-        assert duration_checked, (
-            "DURATION GAP: No Marquez runs have non-zero duration "
+        fresh_scoped_runs = fresh_completed_runs + fresh_model_runs
+        assert any(_run_has_nonzero_duration(run) for run in fresh_scoped_runs), (
+            "DURATION GAP: No fresh Marquez runs have non-zero duration "
             "(startedAt → endedAt).\n"
             "Runtime lineage events MUST have meaningful durations proving "
             "they were emitted at actual execution boundaries, "
             "not back-to-back during compilation.\n"
+            f"Fresh pipeline runs inspected: {len(fresh_completed_runs)}\n"
+            f"Fresh model runs inspected: {len(fresh_model_runs)}\n"
             "Fix: Ensure LineageResource emits START at execution begin "
             "and COMPLETE at execution end with real timestamps."
         )
 
         # -------------------------------------------------------------------
-        # AC-6: Per-model events carry a parentRun facet linking to the
+        # AC-6: Per-model events carry a parent facet linking to the
         #       parent Dagster asset run.
         # -------------------------------------------------------------------
-        parent_facet_found = False
-        for run in all_runs:
-            facets: dict[str, Any] = run.get("facets") or {}
-            parent_facet: dict[str, Any] | None = None
-            if "parentRun" in facets:
-                parent_facet = facets["parentRun"]
-            elif "parent" in facets:
-                parent_facet = facets["parent"]
-            else:
-                # Marquez may nest facets under "run" key
-                run_facets: dict[str, Any] = facets.get("run") or {}
-                if "parentRun" in run_facets:
-                    parent_facet = run_facets["parentRun"]
-                elif "parent" in run_facets:
-                    parent_facet = run_facets["parent"]
-
-            if parent_facet is not None and isinstance(parent_facet, dict):
-                # Validate structure: must contain a run reference
-                has_run_ref = bool(
-                    parent_facet.get("run", {}).get("runId") or parent_facet.get("runId")
-                )
-                if has_run_ref:
-                    parent_facet_found = True
-                    break
-
-        assert parent_facet_found, (
-            "PARENT FACET GAP: No Marquez runs contain a valid 'parentRun' "
+        assert any(
+            _parent_run_id_from_run(run)
+            or _parent_run_id_from_marquez_run_facets(marquez_client, run)
+            for run in fresh_runtime_model_runs
+        ) or any(_parent_run_id_from_event(event) for event in scoped_runtime_model_events), (
+            "PARENT FACET GAP: No fresh Marquez model runs contain a valid 'parent' "
             "facet with a runId.\n"
-            "Per-model dbt lineage events MUST include a parentRun facet "
+            "Per-model dbt lineage events MUST include the OpenLineage parent facet "
             "linking to the parent Dagster asset run.\n"
-            f"Runs inspected: {len(all_runs)}\n"
+            f"Fresh runtime model runs inspected: {len(fresh_runtime_model_runs)}\n"
+            f"Fresh runtime model events inspected: {len(scoped_runtime_model_events)}\n"
+            f"Fresh model jobs inspected: {sorted(fresh_model_job_names)}\n"
+            "Stale model runs from previous executions are not accepted as evidence.\n"
             "Fix: Ensure LineageResource passes parent_run_id "
             "when extracting per-model lineage events."
         )

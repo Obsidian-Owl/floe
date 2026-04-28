@@ -21,7 +21,10 @@ Requirements:
 
 from __future__ import annotations
 
+import ast
+import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -293,15 +296,38 @@ class TestUpgradeCommandStructure:
 
     @pytest.mark.requirement("AC-3")
     def test_upgrade_command_has_wait_flag(self, upgrade_test_code: str) -> None:
-        """The upgrade command must include ``--wait`` for reliable upgrades.
+        """The upgrade command must include a Helm wait flag for reliable upgrades.
 
-        The ``--wait`` flag ensures Helm waits for all resources to be ready
-        before returning. Removing this would make the upgrade test unreliable.
+        The wait flag ensures Helm waits for resources to be ready before
+        returning. Removing this would make the upgrade test unreliable.
         """
-        has_wait = bool(re.search(r'["\']--wait["\']', upgrade_test_code))
+        has_wait = bool(re.search(r'["\']--wait(?:=legacy)?["\']', upgrade_test_code))
         assert has_wait, (
-            "test_helm_upgrade_succeeds does not contain '--wait' flag. "
+            "test_helm_upgrade_succeeds does not contain a Helm wait flag. "
             "The upgrade command must wait for resources to be ready."
+        )
+
+    @pytest.mark.requirement("AC-2.9")
+    def test_upgrade_command_uses_legacy_wait_strategy_for_helm4(
+        self,
+        upgrade_test_code: str,
+    ) -> None:
+        """The destructive upgrade must avoid Helm 4 watcher false negatives.
+
+        Helm 4 defaults ``--rollback-on-failure`` to the watcher wait strategy.
+        In the in-cluster destructive lane that watcher reported a healthy
+        ``cube-api`` deployment as ``Unknown`` and left the release in
+        rollback. The upgrade test should use Helm's legacy readiness waiter
+        explicitly.
+        """
+        assert '"--wait=legacy"' in upgrade_test_code or "'--wait=legacy'" in upgrade_test_code, (
+            "test_helm_upgrade_succeeds must use '--wait=legacy'. Helm 4 "
+            "--rollback-on-failure defaults to watcher wait, which produced "
+            "false Deployment Unknown readiness during the destructive lane."
+        )
+        assert '"--wait"' not in upgrade_test_code and "'--wait'" not in upgrade_test_code, (
+            "test_helm_upgrade_succeeds must not use bare '--wait' because "
+            "Helm 4 rollback-on-failure defaults bare wait to watcher."
         )
 
     @pytest.mark.requirement("AC-3")
@@ -330,3 +356,130 @@ class TestUpgradeCommandStructure:
             "The upgrade test must validate the pure upgrade path, not "
             "fall back to install if the release doesn't exist."
         )
+
+
+class TestUpgradeTimeoutEnvelope:
+    """Validate pytest does not interrupt Helm before Helm can settle state."""
+
+    @pytest.mark.requirement("AC-2.9")
+    def test_pytest_timeout_exceeds_helm_upgrade_and_recovery_budget(
+        self,
+        upgrade_file_raw: str,
+    ) -> None:
+        """The destructive upgrade test needs an outer timeout above Helm budgets.
+
+        ``test_helm_upgrade_succeeds`` runs ``helm upgrade --timeout 8m`` and
+        may run a 5-minute recovery rollback in ``finally``. A global 300s
+        pytest-timeout interrupts Helm mid-transaction and leaves the release
+        in ``pending-rollback``.
+        """
+        tree = ast.parse(upgrade_file_raw)
+        upgrade_test = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "test_helm_upgrade_succeeds"
+        )
+
+        timeout_seconds: int | None = None
+        for decorator in upgrade_test.decorator_list:
+            if not isinstance(decorator, ast.Call):
+                continue
+            if (
+                isinstance(decorator.func, ast.Attribute)
+                and decorator.func.attr == "timeout"
+                and isinstance(decorator.func.value, ast.Attribute)
+                and decorator.func.value.attr == "mark"
+            ):
+                first_arg = decorator.args[0] if decorator.args else None
+                if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, int):
+                    timeout_seconds = first_arg.value
+
+        assert timeout_seconds is not None, (
+            "test_helm_upgrade_succeeds must declare @pytest.mark.timeout(...) "
+            "so the global 300s timeout cannot interrupt Helm mid-upgrade."
+        )
+        assert timeout_seconds >= 1260, (
+            "test_helm_upgrade_succeeds pytest timeout must exceed the 8m Helm "
+            "upgrade budget plus the 5m recovery rollback budget and scheduling "
+            f"headroom; got {timeout_seconds}s."
+        )
+
+
+class TestRuntimeImageOverrides:
+    """Validate upgrade replays only runtime image values from the current release."""
+
+    @pytest.mark.requirement("AC-2.9")
+    def test_runtime_dagster_image_overrides_are_derived_from_helm_values(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The upgrade must preserve the manifest-selected demo image tag.
+
+        DevPod/Kind loads the built demo image by its generated tag and uses
+        ``imagePullPolicy: Never``. If the upgrade falls back to the test
+        values file's ``latest`` tag, pods cannot start and Helm waits until
+        timeout.
+        """
+        from tests.e2e import test_helm_upgrade_e2e as upgrade_module
+
+        helm_values = {
+            "dagster": {
+                "dagsterWebserver": {
+                    "image": {
+                        "repository": "registry.example/floe-dagster-demo",
+                        "tag": "abc123-dirty",
+                    },
+                },
+                "dagsterDaemon": {
+                    "image": {
+                        "repository": "registry.example/floe-dagster-demo",
+                        "tag": "abc123-dirty",
+                    },
+                },
+                "runLauncher": {
+                    "config": {
+                        "k8sRunLauncher": {
+                            "image": {
+                                "repository": "registry.example/floe-dagster-demo",
+                                "tag": "abc123-dirty",
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        calls: list[list[str]] = []
+
+        def fake_run_helm(args: list[str]) -> subprocess.CompletedProcess[str]:
+            calls.append(args)
+            return subprocess.CompletedProcess(
+                args=args,
+                returncode=0,
+                stdout=json.dumps(helm_values),
+                stderr="",
+            )
+
+        monkeypatch.setattr(upgrade_module, "run_helm", fake_run_helm)
+
+        overrides = upgrade_module._current_dagster_image_overrides(
+            release="floe-platform",
+            namespace="floe-test",
+        )
+
+        assert calls == [
+            ["get", "values", "floe-platform", "-n", "floe-test", "--all", "-o", "json"],
+        ]
+        assert overrides == [
+            "--set-string",
+            "dagster.dagsterWebserver.image.repository=registry.example/floe-dagster-demo",
+            "--set-string",
+            "dagster.dagsterWebserver.image.tag=abc123-dirty",
+            "--set-string",
+            "dagster.dagsterDaemon.image.repository=registry.example/floe-dagster-demo",
+            "--set-string",
+            "dagster.dagsterDaemon.image.tag=abc123-dirty",
+            "--set-string",
+            "dagster.runLauncher.config.k8sRunLauncher.image.repository=registry.example/floe-dagster-demo",
+            "--set-string",
+            "dagster.runLauncher.config.k8sRunLauncher.image.tag=abc123-dirty",
+        ]

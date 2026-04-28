@@ -63,6 +63,11 @@ class TestNoOpLineageTransport:
         transport.close()
         transport.close()  # Second close should also succeed (idempotent)
 
+    def test_flush_is_noop(self) -> None:
+        """NoOp flush completes without error."""
+        transport = NoOpLineageTransport()
+        _run(transport.flush())
+
 
 class TestConsoleLineageTransport:
     """Tests for ConsoleLineageTransport."""
@@ -88,6 +93,11 @@ class TestConsoleLineageTransport:
         transport = ConsoleLineageTransport()
         transport.close()
         transport.close()  # Second close should also succeed (idempotent)
+
+    def test_flush_is_noop(self) -> None:
+        """Console flush completes without error."""
+        transport = ConsoleLineageTransport()
+        _run(transport.flush())
 
 
 class TestCompositeLineageTransport:
@@ -127,6 +137,16 @@ class TestCompositeLineageTransport:
 
         for child in children:
             child.close.assert_called_once()
+
+    def test_flush_flushes_all_children(self) -> None:
+        """Flush calls flush() on all children."""
+        children = [AsyncMock() for _ in range(3)]
+        transport = CompositeLineageTransport(transports=children)  # type: ignore[arg-type]
+
+        _run(transport.flush())
+
+        for child in children:
+            child.flush.assert_awaited_once()
 
     def test_close_handles_child_failure(self) -> None:
         """Close continues even if a child fails."""
@@ -189,6 +209,20 @@ class TestHttpLineageTransport:
         transport.close()
 
         assert transport._closed is True
+
+    def test_flush_waits_for_queued_events(self, sample_event: LineageEvent) -> None:
+        """Flush waits until queued HTTP events have been posted."""
+        transport = HttpLineageTransport(url="http://localhost:5000/api/v1/lineage")
+        with patch.object(transport, "_post_event", new_callable=AsyncMock) as post_event:
+
+            async def _exercise_transport() -> None:
+                await transport.emit(sample_event)
+                await transport.flush()
+                await transport.close_async()
+
+            _run(_exercise_transport())
+
+            post_event.assert_awaited_once()
 
     def test_constructor_params(self) -> None:
         """Constructor accepts url, timeout, and api_key."""

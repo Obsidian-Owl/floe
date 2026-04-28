@@ -81,6 +81,36 @@ def sample_compilation_metadata() -> CompilationMetadata:
     )
 
 
+class TestCompilationMetadata:
+    """Tests for compilation metadata validation."""
+
+    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
+    def test_product_name_rejects_python_string_breakout(self) -> None:
+        """Product names embedded in generated Python must reject code injection."""
+        with pytest.raises(ValidationError, match="product_name"):
+            CompilationMetadata(
+                compiled_at=datetime.now(),
+                floe_version=COMPILED_ARTIFACTS_VERSION,
+                source_hash="sha256:abc123",
+                product_name='bad"; import os; #',
+                product_version="1.0.0",
+            )
+
+    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
+    @pytest.mark.parametrize("product_name", ["customer-360", "test_analytics", "Product1"])
+    def test_product_name_accepts_safe_identifiers(self, product_name: str) -> None:
+        """Safe product names remain valid for compiled artifacts."""
+        metadata = CompilationMetadata(
+            compiled_at=datetime.now(),
+            floe_version=COMPILED_ARTIFACTS_VERSION,
+            source_hash="sha256:abc123",
+            product_name=product_name,
+            product_version="1.0.0",
+        )
+
+        assert metadata.product_name == product_name
+
+
 @pytest.fixture
 def sample_product_identity() -> ProductIdentity:
     """Create a sample ProductIdentity for testing."""
@@ -1114,35 +1144,34 @@ class TestGovernanceLifecycleFields:
 
 
 class TestCompiledArtifactsVersionBump:
-    """Tests for AC-6: version bump to 0.9.0 with history entry."""
+    """Tests for AC-6: version bump to 0.10.0 with history entry."""
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_version_is_0_9_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.9.0'."""
-        assert COMPILED_ARTIFACTS_VERSION == "0.9.0", (
-            f"Expected version '0.9.0', got '{COMPILED_ARTIFACTS_VERSION}'"
+    def test_compiled_artifacts_version_is_0_10_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.10.0'."""
+        assert COMPILED_ARTIFACTS_VERSION == "0.10.0", (
+            f"Expected version '0.10.0', got '{COMPILED_ARTIFACTS_VERSION}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_contains_0_9_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.9.0' entry."""
-        assert "0.9.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
-            f"Version '0.9.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
+    def test_version_history_contains_0_10_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.10.0' entry."""
+        assert "0.10.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
+            f"Version '0.10.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_0_9_0_references_governance_lifecycle(self) -> None:
-        """Test that the 0.9.0 history entry mentions governance lifecycle fields."""
-        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.9.0", "")
-        # Must reference both the domain concept and the fields
+    def test_version_history_0_10_0_references_stale_table_recovery(self) -> None:
+        """Test that the 0.10.0 history entry mentions stale table recovery."""
+        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.10.0", "")
         entry_lower = entry.lower()
-        assert "governance" in entry_lower or "lifecycle" in entry_lower or "ttl" in entry_lower, (
-            f"Version 0.9.0 history entry does not reference governance/lifecycle: '{entry}'"
+        assert "stale" in entry_lower and "recovery" in entry_lower, (
+            f"Version 0.10.0 history entry does not reference stale table recovery: '{entry}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_default_version_is_0_9_0(self) -> None:
-        """Test that CompiledArtifacts().version defaults to '0.9.0'."""
+    def test_compiled_artifacts_default_version_is_0_10_0(self) -> None:
+        """Test that CompiledArtifacts().version defaults to '0.10.0'."""
         artifacts = CompiledArtifacts(
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
@@ -1171,7 +1200,7 @@ class TestCompiledArtifactsVersionBump:
                 lineage_namespace="test",
             ),
         )
-        assert artifacts.version == "0.9.0"
+        assert artifacts.version == "0.10.0"
 
 
 class TestGovernanceBackwardCompatibility:

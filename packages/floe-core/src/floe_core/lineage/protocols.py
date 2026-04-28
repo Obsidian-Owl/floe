@@ -49,6 +49,10 @@ class LineageTransport(Protocol):
         """Async close — drain queue before shutdown. Default calls sync close()."""
         self.close()
 
+    async def flush(self) -> None:
+        """Wait for pending events to be delivered without closing the transport."""
+        ...
+
 
 @runtime_checkable
 class SyncLineageTransport(Protocol):

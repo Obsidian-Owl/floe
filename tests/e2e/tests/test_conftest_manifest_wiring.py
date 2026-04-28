@@ -29,6 +29,8 @@ from typing import Any
 import pytest
 import yaml
 
+pytestmark = pytest.mark.developer_workflow
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -247,7 +249,7 @@ class TestReadManifestConfigWithCustomPath:
         assert result["client_id"] == "custom-id", (
             f"Expected 'custom-id' from custom manifest, got {result['client_id']!r}"
         )
-        assert result["client_secret"] == "custom-secret", (
+        assert result["client_secret"] == "custom-secret", (  # pragma: allowlist secret
             f"Expected 'custom-secret', got {result['client_secret']!r}"
         )
         assert result["warehouse"] == "custom-warehouse", (
@@ -325,7 +327,7 @@ class TestReadManifestConfigFallback:
         assert result["client_id"] == "demo-admin", (
             f"Fallback client_id should be 'demo-admin', got {result['client_id']!r}"
         )
-        assert result["client_secret"] == "demo-secret", (
+        assert result["client_secret"] == "demo-secret", (  # pragma: allowlist secret
             f"Fallback client_secret should be 'demo-secret', got {result['client_secret']!r}"
         )
         assert result["scope"] == "PRINCIPAL_ROLE:ALL", (
@@ -512,7 +514,7 @@ class TestManifestCrossCheck:
             f"got {result['client_id']!r}. "
             "Is _read_manifest_config actually reading the file?"
         )
-        assert result["client_secret"] == "unique-test-secret-abc", (
+        assert result["client_secret"] == "unique-test-secret-abc", (  # pragma: allowlist secret
             f"Expected 'unique-test-secret-abc' from custom manifest, "
             f"got {result['client_secret']!r}. "
             "Is _read_manifest_config actually reading the file?"
@@ -568,3 +570,38 @@ class TestEnvVarOverridePrecedence:
             "conftest.py must still check POLARIS_WAREHOUSE env var "
             "for override precedence (AC-3 condition 4)."
         )
+
+    @pytest.mark.requirement("AC-3")
+    def test_custom_manifest_keeps_env_credential_precedence(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Explicit manifest paths must still let POLARIS_* credentials win."""
+        manifest = tmp_path / "manifest.yaml"
+        manifest.write_text(
+            textwrap.dedent("""\
+                plugins:
+                  catalog:
+                    config:
+                      warehouse: manifest-warehouse
+                      oauth2:
+                        client_id: manifest-id
+                        client_secret: manifest-secret
+                        scope: MANIFEST_SCOPE:READ
+            """)
+        )
+        monkeypatch.setenv("POLARIS_CLIENT_ID", "env-id")
+        monkeypatch.setenv("POLARIS_CLIENT_SECRET", "env-secret")  # pragma: allowlist secret
+        monkeypatch.setenv("POLARIS_SCOPE", "ENV_SCOPE:ALL")
+        monkeypatch.setenv("POLARIS_WAREHOUSE", "env-warehouse")
+
+        fn = _import_read_manifest_config()
+        result = fn(manifest_path=manifest)
+
+        assert result == {
+            "client_id": "env-id",
+            "client_secret": "env-secret",  # pragma: allowlist secret
+            "scope": "ENV_SCOPE:ALL",
+            "warehouse": "env-warehouse",
+        }

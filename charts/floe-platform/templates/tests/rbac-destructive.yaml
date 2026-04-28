@@ -31,29 +31,70 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "watch", "create", "delete"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
   - apiGroups: [""]
-    resources: ["pods/log", "pods/status"]
+    resources: ["pods/log"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["get", "list", "watch", "patch", "update"]
   - apiGroups: [""]
     resources: ["pods/exec"]
-    verbs: ["create"]
+    verbs: ["get", "list", "watch", "create"]
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "list"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
   - apiGroups: [""]
     resources: ["events"]
-    verbs: ["get", "list", "watch", "create"]
+    # The upstream Dagster subchart Role grants event mutation verbs. Helm
+    # refuses to patch that Role unless the in-cluster upgrade identity already
+    # has every granted verb, so destructive tests must retain this superset.
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
   - apiGroups: ["batch"]
     resources: ["jobs"]
-    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
+  - apiGroups: ["batch"]
+    resources: ["jobs/status"]
+    # Includes list/watch because the upstream Dagster subchart Role grants
+    # them and Kubernetes RBAC escalation checks require a superset.
+    verbs: ["get", "list", "watch", "patch", "update"]
   - apiGroups: [""]
     resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["endpoints"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["get", "list", "watch", "patch", "update"]
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
-    verbs: ["get", "list", "watch"]
-  # Secrets: split by verb for least privilege (security-hardening AC-9).
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  # Helm pre-upgrade hook identity. The chart's hook uses
+  # before-hook-creation, so Helm must delete and recreate these resources
+  # during destructive upgrade tests. Helm also watches hook resources and
+  # reads chart-managed resources during rollback. K8s RBAC cannot scope
+  # create by name.
+  - apiGroups: [""]
+    resources: ["serviceaccounts"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  # Helm upgrade/rollback is a namespaced chart-manager operation. The
+  # destructive runner is rendered only for tests.enabled=true and must cover
+  # every namespaced kind rendered by the chart, otherwise each release change
+  # risks exposing a new one-off RBAC 403.
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  # Helm release state: split by verb for least privilege (security-hardening AC-9).
   # Read path: list/watch required for Helm release enumeration.
   - apiGroups: [""]
     resources: ["secrets"]
@@ -68,17 +109,27 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     resourceNames:
+      - {{ .Values.dagster.postgresqlSecretName | default "dagster-postgresql-secret" | quote }}
+      - "{{ include "floe-platform.fullname" . }}-cube"
+      - "{{ include "floe-platform.minio.secretName" . }}"
+      - "{{ include "floe-platform.polaris.credentialSecretName" . }}"
+      - "{{ include "floe-platform.postgresql.secretName" . }}"
       {{- range $i, $_ := until (int (.Values.tests.destructive.helmRevisionWindow | default 20)) }}
       - "sh.helm.release.v1.{{ $.Release.Name }}.v{{ add $i 1 }}"
       {{- end }}
-    verbs: ["update", "delete"]
-  # Deployments/statefulsets patched by helm upgrade tests.
+    verbs: ["patch", "update", "delete"]
+  # Deployments/statefulsets managed by helm upgrade tests.
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "patch", "delete"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
+  # ReplicaSets are controller-created, not chart-rendered, but Helm's legacy
+  # waiter reads them while assessing Deployment rollout readiness.
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
-    verbs: ["get", "list", "patch", "delete"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "deletecollection"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

@@ -23,6 +23,7 @@ Example:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -317,6 +318,24 @@ class HelmValuesConfig(BaseModel):
         preset_name = cluster.resource_preset
         return self.resource_presets.get(preset_name, ResourcePreset.small())
 
+    def with_resource_presets(
+        self,
+        resource_presets: Mapping[str, Any],
+    ) -> HelmValuesConfig:
+        """Return a copy using resource presets from platform manifest config."""
+        converted: dict[str, ResourcePreset] = {}
+        for name, preset in resource_presets.items():
+            requests = preset.requests
+            limits = preset.limits
+            converted[name] = ResourcePreset(
+                name=name,
+                resources=ResourceRequirements(
+                    requests=ResourceSpec(cpu=requests.cpu, memory=requests.memory),
+                    limits=ResourceSpec(cpu=limits.cpu, memory=limits.memory),
+                ),
+            )
+        return self.model_copy(update={"resource_presets": converted})
+
     def to_values_dict(self) -> dict[str, Any]:
         """Convert configuration to Helm values dictionary format.
 
@@ -330,6 +349,7 @@ class HelmValuesConfig(BaseModel):
             if cluster
             else f"floe-{self.environment}"
         )
+        resource_presets = self.resource_presets or {preset.name: preset}
 
         return {
             "fullnameOverride": self.fullname_override,
@@ -349,16 +369,17 @@ class HelmValuesConfig(BaseModel):
                 "enabled": self.enable_pod_disruption_budget,
             },
             "resourcePresets": {
-                preset.name: {
+                name: {
                     "requests": {
-                        "cpu": preset.resources.requests.cpu,
-                        "memory": preset.resources.requests.memory,
+                        "cpu": resource_preset.resources.requests.cpu,
+                        "memory": resource_preset.resources.requests.memory,
                     },
                     "limits": {
-                        "cpu": preset.resources.limits.cpu,
-                        "memory": preset.resources.limits.memory,
+                        "cpu": resource_preset.resources.limits.cpu,
+                        "memory": resource_preset.resources.limits.memory,
                     },
                 }
+                for name, resource_preset in resource_presets.items()
             },
         }
 

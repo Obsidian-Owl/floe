@@ -21,10 +21,12 @@ global:
   imagePullPolicy: IfNotPresent
 
 # =============================================================================
-# dbt Job Configuration (Minimal)
+# dbt Job Configuration
 # =============================================================================
 dbt:
-  enabled: true
+  # Keep the GitOps bootstrap install-safe. Real dbt Jobs must be supplied by
+  # compiled manifest/demo pipeline values, not by this generic test overlay.
+  enabled: false
   image:
     repository: ghcr.io/dbt-labs/dbt-core
     tag: "1.7.0"

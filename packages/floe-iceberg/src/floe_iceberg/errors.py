@@ -31,7 +31,20 @@ Example:
 
 from __future__ import annotations
 
+import re
 from typing import Any
+
+_METADATA_LOCATION_RE = re.compile(
+    r"(?P<location>[a-zA-Z][a-zA-Z0-9+.-]*://[^\s,;'\"]+\.metadata\.json)"
+)
+_STALE_METADATA_ERROR_MARKERS = (
+    "notfoundexception",
+    "not found",
+    "does not exist",
+    "no such key",
+    "nosuchkey",
+    "404",
+)
 
 
 class IcebergError(Exception):
@@ -179,6 +192,71 @@ class NoSuchTableError(TableError):
     """
 
     pass
+
+
+class StaleTableMetadataError(TableError):
+    """Catalog table registration points at missing Iceberg metadata."""
+
+    def __init__(
+        self,
+        message: str,
+        table_identifier: str,
+        metadata_location: str | None,
+        recovery_mode: Any,
+        original_error: BaseException,
+    ) -> None:
+        """Initialize StaleTableMetadataError.
+
+        Args:
+            message: Human-readable error description.
+            table_identifier: Full table identifier.
+            metadata_location: Missing Iceberg metadata file location, if known.
+            recovery_mode: Configured stale metadata recovery mode.
+            original_error: Original exception raised by the catalog/table load.
+        """
+        details = {
+            "reason": "stale_table_metadata",
+            "metadata_location": metadata_location or "unknown",
+            "recovery_mode": str(getattr(recovery_mode, "value", recovery_mode)),
+            "original_error_type": type(original_error).__name__,
+            "original_error": str(original_error),
+        }
+        super().__init__(message, table_identifier=table_identifier, details=details)
+        self.metadata_location = metadata_location
+        self.recovery_mode = recovery_mode
+        self.original_error = original_error
+
+
+def metadata_location_from_error(exc: BaseException) -> str | None:
+    """Extract an Iceberg metadata file URI from a catalog/table-load error."""
+    match = _METADATA_LOCATION_RE.search(str(exc))
+    if match is None:
+        return None
+    return match.group("location").rstrip(".")
+
+
+def is_stale_table_metadata_error(exc: BaseException) -> bool:
+    """Return True when an error points at a missing Iceberg metadata file."""
+    message = str(exc).lower()
+    if ".metadata.json" not in message:
+        return False
+    return any(marker in message for marker in _STALE_METADATA_ERROR_MARKERS)
+
+
+def stale_table_metadata_error_from_exception(
+    *,
+    table_identifier: str,
+    recovery_mode: Any,
+    original_error: BaseException,
+) -> StaleTableMetadataError:
+    """Build a structured stale metadata error from a raw catalog exception."""
+    return StaleTableMetadataError(
+        "Catalog table metadata points at a missing object-store file",
+        table_identifier=table_identifier,
+        metadata_location=metadata_location_from_error(original_error),
+        recovery_mode=recovery_mode,
+        original_error=original_error,
+    )
 
 
 class NoSuchNamespaceError(TableError):
@@ -501,6 +579,10 @@ __all__ = [
     "TableError",
     "TableAlreadyExistsError",
     "NoSuchTableError",
+    "StaleTableMetadataError",
+    "is_stale_table_metadata_error",
+    "metadata_location_from_error",
+    "stale_table_metadata_error_from_exception",
     "NoSuchNamespaceError",
     # Schema errors
     "SchemaEvolutionError",

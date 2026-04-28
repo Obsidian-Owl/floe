@@ -29,13 +29,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
-from dagster import asset
+from dagster import AssetKey, asset
 from floe_core.telemetry.tracer_factory import get_tracer as _get_tracer
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +41,12 @@ _DEFAULT_MANIFEST_PATH = Path("target/manifest.json")
 _DEFAULT_OUTPUT_DIR = Path("cube/schema")
 
 
-@asset(
-    name="sync_semantic_schemas",
-    description="Synchronize semantic layer schemas from dbt manifest",
-    required_resource_keys={"semantic_layer"},
-)
-def sync_semantic_schemas(context, semantic_layer) -> list[str]:  # noqa: ANN001
+def _sync_semantic_schemas(
+    context: Any,
+    *,
+    default_manifest_path: Path,
+    default_output_dir: Path,
+) -> list[str]:
     """Synchronize semantic layer schemas from dbt manifest.
 
     This asset runs after dbt models are materialized to generate or update
@@ -60,8 +57,8 @@ def sync_semantic_schemas(context, semantic_layer) -> list[str]:  # noqa: ANN001
     Args:
         context: AssetExecutionContext (Dagster asset execution context).
             Type hint omitted due to Dagster limitations with future annotations.
-        semantic_layer: SemanticLayerPlugin resource instance.
-            Type hint omitted due to Dagster limitations with future annotations.
+        default_manifest_path: Manifest path used when op_config does not override it.
+        default_output_dir: Output directory used when op_config does not override it.
 
     Returns:
         List of generated schema file paths as strings.
@@ -76,16 +73,10 @@ def sync_semantic_schemas(context, semantic_layer) -> list[str]:  # noqa: ANN001
         FR-011: OTel tracing
     """
     # Extract config from context or use defaults
-    manifest_path = Path(
-        context.op_config.get("manifest_path", str(_DEFAULT_MANIFEST_PATH))
-        if context.op_config
-        else str(_DEFAULT_MANIFEST_PATH)
-    )
-    output_dir = Path(
-        context.op_config.get("output_dir", str(_DEFAULT_OUTPUT_DIR))
-        if context.op_config
-        else str(_DEFAULT_OUTPUT_DIR)
-    )
+    op_config = context.op_config or {}
+    manifest_path = Path(op_config.get("manifest_path", str(default_manifest_path)))
+    output_dir = Path(op_config.get("output_dir", str(default_output_dir)))
+    semantic_layer = context.resources.semantic_layer
 
     # FR-011: OTel tracing via core tracer factory
     # Factory returns NoOpTracer gracefully if OTel is not configured
@@ -121,4 +112,44 @@ def sync_semantic_schemas(context, semantic_layer) -> list[str]:  # noqa: ANN001
         return file_paths
 
 
-__all__ = ["sync_semantic_schemas"]
+def create_sync_semantic_schemas_asset(
+    *,
+    manifest_path: Path,
+    output_dir: Path,
+    deps: list[AssetKey] | None = None,
+) -> Any:
+    """Create a semantic schema sync asset bound to product runtime paths.
+
+    Args:
+        manifest_path: dbt manifest path for the product project directory.
+        output_dir: Semantic schema output directory for the product.
+        deps: Optional upstream dbt model asset keys that must materialize first.
+
+    Returns:
+        Dagster asset definition that reads the semantic plugin from
+        ``context.resources.semantic_layer``.
+    """
+
+    @asset(
+        name="sync_semantic_schemas",
+        description="Synchronize semantic layer schemas from dbt manifest",
+        required_resource_keys={"semantic_layer"},
+        deps=deps or [],
+    )
+    def _sync_semantic_schemas_asset(context) -> list[str]:  # noqa: ANN001
+        return _sync_semantic_schemas(
+            context,
+            default_manifest_path=manifest_path,
+            default_output_dir=output_dir,
+        )
+
+    return _sync_semantic_schemas_asset
+
+
+sync_semantic_schemas = create_sync_semantic_schemas_asset(
+    manifest_path=_DEFAULT_MANIFEST_PATH,
+    output_dir=_DEFAULT_OUTPUT_DIR,
+)
+
+
+__all__ = ["create_sync_semantic_schemas_asset", "sync_semantic_schemas"]

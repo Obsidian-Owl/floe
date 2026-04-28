@@ -167,6 +167,7 @@ markers = [
     "integration: Marks tests requiring K8s services",
     "contract: Marks cross-package contract tests",
     "e2e: Marks end-to-end pipeline tests",
+    "destructive: Marks destructive E2E tests requiring elevated RBAC",
     "bootstrap: Marks admin/bootstrap validation",
     "platform_blackbox: Marks in-cluster product validation",
     "developer_workflow: Marks repo-aware host validation",

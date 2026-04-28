@@ -26,7 +26,7 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from dagster import Definitions, ResourceDefinition
+from dagster import AssetKey, Definitions, ResourceDefinition, build_op_context
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
@@ -47,10 +47,11 @@ from floe_orchestrator_dagster.loader import load_product_definitions
 PRODUCT_NAME = "customer-360"
 SAFE_NAME = "customer_360"
 _LOADER_MODULE = "floe_orchestrator_dagster.loader"
-_ICEBERG_FACTORY = f"{_LOADER_MODULE}.try_create_iceberg_resources"
-_LINEAGE_FACTORY = f"{_LOADER_MODULE}.try_create_lineage_resource"
-_EXPORT_FN = f"{_LOADER_MODULE}.export_dbt_to_iceberg"
-_TRACE_BUILDER = f"{_LOADER_MODULE}.TraceCorrelationFacetBuilder"
+_RUNTIME_MODULE = "floe_orchestrator_dagster.runtime"
+_ICEBERG_FACTORY = f"{_RUNTIME_MODULE}.try_create_iceberg_resources"
+_LINEAGE_FACTORY = f"{_RUNTIME_MODULE}.try_create_lineage_resource"
+_EXPORT_FN = f"{_RUNTIME_MODULE}.export_dbt_to_iceberg"
+_TRACE_BUILDER = f"{_RUNTIME_MODULE}.TraceCorrelationFacetBuilder"
 FAKE_RUN_ID = uuid4()
 
 
@@ -62,12 +63,18 @@ FAKE_RUN_ID = uuid4()
 def _make_artifacts(
     catalog: PluginRef | None = None,
     storage: PluginRef | None = None,
+    ingestion: PluginRef | None = None,
+    semantic: PluginRef | None = None,
+    lineage_backend: PluginRef | None = None,
 ) -> CompiledArtifacts:
     """Build a minimal valid CompiledArtifacts with optional catalog/storage.
 
     Args:
         catalog: Optional catalog PluginRef.
         storage: Optional storage PluginRef.
+        ingestion: Optional ingestion PluginRef.
+        semantic: Optional semantic layer PluginRef.
+        lineage_backend: Optional lineage backend PluginRef.
 
     Returns:
         A valid CompiledArtifacts instance.
@@ -108,6 +115,9 @@ def _make_artifacts(
             orchestrator=PluginRef(type="dagster", version="1.5.0"),
             catalog=catalog,
             storage=storage,
+            ingestion=ingestion,
+            semantic=semantic,
+            lineage_backend=lineage_backend,
         ),
         transforms=ResolvedTransforms(
             models=[ResolvedModel(name="stg_customers", compute="duckdb")],
@@ -195,6 +205,212 @@ def project_dir_with_iceberg(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def project_dir_with_alpha_capabilities(tmp_path: Path) -> Path:
+    """Temporary project dir with all alpha-required capability plugins configured."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        catalog=PluginRef(type="polaris", version="0.1.0", config={}),
+        storage=PluginRef(type="s3", version="1.0.0", config={}),
+        lineage_backend=PluginRef(
+            type="marquez",
+            version="0.1.0",
+            config={"url": "http://marquez:5000"},
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_catalog_only(tmp_path: Path) -> Path:
+    """Temporary project dir with catalog but no storage plugin configured."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        catalog=PluginRef(type="polaris", version="0.1.0", config={}),
+        storage=None,
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_semantic(tmp_path: Path) -> Path:
+    """Temporary project dir with semantic layer plugin configured."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        semantic=PluginRef(type="cube", version="0.1.0", config={}),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion(tmp_path: Path) -> Path:
+    """Temporary project dir with ingestion plugin configured."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "sources": [
+                    {
+                        "name": "github-events",
+                        "source_type": "rest_api",
+                        "destination_table": "bronze.github_events",
+                    }
+                ]
+            },
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_no_sources(tmp_path: Path) -> Path:
+    """Temporary project dir with ingestion selected but no workload sources."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={"sources": []},
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_no_config(tmp_path: Path) -> Path:
+    """Temporary project dir with ingestion selected and no config."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config=None,
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_empty_config(tmp_path: Path) -> Path:
+    """Temporary project dir with ingestion selected and empty config."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={},
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_flat_config(tmp_path: Path) -> Path:
+    """Temporary project dir with legacy flat ingestion workload config."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "source_type": "rest_api",
+                "destination_table": "bronze.github_events",
+            },
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_sources_dict(tmp_path: Path) -> Path:
+    """Temporary project dir with malformed non-list sources config."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "sources": {
+                    "name": "github-events",
+                    "source_type": "rest_api",
+                    "destination_table": "bronze.github_events",
+                }
+            },
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_sources_none_no_manifest(tmp_path: Path) -> Path:
+    """Temporary project dir with malformed sources=None and no dbt manifest."""
+    pdir = tmp_path / "dbt_project"
+    pdir.mkdir(parents=True, exist_ok=True)
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={"sources": None},
+        ),
+    )
+    (pdir / "compiled_artifacts.json").write_text(artifacts.model_dump_json(indent=2))
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_empty_sources_and_flat_keys(tmp_path: Path) -> Path:
+    """Temporary project dir with empty sources plus legacy workload keys."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "sources": [],
+                "source_type": "rest_api",
+                "destination_table": "bronze.github_events",
+            },
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_no_manifest(tmp_path: Path) -> Path:
+    """Temporary project dir with ingestion artifacts but no dbt manifest."""
+    pdir = tmp_path / "dbt_project"
+    pdir.mkdir(parents=True, exist_ok=True)
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "sources": [
+                    {
+                        "name": "github-events",
+                        "source_type": "rest_api",
+                        "destination_table": "bronze.github_events",
+                    }
+                ]
+            },
+        ),
+    )
+    (pdir / "compiled_artifacts.json").write_text(artifacts.model_dump_json(indent=2))
+    return pdir
+
+
+@pytest.fixture
 def empty_project_dir(tmp_path: Path) -> Path:
     """Temporary project directory with NO compiled_artifacts.json.
 
@@ -204,6 +420,76 @@ def empty_project_dir(tmp_path: Path) -> Path:
     pdir = tmp_path / "dbt_project"
     pdir.mkdir(parents=True, exist_ok=True)
     return pdir
+
+
+@pytest.mark.requirement("AC-1")
+def test_loader_delegates_to_runtime_builder(project_dir: Path) -> None:
+    """Loader must pass parsed artifacts and project context into runtime builder."""
+    artifacts_path = project_dir / "compiled_artifacts.json"
+    expected_artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
+
+    with patch("floe_orchestrator_dagster.loader.build_product_definitions") as build:
+        sentinel = MagicMock(spec=Definitions)
+        build.return_value = sentinel
+
+        result = load_product_definitions(PRODUCT_NAME, project_dir)
+
+    assert result is sentinel
+    build.assert_called_once()
+    call = build.call_args.kwargs
+    assert call["product_name"] == PRODUCT_NAME
+    assert call["project_dir"] == project_dir
+    assert call["artifacts"] == expected_artifacts
+
+
+@pytest.mark.requirement("ALPHA-CAPABILITY")
+def test_runtime_builder_alpha_policy_rejects_missing_capabilities(project_dir: Path) -> None:
+    """Alpha policy must fail before building definitions with missing capabilities."""
+    from floe_orchestrator_dagster.capabilities import (
+        AlphaCapabilityError,
+        CapabilityPolicy,
+    )
+    from floe_orchestrator_dagster.runtime import build_product_definitions
+
+    artifacts_path = project_dir / "compiled_artifacts.json"
+    artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
+
+    with pytest.raises(AlphaCapabilityError, match="catalog"):
+        build_product_definitions(
+            product_name=PRODUCT_NAME,
+            artifacts=artifacts,
+            project_dir=project_dir,
+            capability_policy=CapabilityPolicy.alpha(),
+        )
+
+
+@pytest.mark.requirement("ALPHA-LINEAGE")
+def test_runtime_builder_alpha_policy_enables_strict_lineage(
+    project_dir_with_alpha_capabilities: Path,
+) -> None:
+    """Alpha policy must wire lineage resources in strict mode."""
+    from floe_orchestrator_dagster.capabilities import CapabilityPolicy
+    from floe_orchestrator_dagster.runtime import build_product_definitions
+
+    artifacts_path = project_dir_with_alpha_capabilities / "compiled_artifacts.json"
+    artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
+
+    with patch(
+        _LINEAGE_FACTORY,
+        return_value={"lineage": ResourceDefinition.hardcoded_resource(MagicMock())},
+    ) as mock_lineage:
+        build_product_definitions(
+            product_name=PRODUCT_NAME,
+            artifacts=artifacts,
+            project_dir=project_dir_with_alpha_capabilities,
+            capability_policy=CapabilityPolicy.alpha(),
+        )
+
+    mock_lineage.assert_called_once_with(
+        artifacts.plugins,
+        strict=True,
+        default_namespace=artifacts.observability.lineage_namespace,
+    )
 
 
 # ===========================================================================
@@ -282,6 +568,19 @@ def test_definitions_no_iceberg_when_unconfigured(project_dir: Path) -> None:
     resources = result.resources or {}
     assert "iceberg" not in resources, (
         "Iceberg resource must be absent when catalog/storage are not configured"
+    )
+
+
+@pytest.mark.requirement("AC-3")
+def test_definitions_no_iceberg_when_catalog_without_storage(
+    project_dir_with_catalog_only: Path,
+) -> None:
+    """Catalog-only artifacts must not register an unusable iceberg resource."""
+    result = load_product_definitions(PRODUCT_NAME, project_dir_with_catalog_only)
+
+    resources = result.resources or {}
+    assert "iceberg" not in resources, (
+        "Iceberg resource must be absent unless both catalog and storage are configured"
     )
 
 
@@ -454,6 +753,36 @@ def _extract_dbt_assets_fn(definitions: Definitions) -> Any:
     return asset_def
 
 
+def _extract_asset_fn_by_op_name(definitions: Definitions, op_name: str) -> Any:
+    """Extract an asset compute function by Dagster op name."""
+    for asset_def in definitions.assets or []:
+        op = getattr(asset_def, "op", None)
+        if op is None or op.name != op_name:
+            continue
+        compute_fn = op.compute_fn
+        if hasattr(compute_fn, "decorated_fn"):
+            return compute_fn.decorated_fn
+        return compute_fn
+    raise AssertionError(f"No asset found with op name {op_name!r}")
+
+
+def _asset_names(definitions: Definitions) -> set[str]:
+    """Collect asset key names from single-asset and multi-asset definitions."""
+    names: set[str] = set()
+    for asset_def in definitions.assets or []:
+        keys = getattr(asset_def, "keys", None)
+        if keys:
+            names.update(key.path[-1] for key in keys)
+        else:
+            try:
+                names.add(asset_def.key.path[-1])
+            except Exception:
+                # Empty dbt manifests can produce a multi-asset definition
+                # without single-asset key access; optional assets are checked below.
+                continue
+    return names
+
+
 def _make_mock_context_with_lineage() -> tuple[MagicMock, MagicMock]:
     """Create a mock Dagster context with a mock lineage resource.
 
@@ -589,6 +918,126 @@ def test_dbt_assets_emit_complete_not_called_on_failure(
 
 
 @pytest.mark.requirement("AC-5")
+def test_dbt_assets_default_lineage_start_failure_remains_best_effort(
+    project_dir: Path,
+) -> None:
+    """Default runtime must continue dbt execution when emit_start fails."""
+    definitions = load_product_definitions(PRODUCT_NAME, project_dir)
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, lineage = _make_mock_context_with_lineage()
+    lineage.emit_start.side_effect = RuntimeError("lineage start failed")
+    mock_dbt = context.resources.dbt
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = MagicMock(return_value=iter([]))
+    mock_dbt.cli.return_value.stream.return_value = mock_stream
+
+    list(asset_fn(context))
+
+    mock_dbt.cli.assert_called_once_with(["build"], context=context)
+    lineage.emit_complete.assert_called_once()
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_strict_lineage_start_failure_escapes(
+    project_dir_with_alpha_capabilities: Path,
+) -> None:
+    """Strict runtime must fail asset execution when emit_start fails."""
+    from floe_orchestrator_dagster.capabilities import CapabilityPolicy
+    from floe_orchestrator_dagster.runtime import build_product_definitions
+
+    artifacts_path = project_dir_with_alpha_capabilities / "compiled_artifacts.json"
+    artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
+    with patch(
+        _LINEAGE_FACTORY,
+        return_value={"lineage": ResourceDefinition.hardcoded_resource(MagicMock())},
+    ):
+        definitions = build_product_definitions(
+            product_name=PRODUCT_NAME,
+            artifacts=artifacts,
+            project_dir=project_dir_with_alpha_capabilities,
+            capability_policy=CapabilityPolicy.alpha(),
+        )
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, lineage = _make_mock_context_with_lineage()
+    lineage.emit_start.side_effect = RuntimeError("lineage start failed")
+
+    with (
+        patch(_EXPORT_FN),
+        pytest.raises(RuntimeError, match="lineage start failed"),
+    ):
+        list(asset_fn(context))
+
+    context.resources.dbt.cli.assert_not_called()
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_strict_lineage_complete_failure_escapes(
+    project_dir_with_alpha_capabilities: Path,
+) -> None:
+    """Strict runtime must fail asset execution when emit_complete fails."""
+    from floe_orchestrator_dagster.capabilities import CapabilityPolicy
+    from floe_orchestrator_dagster.runtime import build_product_definitions
+
+    artifacts_path = project_dir_with_alpha_capabilities / "compiled_artifacts.json"
+    artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
+    with patch(
+        _LINEAGE_FACTORY,
+        return_value={"lineage": ResourceDefinition.hardcoded_resource(MagicMock())},
+    ):
+        definitions = build_product_definitions(
+            product_name=PRODUCT_NAME,
+            artifacts=artifacts,
+            project_dir=project_dir_with_alpha_capabilities,
+            capability_policy=CapabilityPolicy.alpha(),
+        )
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, lineage = _make_mock_context_with_lineage()
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = MagicMock(return_value=iter([]))
+    context.resources.dbt.cli.return_value.stream.return_value = mock_stream
+    lineage.emit_complete.side_effect = RuntimeError("lineage complete failed")
+
+    with (
+        patch(_EXPORT_FN),
+        pytest.raises(RuntimeError, match="lineage complete failed"),
+    ):
+        list(asset_fn(context))
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_strict_lineage_fail_failure_escapes_original_error(
+    project_dir_with_alpha_capabilities: Path,
+) -> None:
+    """Strict runtime must fail with emit_fail errors when failure lineage fails."""
+    from floe_orchestrator_dagster.capabilities import CapabilityPolicy
+    from floe_orchestrator_dagster.runtime import build_product_definitions
+
+    artifacts_path = project_dir_with_alpha_capabilities / "compiled_artifacts.json"
+    artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
+    with patch(
+        _LINEAGE_FACTORY,
+        return_value={"lineage": ResourceDefinition.hardcoded_resource(MagicMock())},
+    ):
+        definitions = build_product_definitions(
+            product_name=PRODUCT_NAME,
+            artifacts=artifacts,
+            project_dir=project_dir_with_alpha_capabilities,
+            capability_policy=CapabilityPolicy.alpha(),
+        )
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, lineage = _make_mock_context_with_lineage()
+    context.resources.dbt.cli.return_value.stream.side_effect = RuntimeError("dbt failed")
+    lineage.emit_fail.side_effect = RuntimeError("lineage fail failed")
+
+    with pytest.raises(RuntimeError, match="lineage fail failed"):
+        list(asset_fn(context))
+
+
+@pytest.mark.requirement("AC-5")
 def test_dbt_assets_calls_iceberg_export_after_dbt(
     project_dir_with_iceberg: Path,
 ) -> None:
@@ -609,6 +1058,52 @@ def test_dbt_assets_calls_iceberg_export_after_dbt(
 
 
 @pytest.mark.requirement("AC-5")
+def test_dbt_assets_fails_when_iceberg_export_reports_zero_tables(
+    project_dir_with_iceberg: Path,
+) -> None:
+    """Runtime must reject configured Iceberg export results with no tables."""
+    zero_result = MagicMock()
+    zero_result.tables_written = 0
+    zero_result.table_names = []
+
+    with patch(_EXPORT_FN, return_value=zero_result):
+        definitions = load_product_definitions(PRODUCT_NAME, project_dir_with_iceberg)
+        asset_fn = _extract_dbt_assets_fn(definitions)
+
+        context, lineage = _make_mock_context_with_lineage()
+        mock_dbt = context.resources.dbt
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = MagicMock(return_value=iter([]))
+        mock_dbt.cli.return_value.stream.return_value = mock_stream
+
+        with pytest.raises(RuntimeError, match="Configured Iceberg export wrote no tables"):
+            list(asset_fn(context))
+
+        lineage.emit_fail.assert_called_once()
+        lineage.emit_complete.assert_not_called()
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_iceberg_export_not_called_with_catalog_only(
+    project_dir_with_catalog_only: Path,
+) -> None:
+    """Catalog-only artifacts must not attempt export without storage."""
+    with patch(_EXPORT_FN) as mock_export:
+        definitions = load_product_definitions(PRODUCT_NAME, project_dir_with_catalog_only)
+        asset_fn = _extract_dbt_assets_fn(definitions)
+
+        context, lineage = _make_mock_context_with_lineage()
+        mock_dbt = context.resources.dbt
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = MagicMock(return_value=iter([]))
+        mock_dbt.cli.return_value.stream.return_value = mock_stream
+
+        list(asset_fn(context))
+
+        mock_export.assert_not_called()
+
+
+@pytest.mark.requirement("AC-5")
 def test_dbt_assets_iceberg_export_not_called_on_failure(
     project_dir_with_iceberg: Path,
 ) -> None:
@@ -625,6 +1120,204 @@ def test_dbt_assets_iceberg_export_not_called_on_failure(
             list(asset_fn(context))
 
         mock_export.assert_not_called()
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_iceberg_export_failure_emits_lineage_fail(
+    project_dir_with_iceberg: Path,
+) -> None:
+    """Post-dbt export failure must emit lineage fail and not complete."""
+    with patch(_EXPORT_FN, side_effect=RuntimeError("export failed")):
+        definitions = load_product_definitions(PRODUCT_NAME, project_dir_with_iceberg)
+        asset_fn = _extract_dbt_assets_fn(definitions)
+
+        context, lineage = _make_mock_context_with_lineage()
+        mock_dbt = context.resources.dbt
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = MagicMock(return_value=iter([]))
+        mock_dbt.cli.return_value.stream.return_value = mock_stream
+
+        with pytest.raises(RuntimeError, match="export failed"):
+            list(asset_fn(context))
+
+        lineage.emit_fail.assert_called_once()
+        lineage.emit_complete.assert_not_called()
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_namespace_export_failure_emits_lineage_fail(
+    project_dir_with_iceberg: Path,
+) -> None:
+    """Namespace creation failures during export must not emit lineage complete."""
+    with patch(_EXPORT_FN, side_effect=RuntimeError("permission denied")):
+        definitions = load_product_definitions(PRODUCT_NAME, project_dir_with_iceberg)
+        asset_fn = _extract_dbt_assets_fn(definitions)
+
+        context, lineage = _make_mock_context_with_lineage()
+        mock_dbt = context.resources.dbt
+        mock_stream = MagicMock()
+        mock_stream.__iter__ = MagicMock(return_value=iter([]))
+        mock_dbt.cli.return_value.stream.return_value = mock_stream
+
+        with pytest.raises(RuntimeError, match="permission denied"):
+            list(asset_fn(context))
+
+        lineage.emit_fail.assert_called_once()
+        lineage.emit_complete.assert_not_called()
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_includes_semantic_resource_and_asset_when_configured(
+    project_dir_with_semantic: Path,
+) -> None:
+    """Semantic plugin config must wire runtime resource and sync asset."""
+    semantic_resource = MagicMock()
+
+    with patch(
+        f"{_RUNTIME_MODULE}._create_semantic_resources",
+        return_value={"semantic_layer": semantic_resource},
+    ):
+        result = load_product_definitions(PRODUCT_NAME, project_dir_with_semantic)
+
+    resources = result.resources or {}
+    asset_names = _asset_names(result)
+    assert resources["semantic_layer"] is semantic_resource
+    assert "sync_semantic_schemas" in asset_names
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_semantic_asset_uses_project_dir_paths(project_dir_with_semantic: Path) -> None:
+    """Runtime semantic sync asset must use paths inside the product project_dir."""
+    semantic_resource = MagicMock()
+    semantic_resource.sync_from_dbt_manifest.return_value = []
+
+    with patch(
+        f"{_RUNTIME_MODULE}._create_semantic_resources",
+        return_value={"semantic_layer": semantic_resource},
+    ):
+        result = load_product_definitions(PRODUCT_NAME, project_dir_with_semantic)
+
+    sync_fn = _extract_asset_fn_by_op_name(result, "sync_semantic_schemas")
+    context = build_op_context(resources={"semantic_layer": semantic_resource})
+
+    sync_fn(context)
+
+    semantic_resource.sync_from_dbt_manifest.assert_called_once_with(
+        manifest_path=project_dir_with_semantic / "target" / "manifest.json",
+        output_dir=project_dir_with_semantic / "cube" / "schema",
+    )
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_semantic_asset_depends_on_compiled_model_assets(
+    project_dir_with_semantic: Path,
+) -> None:
+    """Semantic sync must run after compiled dbt model assets."""
+    semantic_resource = MagicMock()
+
+    with patch(
+        f"{_RUNTIME_MODULE}._create_semantic_resources",
+        return_value={"semantic_layer": semantic_resource},
+    ):
+        result = load_product_definitions(PRODUCT_NAME, project_dir_with_semantic)
+
+    semantic_asset = next(
+        asset_def
+        for asset_def in result.assets or []
+        if AssetKey("sync_semantic_schemas") in getattr(asset_def, "keys", set())
+    )
+
+    assert AssetKey("stg_customers") in semantic_asset.dependency_keys
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_fails_loudly_when_ingestion_configured(
+    project_dir_with_ingestion: Path,
+) -> None:
+    """Dagster ingestion runtime is blocked until source construction exists."""
+    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+        load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion)
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_allows_selected_ingestion_without_sources(
+    project_dir_with_ingestion_no_sources: Path,
+) -> None:
+    """Selecting ingestion without workload sources should not block transforms."""
+    result = load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_no_sources)
+
+    resources = result.resources or {}
+    assert "ingestion" not in resources
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_allows_selected_ingestion_without_config(
+    project_dir_with_ingestion_no_config: Path,
+) -> None:
+    """Selecting ingestion without config should not block transforms."""
+    result = load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_no_config)
+
+    resources = result.resources or {}
+    assert "ingestion" not in resources
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_allows_selected_ingestion_with_empty_config(
+    project_dir_with_ingestion_empty_config: Path,
+) -> None:
+    """Selecting ingestion with empty config should not block transforms."""
+    result = load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_empty_config)
+
+    resources = result.resources or {}
+    assert "ingestion" not in resources
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_fails_for_flat_ingestion_workload_config(
+    project_dir_with_ingestion_flat_config: Path,
+) -> None:
+    """Legacy flat non-empty ingestion config is a workload and must fail."""
+    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+        load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_flat_config)
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_fails_for_non_list_ingestion_sources(
+    project_dir_with_ingestion_sources_dict: Path,
+) -> None:
+    """Malformed non-list sources config must fail loudly."""
+    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+        load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_sources_dict)
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_fails_for_sources_none_before_missing_manifest(
+    project_dir_with_ingestion_sources_none_no_manifest: Path,
+) -> None:
+    """Explicit sources=None is malformed and fails before manifest inspection."""
+    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+        load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_sources_none_no_manifest)
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_fails_for_empty_sources_with_other_workload_keys(
+    project_dir_with_ingestion_empty_sources_and_flat_keys: Path,
+) -> None:
+    """Empty sources plus flat workload keys is still a workload config."""
+    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+        load_product_definitions(
+            PRODUCT_NAME,
+            project_dir_with_ingestion_empty_sources_and_flat_keys,
+        )
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_ingestion_failure_precedes_missing_manifest(
+    project_dir_with_ingestion_no_manifest: Path,
+) -> None:
+    """Unsupported ingestion error must win before dbt manifest inspection."""
+    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+        load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_no_manifest)
 
 
 @pytest.mark.requirement("AC-5")
@@ -689,6 +1382,8 @@ def test_dbt_assets_emit_start_uses_fallback_uuid_on_failure(
 
     # dbt.cli must still have been called
     mock_dbt.cli.assert_called()
+    context.log.warning.assert_called()
+    assert "emit_start failed" in context.log.warning.call_args_list[0].args[0]
 
     # emit_complete must be called with a UUID (the fallback)
     lineage.emit_complete.assert_called_once()
@@ -698,6 +1393,28 @@ def test_dbt_assets_emit_start_uses_fallback_uuid_on_failure(
     assert isinstance(run_id_arg, UUID), (
         f"emit_complete run_id should be a UUID (fallback), got {type(run_id_arg).__name__}"
     )
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_warns_when_best_effort_emit_complete_fails(
+    project_dir: Path,
+) -> None:
+    """Non-strict lineage completion failures must be visible to operators."""
+    definitions = load_product_definitions(PRODUCT_NAME, project_dir)
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, lineage = _make_mock_context_with_lineage()
+    lineage.emit_complete.side_effect = RuntimeError("lineage service down")
+
+    mock_dbt = context.resources.dbt
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = MagicMock(return_value=iter([]))
+    mock_dbt.cli.return_value.stream.return_value = mock_stream
+
+    list(asset_fn(context))
+
+    context.log.warning.assert_called()
+    assert "emit_complete failed" in context.log.warning.call_args_list[-1].args[0]
 
 
 @pytest.mark.requirement("AC-5")

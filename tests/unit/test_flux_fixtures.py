@@ -381,51 +381,115 @@ class TestSuspendHelmrelease:
         assert result is True
 
     @pytest.mark.requirement("AC-2")
-    def test_returns_false_when_flux_not_on_path(
+    def test_uses_kubectl_patch_when_flux_not_on_path(
         self,
         mock_subprocess: MagicMock,
         mock_shutil_which: MagicMock,
     ) -> None:
-        """suspend_helmrelease returns False when flux CLI is not found.
+        """suspend_helmrelease patches spec.suspend when flux CLI is missing.
 
-        When shutil.which("flux") returns None, the function must not
-        attempt to run flux and must return False.
+        The in-cluster E2E test runner does not include the flux binary, but
+        it can use Kubernetes RBAC to suspend the namespace-local HelmRelease.
         """
         from testing.fixtures.flux import suspend_helmrelease
 
         mock_shutil_which.return_value = None
+        mock_subprocess.return_value = _make_completed_process(returncode=0)
 
         result = suspend_helmrelease(_DEFAULT_RELEASE_NAME, _DEFAULT_NAMESPACE)
 
-        assert result is False
+        assert result is True
+        mock_subprocess.assert_called_once()
+        actual_args: list[str] = mock_subprocess.call_args[0][0]
+        assert actual_args == [
+            "kubectl",
+            "patch",
+            "helmrelease",
+            _DEFAULT_RELEASE_NAME,
+            "-n",
+            _DEFAULT_NAMESPACE,
+            "--type=merge",
+            "-p",
+            '{"spec":{"suspend":true}}',
+        ]
+
+    @pytest.mark.requirement("AC-2")
+    def test_rejects_invalid_helmrelease_name_before_kubectl_patch(
+        self,
+        mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
+    ) -> None:
+        """Fallback patch path must reject malformed Kubernetes resource names."""
+        from testing.fixtures.flux import suspend_helmrelease
+
+        mock_shutil_which.return_value = None
+
+        with pytest.raises(ValueError, match="Invalid Kubernetes resource name"):
+            suspend_helmrelease("floe-platform;rm", _DEFAULT_NAMESPACE)
+
         mock_subprocess.assert_not_called()
 
     @pytest.mark.requirement("AC-2")
-    def test_logs_warning_when_flux_not_found(
+    def test_rejects_invalid_namespace_before_kubectl_patch(
+        self,
+        mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
+    ) -> None:
+        """Fallback patch path must reject malformed Kubernetes namespaces."""
+        from testing.fixtures.flux import suspend_helmrelease
+
+        mock_shutil_which.return_value = None
+
+        with pytest.raises(ValueError, match="Invalid Kubernetes namespace"):
+            suspend_helmrelease(_DEFAULT_RELEASE_NAME, "../floe-test")
+
+        mock_subprocess.assert_not_called()
+
+    @pytest.mark.requirement("AC-2")
+    def test_allows_dns_subdomain_helmrelease_name_for_kubectl_patch(
+        self,
+        mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
+    ) -> None:
+        """HelmRelease names may be DNS subdomains while namespaces are DNS labels."""
+        from testing.fixtures.flux import suspend_helmrelease
+
+        mock_shutil_which.return_value = None
+        mock_subprocess.return_value = _make_completed_process(returncode=0)
+
+        result = suspend_helmrelease("floe.platform", _DEFAULT_NAMESPACE)
+
+        assert result is True
+        actual_args: list[str] = mock_subprocess.call_args[0][0]
+        assert actual_args[3] == "floe.platform"
+
+    @pytest.mark.requirement("AC-2")
+    def test_logs_info_when_falling_back_to_kubectl_patch(
         self,
         mock_subprocess: MagicMock,
         mock_shutil_which: MagicMock,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """suspend_helmrelease logs warning when flux CLI is missing.
+        """suspend_helmrelease logs the kubectl patch fallback path.
 
-        The log message must indicate that flux was not found on PATH
-        so operators can diagnose why suspension was skipped.
+        The fallback is expected in the test-runner image, so it should not
+        warn unless the patch itself fails.
         """
         from testing.fixtures.flux import suspend_helmrelease
 
         mock_shutil_which.return_value = None
+        mock_subprocess.return_value = _make_completed_process(returncode=0)
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.INFO):
             suspend_helmrelease(_DEFAULT_RELEASE_NAME, _DEFAULT_NAMESPACE)
 
         warning_messages = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
-        assert len(warning_messages) >= 1, (
-            "suspend_helmrelease must log a warning when flux CLI is not found"
+        assert not warning_messages, (
+            f"flux CLI fallback should not warn on success. Got: {warning_messages}"
         )
-        # Message must mention flux so operators know what's missing
-        combined = " ".join(warning_messages).lower()
-        assert "flux" in combined, f"Warning message must mention 'flux'. Got: {warning_messages}"
+        info_messages = [r.message for r in caplog.records if r.levelno == logging.INFO]
+        combined = " ".join(info_messages).lower()
+        assert "kubectl" in combined and "suspend" in combined
 
     @pytest.mark.requirement("AC-7")
     def test_logs_warning_on_flux_command_failure(
@@ -544,6 +608,7 @@ class TestResumeHelmrelease:
     def test_runs_flux_resume_command(
         self,
         mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
     ) -> None:
         """resume_helmrelease runs 'flux resume helmrelease {name} -n {ns}'.
 
@@ -552,6 +617,7 @@ class TestResumeHelmrelease:
         """
         from testing.fixtures.flux import resume_helmrelease
 
+        mock_shutil_which.return_value = "/usr/local/bin/flux"
         mock_subprocess.return_value = _make_completed_process(returncode=0)
 
         resume_helmrelease(_DEFAULT_RELEASE_NAME, _DEFAULT_NAMESPACE)
@@ -570,6 +636,7 @@ class TestResumeHelmrelease:
     def test_uses_check_false(
         self,
         mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
     ) -> None:
         """resume_helmrelease passes check=False to subprocess.run.
 
@@ -578,6 +645,7 @@ class TestResumeHelmrelease:
         """
         from testing.fixtures.flux import resume_helmrelease
 
+        mock_shutil_which.return_value = "/usr/local/bin/flux"
         mock_subprocess.return_value = _make_completed_process(returncode=1, stderr="error")
 
         # Must not raise even on failure
@@ -592,10 +660,12 @@ class TestResumeHelmrelease:
     def test_returns_true_on_success(
         self,
         mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
     ) -> None:
         """resume_helmrelease returns True when flux resume succeeds."""
         from testing.fixtures.flux import resume_helmrelease
 
+        mock_shutil_which.return_value = "/usr/local/bin/flux"
         mock_subprocess.return_value = _make_completed_process(returncode=0)
 
         result = resume_helmrelease(_DEFAULT_RELEASE_NAME, _DEFAULT_NAMESPACE)
@@ -603,13 +673,43 @@ class TestResumeHelmrelease:
         assert result is True
 
     @pytest.mark.requirement("AC-1")
+    def test_resume_uses_kubectl_patch_when_flux_not_on_path(
+        self,
+        mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
+    ) -> None:
+        """resume_helmrelease patches spec.suspend=false when flux CLI is missing."""
+        from testing.fixtures.flux import resume_helmrelease
+
+        mock_shutil_which.return_value = None
+        mock_subprocess.return_value = _make_completed_process(returncode=0)
+
+        result = resume_helmrelease(_DEFAULT_RELEASE_NAME, _DEFAULT_NAMESPACE)
+
+        assert result is True
+        actual_args: list[str] = mock_subprocess.call_args[0][0]
+        assert actual_args == [
+            "kubectl",
+            "patch",
+            "helmrelease",
+            _DEFAULT_RELEASE_NAME,
+            "-n",
+            _DEFAULT_NAMESPACE,
+            "--type=merge",
+            "-p",
+            '{"spec":{"suspend":false}}',
+        ]
+
+    @pytest.mark.requirement("AC-1")
     def test_returns_false_on_failure(
         self,
         mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
     ) -> None:
         """resume_helmrelease returns False when flux resume fails."""
         from testing.fixtures.flux import resume_helmrelease
 
+        mock_shutil_which.return_value = "/usr/local/bin/flux"
         mock_subprocess.return_value = _make_completed_process(
             returncode=1,
             stderr="error",
@@ -623,6 +723,7 @@ class TestResumeHelmrelease:
     def test_logs_warning_on_failure(
         self,
         mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """resume_helmrelease logs warning on non-zero returncode.
@@ -632,6 +733,7 @@ class TestResumeHelmrelease:
         """
         from testing.fixtures.flux import resume_helmrelease
 
+        mock_shutil_which.return_value = "/usr/local/bin/flux"
         mock_subprocess.return_value = _make_completed_process(
             returncode=1,
             stderr="connection refused",
@@ -647,11 +749,13 @@ class TestResumeHelmrelease:
     def test_log_includes_returncode_on_failure(
         self,
         mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Failure log includes returncode per P56."""
         from testing.fixtures.flux import resume_helmrelease
 
+        mock_shutil_which.return_value = "/usr/local/bin/flux"
         mock_subprocess.return_value = _make_completed_process(
             returncode=7,
             stderr="connection timeout",
@@ -667,11 +771,13 @@ class TestResumeHelmrelease:
     def test_log_includes_stderr_on_failure(
         self,
         mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Failure log includes stderr content per P56."""
         from testing.fixtures.flux import resume_helmrelease
 
+        mock_shutil_which.return_value = "/usr/local/bin/flux"
         mock_subprocess.return_value = _make_completed_process(
             returncode=1,
             stderr="tls handshake timeout",
@@ -689,6 +795,7 @@ class TestResumeHelmrelease:
     def test_does_not_raise_on_failure(
         self,
         mock_subprocess: MagicMock,
+        mock_shutil_which: MagicMock,
     ) -> None:
         """resume_helmrelease must not raise exceptions on failure.
 
@@ -697,6 +804,7 @@ class TestResumeHelmrelease:
         """
         from testing.fixtures.flux import resume_helmrelease
 
+        mock_shutil_which.return_value = "/usr/local/bin/flux"
         mock_subprocess.return_value = _make_completed_process(
             returncode=127,
             stderr="flux: command not found",

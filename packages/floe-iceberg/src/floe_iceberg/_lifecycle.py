@@ -28,11 +28,17 @@ import structlog
 from floe_iceberg.errors import (
     NoSuchNamespaceError,
     NoSuchTableError,
+    StaleTableMetadataError,
     TableAlreadyExistsError,
     ValidationError,
+    is_stale_table_metadata_error,
+    metadata_location_from_error,
+    stale_table_metadata_error_from_exception,
 )
 from floe_iceberg.models import (
     FieldType,
+    IcebergTableManagerConfig,
+    StaleTableRecoveryMode,
     TableConfig,
 )
 from floe_iceberg.telemetry import traced
@@ -86,15 +92,18 @@ class _IcebergTableLifecycle:
         self,
         catalog: Catalog,
         catalog_plugin: CatalogPlugin,
+        config: IcebergTableManagerConfig | None = None,
     ) -> None:
         """Initialize _IcebergTableLifecycle.
 
         Args:
             catalog: Connected PyIceberg catalog instance.
             catalog_plugin: Catalog plugin for catalog operations.
+            config: Optional manager configuration.
         """
         self._catalog = catalog
         self._catalog_plugin = catalog_plugin
+        self._config = config or IcebergTableManagerConfig()
         self._log = structlog.get_logger(__name__)
 
     # =========================================================================
@@ -161,9 +170,32 @@ class _IcebergTableLifecycle:
                     "table_already_exists_returning_existing",
                     identifier=identifier,
                 )
-                return self.load_table(identifier)
-            msg = f"Table '{identifier}' already exists"
-            raise TableAlreadyExistsError(msg)
+                stale_error: StaleTableMetadataError | None = None
+                try:
+                    return self.load_table(identifier)
+                except StaleTableMetadataError as exc:
+                    stale_error = exc
+                    if self._config.stale_table_recovery_mode is StaleTableRecoveryMode.STRICT:
+                        raise
+                except Exception as exc:
+                    if not self._is_stale_metadata_error(exc):
+                        raise
+                    stale_error = self._stale_metadata_error(identifier, exc)
+                    if self._config.stale_table_recovery_mode is StaleTableRecoveryMode.STRICT:
+                        raise stale_error from exc
+                if stale_error is None:
+                    msg = "Stale table metadata repair reached without an error context"
+                    raise RuntimeError(msg)
+                self._log.warning(
+                    "stale_table_metadata_repairing",
+                    identifier=identifier,
+                    metadata_location=stale_error.metadata_location,
+                )
+                self._catalog_plugin.drop_table(identifier, purge=False)
+                self._refresh_catalog_after_repair()
+            else:
+                msg = f"Table '{identifier}' already exists"
+                raise TableAlreadyExistsError(msg)
 
         # Convert schema to dict for catalog plugin
         schema_dict = self._table_schema_to_dict(config.table_schema)
@@ -212,7 +244,14 @@ class _IcebergTableLifecycle:
             raise NoSuchTableError(msg)
 
         # Load table from catalog
-        table = self._catalog.load_table(identifier)
+        try:
+            table = self._catalog.load_table(identifier)
+        except StaleTableMetadataError:
+            raise
+        except Exception as exc:
+            if self._is_stale_metadata_error(exc):
+                raise self._stale_metadata_error(identifier, exc) from exc
+            raise
 
         self._log.debug("table_loaded", identifier=identifier)
 
@@ -346,6 +385,34 @@ class _IcebergTableLifecycle:
         if len(parts) < 2:
             msg = f"Invalid identifier format: '{identifier}'. Expected 'namespace.table'"
             raise ValidationError(msg)
+
+    def _is_stale_metadata_error(self, exc: BaseException) -> bool:
+        """Return True when a catalog error points at missing Iceberg metadata."""
+        return is_stale_table_metadata_error(exc)
+
+    def _metadata_location_from_error(self, exc: BaseException) -> str | None:
+        """Extract the missing metadata file location from a catalog error."""
+        return metadata_location_from_error(exc)
+
+    def _stale_metadata_error(
+        self,
+        identifier: str,
+        exc: BaseException,
+    ) -> StaleTableMetadataError:
+        """Build the structured stale metadata error for a table load failure."""
+        return stale_table_metadata_error_from_exception(
+            table_identifier=identifier,
+            recovery_mode=self._config.stale_table_recovery_mode,
+            original_error=exc,
+        )
+
+    def _refresh_catalog_after_repair(self) -> None:
+        """Refresh the catalog handle after repairing a stale registration."""
+        if self._config.catalog_connection_config is not None:
+            connect_config: dict[str, Any] = dict(self._config.catalog_connection_config)
+        else:
+            connect_config = {}
+        self._catalog = self._catalog_plugin.connect(connect_config)
 
     def _table_schema_to_dict(self, table_schema: Any) -> dict[str, Any]:
         """Convert TableSchema to dictionary for catalog plugin.

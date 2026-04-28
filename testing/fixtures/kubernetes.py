@@ -29,9 +29,13 @@ Example:
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 import time
-from typing import NamedTuple
+from pathlib import Path
+from typing import Any, NamedTuple
+
+import yaml
 
 from testing.fixtures.polling import wait_for_condition
 
@@ -98,6 +102,94 @@ def run_helm(
         timeout=timeout,
         check=False,
     )
+
+
+def _chart_dependency_repositories(chart_path: Path) -> list[tuple[str, str]]:
+    """Return Helm repository aliases and URLs declared by a chart's dependencies."""
+    chart_yaml = chart_path / "Chart.yaml"
+    if not chart_yaml.exists():
+        return []
+
+    raw_chart: Any = yaml.safe_load(chart_yaml.read_text()) or {}
+    if not isinstance(raw_chart, dict):
+        return []
+
+    raw_dependencies = raw_chart.get("dependencies", [])
+    if not isinstance(raw_dependencies, list):
+        return []
+
+    repositories: list[tuple[str, str]] = []
+    seen_urls: set[str] = set()
+    used_names: set[str] = set()
+    for index, dependency in enumerate(raw_dependencies):
+        if not isinstance(dependency, dict):
+            continue
+        repository = dependency.get("repository")
+        if not isinstance(repository, str) or not repository.startswith(("http://", "https://")):
+            continue
+        if repository in seen_urls:
+            continue
+
+        raw_name = dependency.get("alias") or dependency.get("name") or f"dependency-{index}"
+        name = str(raw_name).strip() or f"dependency-{index}"
+        repo_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", name).strip("-") or f"dependency-{index}"
+        if repo_name in used_names:
+            repo_name = f"{repo_name}-{index}"
+
+        repositories.append((repo_name, repository))
+        seen_urls.add(repository)
+        used_names.add(repo_name)
+
+    return repositories
+
+
+def _ensure_helm_chart_dependencies(
+    chart_path: Path,
+    timeout: int,
+) -> subprocess.CompletedProcess[str] | None:
+    """Add chart-declared Helm repos and build dependencies before rendering."""
+    for repo_name, repository in _chart_dependency_repositories(chart_path):
+        repo_result = run_helm(
+            ["repo", "add", repo_name, repository, "--force-update"],
+            timeout=timeout,
+        )
+        if repo_result.returncode != 0:
+            return repo_result
+
+    dependency_result = run_helm(["dependency", "build", str(chart_path)], timeout=timeout)
+    if dependency_result.returncode != 0:
+        return dependency_result
+    return None
+
+
+def run_helm_template(
+    release: str,
+    chart_path: Path,
+    values_path: Path | None = None,
+    set_values: dict[str, str] | None = None,
+    skip_schema_validation: bool = False,
+    timeout: int = 120,
+) -> subprocess.CompletedProcess[str]:
+    """Render a Helm chart after ensuring chart dependencies are available.
+
+    E2E tests run inside a purpose-built test-runner image where vendored
+    subcharts may not be present. Build dependencies from Chart.yaml before
+    rendering so tests validate chart metadata instead of relying on stale
+    checked-out artifacts.
+    """
+    dependency_result = _ensure_helm_chart_dependencies(chart_path, timeout=timeout)
+    if dependency_result is not None:
+        return dependency_result
+
+    args = ["template", release, str(chart_path)]
+    if skip_schema_validation:
+        args.append("--skip-schema-validation")
+    if values_path is not None:
+        args.extend(["-f", str(values_path)])
+    if set_values:
+        for key, value in set_values.items():
+            args.extend(["--set", f"{key}={value}"])
+    return run_helm(args, timeout=timeout)
 
 
 def get_pod_uid(label_selector: str, namespace: str) -> str | None:

@@ -193,10 +193,10 @@ def test_purge_namespace_empty_namespace_succeeds_when_storage_endpoint_resoluti
     dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
 
 
-def test_purge_namespace_raises_when_storage_location_cannot_be_resolved(
+def test_purge_namespace_can_reset_metadata_when_storage_location_cannot_be_resolved(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Purges should fail when table storage locations cannot be determined."""
+    """Missing storage locations should not block catalog metadata cleanup."""
     purge_catalog = Mock()
     purge_catalog.list_tables.return_value = [("customer_360", "stg_customers")]
     purge_catalog.load_table.side_effect = RuntimeError("load failed")
@@ -209,11 +209,12 @@ def test_purge_namespace_raises_when_storage_location_cannot_be_resolved(
 
     monkeypatch.setattr(dbt_utils, "_get_polaris_catalog", _get_catalog)
 
-    with pytest.raises(
-        dbt_utils.NamespaceResetError,
-        match="Could not resolve storage location for customer_360.stg_customers",
-    ):
-        dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
+    dbt_utils._purge_iceberg_namespace("customer_360", verify_empty=True, retries=1)
+
+    purge_catalog.drop_table.assert_called_once_with(
+        "customer_360.stg_customers",
+        purge_requested=False,
+    )
 
 
 def test_purge_namespace_raises_when_purge_phase_table_enumeration_fails(

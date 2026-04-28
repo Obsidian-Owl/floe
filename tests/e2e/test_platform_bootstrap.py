@@ -295,21 +295,8 @@ class TestPlatformBootstrap(IntegrationTestBase):
             f"-l app.kubernetes.io/component=postgresql"
         )
 
-        # Verify PostgreSQL secret exists (floe-platform uses prefixed name)
-        result = _run_kubectl(
-            [
-                "get",
-                "secret",
-                "-n",
-                self.namespace,
-                "-l",
-                "app.kubernetes.io/component=postgresql",
-                "-o",
-                "jsonpath={.items[*].metadata.name}",
-            ]
-        )
-        assert result.returncode == 0, f"Failed to check PostgreSQL secret: {result.stderr}"
-        assert result.stdout.strip(), "PostgreSQL secret not found"
+        # Credentials are intentionally validated indirectly by PostgreSQL readiness
+        # and successful psql execution below; the test runner must not list secrets.
 
         # Get PostgreSQL pod name for query execution
         pg_pod = None

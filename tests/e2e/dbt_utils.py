@@ -144,11 +144,10 @@ def _purge_iceberg_namespace(
 ) -> None:
     """Purge all Iceberg tables in a namespace and delete their S3 data.
 
-    Uses ``purge_table`` (which removes both catalog metadata and data files)
-    then performs an explicit S3 object sweep via the MinIO-compatible
-    ListObjectsV2 + DeleteObjects APIs.  This ensures stale Parquet files
-    cannot interfere with subsequent dbt runs that use DuckDB's Iceberg
-    extension, which does not support ``DROP TABLE CASCADE``.
+    Drops catalog table metadata first, then performs an explicit S3 object
+    sweep via the MinIO-compatible ListObjectsV2 + DeleteObjects APIs.  The
+    catalog drop must succeed before deleting files; otherwise Polaris can be
+    left pointing at metadata files that no longer exist.
 
     Silently does nothing if the catalog is unreachable or the namespace
     doesn't exist — dbt will create everything from scratch.
@@ -160,6 +159,7 @@ def _purge_iceberg_namespace(
     """
     catalog = _get_polaris_catalog(fresh=True)
     storage_cleanup_failure_reason: str | None = None
+    catalog_drop_failure_reason: str | None = None
     if catalog is not None:
         access_key, secret_key = get_minio_credentials()
 
@@ -174,22 +174,33 @@ def _purge_iceberg_namespace(
                     table = catalog.load_table(fqn)
                     location = table.metadata.location  # e.g. s3://warehouse/ns1/t1
                 except Exception as exc:
-                    if verify_empty and storage_cleanup_failure_reason is None:
-                        storage_cleanup_failure_reason = (
-                            f"Could not resolve storage location for {fqn}: {type(exc).__name__}"
-                        )
                     logger.warning(
                         "Could not load table %s for S3 location: %s",
                         fqn,
                         type(exc).__name__,
                     )
 
-                # Step 2: purge via catalog (removes metadata + signals data removal)
+                # Step 2: drop catalog metadata without requesting catalog-side
+                # file purge. Polaris may reject purgeRequested=true while still
+                # allowing metadata deletion; deleting S3 first would orphan a
+                # broken catalog registration.
                 try:
-                    catalog.purge_table(fqn)
-                    logger.info("Purged Iceberg table %s", fqn)
+                    try:
+                        catalog.drop_table(fqn, purge_requested=False)
+                    except TypeError:
+                        catalog.drop_table(fqn)
+                    logger.info("Dropped Iceberg table metadata %s", fqn)
                 except Exception as exc:
-                    logger.warning("Could not purge table %s: %s", fqn, type(exc).__name__)
+                    if verify_empty and catalog_drop_failure_reason is None:
+                        catalog_drop_failure_reason = (
+                            f"Could not drop catalog table {fqn}: {type(exc).__name__}"
+                        )
+                    logger.warning(
+                        "Could not drop catalog table %s: %s",
+                        fqn,
+                        type(exc).__name__,
+                    )
+                    continue
 
                 # Step 3: sweep S3 objects under the table's data prefix via boto3.
                 # boto3 handles AWS Signature V4 required by MinIO.
@@ -320,6 +331,11 @@ def _purge_iceberg_namespace(
     if storage_cleanup_failure_reason is not None:
         raise NamespaceResetError(
             f"Namespace reset incomplete for {namespace}: {storage_cleanup_failure_reason}"
+        )
+
+    if catalog_drop_failure_reason is not None:
+        raise NamespaceResetError(
+            f"Namespace reset incomplete for {namespace}: {catalog_drop_failure_reason}"
         )
 
     if verification_succeeded:

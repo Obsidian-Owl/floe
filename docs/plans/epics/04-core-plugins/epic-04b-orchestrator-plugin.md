@@ -154,16 +154,22 @@ testing/tests/unit/test_orchestrator_fixtures.py  # Fixture tests
 During Epic 4D implementation, IcebergIOManager was incorrectly placed in floe-iceberg.
 This violated the pluggable architecture principle and was removed in a cleanup commit.
 
+> Superseded (2026-04-25 Task 2): Direct Dagster `create_definitions()` is not
+> the production runtime path. Usable Dagster `Definitions` are built by
+> `load_product_definitions(product_name, project_dir)` or the generated
+> `definitions.py` loader shim so dbt manifest, profiles, and compiled artifacts
+> resolve from one product directory.
+
 | What Happened | Why It's Wrong | Correct Approach |
 |---------------|----------------|------------------|
 | IOManager in floe-iceberg | floe-iceberg is orchestrator-agnostic storage | IOManager in orchestrator plugin |
-| Hardcoded Dagster imports | Violates manifest-driven plugin selection | Plugin creates IOManager via create_definitions() |
+| Hardcoded Dagster imports | Violates manifest-driven plugin selection | Dagster runtime loader/builder wires IOManager and resources |
 | Storage package depends on orchestrator | Inverts dependency direction | Orchestrator depends on storage |
 
 **Correct Architecture (implement in Epic 4B):**
 - `floe-iceberg` provides `IcebergTableManager` (pure storage utility)
 - `floe-orchestrator-dagster` creates `IcebergIOManager` using IcebergTableManager
-- IOManager is instantiated by `OrchestratorPlugin.create_definitions()`
+- IOManager is instantiated by the Dagster runtime loader/builder, not direct `create_definitions()`
 - Manifest configuration determines which orchestrator plugin is loaded
 
 **Note**: FR-037 to FR-040 (IOManager requirements) were deferred from Epic 4D to this epic.

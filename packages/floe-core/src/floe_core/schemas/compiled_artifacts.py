@@ -35,6 +35,7 @@ _K8S_DNS_SUBDOMAIN_PATTERN = re.compile(
     r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
 )
 _K8S_NAMESPACE_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+PRODUCT_NAME_PATTERN = r"^[a-zA-Z][a-zA-Z0-9_-]*$"
 _MAX_K8S_NAME_LENGTH = 253
 _MAX_K8S_NAMESPACE_LENGTH = 63
 
@@ -92,6 +93,7 @@ class CompilationMetadata(BaseModel):
         ...,
         min_length=1,
         max_length=128,
+        pattern=PRODUCT_NAME_PATTERN,
         description="Name of the data product",
     )
     product_version: str = Field(
@@ -427,6 +429,10 @@ class ResolvedGovernance(BaseModel):
         ge=1,
         le=100,
         description="Minimum Iceberg snapshots to retain per table",
+    )
+    stale_table_recovery_mode: Literal["strict", "repair"] | None = Field(
+        default=None,
+        description="Configured stale Iceberg metadata recovery mode for runtimes",
     )
 
 

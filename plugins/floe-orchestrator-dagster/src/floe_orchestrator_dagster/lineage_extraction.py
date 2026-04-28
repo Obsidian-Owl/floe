@@ -237,7 +237,7 @@ def extract_dbt_model_lineage(
             outputs = _enrich_outputs_with_column_lineage(outputs, node, inputs, namespace)
 
             model_run_id = uuid4()
-            run = LineageRun(run_id=model_run_id, facets={"parentRun": parent_facet})
+            run = LineageRun(run_id=model_run_id, facets={"parent": parent_facet})
             job = LineageJob(namespace=namespace, name=unique_id)
 
             timing: list[dict[str, str]] = result.get("timing", [])

@@ -297,6 +297,36 @@ def test_get_config_schema_returns_model() -> None:
 
 
 @pytest.mark.requirement("REQ-527")
+def test_configure_updates_transport_config() -> None:
+    """Test registry-applied configuration changes the emitted transport URL."""
+    plugin = MarquezLineageBackendPlugin()
+
+    plugin.configure(
+        MarquezConfig(
+            url="http://localhost:5000",
+            api_key="configured-key",  # pragma: allowlist secret
+            environment="dev",
+        )
+    )
+
+    config = plugin.get_transport_config()
+    assert config["url"] == "http://localhost:5000/api/v1/lineage"
+    assert config["api_key"] == "configured-key"  # pragma: allowlist secret
+
+
+@pytest.mark.requirement("REQ-527")
+def test_config_allows_manifest_explicit_internal_http() -> None:
+    """Test manifests can explicitly allow in-cluster HTTP for self-hosted Marquez."""
+    config = MarquezConfig(
+        url="http://floe-platform-marquez:5000",
+        allow_insecure_http=True,
+    )
+
+    assert config.url == "http://floe-platform-marquez:5000"
+    assert config.allow_insecure_http is True
+
+
+@pytest.mark.requirement("REQ-527")
 def test_helm_values_uses_existing_secret() -> None:
     """Test that PostgreSQL uses existingSecret pattern (no inline password).
 

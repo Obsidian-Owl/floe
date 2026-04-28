@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
+from testing.fixtures.kubernetes import run_helm_template
 
 STORAGE_BACKEND_ERROR_MSG = (
     "STORAGE GAP: Polaris table operation failed. This likely means the storage "
@@ -61,7 +62,6 @@ class TestSchemaEvolution(IntegrationTestBase):
         Raises:
             AssertionError: If configurations conflict.
         """
-        import subprocess
         from pathlib import Path
 
         # Acknowledge fixture is injected but we're testing config isolation
@@ -105,20 +105,11 @@ class TestSchemaEvolution(IntegrationTestBase):
 
         # 3. Verify workspace ConfigMap has unique code locations
         chart_path = project_root / "charts" / "floe-platform"
-        result = subprocess.run(
-            [
-                "helm",
-                "template",
-                "test-release",
-                str(chart_path),
-                "-f",
-                str(chart_path / "values-test.yaml"),
-            ],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
+        result = run_helm_template(
+            "test-release",
+            chart_path,
+            chart_path / "values-test.yaml",
+            timeout=120,
         )
 
         assert result.returncode == 0, f"Helm template failed: {result.stderr}"

@@ -31,6 +31,57 @@ NAMESPACE = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
 # Helm release name
 HELM_RELEASE = "floe-platform"
 
+_DAGSTER_IMAGE_VALUE_PATHS = (
+    "dagster.dagsterWebserver.image.repository",
+    "dagster.dagsterWebserver.image.tag",
+    "dagster.dagsterDaemon.image.repository",
+    "dagster.dagsterDaemon.image.tag",
+    "dagster.runLauncher.config.k8sRunLauncher.image.repository",
+    "dagster.runLauncher.config.k8sRunLauncher.image.tag",
+)
+
+
+def _value_at_path(values: dict[str, object], path: str) -> object:
+    """Return a nested Helm value by dotted path."""
+    current: object = values
+    for part in path.split("."):
+        if not isinstance(current, dict) or part not in current:
+            raise KeyError(path)
+        current = current[part]
+    return current
+
+
+def _current_dagster_image_overrides(release: str, namespace: str) -> list[str]:
+    """Build Helm ``--set-string`` args for the current Dagster image values.
+
+    The upgrade uses clean chart test values to avoid carrying stale release
+    state, but the generated demo image tag is runtime-specific in Kind/DevPod.
+    Preserve only those image coordinates from the active release.
+    """
+    values_result = run_helm(
+        ["get", "values", release, "-n", namespace, "--all", "-o", "json"],
+    )
+    assert values_result.returncode == 0, (
+        f"Unable to read current Helm values for {release}: {values_result.stderr}"
+    )
+
+    current_values = json.loads(values_result.stdout)
+    overrides: list[str] = []
+    missing_paths: list[str] = []
+    for path in _DAGSTER_IMAGE_VALUE_PATHS:
+        try:
+            value = _value_at_path(current_values, path)
+        except KeyError:
+            missing_paths.append(path)
+            continue
+        overrides.extend(["--set-string", f"{path}={value}"])
+
+    assert not missing_paths, (
+        "Current Helm release is missing Dagster image values required for a "
+        f"safe in-place upgrade: {', '.join(missing_paths)}"
+    )
+    return overrides
+
 
 def _recover_stuck_release(release: str, namespace: str) -> None:
     """Detect and recover from stuck Helm release states.
@@ -66,6 +117,7 @@ class TestHelmUpgrade:
     """
 
     @pytest.mark.requirement("AC-2.9")
+    @pytest.mark.timeout(1260)
     def test_helm_upgrade_succeeds(self, flux_suspended: None) -> None:  # noqa: F811
         """Verify helm upgrade completes without error.
 
@@ -86,6 +138,7 @@ class TestHelmUpgrade:
         )
         current = json.loads(status_result.stdout)
         current_revision = current.get("version", 0)
+        image_overrides = _current_dagster_image_overrides(HELM_RELEASE, NAMESPACE)
 
         # Upgrade with an annotation change (minimal modification)
         # --rollback-on-failure auto-rollbacks on failure (prevents leaving
@@ -105,8 +158,9 @@ class TestHelmUpgrade:
                     "charts/floe-platform/values-test.yaml",
                     "--set",
                     "global.annotations.e2e-test-revision=upgrade-test",
+                    *image_overrides,
                     "--rollback-on-failure",
-                    "--wait",
+                    "--wait=legacy",
                     "--timeout",
                     "8m",
                 ],

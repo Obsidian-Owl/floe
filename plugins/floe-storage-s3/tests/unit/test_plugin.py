@@ -234,6 +234,26 @@ class TestStoragePluginMethods:
             fileio = configured_plugin.get_pyiceberg_fileio()
         assert isinstance(fileio, FsspecFileIO)
 
+    @pytest.mark.requirement("AC-1")
+    def test_get_pyiceberg_catalog_config_uses_pyiceberg_s3_keys(
+        self, configured_plugin: S3StoragePlugin
+    ) -> None:
+        """Catalog config must use PyIceberg S3 keys, not raw manifest keys."""
+        with patch.dict(
+            "os.environ", {"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "secret"}
+        ):
+            config = configured_plugin.get_pyiceberg_catalog_config()
+
+        assert config == {
+            "s3.endpoint": "http://minio:9000",
+            "s3.region": "us-east-1",
+            "s3.path-style-access": "true",
+            "s3.access-key-id": "test",
+            "s3.secret-access-key": "secret",
+        }
+        assert "s3.path_style_access" not in config
+        assert "path_style_access" not in config
+
 
 class TestUnconfiguredPlugin:
     """Test that unconfigured plugin raises clear errors."""
@@ -252,3 +272,5 @@ class TestUnconfiguredPlugin:
             plugin.get_dagster_io_manager_config()
         with pytest.raises(PluginConfigurationError, match="not configured"):
             plugin.get_pyiceberg_fileio()
+        with pytest.raises(PluginConfigurationError, match="not configured"):
+            plugin.get_pyiceberg_catalog_config()

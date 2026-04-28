@@ -714,7 +714,9 @@ class TestCompilePipelineLineageFail:
         mock_emitter.emit_start.return_value = uuid4()
 
         # Use a message that would be problematic if leaked
-        secret_message = "password=s3cret in config at /etc/floe/creds.yaml"
+        secret_message = (
+            "password=s3cret in config at /etc/floe/creds.yaml"  # pragma: allowlist secret
+        )
 
         with (
             patch(CREATE_SYNC_EMITTER_PATH, return_value=mock_emitter),
@@ -843,6 +845,27 @@ class TestCompilePipelineLineageEdgeCases:
         assert len(pipeline_start_calls) == 1
         assert len(pipeline_complete_calls) == 1
         mock_emitter.close.assert_called_once()
+
+    @pytest.mark.requirement("AC-OLC-5")
+    def test_per_model_lineage_uses_product_dbt_project_identity(
+        self,
+        spec_path: Path,
+        lineage_manifest_path: Path,
+        mock_emitter: MagicMock,
+    ) -> None:
+        """Compilation model lineage must use product-derived dbt project identity."""
+        from floe_core.compilation.stages import compile_pipeline
+
+        with patch(CREATE_SYNC_EMITTER_PATH, return_value=mock_emitter):
+            compile_pipeline(spec_path, lineage_manifest_path)
+
+        model_start_jobs = {
+            _get_arg(call_args, 0, "job_name")
+            for call_args in mock_emitter.emit_start.call_args_list
+            if str(_get_arg(call_args, 0, "job_name")).startswith("model.")
+        }
+        assert "model.test_product.customers" in model_start_jobs
+        assert "model.floe.customers" not in model_start_jobs
 
     @pytest.mark.requirement("AC-OLC-5")
     @pytest.mark.requirement("AC-OLC-6")

@@ -68,6 +68,9 @@ class StoragePlugin(PluginMetadata):
         - get_dagster_io_manager_config() method
         - get_helm_values_override() method
 
+    Concrete plugins may override:
+        - get_pyiceberg_catalog_config() method
+
     Example:
         >>> class S3Plugin(StoragePlugin):
         ...     @property
@@ -110,6 +113,20 @@ class StoragePlugin(PluginMetadata):
             >>> input_file = fileio.new_input("s3://bucket/table/data.parquet")
         """
         ...
+
+    def get_pyiceberg_catalog_config(self) -> dict[str, Any]:
+        """Return storage-specific PyIceberg catalog connection config.
+
+        Catalog plugins can pass this dictionary through to PyIceberg's
+        catalog loader so storage backend configuration is owned by the
+        storage plugin instead of callers hand-mapping backend-specific keys.
+
+        Returns:
+            PyIceberg catalog configuration for the storage backend. The
+            default is empty for storage plugins that do not require
+            catalog-level storage settings.
+        """
+        return {}
 
     @abstractmethod
     def get_warehouse_uri(self, namespace: str) -> str:

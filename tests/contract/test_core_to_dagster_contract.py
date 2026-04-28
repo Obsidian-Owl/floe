@@ -562,55 +562,126 @@ class TestDagsterPluginConsumesCompiledArtifacts:
             },
         }
 
+    def _write_runtime_project(
+        self,
+        tmp_path: Path,
+        artifacts_dict: dict[str, Any],
+    ) -> tuple[Path, Any]:
+        """Write runtime inputs expected by the Dagster loader/builder path."""
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        project_dir = tmp_path / "dbt_project"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "compiled_artifacts.json").write_text(json.dumps(artifacts_dict))
+
+        target_dir = project_dir / "target"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        manifest = {
+            "metadata": {
+                "dbt_schema_version": "https://schemas.getdbt.com/dbt/manifest/v12.json",
+                "dbt_version": "1.7.0",
+                "generated_at": datetime.now().isoformat(),
+                "invocation_id": "core-to-dagster-contract",
+            },
+            "nodes": {},
+            "sources": {},
+            "exposures": {},
+            "metrics": {},
+            "groups": {},
+            "selectors": {},
+            "disabled": [],
+            "parent_map": {},
+            "child_map": {},
+            "group_map": {},
+            "semantic_models": {},
+            "unit_tests": {},
+            "saved_queries": {},
+        }
+        (target_dir / "manifest.json").write_text(json.dumps(manifest))
+
+        return project_dir, CompiledArtifacts.model_validate(artifacts_dict)
+
     @pytest.mark.requirement("SC-002")
-    def test_dagster_plugin_can_create_definitions_from_artifacts(
+    def test_dagster_plugin_validates_then_requires_runtime_project_dir(
         self, valid_compiled_artifacts_dict: dict[str, Any]
     ) -> None:
-        """Test DagsterOrchestratorPlugin.create_definitions() works with CompiledArtifacts."""
-        from dagster import Definitions
+        """Direct create_definitions() validates artifacts then requires loader context."""
         from floe_orchestrator_dagster import DagsterOrchestratorPlugin
 
         plugin = DagsterOrchestratorPlugin()
-        result = plugin.create_definitions(valid_compiled_artifacts_dict)
+
+        with pytest.raises(ValueError, match="project_dir"):
+            plugin.create_definitions(valid_compiled_artifacts_dict)
+
+    @pytest.mark.requirement("SC-002")
+    def test_runtime_builder_can_create_definitions_from_artifacts(
+        self,
+        valid_compiled_artifacts_dict: dict[str, Any],
+        tmp_path: Path,
+    ) -> None:
+        """Runtime definitions are built from artifacts plus a product directory."""
+        from dagster import Definitions
+        from floe_orchestrator_dagster.runtime import build_product_definitions
+
+        project_dir, artifacts = self._write_runtime_project(
+            tmp_path,
+            valid_compiled_artifacts_dict,
+        )
+
+        result = build_product_definitions(
+            product_name=artifacts.metadata.product_name,
+            artifacts=artifacts,
+            project_dir=project_dir,
+        )
 
         assert isinstance(result, Definitions)
 
     @pytest.mark.requirement("SC-002")
-    def test_dagster_plugin_creates_assets_from_transforms(
-        self, valid_compiled_artifacts_dict: dict[str, Any]
+    def test_runtime_builder_creates_dbt_asset_from_project_manifest(
+        self,
+        valid_compiled_artifacts_dict: dict[str, Any],
+        tmp_path: Path,
     ) -> None:
-        """Test DagsterOrchestratorPlugin creates assets from transforms."""
-        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+        """The runtime path owns asset construction from the dbt manifest."""
+        from floe_orchestrator_dagster.runtime import build_product_definitions
 
-        plugin = DagsterOrchestratorPlugin()
-        result = plugin.create_definitions(valid_compiled_artifacts_dict)
+        project_dir, artifacts = self._write_runtime_project(
+            tmp_path,
+            valid_compiled_artifacts_dict,
+        )
+        result = build_product_definitions(
+            product_name=artifacts.metadata.product_name,
+            artifacts=artifacts,
+            project_dir=project_dir,
+        )
 
-        # Verify assets were created for the models
         assert result.assets is not None
+        assert len(result.assets) == 1
+        assert "dbt" in result.resources
+        assert "lineage" in result.resources
 
     @pytest.mark.requirement("SC-002")
-    def test_dagster_plugin_preserves_dependency_graph(
-        self, valid_compiled_artifacts_dict: dict[str, Any]
+    def test_runtime_builder_wires_dbt_asset_resource_dependencies(
+        self,
+        valid_compiled_artifacts_dict: dict[str, Any],
+        tmp_path: Path,
     ) -> None:
-        """Test DagsterOrchestratorPlugin preserves model dependencies."""
-        from dagster import AssetKey
-        from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+        """The dbt asset depends on runtime dbt and lineage resources."""
+        from floe_orchestrator_dagster.runtime import build_product_definitions
 
-        plugin = DagsterOrchestratorPlugin()
-        result = plugin.create_definitions(valid_compiled_artifacts_dict)
+        project_dir, artifacts = self._write_runtime_project(
+            tmp_path,
+            valid_compiled_artifacts_dict,
+        )
+        result = build_product_definitions(
+            product_name=artifacts.metadata.product_name,
+            artifacts=artifacts,
+            project_dir=project_dir,
+        )
 
-        # Get assets list
-        assets_list = list(result.assets)
+        asset_def = result.assets[0]
 
-        # Find fct_orders asset and verify it depends on stg_customers
-        fct_orders = None
-        for asset in assets_list:
-            if asset.key.path[-1] == "fct_orders":
-                fct_orders = asset
-                break
-
-        assert fct_orders is not None
-        assert AssetKey(["stg_customers"]) in fct_orders.dependency_keys
+        assert asset_def.required_resource_keys == {"dbt", "lineage"}
 
     @pytest.mark.requirement("SC-003")
     def test_dagster_plugin_validates_schema_version(self) -> None:

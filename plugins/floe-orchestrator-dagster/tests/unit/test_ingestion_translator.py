@@ -14,7 +14,14 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from dagster import AssetKey
+from dagster import AssetKey, build_op_context
+from floe_core.plugins.ingestion import IngestionResult
+
+
+class SourceLike:
+    """Small dlt-like source test double."""
+
+    resources = ()
 
 
 class TestFloeIngestionTranslator:
@@ -108,6 +115,23 @@ class TestFloeIngestionTranslator:
 class TestCreateIngestionAssets:
     """Tests for create_ingestion_assets() factory."""
 
+    def _executable_source_ref(self) -> MagicMock:
+        """Build a PluginRef-like object with one executable source object."""
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "github-events",
+                    "source_type": "rest_api",
+                    "source_config": {"source": SourceLike()},
+                    "destination_table": "bronze.github_events",
+                }
+            ],
+        }
+        return mock_ref
+
     @pytest.mark.requirement("4F-FR-060")
     def test_factory_returns_asset_definitions(self) -> None:
         """Test factory returns a list of asset definitions.
@@ -117,10 +141,7 @@ class TestCreateIngestionAssets:
         """
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
 
-        mock_ref: MagicMock = MagicMock()
-        mock_ref.type = "dlt"
-        mock_ref.version = "0.1.0"
-        mock_ref.config = {}
+        mock_ref = self._executable_source_ref()
 
         assets = create_ingestion_assets(mock_ref)
         assert len(assets) == 1
@@ -134,10 +155,7 @@ class TestCreateIngestionAssets:
         """
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
 
-        mock_ref: MagicMock = MagicMock()
-        mock_ref.type = "dlt"
-        mock_ref.version = "0.1.0"
-        mock_ref.config = {}
+        mock_ref = self._executable_source_ref()
 
         assets = create_ingestion_assets(mock_ref)
         asset_def = assets[0]
@@ -158,12 +176,355 @@ class TestCreateIngestionAssets:
         """
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
 
-        mock_ref: MagicMock = MagicMock()
-        mock_ref.type = "dlt"
-        mock_ref.version = "0.1.0"
-        mock_ref.config = {}
+        mock_ref = self._executable_source_ref()
 
         assets = create_ingestion_assets(mock_ref)
         asset_def = assets[0]
 
         assert "ingestion" in asset_def.required_resource_keys
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_factory_creates_one_asset_per_configured_source(self) -> None:
+        """Executable source configs get one asset per source."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        github_source = SourceLike()
+        users_source = SourceLike()
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "github-events",
+                    "source_type": "rest_api",
+                    "source_config": {"source": github_source},
+                    "destination_table": "bronze.github_events",
+                },
+                {
+                    "name": "warehouse_users",
+                    "source_type": "sql_database",
+                    "source_config": {"source": users_source},
+                    "destination_table": "bronze.users",
+                },
+            ],
+        }
+
+        assets = create_ingestion_assets(mock_ref)
+
+        assert len(assets) == 2
+        assert {asset_def.key.path[-1] for asset_def in assets} == {
+            "run_ingestion_github_events",
+            "run_ingestion_warehouse_users",
+        }
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_factory_rejects_normal_json_sources_without_executable_source(self) -> None:
+        """Normal compiled JSON config cannot create runnable dlt source objects yet."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "github-events",
+                    "source_type": "rest_api",
+                    "source_config": {"url": "https://example.test/events"},
+                    "destination_table": "bronze.github_events",
+                }
+            ],
+        }
+
+        with pytest.raises(ValueError, match="executable dlt source object"):
+            create_ingestion_assets(mock_ref)
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_factory_rejects_empty_sources_list(self) -> None:
+        """Configured ingestion must contain at least one source."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {"sources": []}
+
+        with pytest.raises(ValueError, match="at least one ingestion source"):
+            create_ingestion_assets(mock_ref)
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_factory_rejects_empty_config(self) -> None:
+        """Empty config must not synthesize a fake flat ingestion source."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {}
+
+        with pytest.raises(ValueError, match="requires sources or explicit executable source"):
+            create_ingestion_assets(mock_ref)
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_factory_rejects_normalized_source_name_collisions(self) -> None:
+        """Source names that normalize to the same asset key must fail loudly."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "github-events",
+                    "source_type": "rest_api",
+                    "source_config": {"source": SourceLike()},
+                    "destination_table": "bronze.github_events",
+                },
+                {
+                    "name": "github_events",
+                    "source_type": "rest_api",
+                    "source_config": {"source": SourceLike()},
+                    "destination_table": "bronze.github_events_copy",
+                },
+            ],
+        }
+
+        with pytest.raises(ValueError, match="normalized ingestion asset name collision"):
+            create_ingestion_assets(mock_ref)
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_factory_asset_runs_ingestion_pipeline(self) -> None:
+        """Materializing the asset must create and run the ingestion pipeline."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        executable_source = SourceLike()
+        mock_ref.config = {
+            "source_type": "rest_api",
+            "source_config": {
+                "url": "https://example.test/api",
+                "source": executable_source,
+            },
+            "destination_table": "raw.example",
+            "write_mode": "replace",
+            "schema_contract": "freeze",
+        }
+        ingestion_plugin = MagicMock()
+        ingestion_plugin.name = "dlt"
+        ingestion_plugin.version = "0.1.0"
+        pipeline = object()
+        result = IngestionResult(success=True, rows_loaded=12, duration_seconds=1.5)
+        ingestion_plugin.create_pipeline.return_value = pipeline
+        ingestion_plugin.run.return_value = result
+
+        asset_def = create_ingestion_assets(mock_ref)[0]
+        context = build_op_context(resources={"ingestion": ingestion_plugin})
+
+        output = asset_def(context)
+
+        ingestion_plugin.create_pipeline.assert_called_once()
+        config = ingestion_plugin.create_pipeline.call_args.args[0]
+        assert config.source_type == "rest_api"
+        assert config.source_config == {
+            "url": "https://example.test/api",
+            "source": executable_source,
+        }
+        assert config.destination_table == "raw.example"
+        assert config.write_mode == "replace"
+        assert config.schema_contract == "freeze"
+        ingestion_plugin.run.assert_called_once_with(
+            pipeline,
+            write_disposition="replace",
+            table_name="example",
+            schema_contract="freeze",
+            cursor_field=None,
+            primary_key=None,
+            source=executable_source,
+        )
+        assert output is result
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_source_asset_runs_pipeline_with_source_specific_kwargs(self) -> None:
+        """Per-source assets pass write/table/schema/cursor/primary kwargs to plugins."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        executable_source = SourceLike()
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "orders-api",
+                    "source_type": "rest_api",
+                    "source_config": {
+                        "url": "https://example.test/orders",
+                        "source": executable_source,
+                    },
+                    "destination_table": "bronze.orders",
+                    "write_mode": "merge",
+                    "schema_contract": "freeze",
+                    "cursor_field": "updated_at",
+                    "primary_key": ["id"],
+                }
+            ],
+        }
+        ingestion_plugin = MagicMock()
+        ingestion_plugin.name = "dlt"
+        ingestion_plugin.version = "0.1.0"
+        pipeline = object()
+        result = IngestionResult(success=True, rows_loaded=5)
+        ingestion_plugin.create_pipeline.return_value = pipeline
+        ingestion_plugin.run.return_value = result
+
+        asset_def = create_ingestion_assets(mock_ref)[0]
+        context = build_op_context(resources={"ingestion": ingestion_plugin})
+
+        output = asset_def(context)
+
+        config = ingestion_plugin.create_pipeline.call_args.args[0]
+        assert config.source_type == "rest_api"
+        assert config.source_config == {
+            "url": "https://example.test/orders",
+            "source": executable_source,
+        }
+        assert config.destination_table == "bronze.orders"
+        assert config.write_mode == "merge"
+        assert config.schema_contract == "freeze"
+        ingestion_plugin.run.assert_called_once_with(
+            pipeline,
+            write_disposition="merge",
+            table_name="orders",
+            schema_contract="freeze",
+            cursor_field="updated_at",
+            primary_key=["id"],
+            source=executable_source,
+        )
+        assert output is result
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_source_asset_rejects_missing_dlt_source_object(self) -> None:
+        """The helper fails loudly instead of inventing a dlt source object."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "users",
+                    "source_type": "rest_api",
+                    "source_config": {"url": "https://example.test/users"},
+                    "destination_table": "bronze.users",
+                }
+            ],
+        }
+        with pytest.raises(ValueError, match="source_config.source"):
+            create_ingestion_assets(mock_ref)
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_source_asset_rejects_plain_object_source(self) -> None:
+        """Plain object() is not enough to prove executable dlt source semantics."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "users",
+                    "source_type": "rest_api",
+                    "source_config": {"source": object()},
+                    "destination_table": "bronze.users",
+                }
+            ],
+        }
+        with pytest.raises(ValueError, match="source_config.source"):
+            create_ingestion_assets(mock_ref)
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_source_asset_rejects_missing_source_type(self) -> None:
+        """Source configs must declare source_type before assets are returned."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "users",
+                    "source_config": {"source": SourceLike()},
+                    "destination_table": "bronze.users",
+                }
+            ],
+        }
+        with pytest.raises(ValueError, match="source_type"):
+            create_ingestion_assets(mock_ref)
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_source_asset_rejects_missing_destination_table(self) -> None:
+        """Source configs must declare destination_table before assets are returned."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "sources": [
+                {
+                    "name": "users",
+                    "source_type": "rest_api",
+                    "source_config": {"source": SourceLike()},
+                }
+            ],
+        }
+        with pytest.raises(ValueError, match="destination_table"):
+            create_ingestion_assets(mock_ref)
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_factory_asset_raises_when_ingestion_run_fails(self) -> None:
+        """Failed ingestion results must fail the Dagster asset loudly."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        executable_source = SourceLike()
+        mock_ref.config = {
+            "source_type": "rest_api",
+            "source_config": {"source": executable_source},
+            "destination_table": "raw.example",
+        }
+        ingestion_plugin = MagicMock()
+        ingestion_plugin.name = "dlt"
+        ingestion_plugin.version = "0.1.0"
+        pipeline = object()
+        ingestion_plugin.create_pipeline.return_value = pipeline
+        ingestion_plugin.run.return_value = IngestionResult(
+            success=False,
+            errors=["source auth failed"],
+        )
+
+        asset_def = create_ingestion_assets(mock_ref)[0]
+        context = build_op_context(resources={"ingestion": ingestion_plugin})
+
+        with pytest.raises(RuntimeError, match="source auth failed"):
+            asset_def(context)
+
+        ingestion_plugin.create_pipeline.assert_called_once()
+        ingestion_plugin.run.assert_called_once_with(
+            pipeline,
+            write_disposition="append",
+            table_name="example",
+            schema_contract="evolve",
+            cursor_field=None,
+            primary_key=None,
+            source=executable_source,
+        )

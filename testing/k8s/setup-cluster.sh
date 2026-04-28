@@ -14,6 +14,7 @@
 #   VERBOSE: Set to "true" for verbose output
 #   FLOE_FLUX_GIT_URL: Git URL for the Flux GitRepository test fixture
 #   FLOE_FLUX_GIT_BRANCH: Git branch for the Flux GitRepository fixture
+#   FLOE_REQUIRED_FLUX_GIT_BRANCH: Required GitRepository branch; fails fast on mismatch
 #
 # After setup, services are accessible via localhost:
 #   Polaris:     http://localhost:8181
@@ -66,37 +67,135 @@ log_error() {
 
 inject_demo_image_values() {
     local manifest_path="$1"
-    python3 - "${manifest_path}" "${FLOE_DEMO_IMAGE_REPOSITORY}" "${FLOE_DEMO_IMAGE_TAG}" <<'PY'
-from pathlib import Path
-import sys
+    local rendered_path
+    local repository
+    local tag
 
-import yaml
+    rendered_path=$(mktemp "${TMPDIR:-/tmp}/floe-helmrelease.XXXXXX")
+    repository=$(yaml_quote "${FLOE_DEMO_IMAGE_REPOSITORY}")
+    tag=$(yaml_quote "${FLOE_DEMO_IMAGE_TAG}")
 
-manifest_path = Path(sys.argv[1])
-repository = sys.argv[2]
-tag = sys.argv[3]
+    awk -v repository="${repository}" -v tag="${tag}" '
+        function trim(value) {
+            sub(/^[[:space:]]+/, "", value)
+            sub(/[[:space:]]+$/, "", value)
+            return value
+        }
 
-raw = yaml.safe_load(manifest_path.read_text()) or {}
-spec = raw.setdefault("spec", {})
-values = spec.setdefault("values", {})
-dagster = values.setdefault("dagster", {})
+        function print_flow_mapping_values(indent, raw,    body, i, ch, depth, in_quote, quote, part, previous) {
+            body = raw
+            sub(/^[[:space:]]*\{/, "", body)
+            sub(/\}[[:space:]]*$/, "", body)
+            depth = 0
+            in_quote = 0
+            quote = ""
+            part = ""
+            previous = ""
+            for (i = 1; i <= length(body); i++) {
+                ch = substr(body, i, 1)
+                if (in_quote == 1) {
+                    part = part ch
+                    if (ch == quote && previous != "\\") {
+                        in_quote = 0
+                    }
+                    previous = ch
+                    continue
+                }
+                if (ch == "\"" || ch == "'\''") {
+                    in_quote = 1
+                    quote = ch
+                    part = part ch
+                    previous = ch
+                    continue
+                }
+                if (ch == "{" || ch == "[") {
+                    depth++
+                } else if (ch == "}" || ch == "]") {
+                    depth--
+                }
+                if (ch == "," && depth == 0) {
+                    part = trim(part)
+                    if (part != "") print indent part
+                    part = ""
+                    previous = ch
+                    continue
+                }
+                part = part ch
+                previous = ch
+            }
+            part = trim(part)
+            if (part != "") print indent part
+        }
 
-for component in ("dagsterWebserver", "dagsterDaemon"):
-    image = dagster.setdefault(component, {}).setdefault("image", {})
-    image["repository"] = repository
-    image["tag"] = tag
+        function print_image_values(indent) {
+            print indent "dagster:"
+            print indent "  dagsterWebserver:"
+            print indent "    image:"
+            print indent "      repository: " repository
+            print indent "      tag: " tag
+            print indent "  dagsterDaemon:"
+            print indent "    image:"
+            print indent "      repository: " repository
+            print indent "      tag: " tag
+            print indent "  runLauncher:"
+            print indent "    config:"
+            print indent "      k8sRunLauncher:"
+            print indent "        image:"
+            print indent "          repository: " repository
+            print indent "          tag: " tag
+        }
 
-run_image = (
-    dagster.setdefault("runLauncher", {})
-    .setdefault("config", {})
-    .setdefault("k8sRunLauncher", {})
-    .setdefault("image", {})
-)
-run_image["repository"] = repository
-run_image["tag"] = tag
+        BEGIN { injected = 0; in_spec = 0 }
+        /^spec:[[:space:]]*$/ && injected == 0 {
+            print
+            in_spec = 1
+            next
+        }
+        in_spec == 1 && /^  values:[[:space:]]*$/ && injected == 0 {
+            print
+            print_image_values("    ")
+            injected = 1
+            next
+        }
+        in_spec == 1 && /^  values:[[:space:]]*\{.*\}[[:space:]]*$/ && injected == 0 {
+            inline_values = $0
+            sub(/^  values:[[:space:]]*/, "", inline_values)
+            print "  values:"
+            print_flow_mapping_values("    ", inline_values)
+            print_image_values("    ")
+            injected = 1
+            next
+        }
+        in_spec == 1 && /^[^[:space:]]/ && injected == 0 {
+            print "  values:"
+            print_image_values("    ")
+            injected = 1
+            in_spec = 0
+        }
+        { print }
+        END {
+            if (in_spec == 1 && injected == 0) {
+                print "  values:"
+                print_image_values("    ")
+                injected = 1
+            }
+            if (injected == 0) exit 42
+        }
+    ' "${manifest_path}" >"${rendered_path}" || {
+        local status=$?
+        rm -f "${rendered_path}"
+        log_error "Failed to inject demo image values into Flux HelmRelease: ${manifest_path}"
+        return "${status}"
+    }
 
-manifest_path.write_text(yaml.safe_dump(raw, sort_keys=False))
-PY
+    mv "${rendered_path}" "${manifest_path}"
+}
+
+yaml_quote() {
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    printf '"%s"' "${value}"
 }
 
 # Check prerequisites
@@ -501,6 +600,19 @@ resolve_flux_git_branch() {
     printf '%s\n' "main"
 }
 
+assert_flux_git_branch_matches() {
+    local actual_branch="$1"
+
+    if [[ -z "${FLOE_REQUIRED_FLUX_GIT_BRANCH:-}" ]]; then
+        return 0
+    fi
+
+    if [[ "${actual_branch}" != "${FLOE_REQUIRED_FLUX_GIT_BRANCH}" ]]; then
+        log_error "Flux branch mismatch: expected ${FLOE_REQUIRED_FLUX_GIT_BRANCH}, got ${actual_branch}"
+        return 1
+    fi
+}
+
 render_flux_manifests() {
     local flux_git_branch="$1"
     local flux_fixture_dir="${FLOE_FLUX_FIXTURE_DIR}"
@@ -546,12 +658,14 @@ render_flux_manifests() {
 
 # Deploy via Flux: apply CRDs and wait for HelmRelease readiness
 deploy_via_flux() {
+    local flux_git_branch
+    flux_git_branch=$(resolve_flux_git_branch)
+    assert_flux_git_branch_matches "${flux_git_branch}"
+
     # Ensure target namespace exists (direct Helm path uses --create-namespace,
     # but kubectl apply of namespaced CRDs requires the namespace to pre-exist)
     kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-    local flux_git_branch
-    flux_git_branch=$(resolve_flux_git_branch)
     local flux_manifest_dir
     flux_manifest_dir=$(render_flux_manifests "${flux_git_branch}")
     local apply_status=0
