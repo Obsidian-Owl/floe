@@ -418,6 +418,22 @@ jobs:
         run: |
           helm dependency update charts/floe-platform
 
+      - name: Build and load Dagster demo image
+        run: |
+          set -euo pipefail
+          eval "$(python3 testing/ci/resolve-demo-image-ref.py --field exports)"
+          echo "FLOE_DEMO_IMAGE=${FLOE_DEMO_IMAGE}"
+          FLOE_KIND_CLUSTER=helm-test KIND_CLUSTER_NAME=helm-test \
+            FLOE_DEMO_IMAGE_REPOSITORY="${FLOE_DEMO_IMAGE_REPOSITORY}" \
+            FLOE_DEMO_IMAGE_TAG="${FLOE_DEMO_IMAGE_TAG}" \
+            make build-demo-image
+          python3 testing/ci/render-demo-image-values.py \
+            --repository "${FLOE_DEMO_IMAGE_REPOSITORY}" \
+            --tag "${FLOE_DEMO_IMAGE_TAG}" \
+            --pull-policy Never \
+            > /tmp/floe-demo-image-values.yaml
+          cat /tmp/floe-demo-image-values.yaml
+
       - name: Install helm-diff plugin
         run: helm plugin install https://github.com/databus23/helm-diff --version v3.15.3 --verify=false
 
@@ -427,6 +443,7 @@ jobs:
           helm diff upgrade floe-test charts/floe-platform \
             --namespace floe-test \
             --values charts/floe-platform/values-test.yaml \
+            --values /tmp/floe-demo-image-values.yaml \
             --detailed-exitcode \
             --suppress-secrets \
             --three-way-merge 2>&1 | head -200
@@ -437,6 +454,7 @@ jobs:
           helm upgrade --install floe-test charts/floe-platform \
             --namespace floe-test --create-namespace \
             --values charts/floe-platform/values-test.yaml \
+            --values /tmp/floe-demo-image-values.yaml \
             --rollback-on-failure --wait --timeout 10m
           status=$?
           if [ "$status" -ne 0 ]; then
