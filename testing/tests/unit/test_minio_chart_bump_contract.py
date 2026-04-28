@@ -319,6 +319,41 @@ class TestDefaultBucketsFirstPath:
             "values-test.yaml must render the fallback hook against the floe-iceberg bucket."
         )
 
+    @pytest.mark.requirement("AC-3")
+    def test_values_test_bucket_init_references_minio_subchart_name_contract(
+        self,
+        values_defaults_config: dict[str, Any],
+    ) -> None:
+        """The parent fallback hook must use the configured MinIO subchart name."""
+        parent_fullname = values_defaults_config.get("fullnameOverride")
+        assert isinstance(parent_fullname, str), "values.yaml must define fullnameOverride."
+
+        minio_config = values_defaults_config.get("minio", {})
+        assert isinstance(minio_config, dict), "values.yaml minio section is missing."
+        minio_fullname = minio_config.get("fullnameOverride")
+        assert minio_fullname == f"{parent_fullname}-minio", (
+            "values.yaml must pin minio.fullnameOverride to the parent chart "
+            "MinIO name so the Bitnami subchart Service/Secret match parent "
+            "references such as Polaris S3 endpoint and bucket-init."
+        )
+
+        bucket_jobs = _render_template(BUCKET_INIT_TEMPLATE, VALUES_TEST)
+        assert len(bucket_jobs) == 1, "values-test.yaml must render one bucket-init Job."
+
+        container = bucket_jobs[0]["spec"]["template"]["spec"]["containers"][0]
+        env = {item["name"]: item for item in container["env"]}
+
+        assert env["MINIO_HOST"]["value"] == minio_fullname, (
+            "Bucket-init MINIO_HOST must match minio.fullnameOverride."
+        )
+        secret_refs = {
+            env["MINIO_ROOT_USER"]["valueFrom"]["secretKeyRef"]["name"],
+            env["MINIO_ROOT_PASSWORD"]["valueFrom"]["secretKeyRef"]["name"],
+        }
+        assert secret_refs == {minio_fullname}, (
+            "Bucket-init credential references must match minio.fullnameOverride."
+        )
+
 
 class TestFallbackJobDefault:
     """Revised AC-7: values.yaml must expose the dormant fallback flag."""

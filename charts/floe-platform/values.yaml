@@ -578,6 +578,10 @@ minio:
   # Enable MinIO (DEV/DEMO ONLY - use external S3 for production)
   enabled: false
 
+  # Keep the Bitnami subchart resources aligned with parent chart references
+  # such as polaris.storage.s3.endpoint and the bucket-init fallback Job.
+  fullnameOverride: floe-platform-minio
+
   # MinIO image — use minio/minio with command override
   # (bitnami/minio images no longer available on Docker Hub)
   image:
