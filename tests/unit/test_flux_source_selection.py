@@ -228,3 +228,52 @@ def test_render_flux_manifests_merges_demo_image_into_existing_values(
     assert "existingConfig:" in rendered_content
     assert 'repository: "floe-dagster-demo"' in rendered_content
     assert 'tag: "local"' in rendered_content
+
+
+@pytest.mark.requirement("AC-2")
+def test_render_flux_manifests_merges_demo_image_into_inline_values(
+    tmp_path: Path,
+) -> None:
+    """Inline HelmRelease spec.values maps must be normalized before injection."""
+    flux_fixture_dir = tmp_path / "flux-fixture"
+    flux_fixture_dir.mkdir()
+    (flux_fixture_dir / "gitrepository.yaml").write_text(
+        (_REPO_ROOT / "testing" / "k8s" / "flux" / "gitrepository.yaml").read_text()
+    )
+    (flux_fixture_dir / "helmrelease-platform.yaml").write_text(
+        textwrap.dedent(
+            """\
+            apiVersion: helm.toolkit.fluxcd.io/v2
+            kind: HelmRelease
+            metadata:
+              name: floe-platform
+              namespace: floe-test
+            spec:
+              interval: 30m
+              values: {existingConfig: {enabled: true}}
+            """
+        )
+    )
+
+    result = _run_setup_function(
+        textwrap.dedent(
+            f"""\
+            FLOE_FLUX_FIXTURE_DIR="{flux_fixture_dir}"
+
+            rendered_dir="$(render_flux_manifests "feature-worktree")"
+            printf '%s\\n' "$rendered_dir"
+            """
+        ),
+        tmp_path,
+        required_branch="feature-worktree",
+    )
+
+    assert result.returncode == 0, result.stderr
+    rendered_dir = Path(result.stdout.strip().splitlines()[-1])
+    rendered_content = (rendered_dir / "helmrelease-platform.yaml").read_text()
+
+    assert rendered_content.count("\n  values:\n") == 1
+    assert "values: {existingConfig" not in rendered_content
+    assert "existingConfig: {enabled: true}" in rendered_content
+    assert 'repository: "floe-dagster-demo"' in rendered_content
+    assert 'tag: "local"' in rendered_content

@@ -89,6 +89,33 @@ def test_source_helper_accepts_tag_refs(tmp_path: Path) -> None:
 
 
 @pytest.mark.requirement("AC-DevPod-Git-Source")
+def test_source_helper_rejects_tail_pattern_ref_matches(tmp_path: Path) -> None:
+    """Remote ref preflight must not accept suffix-pattern matches as exact refs."""
+    worktree = tmp_path / "worktree"
+    remote = tmp_path / "remote.git"
+    worktree.mkdir()
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True)
+    subprocess.run(["git", "-C", str(worktree), "init"], check=True)
+    subprocess.run(
+        ["git", "-C", str(worktree), "config", "user.email", "test@example.com"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(worktree), "config", "user.name", "Test User"], check=True)
+    (worktree / "README.md").write_text("test\n")
+    subprocess.run(["git", "-C", str(worktree), "add", "README.md"], check=True)
+    subprocess.run(["git", "-C", str(worktree), "commit", "-m", "initial"], check=True)
+    subprocess.run(
+        ["git", "-C", str(worktree), "push", str(remote), "HEAD:refs/heads/feature/main"],
+        check=True,
+    )
+
+    result = _run_source_helper(project_root=worktree, remote=remote, ref="main")
+
+    assert result.returncode == 1
+    assert "Remote ref 'main' is not available" in result.stderr
+
+
+@pytest.mark.requirement("AC-DevPod-Git-Source")
 def test_source_helper_rejects_missing_refs(tmp_path: Path) -> None:
     """Missing branch/tag refs must fail before provisioning Hetzner resources."""
     remote = tmp_path / "remote.git"

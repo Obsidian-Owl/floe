@@ -76,6 +76,57 @@ inject_demo_image_values() {
     tag=$(yaml_quote "${FLOE_DEMO_IMAGE_TAG}")
 
     awk -v repository="${repository}" -v tag="${tag}" '
+        function trim(value) {
+            sub(/^[[:space:]]+/, "", value)
+            sub(/[[:space:]]+$/, "", value)
+            return value
+        }
+
+        function print_flow_mapping_values(indent, raw,    body, i, ch, depth, in_quote, quote, part, previous) {
+            body = raw
+            sub(/^[[:space:]]*\{/, "", body)
+            sub(/\}[[:space:]]*$/, "", body)
+            depth = 0
+            in_quote = 0
+            quote = ""
+            part = ""
+            previous = ""
+            for (i = 1; i <= length(body); i++) {
+                ch = substr(body, i, 1)
+                if (in_quote == 1) {
+                    part = part ch
+                    if (ch == quote && previous != "\\") {
+                        in_quote = 0
+                    }
+                    previous = ch
+                    continue
+                }
+                if (ch == "\"" || ch == "'\''") {
+                    in_quote = 1
+                    quote = ch
+                    part = part ch
+                    previous = ch
+                    continue
+                }
+                if (ch == "{" || ch == "[") {
+                    depth++
+                } else if (ch == "}" || ch == "]") {
+                    depth--
+                }
+                if (ch == "," && depth == 0) {
+                    part = trim(part)
+                    if (part != "") print indent part
+                    part = ""
+                    previous = ch
+                    continue
+                }
+                part = part ch
+                previous = ch
+            }
+            part = trim(part)
+            if (part != "") print indent part
+        }
+
         function print_image_values(indent) {
             print indent "dagster:"
             print indent "  dagsterWebserver:"
@@ -102,6 +153,15 @@ inject_demo_image_values() {
         }
         in_spec == 1 && /^  values:[[:space:]]*$/ && injected == 0 {
             print
+            print_image_values("    ")
+            injected = 1
+            next
+        }
+        in_spec == 1 && /^  values:[[:space:]]*\{.*\}[[:space:]]*$/ && injected == 0 {
+            inline_values = $0
+            sub(/^  values:[[:space:]]*/, "", inline_values)
+            print "  values:"
+            print_flow_mapping_values("    ", inline_values)
             print_image_values("    ")
             injected = 1
             next

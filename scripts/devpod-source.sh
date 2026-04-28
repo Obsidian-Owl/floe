@@ -50,8 +50,19 @@ devpod_git_source_url() {
 devpod_assert_remote_ref_exists() {
     local remote="${1:?remote required}"
     local ref="${2:?ref required}"
+    local candidate
 
-    git ls-remote --exit-code "${remote}" "${ref}" >/dev/null 2>&1
+    if [[ "${ref}" == refs/* ]]; then
+        git ls-remote --exit-code --refs "${remote}" "${ref}" >/dev/null 2>&1
+        return $?
+    fi
+
+    for candidate in "refs/heads/${ref}" "refs/tags/${ref}"; do
+        if git ls-remote --exit-code --refs "${remote}" "${candidate}" >/dev/null 2>&1; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 devpod_resolve_source() {
