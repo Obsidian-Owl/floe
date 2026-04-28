@@ -35,7 +35,7 @@ spec:
         - -c
         - |
           echo "Testing Dagster webserver connectivity..."
-          DAGSTER_URL="http://{{ .Release.Name }}-dagster-webserver:80"
+          DAGSTER_URL="http://{{ include "floe-platform.dagster.webserverName" . }}:80"
           for i in 1 2 3 4 5; do
             if curl -sf "${DAGSTER_URL}/server_info" > /dev/null 2>&1; then
               echo "SUCCESS: Dagster webserver is reachable"
@@ -93,8 +93,8 @@ spec:
         - -c
         - |
           echo "Testing PostgreSQL connectivity..."
-          PG_HOST="{{ .Release.Name }}-postgresql"
-          PG_PORT="5432"
+          PG_HOST="{{ include "floe-platform.postgresql.host" . }}"
+          PG_PORT="{{ include "floe-platform.postgresql.port" . }}"
           for i in 1 2 3 4 5; do
             if pg_isready -h "${PG_HOST}" -p "${PG_PORT}" > /dev/null 2>&1; then
               echo "SUCCESS: PostgreSQL is reachable"
@@ -123,7 +123,7 @@ spec:
         - -c
         - |
           echo "Testing MinIO S3 connectivity..."
-          MINIO_URL="http://{{ .Release.Name }}-minio:9000"
+          MINIO_URL="http://{{ include "floe-platform.minio.fullname" . }}:9000"
           for i in 1 2 3 4 5; do
             if curl -sf "${MINIO_URL}/minio/health/live" > /dev/null 2>&1; then
               echo "SUCCESS: MinIO S3 is reachable"

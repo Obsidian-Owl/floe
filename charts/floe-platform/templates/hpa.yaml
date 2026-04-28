@@ -24,7 +24,7 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ .Release.Name }}-dagster-webserver
+    name: {{ include "floe-platform.dagster.webserverName" . }}
   minReplicas: {{ .Values.autoscaling.dagster.minReplicas | default 1 }}
   maxReplicas: {{ .Values.autoscaling.dagster.maxReplicas | default 5 }}
   metrics:

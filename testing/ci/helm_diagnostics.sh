@@ -23,6 +23,21 @@ kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp || true
 section "Pod descriptions"
 kubectl describe pods -n "$NAMESPACE" || true
 
+section "Helm test pod logs"
+for pod in $(kubectl get pods -n "$NAMESPACE" -o name | grep test || true); do
+  kubectl logs -n "$NAMESPACE" "$pod" --all-containers=true --tail=300 || true
+done
+
+section "Polaris logs"
+for pod in $(kubectl get pods -n "$NAMESPACE" -o name | grep polaris || true); do
+  kubectl logs -n "$NAMESPACE" "$pod" --all-containers=true --tail=300 || true
+done
+
+section "MinIO logs"
+for pod in $(kubectl get pods -n "$NAMESPACE" -o name | grep minio || true); do
+  kubectl logs -n "$NAMESPACE" "$pod" --all-containers=true --tail=300 || true
+done
+
 section "Dagster webserver logs"
 for pod in $(kubectl get pods -n "$NAMESPACE" -o name | grep dagster-webserver || true); do
   kubectl logs -n "$NAMESPACE" "$pod" --all-containers=true --tail=300 || true
