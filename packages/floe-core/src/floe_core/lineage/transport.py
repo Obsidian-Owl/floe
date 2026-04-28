@@ -485,8 +485,7 @@ class SyncHttpLineageTransport:
             verify_ssl: Whether to verify SSL certificates for HTTPS endpoints.
 
         Raises:
-            ValueError: If URL is invalid, uses unsupported scheme, or disables
-                SSL verification in production.
+            ValueError: If URL is invalid or uses unsupported scheme.
         """
         import httpx
 
@@ -506,11 +505,6 @@ class SyncHttpLineageTransport:
             url = f"{parsed.scheme}://{clean_netloc}{parsed.path}"
             if parsed.query:
                 url += f"?{parsed.query}"
-
-        if parsed.scheme == "https" and not verify_ssl:
-            if os.environ.get("FLOE_ENVIRONMENT") == "production":
-                msg = "Cannot disable SSL verification in production"
-                raise ValueError(msg)
 
         ssl_context = _create_ssl_context(url, verify_ssl)
         verify_setting: bool | ssl.SSLContext = True

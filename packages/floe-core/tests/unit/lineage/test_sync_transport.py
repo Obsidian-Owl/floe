@@ -9,6 +9,7 @@ designed for use in contexts where an event loop is unavailable.
 
 from __future__ import annotations
 
+import ssl
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -239,7 +240,8 @@ class TestSyncHttpLineageTransport:
         assert transport._verify_ssl is True
         kwargs = mock_client_class.call_args.kwargs
         assert kwargs["timeout"] == pytest.approx(5.0)
-        assert kwargs["verify"] is not False
+        assert isinstance(kwargs["verify"], ssl.SSLContext)
+        assert kwargs["verify"].verify_mode != ssl.CERT_NONE
 
     @pytest.mark.requirement("REQ-SECURITY-001")
     def test_https_allows_development_insecure_ssl_opt_out(
@@ -260,18 +262,24 @@ class TestSyncHttpLineageTransport:
         assert mock_client_class.call_args.kwargs["verify"] is False
 
     @pytest.mark.requirement("REQ-SECURITY-001")
-    def test_https_rejects_insecure_ssl_in_production(
+    def test_https_enforces_secure_verification_in_production(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Production HTTPS sync transport rejects disabled verification."""
+        """Production HTTPS sync transport ignores disabled verification."""
         monkeypatch.setenv("FLOE_ENVIRONMENT", "production")
         monkeypatch.setenv("FLOE_ALLOW_INSECURE_SSL", "true")
 
-        with pytest.raises(ValueError, match="Cannot disable SSL verification in production"):
-            SyncHttpLineageTransport(
+        mock_client = MagicMock()
+        with patch("httpx.Client", return_value=mock_client) as mock_client_class:
+            transport = SyncHttpLineageTransport(
                 url="https://marquez.example/api/v1/lineage",
                 verify_ssl=False,
             )
+
+        assert transport._verify_ssl is False
+        verify_setting = mock_client_class.call_args.kwargs["verify"]
+        assert isinstance(verify_setting, ssl.SSLContext)
+        assert verify_setting.verify_mode != ssl.CERT_NONE
 
     @pytest.mark.requirement("AC-OLC-1")
     def test_emit_raises_on_transport_error(self, sample_event: LineageEvent) -> None:

@@ -334,7 +334,8 @@ def create_sync_emitter(
 
     Args:
         transport_config: Transport configuration dict. Supported types:
-            - ``{"type": "http", "url": "...", "timeout": 5.0, "api_key": "..."}``
+            - ``{"type": "http", "url": "...", "timeout": 5.0, "api_key": "...",
+              "verify_ssl": true}``
             - ``{"type": "console"}``
             - ``None`` or ``{"type": None}`` → NoOp transport
         default_namespace: Default namespace for jobs.
