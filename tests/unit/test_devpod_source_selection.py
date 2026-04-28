@@ -230,6 +230,27 @@ def test_full_lifecycle_runs_e2e_inside_devpod_by_default() -> None:
 
 
 @pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_remote_e2e_bootstraps_kind_before_running_tests() -> None:
+    """Remote E2E owns Kind setup when provisioning skips postStart setup."""
+    script = _read(_DEVPOD_TEST)
+
+    assert "make kind-up" in script, (
+        "The detached remote E2E script must create/deploy the Kind stack "
+        "before running the in-cluster E2E Job."
+    )
+    assert script.index("make kind-up") < script.index("IMAGE_LOAD_METHOD=kind make test-e2e")
+
+
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_remote_e2e_skips_host_kubeconfig_health_gate() -> None:
+    """Host kubeconfig sync must not run before remote Kind bootstrap exists."""
+    script = _read(_DEVPOD_TEST)
+
+    assert "Remote E2E owns Kind bootstrap; skipping host kubeconfig health gate" in script
+    assert 'if [[ "${DEVPOD_E2E_EXECUTION}" == "remote" ]]; then' in script
+
+
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
 def test_full_lifecycle_remote_e2e_is_detached_and_resumable() -> None:
     """Remote E2E must survive a dropped long-lived DevPod SSH command."""
     script = _read(_DEVPOD_TEST)
