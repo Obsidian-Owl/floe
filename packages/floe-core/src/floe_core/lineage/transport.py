@@ -474,6 +474,7 @@ class SyncHttpLineageTransport:
         url: str,
         timeout: float = 5.0,
         api_key: str | None = None,
+        verify_ssl: bool = True,
     ) -> None:
         """Initialise the sync HTTP transport.
 
@@ -481,9 +482,11 @@ class SyncHttpLineageTransport:
             url: The OpenLineage API endpoint URL.
             timeout: Request timeout in seconds (default 5.0).
             api_key: Optional Bearer token for Authorization header.
+            verify_ssl: Whether to verify SSL certificates for HTTPS endpoints.
 
         Raises:
-            ValueError: If URL is invalid or uses unsupported scheme.
+            ValueError: If URL is invalid, uses unsupported scheme, or disables
+                SSL verification in production.
         """
         import httpx
 
@@ -504,10 +507,27 @@ class SyncHttpLineageTransport:
             if parsed.query:
                 url += f"?{parsed.query}"
 
+        if parsed.scheme == "https" and not verify_ssl:
+            if os.environ.get("FLOE_ENVIRONMENT") == "production":
+                msg = "Cannot disable SSL verification in production"
+                raise ValueError(msg)
+
+        ssl_context = _create_ssl_context(url, verify_ssl)
+        verify_setting: bool | ssl.SSLContext = True
+        if parsed.scheme == "https":
+            verify_setting = ssl_context if ssl_context is not None else True
+            if (
+                not verify_ssl
+                and ssl_context is not None
+                and ssl_context.verify_mode == ssl.CERT_NONE
+            ):
+                verify_setting = False
+
         self._url = url
         self._timeout = timeout
         self._api_key = api_key
-        self._client: httpx.Client = httpx.Client(timeout=timeout)
+        self._verify_ssl = verify_ssl
+        self._client: httpx.Client = httpx.Client(timeout=timeout, verify=verify_setting)
 
     def emit(self, event: LineageEvent) -> None:
         """Send the lineage event as a blocking HTTP POST.

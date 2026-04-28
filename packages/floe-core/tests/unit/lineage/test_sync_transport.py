@@ -224,6 +224,55 @@ class TestSyncHttpLineageTransport:
                     f"httpx.Client must receive timeout=7.5, got {timeout_arg}"
                 )
 
+    @pytest.mark.requirement("REQ-SECURITY-001")
+    def test_https_defaults_to_secure_ssl_verification(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """HTTPS sync transport defaults to certificate verification."""
+        monkeypatch.delenv("FLOE_ENVIRONMENT", raising=False)
+        monkeypatch.delenv("FLOE_ALLOW_INSECURE_SSL", raising=False)
+
+        mock_client = MagicMock()
+        with patch("httpx.Client", return_value=mock_client) as mock_client_class:
+            transport = SyncHttpLineageTransport(url="https://marquez.example/api/v1/lineage")
+
+        assert transport._verify_ssl is True
+        kwargs = mock_client_class.call_args.kwargs
+        assert kwargs["timeout"] == pytest.approx(5.0)
+        assert kwargs["verify"] is not False
+
+    @pytest.mark.requirement("REQ-SECURITY-001")
+    def test_https_allows_development_insecure_ssl_opt_out(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Development HTTPS sync transport can explicitly disable verification."""
+        monkeypatch.setenv("FLOE_ENVIRONMENT", "development")
+        monkeypatch.setenv("FLOE_ALLOW_INSECURE_SSL", "true")
+
+        mock_client = MagicMock()
+        with patch("httpx.Client", return_value=mock_client) as mock_client_class:
+            transport = SyncHttpLineageTransport(
+                url="https://localhost:5000/api/v1/lineage",
+                verify_ssl=False,
+            )
+
+        assert transport._verify_ssl is False
+        assert mock_client_class.call_args.kwargs["verify"] is False
+
+    @pytest.mark.requirement("REQ-SECURITY-001")
+    def test_https_rejects_insecure_ssl_in_production(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Production HTTPS sync transport rejects disabled verification."""
+        monkeypatch.setenv("FLOE_ENVIRONMENT", "production")
+        monkeypatch.setenv("FLOE_ALLOW_INSECURE_SSL", "true")
+
+        with pytest.raises(ValueError, match="Cannot disable SSL verification in production"):
+            SyncHttpLineageTransport(
+                url="https://marquez.example/api/v1/lineage",
+                verify_ssl=False,
+            )
+
     @pytest.mark.requirement("AC-OLC-1")
     def test_emit_raises_on_transport_error(self, sample_event: LineageEvent) -> None:
         """Transport exceptions must NOT be swallowed -- they propagate to caller.
