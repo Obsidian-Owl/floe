@@ -784,6 +784,24 @@ class TestCreateSyncEmitterHttpConfig:
         assert isinstance(transport, SyncHttpLineageTransport)
         assert transport._timeout == pytest.approx(5.0)
 
+    @pytest.mark.requirement("REQ-SECURITY-001")
+    def test_http_passes_verify_ssl_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """HTTP config passes verify_ssl through to SyncHttpLineageTransport."""
+        monkeypatch.setenv("FLOE_ENVIRONMENT", "development")
+        monkeypatch.setenv("FLOE_ALLOW_INSECURE_SSL", "true")
+
+        emitter = create_sync_emitter(
+            {
+                "type": "http",
+                "url": "https://localhost:5000/api/v1/lineage",
+                "verify_ssl": False,
+            }
+        )
+
+        transport = emitter.transport
+        assert isinstance(transport, SyncHttpLineageTransport)
+        assert transport._verify_ssl is False
+
 
 class TestCreateSyncEmitterNamespaceAndProducer:
     """Tests for create_sync_emitter namespace and producer configuration."""

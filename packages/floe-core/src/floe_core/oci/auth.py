@@ -37,7 +37,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, cast
 
 import structlog
 
@@ -48,6 +48,17 @@ if TYPE_CHECKING:
     from floe_core.plugins.secrets import SecretsPlugin
 
 logger = structlog.get_logger(__name__)
+
+
+class _RefreshableGoogleCredentials(Protocol):
+    """Minimal google-auth credential surface used by GCPWIAuthProvider."""
+
+    token: str | None
+    expiry: datetime | None
+
+    def refresh(self, request: object) -> None:
+        """Refresh the access token using a google-auth request object."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -674,16 +685,17 @@ class GCPWIAuthProvider(AuthProvider):
             credentials, _ = google.auth.default(
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
-            credentials.refresh(Request())
+            google_credentials = cast(_RefreshableGoogleCredentials, credentials)
+            google_credentials.refresh(Request())
 
             expires_at = None
-            if hasattr(credentials, "expiry") and credentials.expiry:
-                expires_at = credentials.expiry
+            if google_credentials.expiry:
+                expires_at = google_credentials.expiry
                 if expires_at.tzinfo is None:
                     expires_at = expires_at.replace(tzinfo=timezone.utc)
 
             # credentials.token can be None before refresh, but after refresh it's a string
-            token = credentials.token
+            token = google_credentials.token
             if token is None:
                 raise AuthenticationError(
                     self._registry_uri,

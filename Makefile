@@ -369,6 +369,9 @@ compile-demo: ## Compile dbt models and generate Dagster definitions for all dem
 			--output demo/$$product/compiled_artifacts.json \
 			--generate-definitions || exit 1; \
 	done
+	@uv run python testing/ci/validate-demo-compiled-artifacts.py \
+		--manifest $(DEMO_MANIFEST) \
+		--demo-dir demo
 	@echo "All demo products compiled successfully!"
 
 .PHONY: check-manifests

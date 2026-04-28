@@ -334,7 +334,8 @@ def create_sync_emitter(
 
     Args:
         transport_config: Transport configuration dict. Supported types:
-            - ``{"type": "http", "url": "...", "timeout": 5.0, "api_key": "..."}``
+            - ``{"type": "http", "url": "...", "timeout": 5.0, "api_key": "...",
+              "verify_ssl": true}``
             - ``{"type": "console"}``
             - ``None`` or ``{"type": None}`` → NoOp transport
         default_namespace: Default namespace for jobs.
@@ -360,6 +361,7 @@ def create_sync_emitter(
             url=url,
             timeout=transport_config.get("timeout", 5.0),
             api_key=transport_config.get("api_key"),
+            verify_ssl=transport_config.get("verify_ssl", True),
         )
     elif transport_config["type"] == "console":
         sync_transport = SyncConsoleLineageTransport()

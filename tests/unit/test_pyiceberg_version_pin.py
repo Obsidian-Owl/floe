@@ -37,6 +37,7 @@ _DOCKERFILE = _REPO_ROOT / "docker" / "dagster-demo" / "Dockerfile"
 # The 2 pyproject.toml files with version constraints
 _FLOE_ICEBERG_TOML = _REPO_ROOT / "packages" / "floe-iceberg" / "pyproject.toml"
 _POLARIS_TOML = _REPO_ROOT / "plugins" / "floe-catalog-polaris" / "pyproject.toml"
+_STORAGE_S3_TOML = _REPO_ROOT / "plugins" / "floe-storage-s3" / "pyproject.toml"
 
 # All 5 files
 _ALL_FILES: list[Path] = [
@@ -260,16 +261,33 @@ class TestInstallSitesUseReleasedVersion:
         )
 
     @pytest.mark.requirement("AC-1")
-    def test_dockerfile_installs_released_version(self) -> None:
-        """Dockerfile must install pyiceberg[s3fs]==0.11.1.
+    def test_dockerfile_uses_locked_released_version(self) -> None:
+        """Dockerfile must source released PyIceberg from metadata and uv.lock.
 
-        The old git pin used ``pip install "pyiceberg @ git+..."``.
+        The old git pin used ``pip install "pyiceberg @ git+..."``. The
+        Docker image now installs the uv-exported lockfile instead of directly
+        resolving PyIceberg in the Dockerfile, so S3 FileIO support must be
+        declared in package metadata.
         """
         content = _strip_comments(_DOCKERFILE.read_text())
-        assert _RELEASED_INSTALL in content, (
-            f"Dockerfile must install '{_RELEASED_INSTALL}' "
-            f"(not a git pin). Looked in executable content only "
-            f"(comments stripped)."
+        storage_metadata = _strip_comments(_STORAGE_S3_TOML.read_text())
+
+        assert "uv export --frozen" in content and "--extra docker" in content, (
+            "Dockerfile must install dependencies from the frozen uv export, "
+            "not by resolving runtime packages directly."
+        )
+        assert "pyiceberg @ git+" not in content, "Dockerfile must not install PyIceberg from git."
+        direct_pyiceberg_installs = [
+            line for line in content.splitlines() if "pip install" in line and "pyiceberg" in line
+        ]
+        assert direct_pyiceberg_installs == [], (
+            "Dockerfile must not directly pip install PyIceberg; put the dependency "
+            "in package metadata so uv.lock controls the installed version. "
+            f"Found: {direct_pyiceberg_installs}"
+        )
+        assert '"pyiceberg[s3fs]>=0.11.1"' in storage_metadata, (
+            "floe-storage-s3 must declare pyiceberg[s3fs]>=0.11.1 so the "
+            "Dockerfile's uv export installs the released S3-capable PyIceberg package."
         )
 
     @pytest.mark.requirement("AC-1")

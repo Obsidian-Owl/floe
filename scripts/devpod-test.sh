@@ -98,7 +98,7 @@ workspace_running() {
     if printf '%s\n' "${status}" | grep -Eiq 'not[[:space:]-]+running|stopped|failed|error'; then
         return 1
     fi
-    printf '%s\n' "${status}" | grep -Eiq '(^|[[:space:]])running($|[[:space:]])'
+    printf '%s\n' "${status}" | grep -Eiq '(^|[^[:alpha:]])running([^[:alpha:]]|$)'
 }
 
 # ─── Cleanup (cost-safety guarantee) ─────────────────────────────────────────
@@ -186,11 +186,17 @@ recover_workspace_after_up_failure() {
 }
 
 provision_workspace() {
+    local workspace_env_args=()
+    if [[ "${DEVPOD_E2E_EXECUTION}" == "remote" ]]; then
+        workspace_env_args=(--workspace-env FLOE_DEVPOD_SKIP_POSTSTART_SETUP=1)
+    fi
+
     if devpod up "${WORKSPACE}" \
         --source "${DEVPOD_SOURCE_RESOLVED}" \
         --id "${WORKSPACE}" \
         --provider "${PROVIDER}" \
         --devcontainer-path "${DEVCONTAINER}" \
+        "${workspace_env_args[@]}" \
         --ide none; then
         return 0
     fi
@@ -219,6 +225,7 @@ mkdir -p "\${FLOE_REMOTE_RUN_DIR}/artifacts"
     echo "[remote-e2e] started at \$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     echo "[remote-e2e] workdir=\${FLOE_REMOTE_WORKDIR}"
     cd "\${FLOE_REMOTE_WORKDIR}"
+    SKIP_MONITORING=\${SKIP_MONITORING:-true} make kind-up
     IMAGE_LOAD_METHOD=kind make test-e2e
 } > "\${FLOE_REMOTE_RUN_DIR}/output.log" 2>&1
 rc=\$?
@@ -405,38 +412,42 @@ log "Workspace provisioned"
 
 log "Step 2/5: Verifying cluster health (timeout: ${HEALTH_TIMEOUT}s)..."
 
-# Sync kubeconfig first so we can check cluster health
-bash "${SCRIPT_DIR}/devpod-sync-kubeconfig.sh" "${WORKSPACE}" \
-    || { error "Failed to sync kubeconfig"; exit 1; }
+if [[ "${DEVPOD_E2E_EXECUTION}" == "remote" ]]; then
+    log "Remote E2E owns Kind bootstrap; skipping host kubeconfig health gate"
+else
+    # Sync kubeconfig first so we can check cluster health
+    bash "${SCRIPT_DIR}/devpod-sync-kubeconfig.sh" "${WORKSPACE}" \
+        || { error "Failed to sync kubeconfig"; exit 1; }
 
-ELAPSED=0
-INTERVAL=10
-while [[ ${ELAPSED} -lt ${HEALTH_TIMEOUT} ]]; do
-    # Count non-healthy pods (not Running and not Completed)
-    POD_ROWS="$(kubectl --kubeconfig="${KUBECONFIG_PATH}" get pods -n "${NAMESPACE}" --no-headers 2>/dev/null || true)"
-    TOTAL="$(printf '%s\n' "${POD_ROWS}" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
-    if [[ "${TOTAL}" -eq 0 ]]; then
-        UNHEALTHY=0
-    else
-        UNHEALTHY="$(printf '%s\n' "${POD_ROWS}" | grep -Ecv " Running | Completed " || true)"
+    ELAPSED=0
+    INTERVAL=10
+    while [[ ${ELAPSED} -lt ${HEALTH_TIMEOUT} ]]; do
+        # Count non-healthy pods (not Running and not Completed)
+        POD_ROWS="$(kubectl --kubeconfig="${KUBECONFIG_PATH}" get pods -n "${NAMESPACE}" --no-headers 2>/dev/null || true)"
+        TOTAL="$(printf '%s\n' "${POD_ROWS}" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+        if [[ "${TOTAL}" -eq 0 ]]; then
+            UNHEALTHY=0
+        else
+            UNHEALTHY="$(printf '%s\n' "${POD_ROWS}" | grep -Ecv " Running | Completed " || true)"
+        fi
+
+        if [[ "${TOTAL}" -gt 0 ]] && [[ "${UNHEALTHY}" -eq 0 ]]; then
+            log "All ${TOTAL} pods healthy"
+            break
+        fi
+
+        log "  Waiting for pods... (${UNHEALTHY} unhealthy of ${TOTAL}, ${ELAPSED}s elapsed)"
+        sleep "${INTERVAL}"
+        ELAPSED=$((ELAPSED + INTERVAL))
+    done
+
+    if [[ ${ELAPSED} -ge ${HEALTH_TIMEOUT} ]]; then
+        error "Cluster health check timed out after ${HEALTH_TIMEOUT}s"
+        error "Unhealthy pods:"
+        kubectl --kubeconfig="${KUBECONFIG_PATH}" get pods -n "${NAMESPACE}" --no-headers 2>/dev/null \
+            | grep -v " Running \| Completed " >&2 || true
+        exit 1
     fi
-
-    if [[ "${TOTAL}" -gt 0 ]] && [[ "${UNHEALTHY}" -eq 0 ]]; then
-        log "All ${TOTAL} pods healthy"
-        break
-    fi
-
-    log "  Waiting for pods... (${UNHEALTHY} unhealthy of ${TOTAL}, ${ELAPSED}s elapsed)"
-    sleep "${INTERVAL}"
-    ELAPSED=$((ELAPSED + INTERVAL))
-done
-
-if [[ ${ELAPSED} -ge ${HEALTH_TIMEOUT} ]]; then
-    error "Cluster health check timed out after ${HEALTH_TIMEOUT}s"
-    error "Unhealthy pods:"
-    kubectl --kubeconfig="${KUBECONFIG_PATH}" get pods -n "${NAMESPACE}" --no-headers 2>/dev/null \
-        | grep -v " Running \| Completed " >&2 || true
-    exit 1
 fi
 
 # ─── Step 3: Establish tunnels when required ─────────────────────────────────

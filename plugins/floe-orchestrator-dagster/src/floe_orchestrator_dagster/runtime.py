@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
+import tempfile
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
+import yaml
 from dagster import AssetKey, Definitions, ResourceDefinition
 from dagster_dbt import DbtCliResource, dbt_assets
+from floe_core.compilation.naming import dbt_project_name
 from floe_core.lineage.facets import TraceCorrelationFacetBuilder
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
@@ -59,6 +63,72 @@ def _lineage_namespace(artifacts: CompiledArtifacts) -> str | None:
     observability = getattr(artifacts, "observability", None)
     namespace = getattr(observability, "lineage_namespace", None)
     return str(namespace) if namespace else None
+
+
+def _safe_product_name(product_name: str) -> str:
+    """Return the dbt-safe product/profile name used at compile time."""
+    return dbt_project_name(product_name)
+
+
+def _prepare_duckdb_output_directories(
+    profile_payload: dict[str, Any],
+    *,
+    project_dir: Path,
+) -> None:
+    """Create parent directories required by file-backed DuckDB profile outputs."""
+    for profile in profile_payload.values():
+        if not isinstance(profile, dict):
+            continue
+        outputs = profile.get("outputs")
+        if not isinstance(outputs, dict):
+            continue
+        for output in outputs.values():
+            if not isinstance(output, dict):
+                continue
+            if output.get("type") != "duckdb":
+                continue
+            raw_path = output.get("path")
+            if not isinstance(raw_path, str) or not raw_path or raw_path == ":memory:":
+                continue
+            duckdb_path = Path(raw_path)
+            if not duckdb_path.is_absolute():
+                duckdb_path = project_dir / duckdb_path
+            duckdb_path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def prepare_compiled_profiles_dir(
+    *,
+    artifacts: CompiledArtifacts,
+    project_dir: Path,
+) -> Path:
+    """Write compiled dbt profiles to an isolated runtime directory.
+
+    Dagster runtime must use the compiled artifact contract, not a checked-in
+    ``profiles.yml`` that can drift from manifest-driven plugin config.
+    """
+    profiles = artifacts.dbt_profiles
+    if not isinstance(profiles, dict) or not profiles:
+        return project_dir
+
+    product_name = getattr(getattr(artifacts, "metadata", None), "product_name", None)
+    profile_payload = dict(profiles)
+    if isinstance(product_name, str):
+        safe_name = _safe_product_name(product_name)
+        if product_name in profile_payload and safe_name not in profile_payload:
+            profile_payload[safe_name] = profile_payload[product_name]
+
+    _prepare_duckdb_output_directories(profile_payload, project_dir=project_dir)
+
+    project_hash = hashlib.sha256(str(project_dir.resolve()).encode("utf-8")).hexdigest()[:12]
+    profiles_dir = (
+        Path(tempfile.gettempdir()) / "floe-dbt-profiles" / f"{project_dir.name}-{project_hash}"
+    )
+    profiles_dir.mkdir(parents=True, exist_ok=True)
+    (profiles_dir / "profiles.yml").write_text(
+        yaml.safe_dump(profile_payload, sort_keys=False),
+        encoding="utf-8",
+    )
+    return profiles_dir
 
 
 def _create_semantic_resources(plugins: Any | None) -> dict[str, Any]:
@@ -193,12 +263,14 @@ def build_product_definitions(
                 raise
             context.log.warning("emit_complete failed: %s", _complete_exc)
 
-    project_dir_str = str(project_dir)
-
     def _dbt_resource_fn(_init_context: Any) -> Any:
+        profiles_dir = prepare_compiled_profiles_dir(
+            artifacts=artifacts,
+            project_dir=project_dir,
+        )
         return DbtCliResource(
-            project_dir=project_dir_str,
-            profiles_dir=project_dir_str,
+            project_dir=str(project_dir),
+            profiles_dir=str(profiles_dir),
         )
 
     resources: dict[str, object] = {

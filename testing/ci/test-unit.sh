@@ -77,6 +77,12 @@ if [[ -d "testing/tests/unit" ]]; then
     UNIT_TEST_PATHS="${UNIT_TEST_PATHS} testing/tests/unit"
 fi
 
+# Include CI helper regression tests used by workflow and shell-script gates.
+if [[ -d "testing/ci/tests" ]]; then
+    echo "  Found: testing/ci/tests"
+    UNIT_TEST_PATHS="${UNIT_TEST_PATHS} testing/ci/tests"
+fi
+
 # Include root-level unit tests (cross-package fixture tests, infrastructure tests)
 if [[ -d "tests/unit" ]]; then
     echo "  Found: tests/unit"

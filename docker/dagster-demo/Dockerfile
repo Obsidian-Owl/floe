@@ -61,7 +61,7 @@ ARG FLOE_PLUGINS="floe-core floe-orchestrator-dagster floe-compute-duckdb floe-d
 # --frozen: fail if lockfile is stale (no re-resolution)
 # --no-dev: exclude dev dependencies
 # --no-editable: produce installable requirements (not editable paths)
-# --extra docker: include dagster-webserver/daemon/k8s from orchestrator extras
+# --extra docker: include deployment-only runtime packages from workspace metadata.
 # NOTE: uv 0.7+ only allows --package once. We use --all-packages to export
 # the full workspace closure, then pip install only the target packages.
 # --no-emit-workspace should suppress local paths but has a known bug in 0.7.2,
@@ -114,22 +114,6 @@ RUN set -e; \
         if [ -z "$dir" ]; then echo "ERROR: source for $pkg not found" >&2 && exit 1; fi; \
         pip install --no-deps --no-cache-dir "$dir"; \
     done
-
-# Install orchestrator Docker extras not in the uv lockfile.
-# dagster-daemon is bundled with core dagster; dagster-k8s uses 0.x versioning
-# and IS required in-container for K8sRunLauncher to launch materialization jobs.
-# Versions MUST match uv.lock — update these when bumping dagster in pyproject.toml.
-ARG DAGSTER_VERSION=1.12.14
-ARG DAGSTER_POSTGRES_VERSION=0.28.14
-RUN pip install --no-cache-dir \
-        "dagster-webserver==${DAGSTER_VERSION}" \
-        "dagster-postgres==${DAGSTER_POSTGRES_VERSION}" \
-        "dagster-k8s==${DAGSTER_POSTGRES_VERSION}" \
-        "dagster==${DAGSTER_VERSION}" \
-        "sqlalchemy>=2.0,<2.1"
-
-RUN pip install --no-cache-dir \
-    "pyiceberg[s3fs]==0.11.1"
 
 # Validate dependency tree is consistent
 RUN pip check

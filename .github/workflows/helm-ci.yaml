@@ -19,15 +19,28 @@ on:
     paths:
       - 'charts/**'
       - '.github/workflows/helm-ci.yaml'
+      - 'Makefile'
+      - 'docker/dagster-demo/**'
+      - 'testing/ci/render-demo-image-values.py'
+      - 'testing/ci/resolve-demo-image-ref.py'
+      - 'testing/ci/tests/**'
   pull_request:
     branches: [main]
     paths:
       - 'charts/**'
       - '.github/workflows/helm-ci.yaml'
+      - 'Makefile'
+      - 'docker/dagster-demo/**'
+      - 'testing/ci/render-demo-image-values.py'
+      - 'testing/ci/resolve-demo-image-ref.py'
+      - 'testing/ci/tests/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  PYTHON_VERSION_DEFAULT: "3.10"
 
 jobs:
   # ============================================================
@@ -401,6 +414,20 @@ jobs:
         with:
           version: v4.1.3
 
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f # v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+
       - name: Create Kind cluster
         uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1
         with:
@@ -418,6 +445,22 @@ jobs:
         run: |
           helm dependency update charts/floe-platform
 
+      - name: Build and load Dagster demo image
+        run: |
+          set -euo pipefail
+          eval "$(python3 testing/ci/resolve-demo-image-ref.py --field exports)"
+          echo "FLOE_DEMO_IMAGE=${FLOE_DEMO_IMAGE}"
+          FLOE_KIND_CLUSTER=helm-test KIND_CLUSTER_NAME=helm-test \
+            DEMO_IMAGE_REPOSITORY="${FLOE_DEMO_IMAGE_REPOSITORY}" \
+            DEMO_IMAGE_TAG="${FLOE_DEMO_IMAGE_TAG}" \
+            make build-demo-image
+          uv run python testing/ci/render-demo-image-values.py \
+            --repository "${FLOE_DEMO_IMAGE_REPOSITORY}" \
+            --tag "${FLOE_DEMO_IMAGE_TAG}" \
+            --pull-policy Never \
+            > /tmp/floe-demo-image-values.yaml
+          cat /tmp/floe-demo-image-values.yaml
+
       - name: Install helm-diff plugin
         run: helm plugin install https://github.com/databus23/helm-diff --version v3.15.3 --verify=false
 
@@ -427,6 +470,7 @@ jobs:
           helm diff upgrade floe-test charts/floe-platform \
             --namespace floe-test \
             --values charts/floe-platform/values-test.yaml \
+            --values /tmp/floe-demo-image-values.yaml \
             --detailed-exitcode \
             --suppress-secrets \
             --three-way-merge 2>&1 | head -200
@@ -437,6 +481,7 @@ jobs:
           helm upgrade --install floe-test charts/floe-platform \
             --namespace floe-test --create-namespace \
             --values charts/floe-platform/values-test.yaml \
+            --values /tmp/floe-demo-image-values.yaml \
             --rollback-on-failure --wait --timeout 10m
           status=$?
           if [ "$status" -ne 0 ]; then

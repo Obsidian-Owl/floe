@@ -42,6 +42,7 @@ from floe_core.compilation.errors import (
     CompilationError,
     CompilationException,
 )
+from floe_core.compilation.naming import dbt_project_name
 from floe_core.compilation.quality_compiler import (
     raise_if_quality_violations,
     validate_quality_gates_for_models,
@@ -61,6 +62,7 @@ __all__ = [
     "format_env_var_placeholder",
     "generate_dbt_profiles",
     "get_compute_plugin",
+    "dbt_project_name",
     # Quality compilation
     "raise_if_quality_violations",
     "validate_quality_gates_for_models",
