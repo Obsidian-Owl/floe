@@ -220,6 +220,15 @@ parent chart fullnameOverride.
 {{- end }}
 
 {{/*
+Dagster webserver service port.
+Kept behind a helper so tests, notes, and ingress stay aligned with the
+upstream Dagster subchart values selected by the active values stack.
+*/}}
+{{- define "floe-platform.dagster.webserverPort" -}}
+{{- required "dagster.dagsterWebserver.service.port is required" .Values.dagster.dagsterWebserver.service.port }}
+{{- end }}
+
+{{/*
 MinIO component name.
 */}}
 {{- define "floe-platform.minio.fullname" -}}

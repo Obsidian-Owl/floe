@@ -63,6 +63,14 @@ def test_helm_diagnostics_script_collects_dagster_marquez_and_events() -> None:
         assert fragment in script, f"Missing diagnostic fragment: {fragment}"
 
 
+def test_helm_diagnostics_collects_helm_test_logs_per_container() -> None:
+    script = DIAGNOSTICS.read_text()
+
+    assert "Helm test pod logs" in script
+    assert "jsonpath='{range .spec.containers[*]}{.name}" in script
+    assert '-c "$container"' in script
+
+
 def test_helm_ci_has_integration_test_job() -> None:
     workflow = _load_workflow()
     jobs = cast(Mapping[str, Mapping[str, Any]], workflow["jobs"])

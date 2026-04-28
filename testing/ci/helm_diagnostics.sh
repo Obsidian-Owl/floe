@@ -25,7 +25,11 @@ kubectl describe pods -n "$NAMESPACE" || true
 
 section "Helm test pod logs"
 for pod in $(kubectl get pods -n "$NAMESPACE" -o name | grep -- "-test-connection" || true); do
-  kubectl logs -n "$NAMESPACE" "$pod" --all-containers=true --tail=300 || true
+  while IFS= read -r container; do
+    [ -n "$container" ] || continue
+    section "Helm test pod logs: $pod / $container"
+    kubectl logs -n "$NAMESPACE" "$pod" -c "$container" --tail=300 || true
+  done < <(kubectl get -n "$NAMESPACE" "$pod" -o jsonpath='{range .spec.containers[*]}{.name}{"\n"}{end}' || true)
 done
 
 section "Polaris logs"
