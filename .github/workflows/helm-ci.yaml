@@ -19,15 +19,22 @@ on:
     paths:
       - 'charts/**'
       - '.github/workflows/helm-ci.yaml'
+      - 'testing/ci/render-demo-image-values.py'
+      - 'testing/ci/tests/**'
   pull_request:
     branches: [main]
     paths:
       - 'charts/**'
       - '.github/workflows/helm-ci.yaml'
+      - 'testing/ci/render-demo-image-values.py'
+      - 'testing/ci/tests/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  PYTHON_VERSION_DEFAULT: "3.10"
 
 jobs:
   # ============================================================
@@ -401,6 +408,20 @@ jobs:
         with:
           version: v4.1.3
 
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f # v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
       - name: Create Kind cluster
         uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3 # v1
         with:
@@ -427,7 +448,7 @@ jobs:
             DEMO_IMAGE_REPOSITORY="${FLOE_DEMO_IMAGE_REPOSITORY}" \
             DEMO_IMAGE_TAG="${FLOE_DEMO_IMAGE_TAG}" \
             make build-demo-image
-          python3 testing/ci/render-demo-image-values.py \
+          uv run python testing/ci/render-demo-image-values.py \
             --repository "${FLOE_DEMO_IMAGE_REPOSITORY}" \
             --tag "${FLOE_DEMO_IMAGE_TAG}" \
             --pull-policy Never \
