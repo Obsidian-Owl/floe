@@ -35,9 +35,9 @@ spec:
         - -c
         - |
           echo "Testing Dagster webserver connectivity..."
-          DAGSTER_URL="http://{{ include "floe-platform.dagster.webserverName" . }}:80"
+          DAGSTER_URL="http://{{ include "floe-platform.dagster.webserverName" . }}:{{ include "floe-platform.dagster.webserverPort" . }}"
           for i in 1 2 3 4 5; do
-            if curl -sf "${DAGSTER_URL}/server_info" > /dev/null 2>&1; then
+            if curl --connect-timeout 3 --max-time 10 -sf "${DAGSTER_URL}/server_info" > /dev/null 2>&1; then
               echo "SUCCESS: Dagster webserver is reachable"
               exit 0
             fi
@@ -66,7 +66,7 @@ spec:
           echo "Testing Polaris health connectivity..."
           POLARIS_HEALTH_URL="http://{{ include "floe-platform.polaris.fullname" . }}:{{ .Values.polaris.service.managementPort | default 8182 }}"
           for i in 1 2 3 4 5; do
-            if curl -sf "${POLARIS_HEALTH_URL}/q/health/ready" > /dev/null 2>&1; then
+            if curl --connect-timeout 3 --max-time 10 -sf "${POLARIS_HEALTH_URL}/q/health/ready" > /dev/null 2>&1; then
               echo "SUCCESS: Polaris is healthy"
               exit 0
             fi
@@ -125,7 +125,7 @@ spec:
           echo "Testing MinIO S3 connectivity..."
           MINIO_URL="http://{{ include "floe-platform.minio.fullname" . }}:9000"
           for i in 1 2 3 4 5; do
-            if curl -sf "${MINIO_URL}/minio/health/live" > /dev/null 2>&1; then
+            if curl --connect-timeout 3 --max-time 10 -sf "${MINIO_URL}/minio/health/live" > /dev/null 2>&1; then
               echo "SUCCESS: MinIO S3 is reachable"
               exit 0
             fi

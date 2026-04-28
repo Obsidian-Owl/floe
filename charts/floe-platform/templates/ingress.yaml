@@ -45,7 +45,11 @@ spec:
                 name: {{ $fullname }}-{{ .service }}
                 {{- end }}
                 port:
+                  {{- if and (eq .service "dagster-webserver") (not .port) }}
+                  number: {{ include "floe-platform.dagster.webserverPort" $ }}
+                  {{- else }}
                   number: {{ .port | default 80 }}
+                  {{- end }}
           {{- end }}
     {{- end }}
 {{- end }}

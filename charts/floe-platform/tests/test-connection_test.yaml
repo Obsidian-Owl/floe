@@ -34,9 +34,10 @@ tests:
           path: spec.containers[0].command[2]
           pattern: "curl.*q/health/ready"
 
-  - it: Dagster test should curl /server_info endpoint
+  - it: Dagster test should curl /server_info endpoint using configured service port
     set:
       dagster.enabled: true
+      dagster.dagsterWebserver.service.port: 3000
       polaris.enabled: false
       postgresql.enabled: false
       minio.enabled: false
@@ -49,7 +50,10 @@ tests:
           pattern: "curl.*server_info"
       - matchRegex:
           path: spec.containers[0].command[2]
-          pattern: 'DAGSTER_URL="http://.*-dagster-webserver:80"'
+          pattern: 'DAGSTER_URL="http://.*-dagster-webserver:3000"'
+      - matchRegex:
+          path: spec.containers[0].command[2]
+          pattern: "curl --connect-timeout [0-9]+ --max-time [0-9]+ -sf"
 
   - it: MinIO test should curl /minio/health/live endpoint
     set:
