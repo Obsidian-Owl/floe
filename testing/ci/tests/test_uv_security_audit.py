@@ -10,13 +10,19 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "testing" / "ci" / "uv-security-audit.sh"
 
 
-def _run_audit_with_fake_uv(tmp_path: Path, fake_uv: str) -> subprocess.CompletedProcess[str]:
+def _run_audit_with_fake_uv(
+    tmp_path: Path,
+    fake_uv: str,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     uv_path = tmp_path / "uv"
     uv_path.write_text(fake_uv)
     uv_path.chmod(0o755)
 
     env = os.environ.copy()
     env["PATH"] = f"{tmp_path}{os.pathsep}{env['PATH']}"
+    if extra_env:
+        env.update(extra_env)
 
     return subprocess.run(
         [str(SCRIPT)],
@@ -85,3 +91,30 @@ exit 3
     assert result.returncode == 1
     assert "Traceback (most recent call last):" in result.stdout
     assert "uv-secure scanner crashed" in result.stderr
+
+
+def test_uv_security_audit_retries_transient_scanner_crash(tmp_path: Path) -> None:
+    state_file = tmp_path / "attempts"
+    result = _run_audit_with_fake_uv(
+        tmp_path,
+        """#!/usr/bin/env bash
+state="${UV_FAKE_STATE:?}"
+attempt=0
+if [[ -f "${state}" ]]; then
+  attempt="$(cat "${state}")"
+fi
+attempt=$((attempt + 1))
+printf '%s' "${attempt}" > "${state}"
+if [[ "${attempt}" -eq 1 ]]; then
+  printf 'Error: agate raised exception: transient metadata fetch failure\\n'
+  exit 3
+fi
+printf 'No vulnerabilities or maintenance issues detected!\\n'
+exit 0
+""",
+        extra_env={"UV_FAKE_STATE": str(state_file)},
+    )
+
+    assert result.returncode == 0
+    assert "uv-secure scanner crashed on attempt 1/3" in result.stderr
+    assert state_file.read_text() == "2"
