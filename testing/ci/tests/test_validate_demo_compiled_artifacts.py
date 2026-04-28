@@ -26,18 +26,46 @@ def _write_manifest(path: Path) -> dict[str, object]:
         },
     }
     path.write_text(
-        yaml.safe_dump({"plugins": {"lineage_backend": lineage_backend}}),
+        yaml.safe_dump(
+            {
+                "plugins": {
+                    "catalog": {"type": "polaris", "config": {}},
+                    "storage": {"type": "s3", "config": {}},
+                    "lineage_backend": lineage_backend,
+                }
+            }
+        ),
         encoding="utf-8",
     )
     return lineage_backend
 
 
-def _write_product(demo_dir: Path, name: str, lineage_backend: object) -> None:
+def _write_product(
+    demo_dir: Path,
+    name: str,
+    lineage_backend: object,
+    *,
+    duckdb_path: str = "/tmp/floe/customer_360.duckdb",
+) -> None:
     product_dir = demo_dir / name
     product_dir.mkdir()
     (product_dir / "floe.yaml").write_text("kind: DataProduct\n", encoding="utf-8")
     (product_dir / "compiled_artifacts.json").write_text(
-        json.dumps({"plugins": {"lineage_backend": lineage_backend}}),
+        json.dumps(
+            {
+                "plugins": {
+                    "catalog": {"type": "polaris", "config": {}},
+                    "storage": {"type": "s3", "config": {}},
+                    "lineage_backend": lineage_backend,
+                },
+                "dbt_profiles": {
+                    name: {
+                        "target": "dev",
+                        "outputs": {"dev": {"type": "duckdb", "path": duckdb_path}},
+                    }
+                },
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -75,6 +103,19 @@ def test_validate_artifacts_rejects_missing_compiled_artifact(tmp_path: Path) ->
     _write_manifest(manifest_path)
 
     with pytest.raises(SystemExit, match="compiled_artifacts.json is missing"):
+        validate_demo_compiled_artifacts.validate_artifacts(manifest_path, demo_dir)
+
+
+def test_validate_artifacts_rejects_in_memory_duckdb_when_iceberg_export_enabled(
+    tmp_path: Path,
+) -> None:
+    manifest_path = tmp_path / "manifest.yaml"
+    demo_dir = tmp_path / "demo"
+    demo_dir.mkdir()
+    lineage_backend = _write_manifest(manifest_path)
+    _write_product(demo_dir, "customer-360", lineage_backend, duckdb_path=":memory:")
+
+    with pytest.raises(SystemExit, match="file-backed DuckDB path"):
         validate_demo_compiled_artifacts.validate_artifacts(manifest_path, demo_dir)
 
 

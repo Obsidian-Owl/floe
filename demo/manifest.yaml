@@ -31,6 +31,9 @@ plugins:
   compute:
     type: duckdb
     config:
+      # Product placeholder expansion is performed during floe compilation.
+      # Runtime uses the compiled profile contract, avoiding stale checked-in profiles.
+      path: /tmp/floe/{product_slug}.duckdb
       threads: 4
       memory_limit: "2GB"
 

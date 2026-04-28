@@ -353,6 +353,51 @@ class TestPluginIntegration:
         config_arg = call_args[0][0]  # First positional arg
         assert isinstance(config_arg, ComputeConfig)
 
+    @pytest.mark.requirement("FR-005")
+    def test_expands_product_placeholders_in_compute_connection_config(self) -> None:
+        """Manifest compute config can derive per-product paths without hardcoding."""
+        from floe_core.compilation.dbt_profiles import generate_dbt_profiles
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "duckdb"
+        mock_plugin.generate_dbt_profile.return_value = {"type": "duckdb"}
+
+        plugins = ResolvedPlugins(
+            compute=PluginRef(
+                type="duckdb",
+                version="0.1.0",
+                config={
+                    "path": "/tmp/floe/{product_slug}.duckdb",
+                    "attach": [
+                        {
+                            "path": "iceberg:{product_slug}",
+                            "alias": "{product_slug}",
+                            "type": "iceberg",
+                        }
+                    ],
+                },
+            ),
+            orchestrator=PluginRef(type="dagster", version="0.1.0", config=None),
+            catalog=None,
+            storage=None,
+            ingestion=None,
+            semantic=None,
+        )
+
+        with patch(
+            "floe_core.compilation.dbt_profiles.get_compute_plugin",
+            return_value=mock_plugin,
+        ):
+            generate_dbt_profiles(plugins=plugins, product_name="customer-360")
+
+        call_args = mock_plugin.generate_dbt_profile.call_args
+        assert call_args is not None
+        config_arg = call_args[0][0]
+        assert isinstance(config_arg, ComputeConfig)
+        assert config_arg.connection["path"] == "/tmp/floe/customer_360.duckdb"
+        assert config_arg.connection["attach"][0]["path"] == "iceberg:customer_360"
+        assert config_arg.connection["attach"][0]["alias"] == "customer_360"
+
 
 class TestErrorHandling:
     """Tests for error handling in dbt profile generation."""

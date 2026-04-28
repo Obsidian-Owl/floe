@@ -223,7 +223,7 @@ class TestCompileDeployMaterialize:
 
         The generated profile must:
         - Use DuckDB adapter type matching compute plugin
-        - Use :memory: path (always writable, no volume mounts needed)
+        - Use a file-backed /tmp path so post-dbt Iceberg export can read outputs
         - Carry memory_limit from manifest into settings dict
         - Have a valid target
         """
@@ -237,8 +237,8 @@ class TestCompileDeployMaterialize:
         dev_output = profile["outputs"]["dev"]
         assert dev_output["type"] == "duckdb", f"Expected duckdb adapter, got {dev_output['type']}"
         duckdb_path = dev_output["path"]
-        assert duckdb_path.startswith("/tmp/") or duckdb_path == ":memory:", (
-            f"DuckDB path must be /tmp/* or :memory:, got {duckdb_path}"
+        assert duckdb_path.startswith("/tmp/") and duckdb_path != ":memory:", (
+            f"DuckDB path must be a file-backed /tmp/* path, got {duckdb_path}"
         )
         assert dev_output["threads"] == 4, (
             f"threads should match manifest config (4), got {dev_output['threads']}"

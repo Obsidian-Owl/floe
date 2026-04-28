@@ -29,6 +29,39 @@ def _demo_product_dirs(demo_dir: Path) -> list[Path]:
     return sorted(path for path in demo_dir.iterdir() if (path / "floe.yaml").is_file())
 
 
+def _has_plugin(plugins: dict[str, Any], name: str) -> bool:
+    plugin = plugins.get(name)
+    return isinstance(plugin, dict) and bool(plugin.get("type"))
+
+
+def _validate_file_backed_duckdb_profile(
+    artifact_path: Path,
+    artifact: dict[str, Any],
+) -> None:
+    profiles = artifact.get("dbt_profiles")
+    if not isinstance(profiles, dict) or not profiles:
+        raise SystemExit(
+            f"{artifact_path} enables Iceberg export but does not contain dbt_profiles"
+        )
+
+    for profile_name, profile in profiles.items():
+        if not isinstance(profile, dict):
+            continue
+        target = profile.get("target")
+        outputs = profile.get("outputs")
+        if not isinstance(target, str) or not isinstance(outputs, dict):
+            continue
+        output = outputs.get(target)
+        if not isinstance(output, dict) or output.get("type") != "duckdb":
+            continue
+        duckdb_path = output.get("path")
+        if not isinstance(duckdb_path, str) or not duckdb_path or duckdb_path == ":memory:":
+            raise SystemExit(
+                f"{artifact_path} profile {profile_name!r} target {target!r} must use "
+                "a file-backed DuckDB path when catalog+storage Iceberg export is enabled"
+            )
+
+
 def validate_artifacts(manifest_path: Path, demo_dir: Path) -> None:
     """Fail if generated demo artifacts do not preserve manifest plugin selections."""
     manifest = _load_yaml(manifest_path)
@@ -37,6 +70,10 @@ def validate_artifacts(manifest_path: Path, demo_dir: Path) -> None:
         raise SystemExit(f"{manifest_path} must define a plugins mapping")
 
     expected_lineage_backend = plugins.get("lineage_backend")
+    manifest_enables_iceberg_export = _has_plugin(plugins, "catalog") and _has_plugin(
+        plugins,
+        "storage",
+    )
     product_dirs = _demo_product_dirs(demo_dir)
     if not product_dirs:
         raise SystemExit(f"No demo product directories with floe.yaml found in {demo_dir}")
@@ -61,6 +98,13 @@ def validate_artifacts(manifest_path: Path, demo_dir: Path) -> None:
                 f"expected {expected_lineage_backend!r} from {manifest_path}. "
                 "Regenerate with `make compile-demo`."
             )
+
+        artifact_enables_iceberg_export = _has_plugin(artifact_plugins, "catalog") and _has_plugin(
+            artifact_plugins,
+            "storage",
+        )
+        if manifest_enables_iceberg_export and artifact_enables_iceberg_export:
+            _validate_file_backed_duckdb_profile(artifact_path, artifact)
 
 
 def main() -> None:
