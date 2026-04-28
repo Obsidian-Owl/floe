@@ -44,10 +44,10 @@ output="$(uv run --no-sync uv-secure --no-check-uv-tool --ignore-vulns "${IGNORE
         exit 0
     fi
 
-    # Exit code 3 = tool crash, check if actual vulnerabilities were reported
+    # Exit code 3 = scanner crash. Fail closed; a crash means the audit did not run.
     if [[ "${exit_code}" -eq 3 ]]; then
-        echo "uv-secure crashed but no vulnerabilities were reported" >&2
-        exit 0
+        echo "uv-secure scanner crashed" >&2
+        exit 1
     fi
 
     exit "${exit_code}"

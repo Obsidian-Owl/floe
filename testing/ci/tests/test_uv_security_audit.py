@@ -68,3 +68,20 @@ exit 2
 
     assert result.returncode == 0
     assert "uv-secure returned warnings (exit code 2)" in result.stderr
+
+
+def test_uv_security_audit_fails_closed_when_scanner_crashes_without_vulnerabilities(
+    tmp_path: Path,
+) -> None:
+    result = _run_audit_with_fake_uv(
+        tmp_path,
+        """#!/usr/bin/env bash
+printf 'Traceback (most recent call last):\\n'
+printf 'RuntimeError: scanner crashed before analysis\\n'
+exit 3
+""",
+    )
+
+    assert result.returncode == 1
+    assert "Traceback (most recent call last):" in result.stdout
+    assert "uv-secure scanner crashed" in result.stderr
