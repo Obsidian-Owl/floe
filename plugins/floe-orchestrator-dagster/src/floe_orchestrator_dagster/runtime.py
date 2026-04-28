@@ -69,6 +69,32 @@ def _safe_product_name(product_name: str) -> str:
     return product_name.replace("-", "_")
 
 
+def _prepare_duckdb_output_directories(
+    profile_payload: dict[str, Any],
+    *,
+    project_dir: Path,
+) -> None:
+    """Create parent directories required by file-backed DuckDB profile outputs."""
+    for profile in profile_payload.values():
+        if not isinstance(profile, dict):
+            continue
+        outputs = profile.get("outputs")
+        if not isinstance(outputs, dict):
+            continue
+        for output in outputs.values():
+            if not isinstance(output, dict):
+                continue
+            if output.get("type") != "duckdb":
+                continue
+            raw_path = output.get("path")
+            if not isinstance(raw_path, str) or not raw_path or raw_path == ":memory:":
+                continue
+            duckdb_path = Path(raw_path)
+            if not duckdb_path.is_absolute():
+                duckdb_path = project_dir / duckdb_path
+            duckdb_path.parent.mkdir(parents=True, exist_ok=True)
+
+
 def prepare_compiled_profiles_dir(
     *,
     artifacts: CompiledArtifacts,
@@ -89,6 +115,8 @@ def prepare_compiled_profiles_dir(
         safe_name = _safe_product_name(product_name)
         if product_name in profile_payload and safe_name not in profile_payload:
             profile_payload[safe_name] = profile_payload[product_name]
+
+    _prepare_duckdb_output_directories(profile_payload, project_dir=project_dir)
 
     project_hash = hashlib.sha256(str(project_dir.resolve()).encode("utf-8")).hexdigest()[:12]
     profiles_dir = (
