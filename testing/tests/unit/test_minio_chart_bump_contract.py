@@ -94,6 +94,46 @@ def _render_template(template: str, values_file: Path) -> list[dict[str, Any]]:
     return docs
 
 
+def _render_full_chart(values_file: Path, release_name: str = "floe-test") -> list[dict[str, Any]]:
+    """Render the real floe-platform chart with dependencies enabled."""
+
+    if shutil.which("helm") is None:
+        pytest.fail("helm CLI not available on PATH — required for chart render assertions.")
+
+    result = subprocess.run(
+        [
+            "helm",
+            "template",
+            release_name,
+            str(REPO_ROOT / "charts" / "floe-platform"),
+            "-f",
+            str(VALUES_DEFAULTS),
+            "-f",
+            str(values_file),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, f"helm template failed: {result.stderr}"
+
+    docs: list[dict[str, Any]] = []
+    for raw in yaml.safe_load_all(result.stdout):
+        if isinstance(raw, dict) and raw:
+            docs.append(raw)
+    return docs
+
+
+def _metadata_name(doc: dict[str, Any]) -> str:
+    metadata = doc.get("metadata", {})
+    assert isinstance(metadata, dict), "Rendered document metadata is missing."
+    name = metadata.get("name")
+    assert isinstance(name, str), "Rendered document metadata.name is missing."
+    return name
+
+
 @pytest.fixture(scope="module")
 def chart_config() -> dict[str, Any]:
     """Parse Chart.yaml into a dictionary."""
@@ -317,6 +357,56 @@ class TestDefaultBucketsFirstPath:
         assert isinstance(shell_script, str), "Bucket-init shell script must be a string."
         assert 'mc mb --ignore-existing "local/floe-iceberg"' in shell_script, (
             "values-test.yaml must render the fallback hook against the floe-iceberg bucket."
+        )
+
+    @pytest.mark.requirement("AC-3")
+    def test_values_test_bucket_init_references_rendered_minio_service_and_secret(self) -> None:
+        """The parent fallback hook must use the actual MinIO subchart names."""
+        docs = _render_full_chart(VALUES_TEST)
+
+        minio_secret_names = {
+            _metadata_name(doc)
+            for doc in docs
+            if doc.get("kind") == "Secret"
+            and isinstance(doc.get("data"), dict)
+            and "root-user" in doc["data"]
+            and "root-password" in doc["data"]
+        }
+        assert minio_secret_names, (
+            "Full chart render must include the MinIO root credential Secret."
+        )
+
+        minio_service_names = {
+            _metadata_name(doc)
+            for doc in docs
+            if doc.get("kind") == "Service"
+            and isinstance(doc.get("spec"), dict)
+            and any(
+                isinstance(port, dict) and port.get("port") == 9000
+                for port in doc["spec"].get("ports", [])
+            )
+        }
+        assert minio_service_names, "Full chart render must include the MinIO API Service."
+
+        bucket_jobs = [
+            doc
+            for doc in docs
+            if doc.get("kind") == "Job" and _metadata_name(doc).endswith("-minio-bucket-init")
+        ]
+        assert len(bucket_jobs) == 1, "Full chart render must include one bucket-init fallback Job."
+
+        container = bucket_jobs[0]["spec"]["template"]["spec"]["containers"][0]
+        env = {item["name"]: item for item in container["env"]}
+
+        assert env["MINIO_HOST"]["value"] in minio_service_names, (
+            "Bucket-init MINIO_HOST must match the rendered MinIO Service name."
+        )
+        secret_refs = {
+            env["MINIO_ROOT_USER"]["valueFrom"]["secretKeyRef"]["name"],
+            env["MINIO_ROOT_PASSWORD"]["valueFrom"]["secretKeyRef"]["name"],
+        }
+        assert secret_refs == minio_secret_names, (
+            "Bucket-init credential references must match the rendered MinIO Secret name."
         )
 
 
