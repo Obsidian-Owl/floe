@@ -635,3 +635,14 @@ def test_make_dry_run_uses_importable_customer360_validator_module() -> None:
     )
 
     assert "uv run python -m testing.ci.validate_customer_360_demo" in result.stdout
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_makefile_does_not_override_manifest_expected_text_defaults() -> None:
+    """Make target must let validation.yaml provide default evidence expectations."""
+    makefile = Path("Makefile").read_text(encoding="utf-8")
+
+    assert "FLOE_DEMO_DAGSTER_EXPECTED_TEXT ?=" not in makefile
+    assert "FLOE_DEMO_LINEAGE_EXPECTED_TEXT ?=" not in makefile
+    assert "FLOE_DEMO_TRACING_EXPECTED_TEXT ?=" not in makefile
+    assert "FLOE_DEMO_STORAGE_EXPECTED_TEXT ?=" not in makefile
