@@ -22,6 +22,7 @@ on:
       - "uv.lock"
       - "testing/ci/validate-docs-navigation.py"
       - "testing/ci/validate_docs_navigation.py"
+      - "testing/ci/tests/test_validate_docs_navigation.py"
       - ".github/workflows/docs.yml"
 
 permissions:

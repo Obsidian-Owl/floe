@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import posixpath
+import re
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 
@@ -26,6 +29,8 @@ REQUIRED_DOCS = {
     "docs/releases/v0.1.0-alpha.1-checklist.md",
 }
 
+MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
+
 
 def _walk_nav_items(items: list[Any]) -> set[str]:
     paths: set[str] = set()
@@ -41,8 +46,45 @@ def _walk_nav_items(items: list[Any]) -> set[str]:
     return paths
 
 
+def _link_target(raw_target: str) -> str | None:
+    target = raw_target.strip().split()[0]
+    if not target or target.startswith("#") or target.startswith("/"):
+        return None
+
+    parsed = urlparse(target)
+    if parsed.scheme:
+        return None
+
+    target_path = target.split("#", 1)[0].split("?", 1)[0]
+    if not target_path or Path(target_path).suffix != ".md":
+        return None
+
+    return target_path
+
+
+def _validate_required_doc_links(root: Path, required: str) -> list[str]:
+    source = root / required
+    if not source.exists():
+        return []
+
+    source_parent = posixpath.dirname(required)
+    errors: list[str] = []
+    for match in MARKDOWN_LINK_RE.finditer(source.read_text()):
+        link_target = _link_target(match.group(1))
+        if link_target is None:
+            continue
+
+        resolved = posixpath.normpath(posixpath.join(source_parent, link_target))
+        if not (root / resolved).exists():
+            errors.append(
+                f"Broken docs link in {required}: {link_target} -> {resolved}",
+            )
+
+    return errors
+
+
 def validate_docs_navigation(root: Path) -> list[str]:
-    """Return validation errors for missing alpha-critical docs navigation."""
+    """Return validation errors for alpha-critical docs navigation."""
     mkdocs_path = root / "mkdocs.yml"
     if not mkdocs_path.exists():
         return ["Missing mkdocs.yml"]
@@ -56,6 +98,7 @@ def validate_docs_navigation(root: Path) -> list[str]:
             errors.append(f"Missing docs page: {required}")
         if required not in nav_paths:
             errors.append(f"Missing docs nav entry: {required}")
+        errors.extend(_validate_required_doc_links(root, required))
 
     return errors
 
