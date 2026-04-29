@@ -23,6 +23,12 @@ NODE24_ACTION_PINS = {
     "helm/kind-action": "ef37e7f390d99f746eb8b610417061a60e82a6cc",  # pragma: allowlist secret
 }
 
+ANTHROPIC_OIDC_WORKFLOWS = {
+    WORKFLOWS_DIR / "claude-code-review.yml",
+    WORKFLOWS_DIR / "claude.yml",
+}
+ANTHROPIC_OIDC_ROLLOUT_ISSUE = "https://github.com/Obsidian-Owl/floe/issues/274"
+
 USES_RE = re.compile(r"^\s*uses:\s*(?P<action>[^@\s#]+)@(?P<ref>[^\s#]+)")
 
 
@@ -54,6 +60,8 @@ def test_no_known_old_node20_action_pins_remain() -> None:
     old_refs = set(OLD_ACTION_PINS.values())
 
     for workflow, line_number, action, ref in _uses_entries():
+        if workflow in ANTHROPIC_OIDC_WORKFLOWS:
+            continue
         if ref in old_refs:
             stale_pins.append(f"{workflow}:{line_number}: {action}@{ref}")
 
@@ -66,6 +74,8 @@ def test_known_actions_use_exact_node24_compatible_pins() -> None:
     invalid_refs = []
 
     for workflow, line_number, action, ref in _uses_entries():
+        if workflow in ANTHROPIC_OIDC_WORKFLOWS:
+            continue
         expected_ref = NODE24_ACTION_PINS.get(action)
         if expected_ref is not None and ref != expected_ref:
             invalid_refs.append(
@@ -85,3 +95,13 @@ def test_setup_helm_action_owner_uses_canonical_case() -> None:
             lowercase_setup_helm.append(f"{workflow}:{line_number}: {action}@{ref}")
 
     assert lowercase_setup_helm == []
+
+
+@pytest.mark.requirement("github-actions-node24")
+def test_anthropic_oidc_workflows_keep_default_branch_identity() -> None:
+    """Claude workflows keep default-branch content until their OIDC rollout is tracked."""
+    assert ANTHROPIC_OIDC_ROLLOUT_ISSUE.endswith("/274")
+    for workflow in ANTHROPIC_OIDC_WORKFLOWS:
+        workflow_text = workflow.read_text(encoding="utf-8")
+        assert "anthropics/claude-code-action" in workflow_text
+        assert f"actions/checkout@{OLD_ACTION_PINS['actions/checkout']}" in workflow_text
