@@ -5,9 +5,12 @@ from __future__ import annotations
 import importlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 
+import duckdb
 import pytest
+import yaml
 
 from testing.demo.customer360_validator import (
     Customer360Config,
@@ -414,8 +417,28 @@ def test_customer360_validation_manifest_configures_default_evidence_commands() 
     ]
     assert config.storage_check_command is not None
     assert "floe_orchestrator_dagster.validation.iceberg_outputs" in config.storage_check_command
-    assert config.customer_count_command is not None
-    assert config.lifetime_value_command is not None
+    assert config.customer_count_command == [
+        "kubectl",
+        "exec",
+        "-n",
+        "floe-dev",
+        "deployment/floe-platform-dagster-webserver",
+        "--",
+        "python",
+        "/app/demo/customer_360/scripts/customer360_metric.py",
+        "customer-count",
+    ]
+    assert config.lifetime_value_command == [
+        "kubectl",
+        "exec",
+        "-n",
+        "floe-dev",
+        "deployment/floe-platform-dagster-webserver",
+        "--",
+        "python",
+        "/app/demo/customer_360/scripts/customer360_metric.py",
+        "total-lifetime-value",
+    ]
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -646,3 +669,57 @@ def test_makefile_does_not_override_manifest_expected_text_defaults() -> None:
     assert "FLOE_DEMO_LINEAGE_EXPECTED_TEXT ?=" not in makefile
     assert "FLOE_DEMO_TRACING_EXPECTED_TEXT ?=" not in makefile
     assert "FLOE_DEMO_STORAGE_EXPECTED_TEXT ?=" not in makefile
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_metric_script_queries_duckdb_metrics(tmp_path: Path) -> None:
+    """Customer 360 business metrics live in a copied script, not inline manifest code."""
+    database = tmp_path / "customer_360.duckdb"
+    with duckdb.connect(str(database)) as conn:
+        conn.execute("create table mart_customer_360 (total_spend decimal(10, 2))")
+        conn.execute("insert into mart_customer_360 values (10.50), (5.25)")
+
+    script = Path("demo/customer-360/scripts/customer360_metric.py")
+
+    count_result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--database",
+            str(database),
+            "customer-count",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    lifetime_value_result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--database",
+            str(database),
+            "total-lifetime-value",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert count_result.stdout.strip() == "2"
+    assert lifetime_value_result.stdout.strip() == "15.75"
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_validation_manifest_does_not_embed_python_code() -> None:
+    """Validation manifest should configure commands, not carry inline Python snippets."""
+    manifest = yaml.safe_load(Path("demo/customer-360/validation.yaml").read_text(encoding="utf-8"))
+    evidence = manifest["validation"]["evidence"]
+    commands = [
+        evidence["customer_count_command"],
+        evidence["lifetime_value_command"],
+    ]
+
+    assert all("python" in command for command in commands)
+    assert all("-c" not in command for command in commands)
+    assert "duckdb.connect" not in str(manifest)

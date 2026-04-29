@@ -58,6 +58,7 @@ fi
 log "Extracting kubeconfig from workspace '${WORKSPACE}'..."
 
 # Read kubeconfig — try KUBECONFIG env var path first, then common locations
+# shellcheck disable=SC2016 # KUBECONFIG expands inside the remote shell.
 REMOTE_CONFIG=$(devpod ssh "${WORKSPACE}" --command 'bash -c "cat \${KUBECONFIG:-/home/node/.kube/config} 2>/dev/null || cat ~/.kube/config 2>/dev/null"' 2>/dev/null) || \
     error "Failed to read kubeconfig from workspace. Is the Kind cluster running?"
 
@@ -68,9 +69,52 @@ REMOTE_CONFIG=$(devpod ssh "${WORKSPACE}" --command 'bash -c "cat \${KUBECONFIG:
 REMOTE_API_HOST=""
 REMOTE_API_PORT=""
 
-# Try DooD format first: non-loopback IP (e.g. 172.18.0.2:6443)
-REMOTE_API_HOST=$(echo "${REMOTE_CONFIG}" | sed -nE 's|.*server: https://([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):[0-9]+.*|\1|p' | head -1)
-REMOTE_API_PORT=$(echo "${REMOTE_CONFIG}" | sed -nE 's|.*server: https://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:([0-9]+).*|\1|p' | head -1)
+REMOTE_CONFIG_FILE=$(mktemp "${TMPDIR:-/tmp}/floe-devpod-kubeconfig.XXXXXX")
+REMOTE_CONFIG_JSON_FILE=$(mktemp "${TMPDIR:-/tmp}/floe-devpod-kubeconfig-json.XXXXXX")
+cleanup() {
+    rm -f "${REMOTE_CONFIG_FILE}" "${REMOTE_CONFIG_JSON_FILE}"
+}
+trap cleanup EXIT
+
+printf '%s\n' "${REMOTE_CONFIG}" > "${REMOTE_CONFIG_FILE}"
+kubectl config view --kubeconfig "${REMOTE_CONFIG_FILE}" --raw -o json > "${REMOTE_CONFIG_JSON_FILE}" || \
+    error "Failed to parse remote kubeconfig"
+
+# Parse via kubectl's kubeconfig loader plus Python's URL parser rather than
+# regexing YAML. This keeps DevPod workspace names/paths out of shell parsing.
+IFS=$'\t' read -r REMOTE_API_HOST REMOTE_API_PORT REMOTE_CLUSTER_NAME < <(
+    python - "${REMOTE_CONFIG_JSON_FILE}" <<'PY'
+import json
+import sys
+from urllib.parse import urlparse
+
+with open(sys.argv[1], encoding="utf-8") as config_file:
+    config = json.load(config_file)
+
+clusters = {
+    item.get("name"): item.get("cluster", {})
+    for item in config.get("clusters", [])
+    if isinstance(item, dict)
+}
+contexts = {
+    item.get("name"): item.get("context", {})
+    for item in config.get("contexts", [])
+    if isinstance(item, dict)
+}
+
+current_context = config.get("current-context")
+cluster_name = contexts.get(current_context, {}).get("cluster")
+if not cluster_name and clusters:
+    cluster_name = next(iter(clusters))
+
+server = clusters.get(cluster_name, {}).get("server") if cluster_name else None
+parsed = urlparse(server or "")
+if parsed.scheme != "https" or not parsed.hostname or parsed.port is None:
+    raise SystemExit("remote kubeconfig must contain an https server with host and port")
+
+print(parsed.hostname, parsed.port, cluster_name, sep="\t")
+PY
+) || error "Could not parse K8s API server from remote kubeconfig"
 
 if [[ -z "${REMOTE_API_PORT}" ]]; then
     error "Could not parse K8s API server from remote kubeconfig"
@@ -92,9 +136,10 @@ log "Remote K8s API: ${TUNNEL_TARGET}:${REMOTE_API_PORT}"
 
 mkdir -p "$(dirname "${LOCAL_KUBECONFIG}")"
 
-echo "${REMOTE_CONFIG}" | \
-    sed -E "s|server: https://[^:]+:[0-9]+|server: https://127.0.0.1:${LOCAL_API_PORT}|g" \
-    > "${LOCAL_KUBECONFIG}"
+printf '%s\n' "${REMOTE_CONFIG}" > "${LOCAL_KUBECONFIG}"
+kubectl --kubeconfig "${LOCAL_KUBECONFIG}" config set-cluster "${REMOTE_CLUSTER_NAME}" \
+    --server "https://127.0.0.1:${LOCAL_API_PORT}" >/dev/null || \
+    error "Failed to rewrite local kubeconfig server"
 
 chmod 600 "${LOCAL_KUBECONFIG}"
 log "Kubeconfig written to ${LOCAL_KUBECONFIG}"

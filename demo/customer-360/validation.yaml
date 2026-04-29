@@ -62,8 +62,8 @@ validation:
       - deployment/floe-platform-dagster-webserver
       - --
       - python
-      - -c
-      - "import duckdb; conn = duckdb.connect('/tmp/floe/customer_360.duckdb', read_only=True); print(conn.execute('select count(*) from mart_customer_360').fetchone()[0])"
+      - /app/demo/customer_360/scripts/customer360_metric.py
+      - customer-count
     lifetime_value_command:
       - kubectl
       - exec
@@ -72,5 +72,5 @@ validation:
       - deployment/floe-platform-dagster-webserver
       - --
       - python
-      - -c
-      - "import duckdb; conn = duckdb.connect('/tmp/floe/customer_360.duckdb', read_only=True); print(conn.execute('select coalesce(sum(total_spend), 0) from mart_customer_360').fetchone()[0])"
+      - /app/demo/customer_360/scripts/customer360_metric.py
+      - total-lifetime-value

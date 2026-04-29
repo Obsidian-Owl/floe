@@ -40,3 +40,14 @@ def test_devpod_scripts_honor_devpod_kubeconfig_override() -> None:
     assert 'LOCAL_KUBECONFIG="${DEVPOD_KUBECONFIG:-' in sync_script
     assert 'KUBECONFIG_PATH="${DEVPOD_KUBECONFIG:-' in ready_script
     assert 'KUBECONFIG_PATH="${DEVPOD_KUBECONFIG:-' in test_script
+
+
+@pytest.mark.requirement("197")
+def test_devpod_sync_parses_kubeconfig_with_kubectl_not_yaml_regex() -> None:
+    """DevPod kubeconfig sync uses kubeconfig-aware parsing for the API server."""
+    sync_script = Path("scripts/devpod-sync-kubeconfig.sh").read_text()
+
+    assert "kubectl config view" in sync_script
+    assert "urlparse" in sync_script
+    assert "sed -nE" not in sync_script
+    assert "config set-cluster" in sync_script
