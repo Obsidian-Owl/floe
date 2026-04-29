@@ -10,13 +10,13 @@
 #   ./scripts/devpod-sync-kubeconfig.sh [workspace-name]
 #
 # After running, use:
-#   export KUBECONFIG=~/.kube/devpod-${WORKSPACE}.config
+#   export KUBECONFIG=${DEVPOD_KUBECONFIG:-~/.kube/devpod-${WORKSPACE}.config}
 #   kubectl get pods -n floe-test
 
 set -euo pipefail
 
 WORKSPACE="${1:-floe}"
-LOCAL_KUBECONFIG="${HOME}/.kube/devpod-${WORKSPACE}.config"
+LOCAL_KUBECONFIG="${DEVPOD_KUBECONFIG:-${HOME}/.kube/devpod-${WORKSPACE}.config}"
 LOCAL_API_PORT="${DEVPOD_K8S_API_PORT:-26443}"
 
 # Validate inputs contain only safe characters
@@ -26,6 +26,10 @@ if [[ ! "${WORKSPACE}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
 fi
 if [[ ! "${LOCAL_API_PORT}" =~ ^[0-9]+$ ]]; then
     echo "[devpod-sync] ERROR: Invalid port: ${LOCAL_API_PORT}" >&2
+    exit 1
+fi
+if [[ -z "${LOCAL_KUBECONFIG}" ]]; then
+    echo "[devpod-sync] ERROR: DEVPOD_KUBECONFIG cannot be empty" >&2
     exit 1
 fi
 

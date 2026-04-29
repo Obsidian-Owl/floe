@@ -734,7 +734,7 @@ devpod-delete: devpod-check ## Delete DevPod workspace (stops billing)
 .PHONY: devpod-status
 devpod-status: devpod-check ## Show workspace status, tunnels, and cluster health
 	@echo "=== Workspace Status ==="
-	@devpod status $(DEVPOD_WORKSPACE) 2>/dev/null || echo "Workspace '$(DEVPOD_WORKSPACE)' not running"
+	@devpod status "$(DEVPOD_WORKSPACE)" 2>/dev/null || echo "Workspace '$(DEVPOD_WORKSPACE)' not running"
 	@echo ""
 	@echo "=== Tunnel Status ==="
 	@scripts/devpod-tunnels.sh --status 2>/dev/null || echo "No tunnels active"

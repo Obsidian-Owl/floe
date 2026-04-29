@@ -12,7 +12,7 @@ Customer 360 is the supported alpha demo path. Start with:
 ## Prerequisites
 
 - **DevPod workspace on Hetzner**: running and reachable with the configured `DEVPOD_WORKSPACE`.
-- **Kubeconfig sync**: `make devpod-sync` writes `${DEVPOD_KUBECONFIG}` or
+- **Kubeconfig sync**: `make devpod-sync` writes `DEVPOD_KUBECONFIG` or
   `${HOME}/.kube/devpod-${DEVPOD_WORKSPACE}.config`.
 - **Helm 3.12+**: `brew install helm` (macOS) or [official docs](https://helm.sh/docs/intro/install/)
 - **uv**: `curl -LsSf https://astral.sh/uv/install.sh | sh` (Python dependency manager)

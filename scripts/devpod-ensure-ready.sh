@@ -20,6 +20,8 @@
 #                       (default: .devcontainer/hetzner/devcontainer.json)
 #   DEVPOD_SOURCE       Optional explicit DevPod source, otherwise origin@branch
 #   DEVPOD_GIT_REF      Optional branch/ref when deriving the Git source
+#   DEVPOD_KUBECONFIG   Local kubeconfig path
+#                       (default: ~/.kube/devpod-${DEVPOD_WORKSPACE}.config)
 
 set -euo pipefail
 
@@ -31,7 +33,7 @@ WORKSPACE="${DEVPOD_WORKSPACE:-floe}"
 AUTO_START="${DEVPOD_AUTO_START:-1}"
 PROVIDER="${DEVPOD_PROVIDER:-hetzner}"
 DEVCONTAINER="${DEVPOD_DEVCONTAINER:-.devcontainer/hetzner/devcontainer.json}"
-KUBECONFIG_PATH="${HOME}/.kube/devpod-${WORKSPACE}.config"
+KUBECONFIG_PATH="${DEVPOD_KUBECONFIG:-${HOME}/.kube/devpod-${WORKSPACE}.config}"
 
 log() {
     echo "[devpod-ready] $*"
