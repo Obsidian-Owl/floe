@@ -6,16 +6,16 @@ This file is a validation evidence template for `v0.1.0-alpha.1`. It is not proo
 
 - Date: 2026-04-29
 - Branch: `docs/alpha-docs-demo-release-gate`
-- Local validation commit: `2992a18757ca34b4a7a0925ed2ec32dc1cb2ae19`
+- Local validation commit: `650a9ef71c10aeef09b0e1d917d2f0dbbbd1a2be`
 - Release candidate: `v0.1.0-alpha.1`
 
 ## Automated Gates
 
 | Gate | Evidence Source | Required | Status | Evidence / Notes |
 | --- | --- | --- | --- | --- |
-| Docs build | `uv run mkdocs build --strict` | Yes | PASS | Covered by `make docs-validate`; MkDocs strict build completed successfully. Existing MkDocs Material 2.x theme warning is non-blocking. |
-| Docs validation | `make docs-validate` | Yes | PASS | Passed locally on 2026-04-29. The command completed strict docs build and alpha documentation navigation validation. |
-| Focused release-hardening tests | `uv run pytest testing/ci/tests/test_validate_docs_navigation.py testing/ci/tests/test_github_actions_node24_pins.py testing/tests/unit/test_customer360_validator.py testing/tests/unit/test_demo_makefile_kubeconfig.py -q` | Yes | PASS | Passed locally on 2026-04-29: 36 passed. |
+| Docs build | `uv run mkdocs build --strict` | Yes | PASS | Covered by `make docs-validate`; MkDocs strict build completed successfully. Existing MkDocs Material 2.x theme warning is non-blocking. Repository-wide link validation is not claimed because `mkdocs.yml` intentionally disables some link checks. |
+| Docs validation | `make docs-validate` | Yes | PASS | Passed locally on 2026-04-29. The command completed strict docs build and alpha-required documentation navigation validation. |
+| Focused release-hardening tests | `uv run pytest testing/ci/tests/test_validate_docs_navigation.py testing/ci/tests/test_github_actions_node24_pins.py testing/tests/unit/test_customer360_validator.py testing/tests/unit/test_demo_makefile_kubeconfig.py -q` | Yes | PASS | Passed locally on 2026-04-29: 39 passed. |
 | Unit tests | `make test-unit` | Yes | PASS | Passed locally on 2026-04-29: 10035 passed, 1 skipped, 1 xfailed, 2 warnings; total coverage 87.63%. |
 | Helm lint | `make helm-lint` | Yes | PASS | Passed locally on 2026-04-29 for `charts/floe-platform` and `charts/floe-jobs`; Helm reported icon recommendations only. |
 | Helm CI | GitHub Actions Helm CI run URL | Yes | Not run | Record workflow URL and result. |
@@ -40,15 +40,15 @@ Status: Known post-alpha architecture debt.
 
 Issue: https://github.com/Obsidian-Owl/floe/issues/263
 
-Alpha posture: #263 is the explicitly approved non-blocking alpha limitation. It is not blocking `v0.1.0-alpha.1` because the alpha Customer 360 stack intentionally includes Iceberg and `floe-iceberg`.
+Alpha posture: #263 has a release-scope triage comment classifying it as non-blocking for `v0.1.0-alpha.1` only while the alpha Customer 360 stack intentionally includes Iceberg and `floe-iceberg`.
 
 The alpha release does not promise Dagster runs without `floe-iceberg` installed when Iceberg export is disabled.
 
-Promotion rule: if the alpha promise changes to support Dagster without Iceberg, #263 becomes blocking before tagging.
+Promotion rule: before tagging, confirm that the #263 issue still records this non-blocking alpha posture. If the alpha promise changes to support Dagster without Iceberg, #263 becomes blocking.
 
 ## Release Decision
 
-Alpha tag is blocked until every required validation gate is PASS. #263 is the only pre-approved non-blocking alpha limitation in this evidence record.
+Alpha tag is blocked until every required validation gate is PASS. #263 is the only known architecture debt item currently classified as non-blocking for the alpha promise in this evidence record.
 
 Decision: `BLOCKED`
 
