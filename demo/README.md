@@ -12,7 +12,8 @@ Customer 360 is the supported alpha demo path. Start with:
 ## Prerequisites
 
 - **DevPod workspace on Hetzner**: running and reachable with the configured `DEVPOD_WORKSPACE`.
-- **Kubeconfig sync**: `make devpod-sync` writes `${HOME}/.kube/devpod-floe.config`.
+- **Kubeconfig sync**: `make devpod-sync` writes `${DEVPOD_KUBECONFIG}` or
+  `${HOME}/.kube/devpod-${DEVPOD_WORKSPACE}.config`.
 - **Helm 3.12+**: `brew install helm` (macOS) or [official docs](https://helm.sh/docs/intro/install/)
 - **uv**: `curl -LsSf https://astral.sh/uv/install.sh | sh` (Python dependency manager)
 - **kubectl**: configured to use the DevPod kubeconfig for demo inspection.
@@ -24,7 +25,9 @@ Customer 360 is the supported alpha demo path. Start with:
 make devpod-sync
 
 # 2. Use the DevPod cluster for kubectl inspection
-export KUBECONFIG=${HOME}/.kube/devpod-floe.config
+export DEVPOD_WORKSPACE=${DEVPOD_WORKSPACE:-floe}
+export DEVPOD_KUBECONFIG=${DEVPOD_KUBECONFIG:-${HOME}/.kube/devpod-${DEVPOD_WORKSPACE}.config}
+export KUBECONFIG=${DEVPOD_KUBECONFIG}
 
 # 3. Start the demo platform and service port-forwards
 make demo
@@ -90,11 +93,15 @@ make test-unit
 make check
 
 # View pod logs in the DevPod-backed cluster
-export KUBECONFIG=${HOME}/.kube/devpod-floe.config
+export DEVPOD_WORKSPACE=${DEVPOD_WORKSPACE:-floe}
+export DEVPOD_KUBECONFIG=${DEVPOD_KUBECONFIG:-${HOME}/.kube/devpod-${DEVPOD_WORKSPACE}.config}
+export KUBECONFIG=${DEVPOD_KUBECONFIG}
 kubectl logs -n floe-dev <pod-name>
 
 # Port-forward to access Dagster manually
-export KUBECONFIG=${HOME}/.kube/devpod-floe.config
+export DEVPOD_WORKSPACE=${DEVPOD_WORKSPACE:-floe}
+export DEVPOD_KUBECONFIG=${DEVPOD_KUBECONFIG:-${HOME}/.kube/devpod-${DEVPOD_WORKSPACE}.config}
+export KUBECONFIG=${DEVPOD_KUBECONFIG}
 kubectl port-forward -n floe-dev svc/floe-platform-dagster-webserver 3100:3000
 ```
 
@@ -120,7 +127,9 @@ DevPod-backed Kubernetes cluster on Hetzner
 
 **Pods not starting?**
 ```bash
-export KUBECONFIG=${HOME}/.kube/devpod-floe.config
+export DEVPOD_WORKSPACE=${DEVPOD_WORKSPACE:-floe}
+export DEVPOD_KUBECONFIG=${DEVPOD_KUBECONFIG:-${HOME}/.kube/devpod-${DEVPOD_WORKSPACE}.config}
+export KUBECONFIG=${DEVPOD_KUBECONFIG}
 kubectl get pods -n floe-dev
 kubectl describe pod -n floe-dev <pod-name>
 ```
