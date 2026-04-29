@@ -58,6 +58,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Base URL for Jaeger query API.",
     )
     parser.add_argument(
+        "--dagster-run-check-command",
+        default=os.environ.get("FLOE_DEMO_DAGSTER_RUN_CHECK_COMMAND"),
+        help="Command proving a Customer 360 Dagster run completed.",
+    )
+    parser.add_argument(
+        "--dagster-expected-text",
+        default=_env("FLOE_DEMO_DAGSTER_EXPECTED_TEXT", "customer_360"),
+        help="Text expected in Dagster run check command output.",
+    )
+    parser.add_argument(
+        "--lineage-check-command",
+        default=os.environ.get("FLOE_DEMO_LINEAGE_CHECK_COMMAND"),
+        help="Command proving Customer 360 lineage/job/dataset evidence exists.",
+    )
+    parser.add_argument(
+        "--lineage-expected-text",
+        default=_env("FLOE_DEMO_LINEAGE_EXPECTED_TEXT", "customer_360"),
+        help="Text expected in lineage check command output.",
+    )
+    parser.add_argument(
+        "--tracing-check-command",
+        default=os.environ.get("FLOE_DEMO_TRACING_CHECK_COMMAND"),
+        help="Command proving Customer 360 trace evidence exists.",
+    )
+    parser.add_argument(
+        "--tracing-expected-text",
+        default=_env("FLOE_DEMO_TRACING_EXPECTED_TEXT", "customer_360"),
+        help="Text expected in tracing check command output.",
+    )
+    parser.add_argument(
         "--storage-check-command",
         default=os.environ.get("FLOE_DEMO_STORAGE_CHECK_COMMAND"),
         help="Command proving Customer 360 storage outputs exist.",
@@ -88,6 +118,12 @@ def main() -> int:
         dagster_url=args.dagster_url,
         marquez_url=args.marquez_url,
         jaeger_url=args.jaeger_url,
+        dagster_run_check_command=_command_arg(args.dagster_run_check_command),
+        dagster_expected_text=args.dagster_expected_text,
+        lineage_check_command=_command_arg(args.lineage_check_command),
+        lineage_expected_text=args.lineage_expected_text,
+        tracing_check_command=_command_arg(args.tracing_check_command),
+        tracing_expected_text=args.tracing_expected_text,
         storage_check_command=_command_arg(args.storage_check_command),
         storage_expected_text=args.storage_expected_text,
         customer_count_command=_command_arg(args.customer_count_command),

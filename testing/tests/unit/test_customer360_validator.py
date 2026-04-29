@@ -49,35 +49,44 @@ def _healthy_runner() -> FakeRunner:
 
 @pytest.mark.requirement("alpha-demo")
 def test_customer360_validator_reports_checked_service_evidence() -> None:
-    """Validator reports only checked Customer 360 service evidence as true."""
+    """Validator does not treat reachable services as Customer 360 evidence."""
     runner = _healthy_runner()
 
     result = Customer360Validator(command_runner=runner).validate()
 
     assert result.status == "FAIL"
     assert result.evidence["platform.ready"] == "true"
-    assert result.evidence["dagster.customer_360_run"] == "true"
-    assert result.evidence["lineage.marquez_customer_360"] == "true"
-    assert result.evidence["tracing.jaeger_customer_360"] == "true"
+    assert result.evidence["dagster.customer_360_run"] == "unknown"
+    assert result.evidence["lineage.marquez_customer_360"] == "unknown"
+    assert result.evidence["tracing.jaeger_customer_360"] == "unknown"
     assert result.evidence["storage.customer_360_outputs"] == "unknown"
     assert result.evidence["business.customer_count"] == "unknown"
     assert result.evidence["business.total_lifetime_value"] == "unknown"
+    assert "Customer 360 Dagster run check is not configured" in result.failures
+    assert "Customer 360 lineage check is not configured" in result.failures
+    assert "Customer 360 tracing check is not configured" in result.failures
     assert "Customer 360 storage outputs check is not configured" in result.failures
 
 
 @pytest.mark.requirement("alpha-demo")
-def test_customer360_validator_fails_when_lineage_missing() -> None:
-    """Validator fails clearly when Marquez does not expose Customer 360 lineage."""
+def test_customer360_validator_fails_when_lineage_output_lacks_customer360_text() -> None:
+    """Validator fails clearly when configured lineage evidence is not Customer 360-specific."""
     runner = _healthy_runner()
-    runner.responses[("curl", "-fsS", "http://localhost:5100/api/v1/namespaces")] = json.dumps(
-        {"namespaces": [{"name": "default"}]}
+    runner.responses.update(
+        {
+            ("marquez", "lineage", "list"): "default.orders\n",
+        }
+    )
+    config = Customer360Config(
+        lineage_check_command=["marquez", "lineage", "list"],
+        lineage_expected_text="customer_360",
     )
 
-    result = Customer360Validator(command_runner=runner).validate()
+    result = Customer360Validator(config=config, command_runner=runner).validate()
 
     assert result.status == "FAIL"
     assert result.evidence["lineage.marquez_customer_360"] == "false"
-    assert "Customer 360 namespace not found in Marquez" in result.failures
+    assert "Customer 360 lineage evidence was not found" in result.failures
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -118,6 +127,9 @@ def test_customer360_validator_can_check_storage_and_business_with_configured_co
     runner = _healthy_runner()
     runner.responses.update(
         {
+            ("dagster", "runs", "list"): "run_id=abc job=customer_360 status=SUCCESS\n",
+            ("marquez", "lineage", "list"): "dataset=floe.customer_360_customers\n",
+            ("jaeger", "trace", "list"): "trace service=floe op=customer_360_pipeline\n",
             ("mc", "ls", "local/floe/customer_360/"): "customer_360_outputs.parquet",
             ("duckdb", "customer360.duckdb", "-c", "select count(*) from customer_360"): "42\n",
             (
@@ -129,6 +141,9 @@ def test_customer360_validator_can_check_storage_and_business_with_configured_co
         }
     )
     config = Customer360Config(
+        dagster_run_check_command=["dagster", "runs", "list"],
+        lineage_check_command=["marquez", "lineage", "list"],
+        tracing_check_command=["jaeger", "trace", "list"],
         storage_check_command=["mc", "ls", "local/floe/customer_360/"],
         storage_expected_text="customer_360_outputs",
         customer_count_command=[
@@ -151,6 +166,56 @@ def test_customer360_validator_can_check_storage_and_business_with_configured_co
     assert result.evidence["storage.customer_360_outputs"] == "true"
     assert result.evidence["business.customer_count"] == "42"
     assert result.evidence["business.total_lifetime_value"] == "12345.67"
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_validator_can_check_customer360_service_evidence_with_commands() -> None:
+    """Dagster, lineage, and tracing evidence pass only from Customer 360-specific output."""
+    runner = _healthy_runner()
+    runner.responses.update(
+        {
+            ("dagster", "runs", "list"): "run_id=abc job=customer_360 status=SUCCESS\n",
+            ("marquez", "lineage", "list"): "dataset=floe.customer_360_customers\n",
+            ("jaeger", "trace", "list"): "trace service=floe op=customer_360_pipeline\n",
+            ("mc", "ls", "local/floe/customer_360/"): "customer_360_outputs.parquet",
+            ("duckdb", "customer360.duckdb", "-c", "select count(*) from customer_360"): "42\n",
+            (
+                "duckdb",
+                "customer360.duckdb",
+                "-c",
+                "select sum(lifetime_value) from customer_360",
+            ): "12345.67\n",
+        }
+    )
+    config = Customer360Config(
+        dagster_run_check_command=["dagster", "runs", "list"],
+        dagster_expected_text="customer_360",
+        lineage_check_command=["marquez", "lineage", "list"],
+        lineage_expected_text="customer_360",
+        tracing_check_command=["jaeger", "trace", "list"],
+        tracing_expected_text="customer_360",
+        storage_check_command=["mc", "ls", "local/floe/customer_360/"],
+        storage_expected_text="customer_360_outputs",
+        customer_count_command=[
+            "duckdb",
+            "customer360.duckdb",
+            "-c",
+            "select count(*) from customer_360",
+        ],
+        lifetime_value_command=[
+            "duckdb",
+            "customer360.duckdb",
+            "-c",
+            "select sum(lifetime_value) from customer_360",
+        ],
+    )
+
+    result = Customer360Validator(config=config, command_runner=runner).validate()
+
+    assert result.status == "PASS"
+    assert result.evidence["dagster.customer_360_run"] == "true"
+    assert result.evidence["lineage.marquez_customer_360"] == "true"
+    assert result.evidence["tracing.jaeger_customer_360"] == "true"
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -180,3 +245,37 @@ def test_cli_prints_deterministic_output_and_returns_failure(
         "failure=first failure",
         "failure=second failure",
     ]
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_cli_accepts_customer360_evidence_command_arguments() -> None:
+    """CLI parser exposes Customer 360-specific evidence command arguments."""
+    module_path = Path("testing/ci/validate-customer-360-demo.py")
+    spec = importlib.util.spec_from_file_location("validate_customer_360_demo", module_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    args = module.build_parser().parse_args(
+        [
+            "--dagster-run-check-command",
+            "dagster runs list",
+            "--dagster-expected-text",
+            "customer-360",
+            "--lineage-check-command",
+            "marquez lineage list",
+            "--lineage-expected-text",
+            "customer-360",
+            "--tracing-check-command",
+            "jaeger trace list",
+            "--tracing-expected-text",
+            "customer-360",
+        ]
+    )
+
+    assert args.dagster_run_check_command == "dagster runs list"
+    assert args.dagster_expected_text == "customer-360"
+    assert args.lineage_check_command == "marquez lineage list"
+    assert args.lineage_expected_text == "customer-360"
+    assert args.tracing_check_command == "jaeger trace list"
+    assert args.tracing_expected_text == "customer-360"

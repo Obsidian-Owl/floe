@@ -33,6 +33,12 @@ class Customer360Config:
     dagster_url: str = "http://localhost:3100"
     marquez_url: str = "http://localhost:5100"
     jaeger_url: str = "http://localhost:16686"
+    dagster_run_check_command: list[str] | None = None
+    dagster_expected_text: str = "customer_360"
+    lineage_check_command: list[str] | None = None
+    lineage_expected_text: str = "customer_360"
+    tracing_check_command: list[str] | None = None
+    tracing_expected_text: str = "customer_360"
     storage_check_command: list[str] | None = None
     storage_expected_text: str = "customer_360"
     customer_count_command: list[str] | None = None
@@ -117,41 +123,54 @@ class Customer360Validator:
         try:
             self._run(["curl", "-fsS", url])
         except Exception as exc:  # noqa: BLE001
-            evidence["dagster.customer_360_run"] = "false"
-            failures.append(f"Dagster Customer 360 endpoint is not reachable: {exc}")
-            return
+            failures.append(f"Dagster API is not reachable: {exc}")
 
-        evidence["dagster.customer_360_run"] = "true"
+        self._check_expected_text_command(
+            evidence=evidence,
+            failures=failures,
+            key="dagster.customer_360_run",
+            command=self._config.dagster_run_check_command,
+            expected_text=self._config.dagster_expected_text,
+            missing_message="Customer 360 Dagster run check is not configured",
+            failed_message="Customer 360 Dagster run check failed",
+            not_found_message="Customer 360 Dagster run evidence was not found",
+        )
 
     def _check_marquez(self, evidence: dict[str, str], failures: list[str]) -> None:
         url = _join_url(self._config.marquez_url, "api/v1/namespaces")
         try:
-            payload = json.loads(self._run(["curl", "-fsS", url]))
+            json.loads(self._run(["curl", "-fsS", url]))
         except Exception as exc:  # noqa: BLE001
-            evidence["lineage.marquez_customer_360"] = "false"
             failures.append(f"Unable to inspect Marquez namespaces: {exc}")
-            return
 
-        namespace_names = _extract_names(payload.get("namespaces", []))
-        lineage_found = bool({"customer_360", "customer-360"} & namespace_names)
-        evidence["lineage.marquez_customer_360"] = str(lineage_found).lower()
-        if not lineage_found:
-            failures.append("Customer 360 namespace not found in Marquez")
+        self._check_expected_text_command(
+            evidence=evidence,
+            failures=failures,
+            key="lineage.marquez_customer_360",
+            command=self._config.lineage_check_command,
+            expected_text=self._config.lineage_expected_text,
+            missing_message="Customer 360 lineage check is not configured",
+            failed_message="Customer 360 lineage check failed",
+            not_found_message="Customer 360 lineage evidence was not found",
+        )
 
     def _check_jaeger(self, evidence: dict[str, str], failures: list[str]) -> None:
         url = _join_url(self._config.jaeger_url, "api/services")
         try:
-            payload = json.loads(self._run(["curl", "-fsS", url]))
+            json.loads(self._run(["curl", "-fsS", url]))
         except Exception as exc:  # noqa: BLE001
-            evidence["tracing.jaeger_customer_360"] = "false"
             failures.append(f"Unable to inspect Jaeger services: {exc}")
-            return
 
-        services = {str(service) for service in payload.get("data", [])}
-        tracing_found = bool({"dagster", "floe"} & services)
-        evidence["tracing.jaeger_customer_360"] = str(tracing_found).lower()
-        if not tracing_found:
-            failures.append("Customer 360 trace service not found in Jaeger")
+        self._check_expected_text_command(
+            evidence=evidence,
+            failures=failures,
+            key="tracing.jaeger_customer_360",
+            command=self._config.tracing_check_command,
+            expected_text=self._config.tracing_expected_text,
+            missing_message="Customer 360 tracing check is not configured",
+            failed_message="Customer 360 tracing check failed",
+            not_found_message="Customer 360 tracing evidence was not found",
+        )
 
     def _check_storage(self, evidence: dict[str, str], failures: list[str]) -> None:
         command = self._config.storage_check_command
@@ -201,21 +220,36 @@ class Customer360Validator:
 
         evidence[key] = output
 
+    def _check_expected_text_command(
+        self,
+        *,
+        evidence: dict[str, str],
+        failures: list[str],
+        key: str,
+        command: list[str] | None,
+        expected_text: str,
+        missing_message: str,
+        failed_message: str,
+        not_found_message: str,
+    ) -> None:
+        if command is None:
+            evidence[key] = "unknown"
+            failures.append(missing_message)
+            return
+
+        try:
+            output = self._run(command)
+        except Exception as exc:  # noqa: BLE001
+            evidence[key] = "false"
+            failures.append(f"{failed_message}: {exc}")
+            return
+
+        found = expected_text in output
+        evidence[key] = str(found).lower()
+        if not found:
+            failures.append(not_found_message)
+
 
 def _join_url(base_url: str, path: str) -> str:
     """Join a base URL and path without introducing duplicate slashes."""
     return f"{base_url.rstrip('/')}/{path.lstrip('/')}"
-
-
-def _extract_names(values: object) -> set[str]:
-    """Extract name fields from API list payloads."""
-    if not isinstance(values, list):
-        return set()
-
-    names: set[str] = set()
-    for value in values:
-        if isinstance(value, dict) and isinstance(value.get("name"), str):
-            names.add(value["name"])
-        elif isinstance(value, str):
-            names.add(value)
-    return names
