@@ -111,9 +111,9 @@ DevPod-backed Kubernetes cluster on Hetzner
 │   ├── Jaeger (distributed tracing)
 │   └── Marquez (lineage)
 └── Demo Jobs (K8s Jobs)
-    ├── Customer 360 (daily @ 6 AM)
-    ├── Financial Risk (weekly)
-    └── IoT Telemetry (hourly)
+    ├── Customer 360 (every 10 minutes in demo)
+    ├── Financial Risk (every 10 minutes in demo)
+    └── IoT Telemetry (every 10 minutes in demo)
 ```
 
 ## Troubleshooting
@@ -133,10 +133,14 @@ lsof -i :3100
 kill -9 $(lsof -t -i :3100)
 ```
 
-**Want to clean up completely?**
+**Want to stop local demo port-forwards?**
 ```bash
 make demo-stop
 ```
+
+`make demo-stop` does not uninstall the remote platform or stop the DevPod
+workspace. Use the DevPod/Hetzner lifecycle commands from your environment when
+you are finished with the remote workspace.
 
 ## Local Smoke Testing
 
