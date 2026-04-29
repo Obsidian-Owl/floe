@@ -2,6 +2,13 @@
 
 Quick-start guide for running the Floe E2E demo platform with 3 complete data products.
 
+## Golden Alpha Demo
+
+Customer 360 is the supported alpha demo path. Start with:
+
+- [Customer 360 Golden Demo](../docs/demo/customer-360.md)
+- [Customer 360 Validation](../docs/demo/customer-360-validation.md)
+
 ## Prerequisites
 
 - **Kind cluster**: `kind create cluster --config kind-config.yaml`
@@ -15,17 +22,17 @@ Quick-start guide for running the Floe E2E demo platform with 3 complete data pr
 make demo
 
 # 2. Access the web UIs (after ~3-5 minutes for all pods to be ready)
-# - Dagster: http://localhost:3000 (orchestration)
+# - Dagster: http://localhost:3100 (orchestration)
 # - Polaris: http://localhost:8181 (data catalog)
-# - Grafana: http://localhost:3001 (observability)
+# - MinIO: http://localhost:9001 (object browser)
 # - Jaeger: http://localhost:16686 (distributed tracing)
-# - Marquez: http://localhost:5000 (data lineage)
+# - Marquez: http://localhost:5100 (data lineage)
 
 # 3. View logs
-kubectl logs -f deployment/dagster-webserver
+kubectl logs -n floe-dev -f deployment/floe-platform-dagster-webserver
 
-# 4. Stop the platform
-make demo-down
+# 4. Stop demo port-forwards
+make demo-stop
 ```
 
 ## Demo Products (3)
@@ -47,11 +54,11 @@ Each product demonstrates:
 
 | Service | URL | Purpose |
 |---------|-----|---------|
-| **Dagster** | http://localhost:3000 | View assets, triggers, run history |
+| **Dagster** | http://localhost:3100 | View assets, triggers, run history |
 | **Polaris** | http://localhost:8181 | Explore catalog namespaces + tables |
-| **Grafana** | http://localhost:3001 | Metrics dashboards (CPU, memory, duration) |
+| **MinIO** | http://localhost:9001 | Inspect demo object storage |
 | **Jaeger** | http://localhost:16686 | Trace visualization and span inspection |
-| **Marquez** | http://localhost:5000 | Data lineage graph (beta) |
+| **Marquez** | http://localhost:5100 | Data lineage graph (beta) |
 
 ## Common Commands
 
@@ -71,18 +78,18 @@ make check
 # View pod logs
 kubectl logs -n floe <pod-name>
 
-# Port-forward to access services
-kubectl port-forward -n floe svc/dagster-webserver 3000:80
+# Port-forward to access Dagster manually
+kubectl port-forward -n floe-dev svc/floe-platform-dagster-webserver 3100:3000
 ```
 
 ## Demo Architecture
 
 ```
 Kind Cluster
-├── floe namespace
+├── floe-dev namespace
 │   ├── Dagster (orchestration + webserver)
 │   ├── Polaris (data catalog REST API)
-│   ├── LocalStack (S3-compatible storage)
+│   ├── MinIO (S3-compatible storage)
 │   ├── PostgreSQL (metadata database)
 │   └── Prometheus (metrics scraping)
 ├── Monitoring
@@ -99,21 +106,21 @@ Kind Cluster
 
 **Pods not starting?**
 ```bash
-kubectl get pods -n floe
-kubectl describe pod -n floe <pod-name>
+kubectl get pods -n floe-dev
+kubectl describe pod -n floe-dev <pod-name>
 ```
 
 **Port conflicts?**
 ```bash
-# Check what's using port 3000
-lsof -i :3000
+# Check what's using port 3100
+lsof -i :3100
 # Kill if needed
-kill -9 $(lsof -t -i :3000)
+kill -9 $(lsof -t -i :3100)
 ```
 
 **Want to clean up completely?**
 ```bash
-make demo-down
+make demo-stop
 kind delete cluster
 ```
 

@@ -1,28 +1,30 @@
 # Customer 360 Validation
 
-This page is part of the `v0.1.0-alpha.1` release path.
+## Automated Evidence
 
-## What You Will Do
+The automated Customer 360 validation command is introduced by release hardening before alpha tagging. Until that command exists, use this page as the evidence checklist for the golden demo.
 
-- Capture manual validation evidence for the Customer 360 alpha demo.
-- Confirm the demo run is visible through service endpoints.
-- Record gaps that automated validation must close before alpha tagging.
-- Keep evidence concise and reproducible while the validation checklist is expanded.
+Expected evidence keys:
 
-## Commands
+- `platform.ready`
+- `dagster.customer_360_run`
+- `storage.customer_360_outputs`
+- `lineage.marquez_customer_360`
+- `tracing.jaeger_customer_360`
+- `business.customer_count`
+- `business.total_lifetime_value`
 
-```bash
-make devpod-status
-make docs-validate
-```
+## Manual UI Inspection
 
-## Success Criteria
+| Service | Check | Pass Criteria |
+| --- | --- | --- |
+| Dagster | Open run history | Latest Customer 360 run succeeded |
+| MinIO | Open object browser | Customer 360 output objects are visible |
+| Marquez | Search Customer 360 namespace/job | Lineage graph has Customer 360 datasets |
+| Jaeger | Search Floe/Dagster service | Trace exists for Customer 360 run |
+| Polaris | Open catalog API/UI path | Customer 360 tables are registered |
 
-- DevPod status shows the workspace and cluster are reachable.
-- Documentation validation continues to pass while Customer 360 validation docs are expanded.
-- Planned Customer 360 validation automation is not treated as available until its Make target exists.
-- Manual evidence identifies demo run status, generated data, lineage, and tracing observations.
+## Related Guide
 
-## Next Step
-
+- [Customer 360 Golden Demo](customer-360.md)
 - [DevPod + Hetzner operations](../operations/devpod-hetzner.md)
