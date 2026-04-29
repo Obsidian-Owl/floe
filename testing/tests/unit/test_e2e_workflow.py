@@ -18,13 +18,13 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e.yml"
 FAST_UNIT_SLICE = REPO_ROOT / "testing" / "ci" / "test-specwright-unit.sh"
 
-CHECKOUT_SHA = "34e114876b0b11c390a56381ad16ebd13914f8d5"
-SETUP_PYTHON_SHA = "a26af69be951a213d495a4c3e4e4022e16d87065"
-SETUP_UV_SHA = "e4db8464a088ece1b920f60402e813ea4de65b8f"
-SETUP_HELM_SHA = "1a275c3b69536ee54be43f2070a358922e12c8d4"
-KIND_ACTION_SHA = "a1b0e391336a6ee6713a0583f8c6240d70863de3"
-PATHS_FILTER_SHA = "d1c1ffe0248fe513906c8e24db8ea791d46f8590"
-UPLOAD_ARTIFACT_SHA = "ea165f8d65b6e75b540449e92b4886f43607fa02"
+CHECKOUT_SHA = "de0fac2e4500dabe0009e67214ff5f5447ce83dd"  # pragma: allowlist secret
+SETUP_PYTHON_SHA = "a309ff8b426b58ec0e2a45f0f869d46889d02405"  # pragma: allowlist secret
+SETUP_UV_SHA = "08807647e7069bb48b6ef5acd8ec9567f424441b"  # pragma: allowlist secret
+SETUP_HELM_SHA = "dda3372f752e03dde6b3237bc9431cdc2f7a02a2"  # pragma: allowlist secret
+KIND_ACTION_SHA = "ef37e7f390d99f746eb8b610417061a60e82a6cc"  # pragma: allowlist secret
+PATHS_FILTER_SHA = "d1c1ffe0248fe513906c8e24db8ea791d46f8590"  # pragma: allowlist secret
+UPLOAD_ARTIFACT_SHA = "ea165f8d65b6e75b540449e92b4886f43607fa02"  # pragma: allowlist secret
 
 
 def _load_workflow() -> dict[object, Any]:
@@ -219,8 +219,8 @@ class TestE2EWorkflowPhaseE1:
         )
 
         helm_step = _step_by_name(e2e, "Set up Helm")
-        assert _uses_ref(helm_step) == f"azure/setup-helm@{SETUP_HELM_SHA}", (
-            "Helm setup must pin azure/setup-helm to a full commit SHA."
+        assert _uses_ref(helm_step) == f"Azure/setup-helm@{SETUP_HELM_SHA}", (
+            "Helm setup must pin Azure/setup-helm to a full commit SHA."
         )
         assert helm_step.get("with", {}).get("version") == "v3.16.0", (
             "Helm setup must pin Helm 3.16 explicitly."
