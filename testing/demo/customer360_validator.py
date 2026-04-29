@@ -76,6 +76,7 @@ class Customer360Validator:
         command_runner: CommandRunner = default_command_runner,
     ) -> None:
         self._config = config or Customer360Config()
+        self._run: CommandRunner
         if command_runner is default_command_runner:
             self._run = lambda command: default_command_runner(
                 command,
