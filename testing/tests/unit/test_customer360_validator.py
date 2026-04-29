@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from testing.demo.customer360_validator import (
     Customer360Config,
     Customer360Validator,
     ValidationResult,
+    default_command_runner,
 )
 
 
@@ -34,7 +36,15 @@ def _healthy_runner() -> FakeRunner:
     return FakeRunner(
         {
             ("kubectl", "get", "pods", "-n", "floe-dev", "-o", "json"): json.dumps(
-                {"items": [{"metadata": {"name": "dagster"}, "status": {"phase": "Running"}}]}
+                {
+                    "items": [
+                        _ready_pod("dagster"),
+                        _ready_pod("polaris"),
+                        _ready_pod("minio"),
+                        _ready_pod("jaeger"),
+                        _ready_pod("marquez"),
+                    ]
+                }
             ),
             ("curl", "-fsS", "http://localhost:3100/server_info"): "{}",
             ("curl", "-fsS", "http://localhost:5100/api/v1/namespaces"): json.dumps(
@@ -45,6 +55,16 @@ def _healthy_runner() -> FakeRunner:
             ),
         }
     )
+
+
+def _ready_pod(name: str) -> dict[str, object]:
+    return {
+        "metadata": {"name": name},
+        "status": {
+            "phase": "Running",
+            "conditions": [{"type": "Ready", "status": "True"}],
+        },
+    }
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -66,6 +86,23 @@ def test_customer360_validator_reports_checked_service_evidence() -> None:
     assert "Customer 360 lineage check is not configured" in result.failures
     assert "Customer 360 tracing check is not configured" in result.failures
     assert "Customer 360 storage outputs check is not configured" in result.failures
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_validator_fails_when_expected_text_is_empty() -> None:
+    """Empty expected text is invalid and cannot make evidence checks pass."""
+    runner = _healthy_runner()
+    runner.responses[("marquez", "lineage", "list")] = "anything\n"
+    config = Customer360Config(
+        lineage_check_command=["marquez", "lineage", "list"],
+        lineage_expected_text=" ",
+    )
+
+    result = Customer360Validator(config=config, command_runner=runner).validate()
+
+    assert result.status == "FAIL"
+    assert result.evidence["lineage.marquez_customer_360"] == "false"
+    assert "Customer 360 lineage expected text must be non-empty" in result.failures
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -101,7 +138,15 @@ def test_customer360_validator_uses_configurable_namespace_and_urls() -> None:
     runner = FakeRunner(
         {
             ("kubectl", "get", "pods", "-n", "custom-ns", "-o", "json"): json.dumps(
-                {"items": [{"metadata": {"name": "dagster"}, "status": {"phase": "Running"}}]}
+                {
+                    "items": [
+                        _ready_pod("dagster"),
+                        _ready_pod("polaris"),
+                        _ready_pod("minio"),
+                        _ready_pod("jaeger"),
+                        _ready_pod("marquez"),
+                    ]
+                }
             ),
             ("curl", "-fsS", "http://dagster.example/server_info"): "{}",
             ("curl", "-fsS", "http://marquez.example/api/v1/namespaces"): json.dumps(
@@ -119,6 +164,31 @@ def test_customer360_validator_uses_configurable_namespace_and_urls() -> None:
         ("curl", "-fsS", "http://marquez.example/api/v1/namespaces"),
         ("curl", "-fsS", "http://jaeger.example/api/services"),
     ]
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_validator_requires_expected_platform_services() -> None:
+    """Platform readiness requires configured critical services, not any running pod."""
+    runner = FakeRunner(
+        {
+            ("kubectl", "get", "pods", "-n", "floe-dev", "-o", "json"): json.dumps(
+                {"items": [_ready_pod("unrelated-worker")]}
+            ),
+            ("curl", "-fsS", "http://localhost:3100/server_info"): "{}",
+            ("curl", "-fsS", "http://localhost:5100/api/v1/namespaces"): json.dumps(
+                {"namespaces": []}
+            ),
+            ("curl", "-fsS", "http://localhost:16686/api/services"): json.dumps({"data": []}),
+        }
+    )
+
+    result = Customer360Validator(command_runner=runner).validate()
+
+    assert result.evidence["platform.ready"] == "false"
+    assert (
+        "Expected platform services are not ready in namespace floe-dev: "
+        "dagster, polaris, minio, jaeger, marquez"
+    ) in result.failures
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -166,6 +236,69 @@ def test_customer360_validator_can_check_storage_and_business_with_configured_co
     assert result.evidence["storage.customer_360_outputs"] == "true"
     assert result.evidence["business.customer_count"] == "42"
     assert result.evidence["business.total_lifetime_value"] == "12345.67"
+
+
+@pytest.mark.requirement("alpha-demo")
+@pytest.mark.parametrize(
+    ("customer_count", "lifetime_value", "expected_failure"),
+    [
+        ("not-a-number", "123.45", "Customer 360 customer count check returned non-numeric value"),
+        ("-1", "123.45", "Customer 360 customer count check returned negative value"),
+        ("42.5", "123.45", "Customer 360 customer count check returned non-integer value"),
+        ("42", "not-a-number", "Customer 360 lifetime value check returned non-numeric value"),
+        ("42", "-0.1", "Customer 360 lifetime value check returned negative value"),
+    ],
+)
+def test_customer360_validator_rejects_invalid_business_metrics(
+    customer_count: str,
+    lifetime_value: str,
+    expected_failure: str,
+) -> None:
+    """Business metrics must be non-negative numeric values."""
+    runner = _healthy_runner()
+    runner.responses.update(
+        {
+            ("count",): f"{customer_count}\n",
+            ("lifetime-value",): f"{lifetime_value}\n",
+        }
+    )
+    config = Customer360Config(
+        customer_count_command=["count"],
+        lifetime_value_command=["lifetime-value"],
+    )
+
+    result = Customer360Validator(config=config, command_runner=runner).validate()
+
+    assert result.status == "FAIL"
+    assert expected_failure in result.failures
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_validator_reports_business_metric_command_failure() -> None:
+    """Business metric exceptions identify the command failure."""
+
+    def runner(command: list[str]) -> str:
+        if command[0] == "kubectl":
+            return json.dumps(
+                {
+                    "items": [
+                        _ready_pod("dagster"),
+                        _ready_pod("polaris"),
+                        _ready_pod("minio"),
+                        _ready_pod("jaeger"),
+                        _ready_pod("marquez"),
+                    ]
+                }
+            )
+        if command[0] == "curl":
+            return "{}"
+        raise RuntimeError("boom")
+
+    config = Customer360Config(customer_count_command=["count"])
+
+    result = Customer360Validator(config=config, command_runner=runner).validate()
+
+    assert "Customer 360 customer count check command failed: boom" in result.failures
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -279,3 +412,50 @@ def test_cli_accepts_customer360_evidence_command_arguments() -> None:
     assert args.lineage_expected_text == "customer-360"
     assert args.tracing_check_command == "jaeger trace list"
     assert args.tracing_expected_text == "customer-360"
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_cli_reports_malformed_command_as_parser_error(capsys: pytest.CaptureFixture[str]) -> None:
+    """Malformed command strings produce argparse-style parser failures."""
+    module_path = Path("testing/ci/validate-customer-360-demo.py")
+    spec = importlib.util.spec_from_file_location("validate_customer_360_demo", module_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    with pytest.raises(SystemExit) as exc_info:
+        module._parse_command_arg(module.build_parser(), "--lineage-check-command", "'unterminated")
+
+    assert exc_info.value.code == 2
+    assert "invalid --lineage-check-command" in capsys.readouterr().err
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_default_command_runner_reports_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default command execution uses a bounded timeout and reports it clearly."""
+
+    def fake_check_output(command: list[str], *, text: bool, timeout: float) -> str:
+        raise subprocess.TimeoutExpired(command, timeout)
+
+    monkeypatch.setattr(subprocess, "check_output", fake_check_output)
+
+    with pytest.raises(TimeoutError, match="Command timed out after 0.01s"):
+        default_command_runner(["slow"], timeout_seconds=0.01)
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_make_dry_run_does_not_expose_dangerous_command_override_values() -> None:
+    """Make dry-run must not interpolate user command override values into shell recipes."""
+    result = subprocess.run(
+        [
+            "make",
+            "-n",
+            "demo-customer-360-validate",
+            "FLOE_DEMO_DAGSTER_RUN_CHECK_COMMAND=echo $$(touch /tmp/pwn)",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "touch /tmp/pwn" not in result.stdout

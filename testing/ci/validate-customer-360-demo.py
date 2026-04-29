@@ -24,6 +24,21 @@ def _command_arg(value: str | None) -> list[str] | None:
     return shlex.split(value)
 
 
+def _parse_command_arg(
+    parser: argparse.ArgumentParser,
+    option_name: str,
+    value: str | None,
+) -> list[str] | None:
+    try:
+        return _command_arg(value)
+    except ValueError as exc:
+        parser.error(f"invalid {option_name}: {exc}")
+
+
+def _comma_separated(value: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
 def print_result(result: ValidationResult) -> int:
     """Print deterministic validation output and return a process exit code."""
     print(f"status={result.status}")
@@ -56,6 +71,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--jaeger-url",
         default=_env("FLOE_DEMO_JAEGER_URL", "http://localhost:16686"),
         help="Base URL for Jaeger query API.",
+    )
+    parser.add_argument(
+        "--platform-expected-services",
+        default=_env(
+            "FLOE_DEMO_PLATFORM_EXPECTED_SERVICES",
+            "dagster,polaris,minio,jaeger,marquez",
+        ),
+        help="Comma-separated pod name fragments required for platform readiness.",
+    )
+    parser.add_argument(
+        "--command-timeout-seconds",
+        type=float,
+        default=float(_env("FLOE_DEMO_COMMAND_TIMEOUT_SECONDS", "30")),
+        help="Timeout for default validation commands.",
     )
     parser.add_argument(
         "--dagster-run-check-command",
@@ -118,16 +147,42 @@ def main() -> int:
         dagster_url=args.dagster_url,
         marquez_url=args.marquez_url,
         jaeger_url=args.jaeger_url,
-        dagster_run_check_command=_command_arg(args.dagster_run_check_command),
+        platform_expected_services=_comma_separated(args.platform_expected_services),
+        command_timeout_seconds=args.command_timeout_seconds,
+        dagster_run_check_command=_parse_command_arg(
+            parser,
+            "--dagster-run-check-command",
+            args.dagster_run_check_command,
+        ),
         dagster_expected_text=args.dagster_expected_text,
-        lineage_check_command=_command_arg(args.lineage_check_command),
+        lineage_check_command=_parse_command_arg(
+            parser,
+            "--lineage-check-command",
+            args.lineage_check_command,
+        ),
         lineage_expected_text=args.lineage_expected_text,
-        tracing_check_command=_command_arg(args.tracing_check_command),
+        tracing_check_command=_parse_command_arg(
+            parser,
+            "--tracing-check-command",
+            args.tracing_check_command,
+        ),
         tracing_expected_text=args.tracing_expected_text,
-        storage_check_command=_command_arg(args.storage_check_command),
+        storage_check_command=_parse_command_arg(
+            parser,
+            "--storage-check-command",
+            args.storage_check_command,
+        ),
         storage_expected_text=args.storage_expected_text,
-        customer_count_command=_command_arg(args.customer_count_command),
-        lifetime_value_command=_command_arg(args.lifetime_value_command),
+        customer_count_command=_parse_command_arg(
+            parser,
+            "--customer-count-command",
+            args.customer_count_command,
+        ),
+        lifetime_value_command=_parse_command_arg(
+            parser,
+            "--lifetime-value-command",
+            args.lifetime_value_command,
+        ),
     )
     result = Customer360Validator(config=config).validate()
     return print_result(result)
