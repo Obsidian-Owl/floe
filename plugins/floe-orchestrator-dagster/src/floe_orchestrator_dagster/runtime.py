@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import logging
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -14,6 +16,9 @@ from dagster_dbt import DbtCliResource, dbt_assets
 from floe_core.compilation.naming import dbt_project_name
 from floe_core.lineage.facets import TraceCorrelationFacetBuilder
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+from floe_core.telemetry.initialization import ensure_telemetry_initialized
+from floe_core.telemetry.tracing import create_span
+from opentelemetry import trace
 
 from floe_orchestrator_dagster.capabilities import CapabilityPolicy
 from floe_orchestrator_dagster.export.iceberg import export_dbt_to_iceberg
@@ -31,6 +36,7 @@ _INGESTION_RUNTIME_DISABLED_MESSAGE = (
     "construct executable dlt source objects; implement a source-construction layer "
     "before enabling ingestion assets."
 )
+logger = logging.getLogger(__name__)
 
 
 def _has_iceberg_config(artifacts: CompiledArtifacts) -> bool:
@@ -68,6 +74,38 @@ def _lineage_namespace(artifacts: CompiledArtifacts) -> str | None:
 def _safe_product_name(product_name: str) -> str:
     """Return the dbt-safe product/profile name used at compile time."""
     return dbt_project_name(product_name)
+
+
+def _configure_runtime_telemetry(artifacts: CompiledArtifacts) -> bool:
+    """Configure OTel env vars from the compiled product contract."""
+    observability = getattr(artifacts, "observability", None)
+    telemetry = getattr(observability, "telemetry", None)
+    if telemetry is None or not getattr(telemetry, "enabled", False):
+        return False
+
+    endpoint = str(getattr(telemetry, "otlp_endpoint", "") or "").strip()
+    if endpoint:
+        # Safe for the current Dagster runtime: K8sRunLauncher executes each run in
+        # an isolated pod. If assets run in-process later, pass OTel context without
+        # process-global environment mutation.
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = endpoint
+
+    resource_attributes = getattr(telemetry, "resource_attributes", None)
+    service_name = str(getattr(resource_attributes, "service_name", "") or "").strip()
+    if service_name:
+        os.environ["OTEL_SERVICE_NAME"] = service_name
+    return True
+
+
+def _flush_runtime_telemetry() -> None:
+    """Best-effort flush of runtime spans before short-lived run pods exit."""
+    try:
+        force_flush = getattr(trace.get_tracer_provider(), "force_flush", None)
+        if callable(force_flush):
+            force_flush(timeout_millis=5000)
+    except Exception:
+        # Tracing must never make a successful data product run fail.
+        logger.debug("runtime_telemetry_flush_failed", exc_info=True)
 
 
 def _prepare_duckdb_output_directories(
@@ -192,76 +230,93 @@ def build_product_definitions(
     # concrete context type is not stable enough for strict annotation here.
     def _dbt_assets_fn(context) -> object:  # type: ignore[no-untyped-def]
         """Run dbt build with lineage emission."""
+        telemetry_enabled = _configure_runtime_telemetry(artifacts)
+        if telemetry_enabled:
+            ensure_telemetry_initialized()
         dbt = context.resources.dbt
         lineage = context.resources.lineage
         run_id: UUID | None = None
 
-        run_facets: dict[str, object] = {}
         try:
-            trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
-            if trace_facet is not None:
-                run_facets["traceCorrelation"] = trace_facet
-        except Exception as _trace_exc:
-            context.log.warning("Trace facet creation failed: %s", _trace_exc)
-        try:
-            dagster_run_id = _dagster_run_id(context)
-            run_id = lineage.emit_start(
-                product_name,
-                run_id=dagster_run_id,
-                run_facets=run_facets or None,
-            )
-        except Exception as _start_exc:
-            if policy.require_lineage:
-                raise
-            context.log.warning("emit_start failed; using fallback run id: %s", _start_exc)
-            run_id = uuid4()
-
-        try:
-            yield from dbt.cli(["build"], context=context).stream()
-            if _has_iceberg_config(artifacts):
-                export_result = export_dbt_to_iceberg(
-                    context,
+            run_facets: dict[str, object] = {}
+            if telemetry_enabled:
+                try:
+                    # This span intentionally scopes only trace-correlation facet construction;
+                    # dbt execution and lineage emission publish their own runtime events.
+                    with create_span(
+                        f"floe.dagster.{product_name}.lineage_correlation_facet",
+                        attributes={
+                            "floe.product.name": product_name,
+                            "floe.orchestrator": "dagster",
+                        },
+                    ):
+                        trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
+                        if trace_facet is not None:
+                            run_facets["traceCorrelation"] = trace_facet
+                except Exception as _trace_exc:
+                    context.log.warning("Trace facet creation failed: %s", _trace_exc)
+            try:
+                dagster_run_id = _dagster_run_id(context)
+                run_id = lineage.emit_start(
                     product_name,
-                    project_dir,
-                    artifacts,
+                    run_id=dagster_run_id,
+                    run_facets=run_facets or None,
                 )
-                if export_result.tables_written == 0:
-                    raise RuntimeError(
-                        f"Configured Iceberg export wrote no tables for product {product_name}"
+            except Exception as _start_exc:
+                if policy.require_lineage:
+                    raise
+                context.log.warning("emit_start failed; using fallback run id: %s", _start_exc)
+                run_id = uuid4()
+
+            try:
+                yield from dbt.cli(["build"], context=context).stream()
+                if _has_iceberg_config(artifacts):
+                    export_result = export_dbt_to_iceberg(
+                        context,
+                        product_name,
+                        project_dir,
+                        artifacts,
                     )
-            try:
-                model_events = extract_dbt_model_lineage(
-                    project_dir,
-                    run_id,
-                    product_name,
-                    lineage.namespace,
-                )
-                for event in model_events:
-                    lineage.emit_event(event)
-            except Exception as _model_lineage_exc:
-                if policy.require_lineage:
-                    raise
-                context.log.warning(
-                    "runtime model lineage emission failed: %s",
-                    _model_lineage_exc,
-                )
-        except Exception as exc:
-            try:
-                lineage.emit_fail(run_id, product_name, error_message=type(exc).__name__)
-                lineage.flush()
-            except Exception as _fail_exc:
-                if policy.require_lineage:
-                    raise
-                context.log.warning("emit_fail failed: %s", _fail_exc)
-            raise
-
-        try:
-            lineage.emit_complete(run_id, product_name)
-            lineage.flush()
-        except Exception as _complete_exc:
-            if policy.require_lineage:
+                    if export_result.tables_written == 0:
+                        raise RuntimeError(
+                            f"Configured Iceberg export wrote no tables for product {product_name}"
+                        )
+                try:
+                    model_events = extract_dbt_model_lineage(
+                        project_dir,
+                        run_id,
+                        product_name,
+                        lineage.namespace,
+                    )
+                    for event in model_events:
+                        lineage.emit_event(event)
+                except Exception as _model_lineage_exc:
+                    if policy.require_lineage:
+                        raise
+                    context.log.warning(
+                        "runtime model lineage emission failed: %s",
+                        _model_lineage_exc,
+                    )
+            except Exception as exc:
+                try:
+                    lineage.emit_fail(run_id, product_name, error_message=type(exc).__name__)
+                    lineage.flush()
+                except Exception as _fail_exc:
+                    if policy.require_lineage:
+                        raise
+                    context.log.warning("emit_fail failed: %s", _fail_exc)
                 raise
-            context.log.warning("emit_complete failed: %s", _complete_exc)
+
+            try:
+                lineage.emit_complete(run_id, product_name)
+                lineage.flush()
+            except Exception as _complete_exc:
+                if policy.require_lineage:
+                    raise
+                context.log.warning("emit_complete failed: %s", _complete_exc)
+        finally:
+            if telemetry_enabled:
+                _flush_runtime_telemetry()
 
     def _dbt_resource_fn(_init_context: Any) -> Any:
         profiles_dir = prepare_compiled_profiles_dir(

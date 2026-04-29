@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from floe_orchestrator_dagster.validation.iceberg_outputs import (
     IcebergOutputValidationResult,
+    connect_catalog_from_artifacts,
     expected_iceberg_tables,
     validate_iceberg_outputs,
     validate_iceberg_outputs_from_file,
@@ -11,6 +12,7 @@ from floe_orchestrator_dagster.validation.iceberg_outputs import (
 
 __all__ = [
     "IcebergOutputValidationResult",
+    "connect_catalog_from_artifacts",
     "expected_iceberg_tables",
     "validate_iceberg_outputs",
     "validate_iceberg_outputs_from_file",

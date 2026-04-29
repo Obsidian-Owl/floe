@@ -100,6 +100,11 @@ class MarquezConfig(BaseModel):
         default=True,
         description="Whether to verify SSL certificates",
     )
+    drain_timeout: float = Field(
+        default=30.0,
+        gt=0,
+        description="Timeout in seconds for draining queued OpenLineage events",
+    )
     allow_insecure_http: bool = Field(
         default=False,
         description=(
@@ -204,6 +209,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
         api_key: str | None = None,
         environment: str = "prod",
         verify_ssl: bool = True,
+        drain_timeout: float = 30.0,
         allow_insecure_http: bool = False,
     ) -> None:
         """Initialize Marquez backend plugin.
@@ -213,6 +219,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
             api_key: Optional API key for authentication
             environment: Deployment environment for namespace (default: "prod")
             verify_ssl: Whether to verify SSL certificates (default: True)
+            drain_timeout: Timeout for draining queued OpenLineage events.
             allow_insecure_http: Allow explicit in-cluster HTTP for demo/test use.
 
         Note:
@@ -227,6 +234,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
             api_key=api_key,
             environment=environment,
             verify_ssl=verify_ssl,
+            drain_timeout=drain_timeout,
             allow_insecure_http=allow_insecure_http,
         )
 
@@ -234,6 +242,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
         self._api_key = validated_config.api_key
         self._environment = validated_config.environment
         self._verify_ssl = validated_config.verify_ssl
+        self._drain_timeout = validated_config.drain_timeout
         self._allow_insecure_http = validated_config.allow_insecure_http
         self._tracer = get_tracer()
 
@@ -249,6 +258,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
         self._api_key = config.api_key
         self._environment = config.environment
         self._verify_ssl = config.verify_ssl
+        self._drain_timeout = config.drain_timeout
         self._allow_insecure_http = config.allow_insecure_http
 
     @property
@@ -295,6 +305,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
                 - type: "http"
                 - url: Marquez lineage endpoint
                 - timeout: Request timeout in seconds
+                - drain_timeout: Queue drain timeout in seconds
                 - api_key: Optional API key for authentication
 
         Example:
@@ -305,6 +316,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
                 'type': 'http',
                 'url': 'https://marquez:5000/api/v1/lineage',
                 'timeout': 5.0,
+                'drain_timeout': 30.0,
                 'api_key': None
             }
         """
@@ -313,6 +325,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
                 "type": "http",
                 "url": f"{self._url}/api/v1/lineage",
                 "timeout": 5.0,
+                "drain_timeout": self._drain_timeout,
                 "api_key": self._api_key,
             }
 

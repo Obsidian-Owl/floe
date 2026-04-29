@@ -19,6 +19,7 @@ to isolate the loader's wiring logic. No boundary crossing.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -1355,6 +1356,118 @@ def test_dbt_assets_uses_trace_correlation_facet(project_dir: Path) -> None:
             assert "traceCorrelation" in (run_facets or {})
         else:
             pytest.fail("emit_start was called without run_facets containing traceCorrelation")
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_telemetry_env_comes_from_compiled_artifacts(
+    project_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dagster runtime should initialize OTel from the compiled product contract."""
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+    definitions = load_product_definitions(PRODUCT_NAME, project_dir)
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, _lineage = _make_mock_context_with_lineage()
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = MagicMock(return_value=iter([]))
+    context.resources.dbt.cli.return_value.stream.return_value = mock_stream
+
+    with (
+        patch(f"{_RUNTIME_MODULE}.ensure_telemetry_initialized") as ensure,
+        patch(f"{_RUNTIME_MODULE}.create_span") as create_span,
+    ):
+        create_span.return_value.__enter__.return_value = MagicMock()
+        create_span.return_value.__exit__.return_value = None
+
+        list(asset_fn(context))
+
+    ensure.assert_called_once()
+    assert os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://localhost:4317"
+    assert os.environ["OTEL_SERVICE_NAME"] == "customer-360"
+    create_span.assert_called_once()
+    assert create_span.call_args.args[0] == f"floe.dagster.{PRODUCT_NAME}.lineage_correlation_facet"
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_telemetry_disabled_contract_skips_initialization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disabled compiled telemetry must override ambient cluster OTel env vars."""
+    artifacts = _make_artifacts()
+    artifacts = artifacts.model_copy(
+        update={
+            "observability": artifacts.observability.model_copy(
+                update={
+                    "telemetry": artifacts.observability.telemetry.model_copy(
+                        update={"enabled": False}
+                    )
+                }
+            )
+        }
+    )
+    project_dir = tmp_path / "dbt_project"
+    _write_artifacts_and_manifest(project_dir, artifacts)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://cluster-otel:4317")
+    monkeypatch.setenv("OTEL_SERVICE_NAME", "cluster-default")
+
+    definitions = load_product_definitions(PRODUCT_NAME, project_dir)
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, _lineage = _make_mock_context_with_lineage()
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = MagicMock(return_value=iter([]))
+    context.resources.dbt.cli.return_value.stream.return_value = mock_stream
+
+    with (
+        patch(f"{_RUNTIME_MODULE}.ensure_telemetry_initialized") as ensure,
+        patch(f"{_RUNTIME_MODULE}.create_span") as create_span,
+        patch(f"{_RUNTIME_MODULE}._flush_runtime_telemetry") as flush,
+    ):
+        list(asset_fn(context))
+
+    ensure.assert_not_called()
+    create_span.assert_not_called()
+    flush.assert_not_called()
+    assert os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://cluster-otel:4317"
+    assert os.environ["OTEL_SERVICE_NAME"] == "cluster-default"
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_flushes_runtime_telemetry_on_success(project_dir: Path) -> None:
+    """Successful short-lived run pods must flush telemetry before exit."""
+    definitions = load_product_definitions(PRODUCT_NAME, project_dir)
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, _lineage = _make_mock_context_with_lineage()
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = MagicMock(return_value=iter([]))
+    context.resources.dbt.cli.return_value.stream.return_value = mock_stream
+
+    with patch(f"{_RUNTIME_MODULE}._flush_runtime_telemetry") as flush:
+        list(asset_fn(context))
+
+    flush.assert_called_once()
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_flushes_runtime_telemetry_on_failure(project_dir: Path) -> None:
+    """Failed short-lived run pods must still flush telemetry before exit."""
+    definitions = load_product_definitions(PRODUCT_NAME, project_dir)
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, _lineage = _make_mock_context_with_lineage()
+    context.resources.dbt.cli.return_value.stream.side_effect = RuntimeError("dbt failed")
+
+    with (
+        patch(f"{_RUNTIME_MODULE}._flush_runtime_telemetry") as flush,
+        pytest.raises(RuntimeError, match="dbt failed"),
+    ):
+        list(asset_fn(context))
+
+    flush.assert_called_once()
 
 
 @pytest.mark.requirement("AC-5")

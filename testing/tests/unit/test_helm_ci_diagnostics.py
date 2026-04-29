@@ -88,3 +88,20 @@ def test_helm_ci_has_integration_test_job() -> None:
         job for job in jobs.values() if "Integration Test" in str(job.get("name", ""))
     ]
     assert integration_jobs, "helm-ci.yaml must keep the Kind integration test job"
+
+
+@pytest.mark.requirement("ALPHA-HARDENING")
+def test_helm_ci_render_preview_does_not_pipe_find_into_head() -> None:
+    """Rendered YAML preview must not fail successful jobs with broken pipes."""
+    workflow_text = WORKFLOW.read_text()
+    validate_section = workflow_text.split("- name: Validate rendered YAML", maxsplit=1)[1]
+    validate_section = validate_section.split(
+        "# ============================================================",
+        maxsplit=1,
+    )[0]
+
+    assert "preview_rendered_yaml()" in validate_section
+    assert "mapfile -t files" in validate_section
+    assert "find /tmp/rendered-platform-${ENVIRONMENT}" not in validate_section
+    assert "find /tmp/rendered-jobs-${ENVIRONMENT}" not in validate_section
+    assert "| head" not in validate_section

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import builtins
 import importlib
+import importlib.util
 import json
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
+from types import SimpleNamespace
 
 import duckdb
 import pytest
@@ -410,11 +414,16 @@ def test_customer360_validation_manifest_configures_default_evidence_commands() 
         "marquez",
     )
     assert config.dagster_run_check_command is not None
+    assert "tags" in config.dagster_run_check_command[-1], (
+        "Dagster run evidence must query tags so the customer-360 code location "
+        "is visible even when the Dagster job name is __ASSET_JOB."
+    )
     assert config.lineage_check_command == [
         "curl",
         "-fsS",
         "http://localhost:5100/api/v1/namespaces/customer-360/jobs",
     ]
+    assert config.lineage_expected_text == "mart_customer_360"
     assert config.storage_check_command is not None
     assert "floe_orchestrator_dagster.validation.iceberg_outputs" in config.storage_check_command
     assert config.customer_count_command == [
@@ -426,6 +435,10 @@ def test_customer360_validation_manifest_configures_default_evidence_commands() 
         "--",
         "python",
         "/app/demo/customer_360/scripts/customer360_metric.py",
+        "--source",
+        "iceberg",
+        "--artifacts-path",
+        "/app/demo/customer_360/compiled_artifacts.json",
         "customer-count",
     ]
     assert config.lifetime_value_command == [
@@ -437,6 +450,10 @@ def test_customer360_validation_manifest_configures_default_evidence_commands() 
         "--",
         "python",
         "/app/demo/customer_360/scripts/customer360_metric.py",
+        "--source",
+        "iceberg",
+        "--artifacts-path",
+        "/app/demo/customer_360/compiled_artifacts.json",
         "total-lifetime-value",
     ]
 
@@ -708,6 +725,136 @@ def test_customer360_metric_script_queries_duckdb_metrics(tmp_path: Path) -> Non
 
     assert count_result.stdout.strip() == "2"
     assert lifetime_value_result.stdout.strip() == "15.75"
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_metric_script_duckdb_mode_imports_without_iceberg_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default DuckDB metric mode must not require Iceberg-only runtime packages."""
+    script = Path("demo/customer-360/scripts/customer360_metric.py")
+    real_import = builtins.__import__
+
+    def guarded_import(
+        name: str,
+        globals: dict[str, object] | None = None,
+        locals: dict[str, object] | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> object:
+        if name == "pyarrow" or name.startswith("pyarrow."):
+            raise ModuleNotFoundError(name)
+        if name == "floe_orchestrator_dagster" or name.startswith("floe_orchestrator_dagster."):
+            raise ModuleNotFoundError(name)
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    spec = importlib.util.spec_from_file_location("customer360_metric_duckdb_only", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    parser = module.build_parser()
+    args = parser.parse_args(["customer-count"])
+
+    assert args.source == "duckdb"
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_metric_script_queries_iceberg_metrics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Customer 360 validation can query business metrics from persisted Iceberg outputs."""
+    script = Path("demo/customer-360/scripts/customer360_metric.py")
+    spec = importlib.util.spec_from_file_location("customer360_metric", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    artifacts_path = tmp_path / "compiled_artifacts.json"
+    artifacts_path.write_text("{}", encoding="utf-8")
+
+    class FakeScan:
+        def __init__(self, selected_fields: Sequence[str]) -> None:
+            self.selected_fields = tuple(selected_fields)
+
+        def to_arrow(self) -> object:
+            import pyarrow as pa
+
+            assert self.selected_fields in {("customer_id",), ("total_spend",)}
+            return pa.table({"customer_id": [1, 2], "total_spend": [10.50, 5.25]})
+
+    class FakeTable:
+        def scan(self, *, selected_fields: Sequence[str]) -> FakeScan:
+            return FakeScan(selected_fields)
+
+    class FakeCatalog:
+        def __init__(self) -> None:
+            self.loaded: list[str] = []
+
+        def load_table(self, identifier: str) -> FakeTable:
+            self.loaded.append(identifier)
+            return FakeTable()
+
+    fake_catalog = FakeCatalog()
+    import pyarrow.compute as pc
+
+    monkeypatch.setattr(
+        module,
+        "_load_iceberg_dependencies",
+        lambda: (
+            pc,
+            SimpleNamespace(model_validate_json=lambda _content: object()),
+            lambda _artifacts, tables: tables,
+            lambda _artifacts: fake_catalog,
+        ),
+    )
+
+    count = module.query_metric(
+        source="iceberg",
+        artifacts_path=artifacts_path,
+        database="unused.duckdb",
+        table="mart_customer_360",
+        metric="customer-count",
+        lifetime_value_column="total_spend",
+    )
+    lifetime_value = module.query_metric(
+        source="iceberg",
+        artifacts_path=artifacts_path,
+        database="unused.duckdb",
+        table="mart_customer_360",
+        metric="total-lifetime-value",
+        lifetime_value_column="total_spend",
+    )
+
+    assert count == 2
+    assert lifetime_value == 15.75
+    assert fake_catalog.loaded == ["mart_customer_360", "mart_customer_360"]
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_metric_cli_keeps_stdout_numeric(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Metric CLI should keep diagnostic logs off stdout so validators can parse it."""
+    script = Path("demo/customer-360/scripts/customer360_metric.py")
+    spec = importlib.util.spec_from_file_location("customer360_metric_clean_stdout", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def noisy_query_metric(**_kwargs: object) -> int:
+        print("diagnostic noise")
+        return 500
+
+    monkeypatch.setattr(module, "query_metric", noisy_query_metric)
+
+    assert module.main(["customer-count"]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == "500\n"
+    assert "diagnostic noise" in captured.err
 
 
 @pytest.mark.requirement("alpha-demo")

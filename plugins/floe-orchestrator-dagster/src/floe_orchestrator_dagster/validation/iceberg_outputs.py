@@ -72,7 +72,7 @@ def expected_iceberg_tables(
     return [_qualify_table(namespace, table_name) for table_name in expected_tables]
 
 
-def _connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> Catalog:
+def connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> Catalog:
     """Connect to the configured catalog using catalog/storage plugin config."""
     plugins = artifacts.plugins
     if plugins is None or plugins.catalog is None:
@@ -106,6 +106,10 @@ def _connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> Catalog:
     return catalog_plugin.connect(config=catalog_connection_config)
 
 
+# Backwards-compatible alias for internal tests and older validation callers.
+_connect_catalog_from_artifacts = connect_catalog_from_artifacts
+
+
 def validate_iceberg_outputs(
     artifacts: CompiledArtifacts,
     expected_tables: Sequence[str] | None = None,
@@ -129,7 +133,7 @@ def validate_iceberg_outputs(
         raise RuntimeError("No expected Iceberg tables were derived from CompiledArtifacts")
 
     # Let StoragePlugin own backend-specific PyIceberg catalog keys.
-    catalog = _connect_catalog_from_artifacts(artifacts)
+    catalog = connect_catalog_from_artifacts(artifacts)
 
     loaded_tables: list[str] = []
     load_errors: dict[str, str] = {}
@@ -157,7 +161,7 @@ def reset_iceberg_outputs(
 ) -> list[str]:
     """Drop expected Iceberg output table registrations before a materialization run."""
     expected_table_names = expected_iceberg_tables(artifacts, expected_tables)
-    catalog = _connect_catalog_from_artifacts(artifacts)
+    catalog = connect_catalog_from_artifacts(artifacts)
     dropped: list[str] = []
     for table_name in expected_table_names:
         try:

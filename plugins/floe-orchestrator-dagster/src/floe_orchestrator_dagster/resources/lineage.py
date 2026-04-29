@@ -40,8 +40,20 @@ create_emitter = importlib.import_module("floe_core.lineage.emitter").create_emi
 _PluginType = importlib.import_module("floe_core.plugin_types").PluginType
 
 _EMIT_TIMEOUT = 5.0
+_DRAIN_TIMEOUT = 30.0
 
 logger = logging.getLogger(__name__)
+
+
+def _positive_float(value: Any, default: float) -> float:
+    """Return a positive float from plugin config, or *default* when invalid."""
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    if parsed <= 0:
+        return default
+    return parsed
 
 
 class LineageResource:
@@ -58,15 +70,26 @@ class LineageResource:
             RuntimeError instead of returning fallback/default values.
     """
 
-    def __init__(self, emitter: LineageEmitter, *, strict: bool = False) -> None:
+    def __init__(
+        self,
+        emitter: LineageEmitter,
+        *,
+        strict: bool = False,
+        emit_timeout_seconds: float = _EMIT_TIMEOUT,
+        drain_timeout_seconds: float = _DRAIN_TIMEOUT,
+    ) -> None:
         """Initialise the resource and start the background event loop thread.
 
         Args:
             emitter: The async LineageEmitter to delegate to.
             strict: Raise lineage emission failures instead of returning fallbacks.
+            emit_timeout_seconds: Timeout for single START/COMPLETE/FAIL/enqueue calls.
+            drain_timeout_seconds: Timeout for flushing batched lineage events.
         """
         self._emitter = emitter
         self._strict = strict
+        self._emit_timeout_seconds = emit_timeout_seconds
+        self._drain_timeout_seconds = drain_timeout_seconds
         self._closed = False
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
@@ -76,7 +99,13 @@ class LineageResource:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _run_coroutine(self, coro: Any, *, default: Any = None) -> Any:
+    def _run_coroutine(
+        self,
+        coro: Any,
+        *,
+        default: Any = None,
+        timeout_seconds: float | None = None,
+    ) -> Any:
         """Submit *coro* to the background loop and block until it completes.
 
         Returns the coroutine's result, or *default* on timeout/exception when
@@ -85,21 +114,23 @@ class LineageResource:
         Args:
             coro: Awaitable coroutine to submit.
             default: Value to return when the coroutine fails or times out.
+            timeout_seconds: Optional timeout override.
 
         Returns:
             The coroutine result, or *default* on failure.
         """
+        timeout = timeout_seconds if timeout_seconds is not None else self._emit_timeout_seconds
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         try:
-            return future.result(timeout=_EMIT_TIMEOUT)
+            return future.result(timeout=timeout)
         except (TimeoutError, FutureTimeoutError):
             future.cancel()
             logger.warning(
                 "lineage_emit_timeout",
-                extra={"timeout": _EMIT_TIMEOUT},
+                extra={"timeout": timeout},
             )
             if self._strict:
-                raise RuntimeError(f"Lineage emission timed out after {_EMIT_TIMEOUT}s") from None
+                raise RuntimeError(f"Lineage emission timed out after {timeout}s") from None
             return default
         except Exception as exc:
             logger.warning(
@@ -266,7 +297,7 @@ class LineageResource:
             return
         result = flush()
         if asyncio.iscoroutine(result):
-            self._run_coroutine(result)
+            self._run_coroutine(result, timeout_seconds=self._drain_timeout_seconds)
 
     def close(self) -> None:
         """Drain the emitter, stop the background loop, and join the thread.
@@ -281,15 +312,15 @@ class LineageResource:
         if close_async is not None:
             result = close_async()
             if asyncio.iscoroutine(result):
-                self._run_coroutine(result)
+                self._run_coroutine(result, timeout_seconds=self._drain_timeout_seconds)
         else:
             self._emitter.close()
         self._loop.call_soon_threadsafe(self._loop.stop)
-        self._thread.join(timeout=_EMIT_TIMEOUT)
+        self._thread.join(timeout=self._drain_timeout_seconds)
         if self._thread.is_alive():
             logger.warning(
                 "lineage_background_thread_did_not_stop",
-                extra={"timeout": _EMIT_TIMEOUT},
+                extra={"timeout": self._drain_timeout_seconds},
             )
         else:
             self._loop.close()
@@ -429,11 +460,19 @@ def create_lineage_resource(
     transport_config: dict[str, Any] = plugin.get_transport_config()
     ns_strategy: dict[str, Any] = plugin.get_namespace_strategy()
     resolved_namespace = default_namespace or ns_strategy.get("default_namespace", "default")
+    drain_timeout_seconds = _positive_float(
+        transport_config.get("drain_timeout"),
+        _DRAIN_TIMEOUT,
+    )
 
     emitter = create_emitter(transport_config, resolved_namespace)
 
     def _resource_fn(_init_context: Any) -> Any:
-        resource = LineageResource(emitter=emitter, strict=strict)
+        resource = LineageResource(
+            emitter=emitter,
+            strict=strict,
+            drain_timeout_seconds=drain_timeout_seconds,
+        )
         try:
             yield resource
         finally:

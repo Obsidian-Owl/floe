@@ -72,6 +72,7 @@ plugins:
     version: "0.1.0"
     config:
       url: http://floe-platform-marquez:5000
+      drain_timeout: 30.0
       allow_insecure_http: true
 
 # =============================================================================

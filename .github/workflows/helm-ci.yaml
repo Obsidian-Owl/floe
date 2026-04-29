@@ -159,11 +159,28 @@ jobs:
         env:
           ENVIRONMENT: ${{ matrix.environment }}
         run: |
+          preview_rendered_yaml() {
+            local directory="$1"
+            local max_files="$2"
+            local max_lines="$3"
+
+            mapfile -t files < <(find "$directory" -name '*.yaml' | sort)
+            local count=0
+            for file in "${files[@]}"; do
+              if [ "$count" -ge "$max_files" ]; then
+                break
+              fi
+              count=$((count + 1))
+              echo "Validating: ${file}"
+              sed -n "1,${max_lines}p" "$file"
+            done
+          }
+
           echo "=== floe-platform templates ==="
-          find /tmp/rendered-platform-${ENVIRONMENT} -name '*.yaml' -exec echo "Validating: {}" \; -exec cat {} \; | head -100
+          preview_rendered_yaml "/tmp/rendered-platform-${ENVIRONMENT}" 20 100
           echo ""
           echo "=== floe-jobs templates ==="
-          find /tmp/rendered-jobs-${ENVIRONMENT} -name '*.yaml' -exec echo "Validating: {}" \; -exec cat {} \; | head -50
+          preview_rendered_yaml "/tmp/rendered-jobs-${ENVIRONMENT}" 20 50
           echo ""
           echo "Template rendering successful for ${ENVIRONMENT}"
 

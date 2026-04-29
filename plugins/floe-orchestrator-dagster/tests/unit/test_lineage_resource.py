@@ -820,6 +820,33 @@ class TestLineageResourceErrorHandling:
         finally:
             resource.close()
 
+    @pytest.mark.requirement(AC_6)
+    def test_flush_uses_configured_drain_timeout(self, mock_emitter: MagicMock) -> None:
+        """Test flush uses a longer drain timeout for batched lineage events."""
+        from floe_orchestrator_dagster.resources.lineage import LineageResource
+
+        mock_emitter.flush = AsyncMock(return_value=None)
+        resource = LineageResource(emitter=mock_emitter, drain_timeout_seconds=30.0)
+        try:
+            with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
+                future = MagicMock(spec=Future)
+                future.result.return_value = None
+                mock_submit.return_value = future
+
+                resource.flush()
+
+                call_args = future.result.call_args
+                if call_args.args:
+                    timeout_val = call_args.args[0]
+                else:
+                    timeout_val = call_args.kwargs.get("timeout")
+                assert timeout_val == pytest.approx(30.0), (
+                    f"flush must use configured drain timeout, got {timeout_val}"
+                )
+                mock_submit.call_args[0][0].close()
+        finally:
+            resource.close()
+
 
 class TestLineageResourceConcurrency:
     """Tests for thread-safe concurrent emission — AC-12."""
@@ -1455,6 +1482,49 @@ class TestCreateLineageResource:
         yielded = next(resource_instance)
         try:
             assert yielded._strict is True
+        finally:
+            resource_instance.close()
+
+    @pytest.mark.requirement(AC_10)
+    def test_transport_config_drain_timeout_is_passed_to_lineage_resource(self) -> None:
+        """Test create_lineage_resource uses backend-configured drain timeout."""
+        import types
+
+        from dagster import build_init_resource_context
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.lineage import create_lineage_resource
+
+        lineage_ref = PluginRef(type="marquez", version="1.0.0")
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_transport_config.return_value = {
+            "url": "http://marquez:5000",
+            "drain_timeout": 30.0,
+        }
+        mock_plugin.get_namespace_strategy.return_value = {
+            "default_namespace": "test-ns",
+        }
+        mock_emitter = MagicMock()
+
+        with (
+            patch(f"{_LINEAGE_MODULE}.get_registry") as mock_get_registry,
+            patch(f"{_LINEAGE_MODULE}.create_emitter", return_value=mock_emitter),
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.return_value = mock_plugin
+
+            result = create_lineage_resource(lineage_ref)
+
+        resource_instance = result["lineage"].resource_fn(build_init_resource_context())
+
+        if not isinstance(resource_instance, types.GeneratorType):
+            pytest.fail(f"Resource function must be a generator, got {type(resource_instance)}")
+
+        yielded = next(resource_instance)
+        try:
+            assert yielded._drain_timeout_seconds == pytest.approx(30.0)
         finally:
             resource_instance.close()
 

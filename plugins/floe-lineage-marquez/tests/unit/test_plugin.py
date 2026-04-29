@@ -59,7 +59,20 @@ def test_transport_config_structure() -> None:
     assert config["type"] == "http"
     assert config["url"] == "https://marquez:5000/api/v1/lineage"
     assert config["timeout"] == 5.0
+    assert config["drain_timeout"] == 30.0
     assert config["api_key"] == "test-key"  # pragma: allowlist secret
+
+
+@pytest.mark.requirement("REQ-527")
+def test_transport_config_uses_configured_drain_timeout() -> None:
+    """Test Marquez exposes a configurable drain timeout for runtime batches."""
+    plugin = MarquezLineageBackendPlugin(
+        url="http://localhost:5000",
+        drain_timeout=45.0,
+    )
+    config = plugin.get_transport_config()
+
+    assert config["drain_timeout"] == 45.0
 
 
 @pytest.mark.requirement("REQ-527")
