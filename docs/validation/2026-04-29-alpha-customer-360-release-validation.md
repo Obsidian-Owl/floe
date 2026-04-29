@@ -6,7 +6,7 @@ This file is a validation evidence template for `v0.1.0-alpha.1`. It is not proo
 
 - Date: 2026-04-29
 - Branch: `docs/alpha-docs-demo-release-gate`
-- Local validation commit: `650a9ef71c10aeef09b0e1d917d2f0dbbbd1a2be`
+- Local functional validation commit: `650a9ef71c10aeef09b0e1d917d2f0dbbbd1a2be`
 - Release candidate: `v0.1.0-alpha.1`
 
 ## Automated Gates
