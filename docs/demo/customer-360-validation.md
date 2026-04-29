@@ -2,7 +2,15 @@
 
 ## Automated Evidence
 
-The automated Customer 360 validation command is introduced by release hardening before alpha tagging. Until that command exists, use this page as the evidence checklist for the golden demo.
+Run the Customer 360 evidence gate after `make demo` and after the Customer 360 run has completed:
+
+```bash
+make demo-customer-360-validate
+```
+
+The command loads its default evidence plan from `demo/customer-360/validation.yaml`. The manifest defines service URLs, expected platform pods, and argv-list commands for Dagster, storage, Marquez, Jaeger, and business metric checks.
+
+Use `FLOE_DEMO_VALIDATION_MANIFEST=/path/to/validation.yaml` for a different platform shape. Individual command overrides are also available, for example `FLOE_DEMO_LINEAGE_CHECK_COMMAND`, `FLOE_DEMO_STORAGE_CHECK_COMMAND`, `FLOE_DEMO_CUSTOMER_COUNT_COMMAND`, and `FLOE_DEMO_LIFETIME_VALUE_COMMAND`.
 
 Expected evidence keys:
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +14,7 @@ from testing.demo.customer360_validator import (
     Customer360Validator,
     ValidationResult,
     default_command_runner,
+    load_customer360_config,
 )
 
 
@@ -392,6 +394,48 @@ def test_customer360_validator_can_check_customer360_service_evidence_with_comma
 
 
 @pytest.mark.requirement("alpha-demo")
+def test_customer360_validation_manifest_configures_default_evidence_commands() -> None:
+    """Default Customer 360 evidence checks are manifest-driven, not caller-supplied."""
+    config = load_customer360_config(Path("demo/customer-360/validation.yaml"))
+
+    assert config.namespace == "floe-dev"
+    assert config.platform_expected_services == (
+        "dagster",
+        "polaris",
+        "minio",
+        "jaeger",
+        "marquez",
+    )
+    assert config.dagster_run_check_command is not None
+    assert config.lineage_check_command == [
+        "curl",
+        "-fsS",
+        "http://localhost:5100/api/v1/namespaces/customer-360/jobs",
+    ]
+    assert config.storage_check_command is not None
+    assert "floe_orchestrator_dagster.validation.iceberg_outputs" in config.storage_check_command
+    assert config.customer_count_command is not None
+    assert config.lifetime_value_command is not None
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_validation_manifest_rejects_shell_command_strings(tmp_path: Path) -> None:
+    """Validation manifests use explicit argv lists rather than shell command strings."""
+    manifest = tmp_path / "validation.yaml"
+    manifest.write_text(
+        """
+validation:
+  evidence:
+    lineage_check_command: "curl http://example.com | jq"
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="lineage_check_command"):
+        load_customer360_config(manifest)
+
+
+@pytest.mark.requirement("alpha-demo")
 def test_cli_prints_deterministic_output_and_returns_failure(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -444,6 +488,53 @@ def test_cli_accepts_customer360_evidence_command_arguments() -> None:
     assert args.lineage_expected_text == "customer-360"
     assert args.tracing_check_command == "jaeger trace list"
     assert args.tracing_expected_text == "customer-360"
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_cli_loads_customer360_validation_manifest_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The release validation CLI gets runnable evidence checks from a manifest by default."""
+    module = importlib.import_module("testing.ci.validate_customer_360_demo")
+    manifest = tmp_path / "validation.yaml"
+    manifest.write_text(
+        """
+validation:
+  namespace: manifest-ns
+  evidence:
+    dagster_run_check_command: [dagster, runs, list]
+    dagster_expected_text: customer-360
+    lineage_check_command: [marquez, jobs, list]
+    lineage_expected_text: mart_customer_360
+    tracing_check_command: [jaeger, traces, list]
+    tracing_expected_text: customer-360
+    storage_check_command: [storage, list]
+    storage_expected_text: mart_customer_360
+    customer_count_command: [count]
+    lifetime_value_command: [lifetime]
+""",
+        encoding="utf-8",
+    )
+    captured: dict[str, Customer360Config] = {}
+
+    class FakeValidator:
+        def __init__(self, *, config: Customer360Config) -> None:
+            captured["config"] = config
+
+        def validate(self) -> ValidationResult:
+            return ValidationResult(status="PASS")
+
+    monkeypatch.setenv("FLOE_DEMO_VALIDATION_MANIFEST", str(manifest))
+    monkeypatch.setattr("sys.argv", ["validate_customer_360_demo"])
+    monkeypatch.setattr(module, "Customer360Validator", FakeValidator)
+
+    exit_code = module.main()
+
+    assert exit_code == 0
+    assert captured["config"].namespace == "manifest-ns"
+    assert captured["config"].dagster_run_check_command == ["dagster", "runs", "list"]
+    assert captured["config"].storage_check_command == ["storage", "list"]
 
 
 @pytest.mark.requirement("alpha-demo")

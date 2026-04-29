@@ -7,10 +7,15 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from typing import Any
+
+import yaml
 
 CommandRunner = Callable[[list[str]], str]
 DEFAULT_COMMAND_TIMEOUT_SECONDS = 30.0
 DEFAULT_PLATFORM_SERVICE_FRAGMENTS = ("dagster", "polaris", "minio", "jaeger", "marquez")
+DEFAULT_VALIDATION_MANIFEST = Path("demo/customer-360/validation.yaml")
 
 EXPECTED_EVIDENCE_KEYS = (
     "platform.ready",
@@ -64,6 +69,91 @@ class ValidationResult:
     status: str
     evidence: dict[str, str] = field(default_factory=dict)
     failures: list[str] = field(default_factory=list)
+
+
+def load_customer360_config(path: Path) -> Customer360Config:
+    """Load Customer 360 validation configuration from a YAML manifest."""
+    with path.open() as manifest_file:
+        raw_manifest = yaml.safe_load(manifest_file) or {}
+    if not isinstance(raw_manifest, dict):
+        raise ValueError(f"Customer 360 validation manifest must be a mapping: {path}")
+
+    validation = _mapping(raw_manifest.get("validation"), "validation")
+    urls = _mapping(validation.get("urls"), "validation.urls", required=False)
+    evidence = _mapping(validation.get("evidence"), "validation.evidence", required=False)
+
+    return Customer360Config(
+        namespace=_string(validation.get("namespace"), "validation.namespace", default="floe-dev"),
+        dagster_url=_string(
+            urls.get("dagster"),
+            "validation.urls.dagster",
+            default="http://localhost:3100",
+        ),
+        marquez_url=_string(
+            urls.get("marquez"),
+            "validation.urls.marquez",
+            default="http://localhost:5100",
+        ),
+        jaeger_url=_string(
+            urls.get("jaeger"),
+            "validation.urls.jaeger",
+            default="http://localhost:16686",
+        ),
+        platform_expected_services=_string_tuple(
+            validation.get("platform_expected_services"),
+            "validation.platform_expected_services",
+            default=DEFAULT_PLATFORM_SERVICE_FRAGMENTS,
+        ),
+        command_timeout_seconds=_float(
+            validation.get("command_timeout_seconds"),
+            "validation.command_timeout_seconds",
+            default=DEFAULT_COMMAND_TIMEOUT_SECONDS,
+        ),
+        dagster_run_check_command=_command(
+            evidence.get("dagster_run_check_command"),
+            "validation.evidence.dagster_run_check_command",
+        ),
+        dagster_expected_text=_string(
+            evidence.get("dagster_expected_text"),
+            "validation.evidence.dagster_expected_text",
+            default="customer_360",
+        ),
+        lineage_check_command=_command(
+            evidence.get("lineage_check_command"),
+            "validation.evidence.lineage_check_command",
+        ),
+        lineage_expected_text=_string(
+            evidence.get("lineage_expected_text"),
+            "validation.evidence.lineage_expected_text",
+            default="customer_360",
+        ),
+        tracing_check_command=_command(
+            evidence.get("tracing_check_command"),
+            "validation.evidence.tracing_check_command",
+        ),
+        tracing_expected_text=_string(
+            evidence.get("tracing_expected_text"),
+            "validation.evidence.tracing_expected_text",
+            default="customer_360",
+        ),
+        storage_check_command=_command(
+            evidence.get("storage_check_command"),
+            "validation.evidence.storage_check_command",
+        ),
+        storage_expected_text=_string(
+            evidence.get("storage_expected_text"),
+            "validation.evidence.storage_expected_text",
+            default="customer_360",
+        ),
+        customer_count_command=_command(
+            evidence.get("customer_count_command"),
+            "validation.evidence.customer_count_command",
+        ),
+        lifetime_value_command=_command(
+            evidence.get("lifetime_value_command"),
+            "validation.evidence.lifetime_value_command",
+        ),
+    )
 
 
 class Customer360Validator:
@@ -364,3 +454,47 @@ def _is_ready_running_pod(item: dict[str, object]) -> bool:
     if not ready_conditions:
         return False
     return any(condition.get("status") == "True" for condition in ready_conditions)
+
+
+def _mapping(value: object, field_name: str, *, required: bool = True) -> dict[str, Any]:
+    if value is None and not required:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{field_name} must be a mapping")
+    return value
+
+
+def _string(value: object, field_name: str, *, default: str) -> str:
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string")
+    return value
+
+
+def _float(value: object, field_name: str, *, default: float) -> float:
+    if value is None:
+        return default
+    if not isinstance(value, int | float):
+        raise ValueError(f"{field_name} must be a number")
+    return float(value)
+
+
+def _string_tuple(value: object, field_name: str, *, default: tuple[str, ...]) -> tuple[str, ...]:
+    if value is None:
+        return default
+    if not isinstance(value, list):
+        raise ValueError(f"{field_name} must be a list of strings")
+    result = tuple(_string(item, f"{field_name}[]", default="").strip() for item in value)
+    return tuple(item for item in result if item)
+
+
+def _command(value: object, field_name: str) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"{field_name} must be a non-empty list of command arguments")
+    command = [_string(item, f"{field_name}[]", default="") for item in value]
+    if any(not item for item in command):
+        raise ValueError(f"{field_name} must not contain empty command arguments")
+    return command

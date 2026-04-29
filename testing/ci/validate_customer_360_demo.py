@@ -6,16 +6,15 @@ from __future__ import annotations
 import argparse
 import os
 import shlex
+from pathlib import Path
 
 from testing.demo.customer360_validator import (
+    DEFAULT_VALIDATION_MANIFEST,
     Customer360Config,
     Customer360Validator,
     ValidationResult,
+    load_customer360_config,
 )
-
-
-def _env(name: str, default: str) -> str:
-    return os.environ.get(name, default)
 
 
 def _command_arg(value: str | None) -> list[str] | None:
@@ -35,8 +34,10 @@ def _parse_command_arg(
         parser.error(f"invalid {option_name}: {exc}")
 
 
-def _float_env(parser: argparse.ArgumentParser, name: str, default: str) -> float:
-    raw_value = _env(name, default)
+def _optional_float_env(parser: argparse.ArgumentParser, name: str) -> float | None:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return None
     try:
         return float(raw_value)
     except ValueError:
@@ -61,37 +62,39 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the Customer 360 validation CLI parser."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--validation-manifest",
+        default=os.environ.get("FLOE_DEMO_VALIDATION_MANIFEST", str(DEFAULT_VALIDATION_MANIFEST)),
+        help="YAML manifest containing default Customer 360 validation evidence checks.",
+    )
+    parser.add_argument(
         "--namespace",
-        default=_env("FLOE_DEMO_NAMESPACE", "floe-dev"),
+        default=os.environ.get("FLOE_DEMO_NAMESPACE"),
         help="Kubernetes namespace containing the demo platform.",
     )
     parser.add_argument(
         "--dagster-url",
-        default=_env("FLOE_DEMO_DAGSTER_URL", "http://localhost:3100"),
+        default=os.environ.get("FLOE_DEMO_DAGSTER_URL"),
         help="Base URL for Dagster webserver.",
     )
     parser.add_argument(
         "--marquez-url",
-        default=_env("FLOE_DEMO_MARQUEZ_URL", "http://localhost:5100"),
+        default=os.environ.get("FLOE_DEMO_MARQUEZ_URL"),
         help="Base URL for Marquez API.",
     )
     parser.add_argument(
         "--jaeger-url",
-        default=_env("FLOE_DEMO_JAEGER_URL", "http://localhost:16686"),
+        default=os.environ.get("FLOE_DEMO_JAEGER_URL"),
         help="Base URL for Jaeger query API.",
     )
     parser.add_argument(
         "--platform-expected-services",
-        default=_env(
-            "FLOE_DEMO_PLATFORM_EXPECTED_SERVICES",
-            "dagster,polaris,minio,jaeger,marquez",
-        ),
+        default=os.environ.get("FLOE_DEMO_PLATFORM_EXPECTED_SERVICES"),
         help="Comma-separated pod name fragments required for platform readiness.",
     )
     parser.add_argument(
         "--command-timeout-seconds",
         type=float,
-        default=_float_env(parser, "FLOE_DEMO_COMMAND_TIMEOUT_SECONDS", "30"),
+        default=_optional_float_env(parser, "FLOE_DEMO_COMMAND_TIMEOUT_SECONDS"),
         help="Timeout for default validation commands.",
     )
     parser.add_argument(
@@ -101,7 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--dagster-expected-text",
-        default=_env("FLOE_DEMO_DAGSTER_EXPECTED_TEXT", "customer_360"),
+        default=os.environ.get("FLOE_DEMO_DAGSTER_EXPECTED_TEXT"),
         help="Text expected in Dagster run check command output.",
     )
     parser.add_argument(
@@ -111,7 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--lineage-expected-text",
-        default=_env("FLOE_DEMO_LINEAGE_EXPECTED_TEXT", "customer_360"),
+        default=os.environ.get("FLOE_DEMO_LINEAGE_EXPECTED_TEXT"),
         help="Text expected in lineage check command output.",
     )
     parser.add_argument(
@@ -121,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--tracing-expected-text",
-        default=_env("FLOE_DEMO_TRACING_EXPECTED_TEXT", "customer_360"),
+        default=os.environ.get("FLOE_DEMO_TRACING_EXPECTED_TEXT"),
         help="Text expected in tracing check command output.",
     )
     parser.add_argument(
@@ -131,7 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--storage-expected-text",
-        default=_env("FLOE_DEMO_STORAGE_EXPECTED_TEXT", "customer_360"),
+        default=os.environ.get("FLOE_DEMO_STORAGE_EXPECTED_TEXT"),
         help="Text expected in storage check command output.",
     )
     parser.add_argument(
@@ -150,47 +153,65 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    try:
+        manifest_config = load_customer360_config(Path(args.validation_manifest))
+    except (OSError, ValueError) as exc:
+        parser.error(f"invalid --validation-manifest: {exc}")
+
+    platform_expected_services = (
+        _comma_separated(args.platform_expected_services)
+        if args.platform_expected_services
+        else manifest_config.platform_expected_services
+    )
     config = Customer360Config(
-        namespace=args.namespace,
-        dagster_url=args.dagster_url,
-        marquez_url=args.marquez_url,
-        jaeger_url=args.jaeger_url,
-        platform_expected_services=_comma_separated(args.platform_expected_services),
-        command_timeout_seconds=args.command_timeout_seconds,
+        namespace=args.namespace or manifest_config.namespace,
+        dagster_url=args.dagster_url or manifest_config.dagster_url,
+        marquez_url=args.marquez_url or manifest_config.marquez_url,
+        jaeger_url=args.jaeger_url or manifest_config.jaeger_url,
+        platform_expected_services=platform_expected_services,
+        command_timeout_seconds=args.command_timeout_seconds
+        if args.command_timeout_seconds is not None
+        else manifest_config.command_timeout_seconds,
         dagster_run_check_command=_parse_command_arg(
             parser,
             "--dagster-run-check-command",
             args.dagster_run_check_command,
-        ),
-        dagster_expected_text=args.dagster_expected_text,
+        )
+        or manifest_config.dagster_run_check_command,
+        dagster_expected_text=args.dagster_expected_text or manifest_config.dagster_expected_text,
         lineage_check_command=_parse_command_arg(
             parser,
             "--lineage-check-command",
             args.lineage_check_command,
-        ),
-        lineage_expected_text=args.lineage_expected_text,
+        )
+        or manifest_config.lineage_check_command,
+        lineage_expected_text=args.lineage_expected_text or manifest_config.lineage_expected_text,
         tracing_check_command=_parse_command_arg(
             parser,
             "--tracing-check-command",
             args.tracing_check_command,
-        ),
-        tracing_expected_text=args.tracing_expected_text,
+        )
+        or manifest_config.tracing_check_command,
+        tracing_expected_text=args.tracing_expected_text or manifest_config.tracing_expected_text,
         storage_check_command=_parse_command_arg(
             parser,
             "--storage-check-command",
             args.storage_check_command,
-        ),
-        storage_expected_text=args.storage_expected_text,
+        )
+        or manifest_config.storage_check_command,
+        storage_expected_text=args.storage_expected_text or manifest_config.storage_expected_text,
         customer_count_command=_parse_command_arg(
             parser,
             "--customer-count-command",
             args.customer_count_command,
-        ),
+        )
+        or manifest_config.customer_count_command,
         lifetime_value_command=_parse_command_arg(
             parser,
             "--lifetime-value-command",
             args.lifetime_value_command,
-        ),
+        )
+        or manifest_config.lifetime_value_command,
     )
     result = Customer360Validator(config=config).validate()
     return print_result(result)
