@@ -8,6 +8,7 @@ PORTABILITY_FILES = (
     Path("demo/README.md"),
     Path("TESTING.md"),
     Path("scripts/devpod-ensure-ready.sh"),
+    Path("scripts/devpod-test.sh"),
     Path("scripts/devpod-sync-kubeconfig.sh"),
 )
 
@@ -34,6 +35,8 @@ def test_devpod_scripts_honor_devpod_kubeconfig_override() -> None:
     """DevPod sync/readiness scripts honor DEVPOD_KUBECONFIG overrides."""
     sync_script = Path("scripts/devpod-sync-kubeconfig.sh").read_text()
     ready_script = Path("scripts/devpod-ensure-ready.sh").read_text()
+    test_script = Path("scripts/devpod-test.sh").read_text()
 
     assert 'LOCAL_KUBECONFIG="${DEVPOD_KUBECONFIG:-' in sync_script
     assert 'KUBECONFIG_PATH="${DEVPOD_KUBECONFIG:-' in ready_script
+    assert 'KUBECONFIG_PATH="${DEVPOD_KUBECONFIG:-' in test_script
