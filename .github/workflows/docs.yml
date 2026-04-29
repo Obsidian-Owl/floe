@@ -4,21 +4,28 @@ on:
   pull_request:
     paths:
       - "docs/**"
+      - "Makefile"
       - "mkdocs.yml"
       - "pyproject.toml"
       - "uv.lock"
       - "testing/ci/validate-docs-navigation.py"
+      - "testing/ci/validate_docs_navigation.py"
       - "testing/ci/tests/test_validate_docs_navigation.py"
       - ".github/workflows/docs.yml"
   push:
     branches: [main]
     paths:
       - "docs/**"
+      - "Makefile"
       - "mkdocs.yml"
       - "pyproject.toml"
       - "uv.lock"
       - "testing/ci/validate-docs-navigation.py"
+      - "testing/ci/validate_docs_navigation.py"
       - ".github/workflows/docs.yml"
+
+permissions:
+  contents: read
 
 jobs:
   docs:

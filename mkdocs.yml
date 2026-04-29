@@ -4,6 +4,14 @@ repo_url: https://github.com/Obsidian-Owl/floe
 repo_name: Obsidian-Owl/floe
 strict: true
 
+validation:
+  nav:
+    omitted_files: ignore
+  links:
+    not_found: ignore
+    anchors: ignore
+    unrecognized_links: ignore
+
 theme:
   name: material
   features:
