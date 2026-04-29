@@ -126,6 +126,21 @@ gh workflow run weekly.yml
 
 ---
 
+## Claude Workflows
+
+The Claude workflows (`claude.yml` and `claude-code-review.yml`) use the same
+Node 24-compatible pinned checkout action as the rest of CI:
+`actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd` (`v6.0.2`).
+
+Anthropic app-token exchange validates that the workflow file exists on the
+default branch and can fail while a PR is actively changing the Claude workflow
+definition. Treat that as a workflow-identity rollout constraint, not evidence
+that the checkout pin itself is invalid. Merge only after the normal required CI
+checks are green; the Claude workflow identity is restored once the changed
+workflow is on `main`.
+
+---
+
 ## Local Development
 
 ### Install Git Hooks
