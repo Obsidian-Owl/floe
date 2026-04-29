@@ -1391,6 +1391,51 @@ def test_runtime_telemetry_env_comes_from_compiled_artifacts(
 
 
 @pytest.mark.requirement("AC-5")
+def test_runtime_telemetry_disabled_contract_skips_initialization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disabled compiled telemetry must override ambient cluster OTel env vars."""
+    artifacts = _make_artifacts()
+    artifacts = artifacts.model_copy(
+        update={
+            "observability": artifacts.observability.model_copy(
+                update={
+                    "telemetry": artifacts.observability.telemetry.model_copy(
+                        update={"enabled": False}
+                    )
+                }
+            )
+        }
+    )
+    project_dir = tmp_path / "dbt_project"
+    _write_artifacts_and_manifest(project_dir, artifacts)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://cluster-otel:4317")
+    monkeypatch.setenv("OTEL_SERVICE_NAME", "cluster-default")
+
+    definitions = load_product_definitions(PRODUCT_NAME, project_dir)
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, _lineage = _make_mock_context_with_lineage()
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = MagicMock(return_value=iter([]))
+    context.resources.dbt.cli.return_value.stream.return_value = mock_stream
+
+    with (
+        patch(f"{_RUNTIME_MODULE}.ensure_telemetry_initialized") as ensure,
+        patch(f"{_RUNTIME_MODULE}.create_span") as create_span,
+        patch(f"{_RUNTIME_MODULE}._flush_runtime_telemetry") as flush,
+    ):
+        list(asset_fn(context))
+
+    ensure.assert_not_called()
+    create_span.assert_not_called()
+    flush.assert_not_called()
+    assert os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://cluster-otel:4317"
+    assert os.environ["OTEL_SERVICE_NAME"] == "cluster-default"
+
+
+@pytest.mark.requirement("AC-5")
 def test_dbt_assets_flushes_runtime_telemetry_on_success(project_dir: Path) -> None:
     """Successful short-lived run pods must flush telemetry before exit."""
     definitions = load_product_definitions(PRODUCT_NAME, project_dir)

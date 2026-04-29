@@ -76,12 +76,12 @@ def _safe_product_name(product_name: str) -> str:
     return dbt_project_name(product_name)
 
 
-def _configure_runtime_telemetry(artifacts: CompiledArtifacts) -> None:
+def _configure_runtime_telemetry(artifacts: CompiledArtifacts) -> bool:
     """Configure OTel env vars from the compiled product contract."""
     observability = getattr(artifacts, "observability", None)
     telemetry = getattr(observability, "telemetry", None)
     if telemetry is None or not getattr(telemetry, "enabled", False):
-        return
+        return False
 
     endpoint = str(getattr(telemetry, "otlp_endpoint", "") or "").strip()
     if endpoint:
@@ -94,6 +94,7 @@ def _configure_runtime_telemetry(artifacts: CompiledArtifacts) -> None:
     service_name = str(getattr(resource_attributes, "service_name", "") or "").strip()
     if service_name:
         os.environ["OTEL_SERVICE_NAME"] = service_name
+    return True
 
 
 def _flush_runtime_telemetry() -> None:
@@ -229,29 +230,31 @@ def build_product_definitions(
     # concrete context type is not stable enough for strict annotation here.
     def _dbt_assets_fn(context) -> object:  # type: ignore[no-untyped-def]
         """Run dbt build with lineage emission."""
-        _configure_runtime_telemetry(artifacts)
-        ensure_telemetry_initialized()
+        telemetry_enabled = _configure_runtime_telemetry(artifacts)
+        if telemetry_enabled:
+            ensure_telemetry_initialized()
         dbt = context.resources.dbt
         lineage = context.resources.lineage
         run_id: UUID | None = None
 
         try:
             run_facets: dict[str, object] = {}
-            try:
-                # This span intentionally scopes only trace-correlation facet construction;
-                # dbt execution and lineage emission publish their own runtime events.
-                with create_span(
-                    f"floe.dagster.{product_name}.lineage_correlation_facet",
-                    attributes={
-                        "floe.product.name": product_name,
-                        "floe.orchestrator": "dagster",
-                    },
-                ):
-                    trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
-                    if trace_facet is not None:
-                        run_facets["traceCorrelation"] = trace_facet
-            except Exception as _trace_exc:
-                context.log.warning("Trace facet creation failed: %s", _trace_exc)
+            if telemetry_enabled:
+                try:
+                    # This span intentionally scopes only trace-correlation facet construction;
+                    # dbt execution and lineage emission publish their own runtime events.
+                    with create_span(
+                        f"floe.dagster.{product_name}.lineage_correlation_facet",
+                        attributes={
+                            "floe.product.name": product_name,
+                            "floe.orchestrator": "dagster",
+                        },
+                    ):
+                        trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
+                        if trace_facet is not None:
+                            run_facets["traceCorrelation"] = trace_facet
+                except Exception as _trace_exc:
+                    context.log.warning("Trace facet creation failed: %s", _trace_exc)
             try:
                 dagster_run_id = _dagster_run_id(context)
                 run_id = lineage.emit_start(
@@ -312,7 +315,8 @@ def build_product_definitions(
                     raise
                 context.log.warning("emit_complete failed: %s", _complete_exc)
         finally:
-            _flush_runtime_telemetry()
+            if telemetry_enabled:
+                _flush_runtime_telemetry()
 
     def _dbt_resource_fn(_init_context: Any) -> Any:
         profiles_dir = prepare_compiled_profiles_dir(
