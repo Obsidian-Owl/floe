@@ -120,6 +120,16 @@ class Customer360Validator:
         )
 
     def _check_platform(self, evidence: dict[str, str], failures: list[str]) -> None:
+        expected_services = tuple(
+            service.strip()
+            for service in self._config.platform_expected_services
+            if service.strip()
+        )
+        if not expected_services:
+            evidence["platform.ready"] = "false"
+            failures.append("Platform expected services must contain at least one service fragment")
+            return
+
         command = ["kubectl", "get", "pods", "-n", self._config.namespace, "-o", "json"]
         try:
             pods = json.loads(self._run(command))
@@ -140,8 +150,8 @@ class Customer360Validator:
         ]
         missing_services = [
             service
-            for service in self._config.platform_expected_services
-            if service and not any(service in pod_name for pod_name in ready_pod_names)
+            for service in expected_services
+            if not any(service in pod_name for pod_name in ready_pod_names)
         ]
         ready = not missing_services
         evidence["platform.ready"] = str(ready).lower()
@@ -344,12 +354,12 @@ def _is_ready_running_pod(item: dict[str, object]) -> bool:
         return False
     conditions = status.get("conditions", [])
     if not isinstance(conditions, list):
-        return True
+        return False
     ready_conditions = [
         condition
         for condition in conditions
         if isinstance(condition, dict) and condition.get("type") == "Ready"
     ]
     if not ready_conditions:
-        return True
+        return False
     return any(condition.get("status") == "True" for condition in ready_conditions)

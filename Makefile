@@ -506,7 +506,7 @@ demo-local: build-demo-image ## Deploy demo locally (requires local Kind cluster
 	@echo "Stop with: helm uninstall floe-platform -n floe-dev"
 
 demo-customer-360-validate: ## Validate Customer 360 golden demo evidence
-	@uv run python testing/ci/validate-customer-360-demo.py
+	@uv run python -m testing.ci.validate_customer_360_demo
 
 # ============================================================
 # Development Helpers

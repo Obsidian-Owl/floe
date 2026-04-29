@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import json
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -192,6 +191,47 @@ def test_customer360_validator_requires_expected_platform_services() -> None:
 
 
 @pytest.mark.requirement("alpha-demo")
+def test_customer360_validator_rejects_empty_expected_platform_services() -> None:
+    """Empty expected service configuration cannot bypass platform readiness."""
+    runner = _healthy_runner()
+    config = Customer360Config(platform_expected_services=())
+
+    result = Customer360Validator(config=config, command_runner=runner).validate()
+
+    assert result.evidence["platform.ready"] == "false"
+    assert (
+        "Platform expected services must contain at least one service fragment" in result.failures
+    )
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_validator_requires_ready_condition_for_running_pods() -> None:
+    """Running pods without a Ready condition are not considered platform-ready."""
+    runner = _healthy_runner()
+    runner.responses[("kubectl", "get", "pods", "-n", "floe-dev", "-o", "json")] = json.dumps(
+        {
+            "items": [
+                {
+                    "metadata": {"name": "dagster"},
+                    "status": {"phase": "Running", "conditions": []},
+                },
+                _ready_pod("polaris"),
+                _ready_pod("minio"),
+                _ready_pod("jaeger"),
+                _ready_pod("marquez"),
+            ]
+        }
+    )
+
+    result = Customer360Validator(command_runner=runner).validate()
+
+    assert result.evidence["platform.ready"] == "false"
+    assert (
+        "Expected platform services are not ready in namespace floe-dev: dagster" in result.failures
+    )
+
+
+@pytest.mark.requirement("alpha-demo")
 def test_customer360_validator_can_check_storage_and_business_with_configured_commands() -> None:
     """Storage and business evidence can pass when explicit checks are configured."""
     runner = _healthy_runner()
@@ -356,11 +396,7 @@ def test_cli_prints_deterministic_output_and_returns_failure(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """CLI output is stable and returns nonzero when validation has failures."""
-    module_path = Path("testing/ci/validate-customer-360-demo.py")
-    spec = importlib.util.spec_from_file_location("validate_customer_360_demo", module_path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = importlib.import_module("testing.ci.validate_customer_360_demo")
 
     result = ValidationResult(
         status="FAIL",
@@ -383,11 +419,7 @@ def test_cli_prints_deterministic_output_and_returns_failure(
 @pytest.mark.requirement("alpha-demo")
 def test_cli_accepts_customer360_evidence_command_arguments() -> None:
     """CLI parser exposes Customer 360-specific evidence command arguments."""
-    module_path = Path("testing/ci/validate-customer-360-demo.py")
-    spec = importlib.util.spec_from_file_location("validate_customer_360_demo", module_path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = importlib.import_module("testing.ci.validate_customer_360_demo")
 
     args = module.build_parser().parse_args(
         [
@@ -417,17 +449,57 @@ def test_cli_accepts_customer360_evidence_command_arguments() -> None:
 @pytest.mark.requirement("alpha-demo")
 def test_cli_reports_malformed_command_as_parser_error(capsys: pytest.CaptureFixture[str]) -> None:
     """Malformed command strings produce argparse-style parser failures."""
-    module_path = Path("testing/ci/validate-customer-360-demo.py")
-    spec = importlib.util.spec_from_file_location("validate_customer_360_demo", module_path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = importlib.import_module("testing.ci.validate_customer_360_demo")
 
     with pytest.raises(SystemExit) as exc_info:
         module._parse_command_arg(module.build_parser(), "--lineage-check-command", "'unterminated")
 
     assert exc_info.value.code == 2
     assert "invalid --lineage-check-command" in capsys.readouterr().err
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_cli_reports_malformed_timeout_env_as_parser_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Malformed timeout environment values produce argparse-style parser failures."""
+    module = importlib.import_module("testing.ci.validate_customer_360_demo")
+    monkeypatch.setenv("FLOE_DEMO_COMMAND_TIMEOUT_SECONDS", "abc")
+
+    with pytest.raises(SystemExit) as exc_info:
+        module.build_parser()
+
+    assert exc_info.value.code == 2
+    assert "invalid FLOE_DEMO_COMMAND_TIMEOUT_SECONDS" in capsys.readouterr().err
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_validator_module_help_invocation_works() -> None:
+    """The importable module entry point can render help without live services."""
+    result = subprocess.run(
+        ["uv", "run", "python", "-m", "testing.ci.validate_customer_360_demo", "--help"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Validate the Customer 360 golden demo" in result.stdout
+    assert "--platform-expected-services" in result.stdout
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_customer360_validator_legacy_script_help_invocation_works() -> None:
+    """The legacy hyphenated wrapper can render help without live services."""
+    result = subprocess.run(
+        ["uv", "run", "python", "testing/ci/validate-customer-360-demo.py", "--help"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "Validate the Customer 360 golden demo" in result.stdout
+    assert "--platform-expected-services" in result.stdout
 
 
 @pytest.mark.requirement("alpha-demo")
@@ -459,3 +531,16 @@ def test_make_dry_run_does_not_expose_dangerous_command_override_values() -> Non
     )
 
     assert "touch /tmp/pwn" not in result.stdout
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_make_dry_run_uses_importable_customer360_validator_module() -> None:
+    """Make target executes the importable module rather than a fragile file path."""
+    result = subprocess.run(
+        ["make", "-n", "demo-customer-360-validate"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "uv run python -m testing.ci.validate_customer_360_demo" in result.stdout
