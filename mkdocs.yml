@@ -54,7 +54,7 @@ nav:
       - Opinionation Boundaries: architecture/opinionation-boundaries.md
       - Compiled Artifacts: contracts/compiled-artifacts.md
   - Operations:
-      - Devpod + Hetzner: operations/devpod-hetzner.md
+      - DevPod + Hetzner: operations/devpod-hetzner.md
       - Troubleshooting: operations/troubleshooting.md
       - Deployment Guides: guides/deployment/index.md
       - Testing: guides/testing/index.md
