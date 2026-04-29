@@ -449,7 +449,7 @@ demo: ## Deploy demo via DevPod (requires running DevPod workspace)
 	@echo "Updating Helm chart dependencies..."
 	@helm dependency update charts/floe-platform
 	@echo "Deploying Helm chart via tunneled kubectl..."
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config uv run floe platform deploy \
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" uv run floe platform deploy \
 		--env dev --chart ./charts/floe-platform \
 		--values ./charts/floe-platform/values-demo.yaml \
 		$(DEMO_IMAGE_HELM_SET_ARGS)
@@ -458,12 +458,12 @@ demo: ## Deploy demo via DevPod (requires running DevPod workspace)
 		kill $$(cat .demo-pids) 2>/dev/null || true; \
 		rm -f .demo-pids; \
 	fi
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-marquez 5100:5000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-otel 4317:4317 4318:4318 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-marquez 5100:5000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-otel 4317:4317 4318:4318 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
 	@echo ""
 	@echo "=== Demo Ready ==="
 	@echo "Dagster UI:    http://localhost:3100"
@@ -673,6 +673,7 @@ cognee-test: cognee-check-env ## Run quality validation tests (VERBOSE=1, THRESH
 DEVPOD_WORKSPACE ?= floe
 DEVPOD_PROVIDER ?= hetzner
 DEVPOD_DEVCONTAINER ?= .devcontainer/hetzner/devcontainer.json
+DEVPOD_KUBECONFIG ?= $(HOME)/.kube/devpod-$(DEVPOD_WORKSPACE).config
 
 .PHONY: devpod-check
 devpod-check:
@@ -739,4 +740,4 @@ devpod-status: devpod-check ## Show workspace status, tunnels, and cluster healt
 	@scripts/devpod-tunnels.sh --status 2>/dev/null || echo "No tunnels active"
 	@echo ""
 	@echo "=== Cluster Health ==="
-	@KUBECONFIG="$${HOME}/.kube/devpod-floe.config" kubectl cluster-info 2>/dev/null || echo "Cluster not reachable"
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl cluster-info 2>/dev/null || echo "Cluster not reachable"
