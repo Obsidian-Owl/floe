@@ -6,16 +6,18 @@ This file is a validation evidence template for `v0.1.0-alpha.1`. It is not proo
 
 - Date: 2026-04-29
 - Branch: `docs/alpha-docs-demo-release-gate`
-- Commit: `TODO: record with git rev-parse HEAD before tagging`
+- Local validation commit: `2992a18757ca34b4a7a0925ed2ec32dc1cb2ae19`
 - Release candidate: `v0.1.0-alpha.1`
 
 ## Automated Gates
 
 | Gate | Evidence Source | Required | Status | Evidence / Notes |
 | --- | --- | --- | --- | --- |
-| Docs build | `uv run mkdocs build --strict` | Yes | Not run | Record command output or CI link. |
-| Docs validation | `make docs-validate` | Yes | Not run | Record command output or CI link. |
-| Unit tests | `make test-unit` | Yes | Not run | Record command output or CI link. |
+| Docs build | `uv run mkdocs build --strict` | Yes | PASS | Covered by `make docs-validate`; MkDocs strict build completed successfully. Existing MkDocs Material 2.x theme warning is non-blocking. |
+| Docs validation | `make docs-validate` | Yes | PASS | Passed locally on 2026-04-29. The command completed strict docs build and alpha documentation navigation validation. |
+| Focused release-hardening tests | `uv run pytest testing/ci/tests/test_validate_docs_navigation.py testing/ci/tests/test_github_actions_node24_pins.py testing/tests/unit/test_customer360_validator.py testing/tests/unit/test_demo_makefile_kubeconfig.py -q` | Yes | PASS | Passed locally on 2026-04-29: 36 passed. |
+| Unit tests | `make test-unit` | Yes | PASS | Passed locally on 2026-04-29: 10035 passed, 1 skipped, 1 xfailed, 2 warnings; total coverage 87.63%. |
+| Helm lint | `make helm-lint` | Yes | PASS | Passed locally on 2026-04-29 for `charts/floe-platform` and `charts/floe-jobs`; Helm reported icon recommendations only. |
 | Helm CI | GitHub Actions Helm CI run URL | Yes | Not run | Record workflow URL and result. |
 | CI | GitHub Actions CI run URL | Yes | Not run | Record workflow URL and result. |
 | Security | GitHub Actions security scan URL or local security command output | Yes | Not run | Record scan URL, command output, or accepted non-blocking limitation. |
@@ -48,8 +50,9 @@ Promotion rule: if the alpha promise changes to support Dagster without Iceberg,
 
 Alpha tag is blocked until every required validation gate is PASS. #263 is the only pre-approved non-blocking alpha limitation in this evidence record.
 
-Decision: `TODO: PASS / BLOCKED`
+Decision: `BLOCKED`
 
 Decision notes:
 
-- `TODO: Record final release decision and links to evidence.`
+- Local branch validation has passed for docs, targeted release-hardening tests, unit tests, and Helm lint.
+- The release remains blocked until GitHub CI, security scanning, live Customer 360 validation, manual UI evidence, and DevPod + Hetzner E2E evidence are recorded.
