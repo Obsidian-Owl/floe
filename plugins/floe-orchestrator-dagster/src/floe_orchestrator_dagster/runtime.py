@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,9 @@ from dagster_dbt import DbtCliResource, dbt_assets
 from floe_core.compilation.naming import dbt_project_name
 from floe_core.lineage.facets import TraceCorrelationFacetBuilder
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+from floe_core.telemetry.initialization import ensure_telemetry_initialized
+from floe_core.telemetry.tracing import create_span
+from opentelemetry import trace
 
 from floe_orchestrator_dagster.capabilities import CapabilityPolicy
 from floe_orchestrator_dagster.export.iceberg import export_dbt_to_iceberg
@@ -68,6 +72,34 @@ def _lineage_namespace(artifacts: CompiledArtifacts) -> str | None:
 def _safe_product_name(product_name: str) -> str:
     """Return the dbt-safe product/profile name used at compile time."""
     return dbt_project_name(product_name)
+
+
+def _configure_runtime_telemetry(artifacts: CompiledArtifacts) -> None:
+    """Configure OTel env vars from the compiled product contract."""
+    observability = getattr(artifacts, "observability", None)
+    telemetry = getattr(observability, "telemetry", None)
+    if telemetry is None or not getattr(telemetry, "enabled", False):
+        return
+
+    endpoint = str(getattr(telemetry, "otlp_endpoint", "") or "").strip()
+    if endpoint:
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = endpoint
+
+    resource_attributes = getattr(telemetry, "resource_attributes", None)
+    service_name = str(getattr(resource_attributes, "service_name", "") or "").strip()
+    if service_name:
+        os.environ["OTEL_SERVICE_NAME"] = service_name
+
+
+def _flush_runtime_telemetry() -> None:
+    """Best-effort flush of runtime spans before short-lived run pods exit."""
+    try:
+        force_flush = getattr(trace.get_tracer_provider(), "force_flush", None)
+        if callable(force_flush):
+            force_flush(timeout_millis=5000)
+    except Exception:
+        # Tracing must never make a successful data product run fail.
+        return
 
 
 def _prepare_duckdb_output_directories(
@@ -192,15 +224,24 @@ def build_product_definitions(
     # concrete context type is not stable enough for strict annotation here.
     def _dbt_assets_fn(context) -> object:  # type: ignore[no-untyped-def]
         """Run dbt build with lineage emission."""
+        _configure_runtime_telemetry(artifacts)
+        ensure_telemetry_initialized()
         dbt = context.resources.dbt
         lineage = context.resources.lineage
         run_id: UUID | None = None
 
         run_facets: dict[str, object] = {}
         try:
-            trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
-            if trace_facet is not None:
-                run_facets["traceCorrelation"] = trace_facet
+            with create_span(
+                f"floe.dagster.{product_name}.dbt_assets",
+                attributes={
+                    "floe.product.name": product_name,
+                    "floe.orchestrator": "dagster",
+                },
+            ):
+                trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
+                if trace_facet is not None:
+                    run_facets["traceCorrelation"] = trace_facet
         except Exception as _trace_exc:
             context.log.warning("Trace facet creation failed: %s", _trace_exc)
         try:
@@ -262,6 +303,8 @@ def build_product_definitions(
             if policy.require_lineage:
                 raise
             context.log.warning("emit_complete failed: %s", _complete_exc)
+        finally:
+            _flush_runtime_telemetry()
 
     def _dbt_resource_fn(_init_context: Any) -> Any:
         profiles_dir = prepare_compiled_profiles_dir(

@@ -58,6 +58,7 @@ DEMO_PRODUCTS: dict[str, str] = {
 }
 
 # Helm values files for AC-11.3 / AC-11.5
+VALUES_BASE = REPO_ROOT / "charts" / "floe-platform" / "values.yaml"
 VALUES_TEST = REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
 VALUES_DEMO = REPO_ROOT / "charts" / "floe-platform" / "values-demo.yaml"
 
@@ -1776,6 +1777,223 @@ class TestHelmValuesImageOverride:
         assert daemon_tag == EXPECTED_IMAGE_TAG, (
             f"dagster.dagsterDaemon.image.tag must be '{EXPECTED_IMAGE_TAG}' "
             f"in values-demo.yaml. Got: {daemon_tag!r}"
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_dagster_memory_matches_e2e_profile(self) -> None:
+        """Verify demo Dagster resources can load all Customer 360 code locations.
+
+        The demo profile loads all three demo products in-process. Keep the
+        webserver and daemon memory aligned with the validated E2E profile so
+        `make demo` does not diverge from `make devpod-test` and OOM at startup.
+        """
+        values_demo = _load_values_yaml(VALUES_DEMO)
+        values_test = _load_values_yaml(VALUES_TEST)
+
+        for component in ("dagsterWebserver", "dagsterDaemon"):
+            demo_resources = values_demo.get("dagster", {}).get(component, {}).get("resources", {})
+            test_resources = values_test.get("dagster", {}).get(component, {}).get("resources", {})
+            assert demo_resources.get("requests", {}).get("memory") == test_resources.get(
+                "requests", {}
+            ).get("memory"), (
+                f"values-demo.yaml dagster.{component}.resources.requests.memory must match "
+                "the E2E profile used by values-test.yaml."
+            )
+            assert demo_resources.get("limits", {}).get("memory") == test_resources.get(
+                "limits", {}
+            ).get("memory"), (
+                f"values-demo.yaml dagster.{component}.resources.limits.memory must match "
+                "the E2E profile used by values-test.yaml."
+            )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_run_launcher_keeps_base_memory_limit(self) -> None:
+        """Verify demo run pods keep the base memory budget used by E2E.
+
+        Customer 360 run pods execute dbt and Iceberg export. Demo overrides
+        should not lower the base run launcher memory limit that E2E relies on.
+        """
+        values_demo = _load_values_yaml(VALUES_DEMO)
+        values_base = _load_values_yaml(VALUES_BASE)
+
+        demo_limit = (
+            values_demo.get("dagster", {})
+            .get("runLauncher", {})
+            .get("config", {})
+            .get("k8sRunLauncher", {})
+            .get("resources", {})
+            .get("limits", {})
+            .get("memory")
+        )
+        base_limit = (
+            values_base.get("dagster", {})
+            .get("runLauncher", {})
+            .get("config", {})
+            .get("k8sRunLauncher", {})
+            .get("resources", {})
+            .get("limits", {})
+            .get("memory")
+        )
+        assert demo_limit == base_limit, (
+            "values-demo.yaml dagster.runLauncher.config.k8sRunLauncher.resources."
+            "limits.memory must match the base chart memory budget."
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_webserver_uses_non_privileged_port(self) -> None:
+        """Verify demo Dagster webserver does not bind privileged port 80.
+
+        Demo pods run as non-root under the restricted security context. Keep
+        the webserver service and readiness port aligned with the E2E profile
+        and Makefile port-forward contract.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        webserver = values.get("dagster", {}).get("dagsterWebserver", {})
+
+        assert webserver.get("service", {}).get("port") == 3000, (
+            "values-demo.yaml dagster.dagsterWebserver.service.port must be 3000 "
+            "because the container runs as non-root and make demo forwards 3100:3000."
+        )
+        readiness = webserver.get("readinessProbe", {}).get("httpGet", {})
+        assert readiness.get("port") == 3000, (
+            "values-demo.yaml dagster.dagsterWebserver.readinessProbe.httpGet.port "
+            "must match dagster.dagsterWebserver.service.port."
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_run_pods_allow_dbt_target_writes(self) -> None:
+        """Verify demo run pods can write dbt target artifacts.
+
+        dbt writes partial-parse and run artifacts under the product target
+        directory. Keep demo run-pod security aligned with the validated E2E
+        profile so Customer 360 materialization can execute.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        launcher = (
+            values.get("dagster", {})
+            .get("runLauncher", {})
+            .get("config", {})
+            .get("k8sRunLauncher", {})
+        )
+        security_context = (
+            launcher.get("runK8sConfig", {}).get("containerConfig", {}).get("securityContext", {})
+        )
+        assert security_context.get("readOnlyRootFilesystem") is False, (
+            "values-demo.yaml runLauncher runK8sConfig.containerConfig.securityContext."
+            "readOnlyRootFilesystem must be false because dbt writes target artifacts "
+            "during Customer 360 runs."
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_polaris_matches_e2e_catalog_contract(self) -> None:
+        """Verify demo Polaris config matches the E2E catalog contract.
+
+        Customer 360 alpha validation should exercise the same catalog version
+        and bootstrap grants as the E2E profile, not a separate unvalidated
+        Polaris permission model.
+        """
+        values_demo = _load_values_yaml(VALUES_DEMO)
+        values_test = _load_values_yaml(VALUES_TEST)
+
+        demo_polaris = values_demo.get("polaris", {})
+        test_polaris = values_test.get("polaris", {})
+        assert demo_polaris.get("image", {}).get("tag") == test_polaris.get("image", {}).get(
+            "tag"
+        ), "values-demo.yaml Polaris image tag must match the validated E2E profile."
+        assert demo_polaris.get("bootstrap", {}).get("grants") == test_polaris.get(
+            "bootstrap", {}
+        ).get("grants"), (
+            "values-demo.yaml Polaris bootstrap grants must match values-test.yaml so "
+            "Customer 360 Iceberg writes use the validated catalog role contract."
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_minio_credentials_match_polaris_storage(self) -> None:
+        """Verify demo MinIO credentials match the Polaris S3 storage config.
+
+        `make demo` layers values-dev before values-demo. The demo file must
+        override MinIO auth explicitly so Polaris does not sign S3 requests with
+        credentials that differ from the deployed MinIO root credentials.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        polaris_s3 = values.get("polaris", {}).get("storage", {}).get("s3", {})
+        minio_auth = values.get("minio", {}).get("auth", {})
+
+        assert minio_auth.get("rootUser") == polaris_s3.get("accessKey"), (
+            "values-demo.yaml minio.auth.rootUser must match polaris.storage.s3.accessKey."
+        )
+        assert minio_auth.get("rootPassword") == polaris_s3.get("secretKey"), (
+            "values-demo.yaml minio.auth.rootPassword must match polaris.storage.s3.secretKey."
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_minio_provisions_polaris_warehouse_bucket(self) -> None:
+        """Verify demo installs create the warehouse bucket used by Polaris.
+
+        The chart overrides the Bitnami subchart image to upstream minio/minio,
+        which does not honor the Bitnami defaultBuckets bootstrap path. Demo
+        must use the chart-owned fallback hook so the bucket derived from
+        polaris.bootstrap.defaultBaseLocation exists before Iceberg writes.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        minio = values.get("minio", {})
+        default_base_location = (
+            values.get("polaris", {}).get("bootstrap", {}).get("defaultBaseLocation")
+        )
+        assert isinstance(default_base_location, str)
+        warehouse_bucket = default_base_location.removeprefix("s3://").split("/", maxsplit=1)[0]
+
+        assert minio.get("provisioning", {}).get("fallbackJob") is True, (
+            "values-demo.yaml must enable minio.provisioning.fallbackJob because "
+            "the upstream minio/minio image does not create defaultBuckets itself."
+        )
+        assert warehouse_bucket in str(minio.get("defaultBuckets", "")).split(","), (
+            "values-demo.yaml minio.defaultBuckets must include the bucket from "
+            "polaris.bootstrap.defaultBaseLocation."
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_daemon_env_uses_subchart_list_shape(self) -> None:
+        """Verify demo daemon env uses the Dagster subchart's list contract.
+
+        The upstream Dagster chart supports both list and map env shapes, but
+        mixing base list values with demo map overrides triggers Helm coalesce
+        warnings and can silently drop expected env values.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        daemon_env = values.get("dagster", {}).get("dagsterDaemon", {}).get("env")
+
+        assert isinstance(daemon_env, list), (
+            "values-demo.yaml dagster.dagsterDaemon.env must use a list of "
+            "{name, value} entries to match the base chart and Dagster subchart."
+        )
+        assert {"name": "DAGSTER_DEFAULT_SCHEDULE_CRON", "value": "*/10 * * * *"} in daemon_env
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_values_demo_restores_jaeger_trace_export_after_dev_overlay(self) -> None:
+        """Verify demo OTel traces are exported to Jaeger, not only debug logs.
+
+        `make demo` layers values-dev before values-demo. The dev profile keeps
+        the collector debug-only, so the demo profile must restore the Jaeger
+        OTLP exporter to make visual trace validation possible.
+        """
+        values = _load_values_yaml(VALUES_DEMO)
+        otel_config = values.get("otel", {}).get("config", {})
+        exporters = otel_config.get("exporters", {})
+        trace_exporters = (
+            otel_config.get("service", {})
+            .get("pipelines", {})
+            .get("traces", {})
+            .get("exporters", [])
+        )
+
+        assert "otlp/jaeger" in exporters, (
+            "values-demo.yaml must restore the otlp/jaeger exporter after "
+            "values-dev.yaml overrides the collector config."
+        )
+        assert "otlp/jaeger" in trace_exporters, (
+            "values-demo.yaml traces pipeline must export to Jaeger so "
+            "Customer 360 traces are visible in the demo."
         )
 
 

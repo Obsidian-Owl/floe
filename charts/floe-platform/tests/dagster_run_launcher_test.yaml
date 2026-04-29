@@ -28,3 +28,23 @@ tests:
       - notMatchRegex:
           path: data["dagster.yaml"]
           pattern: 'job_image:'
+
+  - it: should wire dev demo Dagster storage to the shared platform PostgreSQL
+    values:
+      - ../values-dev.yaml
+      - ../values-demo.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: 'hostname: "floe-platform-postgresql"'
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: 'username: floe'
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: 'db_name: dagster'
+      - notMatchRegex:
+          path: data["dagster.yaml"]
+          pattern: 'hostname: ""'

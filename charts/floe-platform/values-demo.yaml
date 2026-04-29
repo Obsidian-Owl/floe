@@ -51,13 +51,23 @@ dagster:
     replicaCount: 1
     image:
       <<: *dagsterDemoImage
+    service:
+      type: ClusterIP
+      port: 3000
+    readinessProbe:
+      httpGet:
+        path: /server_info
+        port: 3000
+      periodSeconds: 20
+      timeoutSeconds: 10
+      failureThreshold: 3
     resources:
       requests:
         cpu: 100m
-        memory: 256Mi
-      limits:
-        cpu: 500m
         memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1536Mi
 
   # Dagster daemon configuration
   dagsterDaemon:
@@ -67,13 +77,14 @@ dagster:
     resources:
       requests:
         cpu: 100m
-        memory: 256Mi
-      limits:
-        cpu: 500m
         memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1536Mi
     # Demo scheduling: 10-minute intervals
     env:
-      DAGSTER_DEFAULT_SCHEDULE_CRON: "*/10 * * * *"
+      - name: DAGSTER_DEFAULT_SCHEDULE_CRON
+        value: "*/10 * * * *"
 
   # Run launcher configuration
   runLauncher:
@@ -83,14 +94,26 @@ dagster:
         image:
           <<: *dagsterDemoImage
         imagePullPolicy: Never
+        # Run pods execute dbt, which writes partial-parse and run artifacts
+        # into /app/demo/*/target. Keep this aligned with values-test.yaml.
+        runK8sConfig:
+          containerConfig:
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: false
+              runAsNonRoot: true
+              runAsUser: 1000
+              capabilities:
+                drop:
+                  - ALL
         # Resources for run pods (light for demo)
         resources:
           requests:
             cpu: 100m
             memory: 256Mi
           limits:
-            cpu: 500m
-            memory: 512Mi
+            cpu: 1000m
+            memory: 1Gi
 
 # =============================================================================
 # Polaris Configuration (Iceberg Catalog - Demo)
@@ -99,7 +122,7 @@ polaris:
   enabled: true
   replicaCount: 1
   image:
-    tag: "1.3.0-incubating"
+    tag: "1.2.0-incubating"
   resources:
     requests:
       cpu: 100m
@@ -137,6 +160,13 @@ polaris:
     defaultBaseLocation: "s3://floe-iceberg"
     allowedLocations:
       - "s3://floe-iceberg"
+    grants:
+      enabled: true
+      catalogRole: "catalog_admin"
+      principalRole: "floe-pipeline"
+      bootstrapPrincipal: "root"
+      privileges:
+        - CATALOG_MANAGE_CONTENT
 
 # =============================================================================
 # OpenTelemetry Collector Configuration (Observability)
@@ -151,6 +181,28 @@ otel:
     limits:
       cpu: 500m
       memory: 512Mi
+  config:
+    exporters:
+      debug:
+        verbosity: detailed
+      otlp/jaeger:
+        endpoint: "{{ .Release.Name }}-jaeger-collector:4317"
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug, otlp/jaeger]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
 
 # =============================================================================
 # PostgreSQL Configuration (Metadata Store)
@@ -186,6 +238,15 @@ minio:
   persistence:
     enabled: true
     size: 5Gi  # Reduced for demo
+  auth:
+    rootUser: minioadmin
+    rootPassword: minioadmin123  # pragma: allowlist secret
+  provisioning:
+    # The upstream minio/minio image does not honor the Bitnami chart's
+    # defaultBuckets bootstrap contract. Keep demo aligned with the validated
+    # E2E profile by using the chart-owned fallback hook, which derives the
+    # warehouse bucket from polaris.bootstrap.defaultBaseLocation.
+    fallbackJob: true
   # Keep this list aligned with demo/manifest.yaml so the demo install path
   # exposes the same bucket contract the data-product manifest advertises.
   defaultBuckets: "floe-iceberg,floe-artifacts"

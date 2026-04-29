@@ -258,6 +258,11 @@ dagster:
   # Disable subchart's PostgreSQL - we use parent chart's PostgreSQL
   postgresql:
     enabled: false
+    # Dagster subchart uses these nested keys for storage config and init checks.
+    postgresqlHost: floe-platform-postgresql
+    postgresqlPort: 5432
+    postgresqlDatabase: dagster
+    postgresqlUsername: floe
 
   # External PostgreSQL configuration (uses parent chart's PostgreSQL)
   generatePostgresqlPasswordSecret: false

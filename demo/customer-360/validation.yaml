@@ -25,7 +25,7 @@ validation:
       - -H
       - "Content-Type: application/json"
       - --data
-      - '{"query":"query Customer360Runs { runsOrError(limit: 50) { __typename ... on Runs { results { runId status pipelineName } } } }"}'
+      - '{"query":"query Customer360Runs { runsOrError(limit: 50) { __typename ... on Runs { results { runId status pipelineName tags { key value } } } } }"}'
     dagster_expected_text: customer-360
     lineage_check_command:
       - curl
@@ -63,6 +63,10 @@ validation:
       - --
       - python
       - /app/demo/customer_360/scripts/customer360_metric.py
+      - --source
+      - iceberg
+      - --artifacts-path
+      - /app/demo/customer_360/compiled_artifacts.json
       - customer-count
     lifetime_value_command:
       - kubectl
@@ -73,4 +77,8 @@ validation:
       - --
       - python
       - /app/demo/customer_360/scripts/customer360_metric.py
+      - --source
+      - iceberg
+      - --artifacts-path
+      - /app/demo/customer_360/compiled_artifacts.json
       - total-lifetime-value
