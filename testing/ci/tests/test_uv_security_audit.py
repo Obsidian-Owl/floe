@@ -158,6 +158,13 @@ exit 99
 
 
 @pytest.mark.requirement("ALPHA-HARDENING")
+def test_uv_security_audit_declares_pip_audit_dependency() -> None:
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text()
+
+    assert '"pip-audit>=' in pyproject
+
+
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_uv_security_audit_retries_transient_scanner_crash(tmp_path: Path) -> None:
     state_file = tmp_path / "attempts"
     result = _run_audit_with_fake_uv(
