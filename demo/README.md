@@ -1,6 +1,6 @@
 # Floe Platform Demo
 
-Quick-start guide for running the Floe E2E demo platform with 3 complete data products.
+Quick-start guide for running the Floe alpha demo platform with 3 complete data products.
 
 ## Golden Alpha Demo
 
@@ -11,36 +11,46 @@ Customer 360 is the supported alpha demo path. Start with:
 
 ## Prerequisites
 
-- **Kind cluster**: `kind create cluster --config kind-config.yaml`
+- **DevPod workspace on Hetzner**: running and reachable with the configured `DEVPOD_WORKSPACE`.
+- **Kubeconfig sync**: `make devpod-sync` writes `${HOME}/.kube/devpod-floe.config`.
 - **Helm 3.12+**: `brew install helm` (macOS) or [official docs](https://helm.sh/docs/intro/install/)
 - **uv**: `curl -LsSf https://astral.sh/uv/install.sh | sh` (Python dependency manager)
+- **kubectl**: configured to use the DevPod kubeconfig for demo inspection.
 
 ## Quick Start
 
 ```bash
-# 1. Start the demo platform (all services + 3 data products)
+# 1. Sync the DevPod kubeconfig from the Hetzner workspace
+make devpod-sync
+
+# 2. Use the DevPod cluster for kubectl inspection
+export KUBECONFIG=${HOME}/.kube/devpod-floe.config
+
+# 3. Start the demo platform and service port-forwards
 make demo
 
-# 2. Access the web UIs (after ~3-5 minutes for all pods to be ready)
+# 4. Access the web UIs (after ~3-5 minutes for all pods to be ready)
 # - Dagster: http://localhost:3100 (orchestration)
 # - Polaris: http://localhost:8181 (data catalog)
 # - MinIO: http://localhost:9001 (object browser)
 # - Jaeger: http://localhost:16686 (distributed tracing)
 # - Marquez: http://localhost:5100 (data lineage)
 
-# 3. View logs
+# 5. View logs in the DevPod-backed cluster
 kubectl logs -n floe-dev -f deployment/floe-platform-dagster-webserver
 
-# 4. Stop demo port-forwards
+# 6. Stop demo port-forwards
 make demo-stop
 ```
+
+`make demo` deploys the platform services and starts port-forwards. Customer 360 outcome validation is tracked by the alpha release gate and is documented in the validation guide.
 
 ## Demo Products (3)
 
 | Product | Location | Description |
 |---------|----------|-------------|
 | **Customer 360** | `demo/customer-360/` | Consolidated customer master data (staging → intermediate → marts) |
-| **Financial Risk** | `demo/financial-risk/` | Risk metrics and portfolio analysis with Spark compute |
+| **Financial Risk** | `demo/financial-risk/` | Risk metrics and portfolio analysis with DuckDB compute |
 | **IoT Telemetry** | `demo/iot-telemetry/` | Real-time sensor data aggregation and anomaly detection |
 
 Each product demonstrates:
@@ -63,11 +73,15 @@ Each product demonstrates:
 ## Common Commands
 
 ```bash
-# Validate demo specifications
-make validate-demo
+# Compile all demo products
+make compile-demo
 
-# Compile one product
-floe compile demo/customer-360/
+# Compile one product and generate Dagster definitions
+uv run floe platform compile \
+  --spec demo/customer-360/floe.yaml \
+  --manifest demo/manifest.yaml \
+  --output demo/customer-360/compiled_artifacts.json \
+  --generate-definitions
 
 # Run unit tests
 make test-unit
@@ -75,25 +89,25 @@ make test-unit
 # Run full CI checks (lint, type, security, test)
 make check
 
-# View pod logs
-kubectl logs -n floe <pod-name>
+# View pod logs in the DevPod-backed cluster
+export KUBECONFIG=${HOME}/.kube/devpod-floe.config
+kubectl logs -n floe-dev <pod-name>
 
 # Port-forward to access Dagster manually
+export KUBECONFIG=${HOME}/.kube/devpod-floe.config
 kubectl port-forward -n floe-dev svc/floe-platform-dagster-webserver 3100:3000
 ```
 
 ## Demo Architecture
 
 ```
-Kind Cluster
+DevPod-backed Kubernetes cluster on Hetzner
 ├── floe-dev namespace
 │   ├── Dagster (orchestration + webserver)
 │   ├── Polaris (data catalog REST API)
 │   ├── MinIO (S3-compatible storage)
 │   ├── PostgreSQL (metadata database)
-│   └── Prometheus (metrics scraping)
-├── Monitoring
-│   ├── Grafana (dashboards)
+│   ├── OpenTelemetry Collector
 │   ├── Jaeger (distributed tracing)
 │   └── Marquez (lineage)
 └── Demo Jobs (K8s Jobs)
@@ -106,6 +120,7 @@ Kind Cluster
 
 **Pods not starting?**
 ```bash
+export KUBECONFIG=${HOME}/.kube/devpod-floe.config
 kubectl get pods -n floe-dev
 kubectl describe pod -n floe-dev <pod-name>
 ```
@@ -121,8 +136,11 @@ kill -9 $(lsof -t -i :3100)
 **Want to clean up completely?**
 ```bash
 make demo-stop
-kind delete cluster
 ```
+
+## Local Smoke Testing
+
+Local Kind remains useful for non-alpha smoke testing of Helm and image wiring, but it is not the supported alpha demo path. The alpha demo path is DevPod + Hetzner with `make devpod-sync` and `make demo`.
 
 ## Next Steps
 
