@@ -56,6 +56,7 @@ help: ## Show this help message
 	@echo "  make demo            Deploy demo via DevPod (requires running workspace)"
 	@echo "  make demo-stop       Stop demo port-forwards"
 	@echo "  make demo-local      Deploy demo locally (requires local Kind cluster)"
+	@echo "  make demo-customer-360-validate Validate Customer 360 golden demo evidence"
 	@echo ""
 	@echo "DevPod (Remote E2E):"
 	@echo "  make devpod-setup    One-time Hetzner provider setup from .env"
@@ -352,12 +353,17 @@ helm-test-infra: ## Verify test infrastructure is healthy
 # Demo Targets
 # ============================================================
 
-.PHONY: compile-demo build-demo-image demo demo-local demo-stop
+.PHONY: compile-demo build-demo-image demo demo-local demo-stop demo-customer-360-validate
 
 DEMO_MANIFEST ?= demo/manifest.yaml
 DEMO_IMAGE_REPOSITORY ?= floe-dagster-demo
 DEMO_IMAGE_TAG ?= $(shell python3 testing/ci/resolve-demo-image-ref.py --field tag)
 DEMO_IMAGE_REF ?= $(DEMO_IMAGE_REPOSITORY):$(DEMO_IMAGE_TAG)
+FLOE_DEMO_NAMESPACE ?= floe-dev
+FLOE_DEMO_DAGSTER_URL ?= http://localhost:3100
+FLOE_DEMO_MARQUEZ_URL ?= http://localhost:5100
+FLOE_DEMO_JAEGER_URL ?= http://localhost:16686
+FLOE_DEMO_STORAGE_EXPECTED_TEXT ?= customer_360
 DEMO_IMAGE_HELM_SET_ARGS = \
 	--set dagster.dagsterWebserver.image.repository=$(DEMO_IMAGE_REPOSITORY) \
 	--set dagster.dagsterWebserver.image.tag=$(DEMO_IMAGE_TAG) \
@@ -487,6 +493,17 @@ demo-local: build-demo-image ## Deploy demo locally (requires local Kind cluster
 	@echo "MinIO Console: http://localhost:9001"
 	@echo ""
 	@echo "Stop with: helm uninstall floe-platform -n floe-dev"
+
+demo-customer-360-validate: ## Validate Customer 360 golden demo evidence
+	@FLOE_DEMO_NAMESPACE="$(FLOE_DEMO_NAMESPACE)" \
+	FLOE_DEMO_DAGSTER_URL="$(FLOE_DEMO_DAGSTER_URL)" \
+	FLOE_DEMO_MARQUEZ_URL="$(FLOE_DEMO_MARQUEZ_URL)" \
+	FLOE_DEMO_JAEGER_URL="$(FLOE_DEMO_JAEGER_URL)" \
+	FLOE_DEMO_STORAGE_EXPECTED_TEXT="$(FLOE_DEMO_STORAGE_EXPECTED_TEXT)" \
+	FLOE_DEMO_STORAGE_CHECK_COMMAND="$(FLOE_DEMO_STORAGE_CHECK_COMMAND)" \
+	FLOE_DEMO_CUSTOMER_COUNT_COMMAND="$(FLOE_DEMO_CUSTOMER_COUNT_COMMAND)" \
+	FLOE_DEMO_LIFETIME_VALUE_COMMAND="$(FLOE_DEMO_LIFETIME_VALUE_COMMAND)" \
+	uv run python testing/ci/validate-customer-360-demo.py
 
 # ============================================================
 # Development Helpers
