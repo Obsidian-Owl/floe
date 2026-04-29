@@ -36,7 +36,9 @@ This file is a validation evidence template for `v0.1.0-alpha.1`. It is not proo
 
 Status: Known post-alpha architecture debt.
 
-Alpha posture: #263 is not blocking `v0.1.0-alpha.1` because the alpha Customer 360 stack intentionally includes Iceberg and `floe-iceberg`.
+Issue: https://github.com/Obsidian-Owl/floe/issues/263
+
+Alpha posture: #263 is the explicitly approved non-blocking alpha limitation. It is not blocking `v0.1.0-alpha.1` because the alpha Customer 360 stack intentionally includes Iceberg and `floe-iceberg`.
 
 The alpha release does not promise Dagster runs without `floe-iceberg` installed when Iceberg export is disabled.
 
@@ -44,7 +46,7 @@ Promotion rule: if the alpha promise changes to support Dagster without Iceberg,
 
 ## Release Decision
 
-Alpha tag is blocked until every required gate is PASS or classified as a non-blocking known limitation.
+Alpha tag is blocked until every required validation gate is PASS. #263 is the only pre-approved non-blocking alpha limitation in this evidence record.
 
 Decision: `TODO: PASS / BLOCKED`
 
