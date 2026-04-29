@@ -82,21 +82,79 @@ exit 2
 
 
 @pytest.mark.requirement("ALPHA-HARDENING")
-def test_uv_security_audit_fails_closed_when_scanner_crashes_without_vulnerabilities(
+def test_uv_security_audit_falls_back_to_pip_audit_when_uv_secure_crashes(
     tmp_path: Path,
 ) -> None:
     result = _run_audit_with_fake_uv(
         tmp_path,
         """#!/usr/bin/env bash
-printf 'Traceback (most recent call last):\\n'
-printf 'RuntimeError: scanner crashed before analysis\\n'
-exit 3
+if [[ "$*" == *"uv-secure"* ]]; then
+  printf 'Traceback (most recent call last):\\n'
+  printf 'RuntimeError: scanner crashed before analysis\\n'
+  exit 3
+fi
+if [[ "$1" == "export" ]]; then
+  output_file=""
+  while [[ "$#" -gt 0 ]]; do
+    if [[ "$1" == "--output-file" ]]; then
+      output_file="$2"
+      shift 2
+      continue
+    fi
+    shift
+  done
+  printf 'safe-package==1.2.3\\n-e ./packages/floe-core\\n' > "${output_file:?}"
+  exit 0
+fi
+if [[ "$*" == *"pip-audit"* ]]; then
+  printf 'No known vulnerabilities found\\n'
+  exit 0
+fi
+exit 99
+""",
+    )
+
+    assert result.returncode == 0
+    assert "Traceback (most recent call last):" in result.stdout
+    assert "uv-secure scanner crashed after 3 attempts" in result.stderr
+    assert "running pip-audit fallback" in result.stderr
+
+
+@pytest.mark.requirement("ALPHA-HARDENING")
+def test_uv_security_audit_fails_when_pip_audit_fallback_finds_vulnerability(
+    tmp_path: Path,
+) -> None:
+    result = _run_audit_with_fake_uv(
+        tmp_path,
+        """#!/usr/bin/env bash
+if [[ "$*" == *"uv-secure"* ]]; then
+  printf 'RuntimeError: scanner crashed before analysis\\n'
+  exit 3
+fi
+if [[ "$1" == "export" ]]; then
+  output_file=""
+  while [[ "$#" -gt 0 ]]; do
+    if [[ "$1" == "--output-file" ]]; then
+      output_file="$2"
+      shift 2
+      continue
+    fi
+    shift
+  done
+  printf 'vulnerable-package==1.2.3\\n' > "${output_file:?}"
+  exit 0
+fi
+if [[ "$*" == *"pip-audit"* ]]; then
+  printf 'Found 1 known vulnerability\\n'
+  exit 1
+fi
+exit 99
 """,
     )
 
     assert result.returncode == 1
-    assert "Traceback (most recent call last):" in result.stdout
-    assert "uv-secure scanner crashed" in result.stderr
+    assert "Found 1 known vulnerability" in result.stdout
+    assert "running pip-audit fallback" in result.stderr
 
 
 @pytest.mark.requirement("ALPHA-HARDENING")
