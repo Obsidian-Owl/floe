@@ -20,8 +20,9 @@ make demo-stop
 ## Success Criteria
 
 - Demo artifacts compile before deployment.
-- `make demo` starts the demo workflow against the configured Devpod workspace.
-- Service tunnels are available for Dagster, MinIO, Marquez, Jaeger, Polaris, and OTLP.
+- `make demo` starts the demo workflow against the configured DevPod workspace.
+- `make demo` starts and owns the port-forwards needed by the automated demo flow.
+- `make devpod-tunnels` is not required before `make demo`; use it separately for manual UI inspection.
 - `make demo-stop` stops local port-forward processes when validation is complete.
 
 ## Next Step

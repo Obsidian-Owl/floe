@@ -19,7 +19,7 @@ make docs-validate
 
 ## Success Criteria
 
-- `make help` lists the docs, demo, Helm, Kind, and Devpod targets.
+- `make help` lists the docs, demo, Helm, Kind, and DevPod targets.
 - `make docs-build` completes with MkDocs strict mode enabled.
 - You have selected either the platform deployment guide or the data product guide.
 
