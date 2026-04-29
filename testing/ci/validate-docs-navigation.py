@@ -47,7 +47,11 @@ def _walk_nav_items(items: list[Any]) -> set[str]:
 
 
 def _link_target(raw_target: str) -> str | None:
-    target = raw_target.strip().split()[0]
+    target_parts = raw_target.strip().split()
+    if not target_parts:
+        return None
+
+    target = target_parts[0]
     if not target or target.startswith("#") or target.startswith("/"):
         return None
 

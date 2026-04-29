@@ -124,3 +124,17 @@ def test_validate_docs_navigation_accepts_valid_required_doc_link(
     )
 
     assert validate_docs_navigation(tmp_path) == []
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_validate_docs_navigation_ignores_whitespace_only_doc_link(
+    tmp_path: Path,
+) -> None:
+    """Navigation validation ignores placeholder Markdown links."""
+    _write_required_docs(tmp_path)
+    (tmp_path / "mkdocs.yml").write_text(REQUIRED_NAV)
+    (tmp_path / "docs/start-here/index.md").write_text(
+        "# Start Here\n\nSee [placeholder]( ).\n",
+    )
+
+    assert validate_docs_navigation(tmp_path) == []
