@@ -13,7 +13,7 @@ import duckdb
 import pyarrow.compute as pc
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 from floe_orchestrator_dagster.validation.iceberg_outputs import (
-    _connect_catalog_from_artifacts,
+    connect_catalog_from_artifacts,
     expected_iceberg_tables,
 )
 
@@ -65,7 +65,7 @@ def query_metric(
             raise ValueError("--artifacts-path is required when --source=iceberg")
         artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
         table_identifier = expected_iceberg_tables(artifacts, [table])[0]
-        iceberg_table = _connect_catalog_from_artifacts(artifacts).load_table(table_identifier)
+        iceberg_table = connect_catalog_from_artifacts(artifacts).load_table(table_identifier)
         if metric == "customer-count":
             arrow_table = iceberg_table.scan(selected_fields=("customer_id",)).to_arrow()
             return arrow_table.num_rows

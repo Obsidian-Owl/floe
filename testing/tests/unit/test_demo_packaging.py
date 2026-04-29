@@ -1347,6 +1347,7 @@ class TestDemoPluginResolver:
             [sys.executable, str(DEMO_PLUGIN_RESOLVER), "--manifest", str(DEMO_MANIFEST)],
             check=True,
             capture_output=True,
+            shell=False,
             text=True,
         )
 
@@ -1376,6 +1377,7 @@ class TestDemoPluginResolver:
             [sys.executable, str(DEMO_PLUGIN_RESOLVER), "--manifest", str(manifest_path)],
             check=True,
             capture_output=True,
+            shell=False,
             text=True,
         )
 

@@ -103,7 +103,7 @@ def test_reset_iceberg_outputs_drops_expected_tables(monkeypatch: pytest.MonkeyP
     """Reset mode drops expected output registrations before validation."""
     artifacts = _make_artifacts(model_names=["mart_customer_360", "int_customer_orders"])
     catalog = MagicMock()
-    monkeypatch.setattr(iceberg_outputs, "_connect_catalog_from_artifacts", lambda _: catalog)
+    monkeypatch.setattr(iceberg_outputs, "connect_catalog_from_artifacts", lambda _: catalog)
 
     dropped = iceberg_outputs.reset_iceberg_outputs(artifacts)
 
@@ -122,7 +122,7 @@ def test_reset_iceberg_outputs_tolerates_missing_tables(
     artifacts = _make_artifacts(model_names=["mart_customer_360", "int_customer_orders"])
     catalog = MagicMock()
     catalog.drop_table.side_effect = [None, RuntimeError("Table not found")]
-    monkeypatch.setattr(iceberg_outputs, "_connect_catalog_from_artifacts", lambda _: catalog)
+    monkeypatch.setattr(iceberg_outputs, "connect_catalog_from_artifacts", lambda _: catalog)
 
     dropped = iceberg_outputs.reset_iceberg_outputs(artifacts)
 

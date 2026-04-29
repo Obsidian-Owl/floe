@@ -769,7 +769,7 @@ def test_customer360_metric_script_queries_iceberg_metrics(
         SimpleNamespace(model_validate_json=lambda _content: object()),
     )
     monkeypatch.setattr(module, "expected_iceberg_tables", lambda _artifacts, tables: tables)
-    monkeypatch.setattr(module, "_connect_catalog_from_artifacts", lambda _artifacts: fake_catalog)
+    monkeypatch.setattr(module, "connect_catalog_from_artifacts", lambda _artifacts: fake_catalog)
 
     count = module.query_metric(
         source="iceberg",
