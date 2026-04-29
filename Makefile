@@ -31,6 +31,11 @@ help: ## Show this help message
 	@echo "  make typecheck       Run type checking (mypy)"
 	@echo "  make check           Run all CI checks (lint + typecheck + test)"
 	@echo ""
+	@echo "Documentation:"
+	@echo "  make docs-build      Build documentation site"
+	@echo "  make docs-serve      Serve documentation site locally"
+	@echo "  make docs-validate   Validate docs navigation and build"
+	@echo ""
 	@echo "Helm Charts:"
 	@echo "  make helm-deps       Update Helm chart dependencies"
 	@echo "  make helm-lint       Lint Helm charts"
@@ -160,6 +165,21 @@ typecheck: ## Run type checking (mypy --strict)
 .PHONY: check
 check: lint typecheck test ## Run all CI checks (lint + typecheck + test)
 	@echo "All checks passed!"
+
+# ============================================================
+# Documentation
+# ============================================================
+
+.PHONY: docs-build docs-serve docs-validate
+docs-build: ## Build documentation site
+	@uv run mkdocs build --strict
+
+docs-serve: ## Serve documentation site locally
+	@uv run mkdocs serve
+
+docs-validate: ## Validate docs navigation and build
+	@uv run python testing/ci/validate-docs-navigation.py
+	@uv run mkdocs build --strict
 
 # ============================================================
 # Helm Chart Targets
