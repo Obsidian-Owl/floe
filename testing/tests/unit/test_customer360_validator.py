@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import importlib
 import importlib.util
 import json
@@ -727,6 +728,39 @@ def test_customer360_metric_script_queries_duckdb_metrics(tmp_path: Path) -> Non
 
 
 @pytest.mark.requirement("alpha-demo")
+def test_customer360_metric_script_duckdb_mode_imports_without_iceberg_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default DuckDB metric mode must not require Iceberg-only runtime packages."""
+    script = Path("demo/customer-360/scripts/customer360_metric.py")
+    real_import = builtins.__import__
+
+    def guarded_import(
+        name: str,
+        globals: dict[str, object] | None = None,
+        locals: dict[str, object] | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> object:
+        if name == "pyarrow" or name.startswith("pyarrow."):
+            raise ModuleNotFoundError(name)
+        if name == "floe_orchestrator_dagster" or name.startswith("floe_orchestrator_dagster."):
+            raise ModuleNotFoundError(name)
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
+    spec = importlib.util.spec_from_file_location("customer360_metric_duckdb_only", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    parser = module.build_parser()
+    args = parser.parse_args(["customer-count"])
+
+    assert args.source == "duckdb"
+
+
+@pytest.mark.requirement("alpha-demo")
 def test_customer360_metric_script_queries_iceberg_metrics(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -763,13 +797,18 @@ def test_customer360_metric_script_queries_iceberg_metrics(
             return FakeTable()
 
     fake_catalog = FakeCatalog()
+    import pyarrow.compute as pc
+
     monkeypatch.setattr(
         module,
-        "CompiledArtifacts",
-        SimpleNamespace(model_validate_json=lambda _content: object()),
+        "_load_iceberg_dependencies",
+        lambda: (
+            pc,
+            SimpleNamespace(model_validate_json=lambda _content: object()),
+            lambda _artifacts, tables: tables,
+            lambda _artifacts: fake_catalog,
+        ),
     )
-    monkeypatch.setattr(module, "expected_iceberg_tables", lambda _artifacts, tables: tables)
-    monkeypatch.setattr(module, "connect_catalog_from_artifacts", lambda _artifacts: fake_catalog)
 
     count = module.query_metric(
         source="iceberg",

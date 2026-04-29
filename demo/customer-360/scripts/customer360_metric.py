@@ -8,14 +8,9 @@ import sys
 from collections.abc import Sequence
 from contextlib import redirect_stdout
 from pathlib import Path
+from typing import Any
 
 import duckdb
-import pyarrow.compute as pc
-from floe_core.schemas.compiled_artifacts import CompiledArtifacts
-from floe_orchestrator_dagster.validation.iceberg_outputs import (
-    connect_catalog_from_artifacts,
-    expected_iceberg_tables,
-)
 
 DEFAULT_DATABASE = "/tmp/floe/customer_360.duckdb"
 DEFAULT_TABLE = "mart_customer_360"
@@ -28,6 +23,18 @@ def _identifier(value: str, field_name: str) -> str:
     if not IDENTIFIER_RE.fullmatch(value):
         raise argparse.ArgumentTypeError(f"{field_name} must be a simple SQL identifier")
     return value
+
+
+def _load_iceberg_dependencies() -> tuple[Any, type[Any], Any, Any]:
+    """Load Iceberg-only dependencies when the Iceberg metric source is selected."""
+    import pyarrow.compute as pc
+    from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+    from floe_orchestrator_dagster.validation.iceberg_outputs import (
+        connect_catalog_from_artifacts,
+        expected_iceberg_tables,
+    )
+
+    return pc, CompiledArtifacts, expected_iceberg_tables, connect_catalog_from_artifacts
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -63,9 +70,15 @@ def query_metric(
     if source == "iceberg":
         if artifacts_path is None:
             raise ValueError("--artifacts-path is required when --source=iceberg")
-        artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
-        table_identifier = expected_iceberg_tables(artifacts, [table])[0]
-        iceberg_table = connect_catalog_from_artifacts(artifacts).load_table(table_identifier)
+        (
+            pc,
+            compiled_artifacts_cls,
+            expected_tables,
+            connect_catalog,
+        ) = _load_iceberg_dependencies()
+        artifacts = compiled_artifacts_cls.model_validate_json(artifacts_path.read_text())
+        table_identifier = expected_tables(artifacts, [table])[0]
+        iceberg_table = connect_catalog(artifacts).load_table(table_identifier)
         if metric == "customer-count":
             arrow_table = iceberg_table.scan(selected_fields=("customer_id",)).to_arrow()
             return arrow_table.num_rows
