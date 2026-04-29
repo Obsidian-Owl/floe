@@ -1,0 +1,76 @@
+apiVersion: floe.dev/v1
+kind: Customer360Validation
+metadata:
+  name: customer-360
+  version: 1.0.0
+  description: Default validation evidence plan for the Customer 360 golden demo.
+validation:
+  namespace: floe-dev
+  urls:
+    dagster: http://localhost:3100
+    marquez: http://localhost:5100
+    jaeger: http://localhost:16686
+  platform_expected_services:
+    - dagster
+    - polaris
+    - minio
+    - jaeger
+    - marquez
+  command_timeout_seconds: 30
+  evidence:
+    dagster_run_check_command:
+      - curl
+      - -fsS
+      - http://localhost:3100/graphql
+      - -H
+      - "Content-Type: application/json"
+      - --data
+      - '{"query":"query Customer360Runs { runsOrError(limit: 50) { __typename ... on Runs { results { runId status pipelineName } } } }"}'
+    dagster_expected_text: customer-360
+    lineage_check_command:
+      - curl
+      - -fsS
+      - http://localhost:5100/api/v1/namespaces/customer-360/jobs
+    lineage_expected_text: mart_customer_360
+    tracing_check_command:
+      - curl
+      - -fsS
+      - "http://localhost:16686/api/traces?service=customer-360&limit=20"
+    tracing_expected_text: customer-360
+    storage_check_command:
+      - kubectl
+      - exec
+      - -n
+      - floe-dev
+      - deployment/floe-platform-dagster-webserver
+      - --
+      - python
+      - -m
+      - floe_orchestrator_dagster.validation.iceberg_outputs
+      - --artifacts-path
+      - /app/demo/customer_360/compiled_artifacts.json
+      - --expected-table
+      - mart_customer_360
+      - --recovery-mode
+      - repair
+    storage_expected_text: tables_validated
+    customer_count_command:
+      - kubectl
+      - exec
+      - -n
+      - floe-dev
+      - deployment/floe-platform-dagster-webserver
+      - --
+      - python
+      - /app/demo/customer_360/scripts/customer360_metric.py
+      - customer-count
+    lifetime_value_command:
+      - kubectl
+      - exec
+      - -n
+      - floe-dev
+      - deployment/floe-platform-dagster-webserver
+      - --
+      - python
+      - /app/demo/customer_360/scripts/customer360_metric.py
+      - total-lifetime-value

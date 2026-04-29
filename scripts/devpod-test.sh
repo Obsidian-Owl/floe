@@ -31,6 +31,8 @@
 #   DEVPOD_ENABLE_REMOTE_TUNNELS Set to 1 to establish host service tunnels
 #                        before remote E2E. Default 0 because remote tests run
 #                        inside the DevPod workspace network.
+#   DEVPOD_KUBECONFIG   Local kubeconfig path for local E2E fallback
+#                        (default: ~/.kube/devpod-${DEVPOD_WORKSPACE}.config)
 
 set -euo pipefail
 
@@ -47,7 +49,7 @@ if [[ "${DEVCONTAINER}" != .devcontainer/* ]]; then
     echo "[devpod-test] ERROR: DEVPOD_DEVCONTAINER must be a relative path under .devcontainer/. Got: '${DEVCONTAINER}'" >&2
     exit 1
 fi
-KUBECONFIG_PATH="${HOME}/.kube/devpod-${WORKSPACE}.config"
+KUBECONFIG_PATH="${DEVPOD_KUBECONFIG:-${HOME}/.kube/devpod-${WORKSPACE}.config}"
 HEALTH_TIMEOUT="${DEVPOD_HEALTH_TIMEOUT:-120}"
 NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 PROVIDER="${DEVPOD_PROVIDER:-hetzner}"

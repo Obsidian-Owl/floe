@@ -21,6 +21,14 @@ floe is an Apache 2.0 licensed Python framework that provides:
 | [contracts/](./contracts/) | Interface contracts (schema ownership) |
 | [guides/](./guides/) | arc42 implementation guides |
 
+## Alpha User Journeys
+
+- [Start Here](./start-here/index.md)
+- [Deploy your first platform](./get-started/first-platform.md)
+- [Build your first data product](./get-started/first-data-product.md)
+- [Customer 360 golden demo](./demo/customer-360.md)
+- [Customer 360 validation](./demo/customer-360-validation.md)
+
 ## Architecture Documentation
 
 | Document | Description |

@@ -31,6 +31,11 @@ help: ## Show this help message
 	@echo "  make typecheck       Run type checking (mypy)"
 	@echo "  make check           Run all CI checks (lint + typecheck + test)"
 	@echo ""
+	@echo "Documentation:"
+	@echo "  make docs-build      Build documentation site"
+	@echo "  make docs-serve      Serve documentation site locally"
+	@echo "  make docs-validate   Validate docs navigation and build"
+	@echo ""
 	@echo "Helm Charts:"
 	@echo "  make helm-deps       Update Helm chart dependencies"
 	@echo "  make helm-lint       Lint Helm charts"
@@ -51,6 +56,7 @@ help: ## Show this help message
 	@echo "  make demo            Deploy demo via DevPod (requires running workspace)"
 	@echo "  make demo-stop       Stop demo port-forwards"
 	@echo "  make demo-local      Deploy demo locally (requires local Kind cluster)"
+	@echo "  make demo-customer-360-validate Validate Customer 360 golden demo evidence"
 	@echo ""
 	@echo "DevPod (Remote E2E):"
 	@echo "  make devpod-setup    One-time Hetzner provider setup from .env"
@@ -160,6 +166,21 @@ typecheck: ## Run type checking (mypy --strict)
 .PHONY: check
 check: lint typecheck test ## Run all CI checks (lint + typecheck + test)
 	@echo "All checks passed!"
+
+# ============================================================
+# Documentation
+# ============================================================
+
+.PHONY: docs-build docs-serve docs-validate
+docs-build: ## Build documentation site
+	@uv run mkdocs build --strict
+
+docs-serve: ## Serve documentation site locally
+	@uv run mkdocs serve
+
+docs-validate: ## Validate docs navigation and build
+	@uv run python testing/ci/validate-docs-navigation.py
+	@uv run mkdocs build --strict
 
 # ============================================================
 # Helm Chart Targets
@@ -332,12 +353,28 @@ helm-test-infra: ## Verify test infrastructure is healthy
 # Demo Targets
 # ============================================================
 
-.PHONY: compile-demo build-demo-image demo demo-local demo-stop
+.PHONY: compile-demo build-demo-image demo demo-local demo-stop demo-customer-360-validate
 
 DEMO_MANIFEST ?= demo/manifest.yaml
 DEMO_IMAGE_REPOSITORY ?= floe-dagster-demo
 DEMO_IMAGE_TAG ?= $(shell python3 testing/ci/resolve-demo-image-ref.py --field tag)
 DEMO_IMAGE_REF ?= $(DEMO_IMAGE_REPOSITORY):$(DEMO_IMAGE_TAG)
+export FLOE_DEMO_NAMESPACE ?= floe-dev
+export FLOE_DEMO_DAGSTER_URL ?= http://localhost:3100
+export FLOE_DEMO_MARQUEZ_URL ?= http://localhost:5100
+export FLOE_DEMO_JAEGER_URL ?= http://localhost:16686
+export FLOE_DEMO_PLATFORM_EXPECTED_SERVICES ?= dagster,polaris,minio,jaeger,marquez
+export FLOE_DEMO_COMMAND_TIMEOUT_SECONDS ?= 30
+export FLOE_DEMO_DAGSTER_EXPECTED_TEXT
+export FLOE_DEMO_LINEAGE_EXPECTED_TEXT
+export FLOE_DEMO_TRACING_EXPECTED_TEXT
+export FLOE_DEMO_STORAGE_EXPECTED_TEXT
+export FLOE_DEMO_DAGSTER_RUN_CHECK_COMMAND
+export FLOE_DEMO_LINEAGE_CHECK_COMMAND
+export FLOE_DEMO_TRACING_CHECK_COMMAND
+export FLOE_DEMO_STORAGE_CHECK_COMMAND
+export FLOE_DEMO_CUSTOMER_COUNT_COMMAND
+export FLOE_DEMO_LIFETIME_VALUE_COMMAND
 DEMO_IMAGE_HELM_SET_ARGS = \
 	--set dagster.dagsterWebserver.image.repository=$(DEMO_IMAGE_REPOSITORY) \
 	--set dagster.dagsterWebserver.image.tag=$(DEMO_IMAGE_TAG) \
@@ -412,7 +449,7 @@ demo: ## Deploy demo via DevPod (requires running DevPod workspace)
 	@echo "Updating Helm chart dependencies..."
 	@helm dependency update charts/floe-platform
 	@echo "Deploying Helm chart via tunneled kubectl..."
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config uv run floe platform deploy \
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" uv run floe platform deploy \
 		--env dev --chart ./charts/floe-platform \
 		--values ./charts/floe-platform/values-demo.yaml \
 		$(DEMO_IMAGE_HELM_SET_ARGS)
@@ -421,12 +458,12 @@ demo: ## Deploy demo via DevPod (requires running DevPod workspace)
 		kill $$(cat .demo-pids) 2>/dev/null || true; \
 		rm -f .demo-pids; \
 	fi
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-marquez 5100:5000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG=$(HOME)/.kube/devpod-floe.config kubectl port-forward svc/floe-platform-otel 4317:4317 4318:4318 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-marquez 5100:5000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-otel 4317:4317 4318:4318 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
 	@echo ""
 	@echo "=== Demo Ready ==="
 	@echo "Dagster UI:    http://localhost:3100"
@@ -467,6 +504,9 @@ demo-local: build-demo-image ## Deploy demo locally (requires local Kind cluster
 	@echo "MinIO Console: http://localhost:9001"
 	@echo ""
 	@echo "Stop with: helm uninstall floe-platform -n floe-dev"
+
+demo-customer-360-validate: ## Validate Customer 360 golden demo evidence
+	@uv run python -m testing.ci.validate_customer_360_demo
 
 # ============================================================
 # Development Helpers
@@ -633,6 +673,7 @@ cognee-test: cognee-check-env ## Run quality validation tests (VERBOSE=1, THRESH
 DEVPOD_WORKSPACE ?= floe
 DEVPOD_PROVIDER ?= hetzner
 DEVPOD_DEVCONTAINER ?= .devcontainer/hetzner/devcontainer.json
+DEVPOD_KUBECONFIG ?= $(HOME)/.kube/devpod-$(DEVPOD_WORKSPACE).config
 
 .PHONY: devpod-check
 devpod-check:
@@ -693,10 +734,10 @@ devpod-delete: devpod-check ## Delete DevPod workspace (stops billing)
 .PHONY: devpod-status
 devpod-status: devpod-check ## Show workspace status, tunnels, and cluster health
 	@echo "=== Workspace Status ==="
-	@devpod status $(DEVPOD_WORKSPACE) 2>/dev/null || echo "Workspace '$(DEVPOD_WORKSPACE)' not running"
+	@devpod status "$(DEVPOD_WORKSPACE)" 2>/dev/null || echo "Workspace '$(DEVPOD_WORKSPACE)' not running"
 	@echo ""
 	@echo "=== Tunnel Status ==="
 	@scripts/devpod-tunnels.sh --status 2>/dev/null || echo "No tunnels active"
 	@echo ""
 	@echo "=== Cluster Health ==="
-	@KUBECONFIG="$${HOME}/.kube/devpod-floe.config" kubectl cluster-info 2>/dev/null || echo "Cluster not reachable"
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl cluster-info 2>/dev/null || echo "Cluster not reachable"

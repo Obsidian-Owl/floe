@@ -163,8 +163,9 @@ make test-e2e-host
 standard `platform_blackbox and not destructive` suite as a Kubernetes Job.
 When `DEVPOD_WORKSPACE` is set and the current kube context is not already
 usable, the runner validates the DevPod workspace and reuses the synced
-`~/.kube/devpod-floe.config`. Otherwise it runs against the current local Kind
-cluster.
+`DEVPOD_KUBECONFIG` path, which defaults to
+`~/.kube/devpod-${DEVPOD_WORKSPACE}.config`. Otherwise it runs against the
+current local Kind cluster.
 
 `make test-e2e-full` runs `testing/ci/test-e2e-full.sh`, which executes the
 host-side `bootstrap` lane first, then the standard in-cluster

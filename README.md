@@ -334,6 +334,15 @@ floe provides **batteries-included OSS defaults** that run on any Kubernetes clu
 
 ## Documentation
 
+The alpha documentation site is built from `docs/` with MkDocs:
+
+```bash
+make docs-build
+make docs-serve
+```
+
+Start with [docs/start-here/index.md](docs/start-here/index.md).
+
 - **Getting Started**: [Quick Start Guide](docs/guides/00-overview.md)
 - **Configuration**: [Configuration Contracts](docs/contracts/index.md) (manifest.yaml + floe.yaml)
 - **Architecture**: [Four-Layer Model](docs/architecture/four-layer-overview.md) • [Platform Enforcement](docs/architecture/platform-enforcement.md)

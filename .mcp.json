@@ -4,7 +4,7 @@
       "command": "npx",
       "args": ["-y", "kubernetes-mcp-server@0.0.59"],
       "env": {
-        "KUBECONFIG": "~/.kube/devpod-floe.config"
+        "KUBECONFIG": "${DEVPOD_KUBECONFIG:-~/.kube/devpod-${DEVPOD_WORKSPACE:-floe}.config}"
       }
     }
   }
