@@ -3,16 +3,15 @@
     "docs/architecture/",
     "docs/contracts/",
     "docs/contributing/",
+    "docs/data-engineers/",
     "docs/demo/",
     "docs/get-started/",
     "docs/guides/",
     "docs/index.md",
-    "docs/operations/",
+    "docs/platform-engineers/",
     "docs/reference/",
     "docs/releases/",
-    "docs/start-here/",
-    "docs/testing/",
-    "docs/validation/"
+    "docs/start-here/"
   ],
   "excludePrefixes": [
     "docs/analysis/",
@@ -31,12 +30,7 @@
           "title": "Home",
           "source": "docs/index.md",
           "slug": "index"
-        }
-      ]
-    },
-    {
-      "label": "Start Here",
-      "items": [
+        },
         {
           "title": "Start Here",
           "source": "docs/start-here/index.md",
@@ -45,47 +39,57 @@
       ]
     },
     {
-      "label": "Get Started",
+      "label": "Platform Engineers",
       "items": [
         {
-          "title": "Get Started",
-          "source": "docs/get-started/index.md",
-          "slug": "get-started"
+          "title": "Platform Engineers",
+          "source": "docs/platform-engineers/index.md",
+          "slug": "platform-engineers"
         },
         {
           "title": "Deploy Your First Platform",
-          "source": "docs/get-started/first-platform.md",
-          "slug": "get-started/first-platform"
+          "source": "docs/platform-engineers/first-platform.md",
+          "slug": "platform-engineers/first-platform"
         },
         {
-          "title": "Build Your First Data Product",
-          "source": "docs/get-started/first-data-product.md",
-          "slug": "get-started/first-data-product"
+          "title": "Validate Your Platform",
+          "source": "docs/platform-engineers/validate-platform.md",
+          "slug": "platform-engineers/validate-platform"
+        },
+        {
+          "title": "Deployment Guides",
+          "source": "docs/guides/deployment/index.md",
+          "slug": "guides/deployment"
         }
       ]
     },
     {
-      "label": "Demo",
+      "label": "Data Engineers",
       "items": [
         {
-          "title": "Demo",
-          "source": "docs/demo/index.md",
-          "slug": "demo"
+          "title": "Data Engineers",
+          "source": "docs/data-engineers/index.md",
+          "slug": "data-engineers"
+        },
+        {
+          "title": "Build Your First Data Product",
+          "source": "docs/data-engineers/first-data-product.md",
+          "slug": "data-engineers/first-data-product"
+        },
+        {
+          "title": "Validate Your Data Product",
+          "source": "docs/data-engineers/validate-data-product.md",
+          "slug": "data-engineers/validate-data-product"
         },
         {
           "title": "Customer 360 Golden Demo",
           "source": "docs/demo/customer-360.md",
           "slug": "demo/customer-360"
-        },
-        {
-          "title": "Customer 360 Validation",
-          "source": "docs/demo/customer-360-validation.md",
-          "slug": "demo/customer-360-validation"
         }
       ]
     },
     {
-      "label": "Concepts",
+      "label": "Architecture",
       "items": [
         {
           "title": "Architecture Summary",
@@ -108,34 +112,9 @@
           "slug": "architecture/opinionation-boundaries"
         },
         {
-          "title": "Compiled Artifacts",
-          "source": "docs/contracts/compiled-artifacts.md",
-          "slug": "contracts/compiled-artifacts"
-        }
-      ]
-    },
-    {
-      "label": "Operations",
-      "items": [
-        {
-          "title": "DevPod + Hetzner",
-          "source": "docs/operations/devpod-hetzner.md",
-          "slug": "operations/devpod-hetzner"
-        },
-        {
-          "title": "Troubleshooting",
-          "source": "docs/operations/troubleshooting.md",
-          "slug": "operations/troubleshooting"
-        },
-        {
-          "title": "Deployment Guides",
-          "source": "docs/guides/deployment/index.md",
-          "slug": "guides/deployment"
-        },
-        {
-          "title": "Testing",
-          "source": "docs/guides/testing/index.md",
-          "slug": "guides/testing"
+          "title": "Capability Status",
+          "source": "docs/architecture/capability-status.md",
+          "slug": "architecture/capability-status"
         }
       ]
     },
@@ -153,6 +132,11 @@
           "slug": "reference/floe-yaml-schema"
         },
         {
+          "title": "Compiled Artifacts",
+          "source": "docs/contracts/compiled-artifacts.md",
+          "slug": "contracts/compiled-artifacts"
+        },
+        {
           "title": "Plugin Catalog",
           "source": "docs/reference/plugin-catalog.md",
           "slug": "reference/plugin-catalog"
@@ -161,16 +145,11 @@
           "title": "Data Contract Reference",
           "source": "docs/contracts/datacontract-yaml-reference.md",
           "slug": "contracts/datacontract-yaml-reference"
-        },
-        {
-          "title": "Plugin Interfaces",
-          "source": "docs/architecture/interfaces/index.md",
-          "slug": "architecture/interfaces"
         }
       ]
     },
     {
-      "label": "Contributing",
+      "label": "Floe Contributors",
       "items": [
         {
           "title": "Contributing",
@@ -178,15 +157,20 @@
           "slug": "contributing"
         },
         {
+          "title": "DevPod + Hetzner",
+          "source": "docs/contributing/devpod-hetzner.md",
+          "slug": "contributing/devpod-hetzner"
+        },
+        {
+          "title": "Contributor Testing",
+          "source": "docs/contributing/testing.md",
+          "slug": "contributing/testing"
+        },
+        {
           "title": "Documentation Standards",
           "source": "docs/contributing/documentation-standards.md",
           "slug": "contributing/documentation-standards"
-        }
-      ]
-    },
-    {
-      "label": "Releases",
-      "items": [
+        },
         {
           "title": "Alpha Checklist",
           "source": "docs/releases/v0.1.0-alpha.1-checklist.md",

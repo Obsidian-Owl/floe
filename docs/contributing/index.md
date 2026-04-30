@@ -16,6 +16,14 @@ make docs-validate
 uv run pytest testing/ci/tests/test_validate_docs_navigation.py -q
 ```
 
+## Contributor Workflows
+
+- DevPod contributor workspace for remote heavyweight validation.
+- [Contributor testing](testing.md) for unit, integration, E2E, docs, and release-validation checks.
+- [Documentation standards](documentation-standards.md) for keeping docs aligned with behavior.
+
+Contributor workflows can use repo-local `make` targets and DevPod. Platform Engineer and Data Engineer docs should describe product workflows that do not require contributor infrastructure.
+
 ## Success Criteria
 
 - Alpha-critical documentation pages exist and are included in the docs manifest.

@@ -11,21 +11,13 @@ This document covers Helm-based Kubernetes deployment for floe.
 ## Quick Start
 
 ```bash
-# From Helm Repository
-helm repo add floe https://obsidian-owl.github.io/floe
-helm repo update
-helm install floe floe/floe-platform --namespace floe-dev --create-namespace
-
-# From OCI Registry (GHCR)
-helm install floe oci://ghcr.io/obsidian-owl/charts/floe-platform \
-  --namespace floe-dev --create-namespace
-
-# From Local Chart
 helm dependency update ./charts/floe-platform
-helm install floe ./charts/floe-platform --namespace floe-dev --create-namespace
+helm upgrade --install floe ./charts/floe-platform \
+  --namespace floe-dev \
+  --create-namespace
 ```
 
----
+For published chart validation, use the release artifact path documented in the release checklist for the version you are installing.
 
 ## 1. Chart Structure
 
@@ -105,27 +97,6 @@ floe/
 |  |  +-- lineage.example.com -> marquez-web:3000                         |  |
 |  +---------------------------------------------------------------------+  |
 +---------------------------------------------------------------------------+
-```
-
----
-
-## 3. Installation
-
-```bash
-# Add Helm repository
-helm repo add floe https://charts.floe.dev
-helm repo update
-
-# Install with default values
-helm install floe floe/floe \
-  --namespace floe \
-  --create-namespace
-
-# Install with custom values
-helm install floe floe/floe \
-  --namespace floe \
-  --create-namespace \
-  --values values-production.yaml
 ```
 
 ---

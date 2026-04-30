@@ -148,12 +148,11 @@ Review the critic's findings:
 
 | File | Purpose |
 |------|---------|
-| `.claude/settings.json` | Hook configuration |
-| `.claude/agents/*.md` | Agent definitions |
-| `.claude/skills/*/SKILL.md` | Skill definitions |
 | `.specwright/state/workflow.json` | Work unit state and gate results |
 | `.specwright/work/{id}/` | Design, spec, plan, evidence per work unit |
 | `tests/fixtures/golden/` | Contract baselines |
+
+Contributor agent configuration is internal to repository development and is not part of the Floe product interface.
 
 ## References
 

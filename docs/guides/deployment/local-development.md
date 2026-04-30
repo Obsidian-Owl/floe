@@ -1,8 +1,6 @@
-# Local Development
+# Local Kind Evaluation
 
-This document covers local development for floe using uv and Kind (Kubernetes in Docker).
-
-**Note**: Docker Compose is NOT supported. All development uses Kubernetes-native tooling to ensure parity between local development and production (ADR-0017).
+Use local Kind when you want a disposable Kubernetes cluster for evaluation or contributor smoke checks. Docker Compose is not supported because Floe's platform behavior depends on Kubernetes service discovery, workload lifecycle, and Helm rendering.
 
 ---
 
@@ -78,7 +76,7 @@ For full-featured local development with all platform services, use Kind (Kubern
 
 ```bash
 # Create Kind cluster
-make kind-create
+make kind-up
 
 # Deploy platform services
 make deploy-local
@@ -139,7 +137,7 @@ kubectl logs -f deployment/dagster-webserver -n floe-dev
 kubectl port-forward svc/dagster-webserver 3000:3000 -n floe-dev
 
 # Clean up
-make kind-delete
+make kind-down
 ```
 
 ### 2.5 Why Not Docker Compose?

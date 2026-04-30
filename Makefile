@@ -59,12 +59,12 @@ help: ## Show this help message
 	@echo "  make demo-customer-360-run Trigger Customer 360 golden demo Dagster run"
 	@echo "  make demo-customer-360-validate Validate Customer 360 golden demo evidence"
 	@echo ""
-	@echo "DevPod (Remote E2E):"
+	@echo "Contributor Remote Validation (DevPod + Hetzner):"
 	@echo "  make devpod-setup    One-time Hetzner provider setup from .env"
-	@echo "  make devpod-test     Run E2E tests on Hetzner (full lifecycle)"
+	@echo "  make devpod-test     Run contributor E2E validation on DevPod"
 	@echo "  make devpod-delete   Delete DevPod workspace (stops billing)"
 	@echo "  make devpod-status   Show workspace status, tunnels, and cluster health"
-	@echo "  make devpod-up       Create/start DevPod workspace on Hetzner"
+	@echo "  make devpod-up       Create/start contributor DevPod workspace"
 	@echo "  make devpod-stop     Stop workspace (preserves VM disk)"
 	@echo "  make devpod-ssh      SSH into workspace"
 	@echo "  make devpod-sync     Sync kubeconfig from workspace to local"
@@ -693,7 +693,7 @@ devpod-check:
 	}
 
 .PHONY: devpod-up
-devpod-up: devpod-check ## Create/start DevPod workspace on Hetzner
+devpod-up: devpod-check ## Create/start contributor DevPod workspace
 	@echo "Starting DevPod workspace '$(DEVPOD_WORKSPACE)' on $(DEVPOD_PROVIDER)..."
 	@DEVPOD_WORKSPACE="$(DEVPOD_WORKSPACE)" \
 		DEVPOD_PROVIDER="$(DEVPOD_PROVIDER)" \
@@ -730,7 +730,7 @@ devpod-setup: devpod-check ## One-time Hetzner provider setup from .env
 	@bash scripts/devpod-setup.sh
 
 .PHONY: devpod-test
-devpod-test: devpod-check ## Run E2E tests on Hetzner (full lifecycle)
+devpod-test: devpod-check ## Run contributor E2E validation on DevPod
 	@bash scripts/devpod-test.sh
 
 .PHONY: devpod-delete

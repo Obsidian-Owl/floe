@@ -20,7 +20,7 @@ make demo-stop
 ## Success Criteria
 
 - Demo artifacts compile before deployment.
-- `make demo` starts the demo workflow against the configured DevPod workspace.
+The Customer 360 demo validates Floe's alpha platform and data product path. Platform Engineers can run it on a deployed Floe platform; Floe Contributors can use the DevPod workspace when they need the remote release-validation lane.
 - `make demo` starts and owns the port-forwards needed by the automated demo flow.
 - `make devpod-tunnels` is not required before `make demo`; use it separately for manual UI inspection.
 - `make demo-stop` stops local port-forward processes when validation is complete.

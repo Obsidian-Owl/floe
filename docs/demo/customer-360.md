@@ -4,10 +4,11 @@ Customer 360 is the `v0.1.0-alpha.1` golden demo. The alpha release gate will pr
 
 ## Prerequisites
 
-- DevPod workspace on Hetzner is running.
-- Kubeconfig is synced with `make devpod-sync`.
-- The repository branch has been pushed before remote validation.
-- For manual UI inspection outside an automated demo run, service tunnels are running with `make devpod-tunnels`.
+- A Floe platform is deployed and reachable.
+- The Customer 360 data product has been compiled or is available in the demo project.
+- You can access Dagster, object storage, Marquez, Jaeger, Polaris, and the semantic/query layer through your platform access method.
+
+Floe contributors can use DevPod when they need the remote release-validation lane.
 
 ## Run
 

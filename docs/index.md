@@ -21,13 +21,13 @@ floe is an Apache 2.0 licensed Python framework that provides:
 | [contracts/](./contracts/) | Interface contracts (schema ownership) |
 | [guides/](./guides/) | arc42 implementation guides |
 
-## Alpha User Journeys
+## Alpha Journeys
 
-- [Start Here](./start-here/index.md)
-- [Deploy your first platform](./get-started/first-platform.md)
-- [Build your first data product](./get-started/first-data-product.md)
-- [Customer 360 golden demo](./demo/customer-360.md)
-- [Customer 360 validation](./demo/customer-360-validation.md)
+| Persona | Start Here | Outcome |
+| --- | --- | --- |
+| Platform Engineer | [Deploy your first platform](./platform-engineers/first-platform.md) | A Floe platform running on a Kubernetes cluster you control |
+| Data Engineer | [Build your first data product](./data-engineers/first-data-product.md) | A governed Customer 360 data product running on Floe |
+| Floe Contributor | [Contributing](./contributing/index.md) | A local or remote development environment for changing Floe itself |
 
 ## Architecture Documentation
 

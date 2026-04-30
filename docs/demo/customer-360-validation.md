@@ -61,7 +61,9 @@ The evidence maps to the release surfaces as follows:
 | Jaeger | Search Floe/Dagster service | Trace exists for Customer 360 run |
 | Polaris | Open catalog API/UI path | Customer 360 tables are registered |
 
-## Related Guide
+## Related Guides
 
 - [Customer 360 Golden Demo](customer-360.md)
-- [DevPod + Hetzner operations](../operations/devpod-hetzner.md)
+- [Validate your platform](../platform-engineers/validate-platform.md)
+- [Validate your data product](../data-engineers/validate-data-product.md)
+- DevPod contributor workspace

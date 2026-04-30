@@ -168,4 +168,4 @@ pre-commit run --all-files
 
 - [Testing Index](index.md)
 - [CI/CD Pipeline](ci-cd.md)
-- [Python Standards](https://github.com/Obsidian-Owl/floe/blob/main/.claude/rules/python-standards.md)
+- [Documentation Standards](../../contributing/documentation-standards.md)

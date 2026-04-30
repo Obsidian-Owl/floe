@@ -1,6 +1,8 @@
-# DevPod + Hetzner Operations
+# DevPod + Hetzner Contributor Workspace
 
-Use this guide to operate the remote alpha workspace after you choose the DevPod + Hetzner path.
+Use this guide when you contribute to Floe and need a remote workspace for heavyweight E2E, integration, demo, or release-validation runs.
+
+This is not the primary Floe product deployment model. Platform Engineers deploy Floe to Kubernetes using manifests, Helm, and their chosen cluster provider.
 
 ## Prerequisites
 
@@ -79,7 +81,3 @@ Delete the workspace and stop workspace billing:
 ```bash
 make devpod-delete
 ```
-
-## Next Step
-
-- [Troubleshoot alpha operations](troubleshooting.md)
