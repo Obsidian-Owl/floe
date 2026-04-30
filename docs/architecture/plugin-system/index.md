@@ -6,7 +6,7 @@ This document describes the plugin system that enables floe's flexibility.
 
 floe uses a plugin architecture for all configurable components. The implementation-truth category list is [`floe_core.plugin_types.PluginType`](../../reference/plugin-catalog.md).
 
-| Plugin Type | Alpha-Supported Default | Purpose | ADR |
+| Plugin Type | Alpha-Supported Reference Path | Purpose | ADR |
 |-------------|-------------------------|---------|-----|
 | **Compute** | DuckDB | Where dbt transforms execute | ADR-0010 |
 | **Orchestrator** | Dagster | Job scheduling and execution | ADR-0033 |

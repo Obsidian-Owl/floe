@@ -284,8 +284,13 @@ test('collectSourceDocsErrors rejects prod shorthand in architecture plugin docs
 
 test('collectSourceDocsErrors rejects stale plugin default wording in published docs', async () => {
   await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/architecture/adr'), { recursive: true });
     await fs.mkdir(path.join(repoRoot, 'docs/architecture/plugin-system'), { recursive: true });
     await fs.mkdir(path.join(repoRoot, 'docs/contracts'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/ARCHITECTURE-SUMMARY.md'),
+      '# Architecture Summary\n\n3. Create default plugins (DuckDB, Dagster, Polaris, Cube, dlt)\n',
+    );
     await fs.writeFile(
       path.join(repoRoot, 'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md'),
       [
@@ -295,6 +300,24 @@ test('collectSourceDocsErrors rejects stale plugin default wording in published 
         '**Total Plugin Types**: 12',
         '',
       ].join('\n'),
+    );
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/adr/0020-ingestion-plugins.md'),
+      '# ADR-0020\n\n### dlt Plugin (Default)\n',
+    );
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/adr/0032-cube-compute-integration.md'),
+      [
+        '# ADR-0032',
+        '',
+        '- **DuckDB-first**: Default compute engine should work with semantic layer',
+        '- **DuckDB-first**: Works with default open-source stack',
+        '',
+      ].join('\n'),
+    );
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/opinionation-boundaries.md'),
+      '# Opinionation Boundaries\n\n| Component | Alpha-Supported Default |\n',
     );
     await fs.writeFile(
       path.join(repoRoot, 'docs/architecture/plugin-system/configuration.md'),
@@ -307,6 +330,7 @@ test('collectSourceDocsErrors rejects stale plugin default wording in published 
         '',
         'Uses only a `floe.yaml` file with system defaults (DuckDB, Dagster, Polaris, Cube, dlt).',
         'Where dbt transforms execute. Default: **DuckDB**.',
+        'compute: duckdb # Analytics (or uses default if omitted)',
         '',
       ].join('\n'),
     );
@@ -314,11 +338,18 @@ test('collectSourceDocsErrors rejects stale plugin default wording in published 
     const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
 
     assert.deepEqual(errors, [
+      'docs/architecture/adr/0020-ingestion-plugins.md: labels a plugin reference implementation as a current default selection',
+      'docs/architecture/adr/0032-cube-compute-integration.md: labels DuckDB-first behavior as a current default',
+      'docs/architecture/adr/0032-cube-compute-integration.md: labels DuckDB-first behavior as a current default',
+      'docs/architecture/adr/0032-cube-compute-integration.md: labels an open-source stack as a current default',
+      'docs/architecture/ARCHITECTURE-SUMMARY.md: presents bundled provider plugins as current defaults',
       'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md: labels a plugin reference implementation as a current default selection',
       'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md: references stale plugin category count 12',
+      'docs/architecture/opinionation-boundaries.md: uses alpha-supported default provider wording',
       'docs/architecture/plugin-system/configuration.md: labels a plugin reference implementation as a current default selection',
       'docs/contracts/glossary.md: presents implicit platform system defaults as a current user path',
       'docs/contracts/glossary.md: labels a plugin reference implementation as a current default selection',
+      'docs/contracts/glossary.md: presents implicit defaults instead of manifest-approved fallbacks',
     ]);
   });
 });
@@ -327,13 +358,14 @@ test('collectSourceDocsErrors checks README as public product surface', async ()
   await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
     await fs.writeFile(
       path.join(repoRoot, 'README.md'),
-      '# Floe\n\nDatadog is the production default telemetry backend.\n',
+      '# Floe\n\nDatadog is the production default telemetry backend.\nJaeger alpha default telemetry path.\n',
     );
 
     const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
 
     assert.deepEqual(errors, [
       'README.md: labels Datadog as a current default integration',
+      'README.md: uses alpha default provider wording',
     ]);
   });
 });

@@ -299,7 +299,7 @@ The following documents have been updated to support the Data Mesh architecture 
 
 1. Implement floe-core schemas (Pydantic models)
 2. Implement plugin interfaces (ABCs)
-3. Create default plugins (DuckDB, Dagster, Polaris, Cube, dlt)
+3. Create reference plugins and implementation primitives (DuckDB, Dagster, Polaris, Cube, dlt)
 4. Create Helm charts for platform deployment
 5. Implement CLI commands
 6. Create integration tests using K8s (ADR-0017)

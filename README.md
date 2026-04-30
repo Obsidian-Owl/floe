@@ -32,7 +32,7 @@
 - **Compute:** DuckDB, Snowflake, Databricks, Spark, BigQuery
 - **Orchestrator:** Dagster, Airflow 3.x
 - **Catalog:** Polaris, AWS Glue, Unity Catalog
-- **Observability:** Split into TelemetryBackend (Jaeger alpha default; Datadog planned/ecosystem example) + LineageBackend (Marquez alpha default; Atlan planned/ecosystem example)
+- **Observability:** Split into TelemetryBackend (Jaeger alpha reference path; Datadog planned/ecosystem example) + LineageBackend (Marquez alpha reference path; Atlan planned/ecosystem example)
 - **[... 10 more plugin categories]**
 
 **Data teams** get opinionated workflows:

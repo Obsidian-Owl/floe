@@ -58,7 +58,7 @@ These standards define floe and cannot be changed:
 
 Platform Team selects these once in `manifest.yaml`:
 
-| Component | Alpha-Supported Default | Implemented Alternatives | Planned Or Ecosystem Examples |
+| Component | Alpha-Supported Reference Path | Implemented Alternatives | Planned Or Ecosystem Examples |
 | --- | --- | --- | --- |
 | Compute | DuckDB | None validated as an alpha product path | Spark, Snowflake, Databricks, BigQuery, Redshift |
 | Orchestration | Dagster | None validated as an alpha product path | Airflow 3.x, Prefect, Argo Workflows |
@@ -162,9 +162,9 @@ metadata:
 
 plugins:
   # PLUGGABLE: Platform Team selects from alpha-supported and validated options
-  compute: duckdb                 # Alpha-supported default
-  orchestrator: dagster           # Alpha-supported default
-  catalog: polaris                # Alpha-supported default
+  compute: duckdb                 # Alpha-supported reference path
+  orchestrator: dagster           # Alpha-supported reference path
+  catalog: polaris                # Alpha-supported reference path
   storage: s3                     # S3-compatible storage plugin; demo uses MinIO
   telemetry_backend: jaeger       # Alpha-supported telemetry backend
   lineage_backend: marquez        # Alpha-supported lineage backend

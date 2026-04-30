@@ -28,7 +28,10 @@ function hasNegativeOrPlannedContext(line) {
 const productSurfaceSources = new Set([
   'README.md',
   'docs/index.md',
+  'docs/architecture/ARCHITECTURE-SUMMARY.md',
   'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md',
+  'docs/architecture/adr/0020-ingestion-plugins.md',
+  'docs/architecture/adr/0032-cube-compute-integration.md',
   'docs/architecture/opinionation-boundaries.md',
   'docs/architecture/capability-status.md',
   'docs/architecture/platform-services.md',
@@ -95,17 +98,38 @@ function collectProductSurfaceLineLevelErrors(line) {
   if (/\bTotal Plugin Types(?:\*\*)?\s*:?\s*12\b/iu.test(line)) {
     errors.push('references stale plugin category count 12');
   }
+  if (/\bAlpha-Supported Default\b/u.test(line)) {
+    errors.push('uses alpha-supported default provider wording');
+  }
+  if (/\balpha default\b/iu.test(line)) {
+    errors.push('uses alpha default provider wording');
+  }
+  if (/\bCreate default plugins\b.*\b(DuckDB|Dagster|Polaris|Cube|dlt)\b/iu.test(line)) {
+    errors.push('presents bundled provider plugins as current defaults');
+  }
   if (/\bsystem defaults\b.*\b(DuckDB|Dagster|Polaris|Cube|dlt)\b/iu.test(line)) {
     errors.push('presents implicit platform system defaults as a current user path');
   }
-  if (/\b(Dagster|Polaris|Cube|dlt)\s*\(\s*default\s*\)/u.test(line)) {
+  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt)\s*\(\s*default\s*\)/iu.test(line)) {
     errors.push('labels a plugin reference implementation as a current default selection');
   }
-  if (/\bDefault:\s*\*\*(DuckDB|Dagster|Polaris|Cube|dlt)\*\*/u.test(line)) {
+  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt)\b.*\bPlugin\b.*\(\s*default\s*\)/iu.test(line)) {
     errors.push('labels a plugin reference implementation as a current default selection');
   }
-  if (/\b(dagster|duckdb|polaris|cube|dlt)\b.*\[\s*default\s*\]/u.test(line)) {
+  if (/\bDefault:\s*\*\*(DuckDB|Dagster|Polaris|Cube|dlt)\*\*/iu.test(line)) {
     errors.push('labels a plugin reference implementation as a current default selection');
+  }
+  if (/\b(dagster|duckdb|polaris|cube|dlt)\b.*\[\s*default\s*\]/iu.test(line)) {
+    errors.push('labels a plugin reference implementation as a current default selection');
+  }
+  if (/\bDuckDB-first\b.*\bdefault\b|\bdefault\b.*\bDuckDB-first\b/iu.test(line)) {
+    errors.push('labels DuckDB-first behavior as a current default');
+  }
+  if (/\bdefault open-source stack\b/iu.test(line)) {
+    errors.push('labels an open-source stack as a current default');
+  }
+  if (/\bdefault if omitted\b/iu.test(line)) {
+    errors.push('presents implicit defaults instead of manifest-approved fallbacks');
   }
   if (/DON'T:\s*Allow Data Engineers to select compute/iu.test(line)) {
     errors.push('forbids approved per-transform compute selection');

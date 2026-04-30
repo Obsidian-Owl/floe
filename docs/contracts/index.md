@@ -130,7 +130,7 @@ data_architecture:
 
 ### DataProduct
 
-The unit of deployment. References a manifest (or uses system defaults).
+The unit of deployment. References a platform or domain manifest, or is validated against an approved platform environment contract for the documented alpha path.
 
 ```yaml
 apiVersion: floe.dev/v1
@@ -149,7 +149,7 @@ transforms:
 
   - type: dbt
     path: models/marts/
-    compute: duckdb     # Analytics (or uses default if omitted)
+    compute: duckdb     # Analytics compute selected from the approved platform list
 
 schedule:
   cron: "0 6 * * *"
@@ -225,4 +225,4 @@ Contracts follow semantic versioning:
 - [Four-Layer Overview](../architecture/four-layer-overview.md) - Architecture context
 - [Platform Artifacts](../architecture/platform-artifacts.md) - OCI storage
 - [Plugin Architecture](../architecture/plugin-system/index.md) - Plugin system
-- [Opinionation Boundaries](../architecture/opinionation-boundaries.md) - Defaults
+- [Opinionation Boundaries](../architecture/opinionation-boundaries.md) - Enforced standards and platform-selected plugin boundaries
