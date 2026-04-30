@@ -167,7 +167,7 @@ See [ADR-0021](../architecture/adr/0021-data-architecture-patterns.md) and [Cont
 
 ### 3.3 Plugin Interfaces (ABCs)
 
-floe defines **11 plugin interfaces** for extensibility (see [plugin-system/index.md](../architecture/plugin-system/index.md) for canonical registry):
+floe documents **14 plugin categories** for extensibility (see [plugin-system/index.md](../architecture/plugin-system/index.md) for the canonical registry and implemented ABCs):
 
 | Plugin Type | Entry Point | Purpose | ADR |
 |-------------|-------------|---------|-----|
@@ -182,8 +182,11 @@ floe defines **11 plugin interfaces** for extensibility (see [plugin-system/inde
 | IngestionPlugin | `floe.ingestion` | Data loading from sources | ADR-0020 |
 | SecretsPlugin | `floe.secrets` | Credential management | ADR-0023/0031 |
 | IdentityPlugin | `floe.identity` | User authentication (OIDC) | ADR-0024 |
+| DataQualityPlugin | `floe.quality` | Data quality validation frameworks | ADR-0044 |
+| RBACPlugin | `floe.rbac` | Namespace and service-account isolation | Epic 7B |
+| AlertChannelPlugin | `floe.alert_channels` | Contract violation alert delivery | Epic 15 |
 
-> **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins. DataQualityPlugin (Great Expectations, Soda) is documented in ADR-0044.
+> **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins.
 
 **Example Interfaces:**
 

@@ -25,6 +25,12 @@ def jobs_chart_path() -> Path:
     return Path(__file__).parents[3] / "charts" / "floe-jobs"
 
 
+@pytest.fixture(scope="module")
+def platform_chart_path() -> Path:
+    """Return path to floe-platform chart."""
+    return Path(__file__).parents[3] / "charts" / "floe-platform"
+
+
 def parse_yaml_documents(yaml_output: str) -> list[dict[str, Any]]:
     """Parse multi-document YAML output into list of dicts."""
     docs: list[dict[str, Any]] = []
@@ -150,8 +156,78 @@ class TestJobsChartTemplate:
 
     @pytest.mark.requirement("9b-FR-081")
     @pytest.mark.usefixtures("helm_available")
-    def test_template_renders_platform_integration(self, jobs_chart_path: Path) -> None:
-        """Test platform integration endpoints are injected."""
+    def test_template_renders_platform_integration(
+        self,
+        jobs_chart_path: Path,
+        platform_chart_path: Path,
+    ) -> None:
+        """Test job endpoint discovery matches rendered floe-platform services."""
+        platform_result = subprocess.run(
+            [
+                "helm",
+                "template",
+                "floe",
+                str(platform_chart_path),
+                "--namespace",
+                "floe-dev",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        platform_docs = parse_yaml_documents(platform_result.stdout)
+        service_names = {
+            doc["metadata"]["name"] for doc in platform_docs if doc.get("kind") == "Service"
+        }
+
+        assert "floe-platform-polaris" in service_names
+        assert "floe-platform-otel" in service_names
+        assert "floe-otel" not in service_names
+        assert "floe-platform-otel-collector" not in service_names
+
+        jobs_result = subprocess.run(
+            [
+                "helm",
+                "template",
+                "test-release",
+                str(jobs_chart_path),
+                "--set",
+                "dbt.enabled=true",
+                "--set",
+                "platform.servicePrefix=floe-platform",
+                "--set",
+                "platform.namespace=floe-dev",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        docs = parse_yaml_documents(jobs_result.stdout)
+        job_docs = [d for d in docs if d.get("kind") == "Job"]
+        assert len(job_docs) == 1
+
+        container = job_docs[0]["spec"]["template"]["spec"]["containers"][0]
+        env_vars = {e["name"]: e["value"] for e in container.get("env", [])}
+
+        assert "POLARIS_ENDPOINT" in env_vars
+        assert (
+            env_vars["POLARIS_ENDPOINT"]
+            == "http://floe-platform-polaris.floe-dev.svc.cluster.local:8181"
+        )
+        assert "OTEL_EXPORTER_OTLP_ENDPOINT" in env_vars
+        assert (
+            env_vars["OTEL_EXPORTER_OTLP_ENDPOINT"]
+            == "http://floe-platform-otel.floe-dev.svc.cluster.local:4317"
+        )
+
+    @pytest.mark.requirement("9b-FR-081")
+    @pytest.mark.usefixtures("helm_available")
+    def test_template_preserves_explicit_platform_endpoint_overrides(
+        self,
+        jobs_chart_path: Path,
+    ) -> None:
+        """Test explicit platform endpoint overrides take precedence."""
         result = subprocess.run(
             [
                 "helm",
@@ -161,9 +237,13 @@ class TestJobsChartTemplate:
                 "--set",
                 "dbt.enabled=true",
                 "--set",
-                "platform.releaseName=floe",
+                "platform.servicePrefix=floe-platform",
                 "--set",
-                "platform.namespace=floe-prod",
+                "platform.namespace=floe-dev",
+                "--set",
+                "platform.polarisEndpoint=http://custom-polaris:8181",
+                "--set",
+                "platform.otelEndpoint=http://custom-otel:4317",
             ],
             capture_output=True,
             text=True,
@@ -177,10 +257,8 @@ class TestJobsChartTemplate:
         container = job_docs[0]["spec"]["template"]["spec"]["containers"][0]
         env_vars = {e["name"]: e["value"] for e in container.get("env", [])}
 
-        assert "POLARIS_ENDPOINT" in env_vars
-        assert "floe-polaris" in env_vars["POLARIS_ENDPOINT"]
-        assert "OTEL_EXPORTER_OTLP_ENDPOINT" in env_vars
-        assert "otel-collector" in env_vars["OTEL_EXPORTER_OTLP_ENDPOINT"]
+        assert env_vars["POLARIS_ENDPOINT"] == "http://custom-polaris:8181"
+        assert env_vars["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://custom-otel:4317"
 
     @pytest.mark.requirement("9b-FR-081")
     @pytest.mark.usefixtures("helm_available")

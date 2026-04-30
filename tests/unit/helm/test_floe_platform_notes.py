@@ -105,3 +105,14 @@ def test_rendered_notes_namespace_scope_troubleshooting_pod_commands() -> None:
     assert "kubectl get pods -n default -l app.kubernetes.io/component=polaris" in rendered_notes
     assert "kubectl get pods -l app.kubernetes.io/component=minio)" not in rendered_notes
     assert "kubectl get pods -l app.kubernetes.io/component=polaris)" not in rendered_notes
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_rendered_notes_use_canonical_otel_service_name() -> None:
+    """Rendered Helm NOTES must advertise the canonical OTel service name."""
+    rendered_notes = _render_notes()
+
+    assert "OTLP gRPC endpoint: floe-platform-otel:4317" in rendered_notes
+    assert "OTLP HTTP endpoint: http://floe-platform-otel:4318" in rendered_notes
+    assert "floe-platform-otel-collector" not in rendered_notes
+    assert "floe-otel" not in rendered_notes

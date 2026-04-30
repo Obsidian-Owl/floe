@@ -40,7 +40,7 @@ spec:
                 {{- else if eq .service "polaris" }}
                 name: {{ $fullname }}-polaris
                 {{- else if eq .service "otel" }}
-                name: {{ $fullname }}-otel-collector
+                name: {{ include "floe-platform.otel.fullname" $ }}
                 {{- else }}
                 name: {{ $fullname }}-{{ .service }}
                 {{- end }}

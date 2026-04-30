@@ -86,7 +86,7 @@ env:
     value: "http://<marquez-service>.<platform-namespace>.svc.cluster.local:5000"
 ```
 
-For the default alpha release name `floe-platform` in namespace `floe-platform`, the shared service names are `floe-platform-polaris` and `floe-platform-marquez`.
+For the default chart service prefix/fullnameOverride `floe-platform` in namespace `floe-platform`, the shared service names are `floe-platform-polaris` and `floe-platform-marquez`.
 
 ---
 

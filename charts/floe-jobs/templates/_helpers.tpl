@@ -72,28 +72,28 @@ app.kubernetes.io/component: {{ .jobName }}
 {{- end }}
 
 {{/*
-Polaris endpoint - auto-discover or use explicit value
+Polaris endpoint - use explicit value or configured platform service prefix.
 */}}
 {{- define "floe-jobs.polarisEndpoint" -}}
 {{- if .Values.platform.polarisEndpoint }}
 {{- .Values.platform.polarisEndpoint }}
-{{- else if .Values.platform.releaseName }}
+{{- else if .Values.platform.servicePrefix }}
 {{- $ns := .Values.platform.namespace | default .Release.Namespace }}
-{{- printf "http://%s-polaris.%s.svc.cluster.local:8181" .Values.platform.releaseName $ns }}
+{{- printf "http://%s-polaris.%s.svc.cluster.local:8181" .Values.platform.servicePrefix $ns }}
 {{- else }}
 {{- "" }}
 {{- end }}
 {{- end }}
 
 {{/*
-OTel collector endpoint - auto-discover or use explicit value
+OTel collector endpoint - use explicit value or configured platform service prefix.
 */}}
 {{- define "floe-jobs.otelEndpoint" -}}
 {{- if .Values.platform.otelEndpoint }}
 {{- .Values.platform.otelEndpoint }}
-{{- else if .Values.platform.releaseName }}
+{{- else if .Values.platform.servicePrefix }}
 {{- $ns := .Values.platform.namespace | default .Release.Namespace }}
-{{- printf "%s-otel-collector.%s.svc.cluster.local:4317" .Values.platform.releaseName $ns }}
+{{- printf "http://%s-otel.%s.svc.cluster.local:4317" .Values.platform.servicePrefix $ns }}
 {{- else }}
 {{- "" }}
 {{- end }}

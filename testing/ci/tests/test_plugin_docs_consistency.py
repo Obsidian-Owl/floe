@@ -55,7 +55,14 @@ def test_plugin_catalog_documents_lineage_alias() -> None:
 def test_owned_public_docs_do_not_use_stale_plugin_counts() -> None:
     """Owned public docs avoid stale plugin type counts that confuse users."""
     count = len(list(PluginType))
-    stale_phrases = {"11 plugin types", "12 plugin types", "13 plugin types"}
+    stale_phrases = {
+        "11 plugin interfaces",
+        "11 plugin types",
+        "12 plugin interfaces",
+        "12 plugin types",
+        "13 plugin interfaces",
+        "13 plugin types",
+    }
     paths = [
         ROOT / "README.md",
         ROOT / "docs" / "architecture" / "plugin-system" / "index.md",

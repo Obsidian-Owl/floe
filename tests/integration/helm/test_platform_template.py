@@ -416,8 +416,7 @@ class TestDagsterOtelEnvVars:
     ) -> None:
         """Verify OTEL endpoint resolves to OTel Collector service.
 
-        The endpoint value must reference the OTel Collector service
-        in K8s DNS format (e.g., http://<release>-otel-collector:4317).
+        The endpoint value must reference the canonical OTel Collector service.
         """
         documents = _render_template(platform_chart_path)
         dagster_deps = _find_dagster_deployments(documents)
@@ -430,9 +429,9 @@ class TestDagsterOtelEnvVars:
             endpoint_envs = [e for e in envs if e.get("name") == "OTEL_EXPORTER_OTLP_ENDPOINT"]
             assert len(endpoint_envs) > 0
             endpoint_val = endpoint_envs[0].get("value", "")
-            assert "otel-collector" in endpoint_val, (
+            assert endpoint_val == "http://floe-platform-otel:4317", (
                 f"Dagster '{name}' OTEL endpoint does not "
-                f"reference otel-collector service. "
+                f"reference floe-platform-otel service. "
                 f"Got: {endpoint_val}"
             )
             assert ":4317" in endpoint_val, (

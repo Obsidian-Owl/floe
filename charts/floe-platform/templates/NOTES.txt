@@ -37,8 +37,8 @@ POLARIS CATALOG:
 {{- if .Values.otel.enabled }}
 
 OPENTELEMETRY COLLECTOR:
-  OTLP gRPC endpoint: {{ $fullname }}-otel-collector:4317
-  OTLP HTTP endpoint: http://{{ $fullname }}-otel-collector:4318
+  OTLP gRPC endpoint: {{ include "floe-platform.otel.fullname" . }}:4317
+  OTLP HTTP endpoint: http://{{ include "floe-platform.otel.fullname" . }}:4318
 {{- end }}
 
 {{- if .Values.postgresql.enabled }}

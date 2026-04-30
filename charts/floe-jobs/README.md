@@ -98,14 +98,16 @@ customJobs:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `platform.releaseName` | floe-platform release name | `""` |
+| `platform.servicePrefix` | floe-platform shared service prefix/fullnameOverride | `""` |
 | `platform.namespace` | floe-platform namespace | `""` |
 | `platform.polarisEndpoint` | Explicit Polaris endpoint | `""` |
 | `platform.otelEndpoint` | Explicit OTel endpoint | `""` |
 
-When `platform.releaseName` is set, the chart automatically discovers:
-- Polaris catalog endpoint
-- OpenTelemetry collector endpoint
+Set `platform.servicePrefix: floe-platform` for the documented alpha platform install. The chart then derives:
+- Polaris catalog endpoint: `http://floe-platform-polaris.<namespace>.svc.cluster.local:8181`
+- OpenTelemetry collector endpoint: `http://floe-platform-otel.<namespace>.svc.cluster.local:4317`
+
+Use `platform.polarisEndpoint` and `platform.otelEndpoint` when your platform uses different service names.
 
 ### Service Account
 
@@ -140,7 +142,8 @@ dbt:
         secretName: dbt-profiles
 
 platform:
-  releaseName: floe
+  servicePrefix: floe-platform
+  namespace: floe-dev
 ```
 
 ### Data Ingestion with dlt
@@ -194,7 +197,7 @@ Override in `defaults.securityContext` and `defaults.containerSecurityContext`.
 
 This chart is designed to work alongside [floe-platform](../floe-platform/). When deployed together:
 
-1. Set `platform.releaseName` to your floe-platform release name
+1. Set `platform.servicePrefix` to the floe-platform shared service prefix/fullnameOverride
 2. Jobs automatically discover Polaris and OTel endpoints
 3. Use shared PostgreSQL for dbt metadata (via external secret)
 
@@ -204,7 +207,8 @@ helm install floe ./charts/floe-platform
 
 # Then deploy jobs
 helm install floe-jobs ./charts/floe-jobs \
-  --set platform.releaseName=floe \
+  --set platform.servicePrefix=floe-platform \
+  --set platform.namespace=floe-dev \
   --set dbt.enabled=true
 ```
 

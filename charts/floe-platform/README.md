@@ -128,6 +128,7 @@ postgresql:
 
 otel:
   enabled: true
+  fullnameOverride: floe-platform-otel
   mode: deployment
 
 jaeger:
