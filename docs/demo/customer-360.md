@@ -2,6 +2,8 @@
 
 Customer 360 is the `v0.1.0-alpha.1` golden demo. The alpha release gate will prove that Floe can run a data product through orchestration, transformation, storage, lineage, tracing, and business-facing query validation.
 
+If you are learning Floe for the first time, start with [Build Your First Data Product](../data-engineers/first-data-product.md). Customer 360 is the advanced proof that demonstrates the full platform, runtime, lineage, telemetry, storage, and business-output path.
+
 Platform Engineers and Data Engineers should run Customer 360 against a Floe platform that has already been deployed and made reachable through their platform access method. Floe Contributors can use the remote DevPod lane when they need contributor release-validation evidence.
 
 ## Prerequisites

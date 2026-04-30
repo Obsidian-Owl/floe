@@ -58,21 +58,19 @@ These standards define floe and cannot be changed:
 
 Platform Team selects these once in `manifest.yaml`:
 
-| Component | Default | Alternatives |
-|-----------|---------|--------------|
-| **Compute** | DuckDB | Spark, Snowflake, Databricks, BigQuery, Redshift |
-| **Orchestration** | Dagster | Airflow 3.x, Prefect, Argo Workflows |
-| **Catalog** | Polaris | AWS Glue, Hive Metastore, Nessie |
-| **Storage** | MinIO (local), S3 (production)* | GCS, Azure Blob, S3-compatible (NetApp, Dell) |
-| **Telemetry Backend** | Jaeger (local), Datadog (production) | Grafana Cloud, AWS X-Ray, custom |
-| **Lineage Backend** | Marquez (local), Atlan (production) | OpenMetadata, Egeria, custom |
-| **dbt Execution Environment** | dbt-core (local) | dbt Fusion (Rust-based), dbt Cloud (deferred) |
-| **Semantic Layer** | Cube | dbt Semantic Layer, None |
-| **Ingestion** | dlt | Airbyte (external) |
-| **Data Quality Framework** | Great Expectations | Soda, dbt Expectations, custom |
-| **Secrets** | K8s Secrets | External Secrets Operator, Vault, Infisical |
-
-**Note:** *MinIO is production-grade for on-premises, data sovereignty, and multi-cloud deployments.
+| Component | Alpha-Supported Default | Implemented Alternatives | Planned Or Ecosystem Examples |
+| --- | --- | --- | --- |
+| Compute | DuckDB | None validated as an alpha product path | Spark, Snowflake, Databricks, BigQuery, Redshift |
+| Orchestration | Dagster | None validated as an alpha product path | Airflow 3.x, Prefect, Argo Workflows |
+| Catalog | Polaris | None validated as an alpha product path | AWS Glue, Hive Metastore, Nessie |
+| Storage | S3-compatible object storage through the implemented storage plugin; demo uses MinIO | S3-compatible backends where configured and validated by the platform team | GCS, Azure Blob, provider-native object storage |
+| Telemetry Backend | Jaeger and console telemetry plugins | OTLP-compatible backends through standard OpenTelemetry configuration | Datadog, Grafana Cloud, AWS X-Ray |
+| Lineage Backend | Marquez | None validated as an alpha product path | Atlan, OpenMetadata, Egeria |
+| dbt Runtime | dbt Core | dbt Fusion plugin exists as an implementation path requiring explicit validation | dbt Cloud |
+| Semantic Layer | Cube reference implementation | None validated as an alpha product path | dbt Semantic Layer |
+| Ingestion | dlt plugin primitive | None validated as a full product path | Airbyte-style integrations |
+| Data Quality Framework | dbt expectations and Great Expectations plugin primitives | None validated as a full product path | Soda, custom |
+| Secrets | Kubernetes Secrets and Infisical plugin primitives | None validated as a full product path | Vault, External Secrets Operator |
 
 ### Why These Are Pluggable
 
@@ -200,33 +198,46 @@ transforms:
 
 ## Anti-Patterns
 
-### DON'T: Allow Data Engineers to select compute
+### DO: Allow Approved Per-Transform Compute Selection
+
+Platform Engineers approve compute targets and choose defaults. Data Engineers may select compute per transform only from that approved list.
 
 ```yaml
-# BAD: Per-pipeline compute selection
-transforms:
-  - type: dbt
-    compute: snowflake  # ❌ Should inherit from platform
-```
-
-### DON'T: Allow per-environment compute
-
-```yaml
-# BAD: Different compute per environment causes drift
-environments:
-  development:
-    compute: duckdb      # ❌ "Works in dev, fails in prod"
-  production:
-    compute: snowflake   # ❌ Environment drift
-```
-
-### DO: Set compute once at platform level
-
-```yaml
-# GOOD: Single compute target, no drift
 plugins:
   compute:
-    type: snowflake  # ✓ Same for dev, staging, prod
+    approved:
+      - name: duckdb
+      - name: spark
+    default: duckdb
+```
+
+```yaml
+transforms:
+  - type: dbt
+    path: models/staging
+    compute: spark
+  - type: dbt
+    path: models/marts
+    compute: duckdb
+```
+
+### DON'T: Use Unapproved Compute
+
+```yaml
+transforms:
+  - type: dbt
+    path: models/marts
+    compute: unapproved-snowflake-account
+```
+
+### DON'T: Create Per-Environment Compute Drift
+
+```yaml
+environments:
+  development:
+    compute: duckdb
+  production:
+    compute: snowflake
 ```
 
 ## Consistency Guarantees

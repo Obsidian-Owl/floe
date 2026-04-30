@@ -32,7 +32,7 @@
 - **Compute:** DuckDB, Snowflake, Databricks, Spark, BigQuery
 - **Orchestrator:** Dagster, Airflow 3.x
 - **Catalog:** Polaris, AWS Glue, Unity Catalog
-- **Observability:** Split into TelemetryBackend (Jaeger, Datadog) + LineageBackend (Marquez, Atlan)
+- **Observability:** Split into TelemetryBackend (Jaeger alpha default; Datadog planned/ecosystem example) + LineageBackend (Marquez alpha default; Atlan planned/ecosystem example)
 - **[... 10 more plugin categories]**
 
 **Data teams** get opinionated workflows:
@@ -166,6 +166,8 @@ The root data-team compile command is a planned lifecycle entry point and is not
 
 **Choose from 14 plugin categories.** Swap implementations without breaking pipelines.
 
+The alpha-supported runtime path is documented in the Floe docs. Some plugin examples below describe the target architecture or ecosystem integrations and are labeled as such in the documentation.
+
 **Multi-compute pipelines:** Platform teams approve N compute targets. Data engineers select per-step from the approved list. Different steps can use different engines:
 
 ```yaml
@@ -193,7 +195,7 @@ transforms:
 **Real-world swap scenarios:**
 - DuckDB (embedded, cost-effective) ↔ Snowflake (managed, elastic)
 - Dagster (asset-centric) ↔ Airflow 3.x (DAG-based)
-- Jaeger (self-hosted) ↔ Datadog (managed SaaS)
+- Jaeger (alpha-supported telemetry backend) ↔ Datadog (planned/ecosystem telemetry example)
 
 **Plugin categories:** Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend, DBT, SemanticLayer, Ingestion, Quality, RBAC, AlertChannel, Secrets, Identity
 
