@@ -20,7 +20,7 @@ Floe fits into an enterprise delivery system. It does not replace your source co
 6. Approval happens through the organization's release process.
 7. Deployment happens through GitOps, CI deployment, service catalog, or a release train.
 8. Dagster or the selected runtime launches Kubernetes work.
-9. OpenLineage and OpenTelemetry evidence proves what ran.
+9. OpenLineage and OpenTelemetry provide evidence of what ran.
 10. Data Engineer validates business outputs and escalates platform failures with evidence.
 
 ## What Floe Standardizes
