@@ -95,6 +95,9 @@ target/
 # Documentation builds
 docs/_build/
 site/
+docs-site/.astro/
+docs-site/dist/
+docs-site/node_modules/
 
 # Kubernetes / Helm
 charts/**/charts/

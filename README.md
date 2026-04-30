@@ -334,7 +334,7 @@ floe provides **batteries-included OSS defaults** that run on any Kubernetes clu
 
 ## Documentation
 
-The alpha documentation site is built from `docs/` with MkDocs:
+The alpha documentation site is built from `docs/` with Astro Starlight:
 
 ```bash
 make docs-build

@@ -173,14 +173,17 @@ check: lint typecheck test ## Run all CI checks (lint + typecheck + test)
 
 .PHONY: docs-build docs-serve docs-validate
 docs-build: ## Build documentation site
-	@uv run mkdocs build --strict
+	@npm --prefix docs-site ci
+	@npm --prefix docs-site run build
 
 docs-serve: ## Serve documentation site locally
-	@uv run mkdocs serve
+	@npm --prefix docs-site install
+	@npm --prefix docs-site run dev -- --host 127.0.0.1
 
 docs-validate: ## Validate docs navigation and build
 	@uv run python testing/ci/validate-docs-navigation.py
-	@uv run mkdocs build --strict
+	@npm --prefix docs-site ci
+	@npm --prefix docs-site run validate
 
 # ============================================================
 # Helm Chart Targets

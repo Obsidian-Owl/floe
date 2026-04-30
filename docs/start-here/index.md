@@ -19,7 +19,7 @@ make docs-serve
 ## Success Criteria
 
 - The docs navigation validator passes.
-- The MkDocs site builds without strict-mode failures.
+- The Starlight site builds without renderer warnings owned by this repository.
 - You know whether your next step is platform deployment, demo execution, or operations setup.
 
 ## Next Step

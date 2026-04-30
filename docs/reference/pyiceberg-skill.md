@@ -20,15 +20,15 @@ description: ALWAYS USE when working with Iceberg table storage, ACID transactio
 - Access control enforced at catalog layer
 - Multi-engine interoperability (DuckDB, Spark, dbt all see same metadata)
 
-**See**: [ADR-0005](docs/architecture/adr/0005-iceberg-table-format.md) - Apache Iceberg Enforced
+**See**: [ADR-0005](../architecture/adr/0005-iceberg-table-format.md) - Apache Iceberg Enforced
 
 ## Related ADRs
 
 | ADR | Decision | Relevance |
 |-----|----------|-----------|
-| [ADR-0005](docs/architecture/adr/0005-iceberg-table-format.md) | Apache Iceberg Enforced | All tables MUST be Iceberg format |
-| [ADR-0034](docs/architecture/adr/0034-dbt-duckdb-iceberg.md) | dbt-duckdb Workaround | Inline credentials for ATTACH |
-| [ADR-0010](docs/architecture/adr/0010-target-agnostic-compute.md) | Target-Agnostic Compute | PyIceberg supports all compute targets |
+| [ADR-0005](../architecture/adr/0005-iceberg-table-format.md) | Apache Iceberg Enforced | All tables MUST be Iceberg format |
+| [ADR-0034](../architecture/adr/0034-dbt-duckdb-iceberg.md) | dbt-duckdb Workaround | Inline credentials for ATTACH |
+| [ADR-0010](../architecture/adr/0010-target-agnostic-compute.md) | Target-Agnostic Compute | PyIceberg supports all compute targets |
 
 ## Philosophy
 

@@ -1,0 +1,192 @@
+{
+  "includePrefixes": [
+    "docs/architecture/",
+    "docs/contracts/",
+    "docs/contributing/",
+    "docs/demo/",
+    "docs/get-started/",
+    "docs/guides/",
+    "docs/index.md",
+    "docs/operations/",
+    "docs/reference/",
+    "docs/releases/",
+    "docs/start-here/",
+    "docs/testing/",
+    "docs/validation/"
+  ],
+  "excludePrefixes": [
+    "docs/analysis/",
+    "docs/audits/",
+    "docs/plans/",
+    "docs/requirements/",
+    "docs/security/",
+    "docs/superpowers/"
+  ],
+  "sections": [
+    {
+      "label": "Home",
+      "items": [
+        {
+          "title": "Home",
+          "source": "docs/index.md",
+          "slug": "index"
+        }
+      ]
+    },
+    {
+      "label": "Start Here",
+      "items": [
+        {
+          "title": "Start Here",
+          "source": "docs/start-here/index.md",
+          "slug": "start-here"
+        }
+      ]
+    },
+    {
+      "label": "Get Started",
+      "items": [
+        {
+          "title": "Get Started",
+          "source": "docs/get-started/index.md",
+          "slug": "get-started"
+        },
+        {
+          "title": "Deploy Your First Platform",
+          "source": "docs/get-started/first-platform.md",
+          "slug": "get-started/first-platform"
+        },
+        {
+          "title": "Build Your First Data Product",
+          "source": "docs/get-started/first-data-product.md",
+          "slug": "get-started/first-data-product"
+        }
+      ]
+    },
+    {
+      "label": "Demo",
+      "items": [
+        {
+          "title": "Demo",
+          "source": "docs/demo/index.md",
+          "slug": "demo"
+        },
+        {
+          "title": "Customer 360 Golden Demo",
+          "source": "docs/demo/customer-360.md",
+          "slug": "demo/customer-360"
+        },
+        {
+          "title": "Customer 360 Validation",
+          "source": "docs/demo/customer-360-validation.md",
+          "slug": "demo/customer-360-validation"
+        }
+      ]
+    },
+    {
+      "label": "Concepts",
+      "items": [
+        {
+          "title": "Architecture Summary",
+          "source": "docs/architecture/ARCHITECTURE-SUMMARY.md",
+          "slug": "architecture/ARCHITECTURE-SUMMARY"
+        },
+        {
+          "title": "Four-Layer Model",
+          "source": "docs/architecture/four-layer-overview.md",
+          "slug": "architecture/four-layer-overview"
+        },
+        {
+          "title": "Plugin System",
+          "source": "docs/architecture/plugin-system/index.md",
+          "slug": "architecture/plugin-system"
+        },
+        {
+          "title": "Opinionation Boundaries",
+          "source": "docs/architecture/opinionation-boundaries.md",
+          "slug": "architecture/opinionation-boundaries"
+        },
+        {
+          "title": "Compiled Artifacts",
+          "source": "docs/contracts/compiled-artifacts.md",
+          "slug": "contracts/compiled-artifacts"
+        }
+      ]
+    },
+    {
+      "label": "Operations",
+      "items": [
+        {
+          "title": "DevPod + Hetzner",
+          "source": "docs/operations/devpod-hetzner.md",
+          "slug": "operations/devpod-hetzner"
+        },
+        {
+          "title": "Troubleshooting",
+          "source": "docs/operations/troubleshooting.md",
+          "slug": "operations/troubleshooting"
+        },
+        {
+          "title": "Deployment Guides",
+          "source": "docs/guides/deployment/index.md",
+          "slug": "guides/deployment"
+        },
+        {
+          "title": "Testing",
+          "source": "docs/guides/testing/index.md",
+          "slug": "guides/testing"
+        }
+      ]
+    },
+    {
+      "label": "Reference",
+      "items": [
+        {
+          "title": "Reference",
+          "source": "docs/reference/index.md",
+          "slug": "reference"
+        },
+        {
+          "title": "floe.yaml Schema",
+          "source": "docs/reference/floe-yaml-schema.md",
+          "slug": "reference/floe-yaml-schema"
+        },
+        {
+          "title": "Data Contract Reference",
+          "source": "docs/contracts/datacontract-yaml-reference.md",
+          "slug": "contracts/datacontract-yaml-reference"
+        },
+        {
+          "title": "Plugin Interfaces",
+          "source": "docs/architecture/interfaces/index.md",
+          "slug": "architecture/interfaces"
+        }
+      ]
+    },
+    {
+      "label": "Contributing",
+      "items": [
+        {
+          "title": "Contributing",
+          "source": "docs/contributing/index.md",
+          "slug": "contributing"
+        },
+        {
+          "title": "Documentation Standards",
+          "source": "docs/contributing/documentation-standards.md",
+          "slug": "contributing/documentation-standards"
+        }
+      ]
+    },
+    {
+      "label": "Releases",
+      "items": [
+        {
+          "title": "Alpha Checklist",
+          "source": "docs/releases/v0.1.0-alpha.1-checklist.md",
+          "slug": "releases/v0.1.0-alpha.1-checklist"
+        }
+      ]
+    }
+  ]
+}

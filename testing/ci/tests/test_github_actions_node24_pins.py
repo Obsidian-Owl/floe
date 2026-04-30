@@ -17,6 +17,7 @@ OLD_ACTION_PINS = {
 
 NODE24_ACTION_PINS = {
     "actions/checkout": "de0fac2e4500dabe0009e67214ff5f5447ce83dd",  # pragma: allowlist secret
+    "actions/setup-node": "48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e",  # pragma: allowlist secret
     "actions/setup-python": "a309ff8b426b58ec0e2a45f0f869d46889d02405",  # pragma: allowlist secret
     "astral-sh/setup-uv": "08807647e7069bb48b6ef5acd8ec9567f424441b",  # pragma: allowlist secret
     "Azure/setup-helm": "dda3372f752e03dde6b3237bc9431cdc2f7a02a2",  # pragma: allowlist secret

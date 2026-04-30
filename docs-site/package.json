@@ -1,0 +1,24 @@
+{
+  "name": "floe-docs-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync": "node scripts/sync-docs.mjs",
+    "test": "node --test scripts/*.test.mjs",
+    "build": "npm run sync && ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "dev": "npm run sync && ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "check:dist": "node scripts/check-built-docs.mjs",
+    "validate": "npm run test && npm run build && npm run check:dist"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.38.4",
+    "astro": "6.1.10"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
