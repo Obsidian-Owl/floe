@@ -1,6 +1,8 @@
 # Data Product Lifecycle Guide
 
-This guide describes the complete lifecycle of a data product in floe, from initialization to production operation.
+This guide describes the intended lifecycle of a data product in Floe. Some lifecycle commands shown here are planned user-facing commands, not alpha-supported commands.
+
+Alpha-supported path: use the Customer 360 docs and generated demo artifacts for the current release. The root `floe validate`, `floe compile`, and `floe run` commands exist as data-team stubs or planned lifecycle entry points; `floe init` is not implemented as a current user command.
 
 ## Overview
 
@@ -10,7 +12,7 @@ A data product moves through five phases:
 ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
 │   INIT      │──►│  DEVELOP    │──►│  VALIDATE   │──►│  COMPILE    │──►│    RUN      │
 │             │   │             │   │             │   │             │   │             │
-│ floe init   │   │ Edit models │   │ floe validate│  │ floe compile│   │ floe run    │
+│ manual setup│   │ Edit models │   │ validate     │  │ compile      │   │ run         │
 └─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘
 ```
 
@@ -18,16 +20,7 @@ A data product moves through five phases:
 
 ### Create Data Product
 
-```bash
-# Simple mode (no platform manifest)
-floe init my-product
-
-# Centralized mode (with platform manifest)
-floe init my-product --platform oci://registry.example.com/platform:v1.0.0
-
-# Data Mesh mode (with domain manifest)
-floe init my-product --domain oci://registry.example.com/sales-domain:v1.0.0
-```
+Current alpha: create a data product directory manually or start from `demo/customer-360`. A future `init` command is planned for simple, centralized, and Data Mesh modes, but it is not a current executable workflow.
 
 ### Generated Structure
 
@@ -171,9 +164,9 @@ slaProperties:
 
 ### Run Validation
 
-```bash
-$ floe validate
+Planned lifecycle behavior for the future data-team validation command:
 
+```text
 [1/4] Validating floe.yaml
       ✓ Schema valid
       ✓ Platform reference resolved
@@ -195,6 +188,8 @@ $ floe validate
 Validation PASSED
 ```
 
+Current alpha: `floe validate` is a stub. Use `make compile-demo` and `make demo-customer-360-validate` for the supported Customer 360 path.
+
 ### Validation Checks
 
 | Check | Description |
@@ -211,9 +206,9 @@ Validation PASSED
 
 ### Compile Artifacts
 
-```bash
-$ floe compile
+Planned lifecycle behavior for the future data-team compile command:
 
+```text
 [1/7] Loading platform artifacts
       ✓ Platform: acme-platform v1.2.3
       ✓ Compute: duckdb (enforced)
@@ -246,6 +241,8 @@ $ floe compile
 Compilation COMPLETE
 ```
 
+Current alpha: `floe compile` is a stub. Customer 360 artifacts are generated through `make compile-demo`, which calls `uv run floe platform compile` with the demo spec and manifest.
+
 ### Identity Registration
 
 During compilation, the product namespace is registered in the Iceberg catalog:
@@ -273,8 +270,8 @@ During compilation, the product namespace is registered in the Iceberg catalog:
 
 **Identity Conflict Error:**
 
-```bash
-$ floe compile
+```text
+[planned compile]
 
 [2/7] Validating product identity
       ✗ ERROR: Namespace 'sales.my_product' owned by different repository
@@ -331,9 +328,9 @@ metadata:
 
 ### Run Pipeline
 
-```bash
-$ floe run
+Planned lifecycle behavior for the future data-team run command:
 
+```text
 [1/4] Starting runtime
       ✓ ContractMonitor initialized
       ✓ Dagster code server started
@@ -358,6 +355,8 @@ $ floe run
 
 Pipeline COMPLETE (6m 45s)
 ```
+
+Current alpha: `floe run` is a stub. Run execution is validated through the Customer 360 platform/demo path documented in [Customer 360 Golden Demo](../demo/customer-360.md).
 
 ### Runtime Flow
 
@@ -404,7 +403,7 @@ Pipeline COMPLETE (6m 45s)
 
 | Event | Table Action |
 |-------|--------------|
-| First `floe run` | Iceberg tables created in catalog |
+| First product run | Iceberg tables created in catalog |
 | Model change | Table updated (incremental or replace) |
 | Schema change | Table altered or recreated |
 | Delete model | Table retained (manual cleanup) |
@@ -413,7 +412,7 @@ Pipeline COMPLETE (6m 45s)
 
 ```
 ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-│   floe      │──────│   Polaris   │──────│   Object    │
+│   planned   │──────│   Polaris   │──────│   Object    │
 │   compile   │      │   Catalog   │      │   Storage   │
 └─────────────┘      └─────────────┘      └─────────────┘
       │                    │                    │
@@ -444,34 +443,34 @@ version: 1.0.0 → 2.0.0  # If removing/changing columns
 
 ### Compile Failure
 
-```bash
-$ floe compile
+```text
+$ planned compile
 ERROR: Model silver_payments violates naming convention
 
 $ # Fix naming
 $ mv models/silver/stg_payments.sql models/silver/silver_payments.sql
 
-$ floe compile
+$ planned compile
 ✓ Compilation COMPLETE
 ```
 
 ### Run Failure
 
-```bash
-$ floe run
+```text
+$ planned run
 ERROR: Transform silver_customers failed
 
 [View logs]
 sqlalchemy.exc.OperationalError: connection refused
 
 $ # Fix connection, retry
-$ floe run --retry-failed
+$ planned run --retry-failed
 ```
 
 ### Contract Violation
 
-```bash
-$ floe run
+```text
+$ planned run
 WARNING: Contract violation detected
 
   Contract: my-product-customers

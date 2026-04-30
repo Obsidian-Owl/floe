@@ -245,6 +245,6 @@ stringData:
 
 - [floe-platform Chart](../../../charts/floe-platform/README.md) - Platform services chart
 - [floe-jobs Chart](../../../charts/floe-jobs/README.md) - Jobs and pipelines chart
-- [Production](production.md) - HA, scaling, monitoring
+- [Production considerations](production.md) - Planned HA, scaling, and monitoring considerations, not alpha-validated operations
 - [Two-Layer Model](two-layer-model.md) - Deployment model overview
 - [Local Development](local-development.md) - Development setup

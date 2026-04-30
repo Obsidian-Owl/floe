@@ -1,10 +1,12 @@
 # Production Considerations
 
-This document covers production-ready deployment patterns for floe.
+This document captures production hardening considerations for future Floe deployments. It is not an alpha-supported production runbook, and the patterns below have not been validated as part of the current release lane.
+
+For the current alpha, use [Kubernetes Helm](kubernetes-helm.md) and [Capability Status](../../architecture/capability-status.md) to distinguish supported deployment paths from planned production operations.
 
 ---
 
-## 1. High Availability
+## 1. High Availability Considerations
 
 ```
 +---------------------------------------------------------------------------+
@@ -32,7 +34,7 @@ This document covers production-ready deployment patterns for floe.
 
 ---
 
-## 2. Scaling Guidelines
+## 2. Scaling Considerations
 
 | Workload | Scaling Strategy |
 |----------|------------------|
@@ -42,7 +44,7 @@ This document covers production-ready deployment patterns for floe.
 
 ---
 
-## 3. Backup Strategy
+## 3. Backup Strategy Considerations
 
 ```yaml
 # CronJob for PostgreSQL backups
@@ -73,7 +75,7 @@ spec:
 
 ---
 
-## 4. Monitoring
+## 4. Monitoring Considerations
 
 ```yaml
 # ServiceMonitor for Prometheus
@@ -102,7 +104,7 @@ spec:
 
 ---
 
-## 5. Pod Disruption Budgets
+## 5. Pod Disruption Budget Considerations
 
 PDBs ensure service availability during cluster maintenance:
 
@@ -154,7 +156,7 @@ spec:
 
 ---
 
-## 6. Dagster Daemon High Availability
+## 6. Dagster Daemon High Availability Considerations
 
 The Dagster daemon is a single-instance service by design. floe provides configurable daemon modes:
 
@@ -248,14 +250,14 @@ The daemon persists all state to PostgreSQL, allowing recovery without data loss
     summary: "Dagster daemon heartbeat stale"
 ```
 
-### Recommendation
+### Planning Matrix
 
 | Environment | Mode | Rationale |
 |-------------|------|-----------|
 | Development | single | Simpler, sufficient for dev |
 | Staging | single | Test production-like recovery |
-| Production (small) | single | Adequate with fast K8s restart |
-| Production (critical) | ha | Sub-15s failover requirement |
+| Future production (small) | single | Candidate pattern; validate before adopting |
+| Future production (critical) | ha | Candidate pattern for sub-15s failover requirements |
 
 ---
 
