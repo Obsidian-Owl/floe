@@ -11,19 +11,47 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-REQUIRED_DOCS = {
+REQUIRED_PAGES = {
     "docs/index.md",
     "docs/start-here/index.md",
     "docs/get-started/index.md",
     "docs/get-started/first-platform.md",
     "docs/get-started/first-data-product.md",
+    "docs/platform-engineers/index.md",
+    "docs/platform-engineers/first-platform.md",
+    "docs/platform-engineers/validate-platform.md",
+    "docs/data-engineers/index.md",
+    "docs/data-engineers/first-data-product.md",
+    "docs/data-engineers/validate-data-product.md",
     "docs/demo/index.md",
     "docs/demo/customer-360.md",
     "docs/demo/customer-360-validation.md",
-    "docs/operations/devpod-hetzner.md",
-    "docs/operations/troubleshooting.md",
+    "docs/architecture/capability-status.md",
     "docs/reference/index.md",
     "docs/contributing/index.md",
+    "docs/contributing/devpod-hetzner.md",
+    "docs/contributing/testing.md",
+    "docs/contributing/troubleshooting.md",
+    "docs/contributing/documentation-standards.md",
+    "docs/releases/v0.1.0-alpha.1-checklist.md",
+}
+
+REQUIRED_MANIFEST_SOURCES = {
+    "docs/index.md",
+    "docs/start-here/index.md",
+    "docs/platform-engineers/index.md",
+    "docs/platform-engineers/first-platform.md",
+    "docs/platform-engineers/validate-platform.md",
+    "docs/data-engineers/index.md",
+    "docs/data-engineers/first-data-product.md",
+    "docs/data-engineers/validate-data-product.md",
+    "docs/demo/customer-360.md",
+    "docs/architecture/capability-status.md",
+    "docs/reference/index.md",
+    "docs/contributing/index.md",
+    "docs/contributing/devpod-hetzner.md",
+    "docs/contributing/testing.md",
+    "docs/contributing/troubleshooting.md",
     "docs/contributing/documentation-standards.md",
     "docs/releases/v0.1.0-alpha.1-checklist.md",
 }
@@ -31,19 +59,55 @@ REQUIRED_DOCS = {
 MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 
-BASE_TUTORIAL_HEADINGS = (
-    "Prerequisites",
-    "What This Does",
-    "Steps",
-    "Expected Output",
-    "Troubleshooting",
-)
-INFRA_TUTORIAL_HEADINGS = (*BASE_TUTORIAL_HEADINGS, "Cleanup")
 REQUIRED_TUTORIAL_HEADINGS = {
-    "docs/get-started/first-platform.md": INFRA_TUTORIAL_HEADINGS,
-    "docs/get-started/first-data-product.md": BASE_TUTORIAL_HEADINGS,
-    "docs/operations/devpod-hetzner.md": INFRA_TUTORIAL_HEADINGS,
-    "docs/operations/troubleshooting.md": BASE_TUTORIAL_HEADINGS,
+    "docs/platform-engineers/first-platform.md": (
+        "Prerequisites",
+        "1. Confirm Your Cluster Context",
+        "2. Choose The Deployment Mode",
+        "3. Prepare Platform Configuration",
+        "4. Install Floe",
+        "5. Wait For Platform Services",
+        "6. Validate The Platform",
+        "Cloud Provider Examples",
+    ),
+    "docs/platform-engineers/validate-platform.md": (
+        "Platform Health",
+        "Service Access",
+        "Customer 360 Platform Evidence",
+        "What To Hand To Data Engineers",
+    ),
+    "docs/data-engineers/first-data-product.md": (
+        "Prerequisites",
+        "1. Inspect The Product Configuration",
+        "2. Validate The Product",
+        "3. Compile The Product",
+        "4. Run The Product",
+        "5. Validate The Product Outputs",
+    ),
+    "docs/data-engineers/validate-data-product.md": (
+        "Validate Business Outputs",
+        "Inspect Orchestration",
+        "Inspect Storage",
+        "Inspect Lineage And Traces",
+        "Troubleshooting",
+    ),
+    "docs/contributing/devpod-hetzner.md": (
+        "Prerequisites",
+        "What This Does",
+        "Steps",
+        "Expected Output",
+        "Port-Forward Ownership",
+        "Troubleshooting",
+        "Cleanup",
+    ),
+    "docs/contributing/troubleshooting.md": (
+        "Prerequisites",
+        "What This Does",
+        "Steps",
+        "Expected Output",
+        "Troubleshooting",
+        "Evidence To Capture",
+    ),
 }
 
 
@@ -194,9 +258,11 @@ def validate_docs_navigation(root: Path) -> list[str]:
     """Return validation errors for alpha-critical docs navigation."""
     manifest_sources, errors = _validate_manifest(root)
 
-    for required in sorted(REQUIRED_DOCS):
+    for required in sorted(REQUIRED_PAGES):
         if not (root / required).exists():
             errors.append(f"Missing docs page: {required}")
+
+    for required in sorted(REQUIRED_MANIFEST_SOURCES):
         if required not in manifest_sources:
             errors.append(f"Missing docs manifest entry: {required}")
 

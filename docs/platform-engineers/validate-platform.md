@@ -19,13 +19,16 @@ Expected outcome:
 Open service access using your normal Kubernetes access pattern. For local evaluation, port-forward the services you want to inspect.
 
 ```bash
-kubectl port-forward -n floe-dev svc/dagster-webserver 3100:3000
+RELEASE=${RELEASE:-floe}
+kubectl port-forward -n floe-dev "svc/${RELEASE}-dagster-webserver" 3100:3000
 ```
 
 Expected outcome:
 
 - Dagster is reachable at `http://localhost:3100`.
 - Platform service access uses your cluster access method, not a cloud-provider-specific Floe requirement.
+
+The contributor release-validation lane uses `RELEASE=floe-platform` because that path installs the chart with the `floe-platform` release name.
 
 ## Customer 360 Platform Evidence
 

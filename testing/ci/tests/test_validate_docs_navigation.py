@@ -7,24 +7,127 @@ import pytest
 
 from testing.ci.validate_docs_navigation import validate_docs_navigation
 
-REQUIRED_DOCS = [
+REQUIRED_PAGES = [
     "index.md",
     "start-here/index.md",
     "get-started/index.md",
     "get-started/first-platform.md",
     "get-started/first-data-product.md",
+    "platform-engineers/index.md",
+    "platform-engineers/first-platform.md",
+    "platform-engineers/validate-platform.md",
+    "data-engineers/index.md",
+    "data-engineers/first-data-product.md",
+    "data-engineers/validate-data-product.md",
     "demo/index.md",
     "demo/customer-360.md",
     "demo/customer-360-validation.md",
-    "operations/devpod-hetzner.md",
-    "operations/troubleshooting.md",
+    "architecture/capability-status.md",
     "reference/index.md",
     "contributing/index.md",
+    "contributing/devpod-hetzner.md",
+    "contributing/testing.md",
+    "contributing/troubleshooting.md",
     "contributing/documentation-standards.md",
     "releases/v0.1.0-alpha.1-checklist.md",
 ]
 
-BASE_TUTORIAL_DOC = """# {title}
+REQUIRED_MANIFEST_SOURCES = [
+    "index.md",
+    "start-here/index.md",
+    "platform-engineers/index.md",
+    "platform-engineers/first-platform.md",
+    "platform-engineers/validate-platform.md",
+    "data-engineers/index.md",
+    "data-engineers/first-data-product.md",
+    "data-engineers/validate-data-product.md",
+    "demo/customer-360.md",
+    "architecture/capability-status.md",
+    "reference/index.md",
+    "contributing/index.md",
+    "contributing/devpod-hetzner.md",
+    "contributing/testing.md",
+    "contributing/troubleshooting.md",
+    "contributing/documentation-standards.md",
+    "releases/v0.1.0-alpha.1-checklist.md",
+]
+
+PLATFORM_FIRST_DOC = """# Deploy Your First Platform
+
+## Prerequisites
+
+## 1. Confirm Your Cluster Context
+
+## 2. Choose The Deployment Mode
+
+## 3. Prepare Platform Configuration
+
+## 4. Install Floe
+
+## 5. Wait For Platform Services
+
+## 6. Validate The Platform
+
+## Cloud Provider Examples
+"""
+
+PLATFORM_VALIDATE_DOC = """# Validate Your Platform
+
+## Platform Health
+
+## Service Access
+
+## Customer 360 Platform Evidence
+
+## What To Hand To Data Engineers
+"""
+
+DATA_FIRST_DOC = """# Build Your First Data Product
+
+## Prerequisites
+
+## 1. Inspect The Product Configuration
+
+## 2. Validate The Product
+
+## 3. Compile The Product
+
+## 4. Run The Product
+
+## 5. Validate The Product Outputs
+"""
+
+DATA_VALIDATE_DOC = """# Validate Your Data Product
+
+## Validate Business Outputs
+
+## Inspect Orchestration
+
+## Inspect Storage
+
+## Inspect Lineage And Traces
+
+## Troubleshooting
+"""
+
+CONTRIBUTOR_TUTORIAL_DOC = """# {title}
+
+## Prerequisites
+
+## What This Does
+
+## Steps
+
+## Expected Output
+
+## Port-Forward Ownership
+
+## Troubleshooting
+
+## Cleanup
+"""
+
+TROUBLESHOOTING_DOC = """# Troubleshooting
 
 ## Prerequisites
 
@@ -35,24 +138,23 @@ BASE_TUTORIAL_DOC = """# {title}
 ## Expected Output
 
 ## Troubleshooting
-"""
 
-INFRA_TUTORIAL_DOC = f"""{BASE_TUTORIAL_DOC}
-
-## Cleanup
+## Evidence To Capture
 """
 
 TUTORIAL_DOCS = {
-    "get-started/first-platform.md": INFRA_TUTORIAL_DOC,
-    "get-started/first-data-product.md": BASE_TUTORIAL_DOC,
-    "operations/devpod-hetzner.md": INFRA_TUTORIAL_DOC,
-    "operations/troubleshooting.md": BASE_TUTORIAL_DOC,
+    "platform-engineers/first-platform.md": PLATFORM_FIRST_DOC,
+    "platform-engineers/validate-platform.md": PLATFORM_VALIDATE_DOC,
+    "data-engineers/first-data-product.md": DATA_FIRST_DOC,
+    "data-engineers/validate-data-product.md": DATA_VALIDATE_DOC,
+    "contributing/devpod-hetzner.md": CONTRIBUTOR_TUTORIAL_DOC,
+    "contributing/troubleshooting.md": TROUBLESHOOTING_DOC,
 }
 
 
 def _write_required_docs(root: Path) -> None:
     docs = root / "docs"
-    for relative in REQUIRED_DOCS:
+    for relative in REQUIRED_PAGES:
         path = docs / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         template = TUTORIAL_DOCS.get(relative, "# {title}\n")
@@ -60,11 +162,22 @@ def _write_required_docs(root: Path) -> None:
 
 
 def _write_manifest(root: Path, docs: list[str] | None = None) -> None:
-    manifest_docs = docs if docs is not None else REQUIRED_DOCS
+    manifest_docs = docs if docs is not None else REQUIRED_MANIFEST_SOURCES
     manifest = {
+        "includePrefixes": [
+            "docs/architecture/",
+            "docs/contributing/",
+            "docs/data-engineers/",
+            "docs/demo/",
+            "docs/get-started/",
+            "docs/platform-engineers/",
+            "docs/reference/",
+            "docs/releases/",
+            "docs/start-here/",
+        ],
         "sections": [
             {
-                "label": "Alpha",
+                "label": "Persona docs",
                 "items": [
                     {
                         "title": relative.removesuffix(".md"),
@@ -100,7 +213,10 @@ def test_validate_docs_navigation_reports_missing_required_manifest_entry(
 ) -> None:
     """Navigation validation reports required pages omitted from the docs manifest."""
     _write_required_docs(tmp_path)
-    _write_manifest(tmp_path, docs=[doc for doc in REQUIRED_DOCS if doc != "reference/index.md"])
+    _write_manifest(
+        tmp_path,
+        docs=[doc for doc in REQUIRED_MANIFEST_SOURCES if doc != "reference/index.md"],
+    )
 
     errors = validate_docs_navigation(tmp_path)
 
@@ -108,25 +224,27 @@ def test_validate_docs_navigation_reports_missing_required_manifest_entry(
 
 
 @pytest.mark.requirement("alpha-docs")
-def test_validate_docs_navigation_rejects_first_platform_without_expected_output(
+def test_validate_docs_navigation_rejects_first_platform_without_install_step(
     tmp_path: Path,
 ) -> None:
     """Navigation validation rejects alpha tutorials missing required headings."""
     _write_required_docs(tmp_path)
     _write_manifest(tmp_path)
-    (tmp_path / "docs/get-started/first-platform.md").write_text(
+    (tmp_path / "docs/platform-engineers/first-platform.md").write_text(
         "# Deploy Your First Platform\n\n"
         "## Prerequisites\n\n"
-        "## What This Does\n\n"
-        "## Steps\n\n"
-        "## Troubleshooting\n\n"
-        "## Cleanup\n",
+        "## 1. Confirm Your Cluster Context\n\n"
+        "## 2. Choose The Deployment Mode\n\n"
+        "## 3. Prepare Platform Configuration\n\n"
+        "## 5. Wait For Platform Services\n\n"
+        "## 6. Validate The Platform\n\n"
+        "## Cloud Provider Examples\n",
     )
 
     errors = validate_docs_navigation(tmp_path)
 
     assert (
-        "Missing required heading in docs/get-started/first-platform.md: ## Expected Output"
+        "Missing required heading in docs/platform-engineers/first-platform.md: ## 4. Install Floe"
     ) in errors
 
 
@@ -136,7 +254,7 @@ def test_validate_docs_navigation_reports_missing_manifest_source(
 ) -> None:
     """Navigation validation reports manifest entries pointing at missing sources."""
     _write_required_docs(tmp_path)
-    _write_manifest(tmp_path, docs=[*REQUIRED_DOCS, "missing.md"])
+    _write_manifest(tmp_path, docs=[*REQUIRED_MANIFEST_SOURCES, "missing.md"])
 
     errors = validate_docs_navigation(tmp_path)
 
@@ -152,7 +270,7 @@ def test_validate_docs_navigation_rejects_non_markdown_manifest_source(
     non_markdown_source = tmp_path / "docs/downloads/readme.txt"
     non_markdown_source.parent.mkdir(parents=True)
     non_markdown_source.write_text("Not a docs page.\n")
-    _write_manifest(tmp_path, docs=[*REQUIRED_DOCS, "downloads/readme.txt"])
+    _write_manifest(tmp_path, docs=[*REQUIRED_MANIFEST_SOURCES, "downloads/readme.txt"])
 
     errors = validate_docs_navigation(tmp_path)
 
@@ -199,6 +317,20 @@ def test_validate_docs_navigation_accepts_required_alpha_pages(tmp_path: Path) -
     """Navigation validation passes when alpha-critical pages exist in the manifest."""
     _write_required_docs(tmp_path)
     _write_manifest(tmp_path)
+
+    assert validate_docs_navigation(tmp_path) == []
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_validate_docs_navigation_allows_bridge_pages_outside_primary_manifest(
+    tmp_path: Path,
+) -> None:
+    """Bridge pages must exist and link-check without being primary nav entries."""
+    _write_required_docs(tmp_path)
+    _write_manifest(
+        tmp_path,
+        docs=[doc for doc in REQUIRED_MANIFEST_SOURCES if not doc.startswith("get-started/")],
+    )
 
     assert validate_docs_navigation(tmp_path) == []
 
@@ -271,7 +403,7 @@ def test_validate_docs_navigation_checks_all_published_docs(
     manifest["includePrefixes"] = ["docs/architecture/"]
     manifest_path.write_text(json.dumps(manifest))
     published_doc = tmp_path / "docs/architecture/published.md"
-    published_doc.parent.mkdir(parents=True)
+    published_doc.parent.mkdir(parents=True, exist_ok=True)
     published_doc.write_text("# Published\n\nSee [missing](missing.md).\n")
 
     errors = validate_docs_navigation(tmp_path)

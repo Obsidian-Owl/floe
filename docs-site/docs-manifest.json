@@ -167,6 +167,11 @@
           "slug": "contributing/testing"
         },
         {
+          "title": "Contributor Troubleshooting",
+          "source": "docs/contributing/troubleshooting.md",
+          "slug": "contributing/troubleshooting"
+        },
+        {
           "title": "Documentation Standards",
           "source": "docs/contributing/documentation-standards.md",
           "slug": "contributing/documentation-standards"

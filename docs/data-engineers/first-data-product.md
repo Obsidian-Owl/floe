@@ -23,38 +23,46 @@ Expected outcome:
 
 ## 2. Validate The Product
 
+The root `floe validate` command currently exists as an alpha stub and is not yet the supported Customer 360 validation path. Use the checked-in demo validation commands for the current alpha.
+
 ```bash
-uv run floe data validate demo/customer-360/floe.yaml
+make compile-demo
 ```
 
 Expected outcome:
 
-- Floe reports schema-valid product configuration.
-- Validation errors point to fields in `floe.yaml` that need correction.
+- dbt manifests compile for the Customer 360 demo project.
+- Floe generates `demo/customer-360/compiled_artifacts.json` and validates the generated demo artifacts.
 
 ## 3. Compile The Product
 
+The root `floe compile` command is also an alpha data-team stub. Customer 360 compilation currently runs through the platform compiler used by `make compile-demo`.
+
 ```bash
-uv run floe data compile demo/customer-360/floe.yaml --output target/customer-360
+uv run floe platform compile \
+  --spec demo/customer-360/floe.yaml \
+  --manifest demo/manifest.yaml \
+  --output demo/customer-360/compiled_artifacts.json \
+  --generate-definitions
 ```
 
 Expected outcome:
 
-- Floe writes compiled artifacts under `target/customer-360`.
+- Floe writes `demo/customer-360/compiled_artifacts.json`.
 - The artifacts are the handoff contract for orchestration, dbt, lineage, and platform services.
 
 ## 4. Run The Product
 
-Use the run command or deployment command documented by your Platform Engineer for the target platform. For the alpha Customer 360 path, use the Customer 360 demo guide:
+Use the run command or deployment command documented by your Platform Engineer for the target platform. For the alpha Customer 360 evidence path, use the Customer 360 validation command after the platform and job are available:
 
 ```bash
-make demo-customer-360-run
+make demo-customer-360-validate
 ```
 
 Expected outcome:
 
-- The Customer 360 run completes successfully.
-- The platform records run, lineage, trace, storage, and business output evidence.
+- The platform reports run, lineage, trace, storage, and business output evidence for Customer 360.
+- If the run has not happened yet, use the run trigger documented by your Platform Engineer or the contributor release-validation lane.
 
 ## 5. Validate The Product Outputs
 

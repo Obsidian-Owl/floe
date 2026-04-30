@@ -1,159 +1,90 @@
 # Local Kind Evaluation
 
-Use local Kind when you want a disposable Kubernetes cluster for evaluation or contributor smoke checks. Docker Compose is not supported because Floe's platform behavior depends on Kubernetes service discovery, workload lifecycle, and Helm rendering.
+Use local Kind when you want a disposable Kubernetes cluster for Platform Engineer evaluation or contributor smoke checks. This is not a separate product onboarding CLI path; it is the local Kubernetes form of the Helm deployment workflow.
 
----
+Docker Compose is not supported because Floe's platform behavior depends on Kubernetes service discovery, workload lifecycle, and Helm rendering.
 
-## 1. Local Development (uv)
+## Prerequisites
 
-### 1.1 Installation
+- Docker is running locally.
+- `kind`, `kubectl`, and `helm` are installed.
+- You are running commands from the Floe repository root.
 
-```bash
-# Create virtual environment with uv
-uv venv
-source .venv/bin/activate
-
-# Install CLI and dependencies
-uv add floe-cli
-
-# For specific compute targets (dbt adapters)
-uv add dbt-duckdb      # Default OSS compute
-uv add dbt-snowflake   # Snowflake
-uv add dbt-bigquery    # BigQuery
-```
-
-### 1.2 Project Setup
+## 1. Create The Kind Cluster
 
 ```bash
-# Initialize project
-floe init my-project
-cd my-project
-
-# Validate configuration
-floe validate
-
-# Run pipeline (uses configured compute target)
-floe run --env dev
-```
-
-### 1.3 Local Architecture
-
-```
-+---------------------------------------------------------------+
-|                     LOCAL MACHINE                              |
-|                                                                |
-|  +---------------------------------------------------------+  |
-|  |  floe-cli process                                        |  |
-|  |                                                          |  |
-|  |  +---------+   +---------+   +---------+                 |  |
-|  |  | Dagster |-->|   dbt   |-->| DuckDB  |                 |  |
-|  |  | (in-    |   |  (in-   |   |  (in-   |                 |  |
-|  |  | process)|   | process)|   | process)|                 |  |
-|  |  +---------+   +---------+   +---------+                 |  |
-|  |                                                          |  |
-|  +---------------------------------------------------------+  |
-|                                                                |
-|  +-----------------+   +-----------------+                     |
-|  | ./warehouse/    |   | .floe/          |                     |
-|  | +- data.duckdb  |   | +- artifacts.json|                    |
-|  +-----------------+   +-----------------+                     |
-+---------------------------------------------------------------+
-```
-
-### 1.4 Limitations
-
-- No persistent Dagster UI (run-and-exit)
-- No built-in observability backends
-- Single-user, single-machine only
-
----
-
-## 2. Local Kubernetes (Kind)
-
-For full-featured local development with all platform services, use Kind (Kubernetes in Docker).
-
-### 2.1 Quick Start
-
-```bash
-# Create Kind cluster
 make kind-up
-
-# Deploy platform services
-make deploy-local
-
-# Verify deployment
-kubectl get pods -n floe-dev
 ```
 
-### 2.2 Architecture
+Expected outcome:
 
-```
-+---------------------------------------------------------------------------+
-|                           KIND CLUSTER                                      |
-|                                                                            |
-|  +---------------------------------------------------------------------+  |
-|  |  namespace: floe-dev                                                 |  |
-|  |                                                                      |  |
-|  |  +---------------+   +---------------+   +---------------+           |  |
-|  |  |   dagster     |   |   postgres    |   |   polaris     |           |  |
-|  |  |  (Deployment) |-->| (StatefulSet) |<--|  (Deployment) |           |  |
-|  |  +---------------+   +---------------+   +---------------+           |  |
-|  |         |                   |                    |                   |  |
-|  |         v                   v                    v                   |  |
-|  |  +---------------+   +---------------+   +---------------+           |  |
-|  |  | otel-collector|   |  localstack   |   |     cube      |           |  |
-|  |  |  (DaemonSet)  |   | (StatefulSet) |   |  (Deployment) |           |  |
-|  |  +---------------+   +---------------+   +---------------+           |  |
-|  |                                                                      |  |
-|  +---------------------------------------------------------------------+  |
-|                                                                            |
-|  +---------------------------------------------------------------------+  |
-|  |  PersistentVolumeClaims                                              |  |
-|  |  +-- postgres-data (10Gi)                                            |  |
-|  |  +-- localstack-data (10Gi)                                          |  |
-|  +---------------------------------------------------------------------+  |
-+---------------------------------------------------------------------------+
-```
+- A local Kind cluster is available.
+- `kubectl cluster-info` points at the local evaluation cluster.
 
-### 2.3 Service URLs
-
-| Service | URL | Purpose |
-|---------|-----|---------|
-| Dagster UI | http://localhost:30000 | Asset management, runs |
-| Polaris | http://localhost:30181 | Iceberg catalog |
-| Cube | http://localhost:30400 | Semantic layer API |
-| LocalStack | http://localhost:30566 | S3-compatible storage |
-
-### 2.4 Development Workflow
+## 2. Render The Platform Chart
 
 ```bash
-# Run tests in K8s
-make test
+helm dependency update ./charts/floe-platform
+helm template floe ./charts/floe-platform \
+  --namespace floe-dev \
+  --create-namespace >/tmp/floe-platform-rendered.yaml
+```
 
-# View logs
-kubectl logs -f deployment/dagster-webserver -n floe-dev
+Expected outcome:
 
-# Port-forward for debugging
-kubectl port-forward svc/dagster-webserver 3000:3000 -n floe-dev
+- Helm dependencies resolve locally.
+- The chart renders Kubernetes manifests without schema or template errors.
 
-# Clean up
+## 3. Install Floe Locally
+
+```bash
+helm upgrade --install floe ./charts/floe-platform \
+  --namespace floe-dev \
+  --create-namespace
+```
+
+Expected outcome:
+
+- Helm reports the `floe` release as deployed.
+- Platform pods begin starting in the `floe-dev` namespace.
+
+## 4. Inspect Platform Health
+
+```bash
+kubectl get pods -n floe-dev
+helm status floe -n floe-dev
+```
+
+Expected outcome:
+
+- Required platform pods reach `Running` or `Completed`.
+- Helm reports the release status as `deployed`.
+
+## 5. Access Dagster For Evaluation
+
+```bash
+RELEASE=${RELEASE:-floe}
+kubectl port-forward -n floe-dev "svc/${RELEASE}-dagster-webserver" 3100:3000
+```
+
+Expected outcome:
+
+- Dagster is reachable at `http://localhost:3100`.
+- If your install uses a different release name, set `RELEASE` before running the port-forward.
+
+## 6. Clean Up
+
+```bash
 make kind-down
 ```
 
-### 2.5 Why Not Docker Compose?
+Expected outcome:
 
-Docker Compose is **explicitly prohibited** (REQ-621) because:
-
-1. **No K8s-specific testing**: Cannot test probes, resource limits, network policies
-2. **No parity**: Docker Compose ≠ production K8s environment
-3. **Hidden bugs**: Issues only discovered in production
-4. **No RBAC testing**: Cannot test service accounts, secrets access
-
-Kind provides full Kubernetes compatibility while running locally.
-
----
+- The local Kind cluster is removed.
+- Local evaluation resources are destroyed.
 
 ## Related Documentation
 
-- [Kubernetes Helm](kubernetes-helm.md) - Production deployment
-- [Two-Layer Model](two-layer-model.md) - Deployment model overview
+- [Platform Engineer first platform guide](../../platform-engineers/first-platform.md)
+- [Kubernetes Helm](kubernetes-helm.md)
+- [Capability status](../../architecture/capability-status.md)

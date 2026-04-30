@@ -1,11 +1,11 @@
 # Troubleshooting
 
-Use this guide when the alpha DevPod + Customer 360 path fails after the normal get-started steps.
+Use this guide when the contributor remote-validation lane or Customer 360 evidence checks fail after the normal setup steps.
 
 ## Prerequisites
 
 - Run commands from the repository root.
-- Know whether you are using local Kind or the DevPod + Hetzner path.
+- Know whether you are using local Kind or the contributor remote workspace.
 - For DevPod debugging, sync kubeconfig first with `make devpod-sync`.
 - Keep exact command output for release evidence or follow-up issues.
 

@@ -66,4 +66,4 @@ The evidence maps to the release surfaces as follows:
 - [Customer 360 Golden Demo](customer-360.md)
 - [Validate your platform](../platform-engineers/validate-platform.md)
 - [Validate your data product](../data-engineers/validate-data-product.md)
-- DevPod contributor workspace
+- [Contributor troubleshooting](../contributing/troubleshooting.md)
