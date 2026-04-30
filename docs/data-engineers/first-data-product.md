@@ -62,7 +62,7 @@ make demo-customer-360-validate
 Expected outcome:
 
 - The platform reports run, lineage, trace, storage, and business output evidence for Customer 360.
-- If the run has not happened yet, use the run trigger documented by your Platform Engineer or the contributor release-validation lane.
+- If the run has not happened yet, ask your Platform Engineer for the supported run trigger or deployed service path for your environment.
 
 ## 5. Validate The Product Outputs
 

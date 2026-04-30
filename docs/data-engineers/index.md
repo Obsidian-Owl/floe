@@ -17,4 +17,4 @@ Data Engineers use Floe to build governed data products on an existing Floe plat
 
 ## What This Path Does Not Require
 
-You do not need DevPod or Floe contributor tooling. Start from a Floe platform that a Platform Engineer has deployed and validated.
+You do not need Floe contributor tooling. Start from a Floe platform that a Platform Engineer has deployed and validated.
