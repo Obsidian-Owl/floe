@@ -535,6 +535,33 @@ class TestDagsterOtelEnvVars:
         assert "custom-otel:4317" in rendered_yaml
         assert "floe-platform-otel:4317" not in rendered_yaml
 
+    @pytest.mark.requirement("AC-17.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_values_demo_preserves_dagster_otel_envs_when_adding_schedule_env(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Demo values must preserve OTel env vars when overriding Dagster env lists."""
+        documents = _render_template_with_values_file(
+            platform_chart_path,
+            "values-demo.yaml",
+        )
+        dagster_deps = _find_dagster_deployments(documents)
+        assert len(dagster_deps) >= 2, "Expected Dagster webserver and daemon deployments"
+
+        for dep in dagster_deps:
+            envs = {
+                env["name"]: env.get("value")
+                for env in _get_container_env_vars(dep)
+                if "name" in env
+            }
+            assert envs["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://floe-platform-otel:4317"
+            assert envs["OTEL_SERVICE_NAME"] == "floe-platform"
+
+            name = dep["metadata"]["name"]
+            if name.endswith("dagster-daemon"):
+                assert envs["DAGSTER_DEFAULT_SCHEDULE_CRON"] == "*/10 * * * *"
+
 
 def _find_marquez_deployment(
     documents: list[dict[str, Any]],
