@@ -7,12 +7,13 @@ Floe is an open platform for building governed internal data platforms on Kubern
 | Persona | Start Here | Outcome |
 | --- | --- | --- |
 | Platform Engineer | [Deploy your first platform](./platform-engineers/first-platform.md) | A Floe platform running on a Kubernetes cluster you control |
-| Data Engineer | [Build your first data product](./data-engineers/first-data-product.md) | A governed Customer 360 data product running on Floe |
+| Data Engineer | [Build your first data product](./data-engineers/first-data-product.md) | A minimal `hello-orders` data product built from source and ready for governed runtime packaging |
 | Floe Contributor | [Contributing](./contributing/index.md) | A local or remote development environment for changing Floe itself |
 
 ## Start Here
 
 - [Start Here](./start-here/index.md) explains the alpha scope, four-layer model, and persona paths.
+- [Recommended Enterprise Operating Model](./guides/operating-model.md) explains how Floe fits into source control, CI/CD, artifact registries, approvals, and deployment systems.
 - [Platform Engineers](./platform-engineers/index.md) covers platform deployment, validation, and handoff.
 - [Data Engineers](./data-engineers/index.md) covers data product build, validation, and Customer 360 checks.
 - [Floe Contributors](./contributing/index.md) covers repository development and release-validation workflows.

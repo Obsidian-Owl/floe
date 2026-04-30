@@ -37,6 +37,11 @@
           "title": "Start Here",
           "source": "docs/start-here/index.md",
           "slug": "start-here"
+        },
+        {
+          "title": "Operating Model",
+          "source": "docs/guides/operating-model.md",
+          "slug": "guides/operating-model"
         }
       ]
     },
@@ -59,9 +64,19 @@
           "slug": "platform-engineers/validate-platform"
         },
         {
+          "title": "Platform Environment Contract",
+          "source": "docs/platform-engineers/platform-environment-contract.md",
+          "slug": "platform-engineers/platform-environment-contract"
+        },
+        {
           "title": "Deployment Guides",
           "source": "docs/guides/deployment/index.md",
           "slug": "guides/deployment"
+        },
+        {
+          "title": "Data Product Runtime Artifacts",
+          "source": "docs/guides/deployment/data-product-runtime-artifacts.md",
+          "slug": "guides/deployment/data-product-runtime-artifacts"
         }
       ]
     },
