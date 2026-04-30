@@ -30,7 +30,7 @@ Key evidence:
 
 Next recommended work:
 
-Create a separate implementation plan for an opt-in OpenChoreo resource generator after ADR review.
+Create a separate implementation plan for an opt-in OpenChoreo resource generator after ADR review. That plan should include a glue-removal ledger proving which Floe-owned Helm, GitOps, RBAC, network, secrets, observability, or CI surfaces would be deleted or materially simplified if OpenChoreo adoption succeeds.
 
 ## Non-Blocking Follow-Ups
 
