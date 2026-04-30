@@ -163,8 +163,8 @@ If something isn't working, check these common issues:
 ================================================================================
 
 For more information, see:
-- floe Platform Docs: https://floe.dev/docs
-- Helm Chart Reference: https://floe.dev/docs/deployment/helm
-- Troubleshooting Guide: https://floe.dev/docs/troubleshooting
+- floe Platform Docs: https://floe.dev/
+- Helm Deployment Guide: https://floe.dev/guides/deployment/kubernetes-helm
+- Contributor Troubleshooting Guide: https://floe.dev/contributing/troubleshooting
 
 ================================================================================
