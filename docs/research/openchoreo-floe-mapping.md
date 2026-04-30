@@ -10,23 +10,36 @@ Map Floe's data-platform concepts to OpenChoreo resources and identify the owner
 
 | Floe Concept | Current Owner | Candidate OpenChoreo Resource | Proposed Owner After Adoption | Boundary Decision |
 | --- | --- | --- | --- | --- |
-| Data product metadata from `floe.yaml` | Floe | `Project`, `Component` | Floe source of truth; OpenChoreo generated view | Resolved by the proof task |
-| Data product runtime container | Floe charts/runtime image | `Workload` | Floe builds image/artifacts; OpenChoreo may deploy wrapper | Resolved by the proof task |
-| Schedule from `floe.yaml` | Floe orchestrator plugin | `Component` type config or `ReleaseBinding` environment config | Floe remains schedule source; OpenChoreo may receive generated config | Resolved by the proof task |
-| Environment promotion | Floe OCI/GitOps model | `Environment`, `DeploymentPipeline`, `ReleaseBinding` | Floe defines promotion policy; OpenChoreo may execute release binding | Resolved by the proof task |
-| Platform plugins | Floe `manifest.yaml` | No direct equivalent | Floe | Must remain Floe-owned |
-| Compiled artifacts | Floe compiler | Artifact consumed by `Workload` | Floe | Must remain Floe-owned |
-| dbt and Iceberg semantics | Floe/dbt/Iceberg | No direct equivalent | Floe | Must remain Floe-owned |
-| RBAC | Floe governance and K8s plugins | OpenChoreo authz resources | Shared only if no policy weakening | Resolved by the proof task |
-| Network policy | Floe network plugin | OpenChoreo gateway/network resources | Shared only if no policy weakening | Resolved by the proof task |
-| Secrets | Floe secrets plugin | `SecretReference` | Shared only if references preserve runtime secret resolution | Resolved by the proof task |
-| Telemetry | Floe OpenTelemetry | OpenChoreo observability plane | Floe emits signals; OpenChoreo may view signals | Resolved by the proof task |
-| Lineage | Floe OpenLineage | No direct replacement | Floe | Must remain Floe-owned |
+| Data product metadata from `floe.yaml` | Floe | `Project`, `Component` | Floe source of truth; OpenChoreo generated view | Generate OpenChoreo resources from Floe metadata. |
+| Data product runtime container | Floe charts/runtime image | `Workload` | Floe builds image/artifacts; OpenChoreo may deploy wrapper | OpenChoreo can wrap the container only after Floe compilation and image build. |
+| Schedule from `floe.yaml` | Floe orchestrator plugin | Component type config or `ReleaseBinding` environment config | Floe remains schedule source; OpenChoreo receives generated config | Schedule must originate in Floe and remain environment-agnostic unless promotion config overrides it. |
+| Environment promotion | Floe OCI/GitOps model | `Environment`, `DeploymentPipeline`, `ReleaseBinding` | Floe defines promotion policy; OpenChoreo may execute release binding | Candidate for simplification if ReleaseBinding can consume Floe artifacts cleanly. |
+| Platform plugins | Floe `manifest.yaml` | No direct equivalent | Floe | Must remain Floe-owned. |
+| Compiled artifacts | Floe compiler | Artifact consumed by `Workload` | Floe | Must remain Floe-owned. |
+| dbt and Iceberg semantics | Floe/dbt/Iceberg | No direct equivalent | Floe | Must remain Floe-owned. |
+| RBAC | Floe governance and K8s plugins | OpenChoreo authz resources | Floe policy source; OpenChoreo adapter possible | Candidate adapter only if generated from Floe governance and audited. |
+| Network policy | Floe network plugin | OpenChoreo gateway/network resources | Floe policy source; OpenChoreo adapter possible | Candidate adapter only if generated from Floe governance and audited. |
+| Secrets | Floe secrets plugin | `SecretReference` | Floe secret reference source; OpenChoreo deployment adapter possible | Candidate adapter only if no raw secrets enter generated resources. |
+| Telemetry | Floe OpenTelemetry | OpenChoreo observability plane | Floe emits signals; OpenChoreo may view signals | OpenChoreo can be a surface, not the signal owner. |
+| Lineage | Floe OpenLineage | No direct replacement | Floe | Must remain Floe-owned. |
 
 ## Integration Shape Assessment
 
-| Shape | Description | Initial Position | Evidence |
+| Shape | Description | Position | Evidence |
 | --- | --- | --- | --- |
-| A | OpenChoreo as optional platform control plane around Floe outputs | Preferred candidate | Resolved by the proof task |
-| B | OpenChoreo as deployment backend for selected Floe workloads/services | Secondary candidate | Resolved by the proof task |
-| C | OpenChoreo as `OrchestratorPlugin` | Negative control | Resolved by the proof task |
+| A | OpenChoreo as optional platform control plane around Floe outputs | Preferred proof target | Preserves Floe's data semantics and lets OpenChoreo own project/component/release surfaces. |
+| B | OpenChoreo as deployment backend for selected Floe workloads/services | Secondary future target | Could reduce Helm/GitOps glue, but requires stronger proof of operational value. |
+| C | OpenChoreo as `OrchestratorPlugin` | Rejected as initial approach | OpenChoreo is a broad platform control plane; Floe's orchestrator interface expects workflow engines such as Dagster, Airflow, or Prefect. |
+
+## Generated Resource Strategy
+
+The first useful integration slice would generate OpenChoreo intent resources from Floe inputs:
+
+1. Read `floe.yaml` and `CompiledArtifacts`.
+2. Emit a `Project` for the data product domain or product grouping.
+3. Emit a `Component` for each deployable Floe runtime unit.
+4. Emit a `Workload` pointing to the Floe runtime image and compiled artifact path.
+5. Emit a `ReleaseBinding` per promoted environment from Floe promotion data.
+6. Emit `SecretReference` resources only when the source is a Floe `SecretReference` or plugin-owned secret reference, never from raw secret values.
+
+Data engineers should continue editing Floe files. Platform engineers may inspect or approve generated OpenChoreo resources.
