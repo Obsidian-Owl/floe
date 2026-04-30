@@ -500,15 +500,29 @@ demo-local: build-demo-image ## Deploy demo locally (requires local Kind cluster
 	@uv run floe platform deploy --env dev --chart ./charts/floe-platform \
 		--values ./charts/floe-platform/values-demo.yaml \
 		$(DEMO_IMAGE_HELM_SET_ARGS)
-	@echo "=== Demo Ready ==="
-	@echo "Dagster UI:    http://localhost:3000"
-	@echo "Polaris:       http://localhost:8181"
-	@echo "Marquez:       http://localhost:5001"
-	@echo "Jaeger:        http://localhost:16686"
-	@echo "Grafana:       http://localhost:3001"
-	@echo "MinIO Console: http://localhost:9001"
+	@echo "Starting port-forwards..."
+	@if [ -f .demo-pids ]; then \
+		kill $$(cat .demo-pids) 2>/dev/null || true; \
+		rm -f .demo-pids; \
+	fi
+	@kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@kubectl port-forward svc/floe-platform-marquez 5100:5000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@kubectl port-forward svc/floe-platform-otel 4317:4317 4318:4318 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
 	@echo ""
-	@echo "Stop with: helm uninstall floe-platform -n floe-dev"
+	@echo "=== Demo Ready ==="
+	@echo "Dagster UI:    http://localhost:3100"
+	@echo "Polaris:       http://localhost:8181"
+	@echo "Marquez:       http://localhost:5100"
+	@echo "Jaeger:        http://localhost:16686"
+	@echo "MinIO Console: http://localhost:9001"
+	@echo "MinIO API:     http://localhost:9000"
+	@echo "OTel gRPC:     http://localhost:4317"
+	@echo "OTel HTTP:     http://localhost:4318"
+	@echo ""
+	@echo "Stop with: make demo-stop"
 
 demo-customer-360-run: ## Trigger Customer 360 golden demo Dagster run
 	@uv run python -m testing.ci.run_customer_360_demo

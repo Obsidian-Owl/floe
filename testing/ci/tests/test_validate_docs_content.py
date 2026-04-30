@@ -72,6 +72,49 @@ def test_rejects_unsupported_public_cli_schema_export(tmp_path: Path) -> None:
 
 
 @pytest.mark.requirement("alpha-docs")
+def test_rejects_stale_chart_metadata(tmp_path: Path) -> None:
+    """Content validation rejects chart metadata that contradicts alpha scope."""
+    chart = tmp_path / "charts" / "floe-platform" / "Chart.yaml"
+    chart.parent.mkdir(parents=True)
+    chart.write_text(
+        "apiVersion: v2\n"
+        "name: floe-platform\n"
+        "description: Production-ready data platform\n"
+        'appVersion: "1.0.0"\n'
+        "home: https://github.com/Obsidian-Owl/floe-runtime\n"
+        "sources:\n"
+        "  - https://github.com/Obsidian-Owl/floe-runtime/tree/main/charts/floe-platform\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert any("must not claim production-ready status" in error for error in errors)
+    assert any("stale appVersion 1.0.0" in error for error in errors)
+    assert any("must match alpha release" in error for error in errors)
+    assert any("not floe-runtime" in error for error in errors)
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_accepts_alpha_chart_metadata(tmp_path: Path) -> None:
+    """Content validation accepts alpha-scoped floe-platform metadata."""
+    chart = tmp_path / "charts" / "floe-platform" / "Chart.yaml"
+    chart.parent.mkdir(parents=True)
+    chart.write_text(
+        "apiVersion: v2\n"
+        "name: floe-platform\n"
+        "description: Alpha data platform chart for local/dev Floe validation\n"
+        'appVersion: "0.1.0-alpha.1"\n'
+        "home: https://github.com/Obsidian-Owl/floe\n"
+        "sources:\n"
+        "  - https://github.com/Obsidian-Owl/floe/tree/main/charts/floe-platform\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert errors == []
+
+
+@pytest.mark.requirement("alpha-docs")
 def test_rejects_uncaveated_data_mesh_migration_claims(tmp_path: Path) -> None:
     """Content validation rejects alpha-overstated Data Mesh migration language."""
     docs = tmp_path / "docs" / "architecture"

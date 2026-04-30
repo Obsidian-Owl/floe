@@ -67,6 +67,21 @@ NEGATIVE_OR_PLANNED_CONTEXT_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+CHART_METADATA_RULES = (
+    (
+        re.compile(r"Production-ready", re.IGNORECASE),
+        "chart metadata must not claim production-ready status",
+    ),
+    (
+        re.compile(r"floe-runtime"),
+        "chart metadata must point to Obsidian-Owl/floe, not floe-runtime",
+    ),
+    (
+        re.compile(r'appVersion:\s*["\']?1\.0\.0["\']?'),
+        "chart metadata must not use stale appVersion 1.0.0",
+    ),
+)
+EXPECTED_FLOE_PLATFORM_APP_VERSION = "0.1.0-alpha.1"
 
 
 def _manifest_items(manifest: dict[str, object]) -> list[dict[str, object]]:
@@ -225,7 +240,41 @@ def validate_docs_content(
                         f"match implementation truth; expected {expected_count} plugin categories"
                     )
 
+    errors.extend(_validate_chart_metadata(root))
+
     return sorted(errors)
+
+
+def _validate_chart_metadata(root: Path) -> list[str]:
+    """Validate chart metadata that is surfaced in chart docs and Helm NOTES."""
+    chart_path = root / "charts" / "floe-platform" / "Chart.yaml"
+    if not chart_path.exists():
+        return []
+
+    errors: list[str] = []
+    rel_path = chart_path.relative_to(root)
+    lines = chart_path.read_text().splitlines()
+    app_version_seen = False
+
+    for line_number, line in enumerate(lines, start=1):
+        for pattern, message in CHART_METADATA_RULES:
+            if pattern.search(line):
+                errors.append(f"{rel_path}:{line_number}: {message}")
+
+        match = re.match(r"\s*appVersion:\s*[\"']?([^\"'\s]+)[\"']?\s*$", line)
+        if match:
+            app_version_seen = True
+            app_version = match.group(1)
+            if app_version != EXPECTED_FLOE_PLATFORM_APP_VERSION:
+                errors.append(
+                    f"{rel_path}:{line_number}: chart appVersion {app_version!r} must match "
+                    f"alpha release {EXPECTED_FLOE_PLATFORM_APP_VERSION!r}"
+                )
+
+    if not app_version_seen:
+        errors.append(f"{rel_path}: missing appVersion")
+
+    return errors
 
 
 def main() -> int:

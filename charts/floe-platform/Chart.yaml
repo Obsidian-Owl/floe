@@ -14,7 +14,7 @@
 
 apiVersion: v2
 name: floe-platform
-description: Production-ready data platform with Dagster, Polaris, and observability
+description: Alpha data platform chart for local/dev Floe validation
 type: application
 
 # Chart version - independent from app version
@@ -22,7 +22,7 @@ type: application
 version: 0.1.0
 
 # Application version - floe platform version this chart deploys
-appVersion: "1.0.0"
+appVersion: "0.1.0-alpha.1"
 
 # Kubernetes version requirement
 kubeVersion: ">=1.28.0-0"
@@ -42,9 +42,9 @@ maintainers:
     email: platform@example.com
 
 # Home and sources
-home: https://github.com/Obsidian-Owl/floe-runtime
+home: https://github.com/Obsidian-Owl/floe
 sources:
-  - https://github.com/Obsidian-Owl/floe-runtime/tree/main/charts/floe-platform
+  - https://github.com/Obsidian-Owl/floe/tree/main/charts/floe-platform
 
 # Chart dependencies
 # These are pulled via `helm dependency update`
