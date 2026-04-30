@@ -3,7 +3,7 @@
 **Purpose**: dbt compilation environment (local, fusion, cloud)
 **Location**: `floe_core/plugin_interfaces.py`
 **Entry Point**: `floe.dbt`
-**ADR**: [ADR-0043: dbt Compilation Abstraction Layer](../adr/0043-dbt-plugin.md)
+**ADR**: [ADR-0043: dbt Compilation Environment Abstraction](../adr/0043-dbt-runtime-abstraction.md)
 
 DBTPlugin abstracts dbt compilation and execution environments, enabling platform teams to choose between local dbt-core, dbt Cloud, or dbt Fusion based on scale and operational requirements.
 
@@ -186,6 +186,6 @@ cloud = "floe_dbt_cloud:CloudDBTPlugin"
 
 ## Related Documents
 
-- [ADR-0043: dbt Compilation Abstraction Layer](../adr/0043-dbt-plugin.md)
+- [ADR-0043: dbt Compilation Environment Abstraction](../adr/0043-dbt-runtime-abstraction.md)
 - [Plugin Architecture](../plugin-system/index.md)
 - [ComputePlugin](compute-plugin.md) - For dbt profile generation

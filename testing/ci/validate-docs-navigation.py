@@ -3,14 +3,13 @@
 
 from __future__ import annotations
 
+import json
 import posixpath
 import re
 import sys
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
-
-import yaml
 
 REQUIRED_DOCS = {
     "docs/index.md",
@@ -32,27 +31,74 @@ REQUIRED_DOCS = {
 MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 
 
-def _walk_nav_items(items: list[Any]) -> set[str]:
-    paths: set[str] = set()
-    for item in items:
-        if isinstance(item, str):
-            paths.add(item)
-        elif isinstance(item, dict):
-            for value in item.values():
-                if isinstance(value, str):
-                    paths.add(value)
-                elif isinstance(value, list):
-                    paths.update(_walk_nav_items(value))
-    return paths
+def _manifest_items(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for section in manifest.get("sections", []):
+        if not isinstance(section, dict):
+            continue
+        for item in section.get("items", []):
+            if isinstance(item, dict):
+                items.append(item)
+    return items
 
 
-def _link_target(raw_target: str) -> str | None:
+def _manifest_string_list(manifest: dict[str, Any], key: str) -> tuple[str, ...]:
+    values = manifest.get(key, [])
+    if not isinstance(values, list):
+        return ()
+    return tuple(value for value in values if isinstance(value, str))
+
+
+def _is_included_by_prefix(source: str, prefixes: tuple[str, ...]) -> bool:
+    return any(source == prefix or source.startswith(prefix) for prefix in prefixes)
+
+
+def _validate_manifest(root: Path) -> tuple[set[str], list[str]]:
+    manifest_path = root / "docs-site/docs-manifest.json"
+    if not manifest_path.exists():
+        return set(), ["Missing docs manifest: docs-site/docs-manifest.json"]
+
+    manifest = json.loads(manifest_path.read_text())
+    sources: set[str] = set()
+    slugs: set[str] = set()
+    errors: list[str] = []
+
+    for item in _manifest_items(manifest):
+        source = item.get("source")
+        slug = item.get("slug")
+        title = item.get("title")
+
+        if not isinstance(source, str) or not source.startswith("docs/"):
+            errors.append(f"Invalid docs manifest source: {source!r}")
+            continue
+        if not source.endswith(".md"):
+            errors.append(f"Invalid docs manifest source extension: {source}")
+            continue
+        if source in sources:
+            errors.append(f"Duplicate docs manifest source: {source}")
+        if not isinstance(slug, str) or not slug:
+            errors.append(f"Invalid docs manifest slug for {source}: {slug!r}")
+        elif slug in slugs:
+            errors.append(f"Duplicate docs manifest slug: {slug}")
+        else:
+            slugs.add(slug)
+        if not isinstance(title, str) or not title:
+            errors.append(f"Invalid docs manifest title for {source}: {title!r}")
+
+        sources.add(source)
+        if not (root / source).exists():
+            errors.append(f"Missing docs manifest source: {source}")
+
+    return sources, errors
+
+
+def _raw_link_target(raw_target: str) -> str | None:
     target_parts = raw_target.strip().split()
     if not target_parts:
         return None
 
     target = target_parts[0]
-    if not target or target.startswith("#") or target.startswith("/"):
+    if not target or target.startswith("#"):
         return None
 
     parsed = urlparse(target)
@@ -66,43 +112,63 @@ def _link_target(raw_target: str) -> str | None:
     return target_path
 
 
-def _validate_required_doc_links(root: Path, required: str) -> list[str]:
-    source = root / required
+def _validate_doc_links(root: Path, doc_path: str) -> list[str]:
+    source = root / doc_path
     if not source.exists():
         return []
 
-    source_parent = posixpath.dirname(required)
+    source_parent = posixpath.dirname(doc_path)
     errors: list[str] = []
     for match in MARKDOWN_LINK_RE.finditer(source.read_text()):
-        link_target = _link_target(match.group(1))
+        link_target = _raw_link_target(match.group(1))
         if link_target is None:
+            continue
+
+        if link_target.startswith("/"):
+            errors.append(f"Site-root Markdown link in {doc_path}: {link_target}")
             continue
 
         resolved = posixpath.normpath(posixpath.join(source_parent, link_target))
         if not (root / resolved).exists():
             errors.append(
-                f"Broken docs link in {required}: {link_target} -> {resolved}",
+                f"Broken docs link in {doc_path}: {link_target} -> {resolved}",
             )
 
     return errors
 
 
+def _docs_to_validate(root: Path, manifest_sources: set[str]) -> list[str]:
+    docs_root = root / "docs"
+    docs: set[str] = set(manifest_sources)
+    manifest_path = root / "docs-site/docs-manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    include_prefixes = _manifest_string_list(manifest, "includePrefixes")
+    exclude_prefixes = _manifest_string_list(manifest, "excludePrefixes")
+
+    if docs_root.exists():
+        for doc_path in sorted(docs_root.rglob("*.md")):
+            relative = doc_path.relative_to(root).as_posix()
+            if _is_included_by_prefix(
+                relative,
+                include_prefixes,
+            ) and not _is_included_by_prefix(relative, exclude_prefixes):
+                docs.add(relative)
+
+    return sorted(docs)
+
+
 def validate_docs_navigation(root: Path) -> list[str]:
     """Return validation errors for alpha-critical docs navigation."""
-    mkdocs_path = root / "mkdocs.yml"
-    if not mkdocs_path.exists():
-        return ["Missing mkdocs.yml"]
-
-    config = yaml.safe_load(mkdocs_path.read_text()) or {}
-    nav_paths = {f"docs/{path}" for path in _walk_nav_items(config.get("nav", []))}
-    errors: list[str] = []
+    manifest_sources, errors = _validate_manifest(root)
 
     for required in sorted(REQUIRED_DOCS):
         if not (root / required).exists():
             errors.append(f"Missing docs page: {required}")
-        if required not in nav_paths:
-            errors.append(f"Missing docs nav entry: {required}")
-        errors.extend(_validate_required_doc_links(root, required))
+        if required not in manifest_sources:
+            errors.append(f"Missing docs manifest entry: {required}")
+
+    for doc_path in _docs_to_validate(root, manifest_sources):
+        errors.extend(_validate_doc_links(root, doc_path))
 
     return errors
 

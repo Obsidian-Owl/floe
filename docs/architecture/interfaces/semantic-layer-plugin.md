@@ -3,7 +3,7 @@
 **Purpose**: Business intelligence API and semantic modeling
 **Location**: `floe_core/interfaces/semantic_layer.py`
 **Entry Point**: `floe.semantic_layers`
-**ADR**: [ADR-0001: Semantic Layer](../adr/0001-semantic-layer.md)
+**ADR**: [ADR-0001: Cube Semantic Layer](../adr/0001-cube-semantic-layer.md)
 
 SemanticLayerPlugin abstracts semantic/consumption layers (Cube, dbt Semantic Layer), enabling consistent metrics definitions and business intelligence APIs across different implementations.
 
@@ -76,6 +76,6 @@ class SemanticLayerPlugin(ABC):
 
 ## Related Documents
 
-- [ADR-0001: Semantic Layer](../adr/0001-semantic-layer.md)
+- [ADR-0001: Cube Semantic Layer](../adr/0001-cube-semantic-layer.md)
 - [Plugin Architecture](../plugin-system/index.md)
 - [ComputePlugin](compute-plugin.md) - For database connections

@@ -9,11 +9,11 @@ description: ALWAYS USE when configuring Polaris catalog, managing namespaces, o
 
 | ADR | Decision | Relevance |
 |-----|----------|-----------|
-| [ADR-0005](docs/architecture/adr/0005-iceberg-table-format.md) | Apache Iceberg Enforced | Polaris manages Iceberg table metadata |
-| [ADR-0034](docs/architecture/adr/0034-dbt-duckdb-iceberg.md) | dbt-duckdb Workaround | Inline credentials for DuckDB ATTACH |
-| [ADR-0010](docs/architecture/adr/0010-target-agnostic-compute.md) | Target-Agnostic Compute | Polaris coordinates multi-engine access |
-| [ADR-0036](docs/architecture/adr/0036-storage-plugin-interface.md) | Storage Plugin Interface | Polaris uses pluggable storage backends |
-| [ADR-0031](docs/architecture/adr/0031-infisical-secrets.md) | Infisical Secrets | OAuth2 credentials managed via secrets |
+| [ADR-0005](../architecture/adr/0005-iceberg-table-format.md) | Apache Iceberg Enforced | Polaris manages Iceberg table metadata |
+| [ADR-0034](../architecture/adr/0034-dbt-duckdb-iceberg.md) | dbt-duckdb Workaround | Inline credentials for DuckDB ATTACH |
+| [ADR-0010](../architecture/adr/0010-target-agnostic-compute.md) | Target-Agnostic Compute | Polaris coordinates multi-engine access |
+| [ADR-0036](../architecture/adr/0036-storage-plugin-interface.md) | Storage Plugin Interface | Polaris uses pluggable storage backends |
+| [ADR-0031](../architecture/adr/0031-infisical-secrets.md) | Infisical Secrets | OAuth2 credentials managed via secrets |
 
 ## When to Use This Skill
 

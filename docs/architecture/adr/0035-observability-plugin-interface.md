@@ -938,14 +938,14 @@ plugins:
 ## References
 
 - [ADR-0006: OpenTelemetry Observability](0006-opentelemetry-observability.md) - Establishes OTel standard (Layer 1 + Layer 2)
-- [ADR-0007: OpenLineage Data Lineage](0007-openlineage-data-lineage.md) - Establishes OpenLineage standard
+- [ADR-0007: OpenLineage from Start](0007-openlineage-from-start.md) - Establishes OpenLineage standard
 - [ADR-0037: Composability Principle](0037-composability-principle.md) - Plugin architecture rationale
 - [plugin-system/](../plugin-system/index.md) - Plugin patterns
 - [interfaces/telemetry-backend-plugin.md](../interfaces/telemetry-backend-plugin.md) + [lineage-backend-plugin.md](../interfaces/lineage-backend-plugin.md) - ABC definitions
 - **Requirements Traceability:**
-  - [REQ-051 to REQ-055](../../plan/requirements/01-plugin-architecture/06-observability-plugin.md) - TelemetryBackendPlugin requirements
-  - [REQ-056 to REQ-060](../../plan/requirements/01-plugin-architecture/06-observability-plugin.md) - LineageBackendPlugin requirements
-  - [REQ-002](../../plan/requirements/01-plugin-architecture/01-plugin-discovery.md) - Plugin discovery (14 entry point groups)
+  - [Epic 06A: OpenTelemetry](../../plans/epics/06-observability/epic-06a-opentelemetry.md) - TelemetryBackendPlugin requirements
+  - [Epic 06B: OpenLineage](../../plans/epics/06-observability/epic-06b-openlineage.md) - LineageBackendPlugin requirements
+  - [Epic 01: Plugin Registry](../../plans/epics/01-foundation/epic-01-plugin-registry.md) - Plugin discovery
 - **Industry References:**
   - [OpenTelemetry Collector Configuration](https://opentelemetry.io/docs/collector/configuration/)
   - [OpenLineage Transport Configuration](https://openlineage.io/docs/client/python)

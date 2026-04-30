@@ -3,7 +3,7 @@
 **Purpose**: Credential management and secret injection
 **Location**: `floe_core/interfaces/secrets.py`
 **Entry Point**: `floe.secrets`
-**ADR**: [ADR-0023: Secrets Management](../adr/0023-secrets-management.md), [ADR-0031: Secret References](../adr/0031-secret-references.md)
+**ADR**: [ADR-0023: Secrets Management](../adr/0023-secrets-management.md), [ADR-0031: Infisical Secrets](../adr/0031-infisical-secrets.md)
 
 SecretsPlugin abstracts credential storage and retrieval, supporting Kubernetes Secrets, External Secrets Operator (ESO), HashiCorp Vault, and other secret management solutions.
 
@@ -72,6 +72,6 @@ class SecretsPlugin(ABC):
 ## Related Documents
 
 - [ADR-0023: Secrets Management](../adr/0023-secrets-management.md)
-- [ADR-0031: Secret References](../adr/0031-secret-references.md)
+- [ADR-0031: Infisical Secrets](../adr/0031-infisical-secrets.md)
 - [Plugin Architecture](../plugin-system/index.md)
 - [ComputePlugin](compute-plugin.md) - For credential injection into dbt profiles

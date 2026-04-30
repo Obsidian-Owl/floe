@@ -373,8 +373,8 @@ floe compile --verbose
 
 ## Related ADRs
 
-- [ADR-0016: Environment-Agnostic Compute](0016-environment-agnostic-compute.md) - No per-environment caching
-- [ADR-0020: OCI Artifact Distribution](0020-oci-artifact-distribution.md) - OCI registry caching
+- [ADR-0010: Target-Agnostic Compute](0010-target-agnostic-compute.md) - No per-environment caching
+- [Platform Artifacts](../platform-artifacts.md) - OCI registry caching
 - [ADR-0044: Unified Data Quality Plugin](0044-unified-data-quality-plugin.md) - Quality gates never cached
 
 ## References
