@@ -72,6 +72,38 @@ test('syncDocs writes explicit manifest pages at their configured slug routes', 
   });
 });
 
+test('syncDocs rewrites directory-style docs links to their published routes', async () => {
+  await withDocsFixture(async ({ repoRoot, docsSiteRoot }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/linked-page'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/source-page.md'),
+      '# Source\n\nSee [linked](linked-page/).\n',
+    );
+    await fs.writeFile(path.join(repoRoot, 'docs/linked-page/index.md'), '# Linked\n');
+    await writeManifest(docsSiteRoot, [
+      {
+        title: 'Renamed Source',
+        source: 'docs/source-page.md',
+        slug: 'renamed/source',
+      },
+      {
+        title: 'Renamed Linked',
+        source: 'docs/linked-page/index.md',
+        slug: 'renamed/linked',
+      },
+    ]);
+
+    await syncDocs({ repoRoot, docsSiteRoot });
+
+    const generatedSource = await fs.readFile(
+      path.join(docsSiteRoot, 'src/content/docs/renamed/source.md'),
+      'utf8',
+    );
+
+    assert.match(generatedSource, /\[linked\]\(\/floe\/renamed\/linked\/\)/u);
+  });
+});
+
 test('syncDocs rejects non-Markdown manifest sources before generating nav targets', async () => {
   await withDocsFixture(async ({ repoRoot, docsSiteRoot }) => {
     await fs.mkdir(path.join(repoRoot, 'docs/downloads'), { recursive: true });

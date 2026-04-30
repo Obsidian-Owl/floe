@@ -100,6 +100,27 @@ function repositoryPathForResolvedSource(resolvedSource) {
   return resolvedSource.replace(/^(\.\.\/)+/u, '');
 }
 
+function docsSourceCandidates(sourceParent, targetPath) {
+  const candidateTargets = [];
+  const extension = path.posix.extname(targetPath);
+
+  if (targetPath.endsWith('.md')) {
+    candidateTargets.push(targetPath);
+  } else if (extension === '') {
+    if (targetPath.endsWith('/')) {
+      candidateTargets.push(`${targetPath}index.md`);
+    } else {
+      candidateTargets.push(`${targetPath}.md`, `${targetPath}/index.md`);
+    }
+  }
+
+  return candidateTargets.map((candidate) =>
+    candidate.startsWith('docs/')
+      ? path.posix.normalize(candidate)
+      : path.posix.normalize(path.posix.join(sourceParent, candidate)),
+  );
+}
+
 function rewriteMarkdownLinks(markdown, source, publishedSourceRoutes, repoRoot) {
   const sourceParent = path.posix.dirname(source);
   return markdown.replace(
@@ -117,13 +138,14 @@ function rewriteMarkdownLinks(markdown, source, publishedSourceRoutes, repoRoot)
 
       const [pathAndQuery, anchor = ''] = trimmedTarget.split('#', 2);
       const [targetPath, query = ''] = pathAndQuery.split('?', 2);
-      if (!targetPath.endsWith('.md')) {
+      const candidates = docsSourceCandidates(sourceParent, targetPath);
+      if (candidates.length === 0) {
         return fullMatch;
       }
 
-      const resolvedSource = targetPath.startsWith('docs/')
-        ? path.posix.normalize(targetPath)
-        : path.posix.normalize(path.posix.join(sourceParent, targetPath));
+      const resolvedSource =
+        candidates.find((candidate) => existsSync(path.join(repoRoot, candidate))) ??
+        candidates[0];
       if (!resolvedSource.startsWith('docs/')) {
         const repositoryPath = repositoryPathForResolvedSource(resolvedSource);
         const absoluteRepositoryPath = path.join(repoRoot, repositoryPath);

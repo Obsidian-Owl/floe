@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { docsBase } from '../site-config.mjs';
 
@@ -43,6 +43,35 @@ function stripDocsBase(target) {
   return target;
 }
 
+function routeForHtmlFile(htmlFile, root = distRoot) {
+  const relativePath = path.relative(root, htmlFile).split(path.sep).join(path.posix.sep);
+  if (relativePath === 'index.html') {
+    return '/';
+  }
+  if (relativePath.endsWith('/index.html')) {
+    return `/${relativePath.slice(0, -'index.html'.length)}`;
+  }
+  return `/${relativePath.replace(/\.html$/u, '')}`;
+}
+
+function routeForHref(href, currentRoute) {
+  const target = withoutHashOrQuery(href);
+  if (
+    target === '' ||
+    target.startsWith('#') ||
+    target.startsWith('//') ||
+    /^[a-z][a-z0-9+.-]*:/iu.test(target)
+  ) {
+    return null;
+  }
+
+  if (target.startsWith('/')) {
+    return stripDocsBase(target);
+  }
+
+  return path.posix.normalize(path.posix.join(currentRoute, target));
+}
+
 function routePrefixForDocsPrefix(prefix) {
   const withoutDocsPrefix = prefix.replace(/^docs\//u, '');
   if (withoutDocsPrefix === '') {
@@ -51,17 +80,12 @@ function routePrefixForDocsPrefix(prefix) {
   return `/${withoutDocsPrefix}`;
 }
 
-function isExcludedDocsRoute(href, excludedRoutePrefixes) {
-  const target = withoutHashOrQuery(href);
-  if (
-    target === '' ||
-    target.startsWith('#') ||
-    /^[a-z][a-z0-9+.-]*:/iu.test(target)
-  ) {
+function isExcludedDocsRoute(href, excludedRoutePrefixes, currentRoute) {
+  const route = routeForHref(href, currentRoute);
+  if (!route) {
     return false;
   }
 
-  const route = stripDocsBase(target);
   return excludedRoutePrefixes.some((prefix) => route.startsWith(prefix));
 }
 
@@ -71,6 +95,7 @@ function isRootLocalHrefWithoutBase(href) {
     !docsBase ||
     target === '' ||
     target.startsWith('#') ||
+    target.startsWith('//') ||
     !target.startsWith('/') ||
     target.startsWith(`${docsBase}/`) ||
     target === docsBase ||
@@ -82,17 +107,22 @@ function isRootLocalHrefWithoutBase(href) {
   return true;
 }
 
-async function checkBuiltDocs() {
-  const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+export async function collectBuiltDocsErrors({
+  docsSiteRoot: siteRoot = docsSiteRoot,
+  distRoot: htmlRoot = distRoot,
+  manifestPath: docsManifestPath = manifestPath,
+} = {}) {
+  const manifest = JSON.parse(await fs.readFile(docsManifestPath, 'utf8'));
   const excludedRoutePrefixes = (manifest.excludePrefixes ?? []).map(
     routePrefixForDocsPrefix,
   );
-  const htmlFiles = await walkHtmlFiles(distRoot);
+  const htmlFiles = await walkHtmlFiles(htmlRoot);
   const errors = [];
 
   for (const htmlFile of htmlFiles) {
     const html = await fs.readFile(htmlFile, 'utf8');
-    const relativePath = path.relative(docsSiteRoot, htmlFile);
+    const relativePath = path.relative(siteRoot, htmlFile);
+    const currentRoute = routeForHtmlFile(htmlFile, htmlRoot);
     for (const match of html.matchAll(hrefPattern)) {
       const href = match[1];
       if (/^[a-z][a-z0-9+.-]*:/iu.test(href)) {
@@ -104,7 +134,7 @@ async function checkBuiltDocs() {
       if (isRootLocalHrefWithoutBase(href)) {
         errors.push(`${relativePath}: contains root-local href without ${docsBase}: ${href}`);
       }
-      if (isExcludedDocsRoute(href, excludedRoutePrefixes)) {
+      if (isExcludedDocsRoute(href, excludedRoutePrefixes, currentRoute)) {
         errors.push(`${relativePath}: contains site href to excluded docs content: ${href}`);
       }
     }
@@ -112,6 +142,12 @@ async function checkBuiltDocs() {
       errors.push(`${relativePath}: references ${daemonStatusPath}`);
     }
   }
+
+  return { checkedCount: htmlFiles.length, errors };
+}
+
+async function checkBuiltDocs() {
+  const { checkedCount, errors } = await collectBuiltDocsErrors();
 
   if (errors.length > 0) {
     for (const error of errors) {
@@ -121,10 +157,12 @@ async function checkBuiltDocs() {
     return;
   }
 
-  console.log(`Checked ${htmlFiles.length} built docs pages.`);
+  console.log(`Checked ${checkedCount} built docs pages.`);
 }
 
-checkBuiltDocs().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  checkBuiltDocs().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
