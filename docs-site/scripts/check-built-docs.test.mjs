@@ -44,3 +44,21 @@ test('checkBuiltDocs resolves relative hrefs before excluded-route detection', a
     ]);
   });
 });
+
+test('checkBuiltDocs treats slashless hrefs as excluded routes', async () => {
+  await withBuiltDocsFixture(async ({ docsSiteRoot, distRoot, manifestPath }) => {
+    const htmlPath = path.join(distRoot, 'guides/testing/index.html');
+    await fs.mkdir(path.dirname(htmlPath), { recursive: true });
+    await fs.writeFile(htmlPath, '<a href="../../plans">Internal plan</a>');
+
+    const { errors } = await collectBuiltDocsErrors({
+      docsSiteRoot,
+      distRoot,
+      manifestPath,
+    });
+
+    assert.deepEqual(errors, [
+      'dist/guides/testing/index.html: contains site href to excluded docs content: ../../plans',
+    ]);
+  });
+});

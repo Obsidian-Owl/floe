@@ -86,7 +86,10 @@ function isExcludedDocsRoute(href, excludedRoutePrefixes, currentRoute) {
     return false;
   }
 
-  return excludedRoutePrefixes.some((prefix) => route.startsWith(prefix));
+  return excludedRoutePrefixes.some((prefix) => {
+    const slashlessPrefix = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
+    return route === slashlessPrefix || route === prefix || route.startsWith(prefix);
+  });
 }
 
 function isRootLocalHrefWithoutBase(href) {
