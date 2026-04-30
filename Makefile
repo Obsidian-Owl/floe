@@ -56,6 +56,7 @@ help: ## Show this help message
 	@echo "  make demo            Deploy demo via DevPod (requires running workspace)"
 	@echo "  make demo-stop       Stop demo port-forwards"
 	@echo "  make demo-local      Deploy demo locally (requires local Kind cluster)"
+	@echo "  make demo-customer-360-run Trigger Customer 360 golden demo Dagster run"
 	@echo "  make demo-customer-360-validate Validate Customer 360 golden demo evidence"
 	@echo ""
 	@echo "DevPod (Remote E2E):"
@@ -182,6 +183,7 @@ docs-serve: ## Serve documentation site locally
 
 docs-validate: ## Validate docs navigation and build
 	@uv run python testing/ci/validate-docs-navigation.py
+	@uv run python testing/ci/validate-docs-content.py
 	@npm --prefix docs-site ci
 	@npm --prefix docs-site run validate
 
@@ -356,7 +358,7 @@ helm-test-infra: ## Verify test infrastructure is healthy
 # Demo Targets
 # ============================================================
 
-.PHONY: compile-demo build-demo-image demo demo-local demo-stop demo-customer-360-validate
+.PHONY: compile-demo build-demo-image demo demo-local demo-stop demo-customer-360-run demo-customer-360-validate
 
 DEMO_MANIFEST ?= demo/manifest.yaml
 DEMO_IMAGE_REPOSITORY ?= floe-dagster-demo
@@ -507,6 +509,9 @@ demo-local: build-demo-image ## Deploy demo locally (requires local Kind cluster
 	@echo "MinIO Console: http://localhost:9001"
 	@echo ""
 	@echo "Stop with: helm uninstall floe-platform -n floe-dev"
+
+demo-customer-360-run: ## Trigger Customer 360 golden demo Dagster run
+	@uv run python -m testing.ci.run_customer_360_demo
 
 demo-customer-360-validate: ## Validate Customer 360 golden demo evidence
 	@uv run python -m testing.ci.validate_customer_360_demo

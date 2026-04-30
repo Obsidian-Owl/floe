@@ -13,17 +13,19 @@ Customer 360 is the `v0.1.0-alpha.1` golden demo. The alpha release gate will pr
 
 ```bash
 make demo
-```
-
-`make demo` deploys the demo platform and services, then starts the port-forwards it needs. It does not yet trigger or validate Customer 360 outcomes. Do not start separate `make devpod-tunnels` sessions at the same time unless you are intentionally doing manual inspection outside a demo run.
-
-After the Customer 360 run has been triggered, run the release evidence check:
-
-```bash
+make demo-customer-360-run
 make demo-customer-360-validate
+make demo-stop
 ```
 
-The validator loads its default evidence plan from `demo/customer-360/validation.yaml`. Override that manifest or individual commands when validating a different platform shape.
+The Customer 360 demo flow is intentionally explicit:
+
+- `make demo` deploys the demo platform and services through DevPod, builds and loads the demo Dagster image, installs the Helm chart, and starts the required port-forwards.
+- `make demo-customer-360-run` should launch the Customer 360 Dagster job declared in `demo/customer-360/validation.yaml` and wait for the run to finish.
+- `make demo-customer-360-validate` runs the release evidence checks for platform readiness, Dagster run evidence, storage outputs, lineage, tracing, and business metrics.
+- `make demo-stop` stops the port-forwards created by `make demo`.
+
+The runner and validator load their default configuration from `demo/customer-360/validation.yaml`. Override that manifest or individual validation commands when validating a different platform shape. Do not start separate `make devpod-tunnels` sessions at the same time unless you are intentionally doing manual inspection outside a demo run.
 
 ## Service URLs
 

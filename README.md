@@ -28,12 +28,12 @@
 
 **floe** is an open platform for building internal data platforms.
 
-**Platform teams** choose their stack from 12 plugin types:
+**Platform teams** choose their stack from 14 plugin categories:
 - **Compute:** DuckDB, Snowflake, Databricks, Spark, BigQuery
 - **Orchestrator:** Dagster, Airflow 3.x
 - **Catalog:** Polaris, AWS Glue, Unity Catalog
 - **Observability:** Split into TelemetryBackend (Jaeger, Datadog) + LineageBackend (Marquez, Atlan)
-- **[... 8 more plugin types]**
+- **[... 10 more plugin categories]**
 
 **Data teams** get opinionated workflows:
 - ✅ 30 lines replaces 300+ lines of boilerplate
@@ -85,7 +85,7 @@
 
 ### 1. Platform Team Chooses Stack (Once)
 
-**Composable architecture:** Mix and match from 13 plugin types
+**Composable architecture:** Mix and match from 14 plugin categories
 
 ```yaml
 # manifest.yaml (50 lines supports 200 pipelines)
@@ -164,7 +164,7 @@ Compilation SUCCESS - ready to deploy
 
 ### 🔌 Composable by Design
 
-**Choose from 12 plugin types.** Swap implementations without breaking pipelines.
+**Choose from 14 plugin categories.** Swap implementations without breaking pipelines.
 
 **Multi-compute pipelines:** Platform teams approve N compute targets. Data engineers select per-step from the approved list. Different steps can use different engines:
 
@@ -195,7 +195,7 @@ transforms:
 - Dagster (asset-centric) ↔ Airflow 3.x (DAG-based)
 - Jaeger (self-hosted) ↔ Datadog (managed SaaS)
 
-**Plugin types:** Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend, DBT, SemanticLayer, Ingestion, DataQuality, Secrets, Identity
+**Plugin categories:** Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend, DBT, SemanticLayer, Ingestion, Quality, RBAC, AlertChannel, Secrets, Identity
 
 ### 📝 Declarative Configuration
 

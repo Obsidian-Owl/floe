@@ -36,9 +36,9 @@ floe is built on **composability** as a core architectural principle (ADR-0037):
 - **Progressive Disclosure**: Point to detailed docs, don't duplicate content
 - **Opt-in Complexity**: Start simple (2-tier), scale to Data Mesh (3-tier) without rewrites
 
-**11 Plugin Types** enable flexibility while maintaining enforced standards (see [plugin-system/index.md](plugin-system/index.md) for canonical registry):
+**14 plugin categories** enable flexibility while maintaining enforced standards (see [Plugin Catalog](../reference/plugin-catalog.md) for implementation truth):
 - Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend
-- DBT, Semantic Layer, Ingestion, Data Quality, Secrets, Identity
+- DBT, Semantic Layer, Ingestion, Quality, RBAC, Alert Channel, Secrets, Identity
 
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins.
 
@@ -194,7 +194,7 @@ floe/
 ├── floe-dbt/            # ENFORCED: dbt framework; runtime PLUGGABLE (ADR-0043)
 ├── floe-iceberg/        # ENFORCED: Iceberg utilities
 │
-├── plugins/             # ALL PLUGGABLE COMPONENTS (11 plugin types)
+├── plugins/             # ALL PLUGGABLE COMPONENTS (see Plugin Catalog)
 │   ├── floe-compute-duckdb/
 │   ├── floe-compute-spark/
 │   ├── floe-compute-snowflake/

@@ -8,8 +8,11 @@ on:
       - "Makefile"
       - "pyproject.toml"
       - "uv.lock"
+      - "testing/ci/validate-docs-content.py"
+      - "testing/ci/validate_docs_content.py"
       - "testing/ci/validate-docs-navigation.py"
       - "testing/ci/validate_docs_navigation.py"
+      - "testing/ci/tests/test_validate_docs_content.py"
       - "testing/ci/tests/test_validate_docs_navigation.py"
       - ".github/workflows/docs.yml"
   push:
@@ -20,8 +23,11 @@ on:
       - "Makefile"
       - "pyproject.toml"
       - "uv.lock"
+      - "testing/ci/validate-docs-content.py"
+      - "testing/ci/validate_docs_content.py"
       - "testing/ci/validate-docs-navigation.py"
       - "testing/ci/validate_docs_navigation.py"
+      - "testing/ci/tests/test_validate_docs_content.py"
       - "testing/ci/tests/test_validate_docs_navigation.py"
       - ".github/workflows/docs.yml"
 
@@ -53,7 +59,7 @@ jobs:
         run: npm --prefix docs-site ci
       - name: Validate docs navigation
         run: uv run python testing/ci/validate-docs-navigation.py
-      - name: Build docs
-        run: npm --prefix docs-site run build
-      - name: Check built docs
-        run: npm --prefix docs-site run check:dist
+      - name: Validate docs content
+        run: uv run python testing/ci/validate-docs-content.py
+      - name: Validate Starlight docs site
+        run: npm --prefix docs-site run validate

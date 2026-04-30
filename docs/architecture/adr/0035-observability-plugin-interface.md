@@ -452,7 +452,7 @@ plugins:
 
 ### Negative
 
-- **More plugin types** - 13 plugin types instead of 12 (split from 1 to 2)
+- **More plugin surface area** - telemetry and lineage are separate extension points instead of one unified observability interface
 - **Plugin development** - Requires implementing two ABCs instead of one unified interface
 - **Discovery complexity** - Two entry point groups instead of one
 - **Initial setup** - Must install two plugin packages instead of one

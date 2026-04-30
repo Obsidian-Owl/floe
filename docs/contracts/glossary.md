@@ -201,7 +201,7 @@ Deploys platform services (Layer 3) to Kubernetes.
 
 ### Plugin
 
-An extensible component that implements a plugin interface (ABC) and registers via Python entry points. floe defines 11 plugin types. See [Plugin Architecture](../architecture/plugin-system/index.md).
+An extensible component that implements a plugin interface (ABC) and registers via Python entry points. The canonical implementation-truth list is [Plugin Catalog](../reference/plugin-catalog.md).
 
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins.
 

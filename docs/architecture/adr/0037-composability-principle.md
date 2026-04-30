@@ -56,7 +56,7 @@ class ObservabilityPlugin(ABC):
 # Future: New backends register via entry points = no core changes
 ```
 
-**Entry Points (11 plugin types):**
+**Entry Points (current plugin categories are listed in the [Plugin Catalog](../../reference/plugin-catalog.md)):**
 - `floe.computes` - Compute engines (DuckDB, Snowflake, Spark, etc.)
 - `floe.orchestrators` - Orchestration platforms (Dagster, Airflow)
 - `floe.catalogs` - Catalog backends (Polaris, Glue, Hive)
@@ -66,6 +66,9 @@ class ObservabilityPlugin(ABC):
 - `floe.dbt` - DBT compilation environments (local, fusion, cloud)
 - `floe.semantic_layers` - Semantic layers (Cube, dbt Semantic Layer)
 - `floe.ingestion` - Ingestion tools (dlt, Airbyte)
+- `floe.quality` - Data quality tooling
+- `floe.rbac` - Access-control policy generators
+- `floe.alert_channels` - Alert delivery backends
 - `floe.secrets` - Secrets management (K8s Secrets, ESO, Vault)
 - `floe.identity` - Identity providers (OIDC, Keycloak)
 
@@ -118,7 +121,7 @@ plugins = registry.discover("floe.computes")
 
 # ✅ GOOD: Pointer to detailed docs
 ## Plugin Architecture
-floe uses plugin interfaces for extensibility. 11 plugin types exist.
+floe uses plugin interfaces for extensibility. The Plugin Catalog lists the current implementation categories.
 **See:** docs/architecture/plugin-system/index.md
 ```
 

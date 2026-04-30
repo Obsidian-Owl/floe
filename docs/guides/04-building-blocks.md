@@ -39,9 +39,9 @@ floe uses a four-layer architecture separating framework code, platform configur
 │  LAYER 1: FOUNDATION (Framework Code - Open Source)                          │
 │  Owner: floe Maintainers | Lifecycle: PyPI/Helm releases            │
 │  • floe-core, floe-cli, floe-dbt, floe-iceberg                              │
-│  • plugins/* (11 plugin types: compute, orchestrator, catalog, storage,     │
+│  • plugins/* (14 plugin categories: compute, orchestrator, catalog, storage,│
 │              telemetry, lineage, dbt, semantic layer, ingestion, quality,   │
-│              secrets, identity - ADR-0037)                                  │
+│              rbac, alert channel, secrets, identity - ADR-0037)             │
 │  • charts/* (Helm charts for platform deployment)                           │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -58,7 +58,7 @@ floe/
 ├── floe-dbt/                            # ENFORCED: dbt framework (compilation environment pluggable)
 ├── floe-iceberg/                        # ENFORCED: Iceberg utilities (not pluggable)
 │
-├── plugins/                             # PLUGGABLE: 11 plugin types (ADR-0037)
+├── plugins/                             # PLUGGABLE: see Plugin Catalog
 │   ├── floe-compute-duckdb/            # Compute plugins
 │   ├── floe-compute-spark/
 │   ├── floe-compute-snowflake/
@@ -361,7 +361,7 @@ dagster = "floe_orchestrator_dagster:chart"
 
 ### 6.3 Available Plugins
 
-floe supports **11 plugin types** (see [plugin-system/index.md](../architecture/plugin-system/index.md) for canonical registry):
+floe supports **14 plugin categories** (see the [Plugin Catalog](../reference/plugin-catalog.md) for implementation truth):
 
 | Category | Default | Alternatives | ADR |
 |----------|---------|--------------|-----|
@@ -374,6 +374,9 @@ floe supports **11 plugin types** (see [plugin-system/index.md](../architecture/
 | **DBT** | dbt-core (local) | dbt Fusion, dbt Cloud | ADR-0043 |
 | **Semantic Layer** | Cube | dbt Semantic Layer, None | ADR-0001 |
 | **Ingestion** | dlt | Airbyte (external) | ADR-0020 |
+| **Quality** | Great Expectations / dbt expectations | Soda, custom checks | ADR-0044 |
+| **RBAC** | Kubernetes RBAC | Cloud IAM integrations | Epic 7B |
+| **Alert Channel** | Webhook / Slack / email | PagerDuty, Teams | Epic 15 |
 | **Secrets** | K8s Secrets | External Secrets Operator, Vault, Infisical | ADR-0023/0031 |
 | **Identity** | Keycloak | Dex, Authentik, Okta, Auth0, Azure AD | ADR-0024 |
 

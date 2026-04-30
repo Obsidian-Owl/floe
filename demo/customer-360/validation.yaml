@@ -10,6 +10,11 @@ validation:
     dagster: http://localhost:3100
     marquez: http://localhost:5100
     jaeger: http://localhost:16686
+  dagster:
+    job_name: customer-360
+    run_tags:
+      floe.demo: customer-360
+      floe.validation: alpha
   platform_expected_services:
     - dagster
     - polaris
