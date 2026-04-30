@@ -38,7 +38,7 @@ Decision options:
 | Workflow support | Workflow plane chart depends on Argo Workflows; samples include workflow and workflow-run resources. | Useful for build/release workflows, but not a direct dbt/Dagster orchestration replacement. |
 | Observability support | Observability plane chart includes logs, metrics, tracing, observer APIs, and authz integration. | Possible platform observability surface, but Floe must retain OpenTelemetry and OpenLineage emission ownership. |
 | Authz/secrets support | CRDs and samples include authz roles/bindings and `SecretReference`. | Potential overlap with Floe's identity/secrets/RBAC plugins; requires strict boundary definition. |
-| Install footprint | Local guide uses k3d plus multiple charts and prerequisites such as cert-manager, external-secrets, gateway components, Thunder, workflow plane, and observability plane. | Adoption complexity is non-trivial; proof should start with CRD/render validation before full runtime validation. |
+| Install footprint | Task 6 local render validation found all requested tools present (`kubectl`, `helm`, `k3d`, `docker`) and verified `release-v1.0` at `1a516d5f52c25b3c91a7e48ed55c2173e8edc070`. Helm dependencies built for control-plane, data-plane, and observability-plane, but workflow-plane failed with `no repository definition for https://argoproj.github.io/argo-helm`. Control, data, and observability renders produced 3,660 total manifest lines; workflow-plane rendered 0 lines because `argo-workflows` was missing. Dominant rendered kinds included 10 `ClusterAuthzRole`, 9 `ClusterAuthzRoleBinding`, 8 `Deployment`, 8 `ServiceAccount`, 7 `ClusterRole`, and 7 `ClusterRoleBinding`. | Adoption complexity is non-trivial; proof should continue with generated-resource validation before any full runtime validation. |
 
 ## Floe Fit Assessment
 
@@ -69,7 +69,7 @@ Use this scale:
 | Developer experience | 1 | OpenChoreo offers project/component/environment abstractions and a portal/API surface, but Floe must generate these resources so data engineers stay in Floe UX. |
 | Platform simplification | 0 | OpenChoreo may simplify deployment lifecycle, authz, observability, and release binding, but Floe already owns Helm/GitOps/RBAC/network paths. A proof is required. |
 | Architecture boundary fit | 1 | OpenChoreo fits better as an optional platform-control layer than as an orchestrator plugin; this preserves Floe's data contracts. |
-| Adoption complexity | -1 | Multi-plane install, `v1alpha1` CRDs, external prerequisites, and overlapping platform controls increase operational complexity. |
+| Adoption complexity | -1 | Multi-plane install, `v1alpha1` CRDs, external prerequisites, overlapping platform controls, a missing Argo Helm repository dependency for workflow-plane rendering, and 3,660 rendered lines across the three successful plane templates increase operational complexity. |
 | Operational maturity | 0 | `v1.0.x` releases are promising, but current CRDs remain alpha-versioned and the open issue count requires caution. |
 | Release roadmap value | 1 | If proof validates generated resources and clear boundaries, OpenChoreo could become a future optional integration for platform teams. |
 
