@@ -37,6 +37,8 @@ const productSurfaceSources = new Set([
 const productSurfacePrefixes = [
   'docs/start-here/',
   'docs/get-started/',
+  'docs/architecture/interfaces/',
+  'docs/architecture/plugin-system/',
   'docs/platform-engineers/',
   'docs/data-engineers/',
   'docs/guides/deployment/',
@@ -78,13 +80,13 @@ function collectProductSurfaceLineLevelErrors(line) {
   if (hasNegativeOrPlannedContext(line)) {
     return errors;
   }
-  if (/\bDatadog\b.*\b(default|production)\b|\b(default|production)\b.*\bDatadog\b/iu.test(line)) {
+  if (/\bDatadog\b.*\b(default|production|prod)\b|\b(default|production|prod)\b.*\bDatadog\b/iu.test(line)) {
     errors.push('labels Datadog as a current default integration');
   }
-  if (/\bAtlan\b.*\b(default|production)\b|\b(default|production)\b.*\bAtlan\b/iu.test(line)) {
+  if (/\bAtlan\b.*\b(default|production|prod)\b|\b(default|production|prod)\b.*\bAtlan\b/iu.test(line)) {
     errors.push('labels Atlan as a current default integration');
   }
-  if (/\bS3\b.*\b(production|default)\b|\b(production|default)\b.*\bS3\b/u.test(line)) {
+  if (/\bS3\b.*\b(production|default|prod)\b|\b(production|default|prod)\b.*\bS3\b/u.test(line)) {
     errors.push('labels S3 as a current production default');
   }
   if (/DON'T:\s*Allow Data Engineers to select compute/iu.test(line)) {

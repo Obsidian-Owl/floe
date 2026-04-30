@@ -249,6 +249,39 @@ test('collectSourceDocsErrors rejects unsupported current default integrations',
   });
 });
 
+test('collectSourceDocsErrors rejects prod shorthand in architecture plugin docs', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/architecture/plugin-system'), { recursive: true });
+    await fs.mkdir(path.join(repoRoot, 'docs/architecture/interfaces'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/plugin-system/index.md'),
+      [
+        '# Plugin Architecture',
+        '',
+        '| Plugin Type | Default |',
+        '| --- | --- |',
+        '| Storage | S3 (prod) |',
+        '| TelemetryBackend | Datadog (prod) |',
+        '| LineageBackend | Atlan (prod) |',
+        '',
+      ].join('\n'),
+    );
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/interfaces/storage-plugin.md'),
+      '# Storage Plugin\n\n`S3Plugin` is AWS S3 storage (production default).\n',
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, [
+      'docs/architecture/interfaces/storage-plugin.md: labels S3 as a current production default',
+      'docs/architecture/plugin-system/index.md: labels S3 as a current production default',
+      'docs/architecture/plugin-system/index.md: labels Datadog as a current default integration',
+      'docs/architecture/plugin-system/index.md: labels Atlan as a current default integration',
+    ]);
+  });
+});
+
 test('collectSourceDocsErrors checks README as public product surface', async () => {
   await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
     await fs.writeFile(
