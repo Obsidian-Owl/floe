@@ -16,8 +16,8 @@ Decision options:
 
 | Source | What It Proves | Notes |
 | --- | --- | --- |
-| https://github.com/openchoreo/openchoreo | Upstream repository, license, activity, releases, CRD source | Record commit and release data during Task 2 |
-| https://openchoreo.dev/docs/ | Published docs and current product positioning | Record relevant concept pages during Task 2 |
+| https://github.com/openchoreo/openchoreo | Upstream repository, license, activity, releases, CRD source | Task 2 cloned `release-v1.0` at `1a516d5f52c25b3c91a7e48ed55c2173e8edc070` and captured GitHub release/repository API metadata. |
+| https://openchoreo.dev/docs/ | Published docs and current product positioning | Task 2 inspected README, resource-kind reference, templating guide, install guides, and source/image samples. |
 | `docs/architecture/ARCHITECTURE-SUMMARY.md` | Floe target architecture and plugin model | Record relevant boundaries during Task 3 |
 | `docs/architecture/platform-services.md` | Floe long-lived services and ownership | Record overlap during Task 3 |
 | `docs/architecture/interfaces/orchestrator-plugin.md` | Floe orchestration boundary | Used to test whether OpenChoreo fits the orchestrator abstraction |
@@ -28,10 +28,10 @@ Decision options:
 
 | Dimension | Evidence | Assessment |
 | --- | --- | --- |
-| Release maturity | Latest observed release line is `v1.0.1-hotfix.1`; `v1.0.0` was released on 2026-03-22; repository uses Apache-2.0. | Mature enough for a proof spike, but CRDs remain `v1alpha1`, so adoption needs API-stability caution. |
-| CRD/resource model | Source includes CRDs for `Project`, `Component`, `Workload`, `ComponentType`, `ClusterComponentType`, `Trait`, `ClusterTrait`, `Environment`, `DataPlane`, `WorkflowPlane`, `Workflow`, `ClusterWorkflow`, `WorkflowRun`, `ReleaseBinding`, `RenderedRelease`, authz, observability, and secret references. | Rich enough to model platform/developer abstractions around Floe outputs. |
+| Release maturity | Task 2 GitHub API snapshot observed latest release line `v1.0.1-hotfix.1` published 2026-04-16 and `v1.0.0` published 2026-03-22; repository default branch is `main`, license is Apache-2.0, `pushed_at` was 2026-04-29T11:42:27Z, `updated_at` was 2026-04-29T21:58:38Z, with 807 stars, 142 forks, and 192 open issues. The inspected `release-v1.0` source commit was `1a516d5f52c25b3c91a7e48ed55c2173e8edc070`. | Mature enough for a proof spike, but CRDs remain `v1alpha1`, so adoption needs API-stability caution. |
+| CRD/resource model | Source includes CRDs/API types for `Project`, `Component`, `Workload`, `ComponentRelease`, `ReleaseBinding`, `RenderedRelease`, `ComponentType`, `ClusterComponentType`, `Trait`, `ClusterTrait`, `Workflow`, `ClusterWorkflow`, `WorkflowRun`, `DeploymentPipeline`, `Environment`, `DataPlane`, `ClusterDataPlane`, `WorkflowPlane`, `ClusterWorkflowPlane`, `ObservabilityPlane`, `ClusterObservabilityPlane`, `ObservabilityAlertRule`, `ObservabilityAlertsNotificationChannel`, `SecretReference`, `AuthzRole`, `AuthzRoleBinding`, `ClusterAuthzRole`, and `ClusterAuthzRoleBinding`. | Rich enough to model platform/developer abstractions around Floe outputs. |
 | Control plane/runtime model | Install tree separates control, data, workflow, and observability planes. | Strong conceptual alignment with Floe's platform-services layer, with added operational footprint. |
-| Developer portal/API | README and docs position OpenChoreo as a Kubernetes internal developer platform with CLI/API/UI concepts. | Potential DX value if Floe can generate OpenChoreo resources instead of exposing CRDs directly. |
+| Developer/runtime concepts | README and docs position OpenChoreo around project/cell boundaries, components, workloads, endpoints, connections/dependencies, component types, traits, workflows, component releases, release bindings, rendered releases, CEL-based templating, validation/patching, and sample categories for platform configuration, deploy-from-source, and deploy-from-image. | Potential DX value if Floe can generate OpenChoreo resources instead of exposing CRDs directly. |
 | Workflow support | Workflow plane chart depends on Argo Workflows; samples include workflow and workflow-run resources. | Useful for build/release workflows, but not a direct dbt/Dagster orchestration replacement. |
 | Observability support | Observability plane chart includes logs, metrics, tracing, observer APIs, and authz integration. | Possible platform observability surface, but Floe must retain OpenTelemetry and OpenLineage emission ownership. |
 | Authz/secrets support | CRDs and samples include authz roles/bindings and `SecretReference`. | Potential overlap with Floe's identity/secrets/RBAC plugins; requires strict boundary definition. |
