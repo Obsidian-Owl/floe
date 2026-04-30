@@ -97,7 +97,17 @@ function routeForDocsSource(source) {
   return `/${withoutExtension}/`;
 }
 
-function rewriteMarkdownLinks(markdown, source) {
+function repositoryUrlForPath(repositoryPath, query, anchor) {
+  return `${repositoryBlobBaseUrl}/${repositoryPath}${query ? `?${query}` : ''}${
+    anchor ? `#${anchor}` : ''
+  }`;
+}
+
+function repositoryPathForResolvedSource(resolvedSource) {
+  return resolvedSource.replace(/^(\.\.\/)+/u, '');
+}
+
+function rewriteMarkdownLinks(markdown, source, publishedSourceSet) {
   const sourceParent = path.posix.dirname(source);
   return markdown.replace(
     /(?<!!)\[([^\]]+)\]\(([^)]+)\)/g,
@@ -118,15 +128,23 @@ function rewriteMarkdownLinks(markdown, source) {
         return fullMatch;
       }
 
-      const resolvedSource = path.posix.normalize(path.posix.join(sourceParent, targetPath));
+      const resolvedSource = targetPath.startsWith('docs/')
+        ? path.posix.normalize(targetPath)
+        : path.posix.normalize(path.posix.join(sourceParent, targetPath));
       if (!resolvedSource.startsWith('docs/')) {
-        const repositoryPath = resolvedSource.replace(/^(\.\.\/)+/u, '');
+        const repositoryPath = repositoryPathForResolvedSource(resolvedSource);
         const absoluteRepositoryPath = path.join(repoRoot, repositoryPath);
         if (repositoryPath.endsWith('.md') && existsSync(absoluteRepositoryPath)) {
-          const rewrittenTarget = `${repositoryBlobBaseUrl}/${repositoryPath}${query ? `?${query}` : ''}${anchor ? `#${anchor}` : ''}`;
-          return `[${label}](${rewrittenTarget})`;
+          return `[${label}](${repositoryUrlForPath(repositoryPath, query, anchor)})`;
         }
         return fullMatch;
+      }
+
+      if (!publishedSourceSet.has(resolvedSource)) {
+        const absoluteRepositoryPath = path.join(repoRoot, resolvedSource);
+        if (existsSync(absoluteRepositoryPath)) {
+          return `[${label}](${repositoryUrlForPath(resolvedSource, query, anchor)})`;
+        }
       }
 
       const route = routeForDocsSource(resolvedSource);
@@ -150,7 +168,11 @@ async function syncDocs() {
   for (const section of manifest.sections) {
     for (const item of section.items) {
       const sourcePath = path.join(repoRoot, item.source);
-      await fs.access(sourcePath);
+      try {
+        await fs.access(sourcePath);
+      } catch {
+        throw new Error(`Manifest source not found: ${item.source}`);
+      }
     }
   }
 
@@ -159,6 +181,7 @@ async function syncDocs() {
   await fs.writeFile(path.join(targetRoot, '.gitignore'), '*\n!.gitignore\n');
 
   const sources = await publishedSources(manifest);
+  const publishedSourceSet = new Set(sources);
   for (const source of sources) {
     const sourceFile = path.join(repoRoot, source);
     const relativePath = toPosixPath(path.relative(sourceRoot, sourceFile));
@@ -169,7 +192,10 @@ async function syncDocs() {
     await fs.writeFile(
       targetPath,
       normalizeGeneratedMarkdown(
-        withStarlightFrontmatter(rewriteMarkdownLinks(markdown, source), relativePath),
+        withStarlightFrontmatter(
+          rewriteMarkdownLinks(markdown, source, publishedSourceSet),
+          relativePath,
+        ),
       ),
     );
   }

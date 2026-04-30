@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const docsSiteRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const distRoot = path.join(docsSiteRoot, 'dist');
+const manifestPath = path.join(docsSiteRoot, 'docs-manifest.json');
 const hrefPattern = /href=["']([^"']+)["']/gu;
 const daemonStatusPath = '/api/daemon/status';
 
@@ -23,7 +24,36 @@ async function walkHtmlFiles(directory) {
   return files;
 }
 
+function withoutHashOrQuery(href) {
+  return href.split('#', 1)[0].split('?', 1)[0];
+}
+
+function routePrefixForDocsPrefix(prefix) {
+  const withoutDocsPrefix = prefix.replace(/^docs\//u, '');
+  if (withoutDocsPrefix === '') {
+    return '/';
+  }
+  return `/${withoutDocsPrefix}`;
+}
+
+function isExcludedDocsRoute(href, excludedRoutePrefixes) {
+  const target = withoutHashOrQuery(href);
+  if (
+    target === '' ||
+    target.startsWith('#') ||
+    /^[a-z][a-z0-9+.-]*:/iu.test(target)
+  ) {
+    return false;
+  }
+
+  return excludedRoutePrefixes.some((prefix) => target.startsWith(prefix));
+}
+
 async function checkBuiltDocs() {
+  const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+  const excludedRoutePrefixes = (manifest.excludePrefixes ?? []).map(
+    routePrefixForDocsPrefix,
+  );
   const htmlFiles = await walkHtmlFiles(distRoot);
   const errors = [];
 
@@ -37,6 +67,9 @@ async function checkBuiltDocs() {
       }
       if (/\.md(?:[#?].*)?$/u.test(href)) {
         errors.push(`${relativePath}: contains local href to Markdown source: ${href}`);
+      }
+      if (isExcludedDocsRoute(href, excludedRoutePrefixes)) {
+        errors.push(`${relativePath}: contains site href to excluded docs content: ${href}`);
       }
     }
     if (html.includes(daemonStatusPath)) {
