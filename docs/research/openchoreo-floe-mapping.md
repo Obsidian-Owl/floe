@@ -43,3 +43,21 @@ The first useful integration slice would generate OpenChoreo intent resources fr
 6. Emit `SecretReference` resources only when the source is a Floe `SecretReference` or plugin-owned secret reference, never from raw secret values.
 
 Data engineers should continue editing Floe files. Platform engineers may inspect or approve generated OpenChoreo resources.
+
+## Customer 360 Proof Mapping
+
+Source Floe product: `demo/customer-360/floe.yaml`
+
+Generated OpenChoreo resources:
+
+| Resource | Source Fields | Purpose | Boundary |
+| --- | --- | --- | --- |
+| `Project/customer-360` | `metadata.name`, `metadata.description`, `metadata.labels` | Groups the data product in OpenChoreo UX. | Generated view of Floe metadata. |
+| `Component/customer-360` | Product name, schedule/resource intent | Represents the deployable scheduled data-product runtime. | Generated wrapper around Floe runtime. |
+| `Workload/customer-360-workload` | Runtime image and compiled artifact paths | Points OpenChoreo at the Floe runtime unit. | Floe owns image and artifact contract. |
+| `SecretReference/customer-360-runtime-secrets` | Secret reference names only | Demonstrates possible external-secret adapter shape. | No raw secrets allowed. |
+| `ReleaseBinding/customer-360-development` | Schedule and environment binding | Demonstrates promotion/deployment binding outside `floe.yaml`. | Environment binding remains outside data engineer config. |
+
+Proof finding:
+
+The mapping is feasible as a generated-resource strategy if OpenChoreo accepts this resource shape after CRD validation. It does not require changing Floe's data contracts or `CompiledArtifacts`.

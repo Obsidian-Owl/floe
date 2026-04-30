@@ -1,0 +1,114 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: Project
+metadata:
+  name: customer-360
+  namespace: default
+  labels:
+    openchoreo.dev/name: customer-360
+    floe.dev/domain: retail
+    floe.dev/tier: gold
+  annotations:
+    openchoreo.dev/display-name: Customer 360
+    openchoreo.dev/description: Retail customer 360 data product generated from Floe demo metadata.
+spec:
+  deploymentPipelineRef:
+    name: default
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: Component
+metadata:
+  name: customer-360
+  namespace: default
+  labels:
+    floe.dev/product: customer-360
+    floe.dev/source: demo-customer-360
+spec:
+  owner:
+    projectName: customer-360
+  autoDeploy: false
+  componentType:
+    kind: ClusterComponentType
+    name: cronjob/scheduled-task
+  parameters:
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 1
+    concurrencyPolicy: Forbid
+    backoffLimit: 2
+    activeDeadlineSeconds: 3600
+    restartPolicy: OnFailure
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: Workload
+metadata:
+  name: customer-360-workload
+  namespace: default
+  labels:
+    floe.dev/product: customer-360
+spec:
+  owner:
+    componentName: customer-360
+    projectName: customer-360
+  container:
+    image: floe-dagster-demo:openchoreo-spike
+    env:
+      - key: FLOE_PRODUCT
+        value: customer-360
+      - key: FLOE_ARTIFACTS_PATH
+        value: /app/demo/customer-360/compiled_artifacts.json
+      - key: FLOE_DBT_PROJECT_DIR
+        value: /app/demo/customer-360
+      - key: OTEL_SERVICE_NAME
+        value: floe-customer-360
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: SecretReference
+metadata:
+  name: customer-360-runtime-secrets
+  namespace: default
+  labels:
+    floe.dev/product: customer-360
+spec:
+  template:
+    type: Opaque
+    metadata:
+      labels:
+        floe.dev/product: customer-360
+  data:
+    - secretKey: polaris-client-secret  # pragma: allowlist secret
+      remoteRef:
+        key: floe/customer-360/polaris
+        property: client_secret  # pragma: allowlist secret
+    - secretKey: minio-access-key  # pragma: allowlist secret
+      remoteRef:
+        key: floe/customer-360/minio
+        property: access_key
+  refreshInterval: 1h
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: ReleaseBinding
+metadata:
+  name: customer-360-development
+  namespace: default
+  labels:
+    floe.dev/product: customer-360
+spec:
+  owner:
+    projectName: customer-360
+    componentName: customer-360
+  environment: development
+  componentTypeEnvironmentConfigs:
+    schedule: "*/10 * * * *"
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
