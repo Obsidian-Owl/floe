@@ -61,6 +61,8 @@ The Customer 360 mapping is valid as a static generated-resource proof. Cluster-
 
 ## OpenChoreo Render and Install Complexity
 
+Validation environment: Darwin arm64 local workstation. Absolute tool paths in this section are local evidence, not portable install requirements.
+
 Tool availability:
 
 | Tool | Present | Notes |

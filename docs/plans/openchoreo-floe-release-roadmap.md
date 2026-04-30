@@ -64,7 +64,7 @@ Candidate scope:
 - Add a command or plugin-owned utility that reads `floe.yaml` and `CompiledArtifacts`.
 - Emit `Project`, `Component`, `Workload`, `SecretReference`, and `ReleaseBinding` YAML.
 - Add contract tests proving no raw secrets and no environment-specific fields enter `floe.yaml`.
-- Add a deletion-impact report showing which Floe chart, GitOps, RBAC, network, secrets, or CI files become unnecessary for OpenChoreo-enabled deployments.
+- Add a deletion-impact report with a candidate file list or draft deletion PR showing which Floe chart, GitOps, RBAC, network, secrets, or CI files become unnecessary for OpenChoreo-enabled deployments.
 - Add docs for platform teams using OpenChoreo.
 
 Exit criteria:
@@ -72,7 +72,7 @@ Exit criteria:
 - Generated resources validate against OpenChoreo CRDs.
 - Floe remains source of truth for data semantics.
 - OpenChoreo integration is disabled by default.
-- The generator identifies at least one concrete lifecycle surface that can be removed or materially simplified if Release Slice 3 succeeds.
+- The generator identifies at least one concrete lifecycle surface that can be removed or materially simplified if Release Slice 3 succeeds, with that candidate deletion captured as a file list or draft PR.
 
 ## Release Slice 3: Platform-Control Integration
 

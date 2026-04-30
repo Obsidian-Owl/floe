@@ -1,3 +1,5 @@
+# Spike proof artifact: namespaces are pinned to the local proof namespace.
+# A production generator must derive namespaces from Floe environment and promotion metadata.
 apiVersion: openchoreo.dev/v1alpha1
 kind: Project
 metadata:
@@ -103,6 +105,8 @@ spec:
     projectName: customer-360
     componentName: customer-360
   environment: development
+  releaseName: customer-360-openchoreo-spike
+  # OpenChoreo release-v1.0 renamed the older componentTypeEnvOverrides field to this schema key.
   componentTypeEnvironmentConfigs:
     schedule: "*/10 * * * *"
     resources:
