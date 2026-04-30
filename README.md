@@ -4,7 +4,7 @@
   <h3>The Open Platform for building Data Platforms</h3>
 
   <p>
-    <strong>Ship faster. Stay compliant. Scale to Data Mesh.</strong>
+    <strong>Ship faster. Stay compliant. Build toward Data Mesh.</strong>
   </p>
 
   <p>
@@ -41,7 +41,7 @@
 - ✅ Standards enforced automatically (compile-time validation)
 - ✅ Full composability (swap DuckDB → Snowflake without pipeline changes)
 
-**Batteries included. Fully customizable. Production-ready.**
+**Batteries included. Fully customizable. Alpha-ready for the documented Customer 360 validation path.**
 
 ---
 
@@ -245,7 +245,7 @@ Or swap to Snowflake, Databricks, or Spark—the pipeline config stays identical
 
 **Result:** No "works on my machine" issues. No config drift. What you test is what you deploy.
 
-### 🌐 Data Mesh Ready
+### 🌐 Data Mesh Direction
 
 **Federated ownership with computational governance:**
 - Enterprise policies → Domain constraints → Data products (three-tier hierarchy)
@@ -253,7 +253,7 @@ Or swap to Snowflake, Databricks, or Spark—the pipeline config stays identical
 - Compile-time + runtime enforcement (not meetings)
 - Domain teams have autonomy within guardrails
 
-**Scale from single platform to federated Data Mesh without rebuilding.**
+The current alpha exposes the primitives and current state documented in [Capability Status](docs/architecture/capability-status.md). Multi-cluster operational hardening and validated federated Data Mesh operations remain planned, not alpha-proven.
 
 ---
 
