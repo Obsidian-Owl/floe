@@ -10,7 +10,7 @@
 |---------|-------------|
 | [Deployment Overview](deployment/index.md) | Main index and comparison |
 | [Two-Layer Model](deployment/two-layer-model.md) | Platform Services vs Pipeline Jobs |
-| [Local Development](deployment/local-development.md) | Local (uv) and Docker Compose setup |
+| [Local Development](deployment/local-development.md) | Local Kind and Helm evaluation path |
 | [Kubernetes Helm](deployment/kubernetes-helm.md) | Helm chart structure and installation |
 | [Production](deployment/production.md) | HA, scaling, monitoring, backups |
 | [Data Mesh](deployment/data-mesh.md) | Federated Data Mesh deployment topology |
@@ -20,7 +20,7 @@
 | Option | Use Case | Complexity |
 |--------|----------|------------|
 | **Local (uv)** | Development, single user | Low |
-| **Docker Compose** | Development, evaluation | Low |
+| **Historical Docker Compose path** | Deprecated and unsupported for alpha product evaluation; use local Kind and Helm instead | Low |
 | **Kubernetes (Helm)** | Production, team use | Medium |
 
 For complete documentation, see [deployment/index.md](deployment/index.md).

@@ -23,8 +23,48 @@ INTERNAL_AGENT_PHRASES = (
 UNSUPPORTED_PUBLIC_CLI_SNIPPETS = (
     (re.compile(r"\bfloe\s+schema\s+export\b"), "unsupported CLI command 'floe schema export'"),
 )
+UNCAVEATED_ALPHA_CLAIMS = (
+    (
+        re.compile(r"without rewrites", re.IGNORECASE),
+        "uncaveated Data Mesh migration language 'without rewrites'",
+    ),
+    (
+        re.compile(r"Data Mesh seamlessly", re.IGNORECASE),
+        "uncaveated Data Mesh migration language 'Data Mesh seamlessly'",
+    ),
+)
+DOCKER_COMPOSE_PRODUCT_PATHS = (
+    (
+        re.compile(r"Docker Compose setup", re.IGNORECASE),
+        "Docker Compose setup presented as a product path",
+    ),
+    (
+        re.compile(r"\bdocker\s+compose\s+up\b", re.IGNORECASE),
+        "'docker compose up' presented as a product path",
+    ),
+    (
+        re.compile(r"\bDocker Compose\b.*\b(development|evaluation)\b", re.IGNORECASE),
+        "Docker Compose presented as a development or evaluation product path",
+    ),
+    (
+        re.compile(r"\b(development|evaluation)\b.*\bDocker Compose\b", re.IGNORECASE),
+        "Docker Compose presented as a development or evaluation product path",
+    ),
+)
+FLOE_DEV_PRODUCT_PATH = (
+    re.compile(r"\bfloe\s+dev\b", re.IGNORECASE),
+    "unsupported CLI command 'floe dev' presented as a product path",
+)
 PLUGIN_COUNT_RE = re.compile(
     r"\b(?P<count>\d+)\s+plugin\s+(?P<noun>types?|categor(?:y|ies))\b",
+    re.IGNORECASE,
+)
+NEGATIVE_OR_PLANNED_CONTEXT_RE = re.compile(
+    r"\b("
+    r"not supported|unsupported|not alpha-supported|not implemented|planned|historical|"
+    r"deprecated|rejected|was rejected|alternative|not a current|do not run|"
+    r"no Docker Compose|creates testing parity issues|parity issues|failure mode"
+    r")\b",
     re.IGNORECASE,
 )
 
@@ -160,6 +200,19 @@ def validate_docs_content(
             for pattern, message in UNSUPPORTED_PUBLIC_CLI_SNIPPETS:
                 if pattern.search(line):
                     errors.append(f"{rel_path}:{line_number}: {message}")
+
+            for pattern, message in UNCAVEATED_ALPHA_CLAIMS:
+                if pattern.search(line):
+                    errors.append(f"{rel_path}:{line_number}: {message}")
+
+            has_negative_or_planned_context = bool(NEGATIVE_OR_PLANNED_CONTEXT_RE.search(line))
+            for pattern, message in DOCKER_COMPOSE_PRODUCT_PATHS:
+                if pattern.search(line) and not has_negative_or_planned_context:
+                    errors.append(f"{rel_path}:{line_number}: {message}")
+
+            floe_dev_pattern, floe_dev_message = FLOE_DEV_PRODUCT_PATH
+            if floe_dev_pattern.search(line) and not has_negative_or_planned_context:
+                errors.append(f"{rel_path}:{line_number}: {floe_dev_message}")
 
             if _is_historical_adr_line(path, active_heading):
                 continue

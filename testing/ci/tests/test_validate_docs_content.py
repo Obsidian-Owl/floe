@@ -72,6 +72,61 @@ def test_rejects_unsupported_public_cli_schema_export(tmp_path: Path) -> None:
 
 
 @pytest.mark.requirement("alpha-docs")
+def test_rejects_uncaveated_data_mesh_migration_claims(tmp_path: Path) -> None:
+    """Content validation rejects alpha-overstated Data Mesh migration language."""
+    docs = tmp_path / "docs" / "architecture"
+    docs.mkdir(parents=True)
+    (docs / "summary.md").write_text(
+        "# Architecture\n\nScale to Data Mesh seamlessly without rewrites.\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert any(
+        "uncaveated Data Mesh migration language 'without rewrites'" in error for error in errors
+    )
+    assert any(
+        "uncaveated Data Mesh migration language 'Data Mesh seamlessly'" in error
+        for error in errors
+    )
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_rejects_docker_compose_and_floe_dev_product_paths(tmp_path: Path) -> None:
+    """Content validation rejects stale local product paths in public docs."""
+    docs = tmp_path / "docs" / "guides" / "deployment"
+    docs.mkdir(parents=True)
+    (docs / "local-development.md").write_text(
+        "# Local\n\n"
+        "Use Docker Compose setup for evaluation.\n"
+        "Run `docker compose up`.\n"
+        "Run `floe dev`.\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert any("Docker Compose setup presented as a product path" in error for error in errors)
+    assert any("'docker compose up' presented as a product path" in error for error in errors)
+    assert any("unsupported CLI command 'floe dev'" in error for error in errors)
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_allows_negative_or_planned_docker_compose_and_floe_dev_context(tmp_path: Path) -> None:
+    """Content validation permits negative and planned references to stale paths."""
+    docs = tmp_path / "docs" / "guides" / "deployment"
+    docs.mkdir(parents=True)
+    (docs / "local-development.md").write_text(
+        "# Local\n\n"
+        "Docker Compose is not supported for Floe product evaluation.\n"
+        "`floe dev` is planned and not implemented.\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert errors == []
+
+
+@pytest.mark.requirement("alpha-docs")
 def test_allows_unsupported_cli_snippet_in_excluded_docs(tmp_path: Path) -> None:
     """Content validation ignores unsupported snippets in docs excluded from publication."""
     docs_site = tmp_path / "docs-site"

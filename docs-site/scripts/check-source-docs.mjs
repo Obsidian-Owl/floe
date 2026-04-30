@@ -19,6 +19,39 @@ const disallowedSnippets = [
   { pattern: /\bfloe\s+schema\s+export\b/u, message: "references unsupported CLI command 'floe schema export'" },
 ];
 
+function hasNegativeOrPlannedContext(line) {
+  return /\b(not supported|unsupported|not alpha-supported|not implemented|planned|historical|deprecated|rejected|was rejected|alternative|not a current|do not run|no Docker Compose|creates testing parity issues|parity issues|failure mode)\b/iu.test(
+    line,
+  );
+}
+
+function collectLineLevelErrors(line) {
+  const errors = [];
+  if (/without rewrites/iu.test(line)) {
+    errors.push("uses uncaveated Data Mesh migration language 'without rewrites'");
+  }
+  if (/Data Mesh seamlessly/iu.test(line)) {
+    errors.push("uses uncaveated Data Mesh migration language 'Data Mesh seamlessly'");
+  }
+  if (/Docker Compose setup/iu.test(line) && !hasNegativeOrPlannedContext(line)) {
+    errors.push('presents Docker Compose setup as a product path');
+  }
+  if (/\bdocker\s+compose\s+up\b/iu.test(line) && !hasNegativeOrPlannedContext(line)) {
+    errors.push("presents 'docker compose up' as a product path");
+  }
+  if (
+    (/\bDocker Compose\b.*\b(development|evaluation)\b/iu.test(line) ||
+      /\b(development|evaluation)\b.*\bDocker Compose\b/iu.test(line)) &&
+    !hasNegativeOrPlannedContext(line)
+  ) {
+    errors.push('presents Docker Compose as a development or evaluation product path');
+  }
+  if (/\bfloe\s+dev\b/iu.test(line) && !hasNegativeOrPlannedContext(line)) {
+    errors.push("presents unsupported CLI command 'floe dev' as a product path");
+  }
+  return errors;
+}
+
 async function walkMarkdownFiles(directory) {
   const entries = await fs.readdir(directory, { withFileTypes: true });
   const files = [];
@@ -88,6 +121,11 @@ export async function collectSourceDocsErrors({
     for (const rule of disallowedSnippets) {
       if (rule.pattern.test(markdown)) {
         errors.push(`${source}: ${rule.message}`);
+      }
+    }
+    for (const line of markdown.split(/\r?\n/u)) {
+      for (const error of collectLineLevelErrors(line)) {
+        errors.push(`${source}: ${error}`);
       }
     }
   }

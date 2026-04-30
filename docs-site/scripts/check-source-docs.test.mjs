@@ -171,3 +171,53 @@ test('collectSourceDocsErrors rejects user-facing links to internal agent rules'
     ]);
   });
 });
+
+test('collectSourceDocsErrors rejects uncaveated Data Mesh migration claims', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/architecture'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/summary.md'),
+      '# Architecture\n\nScale to Data Mesh seamlessly without rewrites.\n',
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, [
+      "docs/architecture/summary.md: uses uncaveated Data Mesh migration language 'without rewrites'",
+      "docs/architecture/summary.md: uses uncaveated Data Mesh migration language 'Data Mesh seamlessly'",
+    ]);
+  });
+});
+
+test('collectSourceDocsErrors rejects Docker Compose and floe dev product paths', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/guides/deployment'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/guides/deployment/local.md'),
+      '# Local\n\nUse Docker Compose setup for evaluation.\nRun `docker compose up`.\nRun `floe dev`.\n',
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, [
+      'docs/guides/deployment/local.md: presents Docker Compose setup as a product path',
+      'docs/guides/deployment/local.md: presents Docker Compose as a development or evaluation product path',
+      "docs/guides/deployment/local.md: presents 'docker compose up' as a product path",
+      "docs/guides/deployment/local.md: presents unsupported CLI command 'floe dev' as a product path",
+    ]);
+  });
+});
+
+test('collectSourceDocsErrors allows negative or planned Docker Compose and floe dev context', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/guides/deployment'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/guides/deployment/local-development.md'),
+      '# Local\n\nDocker Compose is not supported for Floe product evaluation.\n`floe dev` is planned and not implemented.\n',
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, []);
+  });
+});
