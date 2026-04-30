@@ -274,7 +274,7 @@ artifacts:
 **User Experience:**
 
 ```bash
-floe init --platform=v1.2.3
+floe init --platform=v1.2.3  # planned root data-team command; not alpha-supported yet
 # If v1.2.3 is deprecated:
 [WARN] Platform version v1.2.3 is deprecated (deprecated on 2024-07-15)
 [WARN] Recommended version: v2.0.1

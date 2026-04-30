@@ -88,7 +88,7 @@ plugins:
       - name: snowflake
         config:
           warehouse: COMPUTE_WH
-    default: duckdb  # Used when transform doesn't specify
+    default: duckdb  # Example platform-selected fallback when transform doesn't specify
 
 # floe.yaml (Data Engineers)
 platform:
@@ -105,7 +105,7 @@ transforms:
 
   - type: dbt
     path: models/simple/
-    # No compute specified → uses platform default (duckdb)
+    # No compute specified -> uses the platform-selected fallback from this manifest
 ```
 
 ### Data Mesh (Enterprise → Domain → Product)
@@ -239,10 +239,10 @@ transforms:
     compute: duckdb
     tags: [analytics]
 
-  # Step 3: Simple transforms use default
+  # Step 3: Simple transforms can use the manifest fallback
   - type: dbt
     path: models/seeds/
-    # compute: (uses default → duckdb)
+    # compute omitted: uses the platform-selected fallback from the manifest
 ```
 
 This pipeline runs identically in dev, staging, and production:

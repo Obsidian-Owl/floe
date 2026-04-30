@@ -77,7 +77,7 @@ Pluggable Components (platform team selects):
 
 **1. Compile-Time (PolicyEnforcer)**
 
-Contracts are validated during `floe compile`:
+Contracts are validated during the planned root `floe compile` flow:
 - Schema completeness
 - SLA definition validity
 - Classification requirements (PII, PHI)

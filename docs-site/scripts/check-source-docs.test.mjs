@@ -306,6 +306,10 @@ test('collectSourceDocsErrors rejects stale plugin default wording in published 
       '# ADR-0020\n\n### dlt Plugin (Default)\n',
     );
     await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/adr/0035-observability-plugin-interface.md'),
+      '# ADR-0035\n\n- **Default plugins** - Jaeger and Marquez ship together.\n',
+    );
+    await fs.writeFile(
       path.join(repoRoot, 'docs/architecture/adr/0032-cube-compute-integration.md'),
       [
         '# ADR-0032',
@@ -318,6 +322,15 @@ test('collectSourceDocsErrors rejects stale plugin default wording in published 
     await fs.writeFile(
       path.join(repoRoot, 'docs/architecture/opinionation-boundaries.md'),
       '# Opinionation Boundaries\n\n| Component | Alpha-Supported Default |\n',
+    );
+    await fs.mkdir(path.join(repoRoot, 'docs/architecture/interfaces'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/interfaces/telemetry-backend-plugin.md'),
+      '# Telemetry\n\n| `JaegerTelemetryPlugin` | Local observability (default) |\n',
+    );
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/interfaces/lineage-backend-plugin.md'),
+      '# Lineage\n\n| `MarquezLineagePlugin` | Local lineage (default) |\n',
     );
     await fs.writeFile(
       path.join(repoRoot, 'docs/architecture/plugin-system/configuration.md'),
@@ -342,9 +355,13 @@ test('collectSourceDocsErrors rejects stale plugin default wording in published 
       'docs/architecture/adr/0032-cube-compute-integration.md: labels DuckDB-first behavior as a current default',
       'docs/architecture/adr/0032-cube-compute-integration.md: labels DuckDB-first behavior as a current default',
       'docs/architecture/adr/0032-cube-compute-integration.md: labels an open-source stack as a current default',
+      'docs/architecture/adr/0035-observability-plugin-interface.md: uses default plugin bundle wording',
+      'docs/architecture/ARCHITECTURE-SUMMARY.md: uses default plugin bundle wording',
       'docs/architecture/ARCHITECTURE-SUMMARY.md: presents bundled provider plugins as current defaults',
       'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md: labels a plugin reference implementation as a current default selection',
       'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md: references stale plugin category count 12',
+      'docs/architecture/interfaces/lineage-backend-plugin.md: labels a plugin reference implementation as a current default selection',
+      'docs/architecture/interfaces/telemetry-backend-plugin.md: labels a plugin reference implementation as a current default selection',
       'docs/architecture/opinionation-boundaries.md: uses alpha-supported default provider wording',
       'docs/architecture/plugin-system/configuration.md: labels a plugin reference implementation as a current default selection',
       'docs/contracts/glossary.md: presents implicit platform system defaults as a current user path',
@@ -443,7 +460,9 @@ test('collectSourceDocsErrors rejects unsupported root data-team lifecycle comma
         '# Build Your First Data Product',
         '',
         'Run `floe compile`.',
+        'Run `floe init --platform=v1.0.0`.',
         'Run `floe run`.',
+        'Run `floe test`.',
         'Run `floe product deploy`.',
         '',
       ].join('\n'),
@@ -454,7 +473,9 @@ test('collectSourceDocsErrors rejects unsupported root data-team lifecycle comma
     assert.deepEqual(errors, [
       'docs/data-engineers/first-data-product.md: first data product guide must teach hello-orders before Customer 360',
       "docs/data-engineers/first-data-product.md: presents unsupported root command 'floe compile' as current",
+      "docs/data-engineers/first-data-product.md: presents unsupported root command 'floe init' as current",
       "docs/data-engineers/first-data-product.md: presents unsupported root command 'floe run' as current",
+      "docs/data-engineers/first-data-product.md: presents unsupported root command 'floe test' as current",
       "docs/data-engineers/first-data-product.md: presents unsupported CLI command 'floe product deploy' as current",
     ]);
   });

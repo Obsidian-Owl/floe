@@ -23,7 +23,7 @@ catalog = load_catalog(
 **Issues with this approach:**
 1. **Cloud provider lock-in**: S3 syntax doesn't work for GCS (`gs://`) or Azure (`abfss://`)
 2. **Credential management**: Different auth for AWS (IAM), GCS (service account), Azure (SAS)
-3. **Testing complexity**: Cannot easily swap MinIO for local dev, S3 for production
+3. **Testing complexity**: Cannot easily swap MinIO for local evaluation and a validated cloud object-storage backend for production
 4. **Enterprise requirements**: Some organizations require specific storage (on-prem, multi-cloud)
 
 ### Organizations Have Different Storage Needs
@@ -281,7 +281,7 @@ plugins:
 - **Composability** - Storage backends are plugins, not hardcoded paths (ADR-0037)
 - **PyIceberg alignment** - Follows industry-standard FileIO pattern
 - **Cloud portability** - Same code works on AWS, GCP, Azure, on-prem
-- **Testing efficiency** - Swap MinIO for local dev, S3 for production
+- **Testing efficiency** - Swap MinIO for local evaluation and a validated cloud object-storage backend for production
 - **Credential security** - Centralized credential management per backend
 - **Multi-cloud support** - Future: Multiple storage plugins per platform
 

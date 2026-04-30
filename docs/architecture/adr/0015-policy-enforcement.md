@@ -158,7 +158,7 @@ governance:
 ### Compile-Time Workflow
 
 ```bash
-$ floe compile
+$ floe compile  # planned root data-team command; not alpha-supported yet
 
 [1/5] Loading platform manifest...
 [2/5] Compiling dbt project...

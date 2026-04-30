@@ -306,7 +306,7 @@ Quality requirements escalate based on data classification:
 ### Compile-Time Quality Validation
 
 ```bash
-$ floe compile
+$ floe compile  # planned root data-team command; not alpha-supported yet
 
 [1/5] Loading platform artifacts
       ✓ Quality gates: 3 rules loaded
@@ -327,7 +327,7 @@ $ floe compile
 
 [5/5] Compilation FAILED
 
-Fix quality violations and re-run `floe compile`
+Fix quality violations and re-run the planned root `floe compile` flow
 ```
 
 ## References

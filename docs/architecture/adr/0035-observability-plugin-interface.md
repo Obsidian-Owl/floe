@@ -242,7 +242,7 @@ class TelemetryBackendPlugin(ABC):
         """Validate connection to backend.
 
         Checks that backend is reachable and credentials are valid.
-        Called during platform validation (floe validate).
+        Called during planned platform validation workflows.
 
         Returns:
             True if connection successful, False otherwise.
@@ -392,7 +392,7 @@ class LineageBackendPlugin(ABC):
         """Validate connection to backend.
 
         Checks that backend is reachable and credentials are valid.
-        Called during platform validation (floe validate).
+        Called during planned platform validation workflows.
 
         Returns:
             True if connection successful, False otherwise.
@@ -459,7 +459,7 @@ plugins:
 
 ### Neutral
 
-- **Default plugins** - `floe-telemetry-jaeger` and `floe-lineage-marquez` ship together (batteries included)
+- **Reference plugins** - `floe-telemetry-jaeger` and `floe-lineage-marquez` ship together as the local/self-hosted reference path
 - **Migration path** - Existing unified ObservabilityPlugin deprecated but coexists during transition
 - **Ecosystem growth** - Community maintains backend-specific plugins
 
@@ -927,7 +927,7 @@ plugins:
 
 # prod/manifest.yaml
 plugins:
-  telemetry_backend: datadog  # SaaS for production
+  telemetry_backend: datadog  # SaaS telemetry backend example
   lineage_backend: atlan
 ```
 

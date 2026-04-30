@@ -250,7 +250,7 @@ data_architecture:
 ## Compile-Time Enforcement
 
 ```bash
-$ floe compile
+$ floe compile  # planned root data-team command; not alpha-supported yet
 
 [1/4] Loading platform artifacts
       ✓ Pattern: medallion
@@ -270,7 +270,7 @@ $ floe compile
 
 [4/4] Compilation FAILED
 
-Fix naming and quality violations, then re-run `floe compile`
+Fix naming and quality violations, then re-run the planned root `floe compile` flow
 ```
 
 ## Pattern Migration
@@ -772,7 +772,7 @@ Input Ports:
 > **Alpha caveat:** This is a target-state Data Mesh governance example. The current alpha supports the documented Customer 360 path and platform compilation artifacts; federated Data Mesh operations remain planned.
 
 ```bash
-$ floe compile
+$ floe compile  # planned root data-team command; not alpha-supported yet
 
 [1/6] Loading enterprise platform
       ✓ Enterprise: acme-enterprise v1.0.0
@@ -800,7 +800,7 @@ $ floe compile
 
 [6/6] Compilation FAILED
 
-Fix data contract violation and re-run `floe compile`
+Fix data contract violation and re-run the planned root `floe compile` flow
 ```
 
 ### Data Mesh + Data Modeling Patterns
@@ -877,10 +877,10 @@ floe platform publish v1.0.0       # Publish to OCI registry
 floe platform deploy               # Deploy platform services
 
 # Data Product commands (Product Team)
-floe init --platform=v1.0.0        # Initialize with centralized manifest
-floe init --domain=sales:v2.1.0    # Initialize with domain manifest
-floe compile                       # Compile DataProduct
-floe run                           # Execute pipeline
+floe init --platform=v1.0.0        # Planned root command: initialize with centralized manifest
+floe init --domain=sales:v2.1.0    # Planned root command: initialize with domain manifest
+floe compile                       # Planned root command: compile DataProduct
+floe run                           # Planned root command: execute pipeline
 
 # Discovery commands
 floe products list

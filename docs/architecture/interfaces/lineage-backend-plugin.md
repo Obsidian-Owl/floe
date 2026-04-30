@@ -59,7 +59,7 @@ class LineageBackendPlugin(ABC):
 
 | Plugin | Description | Self-Hosted |
 |--------|-------------|-------------|
-| `MarquezLineagePlugin` | Local/self-hosted lineage (default) | Yes |
+| `MarquezLineagePlugin` | Local/self-hosted lineage reference path | Yes |
 | `AtlanLineagePlugin` | SaaS data catalog and governance | No |
 | `OpenMetadataLineagePlugin` | Open-source data catalog | Yes |
 

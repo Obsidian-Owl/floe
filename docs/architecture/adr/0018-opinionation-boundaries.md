@@ -200,7 +200,7 @@ backend = registry.discover("floe.observability")[config["type"]]
 │    orchestrator:                                                         │
 │      type: airflow      # Pluggable ✓                                   │
 │    catalog:                                                              │
-│      type: polaris      # Pluggable ✓ (default)                         │
+│      type: polaris      # Pluggable ✓ (example catalog selection)        │
 │                                                                          │
 │  # ENFORCED (cannot change):                                            │
 │  # - Iceberg table format                                               │

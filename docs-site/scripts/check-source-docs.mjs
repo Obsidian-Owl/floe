@@ -30,8 +30,15 @@ const productSurfaceSources = new Set([
   'docs/index.md',
   'docs/architecture/ARCHITECTURE-SUMMARY.md',
   'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md',
+  'docs/architecture/adr/0007-openlineage-from-start.md',
+  'docs/architecture/adr/0010-target-agnostic-compute.md',
+  'docs/architecture/adr/0016-platform-enforcement-architecture.md',
+  'docs/architecture/adr/0018-opinionation-boundaries.md',
   'docs/architecture/adr/0020-ingestion-plugins.md',
   'docs/architecture/adr/0032-cube-compute-integration.md',
+  'docs/architecture/adr/0035-observability-plugin-interface.md',
+  'docs/architecture/adr/0036-storage-plugin-interface.md',
+  'docs/architecture/adr/0047-cli-architecture.md',
   'docs/architecture/opinionation-boundaries.md',
   'docs/architecture/capability-status.md',
   'docs/architecture/platform-services.md',
@@ -95,6 +102,9 @@ function collectProductSurfaceLineLevelErrors(line) {
   if (/\bS3\b.*\b(production|default|prod)\b|\b(production|default|prod)\b.*\bS3\b/u.test(line)) {
     errors.push('labels S3 as a current production default');
   }
+  if (/\bDefault plugins\b/iu.test(line)) {
+    errors.push('uses default plugin bundle wording');
+  }
   if (/\bTotal Plugin Types(?:\*\*)?\s*:?\s*12\b/iu.test(line)) {
     errors.push('references stale plugin category count 12');
   }
@@ -110,10 +120,13 @@ function collectProductSurfaceLineLevelErrors(line) {
   if (/\bsystem defaults\b.*\b(DuckDB|Dagster|Polaris|Cube|dlt)\b/iu.test(line)) {
     errors.push('presents implicit platform system defaults as a current user path');
   }
-  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt)\s*\(\s*default\s*\)/iu.test(line)) {
+  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt|Jaeger|Marquez)\s*\(\s*default\s*\)/iu.test(line)) {
     errors.push('labels a plugin reference implementation as a current default selection');
   }
-  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt)\b.*\bPlugin\b.*\(\s*default\s*\)/iu.test(line)) {
+  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt|Jaeger|Marquez)\b.*\bPlugin\b.*\(\s*default\s*\)/iu.test(line)) {
+    errors.push('labels a plugin reference implementation as a current default selection');
+  }
+  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt|Jaeger|Marquez)[A-Za-z]*Plugin\b.*\(\s*default\s*\)/iu.test(line)) {
     errors.push('labels a plugin reference implementation as a current default selection');
   }
   if (/\bDefault:\s*\*\*(DuckDB|Dagster|Polaris|Cube|dlt)\*\*/iu.test(line)) {
@@ -140,8 +153,14 @@ function collectProductSurfaceLineLevelErrors(line) {
   if (/\bfloe\s+compile\b/iu.test(line)) {
     errors.push("presents unsupported root command 'floe compile' as current");
   }
+  if (/\bfloe\s+init\b/iu.test(line)) {
+    errors.push("presents unsupported root command 'floe init' as current");
+  }
   if (/\bfloe\s+run\b/iu.test(line)) {
     errors.push("presents unsupported root command 'floe run' as current");
+  }
+  if (/\bfloe\s+test\b/iu.test(line)) {
+    errors.push("presents unsupported root command 'floe test' as current");
   }
   if (/\bfloe\s+validate\b/iu.test(line)) {
     errors.push("presents unsupported root command 'floe validate' as current");
