@@ -285,9 +285,9 @@ floe run                      # Execute pipeline
 floe test                     # Run dbt tests
 ```
 
-### Data Mesh Commands
+### Target-State Data Mesh Commands
 
-For federated Data Mesh deployments:
+For federated Data Mesh deployments, the following commands describe the target-state operator and product-team experience. They are planned examples, not supported alpha workflows.
 
 ```bash
 # Platform Team (compiles any Manifest - enterprise or domain)

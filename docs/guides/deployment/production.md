@@ -158,19 +158,25 @@ spec:
 
 ## 6. Dagster Daemon High Availability Considerations
 
-The Dagster daemon is a single-instance service by design. floe provides configurable daemon modes:
+The current alpha chart deploys a single Dagster daemon through the Dagster subchart. Configure alpha daemon enablement and resources with the actual chart values:
 
 ```yaml
-# manifest.yaml
-orchestrator:
-  type: dagster
-  daemon:
-    mode: single           # single | ha
-    restart_timeout: 60s   # Max time to restart after failure
-    health_check_interval: 30s
+# charts/floe-platform/values.yaml
+dagster:
+  dagsterDaemon:
+    enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
 ```
 
-### Mode: single (default)
+HA daemon operation and leader election are future/candidate production patterns. Floe does not currently expose a `daemon.mode` manifest contract or chart value for switching between single-daemon and HA modes.
+
+### Current Alpha: Single Daemon
 
 Single daemon instance with fast recovery:
 
@@ -192,9 +198,9 @@ Single daemon instance with fast recovery:
 +---------------------------------------------------------------+
 ```
 
-### Mode: ha (leader election)
+### Future Candidate: HA Leader Election
 
-Active-passive configuration using K8s lease-based leader election:
+An active-passive configuration using K8s lease-based leader election is a candidate production hardening pattern. It has not been validated as part of the alpha chart and is not currently implemented as a Floe chart value.
 
 ```
 +---------------------------------------------------------------+
@@ -254,10 +260,10 @@ The daemon persists all state to PostgreSQL, allowing recovery without data loss
 
 | Environment | Mode | Rationale |
 |-------------|------|-----------|
-| Development | single | Simpler, sufficient for dev |
-| Staging | single | Test production-like recovery |
-| Future production (small) | single | Candidate pattern; validate before adopting |
-| Future production (critical) | ha | Candidate pattern for sub-15s failover requirements |
+| Development | single daemon | Simpler, sufficient for dev |
+| Staging | single daemon | Test production-like recovery |
+| Future production (small) | single daemon | Candidate pattern; validate before adopting |
+| Future production (critical) | HA leader election | Candidate pattern for sub-15s failover requirements |
 
 ---
 

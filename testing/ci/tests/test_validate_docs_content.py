@@ -205,6 +205,83 @@ def test_rejects_contract_and_architecture_lifecycle_examples_without_caveat(
 
 
 @pytest.mark.requirement("alpha-docs")
+def test_rejects_vague_customer_360_run_handoff(tmp_path: Path) -> None:
+    """Content validation requires the concrete alpha Customer 360 run path."""
+    docs = tmp_path / "docs" / "data-engineers"
+    docs.mkdir(parents=True)
+    (docs / "first-data-product.md").write_text(
+        "# First Data Product\n\n"
+        "Use the run command or deployment command documented by your Platform Engineer.\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert any("vague Customer 360 run/deploy handoff" in error for error in errors)
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_rejects_uncaveated_data_mesh_discovery_commands(tmp_path: Path) -> None:
+    """Content validation rejects Data Mesh discovery commands as current alpha workflows."""
+    docs = tmp_path / "docs" / "architecture"
+    docs.mkdir(parents=True)
+    (docs / "mesh.md").write_text("# Mesh\n\n```bash\nfloe products list\n```\n")
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert any(
+        "Data Mesh discovery CLI command is not a supported current alpha" in error
+        for error in errors
+    )
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_allows_target_state_data_mesh_discovery_commands(tmp_path: Path) -> None:
+    """Content validation permits explicitly target-state Data Mesh discovery commands."""
+    docs = tmp_path / "docs" / "architecture" / "adr"
+    docs.mkdir(parents=True)
+    (docs / "0021-data-architecture-patterns.md").write_text(
+        "# ADR\n\n"
+        "## Target-State Data Mesh Discovery\n\n"
+        "```bash\n"
+        "# List all products\n"
+        "floe products list\n"
+        "```\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert errors == []
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_rejects_dagster_daemon_mode_as_current_chart_contract(tmp_path: Path) -> None:
+    """Content validation rejects unsupported daemon.mode production claims."""
+    docs = tmp_path / "docs" / "guides" / "deployment"
+    docs.mkdir(parents=True)
+    (docs / "production.md").write_text(
+        "# Production\n\n```yaml\ndaemon:\n  mode: ha\n```\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert any("Dagster daemon HA mode contract is not implemented" in error for error in errors)
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_allows_dagster_daemon_ha_when_marked_candidate(tmp_path: Path) -> None:
+    """Content validation permits daemon HA examples when clearly candidate-only."""
+    docs = tmp_path / "docs" / "guides" / "deployment"
+    docs.mkdir(parents=True)
+    (docs / "production.md").write_text(
+        "# Production\n\n## Future Candidate Pattern\n\n```yaml\ndaemon:\n  mode: ha\n```\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert errors == []
+
+
+@pytest.mark.requirement("alpha-docs")
 def test_allows_adr_lifecycle_commands_as_historical_or_target_context(tmp_path: Path) -> None:
     """Content validation does not force broad rewrites of ADR command references."""
     adr = tmp_path / "docs" / "architecture" / "adr" / "0001-target.md"

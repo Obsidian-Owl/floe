@@ -69,8 +69,20 @@ UNSUPPORTED_ALPHA_LIFECYCLE_COMMAND_RE = re.compile(
 UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE = re.compile(
     r"\b("
     r"planned|stub|target|target-state|historical|not implemented|not current|"
-    r"not the current|not yet implemented|not alpha-supported|non-current"
+    r"not the current|not yet implemented|not alpha-supported|non-current|candidate"
     r")\b",
+    re.IGNORECASE,
+)
+UNSUPPORTED_DATA_MESH_DISCOVERY_COMMAND_RE = re.compile(
+    r"\bfloe\s+(?:products?|contracts?)\s+(?:list|describe)\b",
+    re.IGNORECASE,
+)
+STALE_DATA_PRODUCT_HANDOFF_RE = re.compile(
+    r"Use the run command or deployment command documented by your Platform Engineer",
+    re.IGNORECASE,
+)
+UNSUPPORTED_DAGSTER_DAEMON_MODE_RE = re.compile(
+    r"\b(?:daemon\.mode|mode:\s*(?:single|ha)\b)",
     re.IGNORECASE,
 )
 PLUGIN_COUNT_RE = re.compile(
@@ -204,6 +216,14 @@ def _guards_unsupported_alpha_lifecycle_commands(rel_path: str) -> bool:
     return rel_path == "README.md" or rel_path.startswith("docs/")
 
 
+def _has_planned_or_target_context(line: str, active_heading: str) -> bool:
+    """Return whether a line is visibly target-state, planned, or candidate only."""
+    return bool(
+        UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE.search(line)
+        or UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE.search(active_heading)
+    )
+
+
 def validate_docs_content(
     root: Path,
     *,
@@ -225,8 +245,12 @@ def validate_docs_content(
         rel_path_str = rel_path.as_posix()
 
         active_heading = ""
+        in_fenced_code_block = False
         for line_number, line in enumerate(path.read_text().splitlines(), start=1):
-            if line.lstrip().startswith("#"):
+            if line.lstrip().startswith("```"):
+                in_fenced_code_block = not in_fenced_code_block
+
+            if not in_fenced_code_block and line.lstrip().startswith("#"):
                 active_heading = line.strip("# \t")
 
             for phrase in STALE_RELEASE_PHRASES:
@@ -256,6 +280,12 @@ def validate_docs_content(
             if floe_dev_pattern.search(line) and not has_negative_or_planned_context:
                 errors.append(f"{rel_path}:{line_number}: {floe_dev_message}")
 
+            if STALE_DATA_PRODUCT_HANDOFF_RE.search(line):
+                errors.append(
+                    f"{rel_path}:{line_number}: vague Customer 360 run/deploy handoff; "
+                    "document the alpha repo-checkout run and validation path explicitly"
+                )
+
             if _guards_unsupported_alpha_lifecycle_commands(rel_path_str):
                 for match in UNSUPPORTED_ALPHA_LIFECYCLE_COMMAND_RE.finditer(line):
                     if UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE.search(line):
@@ -266,6 +296,26 @@ def validate_docs_content(
                         "alpha workflow; use 'floe platform compile', 'make compile-demo', "
                         "or mark it planned/stub/target-state"
                     )
+
+            if UNSUPPORTED_DATA_MESH_DISCOVERY_COMMAND_RE.search(line) and not (
+                _has_planned_or_target_context(line, active_heading)
+                or _is_historical_adr_line(path, active_heading)
+            ):
+                errors.append(
+                    f"{rel_path}:{line_number}: Data Mesh discovery CLI command is not "
+                    "a supported current alpha workflow; mark it target-state/planned"
+                )
+
+            if UNSUPPORTED_DAGSTER_DAEMON_MODE_RE.search(
+                line
+            ) and not _has_planned_or_target_context(
+                line,
+                active_heading,
+            ):
+                errors.append(
+                    f"{rel_path}:{line_number}: Dagster daemon HA mode contract is not "
+                    "implemented in the alpha chart; mark it candidate/planned or remove it"
+                )
 
             if _is_historical_adr_line(path, active_heading):
                 continue

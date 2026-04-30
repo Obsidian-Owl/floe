@@ -2,7 +2,7 @@
 
 Customer 360 is the `v0.1.0-alpha.1` golden demo. The alpha release gate will prove that Floe can run a data product through orchestration, transformation, storage, lineage, tracing, and business-facing query validation.
 
-Platform Engineers and Data Engineers should run Customer 360 against a Floe platform that has already been deployed and made reachable through their platform access method. Floe Contributors can use the remote DevPod lane when they need release-validation evidence.
+Platform Engineers and Data Engineers should run Customer 360 against a Floe platform that has already been deployed and made reachable through their platform access method. Floe Contributors can use the remote DevPod lane when they need contributor release-validation evidence.
 
 ## Prerequisites
 
@@ -12,15 +12,25 @@ Platform Engineers and Data Engineers should run Customer 360 against a Floe pla
 
 ## Run
 
-For Platform Engineers and Data Engineers, use the deployment and run trigger provided for your platform, then run the evidence validator:
+### Platform Engineer And Data Engineer Alpha Path
 
-This is the current alpha repo-checkout evidence validator; a packaged product command is not available yet. In a product workspace, use the equivalent evidence requirements and command your platform provides.
+For `v0.1.0-alpha.1`, the supported product-facing Customer 360 path is the checked-in repo-checkout evidence path. It assumes a Platform Engineer has already deployed the platform/runtime, loaded the Customer 360 Dagster code, and exposed Dagster at the URL in `demo/customer-360/validation.yaml`. The default Dagster URL is `http://localhost:3100`.
 
 ```bash
+make demo-customer-360-run
 make demo-customer-360-validate
 ```
 
-For Floe Contributors running the remote release-validation lane:
+Packaged/self-service data-product deployment commands are planned and not yet alpha-supported. The runner reads the Dagster URL and launch metadata from the validation manifest. For non-default service URLs, copy `demo/customer-360/validation.yaml`, edit the service URLs for your environment, and run:
+
+```bash
+uv run python -m testing.ci.run_customer_360_demo \
+  --validation-manifest /path/to/customer-360-validation.yaml
+uv run python -m testing.ci.validate_customer_360_demo \
+  --validation-manifest /path/to/customer-360-validation.yaml
+```
+
+### Floe Contributor Remote Validation Lane
 
 ```bash
 make demo

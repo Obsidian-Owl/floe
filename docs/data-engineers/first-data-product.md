@@ -53,16 +53,30 @@ Expected outcome:
 
 ## 4. Run The Product
 
-Use the run command or deployment command documented by your Platform Engineer for the target platform. For the alpha Customer 360 evidence path, use the Customer 360 validation command after the platform and job are available:
+For `v0.1.0-alpha.1`, the supported Customer 360 path is a repo-checkout evidence path, not a packaged self-service deployment command. A Platform Engineer first deploys the Floe platform/runtime, loads the Customer 360 Dagster code, and exposes Dagster at the URL configured in `demo/customer-360/validation.yaml`. The default Dagster URL is `http://localhost:3100`.
+
+After the platform/runtime is reachable, trigger and validate Customer 360 from the repository checkout:
 
 ```bash
+make demo-customer-360-run
 make demo-customer-360-validate
 ```
 
 Expected outcome:
 
 - The platform reports run, lineage, trace, storage, and business output evidence for Customer 360.
-- If the run has not happened yet, ask your Platform Engineer for the supported run trigger or deployed service path for your environment.
+- `make demo-customer-360-run` launches the Dagster job using `demo/customer-360/validation.yaml`.
+- `make demo-customer-360-validate` checks the run evidence and business outputs.
+- Packaged/self-service data-product deployment commands are planned and not yet alpha-supported.
+
+If your platform does not expose Dagster at `http://localhost:3100`, copy `demo/customer-360/validation.yaml`, edit the service URLs for your environment, and pass the copied manifest to the Python runner and validator:
+
+```bash
+uv run python -m testing.ci.run_customer_360_demo \
+  --validation-manifest /path/to/customer-360-validation.yaml
+uv run python -m testing.ci.validate_customer_360_demo \
+  --validation-manifest /path/to/customer-360-validation.yaml
+```
 
 ## 5. Validate The Product Outputs
 

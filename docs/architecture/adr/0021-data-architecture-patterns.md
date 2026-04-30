@@ -726,9 +726,11 @@ catalog/
     └── facts/
 ```
 
-### Data Mesh Discovery
+### Target-State Data Mesh Discovery
 
-Data products are discoverable via the catalog:
+Data products are intended to be discoverable via the catalog in the target-state Data Mesh model.
+
+> **Alpha caveat:** Data Mesh discovery operations and product registration are planned and not alpha-supported. See [Capability Status](../capability-status.md) for current release boundaries. The commands below are target-state examples, not executable `v0.1.0-alpha.1` workflows.
 
 ```bash
 # List all data products
@@ -765,7 +767,9 @@ Input Ports:
   marketing_interactions (marketing.campaign-attribution.customer_interactions)
 ```
 
-### Federated Governance Enforcement
+### Target-State Federated Governance Enforcement
+
+> **Alpha caveat:** This is a target-state Data Mesh governance example. The current alpha supports the documented Customer 360 path and platform compilation artifacts; federated Data Mesh operations remain planned.
 
 ```bash
 $ floe compile
@@ -862,7 +866,9 @@ In Data Mesh, domains can have their own infrastructure:
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### CLI Commands for Data Mesh
+### Target-State CLI Commands for Data Mesh
+
+The following commands describe the intended Data Mesh operator and product-team experience. They are target-state examples, not supported alpha commands. Current alpha-supported paths are documented in [Capability Status](../capability-status.md).
 
 ```bash
 # Platform commands (Platform Team)
