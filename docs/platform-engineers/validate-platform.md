@@ -34,6 +34,8 @@ The default chart uses Dagster service port `80`. Contributor demo values overri
 
 Run the Customer 360 validation path after the data product has been deployed and run:
 
+This is the current alpha repo-checkout evidence validator; a packaged product command is not available yet. For platform workspaces, provide the equivalent evidence requirements and supported command for your environment.
+
 ```bash
 make demo-customer-360-validate
 ```

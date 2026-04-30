@@ -14,6 +14,8 @@ Platform Engineers and Data Engineers should run Customer 360 against a Floe pla
 
 For Platform Engineers and Data Engineers, use the deployment and run trigger provided for your platform, then run the evidence validator:
 
+This is the current alpha repo-checkout evidence validator; a packaged product command is not available yet. In a product workspace, use the equivalent evidence requirements and command your platform provides.
+
 ```bash
 make demo-customer-360-validate
 ```

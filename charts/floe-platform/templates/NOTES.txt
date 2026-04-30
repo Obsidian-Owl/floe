@@ -20,8 +20,8 @@ DAGSTER WEBSERVER:
   URL: http{{ if .Values.ingress.tls }}s{{ end }}://{{ (index .Values.ingress.hosts 0).host }}
 {{- else }}
   To access the Dagster UI, run:
-    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "floe-platform.dagster.webserverName" . }} 3000:{{ include "floe-platform.dagster.webserverPort" . }}
-  Then open: http://localhost:3000
+    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "floe-platform.dagster.webserverName" . }} 3100:{{ include "floe-platform.dagster.webserverPort" . }}
+  Then open: http://localhost:3100
 {{- end }}
 {{- end }}
 

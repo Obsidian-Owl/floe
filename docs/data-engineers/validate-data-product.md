@@ -4,6 +4,8 @@ Use this guide to prove that a data product produced useful outputs on a Floe pl
 
 ## Validate Business Outputs
 
+This is the current alpha repo-checkout evidence validator; a packaged product command is not available yet. In a product workspace, use the equivalent evidence requirements and run trigger your Platform Engineer provides.
+
 ```bash
 make demo-customer-360-validate
 ```

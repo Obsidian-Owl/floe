@@ -1,284 +1,221 @@
 # floe-platform Helm Chart
 
-Production-ready Helm chart for deploying the floe data platform on Kubernetes.
+Alpha Helm chart for evaluating Floe platform services on Kubernetes.
 
-## Overview
+This chart is currently validated for local/dev and Customer 360 alpha paths. It is not a supported production runbook, and production hardening remains planned/not alpha-proven.
 
-This umbrella chart deploys the complete floe platform including:
+## What This Chart Deploys
 
-- **Dagster** - Orchestration engine for data pipelines
-- **Polaris** - Iceberg REST catalog for data lakehouse
-- **PostgreSQL** - Metadata storage for Dagster and Polaris
-- **MinIO** - S3-compatible object storage (non-prod)
-- **OpenTelemetry Collector** - Observability and tracing
+The default `values.yaml` renders these platform services:
+
+- Dagster orchestration, including the webserver, daemon, and workspace wiring.
+- Polaris Iceberg REST catalog.
+- PostgreSQL metadata storage shared by platform services.
+- OpenTelemetry Collector for telemetry ingestion.
+- Jaeger all-in-one trace backend.
+- Marquez lineage service.
+
+Optional components:
+
+- MinIO is available for local/demo object storage, but is disabled by default.
+- Cube is present as a local semantic-layer dependency, but is disabled by default with `cube.enabled: false`.
+- Contract monitor and chart test jobs are opt-in.
 
 ## Prerequisites
 
-- Kubernetes 1.25+
-- Helm 3.12+
-- kubectl configured for target cluster
+- Kubernetes 1.28 or newer.
+- Helm 3.12 or newer.
+- `kubectl` configured for the target cluster.
 
-## Quick Start
+## Local/Dev Quick Start
 
-### From Helm Repository
-
-```bash
-# Add the floe Helm repository
-helm repo add floe https://obsidian-owl.github.io/floe
-helm repo update
-
-# Install with default values (dev environment)
-helm install floe floe/floe-platform --namespace floe-dev --create-namespace
-
-# Install for production
-helm install floe floe/floe-platform \
-  --namespace floe-prod --create-namespace \
-  --set global.environment=prod \
-  --set autoscaling.enabled=true \
-  --set podDisruptionBudget.enabled=true
-```
-
-### From OCI Registry
+Run from the repository root:
 
 ```bash
-# Install from GHCR OCI registry
-helm install floe oci://ghcr.io/obsidian-owl/charts/floe-platform \
-  --namespace floe-dev --create-namespace
-
-# Install specific version
-helm install floe oci://ghcr.io/obsidian-owl/charts/floe-platform \
-  --version 1.0.0 \
-  --namespace floe-prod --create-namespace
-```
-
-### From Local Chart
-
-```bash
-# Add dependencies
 helm dependency update ./charts/floe-platform
-
-# Install with default values (dev environment)
-helm install floe ./charts/floe-platform --namespace floe-dev --create-namespace
-
-# Install for staging
-helm install floe ./charts/floe-platform \
-  -f values.yaml \
-  -f values-staging.yaml \
-  --namespace floe-staging --create-namespace
-
-# Install for production
-helm install floe ./charts/floe-platform \
-  -f values.yaml \
-  -f values-prod.yaml \
-  --namespace floe-prod --create-namespace
+helm upgrade --install floe ./charts/floe-platform \
+  --namespace floe-dev \
+  --create-namespace
 ```
 
-## Environment Configuration
+Validate the rendered chart before applying overrides:
 
-### Cluster Mapping
+```bash
+helm template floe ./charts/floe-platform \
+  --namespace floe-dev
+```
 
-The chart supports logical-to-physical environment mapping via `clusterMapping`:
+Access Dagster with the default chart values:
+
+```bash
+kubectl port-forward -n floe-dev svc/floe-dagster-webserver 3100:80
+```
+
+Then open `http://localhost:3100`.
+
+The demo values override the Dagster service port to `3000`, so demo-specific helpers can render `3100:3000` while the default chart remains `3100:80`.
+
+## Current Values Shape
+
+These keys are verified against the current `values.yaml`.
 
 ```yaml
+global:
+  environment: dev
+  imagePullPolicy: IfNotPresent
+  storageClass: ""
+  commonLabels: {}
+  commonAnnotations: {}
+
+namespace:
+  create: false
+  name: ""
+
+fullnameOverride: floe-platform
+
 clusterMapping:
   nonProd:
-    cluster: "aks-nonprod"
-    environments: ["dev", "qa", "staging"]
-    namespaceTemplate: "floe-{{ .Values.global.environment }}"
-    resourcePreset: small
+    cluster: ""
+    environments: [dev, qa, staging]
+    namespaceTemplate: "floe-{{ .environment }}"
+    resources:
+      preset: small
   prod:
-    cluster: "aks-prod"
-    environments: ["prod"]
+    cluster: ""
+    environments: [prod]
     namespaceTemplate: "floe-prod"
-    resourcePreset: large
-```
+    resources:
+      preset: large
 
-This allows multiple logical environments to share a physical cluster with namespace isolation.
+resourcePresets:
+  small:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
-### Resource Presets
-
-Three resource presets are available:
-
-| Preset | CPU Request | Memory Request | Use Case |
-|--------|-------------|----------------|----------|
-| small  | 100m        | 256Mi          | Development |
-| medium | 250m        | 512Mi          | Staging |
-| large  | 500m        | 1Gi            | Production |
-
-### Environment-Specific Values
-
-Use environment-specific values files:
-
-- `values.yaml` - Base configuration (required)
-- `values-dev.yaml` - Development overrides
-- `values-staging.yaml` - Staging overrides
-- `values-prod.yaml` - Production overrides
-
-## Security Features
-
-### Network Policies
-
-Enable network isolation between components:
-
-```yaml
-networkPolicy:
-  enabled: true  # Recommended for staging/prod
-```
-
-This creates policies for:
-- Default deny ingress
-- Dagster to PostgreSQL/Polaris egress
-- Polaris to PostgreSQL/MinIO egress
-- OTel Collector ingress from all pods
-
-### RBAC
-
-The chart creates:
-- ServiceAccount for Dagster components
-- Role with K8sRunLauncher permissions
-- RoleBinding to connect them
-
-## High Availability (Production)
-
-Enable HA features for production:
-
-```yaml
-autoscaling:
+dagster:
   enabled: true
+  dagsterWebserver:
+    replicaCount: 1
+    service:
+      type: ClusterIP
+      port: 80
+  dagsterDaemon:
+    enabled: true
+  dagster-user-deployments:
+    enabled: true
+    enableSubchart: false
+    deployments: []
+
+polaris:
+  enabled: true
+  service:
+    type: ClusterIP
+    port: 8181
+    managementPort: 8182
+
+postgresql:
+  enabled: true
+  auth:
+    database: floe
+    username: floe
+    password: ""
+    existingSecret: ""
+    existingSecretKey: password
+
+otel:
+  enabled: true
+  mode: deployment
+
+jaeger:
+  enabled: true
+
+marquez:
+  enabled: true
+
+minio:
+  enabled: false
+
+cube:
+  enabled: false
+
+networkPolicy:
+  enabled: false
+
+ingress:
+  enabled: false
 
 podDisruptionBudget:
-  enabled: true
-  minAvailable: 1
+  enabled: false
 
-# In values-prod.yaml
-dagster:
-  dagster-webserver:
-    replicaCount: 2
+autoscaling:
+  enabled: false
 ```
 
-## Configuration Reference
+## Naming And Access
 
-### Global Settings
+Parent-chart Floe services use `fullnameOverride` when set. The default is `floe-platform`, so Polaris renders as `floe-platform-polaris` and PostgreSQL renders as `floe-platform-postgresql`.
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `global.environment` | Environment name | `dev` |
-| `global.commonLabels` | Labels for all resources | `{}` |
+The upstream Dagster subchart uses the Helm release name for the webserver service. With `helm upgrade --install floe ...`, Dagster renders as `floe-dagster-webserver`.
 
-### Namespace
+## Secrets
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `namespace.name` | Namespace name | `floe-dev` |
-| `namespace.create` | Create namespace | `true` |
+Do not commit long-lived credentials in values files. Current secret-related keys include:
 
-### Dagster
+| Purpose | Values keys |
+| --- | --- |
+| PostgreSQL password | `postgresql.auth.password`, `postgresql.auth.existingSecret`, `postgresql.auth.existingSecretKey` |
+| Polaris bootstrap credentials | `polaris.auth.existingSecret`, `polaris.auth.bootstrapCredentials.clientId`, `polaris.auth.bootstrapCredentials.clientSecret` |
+| MinIO local/demo credentials | `minio.auth.rootUser`, `minio.auth.rootPassword`, `minio.auth.existingSecret` |
+| External Secrets integration | `externalSecrets.enabled`, `externalSecrets.postgresql.enabled`, `externalSecrets.minio.enabled`, `externalSecrets.secrets` |
 
-See [Dagster Helm Chart](https://docs.dagster.io/deployment/guides/kubernetes/deploying-with-helm) for full options.
+## Production Hardening Status
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `dagster.enabled` | Enable Dagster | `true` |
-| `dagster.dagster-webserver.replicaCount` | Webserver replicas | `1` |
+The chart contains configurable primitives for ingress, network policies, pod disruption budgets, HPAs, resource quotas, and external secret integration. Those primitives are not yet a validated alpha production operations path.
 
-### PostgreSQL
+Before treating this chart as a production baseline, validate at least:
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `postgresql.enabled` | Enable PostgreSQL | `true` |
-| `postgresql.primary.persistence.size` | Storage size | `10Gi` |
+- External object storage and catalog credentials.
+- Backup and restore for PostgreSQL and catalog metadata.
+- TLS, ingress, identity, and secret rotation.
+- Resource sizing, HA behavior, and disruption budgets under load.
+- Upgrade and rollback behavior for your selected values stack.
 
-### Polaris
+For current capability truth, see [Capability Status](../../docs/architecture/capability-status.md).
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `polaris.enabled` | Enable Polaris | `true` |
-| `polaris.replicaCount` | Replicas | `1` |
+## GitOps Examples
 
-### MinIO
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `minio.enabled` | Enable MinIO | `true` |
-| `minio.mode` | Deployment mode | `standalone` |
-
-### Ingress
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `ingress.enabled` | Enable ingress | `false` |
-| `ingress.className` | Ingress class | `nginx` |
-| `ingress.hosts` | Ingress hosts | `[]` |
-
-## GitOps Deployment
-
-### ArgoCD
-
-Start with the public examples in [charts/examples/argocd/](../examples/argocd/).
-They stay focused on the operator entry points and avoid duplicating the chart
-README with a second full GitOps walkthrough.
-
-### Flux CD
-
-Use the public Flux examples in [charts/examples/flux/](../examples/flux/).
-For the supported operator workflow, including the compile-to-ConfigMap flow,
-OCI chart source, version knob, and `valuesFrom` integration, follow the
-dedicated [GitOps with Flux guide](../../docs/guides/deployment/gitops-flux.md).
-
-## Upgrade Guide
-
-```bash
-# Update dependencies
-helm dependency update ./charts/floe-platform
-
-# Upgrade release
-helm upgrade floe ./charts/floe-platform \
-  -f values.yaml \
-  -f values-staging.yaml \
-  --namespace floe-staging
-```
+- Argo CD examples live in [charts/examples/argocd/](../examples/argocd/).
+- Flux examples live in [charts/examples/flux/](../examples/flux/).
+- The public Flux workflow is documented in [GitOps with Flux](../../docs/guides/deployment/gitops-flux.md).
 
 ## Troubleshooting
 
-### Check pod status
+Check pod status:
+
 ```bash
-kubectl get pods -n floe-staging
+kubectl get pods -n floe-dev
 ```
 
-### View Dagster logs
+View release status:
+
 ```bash
-kubectl logs -l app.kubernetes.io/name=dagster -n floe-staging
+helm status floe -n floe-dev
 ```
 
-### Validate chart
+Render with debug output:
+
 ```bash
-helm template floe ./charts/floe-platform -f values.yaml --debug
+helm template floe ./charts/floe-platform \
+  --namespace floe-dev \
+  --debug
 ```
-
-## Compatibility Matrix
-
-| Chart Version | floe-core | Kubernetes | Helm | Dagster Chart | OTel Chart |
-|---------------|-----------|------------|------|---------------|------------|
-| 0.1.x         | >=0.5.0   | >=1.28     | >=3.12 | 1.9.6       | 0.108.0    |
-
-### Subchart Versions
-
-| Component | Version | Notes |
-|-----------|---------|-------|
-| Dagster   | 1.9.6   | Orchestration platform |
-| OpenTelemetry Collector | 0.108.0 | Observability |
-| MinIO (Bitnami) | 14.8.5 | Dev/Demo only |
-
-### Image Versions
-
-| Component | Default Image | Tag |
-|-----------|---------------|-----|
-| Polaris   | apache/polaris | 0.9.0 |
-| PostgreSQL | postgres | 16-alpine |
-| Marquez (optional) | marquezproject/marquez | 0.49.0 |
 
 ## Related Documentation
 
-- [Epic 9B Specification](../../specs/9b-helm-deployment/spec.md)
-- [floe-jobs Chart](../floe-jobs/README.md)
-- [Dagster Helm Docs](https://docs.dagster.io/deployment/guides/kubernetes)
+- [Kubernetes Helm guide](../../docs/guides/deployment/kubernetes-helm.md)
+- [Local Kind evaluation](../../docs/guides/deployment/local-development.md)
+- [floe-jobs chart](../floe-jobs/README.md)
