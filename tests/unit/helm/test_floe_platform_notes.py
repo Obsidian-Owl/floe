@@ -66,3 +66,23 @@ def test_rendered_notes_keep_troubleshooting_numbering_on_new_lines() -> None:
     assert "issues:3." not in rendered_notes
     assert "check these common issues:\n\n1. Schema validation error" in rendered_notes
     assert f"{docs_site}/guides/deployment/kubernetes-helm" in rendered_notes
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_rendered_notes_use_valid_helm_template_chart_reference_examples() -> None:
+    """Rendered Helm NOTES must not suggest the chart name as a repo-root path."""
+    rendered_notes = _render_notes()
+
+    assert "helm template test floe-platform" not in rendered_notes
+    assert (
+        "helm template test <chart-reference> -n default -f your-values.yaml --debug"
+        in rendered_notes
+    )
+    assert (
+        "helm template test ./charts/floe-platform -n default -f your-values.yaml --debug"
+        in rendered_notes
+    )
+    assert (
+        "helm template test floe/floe-platform -n default -f your-values.yaml --debug"
+        in rendered_notes
+    )

@@ -155,7 +155,9 @@ If something isn't working, check these common issues:
 {{ end }}
 {{ "\n" }}{{ if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}3{{ else }}1{{ end }}. Schema validation error on helm install/upgrade:
    - Check values override chain: values.yaml < values-<env>.yaml < --set flags
-   - Run: helm template test {{ .Chart.Name }} -f your-values.yaml --debug 2>&1 | head -50
+   - Run: helm template test <chart-reference> -n {{ .Release.Namespace }} -f your-values.yaml --debug
+   - Local chart example: helm template test ./charts/floe-platform -n {{ .Release.Namespace }} -f your-values.yaml --debug
+   - Published chart example: helm template test floe/floe-platform -n {{ .Release.Namespace }} -f your-values.yaml --debug
    - Subchart schema changes after upgrade may reject previously-valid keys
 
 ================================================================================
