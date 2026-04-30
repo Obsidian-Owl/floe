@@ -41,15 +41,15 @@ Decision options:
 
 | Dimension | Alignment | Conflict | Decision Impact |
 | --- | --- | --- | --- |
-| Four-layer architecture |  |  |  |
-| Downward-only configuration flow |  |  |  |
-| Plugin architecture |  |  |  |
-| CompiledArtifacts contract |  |  |  |
-| Dagster/Airflow orchestrator boundary |  |  |  |
-| Helm/GitOps deployment path |  |  |  |
-| RBAC and network policy |  |  |  |
-| Secrets and identity |  |  |  |
-| OpenTelemetry and OpenLineage |  |  |  |
+| Four-layer architecture | OpenChoreo's control/data/workflow/observability planes could sit around Floe Layer 3 services and Layer 4 workloads. | OpenChoreo is itself a broad control plane, which could blur Floe's Layer 2 configuration and Layer 3 service boundaries. | Fit is plausible only if OpenChoreo consumes Floe outputs instead of becoming the source of data-platform truth. |
+| Downward-only configuration flow | OpenChoreo `Project`, `Component`, `Workload`, and `ReleaseBinding` can be generated from Floe data and promotion artifacts. | OpenChoreo environment configs could tempt environment-specific fields back into `floe.yaml`. | Adoption must preserve `manifest.yaml` and `floe.yaml` environment-agnostic rules. |
+| Plugin architecture | OpenChoreo can wrap selected deployment/runtime concerns without replacing plugin contracts. | OpenChoreo does not map cleanly to Floe's 11 plugin categories. | Treat it as optional platform-control integration, not as another standard plugin category without further design. |
+| CompiledArtifacts contract | OpenChoreo can deploy a workload that consumes `compiled_artifacts.json`. | Any requirement to change `CompiledArtifacts` for OpenChoreo would be high risk. | `CompiledArtifacts` remains the source-of-truth handoff. |
+| Dagster/Airflow orchestrator boundary | OpenChoreo workflows can support build/release activity around orchestrators. | It is not a direct replacement for Dagster/Airflow asset scheduling and dbt runtime semantics. | Do not model OpenChoreo as the initial `OrchestratorPlugin`. |
+| Helm/GitOps deployment path | OpenChoreo could reduce bespoke app-lifecycle glue if it owns generated runtime resources. | Floe already has Helm/GitOps assets; adding OpenChoreo may duplicate the deployment path. | Proof must identify real simplification before adoption. |
+| RBAC and network policy | OpenChoreo has authz and gateway/network concepts that may align with platform controls. | Floe's RBAC and network plugins enforce data-platform governance; overlap may weaken auditability. | Boundary must be explicit and default to Floe ownership. |
+| Secrets and identity | OpenChoreo `SecretReference` could interoperate with external-secrets patterns. | Floe secrets and identity plugins already model credential ownership and runtime resolution. | Treat OpenChoreo secrets as a deployment adapter only if it preserves Floe references. |
+| OpenTelemetry and OpenLineage | OpenChoreo observability can potentially present signals emitted by Floe workloads. | OpenChoreo observability does not replace Floe's enforced OpenTelemetry and OpenLineage contracts. | OpenChoreo may be a viewer/control surface, not the signal owner. |
 
 ## Scoring
 
