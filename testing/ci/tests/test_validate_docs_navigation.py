@@ -56,19 +56,19 @@ PLATFORM_FIRST_DOC = """# Deploy Your First Platform
 
 ## Prerequisites
 
-## 1. Confirm Your Cluster Context
+## 1. Choose Your Environment
 
-## 2. Choose The Deployment Mode
+## 2. Render The Platform
 
-## 3. Prepare Platform Configuration
+## 3. Install The Platform
 
-## 4. Install Floe
+## 4. Wait For Services
 
-## 5. Wait For Platform Services
+## 5. Draft The Environment Contract
 
 ## 6. Validate The Platform
 
-## Cloud Provider Examples
+## 7. Prove The Full Demo
 """
 
 PLATFORM_VALIDATE_DOC = """# Validate Your Platform
@@ -77,37 +77,43 @@ PLATFORM_VALIDATE_DOC = """# Validate Your Platform
 
 ## Service Access
 
+## Platform Evidence
+
 ## Customer 360 Platform Evidence
 
-## What To Hand To Data Engineers
+## Publish The Contract, Not A Chat Message
 """
 
 DATA_FIRST_DOC = """# Build Your First Data Product
 
 ## Prerequisites
 
-## 1. Inspect The Product Configuration
+## 1. Inspect The Environment Contract
 
-## 2. Validate The Product
+## 2. Inspect The Data Product
 
-## 3. Compile The Product
+## 3. Review The dbt Models
 
-## 4. Run The Product
+## 4. Compile The Product For The Alpha Runtime Contract
 
-## 5. Validate The Product Outputs
+## 5. Package A Runtime Artifact
+
+## 6. Deploy Through Your Organization's Approved Path
+
+## 7. Validate The Product
+
+## 8. Then Run Customer 360
 """
 
 DATA_VALIDATE_DOC = """# Validate Your Data Product
 
-## Validate Business Outputs
+## Business Output Evidence
 
-## Inspect Orchestration
+## Runtime Evidence
 
-## Inspect Storage
+## Lineage And Telemetry Evidence
 
-## Inspect Lineage And Traces
-
-## Troubleshooting
+## Escalation Boundary
 """
 
 CONTRIBUTOR_TUTORIAL_DOC = """# {title}
@@ -233,18 +239,19 @@ def test_validate_docs_navigation_rejects_first_platform_without_install_step(
     (tmp_path / "docs/platform-engineers/first-platform.md").write_text(
         "# Deploy Your First Platform\n\n"
         "## Prerequisites\n\n"
-        "## 1. Confirm Your Cluster Context\n\n"
-        "## 2. Choose The Deployment Mode\n\n"
-        "## 3. Prepare Platform Configuration\n\n"
-        "## 5. Wait For Platform Services\n\n"
+        "## 1. Choose Your Environment\n\n"
+        "## 2. Render The Platform\n\n"
+        "## 4. Wait For Services\n\n"
+        "## 5. Draft The Environment Contract\n\n"
         "## 6. Validate The Platform\n\n"
-        "## Cloud Provider Examples\n",
+        "## 7. Prove The Full Demo\n",
     )
 
     errors = validate_docs_navigation(tmp_path)
 
     assert (
-        "Missing required heading in docs/platform-engineers/first-platform.md: ## 4. Install Floe"
+        "Missing required heading in docs/platform-engineers/first-platform.md: "
+        "## 3. Install The Platform"
     ) in errors
 
 

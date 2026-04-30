@@ -230,7 +230,7 @@ backend = registry.discover("floe.observability")[config["type"]]
 
 ## Anti-Patterns
 
-### DON'T: Allow Data Engineers to select compute per-pipeline
+### Avoid per-pipeline compute ownership
 
 ```yaml
 # BAD: Per-pipeline compute selection causes drift
