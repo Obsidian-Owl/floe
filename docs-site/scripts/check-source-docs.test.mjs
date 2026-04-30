@@ -282,6 +282,47 @@ test('collectSourceDocsErrors rejects prod shorthand in architecture plugin docs
   });
 });
 
+test('collectSourceDocsErrors rejects stale plugin default wording in published docs', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/architecture/plugin-system'), { recursive: true });
+    await fs.mkdir(path.join(repoRoot, 'docs/contracts'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md'),
+      [
+        '# dbt Architecture Clarification',
+        '',
+        '- **Orchestrator**: Dagster (default), Airflow 3.x',
+        '**Total Plugin Types**: 12',
+        '',
+      ].join('\n'),
+    );
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/plugin-system/configuration.md'),
+      '# Plugin Configuration\n\n- dagster (1.0.0) [default]\n',
+    );
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/contracts/glossary.md'),
+      [
+        '# Glossary',
+        '',
+        'Uses only a `floe.yaml` file with system defaults (DuckDB, Dagster, Polaris, Cube, dlt).',
+        'Where dbt transforms execute. Default: **DuckDB**.',
+        '',
+      ].join('\n'),
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, [
+      'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md: labels a plugin reference implementation as a current default selection',
+      'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md: references stale plugin category count 12',
+      'docs/architecture/plugin-system/configuration.md: labels a plugin reference implementation as a current default selection',
+      'docs/contracts/glossary.md: presents implicit platform system defaults as a current user path',
+      'docs/contracts/glossary.md: labels a plugin reference implementation as a current default selection',
+    ]);
+  });
+});
+
 test('collectSourceDocsErrors checks README as public product surface', async () => {
   await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
     await fs.writeFile(

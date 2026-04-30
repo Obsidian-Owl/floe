@@ -28,8 +28,10 @@ function hasNegativeOrPlannedContext(line) {
 const productSurfaceSources = new Set([
   'README.md',
   'docs/index.md',
+  'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md',
   'docs/architecture/opinionation-boundaries.md',
   'docs/architecture/capability-status.md',
+  'docs/architecture/platform-services.md',
   'docs/reference/plugin-catalog.md',
   'docs/guides/data-product-lifecycle.md',
 ]);
@@ -39,6 +41,7 @@ const productSurfacePrefixes = [
   'docs/get-started/',
   'docs/architecture/interfaces/',
   'docs/architecture/plugin-system/',
+  'docs/contracts/',
   'docs/platform-engineers/',
   'docs/data-engineers/',
   'docs/guides/deployment/',
@@ -88,6 +91,21 @@ function collectProductSurfaceLineLevelErrors(line) {
   }
   if (/\bS3\b.*\b(production|default|prod)\b|\b(production|default|prod)\b.*\bS3\b/u.test(line)) {
     errors.push('labels S3 as a current production default');
+  }
+  if (/\bTotal Plugin Types(?:\*\*)?\s*:?\s*12\b/iu.test(line)) {
+    errors.push('references stale plugin category count 12');
+  }
+  if (/\bsystem defaults\b.*\b(DuckDB|Dagster|Polaris|Cube|dlt)\b/iu.test(line)) {
+    errors.push('presents implicit platform system defaults as a current user path');
+  }
+  if (/\b(Dagster|Polaris|Cube|dlt)\s*\(\s*default\s*\)/u.test(line)) {
+    errors.push('labels a plugin reference implementation as a current default selection');
+  }
+  if (/\bDefault:\s*\*\*(DuckDB|Dagster|Polaris|Cube|dlt)\*\*/u.test(line)) {
+    errors.push('labels a plugin reference implementation as a current default selection');
+  }
+  if (/\b(dagster|duckdb|polaris|cube|dlt)\b.*\[\s*default\s*\]/u.test(line)) {
+    errors.push('labels a plugin reference implementation as a current default selection');
   }
   if (/DON'T:\s*Allow Data Engineers to select compute/iu.test(line)) {
     errors.push('forbids approved per-transform compute selection');

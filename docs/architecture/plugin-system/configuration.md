@@ -8,26 +8,26 @@ This document describes plugin CLI commands and how to create custom plugins.
 # List installed plugins
 floe plugins list
 
-# Output:
+# Illustrative output:
 Installed plugins:
   orchestrators:
-    - dagster (1.0.0) [default]
+    - dagster (1.0.0) [reference implementation]
     - airflow (1.0.0)
   computes:
-    - duckdb (1.0.0) [default]
+    - duckdb (1.0.0) [reference implementation]
     - snowflake (1.0.0)
     - spark (1.0.0)
   catalogs:
-    - polaris (1.0.0) [default]
+    - polaris (1.0.0) [reference implementation]
     - glue (1.0.0)
   dbt:
-    - local (1.0.0) [default]
+    - local (1.0.0) [alpha-supported local runtime]
     - fusion (1.0.0)
   semantic_layers:
-    - cube (1.0.0) [default]
+    - cube (1.0.0) [reference implementation]
     - none (1.0.0)
   ingestion:
-    - dlt (1.0.0) [default]
+    - dlt (1.0.0) [implementation primitive]
     - airbyte (1.0.0)
 
 # List available (installable) plugins

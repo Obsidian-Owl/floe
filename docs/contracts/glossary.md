@@ -52,7 +52,7 @@ metadata:
   version: "1.0"
 ```
 
-DataProducts can reference a `platform:` or `domain:` manifest, or use system defaults.
+DataProducts can reference a `platform:` or `domain:` manifest. Current alpha guides use an explicit platform environment contract or demo fixture rather than asking Data Engineers to rely on implicit platform-wide defaults.
 
 ### CompiledArtifacts
 
@@ -62,7 +62,7 @@ The output of Floe's compilation pipeline. Contains resolved configuration after
 
 ### Simple Mode
 
-The minimal deployment mode. Uses only a `floe.yaml` file with system defaults (DuckDB, Dagster, Polaris, Cube, dlt).
+The minimal authoring mode. Uses a `floe.yaml` data product file and resolves it against a Platform Engineer-approved manifest, platform environment contract, or documented demo fixture.
 
 ### Centralized Mode
 
@@ -97,23 +97,23 @@ Ephemeral pipeline jobs running as Kubernetes Jobs. Executes dbt transforms, ing
 
 ### Compute Plugin
 
-Where dbt transforms execute. Default: **DuckDB**. Alternatives: Spark, Snowflake, Databricks, BigQuery.
+Where dbt transforms execute. Floe's alpha examples use DuckDB; Platform Engineers can approve other compute targets such as Spark, Snowflake, Databricks, or BigQuery as plugins mature.
 
 ### Orchestrator Plugin
 
-Pipeline scheduling and execution. Default: **Dagster**. Alternatives: Airflow, Prefect, Argo Workflows.
+Pipeline scheduling and execution. Floe's documented alpha path uses Dagster-centered runtime artifacts; other orchestrators remain pluggable once validated.
 
 ### Catalog Plugin
 
-Iceberg catalog for table metadata. Default: **Polaris**. Alternatives: AWS Glue, Hive Metastore, Nessie.
+Iceberg catalog for table metadata. Polaris is the reference implementation in the alpha architecture; other catalogs require Platform Engineer validation.
 
 ### Semantic Layer Plugin
 
-Analytics/BI consumption layer. Default: **Cube**. Alternatives: dbt Semantic Layer, None.
+Analytics/BI consumption layer. Cube is the reference semantic layer integration; other semantic layer choices require platform validation.
 
 ### Ingestion Plugin
 
-Data loading (EL). Default: **dlt**. Alternatives: Airbyte (external).
+Data loading (EL). The dlt plugin exists as an implementation primitive; production ingestion options are selected through platform-approved plugins.
 
 ## Enforced Standards
 

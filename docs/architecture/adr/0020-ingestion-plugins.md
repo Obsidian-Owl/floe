@@ -27,10 +27,10 @@ Data pipelines need to ingest data from external sources (APIs, databases, SaaS 
 
 Adopt a **two-tier ingestion strategy**:
 
-1. **dlt (default)** - Embedded, Python-native, Dagster-native
+1. **dlt (reference embedded option)** - Embedded, Python-native, Dagster-native
 2. **Airbyte (external)** - For organizations with existing Airbyte deployments
 
-### Default: dlt (data load tool)
+### Reference Embedded Option: dlt (data load tool)
 
 dlt is the recommended ingestion framework because:
 
@@ -229,7 +229,7 @@ class AirbyteIngestionPlugin(IngestionPlugin):
 # manifest.yaml
 plugins:
   ingestion:
-    type: dlt  # Default: dlt
+    type: dlt  # Example embedded ingestion option
     # OR
     type: airbyte
     config:
@@ -324,7 +324,7 @@ def salesforce_asset(context: AssetExecutionContext, airbyte: AirbyteResource):
 │  INGESTION LAYER                                                         │
 │                                                                          │
 │  ┌───────────────────────────────┐  ┌───────────────────────────────┐  │
-│  │  dlt (default)                 │  │  Airbyte (external)           │  │
+│  │  dlt (embedded option)         │  │  Airbyte (external)           │  │
 │  │                                │  │                                │  │
 │  │  • Python-native               │  │  • 600+ connectors            │  │
 │  │  • Runs in K8s Job             │  │  • External deployment        │  │

@@ -131,7 +131,7 @@ This creates ambiguity when we introduce `DBTRuntimePlugin` while maintaining "d
 
 While dbt is ENFORCED for SQL transformation, the execution runtime is PLUGGABLE:
 
-- **Local Execution**: dbt-core via `dbtRunner` (default, free, offline)
+- **Local Execution**: dbt-core via `dbtRunner` (alpha-supported local runtime path)
 - **Remote Execution**: dbt Cloud API (commercial, managed, scalable)
 - **Future**: dbt Fusion (Rust-based, performance)
 
@@ -166,17 +166,17 @@ See **ADR-0043: dbt Runtime Abstraction Layer** for details.
 
 **PLUGGABLE Components** (platform team selects once):
 - **Compute**: DuckDB, Snowflake, BigQuery, Databricks, Spark
-- **Orchestrator**: Dagster (default), Airflow 3.x, Prefect
+- **Orchestrator**: Dagster reference implementation, Airflow 3.x, Prefect
 - **dbt Runtime**: dbt-core (local), dbt Cloud (remote), dbt Fusion (future) ← **NEW**
-- **Catalog**: Polaris (default), Unity, Glue, Nessie
+- **Catalog**: Polaris reference implementation, Unity, Glue, Nessie
 - **Storage**: S3, GCS, Azure, MinIO
 - **Observability Backend**: Jaeger, Datadog, Grafana Cloud
-- **Semantic Layer**: Cube (default), dbt Semantic Layer, custom
-- **Ingestion**: dlt (default), Airbyte
+- **Semantic Layer**: Cube reference implementation, dbt Semantic Layer, custom
+- **Ingestion**: dlt implementation primitive, Airbyte
 - **Secrets**: K8s Secrets, ESO, Vault, Infisical
 - **Identity**: Keycloak, Dex, Okta, Auth0
 
-**Total Plugin Types**: 12 (was 11 before DBTRuntimePlugin)
+**Total Plugin Categories**: 14, based on `floe_core.plugin_types.PluginType`. See the Plugin Catalog for the current implementation truth.
 ```
 
 ---
@@ -295,7 +295,7 @@ plugins:
 - dbt manifest.json is contract for downstream systems
 
 **Execution Runtime (PLUGGABLE)**:
-- **Local Runtime** (default): dbt-core via Python `dbtRunner` API
+- **Local Runtime** (alpha-supported path): dbt-core via Python `dbtRunner` API
   - Free, open-source
   - Works offline
   - Serialized execution (not thread-safe)
@@ -448,7 +448,7 @@ def customers(context: AssetExecutionContext) -> None:
 >
 > **dbt Runtime: PLUGGABLE** (ADR-0043 - NEW)
 > - Platform teams MAY choose WHERE dbt executes:
->   - Local: dbt-core via `dbtRunner` (default, free)
+>   - Local: dbt-core via `dbtRunner` (alpha-supported local path)
 >   - Cloud: dbt Cloud API (commercial, remote)
 >   - Fusion: dbt Fusion (future, Rust-based)
 >
