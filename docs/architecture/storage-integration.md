@@ -35,14 +35,14 @@ floe enforces Apache Iceberg as the table format. Iceberg tables are stored on o
 
 | Storage | Use Case | Authentication |
 |---------|----------|----------------|
-| **MinIO** (default) | Local development, self-hosted | Access Key / Secret Key |
-| **AWS S3** | Production on AWS | IRSA (recommended) or IAM User |
+| **MinIO** | Local evaluation and self-hosted S3-compatible endpoint | Access Key / Secret Key |
+| **AWS S3** | Validated AWS object-storage backend | IRSA (recommended) or IAM User |
 | **Google Cloud Storage** | Production on GCP | Workload Identity (recommended) or SA Key |
 | **Azure Blob / ADLS Gen2** | Production on Azure | Managed Identity (recommended) or SP |
 
-### MinIO (Default for Development)
+### MinIO Local Evaluation
 
-MinIO is the recommended object storage for local development and self-hosted deployments:
+MinIO is the local evaluation object store used by Floe chart and demo paths:
 
 - S3-compatible API (works with Iceberg's S3 file IO)
 - Included in the `floe-platform` Helm chart

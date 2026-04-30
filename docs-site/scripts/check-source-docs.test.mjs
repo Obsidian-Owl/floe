@@ -310,6 +310,10 @@ test('collectSourceDocsErrors rejects stale plugin default wording in published 
       '# ADR-0035\n\n- **Default plugins** - Jaeger and Marquez ship together.\n',
     );
     await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/adr/0036-storage-plugin-interface.md'),
+      '# ADR-0036\n\n- **Default plugin** - `floe-storage-minio` ships with Floe.\n',
+    );
+    await fs.writeFile(
       path.join(repoRoot, 'docs/architecture/adr/0032-cube-compute-integration.md'),
       [
         '# ADR-0032',
@@ -331,6 +335,14 @@ test('collectSourceDocsErrors rejects stale plugin default wording in published 
     await fs.writeFile(
       path.join(repoRoot, 'docs/architecture/interfaces/lineage-backend-plugin.md'),
       '# Lineage\n\n| `MarquezLineagePlugin` | Local lineage (default) |\n',
+    );
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/interfaces/data-quality-plugin.md'),
+      '# Quality\n\n| `DBTTestsPlugin` | Native dbt tests (default) |\n',
+    );
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/storage-integration.md'),
+      '# Storage\n\n| **MinIO** (default) | Local development |\n\n### MinIO (Default for Development)\n',
     );
     await fs.writeFile(
       path.join(repoRoot, 'docs/architecture/plugin-system/configuration.md'),
@@ -356,14 +368,20 @@ test('collectSourceDocsErrors rejects stale plugin default wording in published 
       'docs/architecture/adr/0032-cube-compute-integration.md: labels DuckDB-first behavior as a current default',
       'docs/architecture/adr/0032-cube-compute-integration.md: labels an open-source stack as a current default',
       'docs/architecture/adr/0035-observability-plugin-interface.md: uses default plugin bundle wording',
+      'docs/architecture/adr/0036-storage-plugin-interface.md: references non-existent package floe-storage-minio',
+      'docs/architecture/adr/0036-storage-plugin-interface.md: uses default plugin bundle wording',
+      'docs/architecture/adr/0036-storage-plugin-interface.md: labels MinIO as a current default storage integration',
       'docs/architecture/ARCHITECTURE-SUMMARY.md: uses default plugin bundle wording',
       'docs/architecture/ARCHITECTURE-SUMMARY.md: presents bundled provider plugins as current defaults',
       'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md: labels a plugin reference implementation as a current default selection',
       'docs/architecture/DBT-ARCHITECTURE-CLARIFICATION.md: references stale plugin category count 12',
+      'docs/architecture/interfaces/data-quality-plugin.md: references stale DBTTestsPlugin name',
       'docs/architecture/interfaces/lineage-backend-plugin.md: labels a plugin reference implementation as a current default selection',
       'docs/architecture/interfaces/telemetry-backend-plugin.md: labels a plugin reference implementation as a current default selection',
       'docs/architecture/opinionation-boundaries.md: uses alpha-supported default provider wording',
       'docs/architecture/plugin-system/configuration.md: labels a plugin reference implementation as a current default selection',
+      'docs/architecture/storage-integration.md: labels MinIO as a current default storage integration',
+      'docs/architecture/storage-integration.md: labels MinIO as a current default storage integration',
       'docs/contracts/glossary.md: presents implicit platform system defaults as a current user path',
       'docs/contracts/glossary.md: labels a plugin reference implementation as a current default selection',
       'docs/contracts/glossary.md: presents implicit defaults instead of manifest-approved fallbacks',

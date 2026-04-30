@@ -251,13 +251,9 @@ class StoragePlugin(ABC):
 ### Plugin Registration
 
 ```python
-# pyproject.toml for floe-storage-s3 plugin
+# pyproject.toml for the implemented floe-storage-s3 plugin
 [project.entry-points."floe.storage"]
 s3 = "floe_storage_s3:S3Plugin"
-
-# pyproject.toml for floe-storage-minio plugin
-[project.entry-points."floe.storage"]
-minio = "floe_storage_minio:MinIOPlugin"
 ```
 
 ### Platform Configuration
@@ -294,8 +290,8 @@ plugins:
 
 ### Neutral
 
-- **Default plugin** - `floe-storage-minio` ships with floe (local dev)
-- **Production plugin** - Users install `floe-storage-s3` or `floe-storage-gcs`
+- **Implemented storage plugin** - `floe-storage-s3` supports AWS S3 and S3-compatible endpoints such as MinIO
+- **Provider-native plugins** - GCS or Azure plugins are future/provider-specific extensions, not alpha-shipped packages
 - **Migration path** - Existing hardcoded URIs can coexist during transition
 
 ## Implementation Details
@@ -375,92 +371,23 @@ class S3Plugin(StoragePlugin):
         return "AWS_ACCESS_KEY_ID" in os.environ and "AWS_SECRET_ACCESS_KEY" in os.environ
 ```
 
-### Reference Implementation: MinIOPlugin
+### S3-Compatible MinIO Configuration Example
 
-```python
-# floe-storage-minio/src/floe_storage_minio/plugin.py
-from __future__ import annotations
+MinIO uses the implemented `S3StoragePlugin` with a MinIO endpoint and
+path-style access. It is not a separate alpha-shipped storage plugin package.
 
-from typing import Any
-from pyiceberg.io.pyarrow import PyArrowFileIO
-from floe_core.plugins import StoragePlugin
-
-
-class MinIOPlugin(StoragePlugin):
-    """Storage plugin for MinIO (S3-compatible, self-hosted)."""
-
-    name = "minio"
-    version = "0.1.0"
-    floe_api_version = "2.0.0"
-
-    def __init__(self, endpoint: str = "http://minio:9000"):
-        """Initialize MinIO plugin.
-
-        Args:
-            endpoint: MinIO endpoint URL
-        """
-        self.endpoint = endpoint
-
-    def get_pyiceberg_fileio(self) -> PyArrowFileIO:
-        """Create PyIceberg FileIO for MinIO."""
-        return PyArrowFileIO(
-            {
-                "s3.endpoint": self.endpoint,
-                "s3.access-key-id": "minioadmin",  # Default MinIO creds
-                "s3.secret-access-key": "minioadmin",
-                "s3.path-style-access": "true",  # MinIO requires path-style
-            }
-        )
-
-    def get_warehouse_uri(self, namespace: str) -> str:
-        """Generate MinIO warehouse URI."""
-        return f"s3://warehouse/{namespace}"  # MinIO uses path-style
-
-    def get_dbt_profile_config(self) -> dict[str, Any]:
-        """Generate dbt-duckdb MinIO filesystems config."""
-        return {
-            "filesystems": {
-                "s3": {
-                    "endpoint_url": self.endpoint,
-                    "key_id": "minioadmin",
-                    "secret": "minioadmin",
-                    "use_ssl": False,  # Local dev uses HTTP
-                    "s3_path_style": True,
-                }
-            }
-        }
-
-    def get_dagster_io_manager_config(self) -> dict[str, Any]:
-        """Generate Dagster IOManager MinIO config."""
-        return {
-            "storage_options": {
-                "endpoint_url": self.endpoint,
-                "aws_access_key_id": "minioadmin",
-                "aws_secret_access_key": "minioadmin",
-                "use_ssl": False,
-            }
-        }
-
-    def get_helm_values_override(self) -> dict[str, Any]:
-        """Generate Helm values for deploying MinIO."""
-        return {
-            "minio": {
-                "enabled": True,
-                "mode": "standalone",
-                "rootUser": "minioadmin",
-                "rootPassword": "minioadmin",
-                "persistence": {
-                    "enabled": True,
-                    "size": "10Gi",
-                },
-                "buckets": [
-                    {"name": "warehouse", "policy": "none", "purge": False}
-                ],
-            }
-        }
+```yaml
+plugins:
+  storage:
+    type: s3
+    config:
+      endpoint: http://floe-platform-minio:9000
+      bucket: floe-data
+      region: us-east-1
+      path_style_access: true
 ```
 
-### Reference Implementation: GCSPlugin
+### Future Provider-Native Example: GCSPlugin
 
 ```python
 # floe-storage-gcs/src/floe_storage_gcs/plugin.py

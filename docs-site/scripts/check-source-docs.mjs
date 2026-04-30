@@ -17,6 +17,8 @@ const disallowedSnippets = [
   { pattern: /make\s+kind-delete/u, message: 'references missing Makefile target make kind-delete' },
   { pattern: /\.claude\//u, message: 'links internal .claude path' },
   { pattern: /\bfloe\s+schema\s+export\b/u, message: "references unsupported CLI command 'floe schema export'" },
+  { pattern: /\bfloe-storage-minio\b/u, message: 'references non-existent package floe-storage-minio' },
+  { pattern: /\bDBTTestsPlugin\b/u, message: 'references stale DBTTestsPlugin name' },
 ];
 
 function hasNegativeOrPlannedContext(line) {
@@ -42,6 +44,7 @@ const productSurfaceSources = new Set([
   'docs/architecture/opinionation-boundaries.md',
   'docs/architecture/capability-status.md',
   'docs/architecture/platform-services.md',
+  'docs/architecture/storage-integration.md',
   'docs/reference/plugin-catalog.md',
   'docs/guides/data-product-lifecycle.md',
 ]);
@@ -102,8 +105,11 @@ function collectProductSurfaceLineLevelErrors(line) {
   if (/\bS3\b.*\b(production|default|prod)\b|\b(production|default|prod)\b.*\bS3\b/u.test(line)) {
     errors.push('labels S3 as a current production default');
   }
-  if (/\bDefault plugins\b/iu.test(line)) {
+  if (/\bDefault plugins?\b/iu.test(line)) {
     errors.push('uses default plugin bundle wording');
+  }
+  if (/\bMinIO\b.*\bdefault\b|\bdefault\b.*\bMinIO\b/iu.test(line)) {
+    errors.push('labels MinIO as a current default storage integration');
   }
   if (/\bTotal Plugin Types(?:\*\*)?\s*:?\s*12\b/iu.test(line)) {
     errors.push('references stale plugin category count 12');
@@ -120,13 +126,13 @@ function collectProductSurfaceLineLevelErrors(line) {
   if (/\bsystem defaults\b.*\b(DuckDB|Dagster|Polaris|Cube|dlt)\b/iu.test(line)) {
     errors.push('presents implicit platform system defaults as a current user path');
   }
-  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt|Jaeger|Marquez)\s*\(\s*default\s*\)/iu.test(line)) {
+  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt|Jaeger|Marquez|MinIO)\s*\(\s*default\s*\)/iu.test(line)) {
     errors.push('labels a plugin reference implementation as a current default selection');
   }
-  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt|Jaeger|Marquez)\b.*\bPlugin\b.*\(\s*default\s*\)/iu.test(line)) {
+  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt|Jaeger|Marquez|MinIO)\b.*\bPlugin\b.*\(\s*default\s*\)/iu.test(line)) {
     errors.push('labels a plugin reference implementation as a current default selection');
   }
-  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt|Jaeger|Marquez)[A-Za-z]*Plugin\b.*\(\s*default\s*\)/iu.test(line)) {
+  if (/\b(DuckDB|Dagster|Polaris|Cube|dlt|Jaeger|Marquez|MinIO)[A-Za-z]*Plugin\b.*\(\s*default\s*\)/iu.test(line)) {
     errors.push('labels a plugin reference implementation as a current default selection');
   }
   if (/\bDefault:\s*\*\*(DuckDB|Dagster|Polaris|Cube|dlt)\*\*/iu.test(line)) {
