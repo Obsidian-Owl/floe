@@ -21,7 +21,7 @@ async function withDocsFixture(callback) {
   }
 }
 
-async function writeManifest(docsSiteRoot, items) {
+async function writeManifest(docsSiteRoot, items, overrides = {}) {
   await fs.writeFile(
     path.join(docsSiteRoot, 'docs-manifest.json'),
     JSON.stringify({
@@ -33,6 +33,7 @@ async function writeManifest(docsSiteRoot, items) {
           items,
         },
       ],
+      ...overrides,
     }),
   );
 }
@@ -142,6 +143,79 @@ test('syncDocs rejects duplicate manifest sources before route generation', asyn
     await assert.rejects(
       syncDocs({ repoRoot, docsSiteRoot }),
       /Duplicate manifest source: docs\/source-page\.md/u,
+    );
+  });
+});
+
+test('syncDocs rejects explicitly listed internal docs before publishing', async () => {
+  await withDocsFixture(async ({ repoRoot, docsSiteRoot }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/internal/agent-skills'), { recursive: true });
+    await fs.writeFile(path.join(repoRoot, 'docs/index.md'), '# Public\n');
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/internal/agent-skills/private-runbook.md'),
+      '# Private Runbook\n',
+    );
+    await writeManifest(
+      docsSiteRoot,
+      [
+        {
+          title: 'Public',
+          source: 'docs/index.md',
+          slug: 'index',
+        },
+        {
+          title: 'Private Runbook',
+          source: 'docs/internal/agent-skills/private-runbook.md',
+          slug: 'internal/agent-skills/private-runbook',
+        },
+      ],
+      {
+        includePrefixes: ['docs/'],
+        excludePrefixes: ['docs/internal/'],
+      },
+    );
+
+    await assert.rejects(
+      syncDocs({ repoRoot, docsSiteRoot }),
+      /Manifest source is excluded by docs manifest: docs\/internal\/agent-skills\/private-runbook\.md/u,
+    );
+  });
+});
+
+test('syncDocs does not publish internal docs discovered through include prefixes', async () => {
+  await withDocsFixture(async ({ repoRoot, docsSiteRoot }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/internal/agent-skills'), { recursive: true });
+    await fs.writeFile(path.join(repoRoot, 'docs/index.md'), '# Public\n');
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/internal/agent-skills/private-runbook.md'),
+      '# Private Runbook\n',
+    );
+    await writeManifest(
+      docsSiteRoot,
+      [
+        {
+          title: 'Public',
+          source: 'docs/index.md',
+          slug: 'index',
+        },
+      ],
+      {
+        includePrefixes: ['docs/'],
+        excludePrefixes: ['docs/internal/'],
+      },
+    );
+
+    await syncDocs({ repoRoot, docsSiteRoot });
+
+    await fs.access(path.join(docsSiteRoot, 'src/content/docs/index.md'));
+    await assert.rejects(
+      fs.access(
+        path.join(
+          docsSiteRoot,
+          'src/content/docs/internal/agent-skills/private-runbook.md',
+        ),
+      ),
+      /ENOENT/u,
     );
   });
 });

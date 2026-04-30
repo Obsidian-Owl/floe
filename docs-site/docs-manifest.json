@@ -17,6 +17,7 @@
   "excludePrefixes": [
     "docs/analysis/",
     "docs/audits/",
+    "docs/internal/",
     "docs/plans/",
     "docs/requirements/",
     "docs/security/",
@@ -150,6 +151,11 @@
           "title": "floe.yaml Schema",
           "source": "docs/reference/floe-yaml-schema.md",
           "slug": "reference/floe-yaml-schema"
+        },
+        {
+          "title": "Plugin Catalog",
+          "source": "docs/reference/plugin-catalog.md",
+          "slug": "reference/plugin-catalog"
         },
         {
           "title": "Data Contract Reference",

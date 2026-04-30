@@ -29,6 +29,22 @@ REQUIRED_DOCS = {
 }
 
 MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
+HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
+
+BASE_TUTORIAL_HEADINGS = (
+    "Prerequisites",
+    "What This Does",
+    "Steps",
+    "Expected Output",
+    "Troubleshooting",
+)
+INFRA_TUTORIAL_HEADINGS = (*BASE_TUTORIAL_HEADINGS, "Cleanup")
+REQUIRED_TUTORIAL_HEADINGS = {
+    "docs/get-started/first-platform.md": INFRA_TUTORIAL_HEADINGS,
+    "docs/get-started/first-data-product.md": BASE_TUTORIAL_HEADINGS,
+    "docs/operations/devpod-hetzner.md": INFRA_TUTORIAL_HEADINGS,
+    "docs/operations/troubleshooting.md": BASE_TUTORIAL_HEADINGS,
+}
 
 
 def _manifest_items(manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -137,6 +153,23 @@ def _validate_doc_links(root: Path, doc_path: str) -> list[str]:
     return errors
 
 
+def _validate_required_headings(root: Path, doc_path: str) -> list[str]:
+    required_headings = REQUIRED_TUTORIAL_HEADINGS.get(doc_path)
+    if required_headings is None:
+        return []
+
+    source = root / doc_path
+    if not source.exists():
+        return []
+
+    headings = {title for level, title in HEADING_RE.findall(source.read_text()) if level == "##"}
+    return [
+        f"Missing required heading in {doc_path}: ## {heading}"
+        for heading in required_headings
+        if heading not in headings
+    ]
+
+
 def _docs_to_validate(root: Path, manifest_sources: set[str]) -> list[str]:
     docs_root = root / "docs"
     docs: set[str] = set(manifest_sources)
@@ -169,6 +202,7 @@ def validate_docs_navigation(root: Path) -> list[str]:
 
     for doc_path in _docs_to_validate(root, manifest_sources):
         errors.extend(_validate_doc_links(root, doc_path))
+        errors.extend(_validate_required_headings(root, doc_path))
 
     return errors
 

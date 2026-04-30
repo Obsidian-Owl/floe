@@ -4,7 +4,7 @@ This document describes the plugin system that enables floe's flexibility.
 
 ## Overview
 
-floe uses a plugin architecture for all configurable components:
+floe uses a plugin architecture for all configurable components. The implementation-truth category list is [`floe_core.plugin_types.PluginType`](../../reference/plugin-catalog.md).
 
 | Plugin Type | Default | Purpose | ADR |
 |-------------|---------|---------|-----|
@@ -17,19 +17,23 @@ floe uses a plugin architecture for all configurable components:
 | **DBT** | dbt-core (local) | dbt compilation environment (local/fusion/cloud) | ADR-0043 |
 | **Semantic Layer** | Cube | Business intelligence API | ADR-0001 |
 | **Ingestion** | dlt | Data loading from sources | ADR-0020 |
+| **Quality** | Great Expectations / dbt expectations | Data quality validation | ADR-0044 |
+| **RBAC** | Kubernetes RBAC | Namespace and service-account isolation | Epic 7B |
+| **Alert Channel** | Webhook / Slack / email | Contract violation alert delivery | Epic 15 |
 | **Secrets** | K8s Secrets | Credential management | ADR-0023/0031 |
 | **Identity** | Keycloak | Authentication provider | ADR-0024 |
 
-**Total:** 11 plugin types (per ADR-0037 Composability Principle)
+**Total:** 14 plugin categories, based on `floe_core.plugin_types.PluginType`.
 
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins. Policy enforcement tooling is provided via DBTPlugin, and rules are configured via manifest.yaml. Data contracts use ODCS v3 as an enforced standard.
 
-> **Canonical Registry**: This table is the authoritative source for plugin type counts and entry points. All documentation references should link here.
+> **Canonical Registry**: The authoritative implementation-truth reference for plugin category counts and entry points is [Plugin Catalog](../../reference/plugin-catalog.md).
 
 ### Plugin Type History
 
 | Version | Count | Changes |
 |---------|-------|---------|
+| current | 14 | Added Quality, RBAC, and Alert Channel categories to `PluginType`; `LINEAGE` remains an alias for `LINEAGE_BACKEND` |
 | floe-core 2.1 | 11 | Moved PolicyEnforcer + DataContract to core modules (not plugins) |
 | floe-core 2.0 | 13 | Split ObservabilityPlugin -> TelemetryBackendPlugin + LineageBackendPlugin (ADR-0035) |
 | floe-core 1.5 | 12 | Added DBTPlugin (ADR-0043) |

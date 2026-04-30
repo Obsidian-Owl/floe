@@ -75,7 +75,7 @@ A plugin that allows dbt to connect to a specific database. Examples: dbt-duckdb
 ## E
 
 ### Entry Point
-Python packaging mechanism for plugin discovery. floe uses entry points for 11 plugin types: `floe.orchestrators`, `floe.computes`, `floe.catalogs`, `floe.storage`, `floe.telemetry_backends`, `floe.lineage_backends`, `floe.dbt`, `floe.semantic_layers`, `floe.ingestion`, `floe.secrets`, `floe.identity`.
+Python packaging mechanism for plugin discovery. floe uses entry points for 14 plugin categories; see the [Plugin Catalog](../reference/plugin-catalog.md) for the canonical list and current entry point groups.
 
 ### Environment
 A deployment context (dev, preview, staging, production). Each environment can have different compute targets and data.

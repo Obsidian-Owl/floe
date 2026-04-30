@@ -24,13 +24,39 @@ REQUIRED_DOCS = [
     "releases/v0.1.0-alpha.1-checklist.md",
 ]
 
+BASE_TUTORIAL_DOC = """# {title}
+
+## Prerequisites
+
+## What This Does
+
+## Steps
+
+## Expected Output
+
+## Troubleshooting
+"""
+
+INFRA_TUTORIAL_DOC = f"""{BASE_TUTORIAL_DOC}
+
+## Cleanup
+"""
+
+TUTORIAL_DOCS = {
+    "get-started/first-platform.md": INFRA_TUTORIAL_DOC,
+    "get-started/first-data-product.md": BASE_TUTORIAL_DOC,
+    "operations/devpod-hetzner.md": INFRA_TUTORIAL_DOC,
+    "operations/troubleshooting.md": BASE_TUTORIAL_DOC,
+}
+
 
 def _write_required_docs(root: Path) -> None:
     docs = root / "docs"
     for relative in REQUIRED_DOCS:
         path = docs / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"# {path.stem}\n")
+        template = TUTORIAL_DOCS.get(relative, "# {title}\n")
+        path.write_text(template.format(title=path.stem))
 
 
 def _write_manifest(root: Path, docs: list[str] | None = None) -> None:
@@ -79,6 +105,29 @@ def test_validate_docs_navigation_reports_missing_required_manifest_entry(
     errors = validate_docs_navigation(tmp_path)
 
     assert "Missing docs manifest entry: docs/reference/index.md" in errors
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_validate_docs_navigation_rejects_first_platform_without_expected_output(
+    tmp_path: Path,
+) -> None:
+    """Navigation validation rejects alpha tutorials missing required headings."""
+    _write_required_docs(tmp_path)
+    _write_manifest(tmp_path)
+    (tmp_path / "docs/get-started/first-platform.md").write_text(
+        "# Deploy Your First Platform\n\n"
+        "## Prerequisites\n\n"
+        "## What This Does\n\n"
+        "## Steps\n\n"
+        "## Troubleshooting\n\n"
+        "## Cleanup\n",
+    )
+
+    errors = validate_docs_navigation(tmp_path)
+
+    assert (
+        "Missing required heading in docs/get-started/first-platform.md: ## Expected Output"
+    ) in errors
 
 
 @pytest.mark.requirement("alpha-docs")

@@ -186,6 +186,9 @@ async function publishedSourceEntries(manifest, sourceRoot) {
   const entriesBySource = new Map();
 
   for (const item of manifestItems(manifest)) {
+    if (isIncludedByPrefix(item.source, excludePrefixes)) {
+      continue;
+    }
     entriesBySource.set(item.source, {
       source: item.source,
       route: routeForManifestSlug(item.slug),
@@ -222,10 +225,14 @@ export async function syncDocs({
   const targetRoot = path.join(docsSiteRoot, 'src', 'content', 'docs');
   const manifestPath = path.join(docsSiteRoot, 'docs-manifest.json');
   const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+  const excludePrefixes = manifest.excludePrefixes ?? [];
   const manifestSources = new Set();
   for (const item of manifestItems(manifest)) {
     if (!item.source.endsWith('.md')) {
       throw new Error(`Manifest source must be Markdown: ${item.source}`);
+    }
+    if (isIncludedByPrefix(item.source, excludePrefixes)) {
+      throw new Error(`Manifest source is excluded by docs manifest: ${item.source}`);
     }
     if (manifestSources.has(item.source)) {
       throw new Error(`Duplicate manifest source: ${item.source}`);

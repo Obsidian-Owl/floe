@@ -2,7 +2,7 @@
 
 ## Automated Evidence
 
-Run the Customer 360 evidence gate after `make demo` and after the Customer 360 run has completed:
+Run the Customer 360 evidence gate after `make demo` and after `make demo-customer-360-run` has completed:
 
 ```bash
 make demo-customer-360-validate
@@ -21,6 +21,35 @@ Expected evidence keys:
 - `tracing.jaeger_customer_360`
 - `business.customer_count`
 - `business.total_lifetime_value`
+
+Expected successful runner evidence:
+
+```text
+status=PASS
+dagster.run_id=<run-id>
+dagster.job_name=customer-360
+```
+
+Expected successful validation evidence:
+
+```text
+status=PASS
+evidence.business.customer_count=<non-negative integer>
+evidence.business.total_lifetime_value=<non-negative decimal>
+evidence.dagster.customer_360_run=true
+evidence.lineage.marquez_customer_360=true
+evidence.platform.ready=true
+evidence.storage.customer_360_outputs=true
+evidence.tracing.jaeger_customer_360=true
+```
+
+The evidence maps to the release surfaces as follows:
+
+- Business evidence comes from querying the generated Customer 360 mart metrics.
+- Dagster evidence proves the configured `customer-360` run completed.
+- Lineage evidence proves Marquez has Customer 360 namespace/job/dataset records.
+- Storage evidence proves the expected Iceberg output table is readable.
+- Tracing evidence proves Jaeger contains Customer 360 run traces.
 
 ## Manual UI Inspection
 

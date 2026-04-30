@@ -9,6 +9,12 @@ This page is part of the `v0.1.0-alpha.1` release path.
 - Check plugin interface documentation before changing extension points.
 - Return to contributing guidance before opening a docs or behavior PR.
 
+## Public Scope
+
+This public reference section lists user-facing schemas, contracts, and extension points. Internal
+agent runbooks live under `docs/internal/agent-skills/` and are intentionally excluded from the
+published docs site.
+
 ## Commands
 
 ```bash
@@ -25,6 +31,7 @@ uv run python testing/ci/validate-docs-navigation.py
 ## Next Step
 
 - [floe.yaml schema](floe-yaml-schema.md)
+- [Plugin catalog](plugin-catalog.md)
 - [Data contract reference](../contracts/datacontract-yaml-reference.md)
 - [Plugin interfaces](../architecture/interfaces/index.md)
 - [Contributing](../contributing/index.md)

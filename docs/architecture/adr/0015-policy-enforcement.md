@@ -181,7 +181,7 @@ Compilation FAILED (block_on_failure: true)
 
 - **Simpler architecture**: No plugin interface to maintain for rules that don't vary by implementation
 - **Clear ownership**: Tooling (SQLFluff, dbt-checkpoint) → DBTPlugin; Rules → Core
-- **Reduced complexity**: 12 plugin types (not 13)
+- **Reduced complexity**: Policy enforcement stays in core instead of adding another plugin surface
 - **Configuration-driven**: Platform teams edit YAML, not code
 
 ### Negative

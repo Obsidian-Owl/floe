@@ -5,6 +5,8 @@ This directory contains the Abstract Base Class (ABC) definitions for all floe p
 Each interface defines the methods that plugin implementations must provide, enabling platform teams to swap implementations (e.g., DuckDB vs Snowflake compute, Dagster vs Airflow orchestration) without changing data product code.
 
 > **Composability Principle**: See [ADR-0037](../adr/0037-composability-principle.md) for how plugins compose to form complete platform configurations.
+>
+> **Category Count:** The implementation-truth plugin category list is [Plugin Catalog](../../reference/plugin-catalog.md). This interface reference documents the public ABC surface and may lag newly introduced implementation categories until their dedicated interface pages are published.
 
 ## Interface Overview
 
@@ -23,7 +25,7 @@ Each interface defines the methods that plugin implementations must provide, ena
 | [SecretsPlugin](secrets-plugin.md) | Credential management | `floe_core/interfaces/secrets.py` | [ADR-0023](../adr/0023-secrets-management.md) |
 | [IdentityPlugin](identity-plugin.md) | User authentication (OIDC) | `floe_core/interfaces/identity.py` | [ADR-0024](../adr/0024-identity-access-management.md) |
 
-**Total:** 12 plugin interfaces (see [plugin-system/index.md](../plugin-system/index.md) for canonical registry)
+**Interface coverage:** This page documents the public plugin ABC reference surface. See [Plugin Catalog](../../reference/plugin-catalog.md) for the canonical `PluginType` category count and entry point groups.
 
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugin interfaces. See [ADR-0015](../adr/0015-policy-enforcement.md) and [ADR-0026](../adr/0026-data-contract-architecture.md).
 
