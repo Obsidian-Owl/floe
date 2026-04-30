@@ -160,6 +160,12 @@ autoscaling:
 
 Parent-chart Floe services use `fullnameOverride` when set. The default is `floe-platform`, so Polaris renders as `floe-platform-polaris` and PostgreSQL renders as `floe-platform-postgresql`.
 
+`otel.fullnameOverride` controls the OTel subchart service and resource name. If
+you change it, also override the Dagster webserver and daemon
+`OTEL_EXPORTER_OTLP_ENDPOINT` env values to the matching
+`http://<otel-service>:4317` endpoint. The Dagster subchart renders those env
+values as static YAML, not templates.
+
 The upstream Dagster subchart uses the Helm release name for the webserver service. With `helm upgrade --install floe ...`, Dagster renders as `floe-dagster-webserver`.
 
 ## Secrets

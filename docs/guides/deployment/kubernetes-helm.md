@@ -152,6 +152,8 @@ ingress:
   enabled: false
 ```
 
+`otel.fullnameOverride` controls the OTel subchart service/resource name. If you change it, also override the Dagster webserver and daemon `OTEL_EXPORTER_OTLP_ENDPOINT` env values to the matching `http://<otel-service>:4317` endpoint. The Dagster subchart renders those env values as static YAML, not templates.
+
 ---
 
 ## 4. Secrets And Credentials

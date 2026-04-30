@@ -424,7 +424,7 @@
         },
         "fullnameOverride": {
           "type": "string",
-          "description": "Override OTel subchart resource names to match parent chart references"
+          "description": "Override the OTel subchart service/resource name. Dagster OTEL_EXPORTER_OTLP_ENDPOINT env values are static and must be explicitly aligned with this name."
         }
       }
     },

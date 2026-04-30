@@ -417,6 +417,8 @@ otel:
   enabled: true
 
   # Keep the subchart Service name aligned with floe platform contracts.
+  # If changed, also override Dagster OTEL_EXPORTER_OTLP_ENDPOINT env values
+  # because the Dagster subchart renders env values as static YAML.
   fullnameOverride: floe-platform-otel
 
   # Deployment mode: deployment (gateway) or daemonset
