@@ -539,7 +539,7 @@ Per ADR-0037 (Composability Principle):
 | Scenario | Decision | Rationale |
 |----------|----------|-----------|
 | Multiple storage backends exist | **Plugin** ✅ | S3, GCS, Azure, MinIO all valid |
-| Organization may swap storage | **Plugin** ✅ | Start with MinIO (local), migrate to S3 (prod) |
+| Organization may swap storage | **Plugin** ✅ | Start with MinIO for local evaluation, then validate the chosen S3-compatible cloud backend |
 | Storage requires different credentials | **Plugin** ✅ | AWS IAM ≠ GCS service account ≠ Azure SAS |
 | Storage-specific features | **Plugin** ✅ | S3 Transfer Acceleration, GCS lifecycle policies |
 
