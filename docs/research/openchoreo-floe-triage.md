@@ -17,7 +17,7 @@ Decision options:
 | Source | What It Proves | Notes |
 | --- | --- | --- |
 | https://github.com/openchoreo/openchoreo | Upstream repository, license, activity, releases, CRD source | Task 2 cloned `release-v1.0` at `1a516d5f52c25b3c91a7e48ed55c2173e8edc070` and captured GitHub release/repository API metadata. |
-| https://openchoreo.dev/docs/ | Published docs and current product positioning | Task 2 inspected README, resource-kind reference, templating guide, install guides, and source/image samples. |
+| OpenChoreo source-tree README, docs, install guides, and samples at `release-v1.0` (`1a516d5f52c25b3c91a7e48ed55c2173e8edc070`) | Version-pinned product positioning, resource model, templating model, install surface, and sample resources | Task 2 inspected the pinned source tree rather than treating live published docs as evidence. |
 | `docs/architecture/ARCHITECTURE-SUMMARY.md` | Floe target architecture and plugin model | Record relevant boundaries during Task 3 |
 | `docs/architecture/platform-services.md` | Floe long-lived services and ownership | Record overlap during Task 3 |
 | `docs/architecture/interfaces/orchestrator-plugin.md` | Floe orchestration boundary | Used to test whether OpenChoreo fits the orchestrator abstraction |
