@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import { collectSourceDocsErrors } from './check-source-docs.mjs';
 
-async function withSourceDocsFixture(callback) {
+async function withSourceDocsFixture(callback, manifestOverrides = {}) {
   const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'floe-source-docs-'));
   const docsSiteRoot = path.join(repoRoot, 'docs-site');
   const manifestPath = path.join(docsSiteRoot, 'docs-manifest.json');
@@ -19,6 +19,7 @@ async function withSourceDocsFixture(callback) {
       includePrefixes: ['docs/'],
       excludePrefixes: ['docs/superpowers/'],
       sections: [],
+      ...manifestOverrides,
     }),
   );
 
@@ -42,6 +43,55 @@ test('collectSourceDocsErrors rejects Hetzner coupling outside contributor docs'
     assert.deepEqual(errors, [
       'docs/platform-engineers/first-platform.md: references Hetzner outside Floe Contributor docs',
     ]);
+  });
+});
+
+test('collectSourceDocsErrors checks manifest-section-only sources outside include prefixes', async () => {
+  await withSourceDocsFixture(
+    async ({ repoRoot, manifestPath }) => {
+      await fs.mkdir(path.join(repoRoot, 'docs/personas'), { recursive: true });
+      await fs.writeFile(
+        path.join(repoRoot, 'docs/personas/kubernetes-platform.md'),
+        '# Kubernetes Platform\n\nValidate on hetzner.\n',
+      );
+
+      const { checkedCount, errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+      assert.equal(checkedCount, 1);
+      assert.deepEqual(errors, [
+        'docs/personas/kubernetes-platform.md: references Hetzner outside Floe Contributor docs',
+      ]);
+    },
+    {
+      includePrefixes: ['docs/published/'],
+      sections: [
+        {
+          title: 'Personas',
+          items: [
+            {
+              title: 'Kubernetes Platform',
+              source: 'docs/personas/kubernetes-platform.md',
+              slug: 'personas/kubernetes-platform',
+            },
+          ],
+        },
+      ],
+    },
+  );
+});
+
+test('collectSourceDocsErrors skips excluded docs discovered through include prefixes', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/superpowers'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/superpowers/internal.md'),
+      '# Internal\n\nRequires Hetzner credentials.\n',
+    );
+
+    const { checkedCount, errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.equal(checkedCount, 0);
+    assert.deepEqual(errors, []);
   });
 });
 

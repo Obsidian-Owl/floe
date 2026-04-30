@@ -40,17 +40,32 @@ function isIncludedByPrefix(source, prefixes) {
   return prefixes.some((prefix) => source === prefix || source.startsWith(prefix));
 }
 
+function manifestItems(manifest) {
+  return (manifest.sections ?? []).flatMap((section) => section.items ?? []);
+}
+
 async function publishedMarkdownSources(repoRoot, manifestPath) {
   const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
   const includePrefixes = manifest.includePrefixes ?? [];
   const excludePrefixes = manifest.excludePrefixes ?? [];
   const docsRoot = path.join(repoRoot, 'docs');
+  const sources = new Set();
+
+  for (const item of manifestItems(manifest)) {
+    if (!isIncludedByPrefix(item.source, excludePrefixes)) {
+      sources.add(item.source);
+    }
+  }
+
   const markdownFiles = await walkMarkdownFiles(docsRoot);
-  return markdownFiles
-    .map((file) => path.posix.join('docs', toPosixPath(path.relative(docsRoot, file))))
-    .filter((source) => isIncludedByPrefix(source, includePrefixes))
-    .filter((source) => !isIncludedByPrefix(source, excludePrefixes))
-    .sort((left, right) => left.localeCompare(right));
+  for (const file of markdownFiles) {
+    const source = path.posix.join('docs', toPosixPath(path.relative(docsRoot, file)));
+    if (isIncludedByPrefix(source, includePrefixes) && !isIncludedByPrefix(source, excludePrefixes)) {
+      sources.add(source);
+    }
+  }
+
+  return [...sources].sort((left, right) => left.localeCompare(right));
 }
 
 export async function collectSourceDocsErrors({
@@ -61,7 +76,7 @@ export async function collectSourceDocsErrors({
   const errors = [];
   for (const source of sources) {
     const markdown = await fs.readFile(path.join(repoRoot, source), 'utf8');
-    if (/\bHetzner\b/u.test(markdown) && !allowedHetznerSources.has(source)) {
+    if (/\bhetzner\b/iu.test(markdown) && !allowedHetznerSources.has(source)) {
       errors.push(`${source}: references Hetzner outside Floe Contributor docs`);
     }
     for (const rule of disallowedSnippets) {
