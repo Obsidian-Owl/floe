@@ -11,19 +11,31 @@ Date: 2026-04-30
 | Recommendation gate | Scored OpenChoreo against Floe architecture and hypotheses. | Adopt candidate for bounded proof | Proof should test optional platform-control integration, not orchestrator replacement. |
 | OpenChoreo proof resource generation | Created `docs/research/openchoreo-proof/customer-360-openchoreo.yaml` from `demo/customer-360/floe.yaml` and Floe runtime assumptions. | Complete | Proof includes `Project`, `Component`, `Workload`, `SecretReference`, and `ReleaseBinding`. |
 | OpenChoreo render or cluster validation | Preserved Task 6 Helm render evidence, then ran Task 7 YAML structure checks and Kubernetes dry-run commands. | Complete with caveat | Task 6 rendered 3,660 lines across control, data, and observability planes while workflow-plane render failed on missing `argo-workflows`; Task 7 static YAML checks passed, but `kubectl` client/server validation could not reach a Kubernetes API server at `localhost:8080`. |
-| Roadmap and ADR evidence | Pending | Pending | Pending |
+| Roadmap and ADR evidence | Created release roadmap and proposed ADR when adoption evidence threshold was met. | Complete | See `docs/plans/openchoreo-floe-release-roadmap.md` and `docs/architecture/adr/0048-openchoreo-platform-control-plane.md`. |
 
 ## Final Outcome
 
-Outcome: In progress
+Outcome: Spike complete.
 
-Recommendation: In progress
+Recommendation: Adopt OpenChoreo as a future optional platform-control integration candidate, pending a follow-up generator implementation plan and CRD validation path.
 
-Confidence: In progress
+Confidence: Medium-low.
 
-## Blockers
+Key evidence:
 
-No blockers recorded at scaffold time.
+- OpenChoreo aligns best around project, component, workload, release, workflow-plane, authz, secret-reference, and observability surfaces.
+- Floe must retain ownership of data semantics, compiled artifacts, dbt, Iceberg, OpenLineage, OpenTelemetry emission, and plugin selection.
+- Customer 360 can be represented as generated OpenChoreo intent resources without changing `floe.yaml`.
+- Adoption complexity remains material because OpenChoreo introduces a multi-plane control-plane footprint and `v1alpha1` APIs.
+
+Next recommended work:
+
+Create a separate implementation plan for an opt-in OpenChoreo resource generator after ADR review.
+
+## Non-Blocking Follow-Ups
+
+- Add the Argo Helm repository before rerunning workflow-plane dependency/render validation.
+- Run Kubernetes client/server and OpenChoreo CRD validation against a reachable cluster with the OpenChoreo CRDs installed.
 
 ## Customer 360 Proof Resource Validation
 
