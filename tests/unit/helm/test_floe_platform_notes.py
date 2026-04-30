@@ -83,8 +83,9 @@ def test_rendered_notes_use_valid_helm_template_chart_reference_examples() -> No
         "helm template test ./charts/floe-platform -n default -f your-values.yaml --debug"
         in rendered_notes
     )
+    assert "helm template test floe/floe-platform" not in rendered_notes
     assert (
-        "helm template test floe/floe-platform -n default -f your-values.yaml --debug"
+        "helm template test <published-chart-reference> -n default -f your-values.yaml --debug"
         in rendered_notes
     )
 

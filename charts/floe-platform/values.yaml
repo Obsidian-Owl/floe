@@ -1047,7 +1047,8 @@ contractMonitor:
 
   # OpenTelemetry
   otel:
-    endpoint: "http://otel-collector:4317"
+    # Empty uses the chart's canonical OTel service helper.
+    endpoint: ""
 
   # Resource requests and limits
   resources:

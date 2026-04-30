@@ -1064,6 +1064,20 @@ def _find_service_by_component(
     return None
 
 
+def _find_deployment_by_component(
+    documents: list[dict[str, Any]],
+    component: str,
+) -> dict[str, Any] | None:
+    """Find a Deployment resource by app.kubernetes.io/component label."""
+    for doc in documents:
+        if doc.get("kind") != "Deployment":
+            continue
+        labels = doc.get("metadata", {}).get("labels", {})
+        if labels.get("app.kubernetes.io/component") == component:
+            return doc
+    return None
+
+
 def _get_service_port(
     service: dict[str, Any],
     port_name: str,
@@ -1239,6 +1253,23 @@ class TestNodePortConditionals:
                 f"Contract-monitor port '{port.get('name')}' should not have "
                 f"nodePort in ClusterIP mode, but got nodePort={port.get('nodePort')}"
             )
+
+    @pytest.mark.requirement("AC-17.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_contract_monitor_otel_endpoint_defaults_to_platform_service(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Contract Monitor uses the canonical platform OTel service by default."""
+        documents = _render_template_with_sets(
+            platform_chart_path,
+            ["contractMonitor.enabled=true"],
+        )
+        deployment = _find_deployment_by_component(documents, "contract-monitor")
+        assert deployment is not None, "Contract-monitor Deployment not found"
+
+        env_vars = {e["name"]: e.get("value") for e in _get_container_env_vars(deployment)}
+        assert env_vars["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://floe-platform-otel:4317"
 
     @pytest.mark.requirement("AC-29.2")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")

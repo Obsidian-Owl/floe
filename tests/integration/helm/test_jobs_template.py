@@ -194,6 +194,8 @@ class TestJobsChartTemplate:
                 "--set",
                 "dbt.enabled=true",
                 "--set",
+                "platform.releaseName=floe",
+                "--set",
                 "platform.servicePrefix=floe-platform",
                 "--set",
                 "platform.namespace=floe-dev",
@@ -220,6 +222,18 @@ class TestJobsChartTemplate:
             env_vars["OTEL_EXPORTER_OTLP_ENDPOINT"]
             == "http://floe-platform-otel.floe-dev.svc.cluster.local:4317"
         )
+
+        test_pods = [
+            d
+            for d in docs
+            if d.get("kind") == "Pod"
+            and d.get("metadata", {}).get("annotations", {}).get("helm.sh/hook") == "test"
+        ]
+        assert len(test_pods) == 1
+        test_containers = {c["name"]: c for c in test_pods[0]["spec"]["containers"]}
+        assert "test-platform-connectivity" in test_containers
+        platform_command = "\n".join(test_containers["test-platform-connectivity"]["command"])
+        assert "http://floe-dagster-webserver.floe-dev.svc.cluster.local:80" in platform_command
 
     @pytest.mark.requirement("9b-FR-081")
     @pytest.mark.usefixtures("helm_available")

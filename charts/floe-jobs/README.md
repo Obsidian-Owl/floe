@@ -203,10 +203,13 @@ This chart is designed to work alongside [floe-platform](../floe-platform/). Whe
 
 ```bash
 # Deploy platform first
-helm install floe ./charts/floe-platform
+helm install floe ./charts/floe-platform \
+  --namespace floe-dev \
+  --create-namespace
 
 # Then deploy jobs
 helm install floe-jobs ./charts/floe-jobs \
+  --set platform.releaseName=floe \
   --set platform.servicePrefix=floe-platform \
   --set platform.namespace=floe-dev \
   --set dbt.enabled=true

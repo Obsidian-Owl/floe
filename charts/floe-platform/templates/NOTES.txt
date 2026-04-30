@@ -157,7 +157,7 @@ If something isn't working, check these common issues:
    - Check values override chain: values.yaml < values-<env>.yaml < --set flags
    - Run: helm template test <chart-reference> -n {{ .Release.Namespace }} -f your-values.yaml --debug
    - Local chart example: helm template test ./charts/floe-platform -n {{ .Release.Namespace }} -f your-values.yaml --debug
-   - Published chart example: helm template test floe/floe-platform -n {{ .Release.Namespace }} -f your-values.yaml --debug
+   - Published chart example: helm template test <published-chart-reference> -n {{ .Release.Namespace }} -f your-values.yaml --debug
    - Subchart schema changes after upgrade may reject previously-valid keys
 
 ================================================================================
