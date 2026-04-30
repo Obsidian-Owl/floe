@@ -240,3 +240,56 @@ test('syncDocs rejects missing Markdown docs link targets before route generatio
     );
   });
 });
+
+test('syncDocs removes the source H1 from generated Starlight content', async () => {
+  await withDocsFixture(async ({ repoRoot, docsSiteRoot }) => {
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/source-page.md'),
+      '# Source Page\n\nIntro paragraph.\n\n## Next Section\n',
+    );
+    await writeManifest(docsSiteRoot, [
+      {
+        title: 'Source Page',
+        source: 'docs/source-page.md',
+        slug: 'source-page',
+      },
+    ]);
+
+    await syncDocs({ repoRoot, docsSiteRoot });
+
+    const generatedSource = await fs.readFile(
+      path.join(docsSiteRoot, 'src/content/docs/source-page.md'),
+      'utf8',
+    );
+
+    assert.match(generatedSource, /^---\ntitle: "Source Page"\n---\n\nIntro paragraph/u);
+    assert.doesNotMatch(generatedSource, /^# Source Page$/mu);
+    assert.match(generatedSource, /^## Next Section$/mu);
+  });
+});
+
+test('syncDocs preserves a non-title H1 that appears later in the body', async () => {
+  await withDocsFixture(async ({ repoRoot, docsSiteRoot }) => {
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/source-page.md'),
+      'Intro paragraph.\n\n# Deliberate Later Heading\n',
+    );
+    await writeManifest(docsSiteRoot, [
+      {
+        title: 'Source Page',
+        source: 'docs/source-page.md',
+        slug: 'source-page',
+      },
+    ]);
+
+    await syncDocs({ repoRoot, docsSiteRoot });
+
+    const generatedSource = await fs.readFile(
+      path.join(docsSiteRoot, 'src/content/docs/source-page.md'),
+      'utf8',
+    );
+
+    assert.match(generatedSource, /^---\ntitle: "Deliberate Later Heading"\n---/u);
+    assert.match(generatedSource, /^Intro paragraph\.\n\n# Deliberate Later Heading$/mu);
+  });
+});

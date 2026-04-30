@@ -43,6 +43,43 @@ function titleFromMarkdown(markdown, relativePath) {
   return path.basename(relativePath, '.md').replace(/[-_]/g, ' ');
 }
 
+function titleFromFrontmatterOrMarkdown(markdown, relativePath) {
+  const frontmatter = markdown.match(/^---\n([\s\S]*?)\n---\n?/u);
+  const title = frontmatter?.[1].match(/^title:\s*(.+)$/m)?.[1];
+  if (title) {
+    return title
+      .trim()
+      .replace(/^["']|["']$/gu, '')
+      .replace(/`/gu, '');
+  }
+
+  return titleFromMarkdown(markdown, relativePath);
+}
+
+function normalizedHeadingText(value) {
+  return value.replace(/`/gu, '').trim();
+}
+
+function withoutGeneratedTitleHeading(markdown, relativePath) {
+  const title = titleFromFrontmatterOrMarkdown(markdown, relativePath);
+  const frontmatter = markdown.match(/^---\n([\s\S]*?)\n---\n?/u);
+  const prefix = frontmatter ? frontmatter[0] : '';
+  const body = markdown.slice(prefix.length);
+  const firstHeading = body.match(/^(\n*)#\s+(.+)\n?/u);
+
+  if (!firstHeading) {
+    return markdown;
+  }
+
+  if (normalizedHeadingText(firstHeading[2]) !== normalizedHeadingText(title)) {
+    return markdown;
+  }
+
+  return `${prefix}${firstHeading[1]}${body
+    .slice(firstHeading[0].length)
+    .replace(/^\n/u, '')}`;
+}
+
 function withStarlightFrontmatter(markdown, relativePath) {
   const title = JSON.stringify(titleFromMarkdown(markdown, relativePath));
   const frontmatter = markdown.match(/^---\n([\s\S]*?)\n---\n?/);
@@ -257,17 +294,23 @@ export async function syncDocs({
     const sourceFile = path.join(repoRoot, entry.source);
     const targetPath = path.join(targetRoot, entry.targetRelativePath);
     const markdown = await fs.readFile(sourceFile, 'utf8');
+    const rewrittenMarkdown = rewriteMarkdownLinks(
+      markdown,
+      entry.source,
+      publishedSourceRoutes,
+      repoRoot,
+    );
+    const withFrontmatter = withStarlightFrontmatter(
+      rewrittenMarkdown,
+      entry.targetRelativePath,
+    );
+    const withoutDuplicateHeading = withoutGeneratedTitleHeading(
+      withFrontmatter,
+      entry.targetRelativePath,
+    );
 
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    await fs.writeFile(
-      targetPath,
-      normalizeGeneratedMarkdown(
-        withStarlightFrontmatter(
-          rewriteMarkdownLinks(markdown, entry.source, publishedSourceRoutes, repoRoot),
-          entry.targetRelativePath,
-        ),
-      ),
-    );
+    await fs.writeFile(targetPath, normalizeGeneratedMarkdown(withoutDuplicateHeading));
   }
 
   console.log(`Synced ${entries.length} docs pages into Starlight content.`);
