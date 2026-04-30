@@ -264,6 +264,46 @@ test('collectSourceDocsErrors checks README as public product surface', async ()
   });
 });
 
+test('collectSourceDocsErrors does not let README inclusion override manifest exclusions', async () => {
+  await withSourceDocsFixture(
+    async ({ repoRoot, manifestPath }) => {
+      await fs.writeFile(
+        path.join(repoRoot, 'README.md'),
+        '# Floe\n\nDatadog is the production default telemetry backend.\n',
+      );
+
+      const { checkedCount, errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+      assert.equal(checkedCount, 0);
+      assert.deepEqual(errors, []);
+    },
+    {
+      excludePrefixes: ['README.md'],
+    },
+  );
+});
+
+test('collectSourceDocsErrors allows explicitly negated product-surface default claims', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/architecture'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/opinionation-boundaries.md'),
+      [
+        '# Opinionation Boundaries',
+        '',
+        'Datadog is not the production default telemetry backend.',
+        'Atlan is not the current default lineage backend.',
+        'S3 is not the production default storage backend.',
+        '',
+      ].join('\n'),
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, []);
+  });
+});
+
 test('collectSourceDocsErrors rejects wrong compute ownership guidance', async () => {
   await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
     await fs.mkdir(path.join(repoRoot, 'docs/architecture'), { recursive: true });

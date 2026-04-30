@@ -20,7 +20,7 @@ const disallowedSnippets = [
 ];
 
 function hasNegativeOrPlannedContext(line) {
-  return /\b(not supported|unsupported|not alpha-supported|not implemented|planned|historical|deprecated|rejected|was rejected|alternative|not a current|do not run|no Docker Compose|creates testing parity issues|parity issues|failure mode|stub|stubs|advanced proof)\b/iu.test(
+  return /\b(not supported|unsupported|not alpha-supported|not implemented|planned|historical|deprecated|rejected|was rejected|alternative|not a current|not the (?:current )?(?:production )?default|do not run|no Docker Compose|creates testing parity issues|parity issues|failure mode|stub|stubs|advanced proof)\b/iu.test(
     line,
   );
 }
@@ -154,7 +154,7 @@ async function publishedMarkdownSources(repoRoot, manifestPath) {
 
   try {
     const readmeStats = await fs.stat(readmePath);
-    if (readmeStats.isFile()) {
+    if (readmeStats.isFile() && !isIncludedByPrefix('README.md', excludePrefixes)) {
       sources.add('README.md');
     }
   } catch (error) {
