@@ -95,6 +95,44 @@ def test_rejects_stale_chart_metadata(tmp_path: Path) -> None:
 
 
 @pytest.mark.requirement("alpha-docs")
+def test_rejects_root_floe_compile_in_user_facing_docs(tmp_path: Path) -> None:
+    """Content validation rejects root floe compile as an executable alpha path."""
+    readme = tmp_path / "README.md"
+    readme.write_text("# Floe\n\n```bash\n$ floe compile\n```\n")
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert any("root 'floe compile' is a data-team stub" in error for error in errors)
+    assert any("README.md:4" in error for error in errors)
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_allows_platform_compile_and_demo_compile_paths(tmp_path: Path) -> None:
+    """Content validation allows current alpha compile commands."""
+    readme = tmp_path / "README.md"
+    readme.write_text(
+        "# Floe\n\n```bash\nmake compile-demo\nuv run floe platform compile\n```\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert errors == []
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_allows_root_floe_compile_when_marked_planned(tmp_path: Path) -> None:
+    """Content validation permits root command references when explicitly planned/stubbed."""
+    readme = tmp_path / "README.md"
+    readme.write_text(
+        "# Floe\n\nThe planned root data-team command is not yet implemented: `floe compile`.\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert errors == []
+
+
+@pytest.mark.requirement("alpha-docs")
 def test_accepts_alpha_chart_metadata(tmp_path: Path) -> None:
     """Content validation accepts alpha-scoped floe-platform metadata."""
     chart = tmp_path / "charts" / "floe-platform" / "Chart.yaml"

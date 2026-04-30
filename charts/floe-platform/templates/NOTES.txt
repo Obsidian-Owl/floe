@@ -56,6 +56,11 @@ POSTGRESQL:
                               IMPORTANT WARNINGS
 ================================================================================
 
+ALPHA SCOPE:
+    This chart output is for alpha local/dev and Customer 360 validation paths.
+    Treat the guidance below as hardening considerations to validate before any
+    production environment use, not as supported production operations guidance.
+
 {{- if .Values.minio.enabled }}
 
 ⚠️  MINIO OBJECT STORAGE WARNING:
@@ -63,7 +68,7 @@ POSTGRESQL:
 
     THIS IS FOR DEVELOPMENT AND DEMO PURPOSES ONLY!
 
-    For production deployments, you should:
+    Before hardening for production environments:
     1. Disable MinIO: minio.enabled=false
     2. Use external S3-compatible storage (AWS S3, GCS, Azure Blob)
     3. Configure storage credentials via external secrets
@@ -79,7 +84,7 @@ POSTGRESQL:
 ⚠️  POSTGRESQL CREDENTIALS WARNING:
     PostgreSQL is using auto-generated or default credentials.
 
-    For production deployments:
+    Before hardening for production environments:
     1. Create a Secret with your PostgreSQL password
     2. Set postgresql.auth.existingSecret to the Secret name
     3. Ensure proper secret rotation policies
@@ -90,7 +95,7 @@ POSTGRESQL:
 
 ⚠️  BOOTSTRAP SECURITY NOTE:
     The bootstrap job communicates with Polaris over plaintext HTTP
-    within the cluster network. For production deployments:
+    within the cluster network. Before hardening for production environments:
     1. Deploy a service mesh (Istio/Linkerd) for automatic mTLS
     2. Or configure Polaris TLS and update polaris.service endpoints
 {{- end }}
@@ -101,7 +106,8 @@ POSTGRESQL:
     This deployment is configured for development (global.environment=dev).
     Resource limits are minimized for local development.
 
-    For production, set: global.environment=prod
+    For non-dev evaluation, set the environment name explicitly and validate
+    the full values stack before relying on it.
 {{- end }}
 
 ================================================================================

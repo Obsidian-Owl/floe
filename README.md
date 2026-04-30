@@ -10,7 +10,7 @@
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
     <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
-    <a href="https://github.com/Obsidian-Owl/floe/releases"><img src="https://img.shields.io/badge/version-0.1.0--pre--alpha-orange.svg" alt="Version"></a>
+    <a href="https://github.com/Obsidian-Owl/floe/releases"><img src="https://img.shields.io/badge/version-v0.1.0--alpha.1-orange.svg" alt="v0.1.0-alpha.1 alpha target"></a>
     <a href="https://deepwiki.com/Obsidian-Owl/floe"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
   </p>
 
@@ -128,26 +128,26 @@ schedule:
 
 ### 3. floe Generates Everything Else
 
-**Compilation phase** (2 seconds, catches violations before deployment):
+**Current alpha compilation path** (generates Customer 360 demo artifacts for inspection):
 
 ```bash
-$ floe compile
+make compile-demo
 
-[1/3] Loading platform policies
-      ✓ Platform: acme-data-platform v1.2.3
+[1/3] Loading demo platform manifest
+      ✓ Platform: Customer 360 alpha path
 
-[2/3] Validating pipeline
-      ✓ Naming: bronze_customers (compliant)
-      ✓ Test coverage: 85% (>80% required)
+[2/3] Running platform compiler
+      ✓ uv run floe platform compile
 
-[3/3] Generating artifacts
+[3/3] Writing generated artifacts
       ✓ Dagster assets (Python)
       ✓ dbt profiles (YAML)
-      ✓ Kubernetes manifests (YAML)
-      ✓ Credentials (vended automatically)
+      ✓ Floe compiled artifacts (JSON)
 
-Compilation SUCCESS - ready to deploy
+Demo compilation SUCCESS - artifacts ready to inspect
 ```
+
+The root data-team compile command is a planned lifecycle entry point and is not the current alpha workflow.
 
 **What's auto-generated:**
 - ✅ Database connection configs (dbt profiles.yml)
@@ -209,14 +209,12 @@ transforms:
 
 **Example:**
 ```bash
-$ floe compile
-[FAIL] 'stg_payments' violates naming convention
-       Expected: bronze_*, silver_*, gold_*
+make compile-demo
 
-[FAIL] 'gold_revenue' missing required tests
-       Required: [unique_pk, not_null_pk, documentation]
+[FAIL] Customer 360 artifact validation failed
+       Evidence key: storage.customer_360_outputs
 
-Compilation FAILED - fix violations before deployment
+Fix the demo platform or data-product inputs, then re-run the alpha validator.
 ```
 
 **Not documentation governance.** Computational governance.
@@ -369,19 +367,19 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Roadmap
 
-**Current (v0.1.0 - Pre-Alpha)**:
+**Current alpha target (v0.1.0-alpha.1 release candidate)**:
 - [x] Four-layer architecture
 - [x] Two-tier configuration
 - [x] Kubernetes-native deployment
-- [x] Compile-time validation
+- [x] Customer 360 demo artifact compilation and validation path
 
-**Next (v0.2.0 - Alpha)**:
+**Next candidate work**:
 - [ ] Complete K8s-native testing
 - [ ] Plugin ecosystem docs
-- [ ] CLI command suite
+- [ ] Data-team CLI command suite
 - [ ] External plugin support
 
-**Future (v1.0.0 - Production)**:
+**Future production hardening**:
 - [ ] Data Mesh extensions
 - [ ] OCI registry integration
 - [ ] Multi-environment workflows

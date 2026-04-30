@@ -55,6 +55,21 @@ FLOE_DEV_PRODUCT_PATH = (
     re.compile(r"\bfloe\s+dev\b", re.IGNORECASE),
     "unsupported CLI command 'floe dev' presented as a product path",
 )
+ROOT_FLOE_COMPILE_COMMAND_RE = re.compile(r"^\s*(?:\$|uv\s+run)?\s*floe\s+compile\b")
+ROOT_FLOE_COMPILE_ALLOWED_CONTEXT_RE = re.compile(
+    r"\b(planned|stub|not implemented|not current|not the current|not yet implemented)\b",
+    re.IGNORECASE,
+)
+ROOT_FLOE_COMPILE_GUARD_PATH_PREFIXES = (
+    "README.md",
+    "docs/index.md",
+    "docs/start-here/",
+    "docs/platform-engineers/",
+    "docs/data-engineers/",
+    "docs/get-started/",
+    "docs/demo/",
+    "docs/guides/deployment/",
+)
 PLUGIN_COUNT_RE = re.compile(
     r"\b(?P<count>\d+)\s+plugin\s+(?P<noun>types?|categor(?:y|ies))\b",
     re.IGNORECASE,
@@ -178,6 +193,14 @@ def _is_historical_adr_line(path: Path, active_heading: str) -> bool:
     return "version" in heading or "history" in heading
 
 
+def _guards_root_floe_compile_command(rel_path: str) -> bool:
+    """Return whether root floe compile command examples are user-facing here."""
+    return any(
+        rel_path == prefix or rel_path.startswith(prefix)
+        for prefix in ROOT_FLOE_COMPILE_GUARD_PATH_PREFIXES
+    )
+
+
 def validate_docs_content(
     root: Path,
     *,
@@ -196,6 +219,7 @@ def validate_docs_content(
             rel_path = path.relative_to(root)
         except ValueError:
             rel_path = path
+        rel_path_str = rel_path.as_posix()
 
         active_heading = ""
         for line_number, line in enumerate(path.read_text().splitlines(), start=1):
@@ -228,6 +252,16 @@ def validate_docs_content(
             floe_dev_pattern, floe_dev_message = FLOE_DEV_PRODUCT_PATH
             if floe_dev_pattern.search(line) and not has_negative_or_planned_context:
                 errors.append(f"{rel_path}:{line_number}: {floe_dev_message}")
+
+            if (
+                _guards_root_floe_compile_command(rel_path_str)
+                and ROOT_FLOE_COMPILE_COMMAND_RE.search(line)
+                and not ROOT_FLOE_COMPILE_ALLOWED_CONTEXT_RE.search(line)
+            ):
+                errors.append(
+                    f"{rel_path}:{line_number}: root 'floe compile' is a data-team stub; "
+                    "use 'floe platform compile', 'make compile-demo', or mark it planned"
+                )
 
             if _is_historical_adr_line(path, active_heading):
                 continue
