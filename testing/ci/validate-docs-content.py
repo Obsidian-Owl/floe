@@ -58,6 +58,7 @@ FLOE_DEV_PRODUCT_PATH = (
 UNSUPPORTED_ALPHA_LIFECYCLE_COMMAND_RE = re.compile(
     r"(?:^|[\s`$])(?P<command>"
     r"floe\s+init\b|"
+    r"floe\s+validate\b|"
     r"floe\s+compile\b|"
     r"floe\s+run\b|"
     r"floe\s+test\b|"
@@ -71,20 +72,6 @@ UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE = re.compile(
     r"not the current|not yet implemented|not alpha-supported|non-current"
     r")\b",
     re.IGNORECASE,
-)
-UNSUPPORTED_ALPHA_LIFECYCLE_GUARD_PATH_PREFIXES = (
-    "README.md",
-    "docs/index.md",
-    "docs/start-here/",
-    "docs/platform-engineers/",
-    "docs/data-engineers/",
-    "docs/get-started/",
-    "docs/demo/",
-    "docs/contracts/",
-    "docs/architecture/",
-    "docs/guides/",
-    "docs/reference/",
-    "docs/guides/deployment/",
 )
 PLUGIN_COUNT_RE = re.compile(
     r"\b(?P<count>\d+)\s+plugin\s+(?P<noun>types?|categor(?:y|ies))\b",
@@ -213,10 +200,7 @@ def _guards_unsupported_alpha_lifecycle_commands(rel_path: str) -> bool:
     """Return whether unsupported lifecycle commands are user-facing in this path."""
     if rel_path.startswith("docs/architecture/adr/"):
         return False
-    return any(
-        rel_path == prefix or rel_path.startswith(prefix)
-        for prefix in UNSUPPORTED_ALPHA_LIFECYCLE_GUARD_PATH_PREFIXES
-    )
+    return rel_path == "README.md" or rel_path.startswith("docs/")
 
 
 def validate_docs_content(

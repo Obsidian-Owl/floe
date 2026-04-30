@@ -102,6 +102,7 @@ def test_rejects_unsupported_lifecycle_commands_in_user_facing_docs(tmp_path: Pa
         "# Floe\n\n"
         "```bash\n"
         "$ floe init --platform=v1.0.0\n"
+        "$ floe validate\n"
         "$ floe compile\n"
         "$ floe run\n"
         "$ floe test\n"
@@ -112,6 +113,9 @@ def test_rejects_unsupported_lifecycle_commands_in_user_facing_docs(tmp_path: Pa
     errors = load_validator().validate_docs_content(tmp_path)
 
     assert any("'floe init' is not a supported current alpha workflow" in error for error in errors)
+    assert any(
+        "'floe validate' is not a supported current alpha workflow" in error for error in errors
+    )
     assert any(
         "'floe compile' is not a supported current alpha workflow" in error for error in errors
     )
@@ -142,12 +146,42 @@ def test_allows_root_floe_compile_when_marked_planned(tmp_path: Path) -> None:
     """Content validation permits root command references when explicitly planned/stubbed."""
     readme = tmp_path / "README.md"
     readme.write_text(
-        "# Floe\n\nThe planned root data-team command is not yet implemented: `floe compile`.\n",
+        "# Floe\n\n"
+        "The planned root data-team commands are not yet implemented: "
+        "`floe validate` and `floe compile`.\n",
     )
 
     errors = load_validator().validate_docs_content(tmp_path)
 
     assert errors == []
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_rejects_lifecycle_commands_in_contributor_docs_without_caveat(
+    tmp_path: Path,
+) -> None:
+    """Content validation covers contributor docs because they are public docs."""
+    docs_site = tmp_path / "docs-site"
+    docs_site.mkdir()
+    (docs_site / "docs-manifest.json").write_text(
+        json.dumps(
+            {
+                "includePrefixes": ["docs/contributing/"],
+                "excludePrefixes": [],
+                "sections": [],
+            }
+        )
+    )
+    contributing = tmp_path / "docs" / "contributing"
+    contributing.mkdir(parents=True)
+    (contributing / "testing.md").write_text("# Testing\n\n```bash\nfloe compile\n```\n")
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert any("docs/contributing/testing.md:4" in error for error in errors)
+    assert any(
+        "'floe compile' is not a supported current alpha workflow" in error for error in errors
+    )
 
 
 @pytest.mark.requirement("alpha-docs")
