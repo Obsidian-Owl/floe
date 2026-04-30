@@ -79,12 +79,14 @@ Domains connect to shared services via K8s DNS:
 # Domain deployment references shared catalog
 env:
   - name: POLARIS_HOST
-    value: "polaris.floe-platform.svc.cluster.local"
+    value: "<polaris-service>.<platform-namespace>.svc.cluster.local"
   - name: OTLP_ENDPOINT
     value: "http://<platform-otlp-endpoint>:4317"
   - name: OPENLINEAGE_URL
-    value: "http://marquez.floe-platform.svc.cluster.local:5000"
+    value: "http://<marquez-service>.<platform-namespace>.svc.cluster.local:5000"
 ```
+
+For the default alpha release name `floe-platform` in namespace `floe-platform`, the shared service names are `floe-platform-polaris` and `floe-platform-marquez`.
 
 ---
 

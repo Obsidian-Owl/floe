@@ -316,12 +316,16 @@ def test_allows_unsupported_cli_snippet_in_excluded_docs(tmp_path: Path) -> None
 def test_rejects_wrong_plugin_count(tmp_path: Path) -> None:
     """Content validation rejects plugin category counts that drift from code."""
     readme = tmp_path / "README.md"
-    readme.write_text("Floe lets teams choose from 12 plugin types.\n")
+    readme.write_text(
+        "Floe lets teams choose from 12 plugin types.\n"
+        "The plugin-quality agent covers 11 floe plugin types testing.\n",
+    )
 
     errors = load_validator().validate_docs_content(tmp_path, plugin_category_count=14)
 
     assert any("plugin count" in error for error in errors)
     assert any("expected 14 plugin categories" in error for error in errors)
+    assert any("plugin count 11" in error for error in errors)
 
 
 @pytest.mark.requirement("alpha-docs")

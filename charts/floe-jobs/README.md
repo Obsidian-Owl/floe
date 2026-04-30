@@ -8,27 +8,25 @@ Helm chart for deploying floe data product jobs (dbt runs, data ingestion, etc.)
 - Helm 3.8+
 - (Optional) floe-platform chart deployed for service discovery
 
-## Installation
+## Alpha Installation
+
+The alpha-supported path is to install from a local repository checkout. Use the OCI release artifact path only for versions where the release checklist publishes one; do not assume a classic Helm repository is available.
 
 ```bash
-# Add floe Helm repository (when published)
-helm repo add floe https://charts.floe.dev
-helm repo update
-
-# Install with default values
-helm install my-jobs floe/floe-jobs
+# Install from the local chart
+helm install my-jobs ./charts/floe-jobs
 
 # Install with dbt job enabled
-helm install my-jobs floe/floe-jobs \
+helm install my-jobs ./charts/floe-jobs \
   --set dbt.enabled=true \
   --set dbt.schedule="0 */6 * * *"
 ```
 
-### Install from Local Chart
+When a release publishes OCI chart artifacts, install from the release artifact reference documented for that version. The expected repository shape is:
 
 ```bash
-helm install my-jobs ./charts/floe-jobs \
-  --set dbt.enabled=true
+helm install my-jobs oci://ghcr.io/obsidian-owl/charts/floe-jobs \
+  --version <published-version>
 ```
 
 ## Configuration

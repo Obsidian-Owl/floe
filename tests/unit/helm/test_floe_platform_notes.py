@@ -23,7 +23,7 @@ def _canonical_docs_site() -> str:
     return match.group(1)
 
 
-def _render_notes() -> str:
+def _render_notes(*extra_args: str) -> str:
     """Render Helm install output including NOTES."""
     result = subprocess.run(
         [
@@ -33,6 +33,7 @@ def _render_notes() -> str:
             "./charts/floe-platform",
             "--dry-run",
             "--debug",
+            *extra_args,
         ],
         cwd=_REPO_ROOT,
         check=True,
@@ -86,3 +87,21 @@ def test_rendered_notes_use_valid_helm_template_chart_reference_examples() -> No
         "helm template test floe/floe-platform -n default -f your-values.yaml --debug"
         in rendered_notes
     )
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_rendered_notes_namespace_scope_troubleshooting_pod_commands() -> None:
+    """Rendered Helm NOTES troubleshooting commands must include the release namespace."""
+    rendered_notes = _render_notes(
+        "--set",
+        "polaris.bootstrap.enabled=true",
+        "--set",
+        "polaris.auth.bootstrapCredentials.clientSecret=test-secret",
+        "--set",
+        "minio.enabled=true",
+    )
+
+    assert "kubectl get pods -n default -l app.kubernetes.io/component=minio" in rendered_notes
+    assert "kubectl get pods -n default -l app.kubernetes.io/component=polaris" in rendered_notes
+    assert "kubectl get pods -l app.kubernetes.io/component=minio)" not in rendered_notes
+    assert "kubectl get pods -l app.kubernetes.io/component=polaris)" not in rendered_notes

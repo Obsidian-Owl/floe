@@ -147,9 +147,9 @@ If something isn't working, check these common issues:
 2. Init container timeout (pod stuck in Init):
    kubectl describe pod -n {{ .Release.Namespace }} <pod-name> | grep -A5 "Init Containers"
 {{- if .Values.minio.enabled }}
-   - wait-for-minio: Verify MinIO is running (kubectl get pods -l app.kubernetes.io/component=minio)
+   - wait-for-minio: Verify MinIO is running (kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/component=minio)
 {{- end }}
-   - wait-for-polaris: Verify Polaris is running (kubectl get pods -l app.kubernetes.io/component=polaris)
+   - wait-for-polaris: Verify Polaris is running (kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/component=polaris)
    - Check service endpoints: kubectl get endpoints -n {{ .Release.Namespace }}
 
 {{ end }}

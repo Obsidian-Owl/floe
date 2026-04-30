@@ -74,7 +74,8 @@ UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE = re.compile(
     re.IGNORECASE,
 )
 PLUGIN_COUNT_RE = re.compile(
-    r"\b(?P<count>\d+)\s+plugin\s+(?P<noun>types?|categor(?:y|ies))\b",
+    r"\b(?P<count>\d+)\s+(?:floe\s+)?plugin\s+"
+    r"(?P<noun>types?|categor(?:y|ies))\b",
     re.IGNORECASE,
 )
 NEGATIVE_OR_PLANNED_CONTEXT_RE = re.compile(

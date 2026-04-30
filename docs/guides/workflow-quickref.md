@@ -47,7 +47,7 @@ Ship:      /sw-ship -> PR with evidence
 
 | Agent | Model | Purpose | Invocation |
 |-------|-------|---------|------------|
-| `plugin-quality` | Opus | 11 floe plugin types testing | Pre-PR |
+| `plugin-quality` | Opus | 14 Floe plugin categories testing | Pre-PR |
 | `contract-stability` | Opus | CompiledArtifacts contract | Pre-PR |
 | `critic` | Opus | Ruthless plan/implementation reviewer | Pre-PR (blocking) |
 | `docker-log-analyser` | Sonnet | Context-efficient container logs | On demand |
