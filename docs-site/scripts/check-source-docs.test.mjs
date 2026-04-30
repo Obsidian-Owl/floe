@@ -221,3 +221,116 @@ test('collectSourceDocsErrors allows negative or planned Docker Compose and floe
     assert.deepEqual(errors, []);
   });
 });
+
+test('collectSourceDocsErrors rejects unsupported current default integrations', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/architecture'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/opinionation-boundaries.md'),
+      [
+        '# Opinionation Boundaries',
+        '',
+        '| Component | Default | Alternatives |',
+        '| --- | --- | --- |',
+        '| Telemetry Backend | Jaeger (local), Datadog (production) | Grafana Cloud |',
+        '| Lineage Backend | Marquez (local), Atlan (production) | OpenMetadata |',
+        '| Storage | MinIO (local), S3 (production) | GCS |',
+        '',
+      ].join('\n'),
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, [
+      'docs/architecture/opinionation-boundaries.md: labels Datadog as a current default integration',
+      'docs/architecture/opinionation-boundaries.md: labels Atlan as a current default integration',
+      'docs/architecture/opinionation-boundaries.md: labels S3 as a current production default',
+    ]);
+  });
+});
+
+test('collectSourceDocsErrors checks README as public product surface', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.writeFile(
+      path.join(repoRoot, 'README.md'),
+      '# Floe\n\nDatadog is the production default telemetry backend.\n',
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, [
+      'README.md: labels Datadog as a current default integration',
+    ]);
+  });
+});
+
+test('collectSourceDocsErrors rejects wrong compute ownership guidance', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/architecture'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/architecture/opinionation-boundaries.md'),
+      [
+        '# Opinionation Boundaries',
+        '',
+        "### DON'T: Allow Data Engineers to select compute",
+        '',
+        'Data engineers inherit compute - they do not select it.',
+        '',
+      ].join('\n'),
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, [
+      'docs/architecture/opinionation-boundaries.md: forbids approved per-transform compute selection',
+      'docs/architecture/opinionation-boundaries.md: says Data Engineers cannot select approved compute',
+    ]);
+  });
+});
+
+test('collectSourceDocsErrors rejects unsupported root data-team lifecycle commands', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/data-engineers'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/data-engineers/first-data-product.md'),
+      [
+        '# Build Your First Data Product',
+        '',
+        'Run `floe compile`.',
+        'Run `floe run`.',
+        'Run `floe product deploy`.',
+        '',
+      ].join('\n'),
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, [
+      'docs/data-engineers/first-data-product.md: first data product guide must teach hello-orders before Customer 360',
+      "docs/data-engineers/first-data-product.md: presents unsupported root command 'floe compile' as current",
+      "docs/data-engineers/first-data-product.md: presents unsupported root command 'floe run' as current",
+      "docs/data-engineers/first-data-product.md: presents unsupported CLI command 'floe product deploy' as current",
+    ]);
+  });
+});
+
+test('collectSourceDocsErrors allows planned root commands and Customer 360 as advanced proof', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/data-engineers'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/data-engineers/first-data-product.md'),
+      [
+        '# Build Your First Data Product',
+        '',
+        'Build `hello-orders` first.',
+        '`floe compile` is planned and not implemented as the current alpha product command.',
+        'Customer 360 is the advanced proof after the hello-orders path.',
+        '',
+      ].join('\n'),
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, []);
+  });
+});

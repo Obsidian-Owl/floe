@@ -20,12 +20,33 @@ const disallowedSnippets = [
 ];
 
 function hasNegativeOrPlannedContext(line) {
-  return /\b(not supported|unsupported|not alpha-supported|not implemented|planned|historical|deprecated|rejected|was rejected|alternative|not a current|do not run|no Docker Compose|creates testing parity issues|parity issues|failure mode)\b/iu.test(
+  return /\b(not supported|unsupported|not alpha-supported|not implemented|planned|historical|deprecated|rejected|was rejected|alternative|not a current|do not run|no Docker Compose|creates testing parity issues|parity issues|failure mode|stub|stubs|advanced proof)\b/iu.test(
     line,
   );
 }
 
-function collectLineLevelErrors(line) {
+const productSurfaceSources = new Set([
+  'README.md',
+  'docs/index.md',
+  'docs/architecture/opinionation-boundaries.md',
+  'docs/architecture/capability-status.md',
+  'docs/reference/plugin-catalog.md',
+  'docs/guides/data-product-lifecycle.md',
+]);
+
+const productSurfacePrefixes = [
+  'docs/start-here/',
+  'docs/get-started/',
+  'docs/platform-engineers/',
+  'docs/data-engineers/',
+  'docs/guides/deployment/',
+];
+
+function isCurrentProductSurfaceSource(source) {
+  return productSurfaceSources.has(source) || productSurfacePrefixes.some((prefix) => source.startsWith(prefix));
+}
+
+function collectGeneralLineLevelErrors(line) {
   const errors = [];
   if (/without rewrites/iu.test(line)) {
     errors.push("uses uncaveated Data Mesh migration language 'without rewrites'");
@@ -48,6 +69,41 @@ function collectLineLevelErrors(line) {
   }
   if (/\bfloe\s+dev\b/iu.test(line) && !hasNegativeOrPlannedContext(line)) {
     errors.push("presents unsupported CLI command 'floe dev' as a product path");
+  }
+  return errors;
+}
+
+function collectProductSurfaceLineLevelErrors(line) {
+  const errors = [];
+  if (hasNegativeOrPlannedContext(line)) {
+    return errors;
+  }
+  if (/\bDatadog\b.*\b(default|production)\b|\b(default|production)\b.*\bDatadog\b/iu.test(line)) {
+    errors.push('labels Datadog as a current default integration');
+  }
+  if (/\bAtlan\b.*\b(default|production)\b|\b(default|production)\b.*\bAtlan\b/iu.test(line)) {
+    errors.push('labels Atlan as a current default integration');
+  }
+  if (/\bS3\b.*\b(production|default)\b|\b(production|default)\b.*\bS3\b/u.test(line)) {
+    errors.push('labels S3 as a current production default');
+  }
+  if (/DON'T:\s*Allow Data Engineers to select compute/iu.test(line)) {
+    errors.push('forbids approved per-transform compute selection');
+  }
+  if (/Data Engineers inherit compute\s+-\s+they do not select it/iu.test(line)) {
+    errors.push('says Data Engineers cannot select approved compute');
+  }
+  if (/\bfloe\s+compile\b/iu.test(line)) {
+    errors.push("presents unsupported root command 'floe compile' as current");
+  }
+  if (/\bfloe\s+run\b/iu.test(line)) {
+    errors.push("presents unsupported root command 'floe run' as current");
+  }
+  if (/\bfloe\s+validate\b/iu.test(line)) {
+    errors.push("presents unsupported root command 'floe validate' as current");
+  }
+  if (/\bfloe\s+product\s+deploy\b/iu.test(line)) {
+    errors.push("presents unsupported CLI command 'floe product deploy' as current");
   }
   return errors;
 }
@@ -88,10 +144,22 @@ async function publishedMarkdownSources(repoRoot, manifestPath) {
   const excludePrefixes = manifest.excludePrefixes ?? [];
   const docsRoot = path.join(repoRoot, 'docs');
   const sources = new Set();
+  const readmePath = path.join(repoRoot, 'README.md');
 
   for (const item of manifestItems(manifest)) {
     if (!isIncludedByPrefix(item.source, excludePrefixes)) {
       sources.add(item.source);
+    }
+  }
+
+  try {
+    const readmeStats = await fs.stat(readmePath);
+    if (readmeStats.isFile()) {
+      sources.add('README.md');
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      throw error;
     }
   }
 
@@ -118,13 +186,20 @@ export async function collectSourceDocsErrors({
     if (/\bhetzner\b/iu.test(proseMarkdown) && !allowedHetznerSources.has(source)) {
       errors.push(`${source}: references Hetzner outside Floe Contributor docs`);
     }
+    if (source === 'docs/data-engineers/first-data-product.md' && !/\bhello-orders\b/iu.test(markdown)) {
+      errors.push(`${source}: first data product guide must teach hello-orders before Customer 360`);
+    }
     for (const rule of disallowedSnippets) {
       if (rule.pattern.test(markdown)) {
         errors.push(`${source}: ${rule.message}`);
       }
     }
     for (const line of markdown.split(/\r?\n/u)) {
-      for (const error of collectLineLevelErrors(line)) {
+      const lineLevelErrors = collectGeneralLineLevelErrors(line);
+      if (isCurrentProductSurfaceSource(source)) {
+        lineLevelErrors.push(...collectProductSurfaceLineLevelErrors(line));
+      }
+      for (const error of lineLevelErrors) {
         errors.push(`${source}: ${error}`);
       }
     }
