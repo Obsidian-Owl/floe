@@ -28,14 +28,14 @@ Decision options:
 
 | Dimension | Evidence | Assessment |
 | --- | --- | --- |
-| Release maturity |  |  |
-| CRD/resource model |  |  |
-| Control plane/runtime model |  |  |
-| Developer portal/API |  |  |
-| Workflow support |  |  |
-| Observability support |  |  |
-| Authz/secrets support |  |  |
-| Install footprint |  |  |
+| Release maturity | Latest observed release line is `v1.0.1-hotfix.1`; `v1.0.0` was released on 2026-03-22; repository uses Apache-2.0. | Mature enough for a proof spike, but CRDs remain `v1alpha1`, so adoption needs API-stability caution. |
+| CRD/resource model | Source includes CRDs for `Project`, `Component`, `Workload`, `ComponentType`, `ClusterComponentType`, `Trait`, `ClusterTrait`, `Environment`, `DataPlane`, `WorkflowPlane`, `Workflow`, `ClusterWorkflow`, `WorkflowRun`, `ReleaseBinding`, `RenderedRelease`, authz, observability, and secret references. | Rich enough to model platform/developer abstractions around Floe outputs. |
+| Control plane/runtime model | Install tree separates control, data, workflow, and observability planes. | Strong conceptual alignment with Floe's platform-services layer, with added operational footprint. |
+| Developer portal/API | README and docs position OpenChoreo as a Kubernetes internal developer platform with CLI/API/UI concepts. | Potential DX value if Floe can generate OpenChoreo resources instead of exposing CRDs directly. |
+| Workflow support | Workflow plane chart depends on Argo Workflows; samples include workflow and workflow-run resources. | Useful for build/release workflows, but not a direct dbt/Dagster orchestration replacement. |
+| Observability support | Observability plane chart includes logs, metrics, tracing, observer APIs, and authz integration. | Possible platform observability surface, but Floe must retain OpenTelemetry and OpenLineage emission ownership. |
+| Authz/secrets support | CRDs and samples include authz roles/bindings and `SecretReference`. | Potential overlap with Floe's identity/secrets/RBAC plugins; requires strict boundary definition. |
+| Install footprint | Local guide uses k3d plus multiple charts and prerequisites such as cert-manager, external-secrets, gateway components, Thunder, workflow plane, and observability plane. | Adoption complexity is non-trivial; proof should start with CRD/render validation before full runtime validation. |
 
 ## Floe Fit Assessment
 

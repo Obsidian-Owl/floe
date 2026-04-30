@@ -6,7 +6,7 @@ Date: 2026-04-30
 
 | Task | Command or Action | Result | Evidence |
 | --- | --- | --- | --- |
-| Triage source capture | Pending | Pending | Pending |
+| Triage source capture | Cloned `release-v1.0`; inspected release API, CRDs, install charts, docs, and samples. | Complete | OpenChoreo has a broad Kubernetes control-plane surface with `v1alpha1` CRDs and a multi-plane install model. |
 | Floe architecture review | Pending | Pending | Pending |
 | Recommendation gate | Pending | Pending | Pending |
 | OpenChoreo proof resource generation | Pending | Pending | Pending |
