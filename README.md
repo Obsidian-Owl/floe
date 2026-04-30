@@ -151,7 +151,7 @@ The root data-team compile command is a planned lifecycle entry point and is not
 
 **What's auto-generated:**
 - ✅ Database connection configs (dbt profiles.yml)
-- ✅ Orchestration code (Dagster assets or Airflow DAGs)
+- ✅ Orchestration code for the alpha Dagster runtime path
 - ✅ Kubernetes manifests (Jobs, Services, ConfigMaps)
 - ✅ Environment-specific settings (dev/staging/prod)
 - ✅ Credential vending (SecretReference pattern, no hardcoded secrets)

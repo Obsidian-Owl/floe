@@ -161,14 +161,15 @@ metadata:
   scope: enterprise
 
 plugins:
-  # PLUGGABLE: Platform Team selects
-  compute: snowflake          # Their choice
-  orchestrator: dagster       # Default
-  catalog: glue               # AWS preference
-  storage: s3                 # Cloud storage
-  observability: datadog      # Existing investment
-  semantic_layer: cube        # Default
-  ingestion: dlt              # Default
+  # PLUGGABLE: Platform Team selects from alpha-supported and validated options
+  compute: duckdb                 # Alpha-supported default
+  orchestrator: dagster           # Alpha-supported default
+  catalog: polaris                # Alpha-supported default
+  storage: s3                     # S3-compatible storage plugin; demo uses MinIO
+  telemetry_backend: jaeger       # Alpha-supported telemetry backend
+  lineage_backend: marquez        # Alpha-supported lineage backend
+  semantic_layer: cube            # Reference implementation
+  ingestion: dlt                  # Plugin primitive
 
 # ENFORCED: Cannot change
 # - Iceberg (all tables are Iceberg)
@@ -189,11 +190,12 @@ metadata:
 platform:
   ref: oci://registry.acme.com/floe-platform:v1.2.3
 
-# Data engineers ONLY define transforms
-# They inherit all plugin choices
+# Data Engineers inherit platform-approved choices and defaults.
+# They may select compute per transform only from the approved list.
 transforms:
   - type: dbt      # ENFORCED: must use dbt
     path: models/
+    compute: duckdb
 ```
 
 ## Anti-Patterns
