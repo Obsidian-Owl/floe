@@ -71,8 +71,6 @@ dependencies = [
     "floe-alert-webhook",
     # Storage plugins
     "floe-storage-s3",
-    "mkdocs>=1.6.1",
-    "mkdocs-material>=9.7.0",
 ]
 
 [project.optional-dependencies]

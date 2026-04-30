@@ -36,4 +36,4 @@
 ## Related Documentation
 
 - [ADR-0017: K8s Testing Infrastructure](../architecture/adr/0017-k8s-testing-infrastructure.md)
-- [TESTING.md](/TESTING.md) - Root-level testing reference
+- [TESTING.md](https://github.com/Obsidian-Owl/floe/blob/main/TESTING.md) - Root-level testing reference

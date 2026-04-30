@@ -20,7 +20,7 @@ make docs-validate
 ## Success Criteria
 
 - `make help` lists the docs, demo, Helm, Kind, and DevPod targets.
-- `make docs-build` completes with MkDocs strict mode enabled.
+- `make docs-build` completes the Starlight static site build.
 - You have selected either the platform deployment guide or the data product guide.
 
 ## Next Step

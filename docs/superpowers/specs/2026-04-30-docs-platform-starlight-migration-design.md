@@ -18,7 +18,7 @@ The MkDocs site was added recently, but the Material for MkDocs warning about th
 ## Non-Goals
 
 - Do not redesign every page.
-- Do not migrate historical planning artifacts into the public docs navigation.
+- Do not migrate historical planning artifacts into the public docs site or navigation.
 - Do not build a custom docs framework.
 - Do not make final DevPod + Hetzner release validation part of this docs migration.
 

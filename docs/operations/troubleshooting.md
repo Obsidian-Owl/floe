@@ -20,7 +20,7 @@ kubectl get pods -n floe-test
 
 ## Success Criteria
 
-- Docs failures are reproduced with `make docs-validate`.
+- Docs validation and Starlight build failures are reproduced with `make docs-validate`.
 - DevPod failures are reproduced with `make devpod-status`.
 - Runtime failures include namespace-specific pod status.
 - Follow-up issues include exact commands and relevant output snippets.
