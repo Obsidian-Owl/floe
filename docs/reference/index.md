@@ -18,7 +18,7 @@ uv run python testing/ci/validate-docs-navigation.py
 
 ## Success Criteria
 
-- Reference pages are reachable from the MkDocs navigation.
+- Reference pages are reachable from the Starlight navigation.
 - Alpha-critical pages remain present in the custom docs validator.
 - Schema and contract links resolve to existing repository files.
 
