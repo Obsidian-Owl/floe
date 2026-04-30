@@ -27,14 +27,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout-seconds",
         type=float,
-        default=float(os.environ.get("FLOE_DEMO_RUN_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS)),
+        default=os.environ.get("FLOE_DEMO_RUN_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS)),
         help="Maximum time to wait for the Dagster run to finish.",
     )
     parser.add_argument(
         "--poll-interval-seconds",
         type=float,
-        default=float(
-            os.environ.get("FLOE_DEMO_RUN_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS)
+        default=os.environ.get(
+            "FLOE_DEMO_RUN_POLL_INTERVAL_SECONDS",
+            str(DEFAULT_POLL_INTERVAL_SECONDS),
         ),
         help="Seconds between Dagster run status polls.",
     )
