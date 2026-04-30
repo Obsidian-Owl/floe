@@ -91,7 +91,7 @@ ALPHA SCOPE:
 {{- end }}
 {{- end }}
 
-{{- if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}
+{{ if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}
 
 ⚠️  BOOTSTRAP SECURITY NOTE:
     The bootstrap job communicates with Polaris over plaintext HTTP
@@ -152,8 +152,8 @@ If something isn't working, check these common issues:
    - wait-for-polaris: Verify Polaris is running (kubectl get pods -l app.kubernetes.io/component=polaris)
    - Check service endpoints: kubectl get endpoints -n {{ .Release.Namespace }}
 
-{{ end -}}
-{{ if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}3{{ else }}1{{ end }}. Schema validation error on helm install/upgrade:
+{{ end }}
+{{ "\n" }}{{ if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}3{{ else }}1{{ end }}. Schema validation error on helm install/upgrade:
    - Check values override chain: values.yaml < values-<env>.yaml < --set flags
    - Run: helm template test {{ .Chart.Name }} -f your-values.yaml --debug 2>&1 | head -50
    - Subchart schema changes after upgrade may reject previously-valid keys
@@ -163,8 +163,8 @@ If something isn't working, check these common issues:
 ================================================================================
 
 For more information, see:
-- floe Platform Docs: https://floe.dev/
-- Helm Deployment Guide: https://floe.dev/guides/deployment/kubernetes-helm
-- Contributor Troubleshooting Guide: https://floe.dev/contributing/troubleshooting
+- floe Platform Docs: https://obsidian-owl.github.io/floe/
+- Helm Deployment Guide: https://obsidian-owl.github.io/floe/guides/deployment/kubernetes-helm
+- Contributor Troubleshooting Guide: https://obsidian-owl.github.io/floe/contributing/troubleshooting
 
 ================================================================================

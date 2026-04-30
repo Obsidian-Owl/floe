@@ -164,7 +164,7 @@ Useful current keys include:
 | PostgreSQL password | `postgresql.auth.password`, `postgresql.auth.existingSecret`, `postgresql.auth.existingSecretKey` |
 | Polaris bootstrap credentials | `polaris.auth.existingSecret`, `polaris.auth.bootstrapCredentials.clientId`, `polaris.auth.bootstrapCredentials.clientSecret` |
 | MinIO local/demo credentials | `minio.auth.rootUser`, `minio.auth.rootPassword`, `minio.auth.existingSecret` |
-| External Secrets integration | `externalSecrets.enabled`, `externalSecrets.polaris.enabled`, `externalSecrets.postgresql.enabled` |
+| External Secrets integration | `externalSecrets.enabled`, `externalSecrets.postgresql.enabled`, `externalSecrets.minio.enabled`, `externalSecrets.secrets` |
 
 ---
 
