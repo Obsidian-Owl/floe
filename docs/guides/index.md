@@ -1,42 +1,45 @@
-# Implementation Guides
+# Guides
 
-This directory contains the implementation guides for floe, following the [Arc42](https://arc42.org/) documentation structure.
+Use these guides for the current alpha documentation paths. Legacy numbered architecture-guide pages remain in the repository for historical context, but they are not part of the published alpha guide set.
 
-## Guide Index
+## Persona Paths
 
-| # | Guide | Description |
-|---|-------|-------------|
-| 00 | [Overview](00-overview.md) | Introduction and goals |
-| 01 | [Constraints](01-constraints.md) | Technical and organizational constraints |
-| 02 | [Context](02-context.md) | System context and external interfaces |
-| 03 | [Solution Strategy](03-solution-strategy.md) | Technology decisions and patterns |
-| 04 | [Building Blocks](04-building-blocks.md) | Core components and schemas |
-| 05 | [Runtime View](05-runtime-view.md) | CLI workflows and execution flows |
-| 06 | [Deployment View](deployment/index.md) | Kubernetes deployment patterns ([split](deployment/)) |
-| 07 | [Crosscutting](07-crosscutting.md) | Observability, security, configuration |
-| 08 | [Quality](08-quality.md) | Testing strategy and quality requirements ([split](testing/)) |
-| 09 | [Risks](09-risks.md) | Risks and technical debt |
-| 10 | [Glossary](10-glossary.md) | Terminology and definitions |
+- [Platform Engineers](../platform-engineers/index.md) deploy and validate Floe platforms.
+- [Data Engineers](../data-engineers/index.md) build and validate data products on an existing Floe platform.
+- [Floe Contributors](../contributing/index.md) change Floe itself and run contributor validation.
 
-## Quick Links
+## Deployment
 
-### Getting Started
-- [Overview](00-overview.md) - What is floe?
-- [Constraints](01-constraints.md) - Key design constraints
-- [Building Blocks](04-building-blocks.md) - Core schemas (Manifest, DataProduct)
+- [Deployment Guides](deployment/index.md)
+- [Kubernetes Helm](deployment/kubernetes-helm.md)
+- [Local Kind Evaluation](deployment/local-development.md)
+- [GitOps with Flux](deployment/gitops-flux.md)
+- [Data Mesh Status](deployment/data-mesh.md)
+- [Production Considerations](deployment/production.md)
 
-### Implementation
-- [Runtime View](05-runtime-view.md) - CLI commands and workflows
-- [Deployment View](deployment/index.md) - Kubernetes deployment
-- [Quality](testing/index.md) - Testing patterns
+## Testing
 
-### Reference
-- [Solution Strategy](03-solution-strategy.md) - Technology rationale
-- [Crosscutting](07-crosscutting.md) - Observability and security
-- [Glossary](10-glossary.md) - Terminology
+- [Testing Guide Router](testing/index.md)
+- [Unit Testing](testing/unit-testing.md)
+- [Integration Testing](testing/integration-testing.md)
+- [E2E Testing](testing/e2e-testing.md)
+- [Kubernetes Infrastructure Testing](testing/k8s-infrastructure.md)
+- [Code Quality](testing/code-quality.md)
 
-## Related Documentation
+## Data Product And Contracts
 
-- [Architecture](../architecture/index.md) - Architecture documentation and ADRs
-- [Contracts](../contracts/index.md) - Interface contracts and schemas
-- [floe Root](../index.md) - Main documentation index
+- [Data Product Lifecycle](data-product-lifecycle.md)
+- [Contract Versioning](contract-versioning.md)
+- [Contract Monitoring](contract-monitoring.md)
+- [Catalog Reconciliation](catalog-reconciliation.md)
+- [SCD Patterns](scd-patterns.md)
+- [Quality Plugin](quality-plugin.md)
+
+## Architecture And Reference
+
+- [Architecture Summary](../architecture/ARCHITECTURE-SUMMARY.md)
+- [Four-Layer Overview](../architecture/four-layer-overview.md)
+- [Plugin System](../architecture/plugin-system/index.md)
+- [Capability Status](../architecture/capability-status.md)
+- [Contracts Index](../contracts/index.md)
+- [Reference Index](../reference/index.md)

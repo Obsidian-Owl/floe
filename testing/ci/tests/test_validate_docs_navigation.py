@@ -370,6 +370,33 @@ def test_validate_docs_navigation_reports_site_root_markdown_link(
 
 
 @pytest.mark.requirement("alpha-docs")
+def test_validate_docs_navigation_rejects_links_to_excluded_docs(
+    tmp_path: Path,
+) -> None:
+    """Navigation validation rejects links from published docs to excluded docs."""
+    _write_required_docs(tmp_path)
+    _write_manifest(tmp_path)
+    manifest_path = tmp_path / "docs-site/docs-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["includePrefixes"] = ["docs/guides/"]
+    manifest["excludePrefixes"] = ["docs/guides/private/"]
+    manifest_path.write_text(json.dumps(manifest))
+    published_doc = tmp_path / "docs/guides/index.md"
+    published_doc.parent.mkdir(parents=True, exist_ok=True)
+    published_doc.write_text("# Guides\n\nSee [legacy](private/legacy.md).\n")
+    excluded_doc = tmp_path / "docs/guides/private/legacy.md"
+    excluded_doc.parent.mkdir(parents=True, exist_ok=True)
+    excluded_doc.write_text("# Legacy\n")
+
+    errors = validate_docs_navigation(tmp_path)
+
+    assert (
+        "Published docs link to excluded docs in docs/guides/index.md: "
+        "private/legacy.md -> docs/guides/private/legacy.md"
+    ) in errors
+
+
+@pytest.mark.requirement("alpha-docs")
 def test_validate_docs_navigation_rejects_raw_html_local_href(
     tmp_path: Path,
 ) -> None:

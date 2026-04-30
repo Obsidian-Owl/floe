@@ -64,13 +64,14 @@ Expected outcome:
 
 ```bash
 RELEASE=${RELEASE:-floe}
-kubectl port-forward -n floe-dev "svc/${RELEASE}-dagster-webserver" 3100:3000
+kubectl port-forward -n floe-dev "svc/${RELEASE}-dagster-webserver" 3100:80
 ```
 
 Expected outcome:
 
 - Dagster is reachable at `http://localhost:3100`.
 - If your install uses a different release name, set `RELEASE` before running the port-forward.
+- The default chart uses service port `80`; demo-specific values may override that port.
 
 ## 6. Clean Up
 

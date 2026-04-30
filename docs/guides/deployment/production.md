@@ -265,4 +265,4 @@ The daemon persists all state to PostgreSQL, allowing recovery without data loss
 
 - [Kubernetes Helm](kubernetes-helm.md) - Base Helm deployment
 - [Data Mesh](data-mesh.md) - Multi-domain deployment
-- [09-risks](../09-risks.md) - Risk documentation
+- [Capability Status](../../architecture/capability-status.md) - Current alpha capability boundaries

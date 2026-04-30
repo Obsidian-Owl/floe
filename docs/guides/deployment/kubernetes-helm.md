@@ -43,7 +43,7 @@ charts/
     +-- templates/
 ```
 
-`Chart.yaml` declares the current subchart dependencies for Dagster, OpenTelemetry, Jaeger, and MinIO. Floe-owned templates in `templates/` render Polaris, Marquez, PostgreSQL, bootstrap jobs, RBAC, network policy, ingress, and tests.
+`Chart.yaml` declares the current subchart dependencies for Dagster, OpenTelemetry, Jaeger, MinIO, and a local Cube semantic-layer chart. Cube is present as a dependency but disabled by default with `cube.enabled: false`. Floe-owned templates in `templates/` render Polaris, Marquez, PostgreSQL, bootstrap jobs, RBAC, network policy, ingress, and tests.
 
 ---
 
@@ -140,6 +140,9 @@ jaeger:
 
 marquez:
   enabled: true
+
+cube:
+  enabled: false
 
 networkPolicy:
   enabled: false

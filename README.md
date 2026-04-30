@@ -341,12 +341,13 @@ make docs-build
 make docs-serve
 ```
 
-Start with [docs/start-here/index.md](docs/start-here/index.md).
+Start with [Start Here](docs/start-here/index.md).
 
-- **Getting Started**: [Quick Start Guide](docs/guides/00-overview.md)
-- **Configuration**: [Configuration Contracts](docs/contracts/index.md) (manifest.yaml + floe.yaml)
-- **Architecture**: [Four-Layer Model](docs/architecture/four-layer-overview.md) • [Platform Enforcement](docs/architecture/platform-enforcement.md)
-- **Development**: [Contributing Guide](CONTRIBUTING.md) • [Code Standards](CLAUDE.md)
+- **Platform Engineers**: [Deploy Your First Platform](docs/platform-engineers/first-platform.md) • [Validate Your Platform](docs/platform-engineers/validate-platform.md)
+- **Data Engineers**: [Build Your First Data Product](docs/data-engineers/first-data-product.md) • [Validate Your Data Product](docs/data-engineers/validate-data-product.md)
+- **Configuration**: [Reference Index](docs/reference/index.md) • [floe.yaml Schema](docs/reference/floe-yaml-schema.md) • [Compiled Artifacts](docs/contracts/compiled-artifacts.md)
+- **Architecture**: [Four-Layer Model](docs/architecture/four-layer-overview.md) • [Capability Status](docs/architecture/capability-status.md)
+- **Development**: [Contributing Guide](CONTRIBUTING.md) • [Floe Contributor Docs](docs/contributing/index.md)
 - **ADRs**: [Architecture Decision Records](docs/architecture/adr/index.md)
 
 ---

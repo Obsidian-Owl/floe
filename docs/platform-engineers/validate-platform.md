@@ -20,7 +20,7 @@ Open service access using your normal Kubernetes access pattern. For local evalu
 
 ```bash
 RELEASE=${RELEASE:-floe}
-kubectl port-forward -n floe-dev "svc/${RELEASE}-dagster-webserver" 3100:3000
+kubectl port-forward -n floe-dev "svc/${RELEASE}-dagster-webserver" 3100:80
 ```
 
 Expected outcome:
@@ -28,7 +28,7 @@ Expected outcome:
 - Dagster is reachable at `http://localhost:3100`.
 - Platform service access uses your cluster access method, not a cloud-provider-specific Floe requirement.
 
-The contributor release-validation lane uses `RELEASE=floe-platform` because that path installs the chart with the `floe-platform` release name.
+The default chart uses Dagster service port `80`. Contributor demo values override that service port to `3000`, so contributor release-validation helpers may use a different port-forward.
 
 ## Customer 360 Platform Evidence
 

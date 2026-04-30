@@ -943,9 +943,9 @@ plugins:
 - [plugin-system/](../plugin-system/index.md) - Plugin patterns
 - [interfaces/telemetry-backend-plugin.md](../interfaces/telemetry-backend-plugin.md) + [lineage-backend-plugin.md](../interfaces/lineage-backend-plugin.md) - ABC definitions
 - **Requirements Traceability:**
-  - [Epic 06A: OpenTelemetry](../../plans/epics/06-observability/epic-06a-opentelemetry.md) - TelemetryBackendPlugin requirements
-  - [Epic 06B: OpenLineage](../../plans/epics/06-observability/epic-06b-openlineage.md) - LineageBackendPlugin requirements
-  - [Epic 01: Plugin Registry](../../plans/epics/01-foundation/epic-01-plugin-registry.md) - Plugin discovery
+  - Epic 06A: OpenTelemetry (`docs/plans/epics/06-observability/epic-06a-opentelemetry.md`) - TelemetryBackendPlugin requirements
+  - Epic 06B: OpenLineage (`docs/plans/epics/06-observability/epic-06b-openlineage.md`) - LineageBackendPlugin requirements
+  - Epic 01: Plugin Registry (`docs/plans/epics/01-foundation/epic-01-plugin-registry.md`) - Plugin discovery
 - **Industry References:**
   - [OpenTelemetry Collector Configuration](https://opentelemetry.io/docs/collector/configuration/)
   - [OpenLineage Transport Configuration](https://openlineage.io/docs/client/python)

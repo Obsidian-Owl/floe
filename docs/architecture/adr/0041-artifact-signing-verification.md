@@ -710,7 +710,7 @@ jobs:
 - [ADR-0016: Platform Enforcement Architecture](0016-platform-enforcement-architecture.md) - OCI registry decision
 - [ADR-0039: Multi-Environment Promotion](0039-multi-environment-promotion.md) - Artifact promotion workflows
 - [ADR-0040: Artifact Immutability and GC](0040-artifact-immutability-gc.md) - Immutability enforcement
-- [Epic 08B: Artifact Signing](../../plans/epics/08-artifact-distribution/epic-08b-artifact-signing.md) - Implementation epic and signing requirements
+- Epic 08B: Artifact Signing (`docs/plans/epics/08-artifact-distribution/epic-08b-artifact-signing.md`) - Implementation epic and signing requirements
 
 ## References
 

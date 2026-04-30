@@ -482,7 +482,7 @@ artifacts:
 
 - [ADR-0016: Platform Enforcement Architecture](0016-platform-enforcement-architecture.md) - OCI registry decision
 - [ADR-0039: Multi-Environment Promotion](0039-multi-environment-promotion.md) - Promotion workflows
-- [Epic 08A: OCI Client](../../plans/epics/08-artifact-distribution/epic-08a-oci-client.md) - Implementation epic and immutability/GC requirements
+- Epic 08A: OCI Client (`docs/plans/epics/08-artifact-distribution/epic-08a-oci-client.md`) - Implementation epic and immutability/GC requirements
 - **Industry Sources:**
   - [ECR Repository Tag Immutability](https://cloud-kb.sentinelone.com/ecr-repository-tag-immutability)
   - [Immutable Container Image Tags (ProactiveOps)](https://www.proactiveops.io/archive/immutable-container-image-tags/)

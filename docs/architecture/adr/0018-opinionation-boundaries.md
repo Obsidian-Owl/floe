@@ -271,4 +271,4 @@ plugins:
 - [ADR-0008: Repository Split](0008-repository-split.md) - Plugin architecture
 - [ADR-0009: dbt Owns SQL](0009-dbt-owns-sql.md) - Enforced transformation
 - [ADR-0010: Target-Agnostic Compute](0010-target-agnostic-compute.md) - Pluggable compute
-- [03-solution-strategy.md](../../guides/03-solution-strategy.md) - Solution strategy
+- [Opinionation Boundaries](../opinionation-boundaries.md) - Current opinionation boundary summary

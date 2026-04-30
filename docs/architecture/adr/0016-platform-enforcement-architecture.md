@@ -308,8 +308,8 @@ Each tier inherits from its parent and can add domain-specific policies. See [AD
 
 ## References
 
-- [04-building-blocks.md](../../guides/04-building-blocks.md) - Four-layer architecture details
-- [03-solution-strategy.md](../../guides/03-solution-strategy.md) - Opinionation boundaries
+- [Four-Layer Overview](../four-layer-overview.md) - Four-layer architecture details
+- [Opinionation Boundaries](../opinionation-boundaries.md) - Opinionation boundaries
 - [ADR-0008](0008-repository-split.md) - Repository structure
 - [ORAS (OCI Registry As Storage)](https://oras.land/)
 - [Helm OCI Support](https://helm.sh/docs/topics/registries/)

@@ -193,7 +193,11 @@ def _raw_link_target(raw_target: str) -> str | None:
     return target_path
 
 
-def _validate_doc_links(root: Path, doc_path: str) -> list[str]:
+def _validate_doc_links(
+    root: Path,
+    doc_path: str,
+    exclude_prefixes: tuple[str, ...] = (),
+) -> list[str]:
     source = root / doc_path
     if not source.exists():
         return []
@@ -214,6 +218,10 @@ def _validate_doc_links(root: Path, doc_path: str) -> list[str]:
         if not (root / resolved).exists():
             errors.append(
                 f"Broken docs link in {doc_path}: {link_target} -> {resolved}",
+            )
+        elif _is_included_by_prefix(resolved, exclude_prefixes):
+            errors.append(
+                f"Published docs link to excluded docs in {doc_path}: {link_target} -> {resolved}",
             )
 
     for match in RAW_HTML_HREF_RE.finditer(markdown):
@@ -273,6 +281,9 @@ def _docs_to_validate(root: Path, manifest_sources: set[str]) -> list[str]:
 def validate_docs_navigation(root: Path) -> list[str]:
     """Return validation errors for alpha-critical docs navigation."""
     manifest_sources, errors = _validate_manifest(root)
+    manifest_path = root / "docs-site/docs-manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    exclude_prefixes = _manifest_string_list(manifest, "excludePrefixes")
 
     for required in sorted(REQUIRED_PAGES):
         if not (root / required).exists():
@@ -283,7 +294,7 @@ def validate_docs_navigation(root: Path) -> list[str]:
             errors.append(f"Missing docs manifest entry: {required}")
 
     for doc_path in _docs_to_validate(root, manifest_sources):
-        errors.extend(_validate_doc_links(root, doc_path))
+        errors.extend(_validate_doc_links(root, doc_path, exclude_prefixes))
         errors.extend(_validate_required_headings(root, doc_path))
 
     return errors
