@@ -1,13 +1,10 @@
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const docsSiteRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
-const repoRoot = path.resolve(docsSiteRoot, '..');
-const sourceRoot = path.join(repoRoot, 'docs');
-const targetRoot = path.join(docsSiteRoot, 'src', 'content', 'docs');
-const manifestPath = path.join(docsSiteRoot, 'docs-manifest.json');
+const defaultDocsSiteRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const defaultRepoRoot = path.resolve(defaultDocsSiteRoot, '..');
 const repositoryBlobBaseUrl = 'https://github.com/Obsidian-Owl/floe/blob/main';
 const unsupportedFenceLanguages = new Set(['gotemplate', 'promql', 'tpl']);
 
@@ -31,34 +28,8 @@ async function walkMarkdownFiles(directory) {
   return files;
 }
 
-function uniqueSorted(values) {
-  return [...new Set(values)].sort();
-}
-
 function isIncludedByPrefix(source, prefixes) {
   return prefixes.some((prefix) => source === prefix || source.startsWith(prefix));
-}
-
-async function publishedSources(manifest) {
-  const manifestSources = manifest.sections.flatMap((section) =>
-    section.items.map((item) => item.source),
-  );
-  const includePrefixes = manifest.includePrefixes ?? [];
-  const excludePrefixes = manifest.excludePrefixes ?? [];
-  const sourceFiles = await walkMarkdownFiles(sourceRoot);
-  const generatedSources = [];
-
-  for (const sourceFile of sourceFiles) {
-    const source = path.posix.join('docs', toPosixPath(path.relative(sourceRoot, sourceFile)));
-    if (
-      isIncludedByPrefix(source, includePrefixes) &&
-      !isIncludedByPrefix(source, excludePrefixes)
-    ) {
-      generatedSources.push(source);
-    }
-  }
-
-  return uniqueSorted([...manifestSources, ...generatedSources]);
 }
 
 function titleFromMarkdown(markdown, relativePath) {
@@ -97,6 +68,26 @@ function routeForDocsSource(source) {
   return `/${withoutExtension}/`;
 }
 
+function routeForManifestSlug(slug) {
+  return slug === 'index' ? '/' : `/${slug}/`;
+}
+
+function targetPathForManifestItem(item) {
+  if (item.slug === 'index') {
+    return 'index.md';
+  }
+
+  if (item.source.endsWith('/index.md')) {
+    return `${item.slug}/index.md`;
+  }
+
+  return `${item.slug}.md`;
+}
+
+function manifestItems(manifest) {
+  return manifest.sections.flatMap((section) => section.items);
+}
+
 function repositoryUrlForPath(repositoryPath, query, anchor) {
   return `${repositoryBlobBaseUrl}/${repositoryPath}${query ? `?${query}` : ''}${
     anchor ? `#${anchor}` : ''
@@ -107,7 +98,7 @@ function repositoryPathForResolvedSource(resolvedSource) {
   return resolvedSource.replace(/^(\.\.\/)+/u, '');
 }
 
-function rewriteMarkdownLinks(markdown, source, publishedSourceSet) {
+function rewriteMarkdownLinks(markdown, source, publishedSourceRoutes, repoRoot) {
   const sourceParent = path.posix.dirname(source);
   return markdown.replace(
     /(?<!!)\[([^\]]+)\]\(([^)]+)\)/g,
@@ -140,14 +131,15 @@ function rewriteMarkdownLinks(markdown, source, publishedSourceSet) {
         return fullMatch;
       }
 
-      if (!publishedSourceSet.has(resolvedSource)) {
+      const publishedRoute = publishedSourceRoutes.get(resolvedSource);
+      if (!publishedRoute) {
         const absoluteRepositoryPath = path.join(repoRoot, resolvedSource);
         if (existsSync(absoluteRepositoryPath)) {
           return `[${label}](${repositoryUrlForPath(resolvedSource, query, anchor)})`;
         }
       }
 
-      const route = routeForDocsSource(resolvedSource);
+      const route = publishedRoute ?? routeForDocsSource(resolvedSource);
       const rewrittenTarget = `${route}${query ? `?${query}` : ''}${anchor ? `#${anchor}` : ''}`;
       return `[${label}](${rewrittenTarget})`;
     },
@@ -163,16 +155,58 @@ function normalizeGeneratedMarkdown(markdown) {
   });
 }
 
-async function syncDocs() {
+async function publishedSourceEntries(manifest, sourceRoot) {
+  const includePrefixes = manifest.includePrefixes ?? [];
+  const excludePrefixes = manifest.excludePrefixes ?? [];
+  const entriesBySource = new Map();
+
+  for (const item of manifestItems(manifest)) {
+    entriesBySource.set(item.source, {
+      source: item.source,
+      route: routeForManifestSlug(item.slug),
+      targetRelativePath: targetPathForManifestItem(item),
+    });
+  }
+
+  const sourceFiles = await walkMarkdownFiles(sourceRoot);
+  for (const sourceFile of sourceFiles) {
+    const source = path.posix.join('docs', toPosixPath(path.relative(sourceRoot, sourceFile)));
+    if (
+      isIncludedByPrefix(source, includePrefixes) &&
+      !isIncludedByPrefix(source, excludePrefixes) &&
+      !entriesBySource.has(source)
+    ) {
+      entriesBySource.set(source, {
+        source,
+        route: routeForDocsSource(source),
+        targetRelativePath: toPosixPath(path.relative(sourceRoot, sourceFile)),
+      });
+    }
+  }
+
+  return [...entriesBySource.values()].sort((left, right) =>
+    left.source.localeCompare(right.source),
+  );
+}
+
+export async function syncDocs({
+  repoRoot = defaultRepoRoot,
+  docsSiteRoot = defaultDocsSiteRoot,
+} = {}) {
+  const sourceRoot = path.join(repoRoot, 'docs');
+  const targetRoot = path.join(docsSiteRoot, 'src', 'content', 'docs');
+  const manifestPath = path.join(docsSiteRoot, 'docs-manifest.json');
   const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
-  for (const section of manifest.sections) {
-    for (const item of section.items) {
-      const sourcePath = path.join(repoRoot, item.source);
-      try {
-        await fs.access(sourcePath);
-      } catch {
-        throw new Error(`Manifest source not found: ${item.source}`);
-      }
+  for (const item of manifestItems(manifest)) {
+    if (!item.source.endsWith('.md')) {
+      throw new Error(`Manifest source must be Markdown: ${item.source}`);
+    }
+
+    const sourcePath = path.join(repoRoot, item.source);
+    try {
+      await fs.access(sourcePath);
+    } catch {
+      throw new Error(`Manifest source not found: ${item.source}`);
     }
   }
 
@@ -180,12 +214,11 @@ async function syncDocs() {
   await fs.mkdir(targetRoot, { recursive: true });
   await fs.writeFile(path.join(targetRoot, '.gitignore'), '*\n!.gitignore\n');
 
-  const sources = await publishedSources(manifest);
-  const publishedSourceSet = new Set(sources);
-  for (const source of sources) {
-    const sourceFile = path.join(repoRoot, source);
-    const relativePath = toPosixPath(path.relative(sourceRoot, sourceFile));
-    const targetPath = path.join(targetRoot, relativePath);
+  const entries = await publishedSourceEntries(manifest, sourceRoot);
+  const publishedSourceRoutes = new Map(entries.map((entry) => [entry.source, entry.route]));
+  for (const entry of entries) {
+    const sourceFile = path.join(repoRoot, entry.source);
+    const targetPath = path.join(targetRoot, entry.targetRelativePath);
     const markdown = await fs.readFile(sourceFile, 'utf8');
 
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
@@ -193,17 +226,19 @@ async function syncDocs() {
       targetPath,
       normalizeGeneratedMarkdown(
         withStarlightFrontmatter(
-          rewriteMarkdownLinks(markdown, source, publishedSourceSet),
-          relativePath,
+          rewriteMarkdownLinks(markdown, entry.source, publishedSourceRoutes, repoRoot),
+          entry.targetRelativePath,
         ),
       ),
     );
   }
 
-  console.log(`Synced ${sources.length} docs pages into Starlight content.`);
+  console.log(`Synced ${entries.length} docs pages into Starlight content.`);
 }
 
-syncDocs().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  syncDocs().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

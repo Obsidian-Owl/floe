@@ -66,6 +66,9 @@ def _validate_manifest(root: Path) -> tuple[set[str], list[str]]:
         if not isinstance(source, str) or not source.startswith("docs/"):
             errors.append(f"Invalid docs manifest source: {source!r}")
             continue
+        if not source.endswith(".md"):
+            errors.append(f"Invalid docs manifest source extension: {source}")
+            continue
         if not isinstance(slug, str) or not slug:
             errors.append(f"Invalid docs manifest slug for {source}: {slug!r}")
         elif slug in slugs:

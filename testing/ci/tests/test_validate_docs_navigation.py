@@ -95,6 +95,22 @@ def test_validate_docs_navigation_reports_missing_manifest_source(
 
 
 @pytest.mark.requirement("alpha-docs")
+def test_validate_docs_navigation_rejects_non_markdown_manifest_source(
+    tmp_path: Path,
+) -> None:
+    """Navigation validation rejects manifest sources Starlight cannot serve."""
+    _write_required_docs(tmp_path)
+    non_markdown_source = tmp_path / "docs/downloads/readme.txt"
+    non_markdown_source.parent.mkdir(parents=True)
+    non_markdown_source.write_text("Not a docs page.\n")
+    _write_manifest(tmp_path, docs=[*REQUIRED_DOCS, "downloads/readme.txt"])
+
+    errors = validate_docs_navigation(tmp_path)
+
+    assert ("Invalid docs manifest source extension: docs/downloads/readme.txt") in errors
+
+
+@pytest.mark.requirement("alpha-docs")
 def test_validate_docs_navigation_reports_duplicate_manifest_slug(
     tmp_path: Path,
 ) -> None:
