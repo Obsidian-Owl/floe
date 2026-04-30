@@ -11,43 +11,21 @@ This guide deploys Floe to a Kubernetes cluster you control. Floe does not requi
 
 For local evaluation, use Kind. For real deployment, use your organization's Kubernetes platform and durable backing services.
 
-## 1. Confirm Your Cluster Context
+## 1. Choose Your Environment
 
-```bash
-kubectl config current-context
-kubectl cluster-info
-kubectl auth can-i create namespace
-```
+Use any Kubernetes cluster where you can install Helm charts and create the Floe namespace. Kind is suitable for evaluation. Managed Kubernetes is suitable when your organization supplies durable storage, ingress, TLS, identity, backup, and operational controls.
 
-Expected outcome:
-
-- `kubectl config current-context` shows the cluster you intend to use.
-- `kubectl cluster-info` returns Kubernetes API information.
-- `kubectl auth can-i create namespace` returns `yes`.
-
-## 2. Choose The Deployment Mode
-
-| Mode | Use When | Notes |
-| --- | --- | --- |
-| Evaluation | You want to inspect Floe quickly | Use Kind or another disposable cluster |
-| Real Kubernetes deployment | You want Floe on managed or self-hosted Kubernetes | Bring durable storage, secrets, ingress, and backup choices |
-| Contributor validation | You are developing Floe itself | Use the Floe Contributor DevPod guide |
-
-## 3. Prepare Platform Configuration
-
-Start with the alpha platform values that match the Customer 360 path, then replace environment-specific settings for your cluster.
+## 2. Render The Platform
 
 ```bash
 helm dependency update ./charts/floe-platform
-helm template floe ./charts/floe-platform --namespace floe-dev --create-namespace >/tmp/floe-platform-rendered.yaml
+helm template floe ./charts/floe-platform \
+  --namespace floe-dev \
+  --create-namespace \
+  >/tmp/floe-platform-rendered.yaml
 ```
 
-Expected outcome:
-
-- Helm renders Kubernetes resources without schema errors.
-- The rendered resources reference your selected namespace and values.
-
-## 4. Install Floe
+## 3. Install The Platform
 
 ```bash
 helm upgrade --install floe ./charts/floe-platform \
@@ -55,27 +33,21 @@ helm upgrade --install floe ./charts/floe-platform \
   --create-namespace
 ```
 
-Expected outcome:
-
-- Helm reports the release as deployed.
-- Platform pods begin starting in the `floe-dev` namespace.
-
-## 5. Wait For Platform Services
+## 4. Wait For Services
 
 ```bash
 kubectl get pods -n floe-dev
 kubectl wait --for=condition=Ready pods --all -n floe-dev --timeout=10m
 ```
 
-Expected outcome:
+## 5. Publish The Environment Contract
 
-- Required platform pods reach `Ready`.
-- If a pod does not become ready, inspect `kubectl describe pod` and `kubectl logs` for that pod before continuing.
+Start from `examples/platform-environment-contracts/dev.yaml` and replace namespace, release name, registry, access, and URL values for your environment.
 
 ## 6. Validate The Platform
 
 Continue with [Validate Your Platform](validate-platform.md).
 
-## Cloud Provider Examples
+## 7. Prove The Full Demo
 
-Provider-specific guides are examples, not requirements. EKS, GKE, AKS, and other providers can all be documented after each path is validated. The alpha product contract remains Kubernetes, Helm, manifests, and Floe artifacts.
+Run [Customer 360](../demo/customer-360.md) after the basic platform and environment contract are validated.

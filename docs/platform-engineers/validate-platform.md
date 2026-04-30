@@ -30,6 +30,17 @@ Expected outcome:
 
 The default chart uses Dagster service port `80`. Contributor demo values override that service port to `3000`, so contributor release-validation helpers may use a different port-forward.
 
+## Platform Evidence
+
+- Helm release is deployed.
+- Dagster UI is reachable.
+- Polaris catalog API is reachable.
+- MinIO or configured object storage is reachable.
+- Marquez API is reachable.
+- Jaeger UI or configured trace backend is reachable.
+- OTel collector is accepting traces.
+- Data product runtime artifact path is defined.
+
 ## Customer 360 Platform Evidence
 
 Run the Customer 360 validation path after the data product has been deployed and run:
@@ -50,11 +61,16 @@ Expected evidence keys:
 - `business.customer_count`
 - `business.total_lifetime_value`
 
-## What To Hand To Data Engineers
+## Publish The Contract, Not A Chat Message
 
-Give Data Engineers:
+Publish the Platform Environment Contract after validation. At minimum it should include:
 
-- The Floe platform endpoint and namespace.
-- The data product deployment command for your environment.
-- The service URLs they can use for Dagster, lineage, traces, storage, and query validation.
-- Any secrets or identities they need through your approved access process.
+- Namespace and release name.
+- Platform manifest reference.
+- Approved plugins and compute choices.
+- Runtime artifact registry convention.
+- Dagster, Marquez, Jaeger, storage, and semantic/query service access patterns.
+- Required promotion evidence.
+- Support path.
+
+Use [`examples/platform-environment-contracts/dev.yaml`](https://github.com/Obsidian-Owl/floe/blob/main/examples/platform-environment-contracts/dev.yaml) as the reference shape.
