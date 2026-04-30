@@ -900,6 +900,8 @@ spec:
     projectName: customer-360
     componentName: customer-360
   environment: development
+  releaseName: customer-360-openchoreo-spike
+  # OpenChoreo release-v1.0 renamed the older componentTypeEnvOverrides field to this schema key.
   componentTypeEnvironmentConfigs:
     schedule: "*/10 * * * *"
     resources:
@@ -927,6 +929,10 @@ assert [doc["kind"] for doc in docs] == ["Project", "Component", "Workload", "Se
 assert docs[0]["metadata"]["name"] == "customer-360"
 assert docs[1]["spec"]["owner"]["projectName"] == "customer-360"
 assert docs[2]["spec"]["container"]["env"][0]["value"] == "customer-360"
+release_binding = docs[4]["spec"]
+assert release_binding["releaseName"] == "customer-360-openchoreo-spike"
+assert "componentTypeEnvironmentConfigs" in release_binding
+assert "componentTypeEnvOverrides" not in release_binding
 print("customer-360-openchoreo.yaml parsed and structure checks passed")
 PY
 kubectl apply --dry-run=client --validate=false -f docs/research/openchoreo-proof/customer-360-openchoreo.yaml
