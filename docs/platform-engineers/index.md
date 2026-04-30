@@ -15,8 +15,8 @@ Your primary handoff to Data Engineers is a Platform Environment Contract. It sh
 
 1. [Read the enterprise operating model](../guides/operating-model.md).
 2. [Deploy your first platform](first-platform.md).
-3. [Publish a Platform Environment Contract](platform-environment-contract.md).
-4. [Validate your platform](validate-platform.md).
+3. [Draft a Platform Environment Contract](platform-environment-contract.md).
+4. [Validate your platform](validate-platform.md) and publish the validated contract.
 5. [Run Customer 360](../demo/customer-360.md) as the advanced end-to-end proof.
 
 ## What This Path Does Not Require

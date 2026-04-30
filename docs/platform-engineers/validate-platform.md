@@ -63,7 +63,7 @@ Expected evidence keys:
 
 ## Publish The Contract, Not A Chat Message
 
-Publish the Platform Environment Contract after validation. At minimum it should include:
+Publish the Platform Environment Contract after validation. The draft should already exist from the deployment step; validation turns it into the contract Data Engineers and CI can trust. At minimum it should include:
 
 - Namespace and release name.
 - Platform manifest reference.

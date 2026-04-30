@@ -40,9 +40,9 @@ kubectl get pods -n floe-dev
 kubectl wait --for=condition=Ready pods --all -n floe-dev --timeout=10m
 ```
 
-## 5. Publish The Environment Contract
+## 5. Draft The Environment Contract
 
-Start from `examples/platform-environment-contracts/dev.yaml` and replace namespace, release name, registry, access, and URL values for your environment.
+Start from `examples/platform-environment-contracts/dev.yaml` and replace namespace, release name, registry, access, and URL values for your environment. Keep it in draft until validation confirms the services and access patterns are correct.
 
 ## 6. Validate The Platform
 
@@ -50,4 +50,4 @@ Continue with [Validate Your Platform](validate-platform.md).
 
 ## 7. Prove The Full Demo
 
-Run [Customer 360](../demo/customer-360.md) after the basic platform and environment contract are validated.
+Run [Customer 360](../demo/customer-360.md) after the basic platform is validated and the Platform Environment Contract is published.
