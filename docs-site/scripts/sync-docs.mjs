@@ -139,6 +139,7 @@ function rewriteMarkdownLinks(markdown, source, publishedSourceRoutes, repoRoot)
         if (existsSync(absoluteRepositoryPath)) {
           return `[${label}](${repositoryUrlForPath(resolvedSource, query, anchor)})`;
         }
+        throw new Error(`Broken docs link in ${source}: ${targetPath} -> ${resolvedSource}`);
       }
 
       const route = withDocsBase(publishedRoute ?? routeForDocsSource(resolvedSource));

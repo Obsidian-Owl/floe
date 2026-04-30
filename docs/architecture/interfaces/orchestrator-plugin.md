@@ -3,7 +3,7 @@
 **Purpose**: Job scheduling and execution orchestration
 **Location**: `floe_core/plugin_interfaces.py`
 **Entry Point**: `floe.orchestrators`
-**ADR**: [ADR-0033: Orchestrator Plugin](../adr/0033-orchestrator-plugin.md)
+**ADR**: [ADR-0011: Pluggable Orchestration](../adr/0011-pluggable-orchestration.md)
 
 OrchestratorPlugin abstracts workflow orchestration, enabling platform teams to choose between Dagster, Airflow, or other orchestration platforms while maintaining consistent pipeline definitions.
 
@@ -148,6 +148,6 @@ airflow = "floe_orchestrator_airflow:AirflowPlugin"
 
 ## Related Documents
 
-- [ADR-0033: Orchestrator Plugin](../adr/0033-orchestrator-plugin.md)
+- [ADR-0011: Pluggable Orchestration](../adr/0011-pluggable-orchestration.md)
 - [Plugin Architecture](../plugin-system/index.md)
 - [LineageBackendPlugin](lineage-backend-plugin.md) - For lineage event destinations

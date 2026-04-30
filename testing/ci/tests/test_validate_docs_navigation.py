@@ -195,6 +195,10 @@ def test_validate_docs_navigation_checks_non_required_docs(
     """Navigation validation checks active guide docs beyond required release pages."""
     _write_required_docs(tmp_path)
     _write_manifest(tmp_path)
+    manifest_path = tmp_path / "docs-site/docs-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["includePrefixes"] = ["docs/guides/"]
+    manifest_path.write_text(json.dumps(manifest))
     extra_doc = tmp_path / "docs/guides/testing/index.md"
     extra_doc.parent.mkdir(parents=True)
     extra_doc.write_text("# Testing\n\nSee [missing](../missing.md).\n")
@@ -203,6 +207,29 @@ def test_validate_docs_navigation_checks_non_required_docs(
 
     assert (
         "Broken docs link in docs/guides/testing/index.md: ../missing.md -> docs/guides/missing.md"
+    ) in errors
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_validate_docs_navigation_checks_all_published_docs(
+    tmp_path: Path,
+) -> None:
+    """Navigation validation checks docs published via manifest include prefixes."""
+    _write_required_docs(tmp_path)
+    _write_manifest(tmp_path)
+    manifest_path = tmp_path / "docs-site/docs-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["includePrefixes"] = ["docs/architecture/"]
+    manifest_path.write_text(json.dumps(manifest))
+    published_doc = tmp_path / "docs/architecture/published.md"
+    published_doc.parent.mkdir(parents=True)
+    published_doc.write_text("# Published\n\nSee [missing](missing.md).\n")
+
+    errors = validate_docs_navigation(tmp_path)
+
+    assert (
+        "Broken docs link in docs/architecture/published.md: missing.md -> "
+        "docs/architecture/missing.md"
     ) in errors
 
 

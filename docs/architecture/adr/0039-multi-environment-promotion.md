@@ -373,8 +373,7 @@ artifacts:
 
 - [ADR-0016: Platform Enforcement Architecture](0016-platform-enforcement-architecture.md) - OCI registry decision
 - [ADR-0040: Artifact Immutability & GC](0040-artifact-immutability-gc.md) - Tag immutability
-- [EPIC-06: OCI Artifact System](../../plan/epics/EPIC-06.md) - Implementation epic
-- [REQ-326 to REQ-340](../../plan/requirements/04-artifact-distribution/03-promotion-rollback.md) - Promotion requirements
+- [Epic 08C: Promotion Lifecycle](../../plans/epics/08-artifact-distribution/epic-08c-promotion-lifecycle.md) - Implementation epic and promotion requirements
 - **Industry Sources:**
   - [GitOps Best Practices 2025 (Akuity)](https://akuity.io/blog/gitops-best-practices-whitepaper)
   - [Continuous Deployment Best Practices (MOSS)](https://moss.sh/deployment/continuous-deployment-best-practices-2025/)

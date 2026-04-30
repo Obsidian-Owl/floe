@@ -11,11 +11,11 @@ This skill provides patterns for building modern data lakehouses using **DuckDB*
 
 | ADR | Decision | Relevance |
 |-----|----------|-----------|
-| [ADR-0034](docs/architecture/adr/0034-dbt-duckdb-iceberg.md) | dbt-duckdb Iceberg Catalog Workaround | **CRITICAL** - Plugin approach adopted after SPIKE-02 |
-| [ADR-0010](docs/architecture/adr/0010-target-agnostic-compute.md) | Target-Agnostic Compute | DuckDB as default, Snowflake/Spark as alternatives |
-| [ADR-0005](docs/architecture/adr/0005-iceberg-table-format.md) | Apache Iceberg Enforced | All tables MUST be Iceberg format |
-| [ADR-0009](docs/architecture/adr/0009-dbt-owns-sql.md) | dbt Owns SQL | NEVER parse SQL in Python |
-| [ADR-0043](docs/architecture/adr/0043-dbt-runtime-abstraction.md) | dbt Compilation Abstraction | DBTPlugin handles compilation environment |
+| [ADR-0034](../architecture/adr/0034-dbt-duckdb-iceberg.md) | dbt-duckdb Iceberg Catalog Workaround | **CRITICAL** - Plugin approach adopted after SPIKE-02 |
+| [ADR-0010](../architecture/adr/0010-target-agnostic-compute.md) | Target-Agnostic Compute | DuckDB as default, Snowflake/Spark as alternatives |
+| [ADR-0005](../architecture/adr/0005-iceberg-table-format.md) | Apache Iceberg Enforced | All tables MUST be Iceberg format |
+| [ADR-0009](../architecture/adr/0009-dbt-owns-sql.md) | dbt Owns SQL | NEVER parse SQL in Python |
+| [ADR-0043](../architecture/adr/0043-dbt-runtime-abstraction.md) | dbt Compilation Abstraction | DBTPlugin handles compilation environment |
 
 ## floe-platform Architecture
 

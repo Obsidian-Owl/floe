@@ -392,7 +392,7 @@ cloud = "floe_dbt_cloud:CloudDBTPlugin"
 
 **Requirements Traceability:** REQ-086 to REQ-095 (DBT Runtime Plugin), REQ-096 to REQ-100 (SQL Linting)
 
-**See**: [interfaces/dbt-plugin.md](../interfaces/dbt-plugin.md) for canonical interface definition, [ADR-0043](../adr/0043-dbt-plugin.md) for architecture rationale.
+**See**: [interfaces/dbt-plugin.md](../interfaces/dbt-plugin.md) for canonical interface definition, [ADR-0043](../adr/0043-dbt-runtime-abstraction.md) for architecture rationale.
 
 ## DataQualityPlugin
 

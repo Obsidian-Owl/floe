@@ -113,3 +113,24 @@ test('syncDocs rejects duplicate manifest sources before route generation', asyn
     );
   });
 });
+
+test('syncDocs rejects missing Markdown docs link targets before route generation', async () => {
+  await withDocsFixture(async ({ repoRoot, docsSiteRoot }) => {
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/source-page.md'),
+      '# Source\n\nSee [missing](missing-page.md).\n',
+    );
+    await writeManifest(docsSiteRoot, [
+      {
+        title: 'Source',
+        source: 'docs/source-page.md',
+        slug: 'source',
+      },
+    ]);
+
+    await assert.rejects(
+      syncDocs({ repoRoot, docsSiteRoot }),
+      /Broken docs link in docs\/source-page\.md: missing-page\.md -> docs\/missing-page\.md/u,
+    );
+  });
+});

@@ -28,12 +28,6 @@ REQUIRED_DOCS = {
     "docs/releases/v0.1.0-alpha.1-checklist.md",
 }
 
-ADDITIONAL_VALIDATED_DOCS = {
-    "docs/guides/08-quality.md",
-}
-
-VALIDATED_DOC_PREFIXES = ("docs/guides/testing/",)
-
 MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
 
 
@@ -46,6 +40,17 @@ def _manifest_items(manifest: dict[str, Any]) -> list[dict[str, Any]]:
             if isinstance(item, dict):
                 items.append(item)
     return items
+
+
+def _manifest_string_list(manifest: dict[str, Any], key: str) -> tuple[str, ...]:
+    values = manifest.get(key, [])
+    if not isinstance(values, list):
+        return ()
+    return tuple(value for value in values if isinstance(value, str))
+
+
+def _is_included_by_prefix(source: str, prefixes: tuple[str, ...]) -> bool:
+    return any(source == prefix or source.startswith(prefix) for prefix in prefixes)
 
 
 def _validate_manifest(root: Path) -> tuple[set[str], list[str]]:
@@ -135,12 +140,18 @@ def _validate_doc_links(root: Path, doc_path: str) -> list[str]:
 def _docs_to_validate(root: Path, manifest_sources: set[str]) -> list[str]:
     docs_root = root / "docs"
     docs: set[str] = set(manifest_sources)
-    docs.update(ADDITIONAL_VALIDATED_DOCS)
+    manifest_path = root / "docs-site/docs-manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    include_prefixes = _manifest_string_list(manifest, "includePrefixes")
+    exclude_prefixes = _manifest_string_list(manifest, "excludePrefixes")
 
     if docs_root.exists():
         for doc_path in sorted(docs_root.rglob("*.md")):
-            relative = str(doc_path.relative_to(root))
-            if relative.startswith(VALIDATED_DOC_PREFIXES):
+            relative = doc_path.relative_to(root).as_posix()
+            if _is_included_by_prefix(
+                relative,
+                include_prefixes,
+            ) and not _is_included_by_prefix(relative, exclude_prefixes):
                 docs.add(relative)
 
     return sorted(docs)
