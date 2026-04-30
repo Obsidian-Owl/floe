@@ -34,7 +34,7 @@ floe is built on **composability** as a core architectural principle (ADR-0037):
 - **Plugin Architecture > Configuration Switches**: Extensibility via entry points (`floe.computes`, `floe.orchestrators`, etc.), not if/else config
 - **Interface > Implementation**: Define ABCs (ComputePlugin, TelemetryBackendPlugin, LineageBackendPlugin), not concrete classes
 - **Progressive Disclosure**: Point to detailed docs, don't duplicate content
-- **Opt-in Complexity**: Start simple (2-tier), scale to Data Mesh (3-tier) without rewrites
+- **Opt-in Complexity**: Start simple (2-tier), with architecture direction toward Data Mesh-compatible (3-tier) governance. See [Capability Status](capability-status.md) for the current alpha-validated state.
 
 **14 plugin categories** enable flexibility while maintaining enforced standards (see [Plugin Catalog](../reference/plugin-catalog.md) for implementation truth):
 - Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend

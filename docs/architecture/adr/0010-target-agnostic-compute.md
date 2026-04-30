@@ -55,7 +55,7 @@ What you test is what you deploy. Each transform uses the same compute across al
 - **Cost optimization** - Heavy processing on Spark, analytics on DuckDB
 - **Platform governance** - Only approved computes can be used
 - **No environment drift** - Each step consistent across environments
-- **Data Mesh ready** - Hierarchical governance (Enterprise → Domain → Product)
+- **Data Mesh-compatible governance primitives** - Hierarchical governance (Enterprise → Domain → Product); validated Data Mesh operations remain planned. See [Capability Status](../capability-status.md).
 
 ### Negative
 
