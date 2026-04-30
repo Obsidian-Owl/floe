@@ -727,10 +727,16 @@ for manifest in artifacts.inheritance_chain:
     print(f"{manifest.name} ({manifest.scope}): {manifest.ref}")
 ```
 
-### JSON Schema Export
+### JSON Schema Inspection
 
-```bash
-floe schema export --output compiled-artifacts.schema.json
+The public CLI does not currently expose a schema export command. During alpha, contributors can inspect the current Pydantic schema from the repository:
+
+```python
+import json
+
+from floe_core.schemas import CompiledArtifacts
+
+print(json.dumps(CompiledArtifacts.export_json_schema(), indent=2))
 ```
 
 ## Versioning

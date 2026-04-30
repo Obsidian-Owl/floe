@@ -18,7 +18,7 @@ uv run pytest testing/ci/tests/test_validate_docs_navigation.py -q
 
 ## Contributor Workflows
 
-- <a href="devpod-&#104;etzner/">Remote DevPod workspace</a> for heavyweight validation.
+- [Remote DevPod workspace](devpod-hetzner.md) for heavyweight validation.
 - [Contributor testing](testing.md) for unit, integration, E2E, docs, and release-validation checks.
 - [Contributor troubleshooting](troubleshooting.md) for remote validation, tunnel, demo, lineage, trace, and stale-image failures.
 - [Documentation standards](documentation-standards.md) for keeping docs aligned with behavior.

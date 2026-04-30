@@ -81,7 +81,7 @@ env:
   - name: POLARIS_HOST
     value: "polaris.floe-platform.svc.cluster.local"
   - name: OTLP_ENDPOINT
-    value: "http://otel-collector.floe-platform.svc.cluster.local:4317"
+    value: "http://<platform-otlp-endpoint>:4317"
   - name: OPENLINEAGE_URL
     value: "http://marquez.floe-platform.svc.cluster.local:5000"
 ```

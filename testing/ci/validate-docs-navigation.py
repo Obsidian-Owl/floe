@@ -57,6 +57,7 @@ REQUIRED_MANIFEST_SOURCES = {
 }
 
 MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)]+)\)")
+RAW_HTML_HREF_RE = re.compile(r"<a\s+[^>]*\bhref\s*=\s*(['\"])(.*?)\1", re.IGNORECASE)
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 
 REQUIRED_TUTORIAL_HEADINGS = {
@@ -199,7 +200,8 @@ def _validate_doc_links(root: Path, doc_path: str) -> list[str]:
 
     source_parent = posixpath.dirname(doc_path)
     errors: list[str] = []
-    for match in MARKDOWN_LINK_RE.finditer(source.read_text()):
+    markdown = source.read_text()
+    for match in MARKDOWN_LINK_RE.finditer(markdown):
         link_target = _raw_link_target(match.group(1))
         if link_target is None:
             continue
@@ -213,6 +215,20 @@ def _validate_doc_links(root: Path, doc_path: str) -> list[str]:
             errors.append(
                 f"Broken docs link in {doc_path}: {link_target} -> {resolved}",
             )
+
+    for match in RAW_HTML_HREF_RE.finditer(markdown):
+        raw_target = match.group(2).strip()
+        if not raw_target or raw_target.startswith("#"):
+            continue
+
+        parsed = urlparse(raw_target)
+        if parsed.scheme or parsed.netloc:
+            continue
+
+        errors.append(
+            f"Raw HTML local href in {doc_path}: {raw_target}; "
+            "use Markdown links for internal docs",
+        )
 
     return errors
 

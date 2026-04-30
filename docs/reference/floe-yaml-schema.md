@@ -627,11 +627,14 @@ quality:
 
 ## JSON Schema
 
-The complete JSON Schema for `floe.yaml` is generated from Pydantic models:
+The complete JSON Schema for `floe.yaml` is generated from Pydantic models. The public CLI does not currently expose a `schema export` command; use Python from the repository when you need to inspect the current schema during alpha:
 
-```bash
-# Export JSON Schema
-floe schema export --format json > floe-yaml-schema.json
+```python
+import json
+
+from floe_core.schemas.floe_spec import FloeSpec
+
+print(json.dumps(FloeSpec.model_json_schema(), indent=2))
 ```
 
 Alpha status: the root `floe validate` command exists as a data-team stub and is not yet the supported schema-validation path for users. For the current alpha, inspect the checked-in Customer 360 `floe.yaml` and run the demo artifact validation path documented in [Build Your First Data Product](../data-engineers/first-data-product.md).

@@ -20,6 +20,9 @@ INTERNAL_AGENT_PHRASES = (
     "$ARGUMENTS",
     "Context Injection (For Future Claude Instances)",
 )
+UNSUPPORTED_PUBLIC_CLI_SNIPPETS = (
+    (re.compile(r"\bfloe\s+schema\s+export\b"), "unsupported CLI command 'floe schema export'"),
+)
 PLUGIN_COUNT_RE = re.compile(
     r"\b(?P<count>\d+)\s+plugin\s+(?P<noun>types?|categor(?:y|ies))\b",
     re.IGNORECASE,
@@ -153,6 +156,10 @@ def validate_docs_content(
                     errors.append(
                         f"{rel_path}:{line_number}: internal agent runbook phrase {phrase!r}"
                     )
+
+            for pattern, message in UNSUPPORTED_PUBLIC_CLI_SNIPPETS:
+                if pattern.search(line):
+                    errors.append(f"{rel_path}:{line_number}: {message}")
 
             if _is_historical_adr_line(path, active_heading):
                 continue

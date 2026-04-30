@@ -297,7 +297,7 @@ Traces and metrics are exported via OTLP:
 
 ```yaml
 # Environment variables
-OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+OTEL_EXPORTER_OTLP_ENDPOINT: "http://<platform-otlp-endpoint>:4317"
 OTEL_SERVICE_NAME: "floe"
 OTEL_RESOURCE_ATTRIBUTES: "floe.namespace=my-project,floe.product.name=customer-analytics"
 ```

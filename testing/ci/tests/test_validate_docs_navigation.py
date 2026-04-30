@@ -370,6 +370,39 @@ def test_validate_docs_navigation_reports_site_root_markdown_link(
 
 
 @pytest.mark.requirement("alpha-docs")
+def test_validate_docs_navigation_rejects_raw_html_local_href(
+    tmp_path: Path,
+) -> None:
+    """Navigation validation rejects local raw HTML hrefs that bypass link rewriting."""
+    _write_required_docs(tmp_path)
+    _write_manifest(tmp_path)
+    (tmp_path / "docs/demo/customer-360-validation.md").write_text(
+        '# Validation\n\n<a href="../contributing/devpod-hetzner.md">DevPod</a>\n',
+    )
+
+    errors = validate_docs_navigation(tmp_path)
+
+    assert (
+        "Raw HTML local href in docs/demo/customer-360-validation.md: "
+        "../contributing/devpod-hetzner.md; use Markdown links for internal docs"
+    ) in errors
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_validate_docs_navigation_allows_raw_html_external_href(
+    tmp_path: Path,
+) -> None:
+    """Navigation validation allows raw HTML hrefs for external badge-style links."""
+    _write_required_docs(tmp_path)
+    _write_manifest(tmp_path)
+    (tmp_path / "docs/demo/customer-360-validation.md").write_text(
+        '# Validation\n\n<a href="https://example.com">External</a>\n',
+    )
+
+    assert validate_docs_navigation(tmp_path) == []
+
+
+@pytest.mark.requirement("alpha-docs")
 def test_validate_docs_navigation_checks_non_required_docs(
     tmp_path: Path,
 ) -> None:

@@ -57,6 +57,42 @@ def test_rejects_internal_agent_runbook_in_public_reference(tmp_path: Path) -> N
 
 
 @pytest.mark.requirement("alpha-docs")
+def test_rejects_unsupported_public_cli_schema_export(tmp_path: Path) -> None:
+    """Content validation rejects public snippets for CLI commands that do not exist."""
+    docs = tmp_path / "docs" / "reference"
+    docs.mkdir(parents=True)
+    (docs / "floe-yaml-schema.md").write_text(
+        "# Schema\n\n```bash\nfloe schema export --format json\n```\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert any("unsupported CLI command 'floe schema export'" in error for error in errors)
+    assert any("docs/reference/floe-yaml-schema.md:4" in error for error in errors)
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_allows_unsupported_cli_snippet_in_excluded_docs(tmp_path: Path) -> None:
+    """Content validation ignores unsupported snippets in docs excluded from publication."""
+    docs_site = tmp_path / "docs-site"
+    docs_site.mkdir()
+    (docs_site / "docs-manifest.json").write_text(
+        json.dumps(
+            {
+                "includePrefixes": ["docs/"],
+                "excludePrefixes": ["docs/internal/"],
+                "sections": [],
+            }
+        )
+    )
+    docs = tmp_path / "docs" / "internal"
+    docs.mkdir(parents=True)
+    (docs / "planned.md").write_text("Planned: `floe schema export --format json`.\n")
+
+    assert load_validator().validate_docs_content(tmp_path) == []
+
+
+@pytest.mark.requirement("alpha-docs")
 def test_rejects_wrong_plugin_count(tmp_path: Path) -> None:
     """Content validation rejects plugin category counts that drift from code."""
     readme = tmp_path / "README.md"

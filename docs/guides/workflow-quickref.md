@@ -1,6 +1,6 @@
 # Workflow Quick Reference
 
-Quick reference for the floe development workflow with Specwright quality gates and automation.
+Quick reference for the Floe repository workflow with Specwright quality gates and automation.
 
 ## Specwright Workflow
 

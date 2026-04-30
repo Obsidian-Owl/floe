@@ -109,6 +109,20 @@ test('collectSourceDocsErrors allows Hetzner in contributor DevPod docs', async 
   });
 });
 
+test('collectSourceDocsErrors allows links to contributor DevPod docs outside contributor docs', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/demo'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/demo/customer-360-validation.md'),
+      '# Validation\n\nSee [DevPod contributor workspace](../contributing/devpod-hetzner.md).\n',
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, []);
+  });
+});
+
 test('collectSourceDocsErrors rejects missing chart and Makefile target references', async () => {
   await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
     await fs.mkdir(path.join(repoRoot, 'docs/guides/deployment'), { recursive: true });
@@ -122,6 +136,22 @@ test('collectSourceDocsErrors rejects missing chart and Makefile target referenc
     assert.deepEqual(errors, [
       'docs/guides/deployment/data-mesh.md: references missing chart charts/floe-domain',
       'docs/guides/deployment/data-mesh.md: references missing Makefile target make kind-create',
+    ]);
+  });
+});
+
+test('collectSourceDocsErrors rejects unsupported public CLI snippets', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/reference'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/reference/floe-yaml-schema.md'),
+      '# Schema\n\nRun `floe schema export --format json`.\n',
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, [
+      "docs/reference/floe-yaml-schema.md: references unsupported CLI command 'floe schema export'",
     ]);
   });
 });

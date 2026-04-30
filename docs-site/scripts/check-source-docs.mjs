@@ -16,6 +16,7 @@ const disallowedSnippets = [
   { pattern: /make\s+kind-create/u, message: 'references missing Makefile target make kind-create' },
   { pattern: /make\s+kind-delete/u, message: 'references missing Makefile target make kind-delete' },
   { pattern: /\.claude\//u, message: 'links internal .claude path' },
+  { pattern: /\bfloe\s+schema\s+export\b/u, message: "references unsupported CLI command 'floe schema export'" },
 ];
 
 async function walkMarkdownFiles(directory) {
@@ -42,6 +43,10 @@ function isIncludedByPrefix(source, prefixes) {
 
 function manifestItems(manifest) {
   return (manifest.sections ?? []).flatMap((section) => section.items ?? []);
+}
+
+function stripMarkdownLinkDestinations(markdown) {
+  return markdown.replace(/\]\([^)\n]*\)/gu, ']()');
 }
 
 async function publishedMarkdownSources(repoRoot, manifestPath) {
@@ -76,7 +81,8 @@ export async function collectSourceDocsErrors({
   const errors = [];
   for (const source of sources) {
     const markdown = await fs.readFile(path.join(repoRoot, source), 'utf8');
-    if (/\bhetzner\b/iu.test(markdown) && !allowedHetznerSources.has(source)) {
+    const proseMarkdown = stripMarkdownLinkDestinations(markdown);
+    if (/\bhetzner\b/iu.test(proseMarkdown) && !allowedHetznerSources.has(source)) {
       errors.push(`${source}: references Hetzner outside Floe Contributor docs`);
     }
     for (const rule of disallowedSnippets) {

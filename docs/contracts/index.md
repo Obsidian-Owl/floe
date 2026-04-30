@@ -191,10 +191,16 @@ print(artifacts.plugins.compute.type)  # "duckdb"
 print(artifacts.plugins.orchestrator.type)  # "dagster"
 ```
 
-### Schema Export
+### Schema Inspection
 
-```bash
-floe schema export --output compiled-artifacts.schema.json
+The public CLI does not currently expose a schema export command. During alpha, contributors can inspect the current Pydantic schema from the repository:
+
+```python
+import json
+
+from floe_core.schemas import CompiledArtifacts
+
+print(json.dumps(CompiledArtifacts.export_json_schema(), indent=2))
 ```
 
 ## Versioning
