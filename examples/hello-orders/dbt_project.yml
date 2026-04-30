@@ -1,0 +1,14 @@
+name: hello_orders
+version: "0.1.0"
+config-version: 2
+profile: hello_orders
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+
+models:
+  hello_orders:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

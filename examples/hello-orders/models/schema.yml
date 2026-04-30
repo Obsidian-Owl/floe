@@ -1,0 +1,41 @@
+version: 2
+
+seeds:
+  - name: orders
+    description: Small source dataset for the hello-orders data product.
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+          - unique
+      - name: customer_id
+        tests:
+          - not_null
+      - name: order_total
+        tests:
+          - not_null
+
+models:
+  - name: stg_orders
+    description: Typed order records.
+    columns:
+      - name: order_id
+        tests:
+          - not_null
+          - unique
+      - name: customer_id
+        tests:
+          - not_null
+  - name: mart_daily_orders
+    description: Daily order metrics for the hello-orders data product.
+    columns:
+      - name: order_date
+        tests:
+          - not_null
+          - unique
+      - name: order_count
+        tests:
+          - not_null
+      - name: total_order_value
+        tests:
+          - not_null
