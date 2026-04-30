@@ -1,83 +1,65 @@
 # Build Your First Data Product
 
-This guide starts from an existing Floe platform. A Platform Engineer should already have deployed and validated the platform.
+This guide builds `hello-orders`, a minimal data product with one seed, one staging model, one mart, and dbt tests. Customer 360 is the advanced demo after you understand this path.
 
 ## Prerequisites
 
-- Access to the target Floe platform.
-- A data product project with `floe.yaml`.
-- dbt project files for the product transformations.
-- Access to the approved compute, storage, catalog, lineage, and observability integrations for the platform.
+- A Platform Environment Contract from your Platform Engineer.
+- A Floe platform installed and validated by a Platform Engineer.
+- A repository checkout with the `examples/hello-orders` project.
+- `uv`, Python, and the repository development dependencies installed for the alpha docs path.
 
-## 1. Inspect The Product Configuration
-
-```bash
-ls demo/customer-360
-sed -n '1,160p' demo/customer-360/floe.yaml
-```
-
-Expected outcome:
-
-- The product declares its name, owner, inputs, outputs, and runtime expectations in `floe.yaml`.
-- dbt models live with the product source.
-
-## 2. Validate The Product
-
-The root `floe validate` command currently exists as an alpha stub and is not yet the supported Customer 360 validation path. Use the checked-in demo validation commands for the current alpha.
+## 1. Inspect The Environment Contract
 
 ```bash
-make compile-demo
+sed -n '1,220p' examples/platform-environment-contracts/dev.yaml
 ```
 
-Expected outcome:
+## 2. Inspect The Data Product
 
-- dbt manifests compile for the Customer 360 demo project.
-- Floe generates `demo/customer-360/compiled_artifacts.json` and validates the generated demo artifacts.
+```bash
+find examples/hello-orders -maxdepth 3 -type f | sort
+sed -n '1,180p' examples/hello-orders/floe.yaml
+```
 
-## 3. Compile The Product
+## 3. Review The dbt Models
 
-The root `floe compile` command is also an alpha data-team stub. Customer 360 compilation currently runs through the platform compiler used by `make compile-demo`.
+```bash
+sed -n '1,120p' examples/hello-orders/models/staging/stg_orders.sql
+sed -n '1,120p' examples/hello-orders/models/marts/mart_daily_orders.sql
+sed -n '1,180p' examples/hello-orders/models/schema.yml
+```
+
+## 4. Compile The Product For The Alpha Runtime Contract
+
 
 ```bash
 uv run floe platform compile \
-  --spec demo/customer-360/floe.yaml \
+  --spec examples/hello-orders/floe.yaml \
   --manifest demo/manifest.yaml \
-  --output demo/customer-360/compiled_artifacts.json \
+  --output target/hello-orders/compiled_artifacts.json \
   --generate-definitions
 ```
 
-Expected outcome:
+The root `floe compile`, `floe run`, and `floe product deploy` commands are planned product lifecycle entry points. They are not the current alpha path.
 
-- Floe writes `demo/customer-360/compiled_artifacts.json`.
-- The artifacts are the handoff contract for orchestration, dbt, lineage, and platform services.
+## 5. Package A Runtime Artifact
 
-## 4. Run The Product
+For the alpha path, CI should build a product runtime image that contains:
 
-For `v0.1.0-alpha.1`, the supported Customer 360 path is a repo-checkout evidence path, not a packaged self-service deployment command. A Platform Engineer first deploys the Floe platform/runtime, loads the Customer 360 Dagster code, and exposes Dagster at the URL configured in `demo/customer-360/validation.yaml`. The default Dagster URL is `http://localhost:3100`.
+- dbt project files.
+- `compiled_artifacts.json`.
+- generated Dagster definitions.
+- runtime dependencies pinned by the repository lockfile or organization base image.
 
-After the platform/runtime is reachable, trigger and validate Customer 360 from the repository checkout:
+## 6. Deploy Through Your Organization's Approved Path
 
-```bash
-make demo-customer-360-run
-make demo-customer-360-validate
-```
+Use the handoff pattern documented in [Data Product Runtime Artifacts](../guides/deployment/data-product-runtime-artifacts.md). Floe does not mandate GitHub, GitLab, Jenkins, Argo CD, Flux, Backstage, or a specific registry.
 
-Expected outcome:
-
-- The platform reports run, lineage, trace, storage, and business output evidence for Customer 360.
-- `make demo-customer-360-run` launches the Dagster job using `demo/customer-360/validation.yaml`.
-- `make demo-customer-360-validate` checks the run evidence and business outputs.
-- Packaged/self-service data-product deployment commands are planned and not yet alpha-supported.
-
-If your platform does not expose Dagster at `http://localhost:3100`, copy `demo/customer-360/validation.yaml`, edit the service URLs for your environment, and pass the copied manifest to the Python runner and validator:
-
-```bash
-uv run python -m testing.ci.run_customer_360_demo \
-  --validation-manifest /path/to/customer-360-validation.yaml
-uv run python -m testing.ci.validate_customer_360_demo \
-  --validation-manifest /path/to/customer-360-validation.yaml
-```
-
-## 5. Validate The Product Outputs
+## 7. Validate The Product
 
 Continue with [Validate Your Data Product](validate-data-product.md).
+
+## 8. Then Run Customer 360
+
+After `hello-orders`, use [Customer 360](../demo/customer-360.md) to prove the full business demo and release-validation path.
