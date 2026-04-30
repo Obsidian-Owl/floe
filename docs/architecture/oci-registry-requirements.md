@@ -172,15 +172,15 @@ cosign generate-key-pair
 # Sign during publish
 floe platform publish v1.2.3 --sign --key cosign.key
 
-# Verify during pull
-floe init --platform=v1.2.3 --verify --key cosign.pub
+# Verify during planned pull
+floe init --platform=v1.2.3 --verify --key cosign.pub  # planned target-state command
 ```
 
 ### Verification Workflow
 
 ```
 ┌─────────────────┐     1. Pull artifact     ┌─────────────────┐
-│   floe init     │ ◄────────────────────────│   OCI Registry  │
+│ planned floe init │ ◄──────────────────────│   OCI Registry  │
 └────────┬────────┘                          └─────────────────┘
          │
          │ 2. Check signature (if enforcement enabled)

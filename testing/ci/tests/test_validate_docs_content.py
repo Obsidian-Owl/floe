@@ -95,14 +95,32 @@ def test_rejects_stale_chart_metadata(tmp_path: Path) -> None:
 
 
 @pytest.mark.requirement("alpha-docs")
-def test_rejects_root_floe_compile_in_user_facing_docs(tmp_path: Path) -> None:
-    """Content validation rejects root floe compile as an executable alpha path."""
+def test_rejects_unsupported_lifecycle_commands_in_user_facing_docs(tmp_path: Path) -> None:
+    """Content validation rejects planned lifecycle commands as executable alpha paths."""
     readme = tmp_path / "README.md"
-    readme.write_text("# Floe\n\n```bash\n$ floe compile\n```\n")
+    readme.write_text(
+        "# Floe\n\n"
+        "```bash\n"
+        "$ floe init --platform=v1.0.0\n"
+        "$ floe compile\n"
+        "$ floe run\n"
+        "$ floe test\n"
+        "$ floe platform test\n"
+        "```\n",
+    )
 
     errors = load_validator().validate_docs_content(tmp_path)
 
-    assert any("root 'floe compile' is a data-team stub" in error for error in errors)
+    assert any("'floe init' is not a supported current alpha workflow" in error for error in errors)
+    assert any(
+        "'floe compile' is not a supported current alpha workflow" in error for error in errors
+    )
+    assert any("'floe run' is not a supported current alpha workflow" in error for error in errors)
+    assert any("'floe test' is not a supported current alpha workflow" in error for error in errors)
+    assert any(
+        "'floe platform test' is not a supported current alpha workflow" in error
+        for error in errors
+    )
     assert any("README.md:4" in error for error in errors)
 
 
@@ -126,6 +144,38 @@ def test_allows_root_floe_compile_when_marked_planned(tmp_path: Path) -> None:
     readme.write_text(
         "# Floe\n\nThe planned root data-team command is not yet implemented: `floe compile`.\n",
     )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert errors == []
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_rejects_contract_and_architecture_lifecycle_examples_without_caveat(
+    tmp_path: Path,
+) -> None:
+    """Content validation covers published contracts and non-ADR architecture docs."""
+    contracts = tmp_path / "docs" / "contracts"
+    architecture = tmp_path / "docs" / "architecture"
+    contracts.mkdir(parents=True)
+    architecture.mkdir(parents=True)
+    (contracts / "index.md").write_text("# Contracts\n\n```bash\nfloe compile\n```\n")
+    (architecture / "four-layer-overview.md").write_text(
+        "# Four Layers\n\n```bash\nfloe platform test\n```\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert any("docs/contracts/index.md:4" in error for error in errors)
+    assert any("docs/architecture/four-layer-overview.md:4" in error for error in errors)
+
+
+@pytest.mark.requirement("alpha-docs")
+def test_allows_adr_lifecycle_commands_as_historical_or_target_context(tmp_path: Path) -> None:
+    """Content validation does not force broad rewrites of ADR command references."""
+    adr = tmp_path / "docs" / "architecture" / "adr" / "0001-target.md"
+    adr.parent.mkdir(parents=True)
+    adr.write_text("# ADR\n\n```bash\nfloe compile\nfloe run\n```\n")
 
     errors = load_validator().validate_docs_content(tmp_path)
 

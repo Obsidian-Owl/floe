@@ -56,7 +56,7 @@ DataProducts can reference a `platform:` or `domain:` manifest, or use system de
 
 ### CompiledArtifacts
 
-The output of `floe compile`. Contains resolved configuration after inheritance, validation, and compilation. This is what the runtime uses for execution.
+The output of Floe's compilation pipeline. Contains resolved configuration after inheritance, validation, and compilation. In the current alpha, Customer 360 artifacts are produced through `make compile-demo`; the root data-team `floe compile` command is planned and not yet implemented.
 
 ## Deployment Modes
 
@@ -177,13 +177,13 @@ OCI reference format: `oci://registry.example.com/artifact-name:version`
 
 ## CLI Commands
 
-### floe compile
+### floe compile (planned data-team command)
 
-Validates DataProduct against inherited manifests and produces CompiledArtifacts.
+Planned data-team lifecycle command that will validate DataProduct definitions against inherited manifests and produce CompiledArtifacts. It is not a current alpha workflow.
 
-### floe run
+### floe run (planned data-team command)
 
-Executes the pipeline using CompiledArtifacts.
+Planned data-team lifecycle command that will execute a pipeline using CompiledArtifacts. It is not a current alpha workflow.
 
 ### floe platform compile
 

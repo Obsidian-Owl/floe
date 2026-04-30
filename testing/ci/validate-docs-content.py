@@ -55,12 +55,24 @@ FLOE_DEV_PRODUCT_PATH = (
     re.compile(r"\bfloe\s+dev\b", re.IGNORECASE),
     "unsupported CLI command 'floe dev' presented as a product path",
 )
-ROOT_FLOE_COMPILE_COMMAND_RE = re.compile(r"^\s*(?:\$|uv\s+run)?\s*floe\s+compile\b")
-ROOT_FLOE_COMPILE_ALLOWED_CONTEXT_RE = re.compile(
-    r"\b(planned|stub|not implemented|not current|not the current|not yet implemented)\b",
+UNSUPPORTED_ALPHA_LIFECYCLE_COMMAND_RE = re.compile(
+    r"(?:^|[\s`$])(?P<command>"
+    r"floe\s+init\b|"
+    r"floe\s+compile\b|"
+    r"floe\s+run\b|"
+    r"floe\s+test\b|"
+    r"floe\s+platform\s+test\b"
+    r")",
     re.IGNORECASE,
 )
-ROOT_FLOE_COMPILE_GUARD_PATH_PREFIXES = (
+UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE = re.compile(
+    r"\b("
+    r"planned|stub|target|target-state|historical|not implemented|not current|"
+    r"not the current|not yet implemented|not alpha-supported|non-current"
+    r")\b",
+    re.IGNORECASE,
+)
+UNSUPPORTED_ALPHA_LIFECYCLE_GUARD_PATH_PREFIXES = (
     "README.md",
     "docs/index.md",
     "docs/start-here/",
@@ -68,6 +80,10 @@ ROOT_FLOE_COMPILE_GUARD_PATH_PREFIXES = (
     "docs/data-engineers/",
     "docs/get-started/",
     "docs/demo/",
+    "docs/contracts/",
+    "docs/architecture/",
+    "docs/guides/",
+    "docs/reference/",
     "docs/guides/deployment/",
 )
 PLUGIN_COUNT_RE = re.compile(
@@ -193,11 +209,13 @@ def _is_historical_adr_line(path: Path, active_heading: str) -> bool:
     return "version" in heading or "history" in heading
 
 
-def _guards_root_floe_compile_command(rel_path: str) -> bool:
-    """Return whether root floe compile command examples are user-facing here."""
+def _guards_unsupported_alpha_lifecycle_commands(rel_path: str) -> bool:
+    """Return whether unsupported lifecycle commands are user-facing in this path."""
+    if rel_path.startswith("docs/architecture/adr/"):
+        return False
     return any(
         rel_path == prefix or rel_path.startswith(prefix)
-        for prefix in ROOT_FLOE_COMPILE_GUARD_PATH_PREFIXES
+        for prefix in UNSUPPORTED_ALPHA_LIFECYCLE_GUARD_PATH_PREFIXES
     )
 
 
@@ -253,15 +271,16 @@ def validate_docs_content(
             if floe_dev_pattern.search(line) and not has_negative_or_planned_context:
                 errors.append(f"{rel_path}:{line_number}: {floe_dev_message}")
 
-            if (
-                _guards_root_floe_compile_command(rel_path_str)
-                and ROOT_FLOE_COMPILE_COMMAND_RE.search(line)
-                and not ROOT_FLOE_COMPILE_ALLOWED_CONTEXT_RE.search(line)
-            ):
-                errors.append(
-                    f"{rel_path}:{line_number}: root 'floe compile' is a data-team stub; "
-                    "use 'floe platform compile', 'make compile-demo', or mark it planned"
-                )
+            if _guards_unsupported_alpha_lifecycle_commands(rel_path_str):
+                for match in UNSUPPORTED_ALPHA_LIFECYCLE_COMMAND_RE.finditer(line):
+                    if UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE.search(line):
+                        continue
+                    command = " ".join(match.group("command").split())
+                    errors.append(
+                        f"{rel_path}:{line_number}: {command!r} is not a supported current "
+                        "alpha workflow; use 'floe platform compile', 'make compile-demo', "
+                        "or mark it planned/stub/target-state"
+                    )
 
             if _is_historical_adr_line(path, active_heading):
                 continue

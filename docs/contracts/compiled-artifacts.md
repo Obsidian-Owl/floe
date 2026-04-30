@@ -1,6 +1,6 @@
 # CompiledArtifacts Contract
 
-The `CompiledArtifacts` schema defines the output of `floe compile` - the resolved, validated configuration that the runtime uses for execution.
+The `CompiledArtifacts` schema defines the output of Floe's compilation pipeline: the resolved, validated configuration that the runtime uses for execution. In the current alpha, use `make compile-demo` for the Customer 360 artifact path or `floe platform compile` for platform manifest validation; the root data-team `floe compile` command is planned and not yet implemented.
 
 ## Overview
 
@@ -25,7 +25,7 @@ CompiledArtifacts is the **single source of truth** for pipeline execution. It c
                                    │
                                    ▼
                           ┌────────────────┐
-                          │  floe compile  │
+                          │ compile pipeline│
                           └────────┬───────┘
                                    │
                                    ▼
@@ -57,7 +57,7 @@ from typing import Literal
 from datetime import datetime
 
 class CompiledArtifacts(BaseModel):
-    """Output of floe compile - unified for all deployment modes."""
+    """Output of the compilation pipeline - unified for all deployment modes."""
 
     # Schema version
     version: str = "0.1.0"

@@ -36,7 +36,7 @@ floe uses a **unified two-type configuration model**:
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  COMPILED ARTIFACTS (Output of floe compile)                                 │
+│  COMPILED ARTIFACTS (Output of the compilation pipeline)                     │
 │                                                                              │
 │  Resolved configuration for runtime execution                               │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -54,7 +54,7 @@ floe uses a **unified two-type configuration model**:
 
 | Contract | Description | Purpose |
 |----------|-------------|---------|
-| [CompiledArtifacts](./compiled-artifacts.md) | Unified schema for all modes | Output of `floe compile` |
+| [CompiledArtifacts](./compiled-artifacts.md) | Unified schema for all modes | Output of the compilation pipeline |
 | [Observability Attributes](./observability-attributes.md) | OpenTelemetry/OpenLineage conventions | Consistent telemetry |
 | [Glossary](./glossary.md) | Terminology definitions | Shared vocabulary |
 
@@ -159,16 +159,22 @@ schedule:
 ## Compilation Flow
 
 ```bash
-# Platform Team: publish manifest
-floe platform compile
-floe platform publish v1.0.0
+# Current alpha: compile the Customer 360 demo artifacts
+make compile-demo
 
-# Data Team: compile DataProduct
-floe init --platform=v1.0.0
-floe compile
+# Current alpha: validate and compile a platform manifest
+uv run floe platform compile --manifest manifest.yaml
 ```
 
-The `floe compile` command:
+The planned root data-team lifecycle commands are not the current alpha workflow:
+
+```bash
+# Planned target-state commands; not alpha-supported user commands today.
+floe init --platform=v1.0.0  # planned target-state command
+floe compile                 # planned target-state command
+```
+
+The compilation pipeline:
 1. Loads manifest from OCI registry (if referenced)
 2. Resolves inheritance chain
 3. Validates DataProduct against constraints

@@ -108,7 +108,7 @@ models:
 The compiler validates version bumps automatically:
 
 ```bash
-$ floe compile
+$ floe compile  # planned target-state command
 
 ERROR: Contract version bump invalid
 
@@ -264,7 +264,7 @@ Product Contract (v2.1.0)  ← Independent version
 ### Inheritance Validation
 
 ```bash
-$ floe compile
+$ floe compile  # planned target-state command
 
 ERROR: Contract inheritance violation
 
@@ -361,7 +361,7 @@ floe contract test datacontract.yaml --connection staging
 floe contract validate-version --old v1 --new v2
 
 # Dry-run compile
-floe compile --dry-run
+floe compile --dry-run  # planned target-state command
 ```
 
 ## Common Scenarios

@@ -222,23 +222,25 @@ floe/
 
 ## CLI Commands
 
+This section shows the target command shape. In the current alpha, `floe platform compile` is implemented for platform manifests and `make compile-demo` is the supported Customer 360 artifact path. Root data-team lifecycle commands and `floe platform test` are planned/stubbed, not current alpha workflows.
+
 ### Platform Team
 
 ```bash
 floe platform compile     # Validate and build artifacts
-floe platform test        # Run policy tests
+floe platform test        # Planned/stub: run policy tests
 floe platform publish     # Push to OCI registry
 floe platform deploy      # Deploy services to K8s
 floe platform status      # Check service health
 ```
 
-### Data Team
+### Data Team Target Lifecycle
 
 ```bash
-floe init --platform=v1.2.3  # Pull platform artifacts
-floe compile                  # Validate against platform
-floe run                      # Execute pipeline
-floe test                     # Run dbt tests
+floe init --platform=v1.2.3  # Planned: pull platform artifacts
+floe compile                  # Planned: validate against platform
+floe run                      # Planned: execute pipeline
+floe test                     # Planned: run dbt tests
 ```
 
 ## Consolidation Achieved

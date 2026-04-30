@@ -77,7 +77,7 @@ schedule:
 Non-compliant pipelines fail before runtime:
 
 ```bash
-$ floe compile
+$ floe compile  # planned target-state command
 
 [1/5] Loading platform artifacts
       ✓ Platform version: 1.2.3
@@ -207,16 +207,16 @@ naming:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  DATA TEAM                                                               │
 │                                                                          │
-│  [floe init --platform=v1.2.3]                                          │
+│  [planned floe init --platform=v1.2.3]                                  │
 │         │                                                                │
 │         ▼                                                                │
 │  floe.yaml + models/                                                     │
 │         │                                                                │
 │         ▼                                                                │
-│  [floe compile] ─────► Validates against platform constraints           │
+│  [planned floe compile] ─────► Validates against platform constraints   │
 │         │                                                                │
 │         ▼                                                                │
-│  [floe run] ─────► Executes with enforced guardrails                    │
+│  [planned floe run] ─────► Executes with enforced guardrails            │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -463,7 +463,7 @@ Data contracts are enforced at both compile-time and runtime using the ODCS (Ope
 
 #### Compile-Time Contract Validation
 
-The PolicyEnforcer validates contracts during `floe compile`:
+The PolicyEnforcer validates contracts during the planned `floe compile` lifecycle:
 
 ```python
 class PolicyEnforcer:
@@ -612,10 +612,10 @@ The Iceberg catalog serves as the product registry via namespace properties.
 
 ### Compile-Time Identity Validation
 
-Identity is validated during `floe compile`:
+Identity is validated during the planned `floe compile` lifecycle:
 
 ```bash
-$ floe compile
+$ floe compile  # planned target-state command
 
 [1/6] Loading platform artifacts
       ✓ Platform version: 1.2.3

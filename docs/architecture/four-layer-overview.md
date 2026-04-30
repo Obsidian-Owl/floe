@@ -117,7 +117,7 @@ The Configuration layer contains platform artifacts that enforce guardrails.
 **Workflow:**
 ```bash
 floe platform compile    # Build artifacts
-floe platform test       # Run policy tests
+floe platform test       # Planned/stub: run policy tests
 floe platform publish    # Push to OCI registry
 ```
 
@@ -155,9 +155,9 @@ The Data layer contains ephemeral jobs that execute data operations.
 
 **Execution:**
 ```bash
-floe init --platform=v1.2.3  # Pull platform artifacts
-floe compile                  # Validate against platform
-floe run                      # Execute pipeline
+floe init --platform=v1.2.3  # Planned: pull platform artifacts
+floe compile                  # Planned: validate against platform
+floe run                      # Planned: execute pipeline
 ```
 
 ## Layer Boundaries

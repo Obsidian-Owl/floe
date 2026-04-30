@@ -53,7 +53,7 @@ help: ## Show this help message
 	@echo "Demo:"
 	@echo "  make compile-demo    Compile dbt models + generate definitions for demo products"
 	@echo "  make build-demo-image Build Dagster demo Docker image"
-	@echo "  make demo            Deploy demo via DevPod (requires running workspace)"
+	@echo "  make demo            Run contributor remote release-validation demo via DevPod"
 	@echo "  make demo-stop       Stop demo port-forwards"
 	@echo "  make demo-local      Deploy demo locally (requires local Kind cluster)"
 	@echo "  make demo-customer-360-run Trigger Customer 360 golden demo Dagster run"
@@ -446,8 +446,8 @@ build-demo-image: compile-demo ## Build Dagster demo Docker image and load to Ki
 	@kind load docker-image $(DEMO_IMAGE_REF) --name $${KIND_CLUSTER_NAME:-floe-test}
 	@echo "Demo image built and loaded to Kind successfully!"
 
-demo: ## Deploy demo via DevPod (requires running DevPod workspace)
-	@echo "=== Starting floe Platform Demo (DevPod) ==="
+demo: ## Run contributor remote release-validation demo via DevPod
+	@echo "=== Starting floe Contributor Remote Validation Demo (DevPod) ==="
 	@scripts/devpod-ensure-ready.sh
 	@echo "Building demo image inside DevPod..."
 	@devpod ssh "$(DEVPOD_WORKSPACE)" -- "cd /workspace && FLOE_DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) FLOE_DEMO_IMAGE_TAG=$(DEMO_IMAGE_TAG) make build-demo-image"
