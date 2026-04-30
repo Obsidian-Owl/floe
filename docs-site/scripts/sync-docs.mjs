@@ -3,6 +3,8 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { withDocsBase } from '../site-config.mjs';
+
 const defaultDocsSiteRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const defaultRepoRoot = path.resolve(defaultDocsSiteRoot, '..');
 const repositoryBlobBaseUrl = 'https://github.com/Obsidian-Owl/floe/blob/main';
@@ -139,7 +141,7 @@ function rewriteMarkdownLinks(markdown, source, publishedSourceRoutes, repoRoot)
         }
       }
 
-      const route = publishedRoute ?? routeForDocsSource(resolvedSource);
+      const route = withDocsBase(publishedRoute ?? routeForDocsSource(resolvedSource));
       const rewrittenTarget = `${route}${query ? `?${query}` : ''}${anchor ? `#${anchor}` : ''}`;
       return `[${label}](${rewrittenTarget})`;
     },
@@ -197,10 +199,15 @@ export async function syncDocs({
   const targetRoot = path.join(docsSiteRoot, 'src', 'content', 'docs');
   const manifestPath = path.join(docsSiteRoot, 'docs-manifest.json');
   const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+  const manifestSources = new Set();
   for (const item of manifestItems(manifest)) {
     if (!item.source.endsWith('.md')) {
       throw new Error(`Manifest source must be Markdown: ${item.source}`);
     }
+    if (manifestSources.has(item.source)) {
+      throw new Error(`Duplicate manifest source: ${item.source}`);
+    }
+    manifestSources.add(item.source);
 
     const sourcePath = path.join(repoRoot, item.source);
     try {

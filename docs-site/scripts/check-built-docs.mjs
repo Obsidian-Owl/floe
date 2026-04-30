@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { docsBase } from '../site-config.mjs';
+
 const docsSiteRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const distRoot = path.join(docsSiteRoot, 'dist');
 const manifestPath = path.join(docsSiteRoot, 'docs-manifest.json');
@@ -28,6 +30,19 @@ function withoutHashOrQuery(href) {
   return href.split('#', 1)[0].split('?', 1)[0];
 }
 
+function stripDocsBase(target) {
+  if (!docsBase) {
+    return target;
+  }
+  if (target === docsBase) {
+    return '/';
+  }
+  if (target.startsWith(`${docsBase}/`)) {
+    return target.slice(docsBase.length);
+  }
+  return target;
+}
+
 function routePrefixForDocsPrefix(prefix) {
   const withoutDocsPrefix = prefix.replace(/^docs\//u, '');
   if (withoutDocsPrefix === '') {
@@ -46,7 +61,25 @@ function isExcludedDocsRoute(href, excludedRoutePrefixes) {
     return false;
   }
 
-  return excludedRoutePrefixes.some((prefix) => target.startsWith(prefix));
+  const route = stripDocsBase(target);
+  return excludedRoutePrefixes.some((prefix) => route.startsWith(prefix));
+}
+
+function isRootLocalHrefWithoutBase(href) {
+  const target = withoutHashOrQuery(href);
+  if (
+    !docsBase ||
+    target === '' ||
+    target.startsWith('#') ||
+    !target.startsWith('/') ||
+    target.startsWith(`${docsBase}/`) ||
+    target === docsBase ||
+    /^[a-z][a-z0-9+.-]*:/iu.test(target)
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 async function checkBuiltDocs() {
@@ -67,6 +100,9 @@ async function checkBuiltDocs() {
       }
       if (/\.md(?:[#?].*)?$/u.test(href)) {
         errors.push(`${relativePath}: contains local href to Markdown source: ${href}`);
+      }
+      if (isRootLocalHrefWithoutBase(href)) {
+        errors.push(`${relativePath}: contains root-local href without ${docsBase}: ${href}`);
       }
       if (isExcludedDocsRoute(href, excludedRoutePrefixes)) {
         errors.push(`${relativePath}: contains site href to excluded docs content: ${href}`);

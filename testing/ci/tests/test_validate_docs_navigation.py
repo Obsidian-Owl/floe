@@ -128,6 +128,24 @@ def test_validate_docs_navigation_reports_duplicate_manifest_slug(
 
 
 @pytest.mark.requirement("alpha-docs")
+def test_validate_docs_navigation_reports_duplicate_manifest_source(
+    tmp_path: Path,
+) -> None:
+    """Navigation validation reports manifest source reuse across routes."""
+    _write_required_docs(tmp_path)
+    _write_manifest(tmp_path)
+    manifest_path = tmp_path / "docs-site/docs-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["sections"][0]["items"][1]["source"] = "docs/index.md"
+    manifest["sections"][0]["items"][1]["slug"] = "start-here"
+    manifest_path.write_text(json.dumps(manifest))
+
+    errors = validate_docs_navigation(tmp_path)
+
+    assert "Duplicate docs manifest source: docs/index.md" in errors
+
+
+@pytest.mark.requirement("alpha-docs")
 def test_validate_docs_navigation_accepts_required_alpha_pages(tmp_path: Path) -> None:
     """Navigation validation passes when alpha-critical pages exist in the manifest."""
     _write_required_docs(tmp_path)

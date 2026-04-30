@@ -64,7 +64,7 @@ test('syncDocs writes explicit manifest pages at their configured slug routes', 
       'utf8',
     );
 
-    assert.match(generatedSource, /\[linked\]\(\/renamed\/linked\/\)/u);
+    assert.match(generatedSource, /\[linked\]\(\/floe\/renamed\/linked\/\)/u);
     await assert.rejects(
       fs.access(path.join(docsSiteRoot, 'src/content/docs/source-page.md')),
       /ENOENT/u,
@@ -87,6 +87,29 @@ test('syncDocs rejects non-Markdown manifest sources before generating nav targe
     await assert.rejects(
       syncDocs({ repoRoot, docsSiteRoot }),
       /Manifest source must be Markdown: docs\/downloads\/readme\.txt/u,
+    );
+  });
+});
+
+test('syncDocs rejects duplicate manifest sources before route generation', async () => {
+  await withDocsFixture(async ({ repoRoot, docsSiteRoot }) => {
+    await fs.writeFile(path.join(repoRoot, 'docs/source-page.md'), '# Source\n');
+    await writeManifest(docsSiteRoot, [
+      {
+        title: 'Primary',
+        source: 'docs/source-page.md',
+        slug: 'primary',
+      },
+      {
+        title: 'Duplicate',
+        source: 'docs/source-page.md',
+        slug: 'duplicate',
+      },
+    ]);
+
+    await assert.rejects(
+      syncDocs({ repoRoot, docsSiteRoot }),
+      /Duplicate manifest source: docs\/source-page\.md/u,
     );
   });
 });

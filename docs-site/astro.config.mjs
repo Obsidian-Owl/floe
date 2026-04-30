@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
+import { docsBase, docsSite } from './site-config.mjs';
+
 const manifest = JSON.parse(
   fs.readFileSync(new URL('./docs-manifest.json', import.meta.url), 'utf8'),
 );
@@ -26,7 +28,8 @@ const sidebar = manifest.sections.map((section) => {
 });
 
 export default defineConfig({
-  site: 'https://obsidian-owl.github.io/floe',
+  site: docsSite,
+  base: docsBase,
   integrations: [
     starlight({
       title: 'Floe',
