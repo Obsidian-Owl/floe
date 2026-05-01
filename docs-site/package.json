@@ -9,7 +9,8 @@
     "build": "npm run sync && ASTRO_TELEMETRY_DISABLED=1 astro build",
     "dev": "npm run sync && ASTRO_TELEMETRY_DISABLED=1 astro dev",
     "check:dist": "node scripts/check-built-docs.mjs",
-    "validate": "npm run test && npm run build && npm run check:dist"
+    "check:source": "node scripts/check-source-docs.mjs",
+    "validate": "npm run test && npm run check:source && npm run build && npm run check:dist"
   },
   "dependencies": {
     "@astrojs/starlight": "0.38.4",

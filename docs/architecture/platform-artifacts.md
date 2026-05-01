@@ -17,7 +17,7 @@ Platform Team                        OCI Registry                         Data T
      │         ▼                          │                                    │
      │  [floe platform publish v1.2.3] ───┼───► oci://registry/platform:v1.2.3│
      │                                    │                                    │
-     │                                    │         [floe init --platform=v1.2.3]
+     │                                    │         [planned floe init --platform=v1.2.3]
      │                                    │                ◄────────────────────│
      │                                    │                                    │
      │                                    │         Pull immutable artifacts   │
@@ -167,7 +167,7 @@ Artifacts built: .floe/artifacts/
 ### 3. Test Policies
 
 ```bash
-$ floe platform test
+$ floe platform test  # planned/stub in the current alpha
 
 Running policy tests...
   ✓ Naming convention enforcement
@@ -196,12 +196,14 @@ Published: oci://registry.example.com/floe-platform:v1.2.3
 Digest: sha256:abc123def456...
 ```
 
-## Data Team Workflow
+## Data Team Target Workflow
+
+The following data-team lifecycle is target-state architecture. These root commands are planned and not the current alpha workflow; use `make compile-demo` for the Customer 360 artifact path today.
 
 ### 1. Initialize Project
 
 ```bash
-$ floe init --platform=v1.2.3
+$ floe init --platform=v1.2.3  # planned target-state command
 
 Pulling platform artifacts from oci://registry.example.com/floe-platform:v1.2.3
   ✓ Verifying signature
@@ -221,7 +223,7 @@ Created:
 ### 2. Compile Pipeline
 
 ```bash
-$ floe compile
+$ floe compile  # planned target-state command
 
 [1/4] Loading platform artifacts
       ✓ Platform: acme-data-platform v1.2.3
@@ -281,8 +283,8 @@ cosign sign oci://registry.example.com/floe-platform:v1.2.3
 ### Verify Signature
 
 ```bash
-# Automatic during init/pull
-floe init --platform=v1.2.3
+# Automatic during planned init/pull
+floe init --platform=v1.2.3  # planned target-state command
 
 # Manual verification
 cosign verify oci://registry.example.com/floe-platform:v1.2.3

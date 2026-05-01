@@ -62,7 +62,7 @@ Adopt a **platform enforcement architecture** with:
 ### Neutral
 
 - Platform Team uses `floe platform compile/publish/deploy`
-- Data Team uses `floe init/compile/run`
+- Data Team uses planned root lifecycle commands such as `floe init`, `floe compile`, and `floe run` once those workflows are productized
 - OCI registry becomes infrastructure requirement
 
 ## Configuration Model
@@ -125,7 +125,7 @@ schedule:
 ## Compile-Time Enforcement
 
 ```bash
-$ floe compile
+$ floe compile  # planned root data-team command; not alpha-supported yet
 
 [1/4] Loading platform artifacts from oci://registry.acme.com/floe-platform:v1.2.3
       ✓ Platform version: 1.2.3
@@ -265,18 +265,18 @@ floe platform deploy
 
 ```bash
 # 1. Pull platform artifacts
-floe init --platform=v1.2.3
+floe init --platform=v1.2.3  # planned root data-team command
 # Pulls from oci://registry.example.com/floe-platform:v1.2.3
 
 # 2. Edit pipeline configuration
 vim floe.yaml
 
 # 3. Validate against platform constraints
-floe compile
+floe compile  # planned root data-team command
 # Validates naming, quality gates, etc.
 
 # 4. Execute pipeline
-floe run
+floe run  # planned root data-team command
 ```
 
 ## Why OCI Registry?
@@ -308,8 +308,8 @@ Each tier inherits from its parent and can add domain-specific policies. See [AD
 
 ## References
 
-- [04-building-blocks.md](../../guides/04-building-blocks.md) - Four-layer architecture details
-- [03-solution-strategy.md](../../guides/03-solution-strategy.md) - Opinionation boundaries
+- [Four-Layer Overview](../four-layer-overview.md) - Four-layer architecture details
+- [Opinionation Boundaries](../opinionation-boundaries.md) - Opinionation boundaries
 - [ADR-0008](0008-repository-split.md) - Repository structure
 - [ORAS (OCI Registry As Storage)](https://oras.land/)
 - [Helm OCI Support](https://helm.sh/docs/topics/registries/)

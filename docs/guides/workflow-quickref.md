@@ -1,6 +1,6 @@
 # Workflow Quick Reference
 
-Quick reference for the floe development workflow with Specwright quality gates and automation.
+Quick reference for the Floe repository workflow with Specwright quality gates and automation.
 
 ## Specwright Workflow
 
@@ -47,7 +47,7 @@ Ship:      /sw-ship -> PR with evidence
 
 | Agent | Model | Purpose | Invocation |
 |-------|-------|---------|------------|
-| `plugin-quality` | Opus | 11 floe plugin types testing | Pre-PR |
+| `plugin-quality` | Opus | 14 Floe plugin categories testing | Pre-PR |
 | `contract-stability` | Opus | CompiledArtifacts contract | Pre-PR |
 | `critic` | Opus | Ruthless plan/implementation reviewer | Pre-PR (blocking) |
 | `docker-log-analyser` | Sonnet | Context-efficient container logs | On demand |
@@ -148,12 +148,11 @@ Review the critic's findings:
 
 | File | Purpose |
 |------|---------|
-| `.claude/settings.json` | Hook configuration |
-| `.claude/agents/*.md` | Agent definitions |
-| `.claude/skills/*/SKILL.md` | Skill definitions |
 | `.specwright/state/workflow.json` | Work unit state and gate results |
 | `.specwright/work/{id}/` | Design, spec, plan, evidence per work unit |
 | `tests/fixtures/golden/` | Contract baselines |
+
+Contributor agent configuration is internal to repository development and is not part of the Floe product interface.
 
 ## References
 

@@ -4,13 +4,13 @@
   <h3>The Open Platform for building Data Platforms</h3>
 
   <p>
-    <strong>Ship faster. Stay compliant. Scale to Data Mesh.</strong>
+    <strong>Ship faster. Stay compliant. Build toward Data Mesh.</strong>
   </p>
 
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
     <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
-    <a href="https://github.com/Obsidian-Owl/floe/releases"><img src="https://img.shields.io/badge/version-0.1.0--pre--alpha-orange.svg" alt="Version"></a>
+    <a href="https://github.com/Obsidian-Owl/floe/releases"><img src="https://img.shields.io/badge/version-v0.1.0--alpha.1-orange.svg" alt="v0.1.0-alpha.1 alpha target"></a>
     <a href="https://deepwiki.com/Obsidian-Owl/floe"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
   </p>
 
@@ -32,7 +32,7 @@
 - **Compute:** DuckDB, Snowflake, Databricks, Spark, BigQuery
 - **Orchestrator:** Dagster, Airflow 3.x
 - **Catalog:** Polaris, AWS Glue, Unity Catalog
-- **Observability:** Split into TelemetryBackend (Jaeger, Datadog) + LineageBackend (Marquez, Atlan)
+- **Observability:** Split into TelemetryBackend (Jaeger alpha reference path; Datadog planned/ecosystem example) + LineageBackend (Marquez alpha reference path; Atlan planned/ecosystem example)
 - **[... 10 more plugin categories]**
 
 **Data teams** get opinionated workflows:
@@ -41,7 +41,7 @@
 - ✅ Standards enforced automatically (compile-time validation)
 - ✅ Full composability (swap DuckDB → Snowflake without pipeline changes)
 
-**Batteries included. Fully customizable. Production-ready.**
+**Batteries included. Fully customizable. Alpha-ready for the documented Customer 360 validation path.**
 
 ---
 
@@ -128,30 +128,30 @@ schedule:
 
 ### 3. floe Generates Everything Else
 
-**Compilation phase** (2 seconds, catches violations before deployment):
+**Current alpha compilation path** (generates Customer 360 demo artifacts for inspection):
 
 ```bash
-$ floe compile
+make compile-demo
 
-[1/3] Loading platform policies
-      ✓ Platform: acme-data-platform v1.2.3
+[1/3] Loading demo platform manifest
+      ✓ Platform: Customer 360 alpha path
 
-[2/3] Validating pipeline
-      ✓ Naming: bronze_customers (compliant)
-      ✓ Test coverage: 85% (>80% required)
+[2/3] Running platform compiler
+      ✓ uv run floe platform compile
 
-[3/3] Generating artifacts
+[3/3] Writing generated artifacts
       ✓ Dagster assets (Python)
       ✓ dbt profiles (YAML)
-      ✓ Kubernetes manifests (YAML)
-      ✓ Credentials (vended automatically)
+      ✓ Floe compiled artifacts (JSON)
 
-Compilation SUCCESS - ready to deploy
+Demo compilation SUCCESS - artifacts ready to inspect
 ```
+
+The root data-team compile command is a planned lifecycle entry point and is not the current alpha workflow.
 
 **What's auto-generated:**
 - ✅ Database connection configs (dbt profiles.yml)
-- ✅ Orchestration code (Dagster assets or Airflow DAGs)
+- ✅ Orchestration code for the alpha Dagster runtime path
 - ✅ Kubernetes manifests (Jobs, Services, ConfigMaps)
 - ✅ Environment-specific settings (dev/staging/prod)
 - ✅ Credential vending (SecretReference pattern, no hardcoded secrets)
@@ -165,6 +165,8 @@ Compilation SUCCESS - ready to deploy
 ### 🔌 Composable by Design
 
 **Choose from 14 plugin categories.** Swap implementations without breaking pipelines.
+
+The alpha-supported runtime path is documented in the Floe docs. Some plugin examples below describe the target architecture or ecosystem integrations and are labeled as such in the documentation.
 
 **Multi-compute pipelines:** Platform teams approve N compute targets. Data engineers select per-step from the approved list. Different steps can use different engines:
 
@@ -193,7 +195,7 @@ transforms:
 **Real-world swap scenarios:**
 - DuckDB (embedded, cost-effective) ↔ Snowflake (managed, elastic)
 - Dagster (asset-centric) ↔ Airflow 3.x (DAG-based)
-- Jaeger (self-hosted) ↔ Datadog (managed SaaS)
+- Jaeger (alpha-supported telemetry backend) ↔ Datadog (planned/ecosystem telemetry example)
 
 **Plugin categories:** Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend, DBT, SemanticLayer, Ingestion, Quality, RBAC, AlertChannel, Secrets, Identity
 
@@ -209,14 +211,12 @@ transforms:
 
 **Example:**
 ```bash
-$ floe compile
-[FAIL] 'stg_payments' violates naming convention
-       Expected: bronze_*, silver_*, gold_*
+make compile-demo
 
-[FAIL] 'gold_revenue' missing required tests
-       Required: [unique_pk, not_null_pk, documentation]
+[FAIL] Customer 360 artifact validation failed
+       Evidence key: storage.customer_360_outputs
 
-Compilation FAILED - fix violations before deployment
+Fix the demo platform or data-product inputs, then re-run the alpha validator.
 ```
 
 **Not documentation governance.** Computational governance.
@@ -245,7 +245,7 @@ Or swap to Snowflake, Databricks, or Spark—the pipeline config stays identical
 
 **Result:** No "works on my machine" issues. No config drift. What you test is what you deploy.
 
-### 🌐 Data Mesh Ready
+### 🌐 Data Mesh Direction
 
 **Federated ownership with computational governance:**
 - Enterprise policies → Domain constraints → Data products (three-tier hierarchy)
@@ -253,7 +253,7 @@ Or swap to Snowflake, Databricks, or Spark—the pipeline config stays identical
 - Compile-time + runtime enforcement (not meetings)
 - Domain teams have autonomy within guardrails
 
-**Scale from single platform to federated Data Mesh without rebuilding.**
+The current alpha exposes the primitives and current state documented in [Capability Status](docs/architecture/capability-status.md). Multi-cluster operational hardening and validated federated Data Mesh operations remain planned, not alpha-proven.
 
 ---
 
@@ -341,12 +341,13 @@ make docs-build
 make docs-serve
 ```
 
-Start with [docs/start-here/index.md](docs/start-here/index.md).
+Start with [Start Here](docs/start-here/index.md).
 
-- **Getting Started**: [Quick Start Guide](docs/guides/00-overview.md)
-- **Configuration**: [Configuration Contracts](docs/contracts/index.md) (manifest.yaml + floe.yaml)
-- **Architecture**: [Four-Layer Model](docs/architecture/four-layer-overview.md) • [Platform Enforcement](docs/architecture/platform-enforcement.md)
-- **Development**: [Contributing Guide](CONTRIBUTING.md) • [Code Standards](CLAUDE.md)
+- **Platform Engineers**: [Deploy Your First Platform](docs/platform-engineers/first-platform.md) • [Validate Your Platform](docs/platform-engineers/validate-platform.md)
+- **Data Engineers**: [Build Your First Data Product](docs/data-engineers/first-data-product.md) • [Validate Your Data Product](docs/data-engineers/validate-data-product.md)
+- **Configuration**: [Reference Index](docs/reference/index.md) • [floe.yaml Schema](docs/reference/floe-yaml-schema.md) • [Compiled Artifacts](docs/contracts/compiled-artifacts.md)
+- **Architecture**: [Four-Layer Model](docs/architecture/four-layer-overview.md) • [Capability Status](docs/architecture/capability-status.md)
+- **Development**: [Contributing Guide](CONTRIBUTING.md) • [Floe Contributor Docs](docs/contributing/index.md)
 - **ADRs**: [Architecture Decision Records](docs/architecture/adr/index.md)
 
 ---
@@ -368,19 +369,19 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Roadmap
 
-**Current (v0.1.0 - Pre-Alpha)**:
+**Current alpha target (v0.1.0-alpha.1 release candidate)**:
 - [x] Four-layer architecture
 - [x] Two-tier configuration
 - [x] Kubernetes-native deployment
-- [x] Compile-time validation
+- [x] Customer 360 demo artifact compilation and validation path
 
-**Next (v0.2.0 - Alpha)**:
+**Next candidate work**:
 - [ ] Complete K8s-native testing
 - [ ] Plugin ecosystem docs
-- [ ] CLI command suite
+- [ ] Data-team CLI command suite
 - [ ] External plugin support
 
-**Future (v1.0.0 - Production)**:
+**Future production hardening**:
 - [ ] Data Mesh extensions
 - [ ] OCI registry integration
 - [ ] Multi-environment workflows

@@ -416,8 +416,7 @@ class TestDagsterOtelEnvVars:
     ) -> None:
         """Verify OTEL endpoint resolves to OTel Collector service.
 
-        The endpoint value must reference the OTel Collector service
-        in K8s DNS format (e.g., http://<release>-otel-collector:4317).
+        The endpoint value must reference the canonical OTel Collector service.
         """
         documents = _render_template(platform_chart_path)
         dagster_deps = _find_dagster_deployments(documents)
@@ -430,9 +429,9 @@ class TestDagsterOtelEnvVars:
             endpoint_envs = [e for e in envs if e.get("name") == "OTEL_EXPORTER_OTLP_ENDPOINT"]
             assert len(endpoint_envs) > 0
             endpoint_val = endpoint_envs[0].get("value", "")
-            assert "otel-collector" in endpoint_val, (
+            assert endpoint_val == "http://floe-platform-otel:4317", (
                 f"Dagster '{name}' OTEL endpoint does not "
-                f"reference otel-collector service. "
+                f"reference floe-platform-otel service. "
                 f"Got: {endpoint_val}"
             )
             assert ":4317" in endpoint_val, (
@@ -463,6 +462,105 @@ class TestDagsterOtelEnvVars:
             assert svc_val == "floe-platform", (
                 f"Dagster '{name}' OTEL_SERVICE_NAME should be 'floe-platform'. Got: '{svc_val}'"
             )
+
+    @pytest.mark.requirement("AC-17.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_default_otel_service_and_dagster_endpoints_align(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Default OTel service name and Dagster OTLP endpoints stay aligned."""
+        documents = _render_template(platform_chart_path)
+        service_names = {
+            doc.get("metadata", {}).get("name") for doc in documents if doc.get("kind") == "Service"
+        }
+        assert "floe-platform-otel" in service_names
+        assert "floe-otel" not in service_names
+        assert "floe-platform-otel-collector" not in service_names
+
+        for dep in _find_dagster_deployments(documents):
+            envs = {
+                env["name"]: env.get("value")
+                for env in _get_container_env_vars(dep)
+                if "name" in env
+            }
+            assert envs["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://floe-platform-otel:4317"
+
+    @pytest.mark.requirement("AC-17.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_custom_otel_fullname_requires_matching_dagster_endpoints(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Custom OTel service names must fail fast unless Dagster endpoints match."""
+        result = _helm_template_with_sets(
+            platform_chart_path,
+            ["otel.fullnameOverride=custom-otel"],
+        )
+
+        stderr = result.stderr.decode()
+        assert result.returncode != 0
+        assert "Dagster dagsterWebserver OTEL_EXPORTER_OTLP_ENDPOINT must be" in stderr
+        assert "http://custom-otel:4317" in stderr
+
+    @pytest.mark.requirement("AC-17.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_custom_otel_fullname_with_matching_dagster_endpoints_renders(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Custom OTel service names render when Dagster endpoints are explicitly aligned."""
+        documents = _render_template_with_sets(
+            platform_chart_path,
+            [
+                "otel.fullnameOverride=custom-otel",
+                "dagster.dagsterWebserver.env[0].name=OTEL_EXPORTER_OTLP_ENDPOINT",
+                "dagster.dagsterWebserver.env[0].value=http://custom-otel:4317",
+                "dagster.dagsterWebserver.env[1].name=OTEL_SERVICE_NAME",
+                "dagster.dagsterWebserver.env[1].value=floe-platform",
+                "dagster.dagsterDaemon.env[0].name=OTEL_EXPORTER_OTLP_ENDPOINT",
+                "dagster.dagsterDaemon.env[0].value=http://custom-otel:4317",
+                "dagster.dagsterDaemon.env[1].name=OTEL_SERVICE_NAME",
+                "dagster.dagsterDaemon.env[1].value=floe-platform",
+            ],
+        )
+        service_names = {
+            doc.get("metadata", {}).get("name") for doc in documents if doc.get("kind") == "Service"
+        }
+        assert "custom-otel" in service_names
+        assert "floe-platform-otel" not in service_names
+
+        rendered_yaml = yaml.safe_dump_all(documents)
+        assert "http://custom-otel:4317" in rendered_yaml
+        assert "custom-otel:4317" in rendered_yaml
+        assert "floe-platform-otel:4317" not in rendered_yaml
+
+    @pytest.mark.requirement("AC-17.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_values_demo_preserves_dagster_otel_envs_when_adding_schedule_env(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Demo values must preserve OTel env vars when overriding Dagster env lists."""
+        documents = _render_template_with_values_file(
+            platform_chart_path,
+            "values-demo.yaml",
+        )
+        dagster_deps = _find_dagster_deployments(documents)
+        assert len(dagster_deps) >= 2, "Expected Dagster webserver and daemon deployments"
+
+        for dep in dagster_deps:
+            envs = {
+                env["name"]: env.get("value")
+                for env in _get_container_env_vars(dep)
+                if "name" in env
+            }
+            assert envs["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://floe-platform-otel:4317"
+            assert envs["OTEL_SERVICE_NAME"] == "floe-platform"
+
+            name = dep["metadata"]["name"]
+            if name.endswith("dagster-daemon"):
+                assert envs["DAGSTER_DEFAULT_SCHEDULE_CRON"] == "*/10 * * * *"
 
 
 def _find_marquez_deployment(
@@ -1011,6 +1109,23 @@ def _render_template_with_sets(
     return [d for d in docs if d is not None]
 
 
+def _helm_template_with_sets(
+    chart_path: Path,
+    set_args: list[str],
+) -> subprocess.CompletedProcess[bytes]:
+    """Run helm template with --set overrides without requiring success."""
+    cmd = [
+        "helm",
+        "template",
+        "floe-platform",
+        str(chart_path),
+        "--skip-schema-validation",
+    ]
+    for arg in set_args:
+        cmd.extend(["--set", arg])
+    return subprocess.run(cmd, capture_output=True, timeout=60, check=False)
+
+
 def _render_template_with_values_file(
     chart_path: Path,
     values_file: str,
@@ -1061,6 +1176,31 @@ def _find_service_by_component(
             continue
         labels = doc.get("metadata", {}).get("labels", {})
         if labels.get("app.kubernetes.io/component") == component:
+            return doc
+    return None
+
+
+def _find_deployment_by_component(
+    documents: list[dict[str, Any]],
+    component: str,
+) -> dict[str, Any] | None:
+    """Find a Deployment resource by app.kubernetes.io/component label."""
+    for doc in documents:
+        if doc.get("kind") != "Deployment":
+            continue
+        labels = doc.get("metadata", {}).get("labels", {})
+        if labels.get("app.kubernetes.io/component") == component:
+            return doc
+    return None
+
+
+def _find_deployment_by_name(
+    documents: list[dict[str, Any]],
+    name: str,
+) -> dict[str, Any] | None:
+    """Find a Deployment resource by metadata.name."""
+    for doc in documents:
+        if doc.get("kind") == "Deployment" and doc.get("metadata", {}).get("name") == name:
             return doc
     return None
 
@@ -1240,6 +1380,60 @@ class TestNodePortConditionals:
                 f"Contract-monitor port '{port.get('name')}' should not have "
                 f"nodePort in ClusterIP mode, but got nodePort={port.get('nodePort')}"
             )
+
+    @pytest.mark.requirement("AC-17.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_contract_monitor_otel_endpoint_defaults_to_platform_service(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Contract Monitor uses the canonical platform OTel service by default."""
+        documents = _render_template_with_sets(
+            platform_chart_path,
+            ["contractMonitor.enabled=true"],
+        )
+        deployment = _find_deployment_by_component(documents, "contract-monitor")
+        assert deployment is not None, "Contract-monitor Deployment not found"
+
+        env_vars = {e["name"]: e.get("value") for e in _get_container_env_vars(deployment)}
+        assert env_vars["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://floe-platform-otel:4317"
+
+    @pytest.mark.requirement("AC-17.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_values_prod_applies_otel_replica_and_resource_overrides(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Production values must use the aliased OTel subchart key."""
+        documents = _render_template_with_values_file(
+            platform_chart_path,
+            "values-prod.yaml",
+        )
+        deployment = _find_deployment_by_name(documents, "floe-platform-otel")
+        assert deployment is not None, "OTel Deployment not found with values-prod.yaml"
+
+        assert deployment["spec"]["replicas"] == 2
+        containers = deployment["spec"]["template"]["spec"]["containers"]
+        assert containers, "OTel Deployment should include a collector container"
+        resources = containers[0].get("resources", {})
+        assert resources.get("requests", {}).get("cpu") == "250m"
+        assert resources.get("requests", {}).get("memory") == "512Mi"
+        assert resources.get("limits", {}).get("cpu") == "1000m"
+        assert resources.get("limits", {}).get("memory") == "1Gi"
+
+    @pytest.mark.requirement("AC-17.6")
+    def test_environment_values_do_not_use_legacy_otel_key(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Environment values must use the dependency alias, not the legacy chart key."""
+        offenders = []
+        for values_file in platform_chart_path.glob("values-*.yaml"):
+            for line_number, line in enumerate(values_file.read_text().splitlines(), start=1):
+                if line.startswith("opentelemetry-collector:"):
+                    offenders.append(f"{values_file.name}:{line_number}")
+
+        assert offenders == []
 
     @pytest.mark.requirement("AC-29.2")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")

@@ -8,27 +8,25 @@ Helm chart for deploying floe data product jobs (dbt runs, data ingestion, etc.)
 - Helm 3.8+
 - (Optional) floe-platform chart deployed for service discovery
 
-## Installation
+## Alpha Installation
+
+The alpha-supported path is to install from a local repository checkout. Use the OCI release artifact path only for versions where the release checklist publishes one; do not assume a classic Helm repository is available.
 
 ```bash
-# Add floe Helm repository (when published)
-helm repo add floe https://charts.floe.dev
-helm repo update
-
-# Install with default values
-helm install my-jobs floe/floe-jobs
+# Install from the local chart
+helm install my-jobs ./charts/floe-jobs
 
 # Install with dbt job enabled
-helm install my-jobs floe/floe-jobs \
+helm install my-jobs ./charts/floe-jobs \
   --set dbt.enabled=true \
   --set dbt.schedule="0 */6 * * *"
 ```
 
-### Install from Local Chart
+When a release publishes OCI chart artifacts, install from the release artifact reference documented for that version. The expected repository shape is:
 
 ```bash
-helm install my-jobs ./charts/floe-jobs \
-  --set dbt.enabled=true
+helm install my-jobs oci://ghcr.io/obsidian-owl/charts/floe-jobs \
+  --version <published-version>
 ```
 
 ## Configuration
@@ -100,14 +98,18 @@ customJobs:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `platform.releaseName` | floe-platform release name | `""` |
+| `platform.servicePrefix` | floe-platform shared service prefix/fullnameOverride | `""` |
 | `platform.namespace` | floe-platform namespace | `""` |
+| `platform.dagsterEndpoint` | Explicit Dagster webserver endpoint | `""` |
 | `platform.polarisEndpoint` | Explicit Polaris endpoint | `""` |
 | `platform.otelEndpoint` | Explicit OTel endpoint | `""` |
 
-When `platform.releaseName` is set, the chart automatically discovers:
-- Polaris catalog endpoint
-- OpenTelemetry collector endpoint
+Set `platform.servicePrefix: floe-platform` for the documented alpha platform install. The chart then derives:
+- Dagster webserver endpoint: `http://floe-platform-dagster-webserver.<namespace>.svc.cluster.local:80`
+- Polaris catalog endpoint: `http://floe-platform-polaris.<namespace>.svc.cluster.local:8181`
+- OpenTelemetry collector endpoint: `http://floe-platform-otel.<namespace>.svc.cluster.local:4317`
+
+Use explicit endpoint values when your platform uses different service names.
 
 ### Service Account
 
@@ -142,7 +144,8 @@ dbt:
         secretName: dbt-profiles
 
 platform:
-  releaseName: floe
+  servicePrefix: floe-platform
+  namespace: floe-dev
 ```
 
 ### Data Ingestion with dlt
@@ -196,17 +199,20 @@ Override in `defaults.securityContext` and `defaults.containerSecurityContext`.
 
 This chart is designed to work alongside [floe-platform](../floe-platform/). When deployed together:
 
-1. Set `platform.releaseName` to your floe-platform release name
+1. Set `platform.servicePrefix` to the floe-platform shared service prefix/fullnameOverride
 2. Jobs automatically discover Polaris and OTel endpoints
 3. Use shared PostgreSQL for dbt metadata (via external secret)
 
 ```bash
 # Deploy platform first
-helm install floe ./charts/floe-platform
+helm install floe ./charts/floe-platform \
+  --namespace floe-dev \
+  --create-namespace
 
 # Then deploy jobs
 helm install floe-jobs ./charts/floe-jobs \
-  --set platform.releaseName=floe \
+  --set platform.servicePrefix=floe-platform \
+  --set platform.namespace=floe-dev \
   --set dbt.enabled=true
 ```
 

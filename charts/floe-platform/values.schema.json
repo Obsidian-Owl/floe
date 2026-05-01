@@ -414,13 +414,17 @@
         }
       }
     },
-    "opentelemetry-collector": {
+    "otel": {
       "type": "object",
       "description": "OpenTelemetry Collector configuration",
       "properties": {
         "enabled": {
           "type": "boolean",
           "default": true
+        },
+        "fullnameOverride": {
+          "type": "string",
+          "description": "Override the OTel subchart service/resource name. Dagster OTEL_EXPORTER_OTLP_ENDPOINT env values are static and must be explicitly aligned with this name."
         }
       }
     },

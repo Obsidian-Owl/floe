@@ -83,6 +83,10 @@ dagster:
         memory: 1536Mi
     # Demo scheduling: 10-minute intervals
     env:
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://floe-platform-otel:4317"
+      - name: OTEL_SERVICE_NAME
+        value: "floe-platform"
       - name: DAGSTER_DEFAULT_SCHEDULE_CRON
         value: "*/10 * * * *"
 

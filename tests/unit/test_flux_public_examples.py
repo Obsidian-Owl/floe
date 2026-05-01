@@ -101,9 +101,9 @@ def test_public_kustomization_documents_gitops_layout_and_secret_strategies() ->
 
 
 @pytest.mark.requirement("AC-4")
-def test_chart_readme_flux_section_is_pointer_only() -> None:
-    """The chart README points operators at the public examples and guide."""
-    section = _section(_README_PATH, "GitOps Deployment")
+def test_chart_readme_gitops_examples_section_is_pointer_only() -> None:
+    """The chart README points operators at the public GitOps examples and guide."""
+    section = _section(_README_PATH, "GitOps Examples")
 
     assert "charts/examples/flux/" in section
     assert "docs/guides/deployment/gitops-flux.md" in section

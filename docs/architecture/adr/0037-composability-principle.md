@@ -385,7 +385,7 @@ config = backend_plugin.get_otlp_exporter_config()
 - [ADR-0036: Storage Plugin Interface](0036-storage-plugin-interface.md) - Reference implementation
 - [plugin-system/](../plugin-system/index.md) - Complete plugin patterns
 - [interfaces/](../interfaces/index.md) - All plugin ABCs
-- [03-solution-strategy.md](../../guides/03-solution-strategy.md) - Solution strategy
+- [Opinionation Boundaries](../opinionation-boundaries.md) - Current opinionation boundary summary
 - **Industry References:**
   - [pytest plugin system](https://docs.pytest.org/en/stable/how-to/writing_plugins.html)
   - [Sphinx extensions](https://www.sphinx-doc.org/en/master/development/tutorials/extending_build.html)

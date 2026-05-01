@@ -1,6 +1,6 @@
 # CompiledArtifacts Contract
 
-The `CompiledArtifacts` schema defines the output of `floe compile` - the resolved, validated configuration that the runtime uses for execution.
+The `CompiledArtifacts` schema defines the output of Floe's compilation pipeline: the resolved, validated configuration that the runtime uses for execution. In the current alpha, use `make compile-demo` for the Customer 360 artifact path or `floe platform compile` for platform manifest validation; the root data-team `floe compile` command is planned and not yet implemented.
 
 ## Overview
 
@@ -25,7 +25,7 @@ CompiledArtifacts is the **single source of truth** for pipeline execution. It c
                                    │
                                    ▼
                           ┌────────────────┐
-                          │  floe compile  │
+                          │ compile pipeline│
                           └────────┬───────┘
                                    │
                                    ▼
@@ -57,7 +57,7 @@ from typing import Literal
 from datetime import datetime
 
 class CompiledArtifacts(BaseModel):
-    """Output of floe compile - unified for all deployment modes."""
+    """Output of the compilation pipeline - unified for all deployment modes."""
 
     # Schema version
     version: str = "0.1.0"
@@ -727,10 +727,16 @@ for manifest in artifacts.inheritance_chain:
     print(f"{manifest.name} ({manifest.scope}): {manifest.ref}")
 ```
 
-### JSON Schema Export
+### JSON Schema Inspection
 
-```bash
-floe schema export --output compiled-artifacts.schema.json
+The public CLI does not currently expose a schema export command. During alpha, contributors can inspect the current Pydantic schema from the repository:
+
+```python
+import json
+
+from floe_core.schemas import CompiledArtifacts
+
+print(json.dumps(CompiledArtifacts.export_json_schema(), indent=2))
 ```
 
 ## Versioning

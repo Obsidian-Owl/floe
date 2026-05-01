@@ -66,9 +66,7 @@ floe/
 │   ├── floe-orchestrator-airflow/
 │   ├── floe-catalog-polaris/           # Catalog plugins
 │   ├── floe-catalog-glue/
-│   ├── floe-storage-s3/                # Storage plugins (ADR-0036)
-│   ├── floe-storage-minio/
-│   ├── floe-storage-gcs/
+│   ├── floe-storage-s3/                # S3-compatible storage, including MinIO endpoints
 │   ├── floe-telemetry-jaeger/          # Telemetry backend plugins (ADR-0035)
 │   ├── floe-telemetry-datadog/
 │   ├── floe-lineage-marquez/           # Lineage backend plugins (ADR-0035)
@@ -167,7 +165,7 @@ See [ADR-0021](../architecture/adr/0021-data-architecture-patterns.md) and [Cont
 
 ### 3.3 Plugin Interfaces (ABCs)
 
-floe defines **11 plugin interfaces** for extensibility (see [plugin-system/index.md](../architecture/plugin-system/index.md) for canonical registry):
+floe documents **14 plugin categories** for extensibility (see [plugin-system/index.md](../architecture/plugin-system/index.md) for the canonical registry and implemented ABCs):
 
 | Plugin Type | Entry Point | Purpose | ADR |
 |-------------|-------------|---------|-----|
@@ -182,8 +180,11 @@ floe defines **11 plugin interfaces** for extensibility (see [plugin-system/inde
 | IngestionPlugin | `floe.ingestion` | Data loading from sources | ADR-0020 |
 | SecretsPlugin | `floe.secrets` | Credential management | ADR-0023/0031 |
 | IdentityPlugin | `floe.identity` | User authentication (OIDC) | ADR-0024 |
+| DataQualityPlugin | `floe.quality` | Data quality validation frameworks | ADR-0044 |
+| RBACPlugin | `floe.rbac` | Namespace and service-account isolation | Epic 7B |
+| AlertChannelPlugin | `floe.alert_channels` | Contract violation alert delivery | Epic 15 |
 
-> **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins. DataQualityPlugin (Great Expectations, Soda) is documented in ADR-0044.
+> **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins.
 
 **Example Interfaces:**
 
@@ -282,9 +283,9 @@ floe run                      # Execute pipeline
 floe test                     # Run dbt tests
 ```
 
-### Data Mesh Commands
+### Target-State Data Mesh Commands
 
-For federated Data Mesh deployments:
+For federated Data Mesh deployments, the following commands describe the target-state operator and product-team experience. They are planned examples, not supported alpha workflows.
 
 ```bash
 # Platform Team (compiles any Manifest - enterprise or domain)

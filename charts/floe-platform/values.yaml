@@ -218,7 +218,7 @@ dagster:
     # Additional environment variables (list format for Dagster subchart compat)
     env:
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
-        value: "http://floe-platform-otel-collector:4317"
+        value: "http://floe-platform-otel:4317"
       - name: OTEL_SERVICE_NAME
         value: "floe-platform"
     envSecrets: []
@@ -246,7 +246,7 @@ dagster:
     # Additional environment variables (list format for Dagster subchart compat)
     env:
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
-        value: "http://floe-platform-otel-collector:4317"
+        value: "http://floe-platform-otel:4317"
       - name: OTEL_SERVICE_NAME
         value: "floe-platform"
     envSecrets: []
@@ -415,6 +415,11 @@ polaris:
 otel:
   # Enable OTel Collector deployment
   enabled: true
+
+  # Keep the subchart Service name aligned with floe platform contracts.
+  # If changed, also override Dagster OTEL_EXPORTER_OTLP_ENDPOINT env values
+  # because the Dagster subchart renders env values as static YAML.
+  fullnameOverride: floe-platform-otel
 
   # Deployment mode: deployment (gateway) or daemonset
   mode: deployment
@@ -1044,7 +1049,8 @@ contractMonitor:
 
   # OpenTelemetry
   otel:
-    endpoint: "http://otel-collector:4317"
+    # Empty uses the chart's canonical OTel service helper.
+    endpoint: ""
 
   # Resource requests and limits
   resources:

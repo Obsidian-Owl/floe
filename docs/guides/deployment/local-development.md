@@ -1,161 +1,91 @@
-# Local Development
+# Local Kind Evaluation
 
-This document covers local development for floe using uv and Kind (Kubernetes in Docker).
+Use local Kind when you want a disposable Kubernetes cluster for Platform Engineer evaluation or contributor smoke checks. This is not a separate product onboarding CLI path; it is the local Kubernetes form of the Helm deployment workflow.
 
-**Note**: Docker Compose is NOT supported. All development uses Kubernetes-native tooling to ensure parity between local development and production (ADR-0017).
+Docker Compose is not supported because Floe's platform behavior depends on Kubernetes service discovery, workload lifecycle, and Helm rendering.
 
----
+## Prerequisites
 
-## 1. Local Development (uv)
+- Docker is running locally.
+- `kind`, `kubectl`, and `helm` are installed.
+- You are running commands from the Floe repository root.
 
-### 1.1 Installation
-
-```bash
-# Create virtual environment with uv
-uv venv
-source .venv/bin/activate
-
-# Install CLI and dependencies
-uv add floe-cli
-
-# For specific compute targets (dbt adapters)
-uv add dbt-duckdb      # Default OSS compute
-uv add dbt-snowflake   # Snowflake
-uv add dbt-bigquery    # BigQuery
-```
-
-### 1.2 Project Setup
+## 1. Create The Kind Cluster
 
 ```bash
-# Initialize project
-floe init my-project
-cd my-project
-
-# Validate configuration
-floe validate
-
-# Run pipeline (uses configured compute target)
-floe run --env dev
+make kind-up
 ```
 
-### 1.3 Local Architecture
+Expected outcome:
 
-```
-+---------------------------------------------------------------+
-|                     LOCAL MACHINE                              |
-|                                                                |
-|  +---------------------------------------------------------+  |
-|  |  floe-cli process                                        |  |
-|  |                                                          |  |
-|  |  +---------+   +---------+   +---------+                 |  |
-|  |  | Dagster |-->|   dbt   |-->| DuckDB  |                 |  |
-|  |  | (in-    |   |  (in-   |   |  (in-   |                 |  |
-|  |  | process)|   | process)|   | process)|                 |  |
-|  |  +---------+   +---------+   +---------+                 |  |
-|  |                                                          |  |
-|  +---------------------------------------------------------+  |
-|                                                                |
-|  +-----------------+   +-----------------+                     |
-|  | ./warehouse/    |   | .floe/          |                     |
-|  | +- data.duckdb  |   | +- artifacts.json|                    |
-|  +-----------------+   +-----------------+                     |
-+---------------------------------------------------------------+
-```
+- A local Kind cluster is available.
+- `kubectl cluster-info` points at the local evaluation cluster.
 
-### 1.4 Limitations
-
-- No persistent Dagster UI (run-and-exit)
-- No built-in observability backends
-- Single-user, single-machine only
-
----
-
-## 2. Local Kubernetes (Kind)
-
-For full-featured local development with all platform services, use Kind (Kubernetes in Docker).
-
-### 2.1 Quick Start
+## 2. Render The Platform Chart
 
 ```bash
-# Create Kind cluster
-make kind-create
+helm dependency update ./charts/floe-platform
+helm template floe ./charts/floe-platform \
+  --namespace floe-dev \
+  --create-namespace >/tmp/floe-platform-rendered.yaml
+```
 
-# Deploy platform services
-make deploy-local
+Expected outcome:
 
-# Verify deployment
+- Helm dependencies resolve locally.
+- The chart renders Kubernetes manifests without schema or template errors.
+
+## 3. Install Floe Locally
+
+```bash
+helm upgrade --install floe ./charts/floe-platform \
+  --namespace floe-dev \
+  --create-namespace
+```
+
+Expected outcome:
+
+- Helm reports the `floe` release as deployed.
+- Platform pods begin starting in the `floe-dev` namespace.
+
+## 4. Inspect Platform Health
+
+```bash
 kubectl get pods -n floe-dev
+helm status floe -n floe-dev
 ```
 
-### 2.2 Architecture
+Expected outcome:
 
-```
-+---------------------------------------------------------------------------+
-|                           KIND CLUSTER                                      |
-|                                                                            |
-|  +---------------------------------------------------------------------+  |
-|  |  namespace: floe-dev                                                 |  |
-|  |                                                                      |  |
-|  |  +---------------+   +---------------+   +---------------+           |  |
-|  |  |   dagster     |   |   postgres    |   |   polaris     |           |  |
-|  |  |  (Deployment) |-->| (StatefulSet) |<--|  (Deployment) |           |  |
-|  |  +---------------+   +---------------+   +---------------+           |  |
-|  |         |                   |                    |                   |  |
-|  |         v                   v                    v                   |  |
-|  |  +---------------+   +---------------+   +---------------+           |  |
-|  |  | otel-collector|   |  localstack   |   |     cube      |           |  |
-|  |  |  (DaemonSet)  |   | (StatefulSet) |   |  (Deployment) |           |  |
-|  |  +---------------+   +---------------+   +---------------+           |  |
-|  |                                                                      |  |
-|  +---------------------------------------------------------------------+  |
-|                                                                            |
-|  +---------------------------------------------------------------------+  |
-|  |  PersistentVolumeClaims                                              |  |
-|  |  +-- postgres-data (10Gi)                                            |  |
-|  |  +-- localstack-data (10Gi)                                          |  |
-|  +---------------------------------------------------------------------+  |
-+---------------------------------------------------------------------------+
-```
+- Required platform pods reach `Running` or `Completed`.
+- Helm reports the release status as `deployed`.
 
-### 2.3 Service URLs
-
-| Service | URL | Purpose |
-|---------|-----|---------|
-| Dagster UI | http://localhost:30000 | Asset management, runs |
-| Polaris | http://localhost:30181 | Iceberg catalog |
-| Cube | http://localhost:30400 | Semantic layer API |
-| LocalStack | http://localhost:30566 | S3-compatible storage |
-
-### 2.4 Development Workflow
+## 5. Access Dagster For Evaluation
 
 ```bash
-# Run tests in K8s
-make test
-
-# View logs
-kubectl logs -f deployment/dagster-webserver -n floe-dev
-
-# Port-forward for debugging
-kubectl port-forward svc/dagster-webserver 3000:3000 -n floe-dev
-
-# Clean up
-make kind-delete
+RELEASE=${RELEASE:-floe}
+kubectl port-forward -n floe-dev "svc/${RELEASE}-dagster-webserver" 3100:80
 ```
 
-### 2.5 Why Not Docker Compose?
+Expected outcome:
 
-Docker Compose is **explicitly prohibited** (REQ-621) because:
+- Dagster is reachable at `http://localhost:3100`.
+- If your install uses a different release name, set `RELEASE` before running the port-forward.
+- The default chart uses service port `80`; demo-specific values may override that port.
 
-1. **No K8s-specific testing**: Cannot test probes, resource limits, network policies
-2. **No parity**: Docker Compose ≠ production K8s environment
-3. **Hidden bugs**: Issues only discovered in production
-4. **No RBAC testing**: Cannot test service accounts, secrets access
+## 6. Clean Up
 
-Kind provides full Kubernetes compatibility while running locally.
+```bash
+make kind-down
+```
 
----
+Expected outcome:
+
+- The local Kind cluster is removed.
+- Local evaluation resources are destroyed.
 
 ## Related Documentation
 
-- [Kubernetes Helm](kubernetes-helm.md) - Production deployment
-- [Two-Layer Model](two-layer-model.md) - Deployment model overview
+- [Platform Engineer first platform guide](../../platform-engineers/first-platform.md)
+- [Kubernetes Helm](kubernetes-helm.md)
+- [Capability status](../../architecture/capability-status.md)

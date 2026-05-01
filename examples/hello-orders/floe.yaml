@@ -1,0 +1,24 @@
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: hello-orders
+  version: 0.1.0
+  description: Minimal orders data product for learning Floe.
+  owner: data-engineering@example.com
+  labels:
+    domain: sales
+    tier: gold
+platform:
+  manifest: "../../demo/manifest.yaml"
+transforms:
+  - name: stg_orders
+    tags: [staging]
+    tier: bronze
+  - name: mart_daily_orders
+    tags: [marts]
+    tier: gold
+    dependsOn: [stg_orders]
+schedule:
+  cron: "0 8 * * *"
+  timezone: UTC
+  enabled: false

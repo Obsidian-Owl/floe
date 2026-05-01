@@ -200,7 +200,7 @@ backend = registry.discover("floe.observability")[config["type"]]
 │    orchestrator:                                                         │
 │      type: airflow      # Pluggable ✓                                   │
 │    catalog:                                                              │
-│      type: polaris      # Pluggable ✓ (default)                         │
+│      type: polaris      # Pluggable ✓ (example catalog selection)        │
 │                                                                          │
 │  # ENFORCED (cannot change):                                            │
 │  # - Iceberg table format                                               │
@@ -230,7 +230,7 @@ backend = registry.discover("floe.observability")[config["type"]]
 
 ## Anti-Patterns
 
-### DON'T: Allow Data Engineers to select compute per-pipeline
+### Avoid per-pipeline compute ownership
 
 ```yaml
 # BAD: Per-pipeline compute selection causes drift
@@ -271,4 +271,4 @@ plugins:
 - [ADR-0008: Repository Split](0008-repository-split.md) - Plugin architecture
 - [ADR-0009: dbt Owns SQL](0009-dbt-owns-sql.md) - Enforced transformation
 - [ADR-0010: Target-Agnostic Compute](0010-target-agnostic-compute.md) - Pluggable compute
-- [03-solution-strategy.md](../../guides/03-solution-strategy.md) - Solution strategy
+- [Opinionation Boundaries](../opinionation-boundaries.md) - Current opinionation boundary summary

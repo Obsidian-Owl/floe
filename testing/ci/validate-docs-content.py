@@ -20,10 +20,101 @@ INTERNAL_AGENT_PHRASES = (
     "$ARGUMENTS",
     "Context Injection (For Future Claude Instances)",
 )
-PLUGIN_COUNT_RE = re.compile(
-    r"\b(?P<count>\d+)\s+plugin\s+(?P<noun>types?|categor(?:y|ies))\b",
+UNSUPPORTED_PUBLIC_CLI_SNIPPETS = (
+    (re.compile(r"\bfloe\s+schema\s+export\b"), "unsupported CLI command 'floe schema export'"),
+)
+UNCAVEATED_ALPHA_CLAIMS = (
+    (
+        re.compile(r"without rewrites", re.IGNORECASE),
+        "uncaveated Data Mesh migration language 'without rewrites'",
+    ),
+    (
+        re.compile(r"Data Mesh seamlessly", re.IGNORECASE),
+        "uncaveated Data Mesh migration language 'Data Mesh seamlessly'",
+    ),
+)
+DOCKER_COMPOSE_PRODUCT_PATHS = (
+    (
+        re.compile(r"Docker Compose setup", re.IGNORECASE),
+        "Docker Compose setup presented as a product path",
+    ),
+    (
+        re.compile(r"\bdocker\s+compose\s+up\b", re.IGNORECASE),
+        "'docker compose up' presented as a product path",
+    ),
+    (
+        re.compile(
+            r"\b(?:"
+            r"Docker Compose\b.*\b(?:development|evaluation)|"
+            r"(?:development|evaluation)\b.*\bDocker Compose"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        "Docker Compose presented as a development or evaluation product path",
+    ),
+)
+FLOE_DEV_PRODUCT_PATH = (
+    re.compile(r"\bfloe\s+dev\b", re.IGNORECASE),
+    "unsupported CLI command 'floe dev' presented as a product path",
+)
+UNSUPPORTED_ALPHA_LIFECYCLE_COMMAND_RE = re.compile(
+    r"(?:^|[\s`$])(?P<command>"
+    r"floe\s+init\b|"
+    r"floe\s+validate\b|"
+    r"floe\s+compile\b|"
+    r"floe\s+run\b|"
+    r"floe\s+test\b|"
+    r"floe\s+platform\s+test\b"
+    r")",
     re.IGNORECASE,
 )
+UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE = re.compile(
+    r"\b("
+    r"planned|stub|target[- ]state|historical|not implemented|not current|"
+    r"not the current|not yet implemented|not alpha-supported|non-current|candidate"
+    r")\b",
+    re.IGNORECASE,
+)
+UNSUPPORTED_DATA_MESH_DISCOVERY_COMMAND_RE = re.compile(
+    r"\bfloe\s+(?:products?|contracts?)\s+(?:list|describe)\b",
+    re.IGNORECASE,
+)
+STALE_DATA_PRODUCT_HANDOFF_RE = re.compile(
+    r"Use the run command or deployment command documented by your Platform Engineer",
+    re.IGNORECASE,
+)
+UNSUPPORTED_DAGSTER_DAEMON_MODE_RE = re.compile(
+    r"\b(?:daemon\.mode|mode:\s*(?:single|ha)\b)",
+    re.IGNORECASE,
+)
+PLUGIN_COUNT_RE = re.compile(
+    r"\b(?P<count>\d+)\s+(?:floe\s+)?plugin\s+"
+    r"(?P<noun>types?|categor(?:y|ies)|interfaces?)\b",
+    re.IGNORECASE,
+)
+NEGATIVE_OR_PLANNED_CONTEXT_RE = re.compile(
+    r"\b("
+    r"not supported|unsupported|not alpha-supported|not implemented|planned|historical|"
+    r"deprecated|rejected|was rejected|alternative|not a current|do not run|"
+    r"no Docker Compose|creates testing parity issues|parity issues|failure mode"
+    r")\b",
+    re.IGNORECASE,
+)
+CHART_METADATA_RULES = (
+    (
+        re.compile(r"Production-ready", re.IGNORECASE),
+        "chart metadata must not claim production-ready status",
+    ),
+    (
+        re.compile(r"floe-runtime"),
+        "chart metadata must point to Obsidian-Owl/floe, not floe-runtime",
+    ),
+    (
+        re.compile(r'appVersion:\s*["\']?1\.0\.0["\']?'),
+        "chart metadata must not use stale appVersion 1.0.0",
+    ),
+)
+EXPECTED_FLOE_PLATFORM_APP_VERSION = "0.1.0-alpha.1"
 
 
 def _manifest_items(manifest: dict[str, object]) -> list[dict[str, object]]:
@@ -120,6 +211,21 @@ def _is_historical_adr_line(path: Path, active_heading: str) -> bool:
     return "version" in heading or "history" in heading
 
 
+def _guards_unsupported_alpha_lifecycle_commands(rel_path: str) -> bool:
+    """Return whether unsupported lifecycle commands are user-facing in this path."""
+    if rel_path.startswith("docs/architecture/adr/"):
+        return False
+    return rel_path == "README.md" or rel_path.startswith("docs/")
+
+
+def _has_planned_or_target_context(line: str, active_heading: str) -> bool:
+    """Return whether a line is visibly target-state, planned, or candidate only."""
+    return bool(
+        UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE.search(line)
+        or UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE.search(active_heading)
+    )
+
+
 def validate_docs_content(
     root: Path,
     *,
@@ -138,10 +244,15 @@ def validate_docs_content(
             rel_path = path.relative_to(root)
         except ValueError:
             rel_path = path
+        rel_path_str = rel_path.as_posix()
 
         active_heading = ""
+        in_fenced_code_block = False
         for line_number, line in enumerate(path.read_text().splitlines(), start=1):
-            if line.lstrip().startswith("#"):
+            if line.lstrip().startswith("```"):
+                in_fenced_code_block = not in_fenced_code_block
+
+            if not in_fenced_code_block and line.lstrip().startswith("#"):
                 active_heading = line.strip("# \t")
 
             for phrase in STALE_RELEASE_PHRASES:
@@ -154,6 +265,60 @@ def validate_docs_content(
                         f"{rel_path}:{line_number}: internal agent runbook phrase {phrase!r}"
                     )
 
+            for pattern, message in UNSUPPORTED_PUBLIC_CLI_SNIPPETS:
+                if pattern.search(line):
+                    errors.append(f"{rel_path}:{line_number}: {message}")
+
+            for pattern, message in UNCAVEATED_ALPHA_CLAIMS:
+                if pattern.search(line):
+                    errors.append(f"{rel_path}:{line_number}: {message}")
+
+            has_negative_or_planned_context = bool(NEGATIVE_OR_PLANNED_CONTEXT_RE.search(line))
+            for pattern, message in DOCKER_COMPOSE_PRODUCT_PATHS:
+                if pattern.search(line) and not has_negative_or_planned_context:
+                    errors.append(f"{rel_path}:{line_number}: {message}")
+
+            floe_dev_pattern, floe_dev_message = FLOE_DEV_PRODUCT_PATH
+            if floe_dev_pattern.search(line) and not has_negative_or_planned_context:
+                errors.append(f"{rel_path}:{line_number}: {floe_dev_message}")
+
+            if STALE_DATA_PRODUCT_HANDOFF_RE.search(line):
+                errors.append(
+                    f"{rel_path}:{line_number}: vague Customer 360 run/deploy handoff; "
+                    "document the alpha repo-checkout run and validation path explicitly"
+                )
+
+            if _guards_unsupported_alpha_lifecycle_commands(rel_path_str):
+                for match in UNSUPPORTED_ALPHA_LIFECYCLE_COMMAND_RE.finditer(line):
+                    if UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE.search(line):
+                        continue
+                    command = " ".join(match.group("command").split())
+                    errors.append(
+                        f"{rel_path}:{line_number}: {command!r} is not a supported current "
+                        "alpha workflow; use 'floe platform compile', 'make compile-demo', "
+                        "or mark it planned/stub/target-state"
+                    )
+
+            if UNSUPPORTED_DATA_MESH_DISCOVERY_COMMAND_RE.search(line) and not (
+                _has_planned_or_target_context(line, active_heading)
+                or _is_historical_adr_line(path, active_heading)
+            ):
+                errors.append(
+                    f"{rel_path}:{line_number}: Data Mesh discovery CLI command is not "
+                    "a supported current alpha workflow; mark it target-state/planned"
+                )
+
+            if UNSUPPORTED_DAGSTER_DAEMON_MODE_RE.search(
+                line
+            ) and not _has_planned_or_target_context(
+                line,
+                active_heading,
+            ):
+                errors.append(
+                    f"{rel_path}:{line_number}: Dagster daemon HA mode contract is not "
+                    "implemented in the alpha chart; mark it candidate/planned or remove it"
+                )
+
             if _is_historical_adr_line(path, active_heading):
                 continue
 
@@ -165,7 +330,41 @@ def validate_docs_content(
                         f"match implementation truth; expected {expected_count} plugin categories"
                     )
 
+    errors.extend(_validate_chart_metadata(root))
+
     return sorted(errors)
+
+
+def _validate_chart_metadata(root: Path) -> list[str]:
+    """Validate chart metadata that is surfaced in chart docs and Helm NOTES."""
+    chart_path = root / "charts" / "floe-platform" / "Chart.yaml"
+    if not chart_path.exists():
+        return []
+
+    errors: list[str] = []
+    rel_path = chart_path.relative_to(root)
+    lines = chart_path.read_text().splitlines()
+    app_version_seen = False
+
+    for line_number, line in enumerate(lines, start=1):
+        for pattern, message in CHART_METADATA_RULES:
+            if pattern.search(line):
+                errors.append(f"{rel_path}:{line_number}: {message}")
+
+        match = re.match(r"\s*appVersion:\s*[\"']?([^\"'\s]+)[\"']?\s*$", line)
+        if match:
+            app_version_seen = True
+            app_version = match.group(1)
+            if app_version != EXPECTED_FLOE_PLATFORM_APP_VERSION:
+                errors.append(
+                    f"{rel_path}:{line_number}: chart appVersion {app_version!r} must match "
+                    f"alpha release {EXPECTED_FLOE_PLATFORM_APP_VERSION!r}"
+                )
+
+    if not app_version_seen:
+        errors.append(f"{rel_path}: missing appVersion")
+
+    return errors
 
 
 def main() -> int:

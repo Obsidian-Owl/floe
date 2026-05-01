@@ -74,7 +74,7 @@ Implement **artifact signing and verification** using Sigstore Cosign with two o
 ### Architecture Principles
 
 1. **Signing is mandatory**: All production artifacts MUST be signed
-2. **Verification before use**: `floe init` and `floe platform deploy` MUST verify signatures
+2. **Verification before use**: the planned root `floe init` workflow and `floe platform deploy` MUST verify signatures
 3. **Identity-based trust**: OIDC identities (GitHub Actions, GitLab CI) as trust anchors
 4. **Transparency by default**: All signatures logged to Rekor (cloud deployments)
 5. **Air-gapped support**: Offline verification bundles for disconnected environments
@@ -177,8 +177,8 @@ artifacts:
 
 **Verification Command**:
 ```bash
-# floe init --platform=v1.2.3 (automatic verification)
-floe init --platform=v1.2.3
+# planned floe init --platform=v1.2.3 workflow (automatic verification)
+floe init --platform=v1.2.3  # planned root data-team command
 
 # Cosign verifies signature
 cosign verify \
@@ -218,7 +218,7 @@ The following checks were performed on each of these signatures:
 
 **Verification Failure**:
 ```bash
-floe init --platform=v1.2.3
+floe init --platform=v1.2.3  # planned root data-team command
 
 # If signature invalid or missing:
 ERROR: Artifact verification failed
@@ -692,7 +692,7 @@ jobs:
 ### Negative
 
 - **Complexity**: PKI, certificates, transparency logs add learning curve
-- **Verification overhead**: Adds ~2-5 seconds to `floe init` and `floe platform deploy`
+- **Verification overhead**: Adds ~2-5 seconds to the planned root `floe init` workflow and `floe platform deploy`
 - **Rekor dependency**: Keyless signing requires internet access to rekor.sigstore.io
 - **Key rotation burden**: Manual key rotation for air-gapped deployments
 - **Signing tools required**: CI/CD must install cosign
@@ -710,7 +710,7 @@ jobs:
 - [ADR-0016: Platform Enforcement Architecture](0016-platform-enforcement-architecture.md) - OCI registry decision
 - [ADR-0039: Multi-Environment Promotion](0039-multi-environment-promotion.md) - Artifact promotion workflows
 - [ADR-0040: Artifact Immutability and GC](0040-artifact-immutability-gc.md) - Immutability enforcement
-- [Epic 08B: Artifact Signing](../../plans/epics/08-artifact-distribution/epic-08b-artifact-signing.md) - Implementation epic and signing requirements
+- Epic 08B: Artifact Signing (`docs/plans/epics/08-artifact-distribution/epic-08b-artifact-signing.md`) - Implementation epic and signing requirements
 
 ## References
 

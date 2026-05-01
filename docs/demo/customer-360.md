@@ -2,14 +2,37 @@
 
 Customer 360 is the `v0.1.0-alpha.1` golden demo. The alpha release gate will prove that Floe can run a data product through orchestration, transformation, storage, lineage, tracing, and business-facing query validation.
 
+If you are learning Floe for the first time, start with [Build Your First Data Product](../data-engineers/first-data-product.md). Customer 360 is the advanced proof that demonstrates the full platform, runtime, lineage, telemetry, storage, and business-output path.
+
+Platform Engineers and Data Engineers should run Customer 360 against a Floe platform that has already been deployed and made reachable through their platform access method. Floe Contributors can use the remote DevPod lane when they need contributor release-validation evidence.
+
 ## Prerequisites
 
-- DevPod workspace on Hetzner is running.
-- Kubeconfig is synced with `make devpod-sync`.
-- The repository branch has been pushed before remote validation.
-- For manual UI inspection outside an automated demo run, service tunnels are running with `make devpod-tunnels`.
+- A Floe platform is deployed and reachable.
+- The Customer 360 data product has been compiled or is available in the demo project.
+- You can access Dagster, object storage, Marquez, Jaeger, Polaris, and the semantic/query layer through your platform access method.
 
 ## Run
+
+### Platform Engineer And Data Engineer Alpha Path
+
+For `v0.1.0-alpha.1`, the supported product-facing Customer 360 path is the checked-in repo-checkout evidence path. It assumes a Platform Engineer has already deployed the platform/runtime, loaded the Customer 360 Dagster code, and exposed Dagster at the URL in `demo/customer-360/validation.yaml`. The default Dagster URL is `http://localhost:3100`.
+
+```bash
+make demo-customer-360-run
+make demo-customer-360-validate
+```
+
+Packaged/self-service data-product deployment commands are planned and not yet alpha-supported. The runner reads the Dagster URL and launch metadata from the validation manifest. For non-default service URLs, copy `demo/customer-360/validation.yaml`, edit the service URLs for your environment, and run:
+
+```bash
+uv run python -m testing.ci.run_customer_360_demo \
+  --validation-manifest /path/to/customer-360-validation.yaml
+uv run python -m testing.ci.validate_customer_360_demo \
+  --validation-manifest /path/to/customer-360-validation.yaml
+```
+
+### Floe Contributor Remote Validation Lane
 
 ```bash
 make demo
@@ -20,7 +43,7 @@ make demo-stop
 
 The Customer 360 demo flow is intentionally explicit:
 
-- `make demo` deploys the demo platform and services through DevPod, builds and loads the demo Dagster image, installs the Helm chart, and starts the required port-forwards.
+- `make demo` is contributor-only. It deploys the demo platform and services through DevPod, builds and loads the demo Dagster image, installs the Helm chart, and starts the required port-forwards.
 - `make demo-customer-360-run` should launch the Customer 360 Dagster job declared in `demo/customer-360/validation.yaml` and wait for the run to finish.
 - `make demo-customer-360-validate` runs the release evidence checks for platform readiness, Dagster run evidence, storage outputs, lineage, tracing, and business metrics.
 - `make demo-stop` stops the port-forwards created by `make demo`.
@@ -29,7 +52,7 @@ The runner and validator load their default configuration from `demo/customer-36
 
 ## Service URLs
 
-These URLs match the current `make demo` DevPod port-forwards.
+These URLs match the current contributor `make demo` DevPod port-forwards. Product deployments should use the service URLs or ingress routes supplied by the Platform Engineer.
 
 | Service | URL | Proof |
 | --- | --- | --- |

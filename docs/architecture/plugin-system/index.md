@@ -6,22 +6,22 @@ This document describes the plugin system that enables floe's flexibility.
 
 floe uses a plugin architecture for all configurable components. The implementation-truth category list is [`floe_core.plugin_types.PluginType`](../../reference/plugin-catalog.md).
 
-| Plugin Type | Default | Purpose | ADR |
-|-------------|---------|---------|-----|
+| Plugin Type | Alpha-Supported Reference Path | Purpose | ADR |
+|-------------|-------------------------|---------|-----|
 | **Compute** | DuckDB | Where dbt transforms execute | ADR-0010 |
 | **Orchestrator** | Dagster | Job scheduling and execution | ADR-0033 |
 | **Catalog** | Polaris | Iceberg table catalog | ADR-0008 |
-| **Storage** | MinIO (local), S3 (prod) | Object storage for Iceberg data | ADR-0036 |
-| **TelemetryBackend** | Jaeger (local), Datadog (prod) | OTLP telemetry backend (traces, metrics, logs) | ADR-0035 |
-| **LineageBackend** | Marquez (local), Atlan (prod) | OpenLineage backend (data lineage) | ADR-0035 |
-| **DBT** | dbt-core (local) | dbt compilation environment (local/fusion/cloud) | ADR-0043 |
-| **Semantic Layer** | Cube | Business intelligence API | ADR-0001 |
-| **Ingestion** | dlt | Data loading from sources | ADR-0020 |
-| **Quality** | Great Expectations / dbt expectations | Data quality validation | ADR-0044 |
+| **Storage** | S3-compatible storage plugin; demo uses MinIO | Object storage for Iceberg data | ADR-0036 |
+| **TelemetryBackend** | Jaeger and console telemetry plugins | OTLP telemetry backend (traces, metrics, logs) | ADR-0035 |
+| **LineageBackend** | Marquez | OpenLineage backend (data lineage) | ADR-0035 |
+| **DBT** | dbt Core | dbt compilation environment | ADR-0043 |
+| **Semantic Layer** | Cube reference implementation | Business intelligence API | ADR-0001 |
+| **Ingestion** | dlt plugin primitive | Data loading from sources | ADR-0020 |
+| **Quality** | dbt expectations and Great Expectations plugin primitives | Data quality validation | ADR-0044 |
 | **RBAC** | Kubernetes RBAC | Namespace and service-account isolation | Epic 7B |
-| **Alert Channel** | Webhook / Slack / email | Contract violation alert delivery | Epic 15 |
-| **Secrets** | K8s Secrets | Credential management | ADR-0023/0031 |
-| **Identity** | Keycloak | Authentication provider | ADR-0024 |
+| **Alert Channel** | Webhook / Slack / email primitives | Contract violation alert delivery | Epic 15 |
+| **Secrets** | Kubernetes Secrets and Infisical plugin primitives | Credential management | ADR-0023/0031 |
+| **Identity** | Keycloak reference implementation | Authentication provider | ADR-0024 |
 
 **Total:** 14 plugin categories, based on `floe_core.plugin_types.PluginType`.
 

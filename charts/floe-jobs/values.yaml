@@ -254,14 +254,21 @@ secrets: []
 # =============================================================================
 # Settings for integrating with floe-platform
 platform:
-  # floe-platform release name (for service discovery)
+  # Legacy release-name setting. Prefer servicePrefix or explicit endpoints.
   releaseName: ""
+
+  # Service name prefix/fullnameOverride used by floe-platform shared services.
+  # Set to "floe-platform" for the documented alpha platform install.
+  servicePrefix: ""
 
   # Namespace where floe-platform is deployed
   namespace: ""
 
-  # Polaris catalog endpoint (auto-discovered if platform.releaseName set)
+  # Dagster webserver endpoint (overrides platform.servicePrefix discovery)
+  dagsterEndpoint: ""
+
+  # Polaris catalog endpoint (overrides platform.servicePrefix discovery)
   polarisEndpoint: ""
 
-  # OTel collector endpoint (auto-discovered if platform.releaseName set)
+  # OTel collector endpoint (overrides platform.servicePrefix discovery)
   otelEndpoint: ""

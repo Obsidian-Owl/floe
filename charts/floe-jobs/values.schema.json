@@ -20,13 +20,29 @@
       "type": "object",
       "description": "Platform integration settings",
       "properties": {
-        "release": {
+        "releaseName": {
           "type": "string",
-          "description": "floe-platform release name"
+          "description": "Legacy floe-platform release-name setting; prefer servicePrefix or explicit endpoints"
+        },
+        "servicePrefix": {
+          "type": "string",
+          "description": "floe-platform shared service prefix/fullnameOverride, for example floe-platform"
         },
         "namespace": {
           "type": "string",
           "description": "Platform namespace"
+        },
+        "dagsterEndpoint": {
+          "type": "string",
+          "description": "Explicit Dagster webserver endpoint override"
+        },
+        "polarisEndpoint": {
+          "type": "string",
+          "description": "Explicit Polaris endpoint override"
+        },
+        "otelEndpoint": {
+          "type": "string",
+          "description": "Explicit OpenTelemetry endpoint override"
         }
       }
     },

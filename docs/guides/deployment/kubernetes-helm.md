@@ -11,262 +11,177 @@ This document covers Helm-based Kubernetes deployment for floe.
 ## Quick Start
 
 ```bash
-# From Helm Repository
-helm repo add floe https://obsidian-owl.github.io/floe
-helm repo update
-helm install floe floe/floe-platform --namespace floe-dev --create-namespace
-
-# From OCI Registry (GHCR)
-helm install floe oci://ghcr.io/obsidian-owl/charts/floe-platform \
-  --namespace floe-dev --create-namespace
-
-# From Local Chart
 helm dependency update ./charts/floe-platform
-helm install floe ./charts/floe-platform --namespace floe-dev --create-namespace
+helm upgrade --install floe ./charts/floe-platform \
+  --namespace floe-dev \
+  --create-namespace
 ```
 
----
+For published chart validation, use the release artifact path documented in the release checklist for the version you are installing.
 
 ## 1. Chart Structure
 
-Charts are organized to support the plugin architecture:
+`charts/floe-platform` is the alpha platform chart. It uses direct Helm values and chart dependencies; this guide does not claim manifest-driven chart assembly.
 
 ```
-floe/
-+-- charts/
-|   +-- floe-platform/                    # Meta-chart: assembles plugin charts
-|   |   +-- Chart.yaml                    # Dependencies on plugin charts
-|   |   +-- values.yaml
-|   |   +-- templates/
-|   |       +-- namespace.yaml
-|   |       +-- observability.yaml        # OTLP, Prometheus, Grafana
-|   |
-|   +-- floe-jobs/                        # Base chart for pipeline jobs
-|       +-- Chart.yaml
-|       +-- values.yaml
-|       +-- templates/
-|           +-- job.yaml                  # dbt run job template
-|           +-- configmap.yaml
+charts/
++-- floe-platform/
+|   +-- Chart.yaml
+|   +-- values.yaml
+|   +-- templates/
+|       +-- _helpers.tpl
+|       +-- deployment-polaris.yaml
+|       +-- deployment-marquez.yaml
+|       +-- service-polaris.yaml
+|       +-- service-postgresql.yaml
+|       +-- statefulset-postgresql.yaml
+|       +-- ingress.yaml
 |
-+-- plugins/                              # Each plugin includes its own chart
-    +-- floe-orchestrator-dagster/
-    |   +-- chart/                        # Dagster services
-    |       +-- Chart.yaml
-    |       +-- templates/
-    |           +-- webserver.yaml
-    |           +-- daemon.yaml
-    |           +-- postgresql.yaml
-    |
-    +-- floe-catalog-polaris/
-    |   +-- chart/                        # Polaris server
-    |
-    +-- floe-semantic-cube/
-        +-- chart/                        # Cube server + Redis
++-- floe-jobs/
+    +-- Chart.yaml
+    +-- values.yaml
+    +-- templates/
 ```
 
-**Key Design**: The `floe-platform` meta-chart assembles plugin charts based on `manifest.yaml` selections.
+`Chart.yaml` declares the current subchart dependencies for Dagster, OpenTelemetry, Jaeger, MinIO, and a local Cube semantic-layer chart. The Cube dependency is present but starts disabled via `cube.enabled: false`. Floe-owned templates in `templates/` render Polaris, Marquez, PostgreSQL, bootstrap jobs, RBAC, network policy, ingress, and tests.
 
 ---
 
-## 2. Deployment Architecture
+## 2. Alpha Deployment Model
 
-```
-+---------------------------------------------------------------------------+
-|                         KUBERNETES CLUSTER                                 |
-|                                                                            |
-|  +---------------------------------------------------------------------+  |
-|  |  Namespace: floe                                                     |  |
-|  |                                                                      |  |
-|  |  +-----------------+   +-----------------+   +-----------------+     |  |
-|  |  | dagster-webserver|  |  dagster-daemon |   |  dagster-worker |     |  |
-|  |  |   (Deployment)   |   |  (Deployment)   |   |  (Deployment)   |     |  |
-|  |  |   replicas: 2    |   |   replicas: 1   |   |   replicas: 3   |     |  |
-|  |  +--------+---------+   +--------+--------+   +--------+--------+     |  |
-|  |           |                      |                     |              |  |
-|  |           +----------------------+---------------------+              |  |
-|  |                                  |                                    |  |
-|  |                                  v                                    |  |
-|  |                    +-------------------------+                        |  |
-|  |                    |  PostgreSQL (StatefulSet)|                        |  |
-|  |                    |  or external RDS         |                        |  |
-|  |                    +-------------------------+                        |  |
-|  |                                                                       |  |
-|  |  +-----------------+   +-----------------+                            |  |
-|  |  |  otel-collector |   |     marquez     |                            |  |
-|  |  |   (DaemonSet)   |   |  (Deployment)   |                            |  |
-|  |  +-----------------+   +-----------------+                            |  |
-|  |                                                                       |  |
-|  +---------------------------------------------------------------------+  |
-|                                                                            |
-|  +---------------------------------------------------------------------+  |
-|  |  Ingress                                                             |  |
-|  |  +-- dagster.example.com -> dagster-webserver:3000                   |  |
-|  |  +-- traces.example.com -> jaeger-query:16686                        |  |
-|  |  +-- lineage.example.com -> marquez-web:3000                         |  |
-|  +---------------------------------------------------------------------+  |
-+---------------------------------------------------------------------------+
-```
+The alpha chart deploys platform services into a Kubernetes namespace using Helm. Defaults are optimized for local/dev evaluation, not production hardening.
+
+Service names come from two naming rules:
+
+- Parent-chart Floe services use `fullnameOverride` when set. The default is `floe-platform`, so Polaris renders as `floe-platform-polaris` and PostgreSQL renders as `floe-platform-postgresql`.
+- The upstream Dagster subchart prefixes the webserver service with the Helm release name. With `helm upgrade --install floe ...`, the webserver service is `floe-dagster-webserver`.
 
 ---
 
-## 3. Installation
+## 3. Current Values Excerpt
 
-```bash
-# Add Helm repository
-helm repo add floe https://charts.floe.dev
-helm repo update
-
-# Install with default values
-helm install floe floe/floe \
-  --namespace floe \
-  --create-namespace
-
-# Install with custom values
-helm install floe floe/floe \
-  --namespace floe \
-  --create-namespace \
-  --values values-production.yaml
-```
-
----
-
-## 4. values.yaml
+The excerpt below uses real keys from `charts/floe-platform/values.yaml`. Keep environment overrides small and verify them with `helm template` before applying.
 
 ```yaml
-# values.yaml - Generated from manifest.yaml
 global:
-  # Compute configuration (inherited from platform)
-  compute:
-    type: snowflake
-    secretRef: snowflake-credentials
+  environment: dev
+  imagePullPolicy: IfNotPresent
+  storageClass: ""
+  commonLabels: {}
+  commonAnnotations: {}
 
-  # Observability endpoints
-  observability:
-    otlpEndpoint: http://otel-collector:4317
-    lineageEndpoint: http://marquez:5000
+namespace:
+  create: false
+  name: ""
 
-# Dagster configuration
+fullnameOverride: floe-platform
+
+clusterMapping:
+  nonProd:
+    cluster: ""
+    environments:
+      - dev
+      - qa
+      - staging
+    namespaceTemplate: "floe-{{ .environment }}"
+    resources:
+      preset: small
+  prod:
+    cluster: ""
+    environments:
+      - prod
+    namespaceTemplate: "floe-prod"
+    resources:
+      preset: large
+
+resourcePresets:
+  small:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
 dagster:
   enabled: true
-  webserver:
-    replicas: 2
-    resources:
-      requests:
-        cpu: 500m
-        memory: 1Gi
-      limits:
-        cpu: 2000m
-        memory: 4Gi
-
-  daemon:
+  dagsterWebserver:
+    replicaCount: 1
+    service:
+      type: ClusterIP
+      port: 80
+  dagsterDaemon:
     enabled: true
-    resources:
-      requests:
-        cpu: 250m
-        memory: 512Mi
 
-  worker:
-    replicas: 3
-    resources:
-      requests:
-        cpu: 1000m
-        memory: 2Gi
-
-  # External database (recommended for production)
-  postgresql:
-    enabled: false
-  externalPostgresql:
-    host: my-rds-instance.xxx.us-east-1.rds.amazonaws.com
-    port: 5432
-    database: dagster
-    existingSecret: dagster-postgresql
-    secretKeys:
-      username: username
-      password: password
-
-# OTel Collector
-otel-collector:
+polaris:
   enabled: true
-  mode: daemonset
-  config:
-    exporters:
-      otlp/grafana:
-        endpoint: tempo-us-east-1.grafana.net:443
-        headers:
-          authorization: "Basic ${GRAFANA_API_KEY}"
+  service:
+    type: ClusterIP
+    port: 8181
+    managementPort: 8182
 
-# Marquez (optional - can use external)
+otel:
+  enabled: true
+  fullnameOverride: floe-platform-otel
+  mode: deployment
+
+postgresql:
+  enabled: true
+  auth:
+    database: floe
+    username: floe
+    password: ""
+    existingSecret: ""
+
+minio:
+  enabled: false
+
+jaeger:
+  enabled: true
+
 marquez:
   enabled: true
-  api:
-    replicas: 2
-  web:
-    enabled: true
 
-# Ingress
+cube:
+  enabled: false
+
+networkPolicy:
+  enabled: false
+
 ingress:
-  enabled: true
-  className: nginx
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-  hosts:
-    - host: dagster.example.com
-      paths:
-        - path: /
-          pathType: Prefix
-          backend:
-            service:
-              name: dagster-webserver
-              port: 3000
-  tls:
-    - secretName: dagster-tls
-      hosts:
-        - dagster.example.com
+  enabled: false
 ```
 
----
-
-## 5. Secrets Management
-
-```yaml
-# secrets.yaml (apply separately, store in Vault/SOPS)
-apiVersion: v1
-kind: Secret
-metadata:
-  name: snowflake-credentials
-  namespace: floe
-type: Opaque
-stringData:
-  SNOWFLAKE_ACCOUNT: "xxx.us-east-1"
-  SNOWFLAKE_USER: "floe_user"
-  SNOWFLAKE_PASSWORD: "secret"
-  SNOWFLAKE_ROLE: "floe_role"
-  SNOWFLAKE_WAREHOUSE: "floe_wh"
-  SNOWFLAKE_DATABASE: "floe_db"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: dagster-postgresql
-  namespace: floe
-type: Opaque
-stringData:
-  username: "dagster"
-  password: "secret"
-```
+`otel.fullnameOverride` controls the OTel subchart service/resource name. If you change it, also override the Dagster webserver and daemon `OTEL_EXPORTER_OTLP_ENDPOINT` env values to the matching `http://<otel-service>:4317` endpoint. The Dagster subchart renders those env values as static YAML, not templates.
 
 ---
 
-## 6. Resource Requirements
+## 4. Secrets And Credentials
 
-| Component | Min CPU | Min Memory | Recommended |
-|-----------|---------|------------|-------------|
-| dagster-webserver | 500m | 1Gi | 2 replicas |
-| dagster-daemon | 250m | 512Mi | 1 replica |
-| dagster-worker | 1000m | 2Gi | 3+ replicas |
-| postgresql | 500m | 1Gi | External RDS |
-| otel-collector | 200m | 256Mi | DaemonSet |
-| marquez | 500m | 1Gi | 2 replicas |
+The alpha chart supports existing Kubernetes Secrets for sensitive values. Do not put long-lived credentials directly in committed values files.
+
+Useful current keys include:
+
+| Purpose | Values keys |
+|---------|-------------|
+| PostgreSQL password | `postgresql.auth.password`, `postgresql.auth.existingSecret`, `postgresql.auth.existingSecretKey` |
+| Polaris bootstrap credentials | `polaris.auth.existingSecret`, `polaris.auth.bootstrapCredentials.clientId`, `polaris.auth.bootstrapCredentials.clientSecret` |
+| MinIO local/demo credentials | `minio.auth.rootUser`, `minio.auth.rootPassword`, `minio.auth.existingSecret` |
+| External Secrets integration | `externalSecrets.enabled`, `externalSecrets.postgresql.enabled`, `externalSecrets.minio.enabled`, `externalSecrets.secrets` |
+
+---
+
+## 5. Default Resource Shape
+
+These are chart defaults for alpha evaluation. They are not production capacity recommendations.
+
+| Component | Default request | Default limit |
+|-----------|-----------------|---------------|
+| Dagster webserver | 100m CPU, 256Mi memory | 500m CPU, 512Mi memory |
+| Dagster daemon | 100m CPU, 256Mi memory | 500m CPU, 512Mi memory |
+| Dagster run pods | 100m CPU, 256Mi memory | 1000m CPU, 1Gi memory |
+| Polaris | 200m CPU, 512Mi memory | 1000m CPU, 1Gi memory |
+| PostgreSQL | 100m CPU, 256Mi memory | 500m CPU, 512Mi memory |
 
 ---
 
@@ -274,6 +189,6 @@ stringData:
 
 - [floe-platform Chart](../../../charts/floe-platform/README.md) - Platform services chart
 - [floe-jobs Chart](../../../charts/floe-jobs/README.md) - Jobs and pipelines chart
-- [Production](production.md) - HA, scaling, monitoring
+- [Production considerations](production.md) - Planned HA, scaling, and monitoring considerations, not alpha-validated operations
 - [Two-Layer Model](two-layer-model.md) - Deployment model overview
 - [Local Development](local-development.md) - Development setup

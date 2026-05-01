@@ -34,7 +34,7 @@ floe is built on **composability** as a core architectural principle (ADR-0037):
 - **Plugin Architecture > Configuration Switches**: Extensibility via entry points (`floe.computes`, `floe.orchestrators`, etc.), not if/else config
 - **Interface > Implementation**: Define ABCs (ComputePlugin, TelemetryBackendPlugin, LineageBackendPlugin), not concrete classes
 - **Progressive Disclosure**: Point to detailed docs, don't duplicate content
-- **Opt-in Complexity**: Start simple (2-tier), scale to Data Mesh (3-tier) without rewrites
+- **Opt-in Complexity**: Start simple (2-tier), with architecture direction toward Data Mesh-compatible (3-tier) governance. See [Capability Status](capability-status.md) for the current alpha-validated state.
 
 **14 plugin categories** enable flexibility while maintaining enforced standards (see [Plugin Catalog](../reference/plugin-catalog.md) for implementation truth):
 - Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend
@@ -128,7 +128,7 @@ Layer 1: FOUNDATION (Framework Code)
 
 ## Key Interfaces
 
-floe defines **11 plugin interfaces** (ABCs) for extensibility (see [plugin-system/index.md](plugin-system/index.md) for canonical registry):
+floe documents **14 plugin categories** for extensibility (see [plugin-system/index.md](plugin-system/index.md) for the canonical registry and implemented ABCs):
 
 | Plugin Type | Purpose | Entry Point | ADR |
 |-------------|---------|-------------|-----|
@@ -143,8 +143,11 @@ floe defines **11 plugin interfaces** (ABCs) for extensibility (see [plugin-syst
 | `IngestionPlugin` | Data loading from sources | `floe.ingestion` | ADR-0020 |
 | `SecretsPlugin` | Credential management | `floe.secrets` | ADR-0023/0031 |
 | `IdentityPlugin` | User authentication (OIDC) | `floe.identity` | ADR-0024 |
+| `DataQualityPlugin` | Data quality validation frameworks | `floe.quality` | ADR-0044 |
+| `RBACPlugin` | Namespace and service-account isolation | `floe.rbac` | Epic 7B |
+| `AlertChannelPlugin` | Contract violation alert delivery | `floe.alert_channels` | Epic 15 |
 
-> **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins. DataQualityPlugin (Great Expectations, Soda) is documented in ADR-0044.
+> **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins.
 
 **See**: [interfaces/](interfaces/index.md) for complete ABC definitions with method signatures
 
@@ -202,9 +205,7 @@ floe/
 │   ├── floe-orchestrator-airflow/
 │   ├── floe-catalog-polaris/
 │   ├── floe-catalog-glue/
-│   ├── floe-storage-s3/
-│   ├── floe-storage-minio/
-│   ├── floe-storage-gcs/
+│   ├── floe-storage-s3/         # S3-compatible storage, including MinIO endpoints
 │   ├── floe-observability-jaeger/
 │   ├── floe-observability-datadog/
 │   ├── floe-semantic-cube/
@@ -222,23 +223,25 @@ floe/
 
 ## CLI Commands
 
+This section shows the target command shape. In the current alpha, `floe platform compile` is implemented for platform manifests and `make compile-demo` is the supported Customer 360 artifact path. Root data-team lifecycle commands and `floe platform test` are planned/stubbed, not current alpha workflows.
+
 ### Platform Team
 
 ```bash
 floe platform compile     # Validate and build artifacts
-floe platform test        # Run policy tests
+floe platform test        # Planned/stub: run policy tests
 floe platform publish     # Push to OCI registry
 floe platform deploy      # Deploy services to K8s
 floe platform status      # Check service health
 ```
 
-### Data Team
+### Data Team Target Lifecycle
 
 ```bash
-floe init --platform=v1.2.3  # Pull platform artifacts
-floe compile                  # Validate against platform
-floe run                      # Execute pipeline
-floe test                     # Run dbt tests
+floe init --platform=v1.2.3  # Planned: pull platform artifacts
+floe compile                  # Planned: validate against platform
+floe run                      # Planned: execute pipeline
+floe test                     # Planned: run dbt tests
 ```
 
 ## Consolidation Achieved
@@ -294,7 +297,7 @@ The following documents have been updated to support the Data Mesh architecture 
 
 1. Implement floe-core schemas (Pydantic models)
 2. Implement plugin interfaces (ABCs)
-3. Create default plugins (DuckDB, Dagster, Polaris, Cube, dlt)
+3. Create reference plugins and implementation primitives (DuckDB, Dagster, Polaris, Cube, dlt)
 4. Create Helm charts for platform deployment
 5. Implement CLI commands
 6. Create integration tests using K8s (ADR-0017)

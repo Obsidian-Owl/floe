@@ -10,6 +10,7 @@ Tests performed:
 Requirements:
 - 9b-FR-084: Helm test pod
 */}}
+{{- $dagsterEndpoint := include "floe-jobs.dagsterEndpoint" . }}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -66,7 +67,7 @@ spec:
     {{- end }}
 
     # Test platform connectivity
-    {{- if .Values.platform.release }}
+    {{- if $dagsterEndpoint }}
     - name: test-platform-connectivity
       image: curlimages/curl:8.5.0
       command:
@@ -75,11 +76,7 @@ spec:
         - |
           echo "Testing platform connectivity..."
 
-          {{- if .Values.platform.namespace }}
-          DAGSTER_URL="http://{{ .Values.platform.release }}-dagster-webserver.{{ .Values.platform.namespace }}.svc.cluster.local:80"
-          {{- else }}
-          DAGSTER_URL="http://{{ .Values.platform.release }}-dagster-webserver:80"
-          {{- end }}
+          DAGSTER_URL={{ $dagsterEndpoint | quote }}
 
           for i in 1 2 3 4 5; do
             if curl -sf "${DAGSTER_URL}/server_info" > /dev/null 2>&1; then
@@ -131,7 +128,7 @@ spec:
     {{- end }}
 
     # Fallback test if nothing else is enabled
-    {{- if and (not .Values.dbt.enabled) (not .Values.platform.release) (not .Values.customJobs) }}
+    {{- if and (not .Values.dbt.enabled) (not $dagsterEndpoint) (not .Values.customJobs) }}
     - name: test-basic
       image: busybox:1.36
       command:

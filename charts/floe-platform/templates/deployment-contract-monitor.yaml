@@ -54,7 +54,7 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: "floe-contract-monitor"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: {{ .Values.contractMonitor.otel.endpoint | default "http://otel-collector:4317" | quote }}
+              value: {{ .Values.contractMonitor.otel.endpoint | default (printf "http://%s:4317" (include "floe-platform.otel.fullname" .)) | quote }}
           livenessProbe:
             httpGet:
               path: /healthz

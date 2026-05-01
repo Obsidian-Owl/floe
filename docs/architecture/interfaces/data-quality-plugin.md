@@ -103,9 +103,9 @@ class DataQualityPlugin(ABC):
 
 | Plugin | Description |
 |--------|-------------|
-| `DBTTestsPlugin` | Native dbt tests (default) |
+| `DBTExpectationsPlugin` | dbt-expectations quality checks |
 | `GreatExpectationsPlugin` | Great Expectations framework |
-| `SodaPlugin` | Soda Core quality checks |
+| `SodaPlugin` | Planned Soda Core quality-check example |
 
 ## Related Documents
 

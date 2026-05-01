@@ -20,8 +20,8 @@ DAGSTER WEBSERVER:
   URL: http{{ if .Values.ingress.tls }}s{{ end }}://{{ (index .Values.ingress.hosts 0).host }}
 {{- else }}
   To access the Dagster UI, run:
-    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "floe-platform.dagster.webserverName" . }} 3000:{{ include "floe-platform.dagster.webserverPort" . }}
-  Then open: http://localhost:3000
+    kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "floe-platform.dagster.webserverName" . }} 3100:{{ include "floe-platform.dagster.webserverPort" . }}
+  Then open: http://localhost:3100
 {{- end }}
 {{- end }}
 
@@ -37,8 +37,8 @@ POLARIS CATALOG:
 {{- if .Values.otel.enabled }}
 
 OPENTELEMETRY COLLECTOR:
-  OTLP gRPC endpoint: {{ $fullname }}-otel-collector:4317
-  OTLP HTTP endpoint: http://{{ $fullname }}-otel-collector:4318
+  OTLP gRPC endpoint: {{ include "floe-platform.otel.fullname" . }}:4317
+  OTLP HTTP endpoint: http://{{ include "floe-platform.otel.fullname" . }}:4318
 {{- end }}
 
 {{- if .Values.postgresql.enabled }}
@@ -56,6 +56,11 @@ POSTGRESQL:
                               IMPORTANT WARNINGS
 ================================================================================
 
+ALPHA SCOPE:
+    This chart output is for alpha local/dev and Customer 360 validation paths.
+    Treat the guidance below as hardening considerations to validate before any
+    production environment use, not as supported production operations guidance.
+
 {{- if .Values.minio.enabled }}
 
 ⚠️  MINIO OBJECT STORAGE WARNING:
@@ -63,7 +68,7 @@ POSTGRESQL:
 
     THIS IS FOR DEVELOPMENT AND DEMO PURPOSES ONLY!
 
-    For production deployments, you should:
+    Before hardening for production environments:
     1. Disable MinIO: minio.enabled=false
     2. Use external S3-compatible storage (AWS S3, GCS, Azure Blob)
     3. Configure storage credentials via external secrets
@@ -79,18 +84,18 @@ POSTGRESQL:
 ⚠️  POSTGRESQL CREDENTIALS WARNING:
     PostgreSQL is using auto-generated or default credentials.
 
-    For production deployments:
+    Before hardening for production environments:
     1. Create a Secret with your PostgreSQL password
     2. Set postgresql.auth.existingSecret to the Secret name
     3. Ensure proper secret rotation policies
 {{- end }}
 {{- end }}
 
-{{- if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}
+{{ if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}
 
 ⚠️  BOOTSTRAP SECURITY NOTE:
     The bootstrap job communicates with Polaris over plaintext HTTP
-    within the cluster network. For production deployments:
+    within the cluster network. Before hardening for production environments:
     1. Deploy a service mesh (Istio/Linkerd) for automatic mTLS
     2. Or configure Polaris TLS and update polaris.service endpoints
 {{- end }}
@@ -101,7 +106,8 @@ POSTGRESQL:
     This deployment is configured for development (global.environment=dev).
     Resource limits are minimized for local development.
 
-    For production, set: global.environment=prod
+    For non-dev evaluation, set the environment name explicitly and validate
+    the full values stack before relying on it.
 {{- end }}
 
 ================================================================================
@@ -141,15 +147,17 @@ If something isn't working, check these common issues:
 2. Init container timeout (pod stuck in Init):
    kubectl describe pod -n {{ .Release.Namespace }} <pod-name> | grep -A5 "Init Containers"
 {{- if .Values.minio.enabled }}
-   - wait-for-minio: Verify MinIO is running (kubectl get pods -l app.kubernetes.io/component=minio)
+   - wait-for-minio: Verify MinIO is running (kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/component=minio)
 {{- end }}
-   - wait-for-polaris: Verify Polaris is running (kubectl get pods -l app.kubernetes.io/component=polaris)
+   - wait-for-polaris: Verify Polaris is running (kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/component=polaris)
    - Check service endpoints: kubectl get endpoints -n {{ .Release.Namespace }}
 
-{{ end -}}
-{{ if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}3{{ else }}1{{ end }}. Schema validation error on helm install/upgrade:
+{{ end }}
+{{ "\n" }}{{ if and .Values.polaris.enabled .Values.polaris.bootstrap.enabled }}3{{ else }}1{{ end }}. Schema validation error on helm install/upgrade:
    - Check values override chain: values.yaml < values-<env>.yaml < --set flags
-   - Run: helm template test {{ .Chart.Name }} -f your-values.yaml --debug 2>&1 | head -50
+   - Run: helm template test <chart-reference> -n {{ .Release.Namespace }} -f your-values.yaml --debug
+   - Local chart example: helm template test ./charts/floe-platform -n {{ .Release.Namespace }} -f your-values.yaml --debug
+   - Published chart example: helm template test <published-chart-reference> -n {{ .Release.Namespace }} -f your-values.yaml --debug
    - Subchart schema changes after upgrade may reject previously-valid keys
 
 ================================================================================
@@ -157,8 +165,8 @@ If something isn't working, check these common issues:
 ================================================================================
 
 For more information, see:
-- floe Platform Docs: https://floe.dev/docs
-- Helm Chart Reference: https://floe.dev/docs/deployment/helm
-- Troubleshooting Guide: https://floe.dev/docs/troubleshooting
+- floe Platform Docs: https://obsidian-owl.github.io/floe/
+- Helm Deployment Guide: https://obsidian-owl.github.io/floe/guides/deployment/kubernetes-helm
+- Contributor Troubleshooting Guide: https://obsidian-owl.github.io/floe/contributing/troubleshooting
 
 ================================================================================

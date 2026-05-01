@@ -53,18 +53,18 @@ help: ## Show this help message
 	@echo "Demo:"
 	@echo "  make compile-demo    Compile dbt models + generate definitions for demo products"
 	@echo "  make build-demo-image Build Dagster demo Docker image"
-	@echo "  make demo            Deploy demo via DevPod (requires running workspace)"
+	@echo "  make demo            Run contributor remote release-validation demo via DevPod"
 	@echo "  make demo-stop       Stop demo port-forwards"
 	@echo "  make demo-local      Deploy demo locally (requires local Kind cluster)"
 	@echo "  make demo-customer-360-run Trigger Customer 360 golden demo Dagster run"
 	@echo "  make demo-customer-360-validate Validate Customer 360 golden demo evidence"
 	@echo ""
-	@echo "DevPod (Remote E2E):"
+	@echo "Contributor Remote Validation (DevPod + Hetzner):"
 	@echo "  make devpod-setup    One-time Hetzner provider setup from .env"
-	@echo "  make devpod-test     Run E2E tests on Hetzner (full lifecycle)"
+	@echo "  make devpod-test     Run contributor E2E validation on DevPod"
 	@echo "  make devpod-delete   Delete DevPod workspace (stops billing)"
 	@echo "  make devpod-status   Show workspace status, tunnels, and cluster health"
-	@echo "  make devpod-up       Create/start DevPod workspace on Hetzner"
+	@echo "  make devpod-up       Create/start contributor DevPod workspace"
 	@echo "  make devpod-stop     Stop workspace (preserves VM disk)"
 	@echo "  make devpod-ssh      SSH into workspace"
 	@echo "  make devpod-sync     Sync kubeconfig from workspace to local"
@@ -446,8 +446,8 @@ build-demo-image: compile-demo ## Build Dagster demo Docker image and load to Ki
 	@kind load docker-image $(DEMO_IMAGE_REF) --name $${KIND_CLUSTER_NAME:-floe-test}
 	@echo "Demo image built and loaded to Kind successfully!"
 
-demo: ## Deploy demo via DevPod (requires running DevPod workspace)
-	@echo "=== Starting floe Platform Demo (DevPod) ==="
+demo: ## Run contributor remote release-validation demo via DevPod
+	@echo "=== Starting floe Contributor Remote Validation Demo (DevPod) ==="
 	@scripts/devpod-ensure-ready.sh
 	@echo "Building demo image inside DevPod..."
 	@devpod ssh "$(DEVPOD_WORKSPACE)" -- "cd /workspace && FLOE_DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) FLOE_DEMO_IMAGE_TAG=$(DEMO_IMAGE_TAG) make build-demo-image"
@@ -500,15 +500,29 @@ demo-local: build-demo-image ## Deploy demo locally (requires local Kind cluster
 	@uv run floe platform deploy --env dev --chart ./charts/floe-platform \
 		--values ./charts/floe-platform/values-demo.yaml \
 		$(DEMO_IMAGE_HELM_SET_ARGS)
-	@echo "=== Demo Ready ==="
-	@echo "Dagster UI:    http://localhost:3000"
-	@echo "Polaris:       http://localhost:8181"
-	@echo "Marquez:       http://localhost:5001"
-	@echo "Jaeger:        http://localhost:16686"
-	@echo "Grafana:       http://localhost:3001"
-	@echo "MinIO Console: http://localhost:9001"
+	@echo "Starting port-forwards..."
+	@if [ -f .demo-pids ]; then \
+		kill $$(cat .demo-pids) 2>/dev/null || true; \
+		rm -f .demo-pids; \
+	fi
+	@kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@kubectl port-forward svc/floe-platform-marquez 5100:5000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@kubectl port-forward svc/floe-platform-otel 4317:4317 4318:4318 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
 	@echo ""
-	@echo "Stop with: helm uninstall floe-platform -n floe-dev"
+	@echo "=== Demo Ready ==="
+	@echo "Dagster UI:    http://localhost:3100"
+	@echo "Polaris:       http://localhost:8181"
+	@echo "Marquez:       http://localhost:5100"
+	@echo "Jaeger:        http://localhost:16686"
+	@echo "MinIO Console: http://localhost:9001"
+	@echo "MinIO API:     http://localhost:9000"
+	@echo "OTel gRPC:     http://localhost:4317"
+	@echo "OTel HTTP:     http://localhost:4318"
+	@echo ""
+	@echo "Stop with: make demo-stop"
 
 demo-customer-360-run: ## Trigger Customer 360 golden demo Dagster run
 	@uv run python -m testing.ci.run_customer_360_demo
@@ -693,7 +707,7 @@ devpod-check:
 	}
 
 .PHONY: devpod-up
-devpod-up: devpod-check ## Create/start DevPod workspace on Hetzner
+devpod-up: devpod-check ## Create/start contributor DevPod workspace
 	@echo "Starting DevPod workspace '$(DEVPOD_WORKSPACE)' on $(DEVPOD_PROVIDER)..."
 	@DEVPOD_WORKSPACE="$(DEVPOD_WORKSPACE)" \
 		DEVPOD_PROVIDER="$(DEVPOD_PROVIDER)" \
@@ -730,7 +744,7 @@ devpod-setup: devpod-check ## One-time Hetzner provider setup from .env
 	@bash scripts/devpod-setup.sh
 
 .PHONY: devpod-test
-devpod-test: devpod-check ## Run E2E tests on Hetzner (full lifecycle)
+devpod-test: devpod-check ## Run contributor E2E validation on DevPod
 	@bash scripts/devpod-test.sh
 
 .PHONY: devpod-delete

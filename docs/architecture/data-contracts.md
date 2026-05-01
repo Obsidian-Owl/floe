@@ -119,7 +119,7 @@ Catalog: floe-data
 Contracts are registered via `CatalogPlugin.register_contract()`:
 
 ```python
-# During floe compile
+# During the planned floe compile lifecycle
 catalog.register_contract(
     namespace="sales.customer_360",
     contract_name="customers",
@@ -433,7 +433,7 @@ Contract validation produces specific error codes (FLOE-E5xx series) for actiona
 ### Example Error Output
 
 ```bash
-$ floe compile
+$ floe compile  # planned target-state command
 
 [3/5] Validating data contracts
       ✗ FLOE-E510: Child contract weakens 'freshness' SLA

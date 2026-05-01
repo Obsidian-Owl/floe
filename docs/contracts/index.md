@@ -36,7 +36,7 @@ floe uses a **unified two-type configuration model**:
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  COMPILED ARTIFACTS (Output of floe compile)                                 │
+│  COMPILED ARTIFACTS (Output of the compilation pipeline)                     │
 │                                                                              │
 │  Resolved configuration for runtime execution                               │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -54,7 +54,7 @@ floe uses a **unified two-type configuration model**:
 
 | Contract | Description | Purpose |
 |----------|-------------|---------|
-| [CompiledArtifacts](./compiled-artifacts.md) | Unified schema for all modes | Output of `floe compile` |
+| [CompiledArtifacts](./compiled-artifacts.md) | Unified schema for all modes | Output of the compilation pipeline |
 | [Observability Attributes](./observability-attributes.md) | OpenTelemetry/OpenLineage conventions | Consistent telemetry |
 | [Glossary](./glossary.md) | Terminology definitions | Shared vocabulary |
 
@@ -130,7 +130,7 @@ data_architecture:
 
 ### DataProduct
 
-The unit of deployment. References a manifest (or uses system defaults).
+The unit of deployment. References a platform or domain manifest, or is validated against an approved platform environment contract for the documented alpha path.
 
 ```yaml
 apiVersion: floe.dev/v1
@@ -149,7 +149,7 @@ transforms:
 
   - type: dbt
     path: models/marts/
-    compute: duckdb     # Analytics (or uses default if omitted)
+    compute: duckdb     # Analytics compute selected from the approved platform list
 
 schedule:
   cron: "0 6 * * *"
@@ -159,16 +159,22 @@ schedule:
 ## Compilation Flow
 
 ```bash
-# Platform Team: publish manifest
-floe platform compile
-floe platform publish v1.0.0
+# Current alpha: compile the Customer 360 demo artifacts
+make compile-demo
 
-# Data Team: compile DataProduct
-floe init --platform=v1.0.0
-floe compile
+# Current alpha: validate and compile a platform manifest
+uv run floe platform compile --manifest manifest.yaml
 ```
 
-The `floe compile` command:
+The planned root data-team lifecycle commands are not the current alpha workflow:
+
+```bash
+# Planned target-state commands; not alpha-supported user commands today.
+floe init --platform=v1.0.0  # planned target-state command
+floe compile                 # planned target-state command
+```
+
+The compilation pipeline:
 1. Loads manifest from OCI registry (if referenced)
 2. Resolves inheritance chain
 3. Validates DataProduct against constraints
@@ -191,10 +197,16 @@ print(artifacts.plugins.compute.type)  # "duckdb"
 print(artifacts.plugins.orchestrator.type)  # "dagster"
 ```
 
-### Schema Export
+### Schema Inspection
 
-```bash
-floe schema export --output compiled-artifacts.schema.json
+The public CLI does not currently expose a schema export command. During alpha, contributors can inspect the current Pydantic schema from the repository:
+
+```python
+import json
+
+from floe_core.schemas import CompiledArtifacts
+
+print(json.dumps(CompiledArtifacts.export_json_schema(), indent=2))
 ```
 
 ## Versioning
@@ -213,4 +225,4 @@ Contracts follow semantic versioning:
 - [Four-Layer Overview](../architecture/four-layer-overview.md) - Architecture context
 - [Platform Artifacts](../architecture/platform-artifacts.md) - OCI storage
 - [Plugin Architecture](../architecture/plugin-system/index.md) - Plugin system
-- [Opinionation Boundaries](../architecture/opinionation-boundaries.md) - Defaults
+- [Opinionation Boundaries](../architecture/opinionation-boundaries.md) - Enforced standards and platform-selected plugin boundaries

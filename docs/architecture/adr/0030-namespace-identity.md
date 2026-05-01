@@ -266,11 +266,11 @@ class RegisteredContract:
 
 ### Compile-Time Enforcement
 
-Identity validation occurs during `floe compile`:
+Identity validation occurs during the planned root `floe compile` flow:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         floe compile                                         │
+│                  planned root floe compile flow                              │
 │                                                                              │
 │  1. Parse floe.yaml                                                  │
 │     └── Extract: name, domain, version, repository                          │

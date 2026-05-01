@@ -61,9 +61,11 @@ data_contracts:
 
 ### 3. Compile and Run
 
+This is a planned data-team lifecycle example. In the current alpha, use the Customer 360 repo-local validation path for artifact evidence.
+
 ```bash
-floe compile
-floe run
+floe compile  # planned target-state command
+floe run      # planned target-state command
 ```
 
 The ContractMonitor will automatically start and begin checking contracts.
@@ -341,7 +343,7 @@ groups:
 
 ```bash
 # Run with verbose logging
-FLOE_LOG_LEVEL=debug floe run
+FLOE_LOG_LEVEL=debug floe run  # planned target-state command
 
 # Check contract directly
 floe contract test datacontract.yaml --connection prod --verbose

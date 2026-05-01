@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-The `floe compile` command executes multiple stages:
+The planned root `floe compile` command executes multiple stages:
 1. **Stage 1**: Load platform manifest from OCI registry
 2. **Stage 2**: Resolve profiles (credentials, compute config)
 3. **Stage 3**: Parse dbt manifest.json
@@ -163,7 +163,7 @@ Stage 1 HIT  → Stage 2 HIT  → Stage 3 HIT  → Stage 4 ALWAYS EXECUTES
 Users can force cache invalidation:
 
 ```bash
-floe compile --no-cache  # Ignore all caches
+floe compile --no-cache  # Planned root command: ignore all caches
 floe cache clear         # Delete all cached data
 floe cache clear --type profiles  # Delete only profile caches
 ```
@@ -285,7 +285,7 @@ floe cache stats
 
 ```bash
 # Verbose compilation shows cache hits/misses
-floe compile --verbose
+floe compile --verbose  # Planned root command
 
 # Output:
 # Stage 1: Load manifest [CACHE HIT] (0.1s)

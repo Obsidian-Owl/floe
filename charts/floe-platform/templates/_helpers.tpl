@@ -191,7 +191,50 @@ Polaris component name.
 OTel Collector component name.
 */}}
 {{- define "floe-platform.otel.fullname" -}}
+{{- if .Values.otel.fullnameOverride }}
+{{- .Values.otel.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- else }}
 {{- printf "%s-otel" (include "floe-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Find an environment variable value in a list of env var maps.
+*/}}
+{{- define "floe-platform.envValue" -}}
+{{- $name := .name -}}
+{{- $value := "" -}}
+{{- range .env }}
+{{- if eq .name $name }}
+{{- $value = (.value | default "") }}
+{{- end }}
+{{- end }}
+{{- $value }}
+{{- end }}
+
+{{/*
+Validate that static Dagster OTLP endpoint env vars match the rendered OTel service.
+The Dagster subchart renders env values with toYaml, so these cannot be templated.
+*/}}
+{{- define "floe-platform.validateDagsterOtelEndpoint" -}}
+{{- $context := .context -}}
+{{- $component := .component -}}
+{{- $env := .env | default list -}}
+{{- $expected := printf "http://%s:4317" (include "floe-platform.otel.fullname" $context) -}}
+{{- $actual := include "floe-platform.envValue" (dict "env" $env "name" "OTEL_EXPORTER_OTLP_ENDPOINT") -}}
+{{- if and (default false $context.Values.otel.enabled) (default false $context.Values.dagster.enabled) (ne $actual $expected) }}
+{{- fail (printf "Dagster %s OTEL_EXPORTER_OTLP_ENDPOINT must be %q to match OTel service %q; got %q. If otel.fullnameOverride is set, override both dagster.dagsterWebserver.env and dagster.dagsterDaemon.env to the matching endpoint." $component $expected (include "floe-platform.otel.fullname" $context) $actual) }}
+{{- end }}
+{{- end }}
+
+{{/*
+Validate all Dagster OTLP endpoints that are enabled for the platform chart.
+*/}}
+{{- define "floe-platform.validateDagsterOtelEndpoints" -}}
+{{- include "floe-platform.validateDagsterOtelEndpoint" (dict "context" . "component" "dagsterWebserver" "env" .Values.dagster.dagsterWebserver.env) }}
+{{- if default false .Values.dagster.dagsterDaemon.enabled }}
+{{- include "floe-platform.validateDagsterOtelEndpoint" (dict "context" . "component" "dagsterDaemon" "env" .Values.dagster.dagsterDaemon.env) }}
+{{- end }}
 {{- end }}
 
 {{/*

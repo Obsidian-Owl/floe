@@ -10,7 +10,7 @@ This document describes the long-lived services in Layer 3 of the floe architect
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────────┐│
 │  │  ORCHESTRATOR (Plugin)                                               ││
-│  │  Default: Dagster │ Alternatives: Airflow, Prefect                  ││
+│  │  Reference: Dagster │ Alternatives: Airflow, Prefect                ││
 │  │                                                                      ││
 │  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐        ││
 │  │  │   Webserver    │  │    Daemon      │  │   PostgreSQL   │        ││
@@ -20,7 +20,7 @@ This document describes the long-lived services in Layer 3 of the floe architect
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────────┐│
 │  │  CATALOG (Plugin)                                                    ││
-│  │  Default: Polaris │ Alternatives: AWS Glue, Hive, Nessie            ││
+│  │  Reference: Polaris │ Alternatives: AWS Glue, Hive, Nessie          ││
 │  │                                                                      ││
 │  │  ┌────────────────┐  ┌────────────────┐                             ││
 │  │  │  Polaris API   │  │   PostgreSQL   │                             ││
@@ -30,7 +30,7 @@ This document describes the long-lived services in Layer 3 of the floe architect
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────────┐│
 │  │  SEMANTIC LAYER (Plugin)                                             ││
-│  │  Default: Cube │ Alternatives: dbt Semantic Layer, None             ││
+│  │  Reference: Cube │ Alternatives: dbt Semantic Layer, None           ││
 │  │                                                                      ││
 │  │  ┌────────────────┐  ┌────────────────┐                             ││
 │  │  │  Cube Server   │  │     Redis      │                             ││

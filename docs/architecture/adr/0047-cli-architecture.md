@@ -56,15 +56,15 @@ floe                           # Root command
 │   ├── validate              # Validate RBAC configs
 │   ├── audit                 # Audit current RBAC state
 │   └── diff                  # Compare RBAC configurations
-├── compile                    # Data Team: validate spec
-├── validate                   # Data Team: validate floe.yaml
-├── run                        # Data Team: execute pipeline
-└── test                       # Data Team: dbt tests
+├── compile                    # Planned Data Team command: validate spec
+├── validate                   # Planned Data Team command: validate floe.yaml
+├── run                        # Planned Data Team command: execute pipeline
+└── test                       # Planned Data Team command: dbt tests
 ```
 
 **Two-Team UX Model**:
 - **Platform Team**: `floe platform *` - governance, deployment, infrastructure
-- **Data Team**: `floe compile`, `floe run`, `floe test` - day-to-day pipeline work
+- **Data Team**: planned target-state commands such as `floe compile`, `floe run`, and `floe test` for day-to-day pipeline work
 
 ### 4. Migration Strategy
 
@@ -95,7 +95,7 @@ floe                           # Root command
 ### Negative
 
 - **Migration effort** - Rewrite existing argparse commands
-- **Breaking changes** - Users of current `floe compile` may need adjustment
+- **Breaking changes** - future users of the planned root `floe compile` command may need adjustment
 - **Package changes** - floe-cli deprecated (users must update dependencies)
 
 ### Neutral
@@ -126,10 +126,10 @@ packages/floe-core/
     │   └── diff.py
     └── data/                   # Data team commands
         ├── __init__.py
-        ├── compile.py          # floe compile
-        ├── validate.py         # floe validate
-        ├── run.py              # floe run
-        └── test.py             # floe test
+        ├── compile.py          # planned floe compile
+        ├── validate.py         # planned floe validate
+        ├── run.py              # planned floe run
+        └── test.py             # planned floe test
 ```
 
 ## References

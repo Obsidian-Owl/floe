@@ -2,7 +2,9 @@
 
 ## Automated Evidence
 
-Run the Customer 360 evidence gate after `make demo` and after `make demo-customer-360-run` has completed:
+Platform Engineers and Data Engineers use this page to validate an already deployed Floe platform and Customer 360 data product. Start from the service URLs, run evidence, and platform access method provided for your environment, then run the checks described below.
+
+Floe Contributors use `make demo` only in the remote release-validation workflow. In that contributor lane, run the Customer 360 evidence gate after `make demo` and after `make demo-customer-360-run` has completed:
 
 ```bash
 make demo-customer-360-validate
@@ -61,7 +63,10 @@ The evidence maps to the release surfaces as follows:
 | Jaeger | Search Floe/Dagster service | Trace exists for Customer 360 run |
 | Polaris | Open catalog API/UI path | Customer 360 tables are registered |
 
-## Related Guide
+## Related Guides
 
 - [Customer 360 Golden Demo](customer-360.md)
-- [DevPod + Hetzner operations](../operations/devpod-hetzner.md)
+- [Validate your platform](../platform-engineers/validate-platform.md)
+- [Validate your data product](../data-engineers/validate-data-product.md)
+- [DevPod contributor workspace](../contributing/devpod-hetzner.md)
+- [Contributor troubleshooting](../contributing/troubleshooting.md)

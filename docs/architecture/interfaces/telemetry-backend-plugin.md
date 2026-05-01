@@ -66,7 +66,7 @@ class TelemetryBackendPlugin(ABC):
 
 | Plugin | Description | Self-Hosted |
 |--------|-------------|-------------|
-| `JaegerTelemetryPlugin` | Local/self-hosted observability (default) | Yes |
+| `JaegerTelemetryPlugin` | Local/self-hosted observability reference path | Yes |
 | `DatadogTelemetryPlugin` | SaaS APM and distributed tracing | No |
 | `GrafanaCloudTelemetryPlugin` | Managed Grafana + Tempo + Loki | No |
 

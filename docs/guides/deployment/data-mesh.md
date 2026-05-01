@@ -1,6 +1,22 @@
-# Data Mesh Deployment Topology
+# Data Mesh Deployment Status
 
-For federated Data Mesh deployments, the architecture separates shared platform services from domain-specific workloads.
+Data Mesh is part of Floe's architecture direction. The current alpha includes schema, contract, inheritance, and lineage namespace primitives, but it does not yet provide a validated multi-cluster Data Mesh deployment path.
+
+## Current Status
+
+| Capability | Status |
+| --- | --- |
+| Enterprise and domain manifest fields | Implemented primitive |
+| Manifest inheritance validation | Implemented primitive |
+| Data contract schemas | Implemented primitive |
+| Data Mesh lineage namespace strategy | Implemented primitive |
+| Dedicated domain Helm chart | Planned |
+| Multi-cluster deployment guide | Planned |
+| Product registration workflow | Planned |
+
+## Alpha Guidance
+
+Use the single-platform Kubernetes deployment path for alpha. Treat the diagrams below as architecture context, not a supported deployment recipe.
 
 ---
 
@@ -63,12 +79,14 @@ Domains connect to shared services via K8s DNS:
 # Domain deployment references shared catalog
 env:
   - name: POLARIS_HOST
-    value: "polaris.floe-platform.svc.cluster.local"
+    value: "<polaris-service>.<platform-namespace>.svc.cluster.local"
   - name: OTLP_ENDPOINT
-    value: "http://otel-collector.floe-platform.svc.cluster.local:4317"
+    value: "http://<platform-otlp-endpoint>:4317"
   - name: OPENLINEAGE_URL
-    value: "http://marquez.floe-platform.svc.cluster.local:5000"
+    value: "http://<marquez-service>.<platform-namespace>.svc.cluster.local:5000"
 ```
+
+For the default chart service prefix/fullnameOverride `floe-platform` in namespace `floe-platform`, the shared service names are `floe-platform-polaris` and `floe-platform-marquez`.
 
 ---
 
@@ -90,27 +108,6 @@ For large enterprises, domains may run in separate clusters:
          +----------------------------+----------------------------+
                           Cross-cluster networking
                           (Service Mesh / Ingress)
-```
-
----
-
-## 5. Data Mesh Helm Deployment
-
-```bash
-# 1. Deploy shared services (Central Platform Team)
-helm install floe-platform charts/floe-platform \
-  --namespace floe-platform \
-  --values enterprise-values.yaml
-
-# 2. Deploy domain services (Domain Platform Team)
-helm install sales-domain charts/floe-domain \
-  --namespace floe-sales-domain \
-  --set domain.name=sales \
-  --set domain.enterprise.ref=oci://registry/enterprise:v1.0.0
-
-# 3. Deploy data products (Product Team)
-floe product init --domain=sales:v1.0.0
-floe product register
 ```
 
 ---

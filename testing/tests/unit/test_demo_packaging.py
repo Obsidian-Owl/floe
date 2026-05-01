@@ -1512,6 +1512,42 @@ class TestMakefileDemoChain:
                 "deploys the explicit demo image ref."
             )
 
+    @pytest.mark.requirement("WU11-AC6")
+    def test_demo_local_starts_local_port_forwards(self) -> None:
+        """Verify demo-local starts localhost port-forwards after deploying.
+
+        The user-facing URLs printed by demo-local must be reachable without a
+        separate manual port-forward command.
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "demo-local")
+
+        assert "KUBECONFIG" not in body, "demo-local port-forwards must use local kube context."
+        assert ".demo-pids" in body, "demo-local must write pids for make demo-stop."
+        for command in (
+            "kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev",
+            "kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev",
+            "kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev",
+            "kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n floe-dev",
+            "kubectl port-forward svc/floe-platform-marquez 5100:5000 -n floe-dev",
+            "kubectl port-forward svc/floe-platform-otel 4317:4317 4318:4318 -n floe-dev",
+        ):
+            assert command in body, f"demo-local must start port-forward: {command}"
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_demo_local_prints_reachable_urls(self) -> None:
+        """Verify demo-local prints URLs backed by its port-forwards."""
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "demo-local")
+
+        assert "Dagster UI:    http://localhost:3100" in body
+        assert "Marquez:       http://localhost:5100" in body
+        assert "MinIO API:     http://localhost:9000" in body
+        assert "OTel gRPC:     http://localhost:4317" in body
+        assert "OTel HTTP:     http://localhost:4318" in body
+        assert "Stop with: make demo-stop" in body
+        assert "http://localhost:3000" not in body
+
 
 # ============================================================
 # Helm Values File Parsing Helpers (T63/T64)

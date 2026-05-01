@@ -12,8 +12,8 @@ floe is built on **composability** as its foundational principle ([ADR-0037](../
 
 - **Plugin Architecture > Configuration Switches**: Use entry points for extensibility, not if/else config
 - **Interface > Implementation**: Define ABCs (Abstract Base Classes), not concrete classes
-- **Progressive Disclosure**: Start simple, opt-in to complexity without rewrites
-- **Opt-in Complexity**: 2-tier config (single team) → 3-tier config (Data Mesh) seamlessly
+- **Progressive Disclosure**: Start simple, then opt in to architecture-compatible governance primitives as needs grow.
+- **Opt-in Complexity**: 2-tier config (single team) can evolve toward 3-tier config (Data Mesh) as an architecture direction; validated Data Mesh operations remain planned and are not alpha-supported.
 
 ### 1.2 Design Decisions
 

@@ -1,0 +1,59 @@
+apiVersion: floe.dev/v1alpha1
+kind: PlatformEnvironmentContract
+metadata:
+  name: floe-dev
+  owner: platform-team@example.com
+  description: Development Floe environment for first data products.
+environment:
+  name: dev
+  kubernetes:
+    namespace: floe-dev
+    releaseName: floe
+  platformManifest:
+    source: git
+    path: demo/manifest.yaml
+    ociRef: oci://registry.example.com/floe/platform/dev:0.1.0
+plugins:
+  orchestrator:
+    default: dagster
+    alphaSupported: [dagster]
+  catalog:
+    default: polaris
+    alphaSupported: [polaris]
+  storage:
+    default: s3-compatible
+    alphaSupported: [s3-compatible]
+  telemetryBackend:
+    default: jaeger
+    alphaSupported: [jaeger, console]
+  lineageBackend:
+    default: marquez
+    alphaSupported: [marquez]
+  compute:
+    default: duckdb
+    approved:
+      - name: duckdb
+        use: Small and medium dbt transformations in the alpha path.
+runtime:
+  recommendedAlphaSpine: dagster
+  artifactRegistry: registry.example.com/data-products
+  imageTagPolicy: git-sha
+access:
+  serviceAccount: floe-data-product-runner
+  secrets:
+    convention: Kubernetes Secret references only; do not put raw secrets in floe.yaml.
+observability:
+  dagsterUrl: http://localhost:3100
+  marquezUrl: http://localhost:5100
+  jaegerUrl: http://localhost:16686
+  minioConsoleUrl: http://localhost:9001
+promotion:
+  requiredEvidence:
+    - floe platform compile succeeds
+    - dbt tests pass
+    - runtime artifact image is published
+    - Dagster run succeeds
+    - OpenLineage event appears in Marquez
+    - OpenTelemetry trace appears in Jaeger
+support:
+  escalation: platform-team@example.com

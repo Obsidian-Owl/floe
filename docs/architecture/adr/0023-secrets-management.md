@@ -451,7 +451,7 @@ resource "vault_kubernetes_auth_backend_role" "floe_runtime" {
 ### Compile-Time: Manifest → Profile
 
 ```
-manifest.yaml                floe compile              profiles.yml
+manifest.yaml                planned compile flow       profiles.yml
        │                                   │                          │
        ▼                                   ▼                          ▼
 ┌──────────────────────┐           ┌─────────────────┐      ┌─────────────────────┐
@@ -467,7 +467,7 @@ manifest.yaml                floe compile              profiles.yml
                                                             └─────────────────────┘
 ```
 
-**Key Principle:** `floe compile` generates profiles that reference environment variables, never actual secrets.
+**Key Principle:** the planned root `floe compile` flow generates profiles that reference environment variables, never actual secrets.
 
 ### Runtime: Secret Injection
 

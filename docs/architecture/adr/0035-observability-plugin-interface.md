@@ -242,7 +242,7 @@ class TelemetryBackendPlugin(ABC):
         """Validate connection to backend.
 
         Checks that backend is reachable and credentials are valid.
-        Called during platform validation (floe validate).
+        Called during planned platform validation workflows.
 
         Returns:
             True if connection successful, False otherwise.
@@ -392,7 +392,7 @@ class LineageBackendPlugin(ABC):
         """Validate connection to backend.
 
         Checks that backend is reachable and credentials are valid.
-        Called during platform validation (floe validate).
+        Called during planned platform validation workflows.
 
         Returns:
             True if connection successful, False otherwise.
@@ -459,7 +459,7 @@ plugins:
 
 ### Neutral
 
-- **Default plugins** - `floe-telemetry-jaeger` and `floe-lineage-marquez` ship together (batteries included)
+- **Reference plugins** - `floe-telemetry-jaeger` and `floe-lineage-marquez` ship together as the local/self-hosted reference path
 - **Migration path** - Existing unified ObservabilityPlugin deprecated but coexists during transition
 - **Ecosystem growth** - Community maintains backend-specific plugins
 
@@ -927,7 +927,7 @@ plugins:
 
 # prod/manifest.yaml
 plugins:
-  telemetry_backend: datadog  # SaaS for production
+  telemetry_backend: datadog  # SaaS telemetry backend example
   lineage_backend: atlan
 ```
 
@@ -943,9 +943,9 @@ plugins:
 - [plugin-system/](../plugin-system/index.md) - Plugin patterns
 - [interfaces/telemetry-backend-plugin.md](../interfaces/telemetry-backend-plugin.md) + [lineage-backend-plugin.md](../interfaces/lineage-backend-plugin.md) - ABC definitions
 - **Requirements Traceability:**
-  - [Epic 06A: OpenTelemetry](../../plans/epics/06-observability/epic-06a-opentelemetry.md) - TelemetryBackendPlugin requirements
-  - [Epic 06B: OpenLineage](../../plans/epics/06-observability/epic-06b-openlineage.md) - LineageBackendPlugin requirements
-  - [Epic 01: Plugin Registry](../../plans/epics/01-foundation/epic-01-plugin-registry.md) - Plugin discovery
+  - Epic 06A: OpenTelemetry (`docs/plans/epics/06-observability/epic-06a-opentelemetry.md`) - TelemetryBackendPlugin requirements
+  - Epic 06B: OpenLineage (`docs/plans/epics/06-observability/epic-06b-openlineage.md`) - LineageBackendPlugin requirements
+  - Epic 01: Plugin Registry (`docs/plans/epics/01-foundation/epic-01-plugin-registry.md`) - Plugin discovery
 - **Industry References:**
   - [OpenTelemetry Collector Configuration](https://opentelemetry.io/docs/collector/configuration/)
   - [OpenLineage Transport Configuration](https://openlineage.io/docs/client/python)

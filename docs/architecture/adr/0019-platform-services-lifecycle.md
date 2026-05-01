@@ -117,7 +117,7 @@ floe platform logs catalog
 
 ```bash
 # Trigger pipeline run (creates K8s Job)
-floe run
+floe run  # planned root data-team command; not alpha-supported yet
 
 # View job status
 floe status

@@ -101,7 +101,7 @@ floe/
         └── pyproject.toml           # Entry point registration
 ```
 
-> **Note:** floe-cube has been renamed to `plugins/floe-semantic-cube/` to follow the plugin pattern established in [04-building-blocks](../../guides/04-building-blocks.md).
+> **Note:** floe-cube has been renamed to `plugins/floe-semantic-cube/` to follow the plugin pattern documented in [Plugin System](../plugin-system/index.md).
 
 ### Data Flow
 

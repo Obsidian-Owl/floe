@@ -324,20 +324,24 @@ Trace: floe.run
 
 ---
 
-## 6. Development Environment
+## 6. Historical Development Environment Sketch
 
-### 6.1 Sequence: `floe dev`
+This section records an earlier local-runtime design sketch. It is not the alpha-supported runtime path. Use [Local Kind Evaluation](deployment/local-development.md) for the current local Kind and Helm workflow.
+
+### 6.1 Historical Local Runtime Command Sequence
 
 ```
 User              floe-cli           Docker Compose        Services
   │                   │                    │                   │
-  │  floe dev         │                    │                   │
+  │  planned local    │                    │                   │
+  │  runtime command  │                    │                   │
   │──────────────────►│                    │                   │
   │                   │                    │                   │
   │                   │  Generate compose  │                   │
   │                   │  configuration     │                   │
   │                   │                    │                   │
-  │                   │  docker compose up │                   │
+  │                   │  start compose     │                   │
+  │                   │  services          │                   │
   │                   │───────────────────►│                   │
   │                   │                    │                   │
   │                   │                    │  Start PostgreSQL │
@@ -363,7 +367,9 @@ User              floe-cli           Docker Compose        Services
   │◄──────────────────│                    │                   │
 ```
 
-### 6.2 Docker Compose Configuration
+### 6.2 Historical Docker Compose Configuration
+
+The following compose sketch is historical and unsupported for alpha product evaluation. Floe's current local evaluation path uses Kubernetes through Kind and Helm.
 
 ```yaml
 # Generated docker-compose.yml

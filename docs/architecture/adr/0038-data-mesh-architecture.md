@@ -12,12 +12,12 @@ floe must support organizations at vastly different scales and structures:
 2. **Multi-team enterprise** - Shared platform team, multiple data teams, standardized tooling
 3. **Data Mesh organization** - Federated domains, autonomous product teams, domain-specific governance
 
-Traditional data platforms fail at this range:
-- **Centralized platforms** work for single/multi-team but don't scale to Data Mesh (100+ domains)
+Traditional data platforms expose tradeoffs across this range:
+- **Centralized platforms** work for single/multi-team but can become bottlenecks for federated Data Mesh organizations unless domain autonomy and governance are added
 - **Domain-specific platforms** work for Data Mesh but create massive overhead for small teams
-- **Separate codebases** for each model require rewrites when scaling
+- **Separate codebases** for each model create migration work as organizational models change
 
-**The tension:** We need ONE architecture that supports both extremes without rewriting.
+**The tension:** We need one architecture direction that can support both extremes while the current alpha remains limited to the primitives documented in [Capability Status](../capability-status.md).
 
 ### What is Data Mesh?
 
