@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
+import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
+_CHART_PATH = _REPO_ROOT / "charts" / "floe-platform"
 _NOTES_PATH = _REPO_ROOT / "charts" / "floe-platform" / "templates" / "NOTES.txt"
 _SITE_CONFIG_PATH = _REPO_ROOT / "docs-site" / "site-config.mjs"
 
@@ -25,22 +29,37 @@ def _canonical_docs_site() -> str:
 
 def _render_notes(*extra_args: str) -> str:
     """Render Helm install output including NOTES."""
-    result = subprocess.run(
-        [
-            "helm",
-            "install",
-            "floe",
-            "./charts/floe-platform",
-            "--dry-run=client",
-            "--debug",
-            *extra_args,
-        ],
-        cwd=_REPO_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return f"{result.stdout}\n{result.stderr}"
+    with tempfile.TemporaryDirectory() as temp_dir:
+        chart_path = Path(temp_dir) / "floe-platform"
+        # NOTES rendering should stay hermetic; external subcharts are validated
+        # in Helm-specific CI lanes after dependency build.
+        shutil.copytree(
+            _CHART_PATH,
+            chart_path,
+            ignore=shutil.ignore_patterns("charts", "Chart.lock"),
+        )
+
+        chart_yaml_path = chart_path / "Chart.yaml"
+        chart_yaml = yaml.safe_load(chart_yaml_path.read_text())
+        chart_yaml["dependencies"] = []
+        chart_yaml_path.write_text(yaml.safe_dump(chart_yaml, sort_keys=False))
+
+        result = subprocess.run(
+            [
+                "helm",
+                "install",
+                "floe",
+                str(chart_path),
+                "--dry-run=client",
+                "--debug",
+                *extra_args,
+            ],
+            cwd=_REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return f"{result.stdout}\n{result.stderr}"
 
 
 @pytest.mark.requirement("alpha-docs")
