@@ -111,7 +111,14 @@ cat > "$HOOKS_DIR/pre-push" << 'HOOK'
 # Git hooks run with repository-local GIT_* variables exported. Clear them
 # before invoking test subprocesses that create their own temporary repos.
 for git_env_var in $(git rev-parse --local-env-vars); do
-    unset "$git_env_var"
+    case "$git_env_var" in
+        GIT_*[!ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*)
+            continue
+            ;;
+        GIT_*)
+            unset "$git_env_var"
+            ;;
+    esac
 done
 
 if command -v uv >/dev/null 2>&1; then

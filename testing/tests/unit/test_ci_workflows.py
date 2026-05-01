@@ -334,7 +334,12 @@ class TestLocalHookAlignment:
         ].split("HOOK", maxsplit=1)[0]
 
         assert "git rev-parse --local-env-vars" in pre_push_template
+        assert 'case "$git_env_var" in' in pre_push_template
+        assert "GIT_*[!ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*" in pre_push_template
         assert 'unset "$git_env_var"' in pre_push_template
+        assert pre_push_template.index('case "$git_env_var" in') < pre_push_template.index(
+            'unset "$git_env_var"',
+        )
         assert pre_push_template.index('unset "$git_env_var"') < pre_push_template.index(
             "pre-commit run --hook-stage pre-push",
         )
