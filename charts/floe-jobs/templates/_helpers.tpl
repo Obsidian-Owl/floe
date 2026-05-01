@@ -90,7 +90,8 @@ or legacy release name fallback.
 {{- end }}
 
 {{/*
-Polaris endpoint - use explicit value or configured platform service prefix.
+Polaris endpoint - use explicit value, configured platform service prefix,
+or legacy release name fallback.
 */}}
 {{- define "floe-jobs.polarisEndpoint" -}}
 {{- if .Values.platform.polarisEndpoint }}
@@ -98,13 +99,17 @@ Polaris endpoint - use explicit value or configured platform service prefix.
 {{- else if .Values.platform.servicePrefix }}
 {{- $ns := .Values.platform.namespace | default .Release.Namespace }}
 {{- printf "http://%s-polaris.%s.svc.cluster.local:8181" .Values.platform.servicePrefix $ns }}
+{{- else if .Values.platform.releaseName }}
+{{- $ns := .Values.platform.namespace | default .Release.Namespace }}
+{{- printf "http://%s-polaris.%s.svc.cluster.local:8181" .Values.platform.releaseName $ns }}
 {{- else }}
 {{- "" }}
 {{- end }}
 {{- end }}
 
 {{/*
-OTel collector endpoint - use explicit value or configured platform service prefix.
+OTel collector endpoint - use explicit value, configured platform service prefix,
+or legacy release name fallback.
 */}}
 {{- define "floe-jobs.otelEndpoint" -}}
 {{- if .Values.platform.otelEndpoint }}
@@ -112,6 +117,9 @@ OTel collector endpoint - use explicit value or configured platform service pref
 {{- else if .Values.platform.servicePrefix }}
 {{- $ns := .Values.platform.namespace | default .Release.Namespace }}
 {{- printf "http://%s-otel.%s.svc.cluster.local:4317" .Values.platform.servicePrefix $ns }}
+{{- else if .Values.platform.releaseName }}
+{{- $ns := .Values.platform.namespace | default .Release.Namespace }}
+{{- printf "http://%s-otel.%s.svc.cluster.local:4317" .Values.platform.releaseName $ns }}
 {{- else }}
 {{- "" }}
 {{- end }}

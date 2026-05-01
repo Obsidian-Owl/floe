@@ -437,6 +437,20 @@ def test_validate_docs_navigation_allows_raw_html_external_href(
 
 
 @pytest.mark.requirement("alpha-docs")
+def test_validate_docs_navigation_ignores_raw_html_local_href_in_fenced_code(
+    tmp_path: Path,
+) -> None:
+    """Navigation validation ignores raw HTML examples inside fenced code."""
+    _write_required_docs(tmp_path)
+    _write_manifest(tmp_path)
+    (tmp_path / "docs/demo/customer-360-validation.md").write_text(
+        '# Validation\n\n```html\n<a href="../contributing/devpod-hetzner.md">DevPod</a>\n```\n',
+    )
+
+    assert validate_docs_navigation(tmp_path) == []
+
+
+@pytest.mark.requirement("alpha-docs")
 def test_validate_docs_navigation_checks_non_required_docs(
     tmp_path: Path,
 ) -> None:

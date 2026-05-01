@@ -196,6 +196,30 @@ def _raw_link_target(raw_target: str) -> str | None:
     return target_path
 
 
+def _without_fenced_code_blocks(markdown: str) -> str:
+    """Return Markdown content with fenced code blocks removed."""
+    lines: list[str] = []
+    in_fenced_code_block = False
+    fence_marker = ""
+
+    for line in markdown.splitlines(keepends=True):
+        stripped = line.lstrip()
+        current_marker = stripped[:3]
+        if current_marker in {"```", "~~~"}:
+            if not in_fenced_code_block:
+                in_fenced_code_block = True
+                fence_marker = current_marker
+            elif current_marker == fence_marker:
+                in_fenced_code_block = False
+                fence_marker = ""
+            continue
+
+        if not in_fenced_code_block:
+            lines.append(line)
+
+    return "".join(lines)
+
+
 def _validate_doc_links(
     root: Path,
     doc_path: str,
@@ -227,7 +251,7 @@ def _validate_doc_links(
                 f"Published docs link to excluded docs in {doc_path}: {link_target} -> {resolved}",
             )
 
-    for match in RAW_HTML_HREF_RE.finditer(markdown):
+    for match in RAW_HTML_HREF_RE.finditer(_without_fenced_code_blocks(markdown)):
         raw_target = match.group(2).strip()
         if not raw_target or raw_target.startswith("#"):
             continue

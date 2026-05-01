@@ -292,6 +292,44 @@ class TestJobsChartTemplate:
 
     @pytest.mark.requirement("9b-FR-081")
     @pytest.mark.usefixtures("helm_available")
+    def test_template_preserves_legacy_release_name_platform_fallbacks(
+        self,
+        jobs_chart_path: Path,
+    ) -> None:
+        """Legacy releaseName derives all platform endpoints consistently."""
+        result = subprocess.run(
+            [
+                "helm",
+                "template",
+                "test-release",
+                str(jobs_chart_path),
+                "--set",
+                "dbt.enabled=true",
+                "--set",
+                "platform.releaseName=floe",
+                "--set",
+                "platform.namespace=floe-dev",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        docs = parse_yaml_documents(result.stdout)
+        job_docs = [d for d in docs if d.get("kind") == "Job"]
+        assert len(job_docs) == 1
+
+        container = job_docs[0]["spec"]["template"]["spec"]["containers"][0]
+        env_vars = {e["name"]: e["value"] for e in container.get("env", [])}
+
+        assert env_vars["POLARIS_ENDPOINT"] == "http://floe-polaris.floe-dev.svc.cluster.local:8181"
+        assert (
+            env_vars["OTEL_EXPORTER_OTLP_ENDPOINT"]
+            == "http://floe-otel.floe-dev.svc.cluster.local:4317"
+        )
+
+    @pytest.mark.requirement("9b-FR-081")
+    @pytest.mark.usefixtures("helm_available")
     def test_template_renders_custom_job(self, jobs_chart_path: Path) -> None:
         """Test custom jobs are rendered correctly."""
         result = subprocess.run(
