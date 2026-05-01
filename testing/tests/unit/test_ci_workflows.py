@@ -325,6 +325,25 @@ class TestLocalHookAlignment:
         assert "git config --local core.hooksPath" in setup_text
         assert "git config --global --get core.hooksPath" in setup_text
 
+    @pytest.mark.requirement("VAL-HOOKS")
+    def test_pre_push_unsets_git_hook_environment_before_running_pytest(self) -> None:
+        """Local pre-push must not leak hook-local Git env into test subprocesses."""
+        setup_text = SETUP_HOOKS.read_text()
+        pre_push_template = setup_text.split("cat > \"$HOOKS_DIR/pre-push\" << 'HOOK'", maxsplit=1)[
+            1
+        ].split("HOOK", maxsplit=1)[0]
+
+        assert "git rev-parse --local-env-vars" in pre_push_template
+        assert 'case "$git_env_var" in' in pre_push_template
+        assert "GIT_*[!ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*" in pre_push_template
+        assert 'unset "$git_env_var"' in pre_push_template
+        assert pre_push_template.index('case "$git_env_var" in') < pre_push_template.index(
+            'unset "$git_env_var"',
+        )
+        assert pre_push_template.index('unset "$git_env_var"') < pre_push_template.index(
+            "pre-commit run --hook-stage pre-push",
+        )
+
 
 class TestCubeStoreRollbackPath:
     """Verify Cube Store E2E tests exist and rollback path is documented."""
