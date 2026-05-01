@@ -44,22 +44,56 @@ def _render_notes(*extra_args: str) -> str:
         chart_yaml["dependencies"] = []
         chart_yaml_path.write_text(yaml.safe_dump(chart_yaml, sort_keys=False))
 
+        notes_fixture_path = chart_path / "files" / "NOTES.txt"
+        notes_fixture_path.parent.mkdir()
+        notes_fixture_path.write_text((chart_path / "templates" / "NOTES.txt").read_text())
+
+        notes_wrapper_path = chart_path / "templates" / "rendered-notes-test.yaml"
+        notes_wrapper_path.write_text(
+            """apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rendered-notes-test
+data:
+  notes: |-
+{{ tpl (.Files.Get "files/NOTES.txt") . | nindent 4 }}
+"""
+        )
+
         result = subprocess.run(
             [
                 "helm",
-                "install",
+                "template",
                 "floe",
                 str(chart_path),
-                "--dry-run=client",
                 "--debug",
+                "--show-only",
+                "templates/rendered-notes-test.yaml",
                 *extra_args,
             ],
             cwd=_REPO_ROOT,
-            check=True,
+            check=False,
             capture_output=True,
             text=True,
         )
-        return f"{result.stdout}\n{result.stderr}"
+        assert result.returncode == 0, (
+            "helm template failed while rendering NOTES fixture\n"
+            f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+        )
+
+        rendered_docs = yaml.safe_load_all(result.stdout)
+        for rendered_doc in rendered_docs:
+            if (
+                isinstance(rendered_doc, dict)
+                and rendered_doc.get("kind") == "ConfigMap"
+                and rendered_doc.get("metadata", {}).get("name") == "rendered-notes-test"
+            ):
+                return str(rendered_doc["data"]["notes"])
+
+        raise AssertionError(
+            "rendered-notes-test ConfigMap not found in Helm output\n"
+            f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+        )
 
 
 @pytest.mark.requirement("alpha-docs")
