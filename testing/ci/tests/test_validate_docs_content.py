@@ -157,6 +157,22 @@ def test_allows_root_floe_compile_when_marked_planned(tmp_path: Path) -> None:
 
 
 @pytest.mark.requirement("alpha-docs")
+def test_rejects_unsupported_lifecycle_commands_with_bare_target_artifact_context(
+    tmp_path: Path,
+) -> None:
+    """Target artifact wording does not caveat unsupported lifecycle commands."""
+    readme = tmp_path / "README.md"
+    readme.write_text(
+        "# Floe\n\n"
+        "Run the compiled target artifact with `floe run target/compiled_artifacts.json`.\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    assert any("'floe run' is not a supported current alpha workflow" in error for error in errors)
+
+
+@pytest.mark.requirement("alpha-docs")
 def test_rejects_lifecycle_commands_in_contributor_docs_without_caveat(
     tmp_path: Path,
 ) -> None:

@@ -70,7 +70,7 @@ UNSUPPORTED_ALPHA_LIFECYCLE_COMMAND_RE = re.compile(
 )
 UNSUPPORTED_ALPHA_LIFECYCLE_ALLOWED_CONTEXT_RE = re.compile(
     r"\b("
-    r"planned|stub|target|target-state|historical|not implemented|not current|"
+    r"planned|stub|target[- ]state|historical|not implemented|not current|"
     r"not the current|not yet implemented|not alpha-supported|non-current|candidate"
     r")\b",
     re.IGNORECASE,
