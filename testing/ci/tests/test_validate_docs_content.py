@@ -353,6 +353,26 @@ def test_rejects_docker_compose_and_floe_dev_product_paths(tmp_path: Path) -> No
 
 
 @pytest.mark.requirement("alpha-docs")
+def test_reports_one_docker_compose_development_path_error_per_line(tmp_path: Path) -> None:
+    """Content validation reports the bidirectional Docker Compose path rule once."""
+    docs = tmp_path / "docs" / "guides" / "deployment"
+    docs.mkdir(parents=True)
+    (docs / "local-development.md").write_text(
+        "# Local\n\n"
+        "Docker Compose development workflows make evaluation Docker Compose friendly.\n",
+    )
+
+    errors = load_validator().validate_docs_content(tmp_path)
+
+    matching_errors = [
+        error
+        for error in errors
+        if "Docker Compose presented as a development or evaluation product path" in error
+    ]
+    assert len(matching_errors) == 1
+
+
+@pytest.mark.requirement("alpha-docs")
 def test_allows_negative_or_planned_docker_compose_and_floe_dev_context(tmp_path: Path) -> None:
     """Content validation permits negative and planned references to stale paths."""
     docs = tmp_path / "docs" / "guides" / "deployment"

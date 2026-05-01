@@ -21,10 +21,32 @@ const disallowedSnippets = [
   { pattern: /\bDBTTestsPlugin\b/u, message: 'references stale DBTTestsPlugin name' },
 ];
 
+const negativeOrPlannedContextPatterns = [
+  /\bnot supported\b/iu,
+  /\bunsupported\b/iu,
+  /\bnot alpha-supported\b/iu,
+  /\bnot implemented\b/iu,
+  /\bplanned\b/iu,
+  /\bhistorical\b/iu,
+  /\bdeprecated\b/iu,
+  /\brejected\b/iu,
+  /\bwas rejected\b/iu,
+  /\balternative\b/iu,
+  /\bnot a current\b/iu,
+  /\bnot the (?:current )?(?:production )?default\b/iu,
+  /\bdo not run\b/iu,
+  /\bno Docker Compose\b/iu,
+  /\bcreates testing parity issues\b/iu,
+  /\bparity issues\b/iu,
+  /\bfailure mode\b/iu,
+  /\bstubs?\b/iu,
+  /\badvanced proof after\b/iu,
+];
+
 function hasNegativeOrPlannedContext(line) {
-  return /\b(not supported|unsupported|not alpha-supported|not implemented|planned|historical|deprecated|rejected|was rejected|alternative|not a current|not the (?:current )?(?:production )?default|do not run|no Docker Compose|creates testing parity issues|parity issues|failure mode|stub|stubs|advanced proof)\b/iu.test(
-    line,
-  );
+  // Negative-context gating exempts planned, rejected, or explicitly non-current
+  // references from product-surface checks while keeping current-path claims strict.
+  return negativeOrPlannedContextPatterns.some((pattern) => pattern.test(line));
 }
 
 const productSurfaceSources = new Set([

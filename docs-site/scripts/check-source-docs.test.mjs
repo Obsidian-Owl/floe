@@ -519,3 +519,25 @@ test('collectSourceDocsErrors allows planned root commands and Customer 360 as a
     assert.deepEqual(errors, []);
   });
 });
+
+test('collectSourceDocsErrors rejects broad advanced proof wording as negative context', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/data-engineers'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/data-engineers/first-data-product.md'),
+      [
+        '# Build Your First Data Product',
+        '',
+        'Build `hello-orders` first.',
+        'This provides advanced proof-of-concept coverage for `floe compile`.',
+        '',
+      ].join('\n'),
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, [
+      "docs/data-engineers/first-data-product.md: presents unsupported root command 'floe compile' as current",
+    ]);
+  });
+});

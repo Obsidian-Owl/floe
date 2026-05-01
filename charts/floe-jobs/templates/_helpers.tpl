@@ -72,6 +72,24 @@ app.kubernetes.io/component: {{ .jobName }}
 {{- end }}
 
 {{/*
+Dagster webserver endpoint - use explicit value, configured platform service prefix,
+or legacy release name fallback.
+*/}}
+{{- define "floe-jobs.dagsterEndpoint" -}}
+{{- if .Values.platform.dagsterEndpoint }}
+{{- .Values.platform.dagsterEndpoint }}
+{{- else if .Values.platform.servicePrefix }}
+{{- $ns := .Values.platform.namespace | default .Release.Namespace }}
+{{- printf "http://%s-dagster-webserver.%s.svc.cluster.local:80" .Values.platform.servicePrefix $ns }}
+{{- else if .Values.platform.releaseName }}
+{{- $ns := .Values.platform.namespace | default .Release.Namespace }}
+{{- printf "http://%s-dagster-webserver.%s.svc.cluster.local:80" .Values.platform.releaseName $ns }}
+{{- else }}
+{{- "" }}
+{{- end }}
+{{- end }}
+
+{{/*
 Polaris endpoint - use explicit value or configured platform service prefix.
 */}}
 {{- define "floe-jobs.polarisEndpoint" -}}

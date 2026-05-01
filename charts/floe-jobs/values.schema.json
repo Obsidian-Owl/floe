@@ -32,6 +32,10 @@
           "type": "string",
           "description": "Platform namespace"
         },
+        "dagsterEndpoint": {
+          "type": "string",
+          "description": "Explicit Dagster webserver endpoint override"
+        },
         "polarisEndpoint": {
           "type": "string",
           "description": "Explicit Polaris endpoint override"

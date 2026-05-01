@@ -264,6 +264,9 @@ platform:
   # Namespace where floe-platform is deployed
   namespace: ""
 
+  # Dagster webserver endpoint (overrides platform.servicePrefix discovery)
+  dagsterEndpoint: ""
+
   # Polaris catalog endpoint (overrides platform.servicePrefix discovery)
   polarisEndpoint: ""
 

@@ -43,11 +43,13 @@ DOCKER_COMPOSE_PRODUCT_PATHS = (
         "'docker compose up' presented as a product path",
     ),
     (
-        re.compile(r"\bDocker Compose\b.*\b(development|evaluation)\b", re.IGNORECASE),
-        "Docker Compose presented as a development or evaluation product path",
-    ),
-    (
-        re.compile(r"\b(development|evaluation)\b.*\bDocker Compose\b", re.IGNORECASE),
+        re.compile(
+            r"\b(?:"
+            r"Docker Compose\b.*\b(?:development|evaluation)|"
+            r"(?:development|evaluation)\b.*\bDocker Compose"
+            r")\b",
+            re.IGNORECASE,
+        ),
         "Docker Compose presented as a development or evaluation product path",
     ),
 )

@@ -31,7 +31,7 @@ def _render_notes(*extra_args: str) -> str:
             "install",
             "floe",
             "./charts/floe-platform",
-            "--dry-run",
+            "--dry-run=client",
             "--debug",
             *extra_args,
         ],

@@ -100,14 +100,16 @@ customJobs:
 |-----------|-------------|---------|
 | `platform.servicePrefix` | floe-platform shared service prefix/fullnameOverride | `""` |
 | `platform.namespace` | floe-platform namespace | `""` |
+| `platform.dagsterEndpoint` | Explicit Dagster webserver endpoint | `""` |
 | `platform.polarisEndpoint` | Explicit Polaris endpoint | `""` |
 | `platform.otelEndpoint` | Explicit OTel endpoint | `""` |
 
 Set `platform.servicePrefix: floe-platform` for the documented alpha platform install. The chart then derives:
+- Dagster webserver endpoint: `http://floe-platform-dagster-webserver.<namespace>.svc.cluster.local:80`
 - Polaris catalog endpoint: `http://floe-platform-polaris.<namespace>.svc.cluster.local:8181`
 - OpenTelemetry collector endpoint: `http://floe-platform-otel.<namespace>.svc.cluster.local:4317`
 
-Use `platform.polarisEndpoint` and `platform.otelEndpoint` when your platform uses different service names.
+Use explicit endpoint values when your platform uses different service names.
 
 ### Service Account
 
@@ -209,7 +211,6 @@ helm install floe ./charts/floe-platform \
 
 # Then deploy jobs
 helm install floe-jobs ./charts/floe-jobs \
-  --set platform.releaseName=floe \
   --set platform.servicePrefix=floe-platform \
   --set platform.namespace=floe-dev \
   --set dbt.enabled=true

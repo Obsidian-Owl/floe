@@ -194,8 +194,6 @@ class TestJobsChartTemplate:
                 "--set",
                 "dbt.enabled=true",
                 "--set",
-                "platform.releaseName=floe",
-                "--set",
                 "platform.servicePrefix=floe-platform",
                 "--set",
                 "platform.namespace=floe-dev",
@@ -233,7 +231,12 @@ class TestJobsChartTemplate:
         test_containers = {c["name"]: c for c in test_pods[0]["spec"]["containers"]}
         assert "test-platform-connectivity" in test_containers
         platform_command = "\n".join(test_containers["test-platform-connectivity"]["command"])
-        assert "http://floe-dagster-webserver.floe-dev.svc.cluster.local:80" in platform_command
+        platform_command_lines = platform_command.splitlines()
+        assert (
+            'DAGSTER_URL="http://floe-platform-dagster-webserver.floe-dev.svc.cluster.local:80"'
+            in platform_command_lines
+        )
+        assert "test-basic" not in test_containers
 
     @pytest.mark.requirement("9b-FR-081")
     @pytest.mark.usefixtures("helm_available")
@@ -255,6 +258,8 @@ class TestJobsChartTemplate:
                 "--set",
                 "platform.namespace=floe-dev",
                 "--set",
+                "platform.dagsterEndpoint=http://custom-dagster:80",
+                "--set",
                 "platform.polarisEndpoint=http://custom-polaris:8181",
                 "--set",
                 "platform.otelEndpoint=http://custom-otel:4317",
@@ -273,6 +278,17 @@ class TestJobsChartTemplate:
 
         assert env_vars["POLARIS_ENDPOINT"] == "http://custom-polaris:8181"
         assert env_vars["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://custom-otel:4317"
+
+        test_pods = [
+            d
+            for d in docs
+            if d.get("kind") == "Pod"
+            and d.get("metadata", {}).get("annotations", {}).get("helm.sh/hook") == "test"
+        ]
+        assert len(test_pods) == 1
+        test_containers = {c["name"]: c for c in test_pods[0]["spec"]["containers"]}
+        platform_command = "\n".join(test_containers["test-platform-connectivity"]["command"])
+        assert 'DAGSTER_URL="http://custom-dagster:80"' in platform_command.splitlines()
 
     @pytest.mark.requirement("9b-FR-081")
     @pytest.mark.usefixtures("helm_available")
