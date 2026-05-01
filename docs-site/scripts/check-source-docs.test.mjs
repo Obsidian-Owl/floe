@@ -235,6 +235,8 @@ test('collectSourceDocsErrors rejects unsupported current default integrations',
         '| Telemetry Backend | Jaeger (local), Datadog (production) | Grafana Cloud |',
         '| Lineage Backend | Marquez (local), Atlan (production) | OpenMetadata |',
         '| Storage | MinIO (local), S3 (production) | GCS |',
+        '| Archive Storage | Default S3 | GCS |',
+        '| Lakehouse Storage | S3 (Production) | GCS |',
         '',
       ].join('\n'),
     );
@@ -244,6 +246,8 @@ test('collectSourceDocsErrors rejects unsupported current default integrations',
     assert.deepEqual(errors, [
       'docs/architecture/opinionation-boundaries.md: labels Datadog as a current default integration',
       'docs/architecture/opinionation-boundaries.md: labels Atlan as a current default integration',
+      'docs/architecture/opinionation-boundaries.md: labels S3 as a current production default',
+      'docs/architecture/opinionation-boundaries.md: labels S3 as a current production default',
       'docs/architecture/opinionation-boundaries.md: labels S3 as a current production default',
     ]);
   });

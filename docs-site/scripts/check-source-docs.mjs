@@ -124,7 +124,7 @@ function collectProductSurfaceLineLevelErrors(line) {
   if (/\bAtlan\b.*\b(default|production|prod)\b|\b(default|production|prod)\b.*\bAtlan\b/iu.test(line)) {
     errors.push('labels Atlan as a current default integration');
   }
-  if (/\bS3\b.*\b(production|default|prod)\b|\b(production|default|prod)\b.*\bS3\b/u.test(line)) {
+  if (/\bS3\b.*\b(production|default|prod)\b|\b(production|default|prod)\b.*\bS3\b/iu.test(line)) {
     errors.push('labels S3 as a current production default');
   }
   if (/\bDefault plugins?\b/iu.test(line)) {
