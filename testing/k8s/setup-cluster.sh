@@ -406,7 +406,12 @@ deploy_monitoring_stack() {
 build_demo_image() {
     if [[ -f "${PROJECT_ROOT}/docker/dagster-demo/Dockerfile" ]]; then
         log_info "Building Dagster demo image (${FLOE_DEMO_IMAGE})..."
-        KIND_CLUSTER_NAME="${CLUSTER_NAME}" make -C "${PROJECT_ROOT}" build-demo-image 2>&1 || {
+        KIND_CLUSTER_NAME="${CLUSTER_NAME}" \
+            DEMO_IMAGE_REPOSITORY="${FLOE_DEMO_IMAGE_REPOSITORY}" \
+            DEMO_IMAGE_TAG="${FLOE_DEMO_IMAGE_TAG}" \
+            FLOE_DEMO_IMAGE_REPOSITORY="${FLOE_DEMO_IMAGE_REPOSITORY}" \
+            FLOE_DEMO_IMAGE_TAG="${FLOE_DEMO_IMAGE_TAG}" \
+            make -C "${PROJECT_ROOT}" build-demo-image 2>&1 || {
             log_warn "Dagster demo image build failed — Dagster pods will be in ErrImageNeverPull"
         }
     fi

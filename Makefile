@@ -450,7 +450,10 @@ demo: ## Run contributor remote release-validation demo via DevPod
 	@echo "=== Starting floe Contributor Remote Validation Demo (DevPod) ==="
 	@scripts/devpod-ensure-ready.sh
 	@echo "Building demo image inside DevPod..."
-	@devpod ssh "$(DEVPOD_WORKSPACE)" -- "cd /workspace && FLOE_DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) FLOE_DEMO_IMAGE_TAG=$(DEMO_IMAGE_TAG) make build-demo-image"
+	@devpod ssh "$(DEVPOD_WORKSPACE)" \
+		--start-services=false \
+		--workdir /workspace \
+		--command 'DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) DEMO_IMAGE_TAG=$(DEMO_IMAGE_TAG) FLOE_DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY) FLOE_DEMO_IMAGE_TAG=$(DEMO_IMAGE_TAG) make build-demo-image'
 	@echo "Updating Helm chart dependencies..."
 	@helm dependency update charts/floe-platform
 	@echo "Deploying Helm chart via tunneled kubectl..."

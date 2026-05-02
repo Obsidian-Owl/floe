@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from testing.fixtures.credentials import (
     get_minio_credentials,
     get_polaris_credentials,
+    get_polaris_oauth2_server_uri,
     get_polaris_scope,
     get_polaris_warehouse,
 )
@@ -125,6 +126,7 @@ def create_polaris_catalog(config: PolarisConfig) -> Catalog:
             "polaris",
             type="rest",
             uri=config.uri,
+            **{"oauth2-server-uri": get_polaris_oauth2_server_uri(catalog_endpoint=config.uri)},
             warehouse=config.warehouse,
             credential=config.credential.get_secret_value(),
             scope=config.scope,

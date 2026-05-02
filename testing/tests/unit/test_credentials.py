@@ -20,6 +20,7 @@ from testing.fixtures.credentials import (
     get_minio_credentials,
     get_polaris_credentials,
     get_polaris_endpoint,
+    get_polaris_oauth2_server_uri,
 )
 
 # ---------------------------------------------------------------------------
@@ -28,6 +29,7 @@ from testing.fixtures.credentials import (
 MANIFEST_POLARIS_CLIENT_ID = "demo-admin"
 MANIFEST_POLARIS_CLIENT_SECRET = "demo-secret"  # pragma: allowlist secret
 MANIFEST_POLARIS_URI = "http://floe-platform-polaris:8181/api/catalog"
+MANIFEST_POLARIS_OAUTH2_URI = "http://floe-platform-polaris:8181/api/catalog/v1/oauth/tokens"
 MINIO_DEFAULT_ACCESS_KEY = "minioadmin"
 MINIO_DEFAULT_SECRET_KEY = "minioadmin123"  # pragma: allowlist secret
 
@@ -55,6 +57,7 @@ def _make_valid_manifest(tmp_path: Path) -> Path:
                     "oauth2": {
                         "client_id": MANIFEST_POLARIS_CLIENT_ID,
                         "client_secret": MANIFEST_POLARIS_CLIENT_SECRET,
+                        "token_url": MANIFEST_POLARIS_OAUTH2_URI,
                     },
                 },
             },
@@ -106,7 +109,7 @@ class TestGetMinioCredentials:
         access_key, secret_key = get_minio_credentials(manifest_path=manifest)
 
         assert access_key == "custom-key"
-        assert secret_key == "custom-secret"
+        assert secret_key == "custom-secret"  # pragma: allowlist secret
 
     @pytest.mark.requirement("AC-2")
     def test_returns_defaults_when_manifest_missing(
@@ -165,7 +168,7 @@ class TestGetMinioCredentials:
         access_key, secret_key = get_minio_credentials(manifest_path=manifest)
 
         assert access_key == MINIO_DEFAULT_ACCESS_KEY
-        assert secret_key == "only-secret"
+        assert secret_key == "only-secret"  # pragma: allowlist secret
 
     @pytest.mark.requirement("AC-2")
     def test_empty_env_vars_treated_as_unset(
@@ -216,7 +219,7 @@ class TestGetPolarisCredentials:
         client_id, client_secret = get_polaris_credentials(manifest_path=manifest)
 
         assert client_id == "env-client"
-        assert client_secret == "env-secret"
+        assert client_secret == "env-secret"  # pragma: allowlist secret
 
     @pytest.mark.requirement("AC-2")
     def test_returns_defaults_when_manifest_missing(
@@ -347,7 +350,7 @@ class TestGetPolarisCredentials:
         client_id, client_secret = get_polaris_credentials(manifest_path=manifest)
 
         assert client_id == MANIFEST_POLARIS_CLIENT_ID
-        assert client_secret == "env-secret-only"
+        assert client_secret == "env-secret-only"  # pragma: allowlist secret
 
     @pytest.mark.requirement("AC-2")
     def test_empty_env_vars_treated_as_unset(
@@ -378,7 +381,7 @@ class TestGetPolarisCredentials:
                         "config": {
                             "oauth2": {
                                 "client_id": "production-admin",
-                                "client_secret": "production-secret",
+                                "client_secret": "production-secret",  # pragma: allowlist secret
                             }
                         }
                     }
@@ -389,7 +392,7 @@ class TestGetPolarisCredentials:
         client_id, client_secret = get_polaris_credentials(manifest_path=custom_manifest)
 
         assert client_id == "production-admin"
-        assert client_secret == "production-secret"
+        assert client_secret == "production-secret"  # pragma: allowlist secret
 
     @pytest.mark.requirement("AC-2")
     def test_manifest_yaml_is_empty_file(
@@ -560,6 +563,84 @@ class TestGetPolarisEndpoint:
 
 
 # ---------------------------------------------------------------------------
+# get_polaris_oauth2_server_uri
+# ---------------------------------------------------------------------------
+
+
+class TestGetPolarisOAuth2ServerUri:
+    """Tests for get_polaris_oauth2_server_uri()."""
+
+    @pytest.mark.requirement("AC-2")
+    def test_env_var_overrides_manifest(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Explicit token endpoint env vars take priority."""
+        monkeypatch.setenv("POLARIS_OAUTH2_SERVER_URI", "http://auth.example/token")
+        manifest = _make_valid_manifest(tmp_path)
+
+        uri = get_polaris_oauth2_server_uri(manifest_path=manifest)
+
+        assert uri == "http://auth.example/token"
+
+    @pytest.mark.requirement("AC-2")
+    def test_derives_from_runtime_catalog_endpoint_before_manifest(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Runtime catalog endpoints should keep host and in-cluster paths aligned."""
+        monkeypatch.delenv("POLARIS_OAUTH2_SERVER_URI", raising=False)
+        monkeypatch.delenv("FLOE_E2E_POLARIS_OAUTH2_URI", raising=False)
+        manifest = _make_valid_manifest(tmp_path)
+
+        uri = get_polaris_oauth2_server_uri(
+            manifest_path=manifest,
+            catalog_endpoint="http://localhost:18181/api/catalog",
+        )
+
+        assert uri == "http://localhost:18181/api/catalog/v1/oauth/tokens"
+
+    @pytest.mark.requirement("AC-2")
+    def test_reads_token_url_from_manifest_when_no_runtime_endpoint(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Manifest token_url is used when there is no explicit runtime endpoint."""
+        monkeypatch.delenv("POLARIS_OAUTH2_SERVER_URI", raising=False)
+        monkeypatch.delenv("FLOE_E2E_POLARIS_OAUTH2_URI", raising=False)
+        manifest = _make_valid_manifest(tmp_path)
+
+        uri = get_polaris_oauth2_server_uri(manifest_path=manifest)
+
+        assert uri == MANIFEST_POLARIS_OAUTH2_URI
+
+    @pytest.mark.requirement("AC-2")
+    def test_derives_from_manifest_endpoint_when_token_url_missing(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Missing token_url falls back to the manifest catalog endpoint."""
+        monkeypatch.delenv("POLARIS_OAUTH2_SERVER_URI", raising=False)
+        monkeypatch.delenv("FLOE_E2E_POLARIS_OAUTH2_URI", raising=False)
+        manifest = _write_manifest(
+            tmp_path / "manifest.yaml",
+            {
+                "plugins": {
+                    "catalog": {
+                        "config": {
+                            "uri": "http://polaris.example/api/catalog",
+                            "oauth2": {
+                                "client_id": "id",
+                                "client_secret": "secret",  # pragma: allowlist secret
+                            },
+                        }
+                    }
+                }
+            },
+        )
+
+        uri = get_polaris_oauth2_server_uri(manifest_path=manifest)
+
+        assert uri == "http://polaris.example/api/catalog/v1/oauth/tokens"
+
+
+# ---------------------------------------------------------------------------
 # Cross-cutting: API contract tests
 # ---------------------------------------------------------------------------
 
@@ -608,9 +689,9 @@ class TestCredentialsAPIContract:
         second_id, second_secret = get_polaris_credentials(manifest_path=manifest)
 
         assert first_id == "first-call-id"
-        assert first_secret == "first-call-secret"
+        assert first_secret == "first-call-secret"  # pragma: allowlist secret
         assert second_id == "second-call-id"
-        assert second_secret == "second-call-secret"
+        assert second_secret == "second-call-secret"  # pragma: allowlist secret
         # Prove they are different (not cached/stale)
         assert first_id != second_id
         assert first_secret != second_secret
@@ -633,7 +714,7 @@ class TestCredentialsAPIContract:
                         "config": {
                             "oauth2": {
                                 "client_id": "first-id",
-                                "client_secret": "first-secret",
+                                "client_secret": "first-secret",  # pragma: allowlist secret
                             }
                         }
                     }
@@ -651,7 +732,7 @@ class TestCredentialsAPIContract:
                         "config": {
                             "oauth2": {
                                 "client_id": "second-id",
-                                "client_secret": "second-secret",
+                                "client_secret": "second-secret",  # pragma: allowlist secret
                             }
                         }
                     }

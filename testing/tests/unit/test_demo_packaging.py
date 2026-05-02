@@ -1513,6 +1513,24 @@ class TestMakefileDemoChain:
             )
 
     @pytest.mark.requirement("WU11-AC6")
+    def test_remote_demo_build_passes_same_image_ref_as_deploy(self) -> None:
+        """The DevPod demo build must use the same image ref Helm deploys.
+
+        Without command-line ``DEMO_IMAGE_*`` overrides, the remote build can
+        recompute a dirty tag from generated artifacts while Helm deploys the
+        local clean SHA tag, leaving Dagster pods in ``ErrImageNeverPull``.
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "demo")
+
+        assert "--command" in body, "demo must use DevPod's explicit command flag."
+        assert "DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)" in body
+        assert "DEMO_IMAGE_TAG=$(DEMO_IMAGE_TAG)" in body
+        assert "FLOE_DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)" in body
+        assert "FLOE_DEMO_IMAGE_TAG=$(DEMO_IMAGE_TAG)" in body
+        assert "$(DEMO_IMAGE_HELM_SET_ARGS)" in body
+
+    @pytest.mark.requirement("WU11-AC6")
     def test_demo_local_starts_local_port_forwards(self) -> None:
         """Verify demo-local starts localhost port-forwards after deploying.
 

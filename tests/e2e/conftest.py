@@ -29,6 +29,7 @@ import yaml
 from testing.fixtures.credentials import (
     get_minio_credentials,
     get_polaris_credentials,
+    get_polaris_oauth2_server_uri,
     get_polaris_scope,
     get_polaris_warehouse,
     resolve_manifest_path,
@@ -226,6 +227,7 @@ def pytest_collection_modifyitems(
 
         test_func = item.function
         test_name = item.nodeid
+        item_markers = {mark.name for mark in item.iter_markers()}
 
         try:
             source = inspect.getsource(test_func)
@@ -253,7 +255,7 @@ def pytest_collection_modifyitems(
                 )
 
         # TQR-010: dry_run=True in E2E tests
-        if re.search(r"dry_run\s*=\s*True", source):
+        if "developer_workflow" not in item_markers and re.search(r"dry_run\s*=\s*True", source):
             violations.append(
                 f"TQR WARNING: {test_name} - TQR-010 violation: "
                 "dry_run=True found in E2E test (E2E should execute real operations)"
@@ -734,6 +736,10 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         **{
             "type": "rest",
             "uri": f"{polaris_url}/api/catalog",
+            "oauth2-server-uri": get_polaris_oauth2_server_uri(
+                _MANIFEST_PATH,
+                catalog_endpoint=f"{polaris_url}/api/catalog",
+            ),
             "credential": polaris_credential,
             "scope": _manifest_scope,
             "warehouse": os.environ.get("POLARIS_WAREHOUSE", _manifest_warehouse),
