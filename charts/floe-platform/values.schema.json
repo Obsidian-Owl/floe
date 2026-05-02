@@ -361,6 +361,82 @@
             "allowedLocations": {
               "type": "array",
               "items": { "type": "string" }
+            },
+            "grants": {
+              "type": "object",
+              "description": "Polaris catalog role, principal role, and privilege grants created by the bootstrap Job",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "catalogRole": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[a-zA-Z0-9_-]+$",
+                  "description": "Catalog role name to create and grant privileges to"
+                },
+                "principalRole": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[a-zA-Z0-9_-]+$",
+                  "description": "Principal role name to create and assign the catalog role to"
+                },
+                "bootstrapPrincipal": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[a-zA-Z0-9_-]+$",
+                  "description": "Bootstrap principal receiving the principal role"
+                },
+                "privileges": {
+                  "type": "array",
+                  "description": "Apache Polaris 1.3.0 catalog-role privileges to grant",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "CATALOG_ATTACH_POLICY",
+                      "CATALOG_DETACH_POLICY",
+                      "CATALOG_MANAGE_ACCESS",
+                      "CATALOG_MANAGE_CONTENT",
+                      "CATALOG_MANAGE_METADATA",
+                      "CATALOG_READ_PROPERTIES",
+                      "CATALOG_WRITE_PROPERTIES",
+                      "NAMESPACE_ATTACH_POLICY",
+                      "NAMESPACE_CREATE",
+                      "NAMESPACE_DETACH_POLICY",
+                      "NAMESPACE_DROP",
+                      "NAMESPACE_FULL_METADATA",
+                      "NAMESPACE_LIST",
+                      "NAMESPACE_READ_PROPERTIES",
+                      "NAMESPACE_WRITE_PROPERTIES",
+                      "POLICY_ATTACH",
+                      "POLICY_CREATE",
+                      "POLICY_DETACH",
+                      "POLICY_DROP",
+                      "POLICY_FULL_METADATA",
+                      "POLICY_LIST",
+                      "POLICY_READ",
+                      "POLICY_WRITE",
+                      "TABLE_ATTACH_POLICY",
+                      "TABLE_CREATE",
+                      "TABLE_DETACH_POLICY",
+                      "TABLE_DROP",
+                      "TABLE_FULL_METADATA",
+                      "TABLE_LIST",
+                      "TABLE_READ_DATA",
+                      "TABLE_READ_PROPERTIES",
+                      "TABLE_WRITE_DATA",
+                      "TABLE_WRITE_PROPERTIES",
+                      "VIEW_CREATE",
+                      "VIEW_DROP",
+                      "VIEW_FULL_METADATA",
+                      "VIEW_LIST",
+                      "VIEW_READ_PROPERTIES",
+                      "VIEW_WRITE_PROPERTIES"
+                    ]
+                  }
+                }
+              }
             }
           }
         }
