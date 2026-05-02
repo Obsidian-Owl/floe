@@ -114,7 +114,13 @@ test('collectSourceDocsErrors allows links to contributor DevPod docs outside co
     await fs.mkdir(path.join(repoRoot, 'docs/demo'), { recursive: true });
     await fs.writeFile(
       path.join(repoRoot, 'docs/demo/customer-360-validation.md'),
-      '# Validation\n\nSee [DevPod contributor workspace](../contributing/devpod-hetzner.md).\n',
+      [
+        '# Validation',
+        '',
+        'The current alpha business/query proof is command-based against the generated Iceberg mart.',
+        'See [DevPod contributor workspace](../contributing/devpod-hetzner.md).',
+        '',
+      ].join('\n'),
     );
 
     const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
@@ -543,5 +549,64 @@ test('collectSourceDocsErrors rejects broad advanced proof wording as negative c
     assert.deepEqual(errors, [
       "docs/data-engineers/first-data-product.md: presents unsupported root command 'floe compile' as current",
     ]);
+  });
+});
+
+test('collectSourceDocsErrors rejects ambiguous Customer 360 semantic query proof', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/demo'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/demo/customer-360.md'),
+      [
+        '# Customer 360 Golden Demo',
+        '',
+        'You can access Dagster, Polaris, and the semantic/query layer.',
+        '',
+      ].join('\n'),
+    );
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/demo/customer-360-validation.md'),
+      [
+        '# Customer 360 Validation',
+        '',
+        'Business evidence comes from querying Customer 360 metrics.',
+        '',
+      ].join('\n'),
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, [
+      'docs/demo/customer-360-validation.md: must identify the command-based business/query proof',
+      'docs/demo/customer-360.md: must clarify Cube is not required for the Customer 360 alpha query proof',
+    ]);
+  });
+});
+
+test('collectSourceDocsErrors accepts explicit Customer 360 alpha query boundaries', async () => {
+  await withSourceDocsFixture(async ({ repoRoot, manifestPath }) => {
+    await fs.mkdir(path.join(repoRoot, 'docs/demo'), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/demo/customer-360.md'),
+      [
+        '# Customer 360 Golden Demo',
+        '',
+        'Cube is charted but disabled by default and is not part of the Customer 360 alpha gate.',
+        '',
+      ].join('\n'),
+    );
+    await fs.writeFile(
+      path.join(repoRoot, 'docs/demo/customer-360-validation.md'),
+      [
+        '# Customer 360 Validation',
+        '',
+        'The current alpha business/query proof is command-based against the generated Iceberg mart.',
+        '',
+      ].join('\n'),
+    );
+
+    const { errors } = await collectSourceDocsErrors({ repoRoot, manifestPath });
+
+    assert.deepEqual(errors, []);
   });
 });
