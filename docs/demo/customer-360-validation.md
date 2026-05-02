@@ -12,6 +12,8 @@ make demo-customer-360-validate
 
 The command loads its default evidence plan from `demo/customer-360/validation.yaml`. The manifest defines service URLs, expected platform pods, and argv-list commands for Dagster, storage, Marquez, Jaeger, and business metric checks.
 
+The current alpha business/query proof is command-based against the generated Iceberg mart. Cube is charted but disabled by default and is not part of the Customer 360 alpha gate unless your platform enables it.
+
 Use `FLOE_DEMO_VALIDATION_MANIFEST=/path/to/validation.yaml` for a different platform shape. Individual command overrides are also available, for example `FLOE_DEMO_LINEAGE_CHECK_COMMAND`, `FLOE_DEMO_STORAGE_CHECK_COMMAND`, `FLOE_DEMO_CUSTOMER_COUNT_COMMAND`, and `FLOE_DEMO_LIFETIME_VALUE_COMMAND`.
 
 Expected evidence keys:

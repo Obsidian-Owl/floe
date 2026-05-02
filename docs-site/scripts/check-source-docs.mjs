@@ -280,6 +280,18 @@ export async function collectSourceDocsErrors({
     if (source === 'docs/data-engineers/first-data-product.md' && !/\bhello-orders\b/iu.test(markdown)) {
       errors.push(`${source}: first data product guide must teach hello-orders before Customer 360`);
     }
+    if (
+      source === 'docs/demo/customer-360.md' &&
+      !/Cube\b[^.\n]*(?:disabled by default|not part of the Customer 360 alpha gate)/iu.test(markdown)
+    ) {
+      errors.push(`${source}: must clarify Cube is not required for the Customer 360 alpha query proof`);
+    }
+    if (
+      source === 'docs/demo/customer-360-validation.md' &&
+      !/business\/query proof\b[^.\n]*command-based/iu.test(markdown)
+    ) {
+      errors.push(`${source}: must identify the command-based business/query proof`);
+    }
     for (const rule of disallowedSnippets) {
       if (rule.pattern.test(markdown)) {
         errors.push(`${source}: ${rule.message}`);

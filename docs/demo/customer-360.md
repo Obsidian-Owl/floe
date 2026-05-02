@@ -10,7 +10,9 @@ Platform Engineers and Data Engineers should run Customer 360 against a Floe pla
 
 - A Floe platform is deployed and reachable.
 - The Customer 360 data product has been compiled or is available in the demo project.
-- You can access Dagster, object storage, Marquez, Jaeger, Polaris, and the semantic/query layer through your platform access method.
+- You can access Dagster, object storage, Marquez, Jaeger, Polaris, and the current alpha query surface through your platform access method.
+
+The current alpha query proof is the Customer 360 business metric check against generated Iceberg outputs. Cube is charted but disabled by default and is not part of the Customer 360 alpha gate unless your platform enables it.
 
 ## Run
 
@@ -61,6 +63,7 @@ These URLs match the current contributor `make demo` DevPod port-forwards. Produ
 | Marquez | http://localhost:5100 | Customer 360 lineage exists |
 | Jaeger | http://localhost:16686 | Customer 360 traces exist |
 | Polaris | http://localhost:8181 | Customer 360 tables are registered |
+| Business query surface | `make demo-customer-360-validate` | Customer count and total lifetime value checks pass |
 
 ## Business Outcome
 
