@@ -2651,6 +2651,25 @@ class TestGeneratedDefinitions:
             f"to generate definitions.py files. Recipe body:\n{body}"
         )
 
+    @pytest.mark.requirement("WU11-AC8")
+    def test_compile_demo_disables_predeploy_lineage_emission(self) -> None:
+        """compile-demo must not POST OpenLineage before Marquez is deployed.
+
+        The demo manifest keeps runtime lineage enabled. The pre-deploy
+        artifact-generation step runs before the platform services exist, so it
+        must explicitly disable compile-time lineage side effects.
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "compile-demo")
+        assert body.strip(), (
+            "compile-demo target has no recipe body. Cannot verify lineage emission flag."
+        )
+        assert "--no-lineage-emission" in body, (
+            "compile-demo target must pass '--no-lineage-emission' so "
+            "pre-deploy artifact generation does not attempt Marquez before "
+            f"the platform exists. Recipe body:\n{body}"
+        )
+
 
 # ============================================================
 # WU-12: Docker Packaging Strategy — Structural Tests

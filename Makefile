@@ -403,12 +403,14 @@ compile-demo: ## Compile dbt models and generate Dagster definitions for all dem
 		uv run dbt compile --project-dir demo/$$product --profiles-dir demo/$$product || exit 1; \
 	done
 	@echo "Generating Dagster definitions.py for all demo products..."
+	@# This pre-deploy compile runs before Marquez exists; runtime lineage remains enabled in artifacts.
 	@for product in customer-360 iot-telemetry financial-risk; do \
 		echo "Generating definitions for $$product..."; \
 		uv run floe platform compile \
 			--spec demo/$$product/floe.yaml \
 			--manifest $(DEMO_MANIFEST) \
 			--output demo/$$product/compiled_artifacts.json \
+			--no-lineage-emission \
 			--generate-definitions || exit 1; \
 	done
 	@uv run python testing/ci/validate-demo-compiled-artifacts.py \

@@ -255,6 +255,7 @@ def compile_pipeline(
     manifest_path: Path,
     *,
     dry_run: bool = False,
+    emit_lineage: bool = True,
 ) -> CompiledArtifacts:
     """Execute the 6-stage compilation pipeline.
 
@@ -275,6 +276,10 @@ def compile_pipeline(
         spec_path: Path to floe.yaml file.
         manifest_path: Path to manifest.yaml file.
         dry_run: If True, violations are reported but don't block compilation.
+        emit_lineage: If True, emit compile-time OpenLineage events using
+            manifest configuration. If False, use the NoOp transport for
+            offline/pre-deploy artifact generation while preserving runtime
+            lineage settings in compiled artifacts.
 
     Returns:
         CompiledArtifacts ready for serialization.
@@ -332,7 +337,11 @@ def compile_pipeline(
         # Construct lineage emitter from manifest config (after LOAD, inside pipeline span
         # so TraceCorrelationFacetBuilder can capture the active OTel span context)
         try:
-            _lineage_config = _build_lineage_config(manifest)
+            if emit_lineage:
+                _lineage_config = _build_lineage_config(manifest)
+            else:
+                log.info("compile_time_lineage_emission_disabled")
+                _lineage_config = None
             emitter = create_sync_emitter(_lineage_config, default_namespace="floe.compilation")
         except Exception as _build_err:
             # CWE-532: log type name only — exc_info may contain credential-bearing URLs

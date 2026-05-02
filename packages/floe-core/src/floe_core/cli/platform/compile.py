@@ -133,6 +133,16 @@ Examples:
     help="Generate Dagster definitions.py file alongside CompiledArtifacts. "
     "Requires JSON output at a path named compiled_artifacts.json.",
 )
+@click.option(
+    "--lineage-emission/--no-lineage-emission",
+    default=True,
+    show_default=True,
+    help=(
+        "Emit compile-time OpenLineage events configured by the manifest. "
+        "Disable for offline or pre-deploy artifact generation; compiled "
+        "artifacts still preserve runtime lineage settings."
+    ),
+)
 def compile_command(
     spec: Path | None,
     manifest: Path | None,
@@ -145,6 +155,7 @@ def compile_command(
     skip_contracts: bool,
     drift_detection: bool,
     generate_definitions: bool,
+    lineage_emission: bool,
 ) -> None:
     """Compile FloeSpec and Manifest into CompiledArtifacts.
 
@@ -164,6 +175,7 @@ def compile_command(
         skip_contracts: Skip data contract validation if True.
         drift_detection: Enable schema drift detection if True.
         generate_definitions: Generate Dagster definitions.py if True.
+        lineage_emission: Emit compile-time OpenLineage events if True.
     """
     output_format = output_format.lower()
     resolved_output = output or DEFAULT_OUTPUT_PATHS[output_format]
@@ -199,6 +211,11 @@ def compile_command(
     if generate_definitions:
         _validate_generate_definitions_output(output_format, resolved_output)
 
+    if lineage_emission:
+        info("Compile-time lineage emission: ENABLED")
+    else:
+        info("Compile-time lineage emission: DISABLED (--no-lineage-emission)")
+
     # Log contract-related options (T077)
     if skip_contracts:
         info("Contract validation: SKIPPED (--skip-contracts)")
@@ -222,7 +239,11 @@ def compile_command(
         from floe_core.compilation.stages import compile_pipeline
 
         info("Running compilation pipeline...")
-        artifacts: CompiledArtifacts = compile_pipeline(spec, manifest)
+        artifacts: CompiledArtifacts = compile_pipeline(
+            spec,
+            manifest,
+            emit_lineage=lineage_emission,
+        )
 
         # Step 4: Save CompiledArtifacts to output path (FR-011)
         _write_artifacts_output(

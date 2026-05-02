@@ -417,6 +417,33 @@ class TestCompilePipelineLineageStart:
         ]
         assert model_start_calls == []
 
+    @pytest.mark.requirement("AC-OLC-5")
+    def test_emit_lineage_false_uses_noop_transport_config(
+        self,
+        spec_path: Path,
+        lineage_manifest_path: Path,
+        mock_emitter: MagicMock,
+    ) -> None:
+        """Offline compilation can preserve manifest lineage without HTTP emission.
+
+        Pre-deploy packaging generates artifacts before Marquez exists. It must
+        not attempt the manifest HTTP endpoint, but artifacts still need lineage
+        enabled so runtime Dagster/OpenLineage behavior remains configured.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        with patch(CREATE_SYNC_EMITTER_PATH, return_value=mock_emitter) as mock_factory:
+            artifacts = compile_pipeline(
+                spec_path,
+                lineage_manifest_path,
+                emit_lineage=False,
+            )
+
+        mock_factory.assert_called_once()
+        config_arg = _get_arg(mock_factory.call_args, 0, "transport_config")
+        assert config_arg is None
+        assert artifacts.observability.lineage is True
+
 
 class TestCompilePipelineLineageComplete:
     """AC-OLC-6: compile_pipeline() emits COMPLETE event at pipeline close."""
