@@ -461,17 +461,8 @@ demo: ## Run contributor remote release-validation demo via DevPod
 		--env dev --chart ./charts/floe-platform \
 		--values ./charts/floe-platform/values-demo.yaml \
 		$(DEMO_IMAGE_HELM_SET_ARGS)
-	@echo "Starting port-forwards..."
-	@if [ -f .demo-pids ]; then \
-		kill $$(cat .demo-pids) 2>/dev/null || true; \
-		rm -f .demo-pids; \
-	fi
-	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-marquez 5100:5000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" kubectl port-forward svc/floe-platform-otel 4317:4317 4318:4318 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@echo "Starting port-forwards and waiting for demo endpoints..."
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" scripts/demo-start-port-forwards.sh
 	@echo ""
 	@echo "=== Demo Ready ==="
 	@echo "Dagster UI:    http://localhost:3100"
@@ -503,17 +494,8 @@ demo-local: build-demo-image ## Deploy demo locally (requires local Kind cluster
 	@uv run floe platform deploy --env dev --chart ./charts/floe-platform \
 		--values ./charts/floe-platform/values-demo.yaml \
 		$(DEMO_IMAGE_HELM_SET_ARGS)
-	@echo "Starting port-forwards..."
-	@if [ -f .demo-pids ]; then \
-		kill $$(cat .demo-pids) 2>/dev/null || true; \
-		rm -f .demo-pids; \
-	fi
-	@kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@kubectl port-forward svc/floe-platform-marquez 5100:5000 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
-	@kubectl port-forward svc/floe-platform-otel 4317:4317 4318:4318 -n floe-dev >/dev/null 2>&1 & echo $$! >> .demo-pids
+	@echo "Starting port-forwards and waiting for demo endpoints..."
+	@scripts/demo-start-port-forwards.sh
 	@echo ""
 	@echo "=== Demo Ready ==="
 	@echo "Dagster UI:    http://localhost:3100"

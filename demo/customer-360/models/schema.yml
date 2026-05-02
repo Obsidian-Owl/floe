@@ -24,7 +24,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['enterprise', 'mid_market', 'smb', 'startup', 'unknown']
+              arguments:
+                values: ['enterprise', 'mid_market', 'smb', 'startup', 'unknown']
       - name: _loaded_at
         description: "Timestamp when record was loaded"
 
@@ -55,7 +56,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['completed', 'pending', 'refunded', 'cancelled', 'unknown']
+              arguments:
+                values: ['completed', 'pending', 'refunded', 'cancelled', 'unknown']
       - name: _loaded_at
         description: "Timestamp when record was loaded"
 
@@ -76,13 +78,15 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['billing', 'technical', 'account', 'shipping', 'general', 'unknown']
+              arguments:
+                values: ['billing', 'technical', 'account', 'shipping', 'general', 'unknown']
       - name: priority
         description: "Ticket priority level"
         tests:
           - not_null
           - accepted_values:
-              values: ['low', 'medium', 'high', 'critical']
+              arguments:
+                values: ['low', 'medium', 'high', 'critical']
       - name: created_at
         description: "Timestamp when ticket was created"
         tests:

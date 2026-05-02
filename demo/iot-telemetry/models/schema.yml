@@ -19,13 +19,15 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['temperature', 'pressure', 'vibration', 'humidity', 'flow_rate']
+              arguments:
+                values: ['temperature', 'pressure', 'vibration', 'humidity', 'flow_rate']
       - name: location
         description: Physical location of the sensor
         tests:
           - not_null
           - accepted_values:
-              values: ['line_a', 'line_b', 'line_c', 'warehouse_1', 'warehouse_2']
+              arguments:
+                values: ['line_a', 'line_b', 'line_c', 'warehouse_1', 'warehouse_2']
       - name: installed_at
         description: Date sensor was installed
         tests:
@@ -48,8 +50,9 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_sensors')
-              field: sensor_id
+              arguments:
+                to: ref('stg_sensors')
+                field: sensor_id
       - name: timestamp
         description: When the reading was taken
         tests:
@@ -63,7 +66,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['celsius', 'bar', 'mm_s', 'percent', 'l_min']
+              arguments:
+                values: ['celsius', 'bar', 'mm_s', 'percent', 'l_min']
       - name: _loaded_at
         description: Timestamp when data was loaded
         tests:
@@ -86,7 +90,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['preventive', 'corrective', 'predictive', 'emergency']
+              arguments:
+                values: ['preventive', 'corrective', 'predictive', 'emergency']
       - name: performed_at
         description: When maintenance was performed
         tests:

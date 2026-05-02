@@ -49,6 +49,7 @@ DOCKERIGNORE = REPO_ROOT / ".dockerignore"
 MAKEFILE = REPO_ROOT / "Makefile"
 DEMO_PLUGIN_RESOLVER = REPO_ROOT / "scripts" / "resolve-demo-plugins.py"
 DEMO_MANIFEST = REPO_ROOT / "demo" / "manifest.yaml"
+DEMO_PORT_FORWARD_SCRIPT = REPO_ROOT / "scripts" / "demo-start-port-forwards.sh"
 
 # The three demo products: disk name (hyphenated) -> container name (underscore)
 DEMO_PRODUCTS: dict[str, str] = {
@@ -1539,18 +1540,21 @@ class TestMakefileDemoChain:
         """
         content = _read_makefile_content()
         body = _extract_target_body(content, "demo-local")
+        script = DEMO_PORT_FORWARD_SCRIPT.read_text()
 
         assert "KUBECONFIG" not in body, "demo-local port-forwards must use local kube context."
-        assert ".demo-pids" in body, "demo-local must write pids for make demo-stop."
-        for command in (
-            "kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev",
-            "kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev",
-            "kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev",
-            "kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n floe-dev",
-            "kubectl port-forward svc/floe-platform-marquez 5100:5000 -n floe-dev",
-            "kubectl port-forward svc/floe-platform-otel 4317:4317 4318:4318 -n floe-dev",
+        assert "scripts/demo-start-port-forwards.sh" in body
+        assert ".demo-pids" in script, "helper must write pids for make demo-stop."
+        for service_suffix, port_mapping in (
+            ("dagster-webserver", "DAGSTER_HOST_PORT}:3000"),
+            ("polaris", "POLARIS_API_PORT}:8181"),
+            ("minio", "MINIO_API_PORT}:9000"),
+            ("jaeger-query", "JAEGER_PORT}:16686"),
+            ("marquez", "MARQUEZ_PORT}:5000"),
+            ("otel", "OTEL_GRPC_PORT}:4317"),
         ):
-            assert command in body, f"demo-local must start port-forward: {command}"
+            assert service_suffix in script
+            assert port_mapping in script
 
     @pytest.mark.requirement("WU11-AC6")
     def test_demo_local_prints_reachable_urls(self) -> None:
@@ -1565,6 +1569,57 @@ class TestMakefileDemoChain:
         assert "OTel HTTP:     http://localhost:4318" in body
         assert "Stop with: make demo-stop" in body
         assert "http://localhost:3000" not in body
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_demo_targets_use_ready_checked_port_forward_helper(self) -> None:
+        """Demo targets must not print ready before forwarded services respond."""
+        content = _read_makefile_content()
+        remote_body = _extract_target_body(content, "demo")
+        local_body = _extract_target_body(content, "demo-local")
+
+        assert (
+            'KUBECONFIG="$(DEVPOD_KUBECONFIG)" scripts/demo-start-port-forwards.sh' in remote_body
+        )
+        assert "scripts/demo-start-port-forwards.sh" in local_body
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_demo_port_forward_helper_waits_for_dagster_http_health(self) -> None:
+        """The shared helper must verify Dagster HTTP readiness before returning."""
+        assert DEMO_PORT_FORWARD_SCRIPT.exists(), "demo port-forward helper is missing"
+        script = DEMO_PORT_FORWARD_SCRIPT.read_text()
+
+        assert "/server_info" in script
+        assert "curl" in script
+        assert "wait_for_http" in script
+        assert '"${RELEASE}-dagster-webserver" "${DAGSTER_HOST_PORT}:3000"' in script
+        assert 'RELEASE="${FLOE_DEMO_RELEASE:-floe-platform}"' in script
+        assert 'DAGSTER_HOST_PORT="${FLOE_DEMO_DAGSTER_PORT:-3100}"' in script
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_demo_dbt_accepted_values_use_dbt_1_11_arguments_property(self) -> None:
+        """Demo dbt tests should not emit dbt 1.11 generic-test deprecations."""
+        for product in DEMO_PRODUCTS:
+            schema_path = REPO_ROOT / "demo" / product / "models" / "schema.yml"
+            schema = _load_values_yaml(schema_path)
+            for model in schema.get("models", []):
+                for column in model.get("columns", []):
+                    for test in column.get("tests", []):
+                        if not isinstance(test, dict):
+                            continue
+                        for test_name, config in test.items():
+                            if test_name not in {"accepted_values", "relationships"}:
+                                continue
+                            assert isinstance(config, dict)
+                            assert "arguments" in config, (
+                                f"{schema_path}:{model['name']}.{column['name']} "
+                                f"must nest {test_name} config under arguments"
+                            )
+                            deprecated_argument_keys = {"field", "to", "values"} & set(config)
+                            assert not deprecated_argument_keys, (
+                                f"{schema_path}:{model['name']}.{column['name']} "
+                                f"uses deprecated top-level {test_name} arguments: "
+                                f"{sorted(deprecated_argument_keys)}"
+                            )
 
 
 # ============================================================
