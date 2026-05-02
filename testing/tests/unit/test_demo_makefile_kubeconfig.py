@@ -51,3 +51,18 @@ def test_devpod_sync_parses_kubeconfig_with_kubectl_not_yaml_regex() -> None:
     assert "urlparse" in sync_script
     assert "sed -nE" not in sync_script
     assert "config set-cluster" in sync_script
+
+
+@pytest.mark.requirement("197")
+def test_devpod_sync_waits_for_tunnel_readiness_before_returning() -> None:
+    """DevPod kubeconfig sync must not return while the SSH tunnel is still starting."""
+    sync_script = Path("scripts/devpod-sync-kubeconfig.sh").read_text()
+    env_example = Path(".env.example").read_text()
+
+    assert 'TUNNEL_TIMEOUT="${DEVPOD_TUNNEL_TIMEOUT:-120}"' in sync_script
+    assert 'TUNNEL_INTERVAL="${DEVPOD_TUNNEL_INTERVAL:-2}"' in sync_script
+    assert "while (( SECONDS < tunnel_deadline )); do" in sync_script
+    assert 'kubectl --kubeconfig "${LOCAL_KUBECONFIG}" cluster-info' in sync_script
+    assert 'kill -0 "${TUNNEL_PID}"' in sync_script
+    assert "SSH tunnel process exited before Kubernetes became reachable" in sync_script
+    assert "DEVPOD_TUNNEL_TIMEOUT=120" in env_example

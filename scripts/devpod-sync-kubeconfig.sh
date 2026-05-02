@@ -18,6 +18,8 @@ set -euo pipefail
 WORKSPACE="${1:-floe}"
 LOCAL_KUBECONFIG="${DEVPOD_KUBECONFIG:-${HOME}/.kube/devpod-${WORKSPACE}.config}"
 LOCAL_API_PORT="${DEVPOD_K8S_API_PORT:-26443}"
+TUNNEL_TIMEOUT="${DEVPOD_TUNNEL_TIMEOUT:-120}"
+TUNNEL_INTERVAL="${DEVPOD_TUNNEL_INTERVAL:-2}"
 
 # Validate inputs contain only safe characters
 if [[ ! "${WORKSPACE}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
@@ -26,6 +28,14 @@ if [[ ! "${WORKSPACE}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
 fi
 if [[ ! "${LOCAL_API_PORT}" =~ ^[0-9]+$ ]]; then
     echo "[devpod-sync] ERROR: Invalid port: ${LOCAL_API_PORT}" >&2
+    exit 1
+fi
+if [[ ! "${TUNNEL_TIMEOUT}" =~ ^[0-9]+$ || "${TUNNEL_TIMEOUT}" -lt 1 ]]; then
+    echo "[devpod-sync] ERROR: Invalid DEVPOD_TUNNEL_TIMEOUT: ${TUNNEL_TIMEOUT}" >&2
+    exit 1
+fi
+if [[ ! "${TUNNEL_INTERVAL}" =~ ^[0-9]+$ || "${TUNNEL_INTERVAL}" -lt 1 ]]; then
+    echo "[devpod-sync] ERROR: Invalid DEVPOD_TUNNEL_INTERVAL: ${TUNNEL_INTERVAL}" >&2
     exit 1
 fi
 if [[ -z "${LOCAL_KUBECONFIG}" ]]; then
@@ -168,23 +178,29 @@ nohup devpod ssh "${WORKSPACE}" \
 
 TUNNEL_PID=$!
 
-# Wait briefly for tunnel to establish
-sleep 3
-
-if ! kill -0 "${TUNNEL_PID}" 2>/dev/null; then
-    error "SSH tunnel process exited immediately. Check ${HOME}/.kube/devpod-ssh.log"
-fi
-
 # ─── Validate ────────────────────────────────────────────────────────────────
 
 log "Validating connection..."
-if kubectl --kubeconfig "${LOCAL_KUBECONFIG}" cluster-info >/dev/null 2>&1; then
-    log "SUCCESS: K8s cluster accessible at localhost:${LOCAL_API_PORT}"
-    log ""
-    log "Usage:"
-    log "  export KUBECONFIG=${LOCAL_KUBECONFIG}"
-    log "  kubectl get pods -n floe-test"
-else
-    log "WARNING: cluster-info check failed. The tunnel may need a moment to establish."
-    log "Retry: kubectl --kubeconfig ${LOCAL_KUBECONFIG} cluster-info"
-fi
+tunnel_deadline=$((SECONDS + TUNNEL_TIMEOUT))
+while (( SECONDS < tunnel_deadline )); do
+    if kubectl --kubeconfig "${LOCAL_KUBECONFIG}" cluster-info >/dev/null 2>&1; then
+        log "SUCCESS: K8s cluster accessible at localhost:${LOCAL_API_PORT}"
+        log ""
+        log "Usage:"
+        log "  export KUBECONFIG=${LOCAL_KUBECONFIG}"
+        log "  kubectl get pods -n floe-test"
+        exit 0
+    fi
+
+    if ! kill -0 "${TUNNEL_PID}" 2>/dev/null; then
+        error "SSH tunnel process exited before Kubernetes became reachable. Check ${HOME}/.kube/devpod-ssh.log"
+    fi
+
+    elapsed=$((TUNNEL_TIMEOUT - (tunnel_deadline - SECONDS)))
+    log "Waiting for SSH tunnel... (${elapsed}/${TUNNEL_TIMEOUT}s)"
+    sleep "${TUNNEL_INTERVAL}"
+done
+
+error "K8s cluster not reachable via ${LOCAL_KUBECONFIG} after ${TUNNEL_TIMEOUT}s.
+  Check ${HOME}/.kube/devpod-ssh.log and retry:
+  kubectl --kubeconfig ${LOCAL_KUBECONFIG} cluster-info"
