@@ -37,6 +37,8 @@ SCHEMA_VALIDATION_FAILED = "validation failed"
 BOOTSTRAP_CLIENT_SECRET_FIELD = "clientSecret"
 S3_ENDPOINT_FIELD = "endpoint"
 ENVIRONMENT_FIELD = "environment"
+GRANTS_FIELD = "grants"
+PRIVILEGES_FIELD = "privileges"
 
 # The exact set of valid environment values per the schema enum.
 # Tests MUST verify ALL of these are accepted; a partial enum is a bug.
@@ -539,6 +541,149 @@ class TestS3EndpointRequired:
             "helm template FAILED when S3 is disabled. The endpoint "
             "constraint should only apply when S3 is enabled.\n"
             f"STDERR: {stderr[:1000]}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# AC-28.6: Polaris bootstrap grants schema validation
+# ---------------------------------------------------------------------------
+
+
+class TestPolarisBootstrapGrantsSchema:
+    """Tests that polaris.bootstrap.grants is validated by values.schema.json.
+
+    AC-28.6: Polaris grant settings MUST be rejected by Helm schema validation
+    when booleans, role names, or privilege lists are malformed. This catches
+    operator mistakes before the bootstrap Job runs.
+    """
+
+    @pytest.mark.requirement("AC-28.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_grants_enabled_string_rejected(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST fail when grants.enabled is a string."""
+        result = _helm_template(
+            platform_chart_path,
+            set_values=[
+                "polaris.bootstrap.grants.enabled=not-a-bool",
+            ],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode != 0, (
+            "helm template should have FAILED when polaris.bootstrap.grants.enabled "
+            "is a string, but it succeeded. This means the schema does not enforce "
+            "the grants.enabled boolean contract.\n"
+            f"STDOUT (first 500 chars): {_stdout_text(result)[:500]}"
+        )
+
+        stderr_lower = stderr.lower()
+        assert SCHEMA_ERROR_INDICATOR in stderr_lower or SCHEMA_VALIDATION_FAILED in stderr_lower, (
+            f"helm template failed, but not due to schema validation.\nSTDERR: {stderr[:1000]}"
+        )
+        assert GRANTS_FIELD in stderr_lower or "boolean" in stderr_lower, (
+            "Schema validation failed, but the error does not reference the grants "
+            f"boolean constraint.\nSTDERR: {stderr[:1000]}"
+        )
+
+    @pytest.mark.requirement("AC-28.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_grants_privileges_scalar_rejected(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST fail when grants.privileges is not an array."""
+        result = _helm_template(
+            platform_chart_path,
+            set_values=[
+                "polaris.bootstrap.grants.privileges=CATALOG_MANAGE_CONTENT",
+            ],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode != 0, (
+            "helm template should have FAILED when polaris.bootstrap.grants.privileges "
+            "is a scalar string, but it succeeded. The schema must require a list "
+            "of privilege strings.\n"
+            f"STDOUT (first 500 chars): {_stdout_text(result)[:500]}"
+        )
+
+        stderr_lower = stderr.lower()
+        assert SCHEMA_ERROR_INDICATOR in stderr_lower or SCHEMA_VALIDATION_FAILED in stderr_lower, (
+            f"helm template failed, but not due to schema validation.\nSTDERR: {stderr[:1000]}"
+        )
+        assert PRIVILEGES_FIELD in stderr_lower or "array" in stderr_lower, (
+            "Schema validation failed, but the error does not reference the privileges "
+            f"array constraint.\nSTDERR: {stderr[:1000]}"
+        )
+
+    @pytest.mark.requirement("AC-28.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_grants_invalid_privilege_rejected(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST fail when a grants privilege is unsupported."""
+        result = _helm_template(
+            platform_chart_path,
+            set_values=[
+                "polaris.bootstrap.grants.privileges[0]=NOT_A_POLARIS_PRIVILEGE",
+            ],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode != 0, (
+            "helm template should have FAILED when polaris.bootstrap.grants.privileges "
+            "contains an unsupported privilege, but it succeeded. The schema must "
+            "restrict privileges to known Polaris privilege names.\n"
+            f"STDOUT (first 500 chars): {_stdout_text(result)[:500]}"
+        )
+
+        stderr_lower = stderr.lower()
+        assert SCHEMA_ERROR_INDICATOR in stderr_lower or SCHEMA_VALIDATION_FAILED in stderr_lower, (
+            f"helm template failed, but not due to schema validation.\nSTDERR: {stderr[:1000]}"
+        )
+        assert PRIVILEGES_FIELD in stderr_lower or "enum" in stderr_lower, (
+            "Schema validation failed, but the error does not reference the privileges "
+            f"enum constraint.\nSTDERR: {stderr[:1000]}"
+        )
+
+    @pytest.mark.requirement("AC-28.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_valid_grants_configuration_succeeds(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST succeed with valid bootstrap grant settings."""
+        result = _helm_template(
+            platform_chart_path,
+            set_values=[
+                "polaris.bootstrap.enabled=true",
+                "polaris.auth.bootstrapCredentials.clientSecret=SCHEMA-TEST-SENTINEL",
+                "polaris.bootstrap.grants.enabled=true",
+                "polaris.bootstrap.grants.catalogRole=catalog_admin",
+                "polaris.bootstrap.grants.principalRole=floe-pipeline",
+                "polaris.bootstrap.grants.bootstrapPrincipal=root",
+                "polaris.bootstrap.grants.privileges[0]=CATALOG_MANAGE_CONTENT",
+            ],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode == 0, (
+            "helm template FAILED with a valid Polaris bootstrap grants configuration. "
+            "The schema should allow this configuration.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
+        stdout = _stdout_text(result)
+        assert "apiVersion:" in stdout or "kind:" in stdout, (
+            "helm template produced output but it does not contain K8s manifests."
         )
 
 

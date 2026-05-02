@@ -120,6 +120,61 @@ class TestFloePlatformSchema:
         for section in expected:
             assert section in properties, f"Missing schema section: {section}"
 
+    @pytest.mark.requirement("9b-FR-004")
+    def test_polaris_bootstrap_grants_schema_has_expected_fields(
+        self,
+        floe_platform_schema: dict[str, Any],
+    ) -> None:
+        """Test that Polaris bootstrap grants are covered by values.schema.json."""
+        grants_schema = floe_platform_schema["properties"]["polaris"]["properties"]["bootstrap"][
+            "properties"
+        ]["grants"]
+
+        properties = grants_schema.get("properties", {})
+        assert properties["enabled"]["type"] == "boolean"
+        assert properties["catalogRole"]["type"] == "string"
+        assert properties["principalRole"]["type"] == "string"
+        assert properties["bootstrapPrincipal"]["type"] == "string"
+        assert properties["privileges"]["type"] == "array"
+        assert properties["privileges"]["items"]["type"] == "string"
+        assert "enum" in properties["privileges"]["items"]
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_polaris_bootstrap_grants_enabled_must_be_boolean(
+        self,
+        floe_platform_schema: dict[str, Any],
+    ) -> None:
+        """Test that grants.enabled rejects string values."""
+        invalid_values = {
+            "polaris": {
+                "bootstrap": {
+                    "grants": {
+                        "enabled": "true",
+                    },
+                },
+            },
+        }
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(invalid_values, floe_platform_schema)
+
+    @pytest.mark.requirement("9b-FR-004")
+    def test_polaris_bootstrap_grants_privileges_must_be_valid_enum_values(
+        self,
+        floe_platform_schema: dict[str, Any],
+    ) -> None:
+        """Test that grants.privileges rejects unsupported Polaris privilege names."""
+        invalid_values = {
+            "polaris": {
+                "bootstrap": {
+                    "grants": {
+                        "privileges": ["NOT_A_POLARIS_PRIVILEGE"],
+                    },
+                },
+            },
+        }
+        with pytest.raises(jsonschema.ValidationError):
+            jsonschema.validate(invalid_values, floe_platform_schema)
+
 
 @pytest.mark.skipif(not HAS_JSONSCHEMA, reason="jsonschema not installed")
 class TestFloeJobsSchema:
