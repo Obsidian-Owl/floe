@@ -370,6 +370,19 @@ class TestDockerfileMacrosAndManifest:
         )
 
     @pytest.mark.requirement("WU11-AC1")
+    def test_demo_manifest_marks_insecure_marquez_http_as_demo_environment(self) -> None:
+        """Demo HTTP lineage config must declare a non-production environment."""
+        manifest = yaml.safe_load(DEMO_MANIFEST.read_text())
+        lineage_backend = manifest["plugins"]["lineage_backend"]
+        config = lineage_backend["config"]
+
+        assert config["allow_insecure_http"] is True
+        assert config["environment"] == "demo", (
+            "demo/manifest.yaml allows in-cluster HTTP for Marquez and must "
+            "explicitly mark that plugin config as demo/non-production."
+        )
+
+    @pytest.mark.requirement("WU11-AC1")
     def test_dockerfile_copies_macros_directory(self) -> None:
         """Verify Dockerfile has a COPY instruction for the macros/ directory.
 
