@@ -175,6 +175,29 @@ class TestFloePlatformSchema:
         with pytest.raises(jsonschema.ValidationError):
             jsonschema.validate(invalid_values, floe_platform_schema)
 
+    @pytest.mark.requirement("9b-FR-004")
+    def test_polaris_bootstrap_grants_identity_fields_do_not_add_length_cap(
+        self,
+        floe_platform_schema: dict[str, Any],
+    ) -> None:
+        """Test that schema does not add a stricter role-name cap than runtime validation."""
+        long_role_name = "platform_data_engineering_catalog_admin_role_for_customer_360_alpha"
+        values = {
+            "polaris": {
+                "bootstrap": {
+                    "grants": {
+                        "enabled": True,
+                        "catalogRole": long_role_name,
+                        "principalRole": long_role_name,
+                        "bootstrapPrincipal": long_role_name,
+                        "privileges": ["CATALOG_MANAGE_CONTENT"],
+                    },
+                },
+            },
+        }
+
+        jsonschema.validate(values, floe_platform_schema)
+
 
 @pytest.mark.skipif(not HAS_JSONSCHEMA, reason="jsonschema not installed")
 class TestFloeJobsSchema:

@@ -686,6 +686,36 @@ class TestPolarisBootstrapGrantsSchema:
             "helm template produced output but it does not contain K8s manifests."
         )
 
+    @pytest.mark.requirement("AC-28.6")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_valid_long_grants_identity_names_succeed(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Helm template MUST not reject role names the bootstrap Job can render."""
+        long_role_name = "platform_data_engineering_catalog_admin_role_for_customer_360_alpha"
+        result = _helm_template(
+            platform_chart_path,
+            set_values=[
+                "polaris.bootstrap.enabled=true",
+                "polaris.auth.bootstrapCredentials.clientSecret=SCHEMA-TEST-SENTINEL",
+                "polaris.bootstrap.grants.enabled=true",
+                f"polaris.bootstrap.grants.catalogRole={long_role_name}",
+                f"polaris.bootstrap.grants.principalRole={long_role_name}",
+                f"polaris.bootstrap.grants.bootstrapPrincipal={long_role_name}",
+                "polaris.bootstrap.grants.privileges[0]=CATALOG_MANAGE_CONTENT",
+            ],
+        )
+
+        stderr = _stderr_text(result)
+
+        assert result.returncode == 0, (
+            "helm template FAILED with long but shell-safe Polaris grants identity "
+            "names. The schema should not add a stricter maxLength cap than the "
+            "bootstrap Job runtime validation.\n"
+            f"STDERR: {stderr[:1000]}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # AC-28.4: Custom overlays not blocked (additionalProperties: true)

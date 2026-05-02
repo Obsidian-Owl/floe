@@ -373,21 +373,18 @@
                 "catalogRole": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 64,
                   "pattern": "^[a-zA-Z0-9_-]+$",
                   "description": "Catalog role name to create and grant privileges to"
                 },
                 "principalRole": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 64,
                   "pattern": "^[a-zA-Z0-9_-]+$",
                   "description": "Principal role name to create and assign the catalog role to"
                 },
                 "bootstrapPrincipal": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 64,
                   "pattern": "^[a-zA-Z0-9_-]+$",
                   "description": "Bootstrap principal receiving the principal role"
                 },
