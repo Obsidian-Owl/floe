@@ -33,6 +33,19 @@ _LOCALHOST_HOSTNAMES: frozenset[str] = frozenset(
         "localhost.localdomain",
     }
 )
+_WARNED_INSECURE_HTTP_HOSTS: set[str] = set()
+
+
+def _warn_insecure_http_once(hostname: str) -> None:
+    """Warn once when explicit non-localhost HTTP is enabled for Marquez."""
+    if hostname in _WARNED_INSECURE_HTTP_HOSTS:
+        return
+    _WARNED_INSECURE_HTTP_HOSTS.add(hostname)
+    logger.warning(
+        "INSECURE HTTP enabled for Marquez URL '%s' - development/test use only! "
+        "Use HTTPS before deploying to production.",
+        hostname,
+    )
 
 
 def _is_localhost(hostname: str) -> bool:
@@ -153,12 +166,7 @@ class MarquezConfig(BaseModel):
                 self.allow_insecure_http
                 or os.environ.get("FLOE_ALLOW_INSECURE_HTTP", "").lower() == "true"
             ):
-                logger.critical(
-                    "INSECURE HTTP enabled for Marquez URL '%s' - "
-                    "development/test use only! Use HTTPS before deploying "
-                    "to production.",
-                    hostname,
-                )
+                _warn_insecure_http_once(hostname)
                 self.url = v
                 return self
 

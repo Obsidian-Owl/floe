@@ -74,6 +74,9 @@ RUN uv export --frozen --no-dev --no-editable --all-packages --no-emit-workspace
 # =============================================================================
 FROM python:3.11-slim@sha256:9358444059ed78e2975ada2c189f1c1a3144a5dab6f35bff8c981afb38946634 AS build
 
+# Build-stage installs run as root by design; runtime drops privileges to dagster.
+ENV PIP_ROOT_USER_ACTION=ignore
+
 # Build dependencies for C extensions (grpcio, greenlet, pyarrow, duckdb)
 # git: required for pip install from git URLs (pyiceberg pinned commit)
 RUN apt-get update && apt-get install -y --no-install-recommends \

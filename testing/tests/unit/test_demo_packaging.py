@@ -471,6 +471,17 @@ class TestDockerfilePipOperations:
                 f"pip install for requirements.txt must use --require-hashes. Line: {pip_line}"
             )
 
+    @pytest.mark.requirement("WU12-AC5")
+    def test_build_stage_suppresses_pip_root_warning(self) -> None:
+        """Build-stage pip runs as root, while the runtime image remains non-root."""
+        content = _read_dockerfile_raw()
+
+        assert "PIP_ROOT_USER_ACTION=ignore" in content, (
+            "Dockerfile build stage must explicitly suppress pip's root-user warning. "
+            "The runtime image still needs to switch to the dagster user."
+        )
+        assert "USER dagster" in content, "Runtime stage must continue to run as non-root user."
+
     @pytest.mark.requirement("WU12-AC2")
     def test_workspace_packages_use_no_deps(self) -> None:
         """Verify workspace package pip install uses --no-deps.

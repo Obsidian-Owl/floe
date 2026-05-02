@@ -130,6 +130,15 @@ def _resolve_polaris_credential(
     return credential, client_id, client_secret
 
 
+def _is_duplicate_polaris_grant_response(response: httpx.Response) -> bool:
+    """Return True when Polaris reports an idempotent duplicate grant as HTTP 500."""
+    return (
+        response.status_code == 500
+        and "grant_records_pkey" in response.text
+        and "sql-state '23505'" in response.text
+    )
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Register custom markers and E2E-scoped rerun config."""
     config.addinivalue_line(
@@ -814,7 +823,12 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         json={"principalRole": {"name": principal_role}},
         timeout=10.0,
     )
-    if pr_assign_response.status_code not in (200, 201, 204, 409):
+    if _is_duplicate_polaris_grant_response(pr_assign_response):
+        logger.info(
+            "Principal role %s already assigned to root (duplicate grant record, HTTP 500)",
+            principal_role,
+        )
+    elif pr_assign_response.status_code not in (200, 201, 204, 409):
         logger.warning(
             "Failed to assign principal role %s to root: HTTP %s",
             principal_role,
@@ -842,7 +856,9 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         json={"grant": {"type": "catalog", "privilege": "CATALOG_MANAGE_CONTENT"}},
         timeout=10.0,
     )
-    if grant_response.status_code not in (200, 201, 204, 409):
+    if _is_duplicate_polaris_grant_response(grant_response):
+        logger.info("CATALOG_MANAGE_CONTENT already granted (duplicate grant record, HTTP 500)")
+    elif grant_response.status_code not in (200, 201, 204, 409):
         logger.warning(
             "Failed to grant CATALOG_MANAGE_CONTENT: HTTP %s",
             grant_response.status_code,
@@ -855,7 +871,12 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         json={"catalogRole": {"name": "catalog_admin"}},
         timeout=10.0,
     )
-    if assign_response.status_code not in (200, 204, 409):
+    if _is_duplicate_polaris_grant_response(assign_response):
+        logger.info(
+            "catalog_admin already assigned to %s (duplicate grant record, HTTP 500)",
+            principal_role,
+        )
+    elif assign_response.status_code not in (200, 204, 409):
         logger.warning(
             "Failed to assign catalog_admin to %s: HTTP %s",
             principal_role,

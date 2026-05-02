@@ -389,6 +389,34 @@ class TestCompilePipelineLineageStart:
         assert isinstance(result, CompiledArtifacts)
         assert result.metadata.product_name == PRODUCT_NAME
 
+    @pytest.mark.requirement("AC-OLC-5")
+    def test_emit_start_failure_skips_per_model_lineage_noise(
+        self,
+        spec_path: Path,
+        lineage_manifest_path: Path,
+        mock_emitter: MagicMock,
+    ) -> None:
+        """A failed pipeline START marks compile-time lineage unavailable.
+
+        If the backend is not reachable before deployment, every per-model
+        event would fail for the same reason. Compilation should emit one
+        pipeline-level warning and skip per-model lineage instead of producing
+        repeated model warnings.
+        """
+        from floe_core.compilation.stages import compile_pipeline
+
+        mock_emitter.emit_start.side_effect = ConnectionError("Marquez unavailable")
+
+        with patch(CREATE_SYNC_EMITTER_PATH, return_value=mock_emitter):
+            compile_pipeline(spec_path, lineage_manifest_path)
+
+        model_start_calls = [
+            c
+            for c in mock_emitter.emit_start.call_args_list
+            if str(_get_arg(c, 0, "job_name")).startswith("model.")
+        ]
+        assert model_start_calls == []
+
 
 class TestCompilePipelineLineageComplete:
     """AC-OLC-6: compile_pipeline() emits COMPLETE event at pipeline close."""
