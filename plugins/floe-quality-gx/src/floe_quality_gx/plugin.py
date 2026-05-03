@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 from typing import TYPE_CHECKING, Any
 
 from floe_core.plugin_metadata import HealthState, HealthStatus
@@ -213,22 +214,20 @@ class GreatExpectationsPlugin(QualityPlugin):
             timeout: Maximum time in seconds to wait for response.
                 Not used by this plugin; accepted for base ABC compatibility.
 
-        Returns HEALTHY if Great Expectations can be imported.
+        Returns HEALTHY if Great Expectations is discoverable.
         """
-        try:
-            import great_expectations  # noqa: F401
-
+        if importlib.util.find_spec("great_expectations") is not None:
             return HealthStatus(
                 state=HealthState.HEALTHY,
                 message="Great Expectations is available",
                 details={"gx_available": True},
             )
-        except ImportError:
-            return HealthStatus(
-                state=HealthState.UNHEALTHY,
-                message="Great Expectations is not installed",
-                details={"gx_available": False},
-            )
+
+        return HealthStatus(
+            state=HealthState.UNHEALTHY,
+            message="Great Expectations is not installed",
+            details={"gx_available": False},
+        )
 
     def get_config_schema(self) -> type[BaseModel]:
         """Return QualityConfig as the configuration schema (FR-010)."""

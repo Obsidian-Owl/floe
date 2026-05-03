@@ -27,6 +27,7 @@ import socket
 import time
 from collections.abc import Callable
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -209,6 +210,75 @@ def wait_for_service(
     )
 
 
+def wait_for_http_status(
+    url: str,
+    expected_status: int = 200,
+    timeout: float = 60.0,
+    interval: float = 3.0,
+    request_timeout: float = 5.0,
+    description: str | None = None,
+    *,
+    raise_on_timeout: bool = True,
+) -> bool:
+    """Wait for an HTTP endpoint to return a specific status code.
+
+    Use this for readiness endpoints where TCP readiness or pod readiness is
+    insufficient, such as Quarkus health checks that return 503 until
+    dependencies have settled.
+
+    Args:
+        url: Full HTTP URL to poll.
+        expected_status: HTTP status code that indicates readiness.
+            Defaults to 200.
+        timeout: Maximum wait time in seconds. Defaults to 60.0.
+        interval: Poll interval in seconds. Defaults to 3.0.
+        request_timeout: Timeout for each HTTP request in seconds. Defaults to 5.0.
+        description: Description for timeout errors. Defaults to the URL.
+        raise_on_timeout: If True, raise on timeout. Defaults to True.
+
+    Returns:
+        True if endpoint returned the expected status within timeout.
+        False if raise_on_timeout=False and timeout occurred.
+
+    Raises:
+        PollingTimeoutError: If endpoint did not return the expected status
+            within timeout and raise_on_timeout=True.
+    """
+    effective_description = description or f"HTTP {expected_status} from {url}"
+    last_status: int | None = None
+    last_error: Exception | None = None
+
+    def check_http_status() -> bool:
+        nonlocal last_status, last_error
+        try:
+            response = httpx.get(url, timeout=request_timeout)
+        except (httpx.HTTPError, OSError) as exc:
+            last_error = exc
+            return False
+
+        last_status = response.status_code
+        last_error = None
+        return response.status_code == expected_status
+
+    ready = wait_for_condition(
+        check_http_status,
+        timeout=timeout,
+        interval=interval,
+        description=effective_description,
+        raise_on_timeout=False,
+    )
+    if ready:
+        return True
+
+    if not raise_on_timeout:
+        return False
+
+    if last_status is not None:
+        effective_description = f"{effective_description} (last HTTP status {last_status})"
+
+    raise PollingTimeoutError(effective_description, timeout, last_error)
+
+
 def _tcp_check(host: str, port: int, timeout: float = 5.0) -> bool:
     """Check if a TCP connection can be established.
 
@@ -232,5 +302,6 @@ __all__ = [
     "PollingConfig",
     "PollingTimeoutError",
     "wait_for_condition",
+    "wait_for_http_status",
     "wait_for_service",
 ]
