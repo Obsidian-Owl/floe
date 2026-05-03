@@ -69,13 +69,20 @@ wait_for_http() {
     return 1
 }
 
+wait_for_deployment() {
+    local deployment=$1 timeout=${2:-180s}
+    "${KUBECTL[@]}" rollout status "deployment/${deployment}" -n "${NAMESPACE}" --timeout="${timeout}" >/dev/null
+}
+
 stop_existing
 : >"${LOG_FILE}"
 
-"${KUBECTL[@]}" wait --for=condition=ready pod \
-    -l "app.kubernetes.io/instance=${RELEASE}" \
-    -n "${NAMESPACE}" \
-    --timeout=180s >/dev/null
+wait_for_deployment "${RELEASE}-dagster-webserver"
+wait_for_deployment "${RELEASE}-polaris"
+wait_for_deployment "${RELEASE}-minio"
+wait_for_deployment "${RELEASE}-jaeger"
+wait_for_deployment "${RELEASE}-marquez"
+wait_for_deployment "${RELEASE}-otel"
 
 start_port_forward "${RELEASE}-dagster-webserver" "${DAGSTER_HOST_PORT}:3000"
 start_port_forward "${RELEASE}-polaris" "${POLARIS_API_PORT}:8181" "${POLARIS_MGMT_PORT}:8182"

@@ -21,6 +21,7 @@ from testing.fixtures.credentials import (
     get_polaris_credentials,
     get_polaris_endpoint,
     get_polaris_oauth2_server_uri,
+    resolve_manifest_path,
 )
 
 # ---------------------------------------------------------------------------
@@ -695,6 +696,33 @@ class TestCredentialsAPIContract:
         # Prove they are different (not cached/stale)
         assert first_id != second_id
         assert first_secret != second_secret
+
+    @pytest.mark.requirement("AC-2")
+    def test_resolve_manifest_path_normalizes_explicit_relative_paths(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Explicit manifest paths are normalized to absolute paths before use."""
+        monkeypatch.chdir(tmp_path)
+        manifest = Path("config") / ".." / "manifest.yaml"
+
+        resolved = resolve_manifest_path(manifest)
+
+        assert resolved == (tmp_path / "manifest.yaml").resolve(strict=False)
+        assert resolved.is_absolute()
+
+    @pytest.mark.requirement("AC-2")
+    def test_resolve_manifest_path_normalizes_environment_paths(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Manifest path env vars are normalized to absolute paths before use."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("FLOE_MANIFEST_PATH", "config/../manifest.yaml")
+        monkeypatch.delenv("POLARIS_MANIFEST_PATH", raising=False)
+
+        resolved = resolve_manifest_path()
+
+        assert resolved == (tmp_path / "manifest.yaml").resolve(strict=False)
+        assert resolved.is_absolute()
 
     @pytest.mark.requirement("AC-2")
     def test_no_caching_of_manifest_values(

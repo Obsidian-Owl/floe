@@ -1620,6 +1620,20 @@ class TestMakefileDemoChain:
         assert 'DAGSTER_HOST_PORT="${FLOE_DEMO_DAGSTER_PORT:-3100}"' in script
 
     @pytest.mark.requirement("WU11-AC6")
+    def test_demo_port_forward_helper_waits_only_for_service_deployments(self) -> None:
+        """The helper must not wait on Helm hook/job pods that can complete."""
+        script = DEMO_PORT_FORWARD_SCRIPT.read_text()
+
+        assert 'rollout status "deployment/${deployment}"' in script
+        assert 'wait_for_deployment "${RELEASE}-dagster-webserver"' in script
+        assert 'wait_for_deployment "${RELEASE}-polaris"' in script
+        assert 'wait_for_deployment "${RELEASE}-minio"' in script
+        assert 'wait_for_deployment "${RELEASE}-jaeger"' in script
+        assert 'wait_for_deployment "${RELEASE}-marquez"' in script
+        assert 'wait_for_deployment "${RELEASE}-otel"' in script
+        assert "app.kubernetes.io/instance=${RELEASE}" not in script
+
+    @pytest.mark.requirement("WU11-AC6")
     def test_demo_dbt_accepted_values_use_dbt_1_11_arguments_property(self) -> None:
         """Demo dbt tests should not emit dbt 1.11 generic-test deprecations."""
         for product in DEMO_PRODUCTS:

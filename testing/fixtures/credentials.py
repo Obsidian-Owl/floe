@@ -47,14 +47,19 @@ DEFAULT_POLARIS_CONFIG = {
 def resolve_manifest_path(manifest_path: Path | None = None) -> Path:
     """Resolve the manifest path from an explicit argument, env, or repo default."""
     if manifest_path is not None:
-        return manifest_path
+        return _normalize_manifest_path(manifest_path)
 
     for env_var in MANIFEST_PATH_ENV_VARS:
         env_path = _env_or_none(env_var)
         if env_path is not None:
-            return Path(env_path).expanduser()
+            return _normalize_manifest_path(Path(env_path))
 
     return _default_manifest_path()
+
+
+def _normalize_manifest_path(manifest_path: Path) -> Path:
+    """Return an absolute, user-expanded manifest path without requiring it to exist."""
+    return manifest_path.expanduser().resolve(strict=False)
 
 
 def _default_manifest_path() -> Path:
