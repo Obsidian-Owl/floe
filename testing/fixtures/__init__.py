@@ -64,6 +64,7 @@ from testing.fixtures.dagster import (
     materialize_to_memory,
     wait_for_run_completion,
 )
+from testing.fixtures.dagster_graphql import execute_dagster_graphql_request
 from testing.fixtures.data import (
     create_model_instance,
     generate_random_string,
@@ -272,6 +273,7 @@ __all__ = [
     "ephemeral_instance",
     "execute_job",
     "execute_job_to_memory",
+    "execute_dagster_graphql_request",
     "get_run_status",
     "materialize_asset",
     "materialize_to_memory",
