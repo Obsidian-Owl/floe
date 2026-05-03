@@ -230,6 +230,7 @@ def test_full_lifecycle_runs_e2e_inside_devpod_by_default() -> None:
     script = _read(_DEVPOD_TEST)
 
     assert 'DEVPOD_E2E_EXECUTION="${DEVPOD_E2E_EXECUTION:-remote}"' in script
+    assert 'DEVPOD_REMOTE_E2E_MAKE_TARGET="${DEVPOD_REMOTE_E2E_MAKE_TARGET:-test-e2e}"' in script
     assert 'case "${DEVPOD_E2E_EXECUTION}" in' in script
     assert "remote)" in script
     assert "run_remote_e2e_detached" in script
@@ -237,7 +238,7 @@ def test_full_lifecycle_runs_e2e_inside_devpod_by_default() -> None:
     assert "poll_remote_e2e_run" in script
     assert "fetch_remote_e2e_artifacts" in script
     assert '--workdir "${DEVPOD_REMOTE_WORKDIR}"' in script
-    assert "IMAGE_LOAD_METHOD=kind make test-e2e" in script
+    assert 'IMAGE_LOAD_METHOD=kind make "\\${FLOE_REMOTE_E2E_MAKE_TARGET}"' in script
     assert '--command "bash -lc ${escaped_script}"' in script
 
 
@@ -250,7 +251,21 @@ def test_remote_e2e_bootstraps_kind_before_running_tests() -> None:
         "The detached remote E2E script must create/deploy the Kind stack "
         "before running the in-cluster E2E Job."
     )
-    assert script.index("make kind-up") < script.index("IMAGE_LOAD_METHOD=kind make test-e2e")
+    assert script.index("make kind-up") < script.index(
+        'IMAGE_LOAD_METHOD=kind make "\\${FLOE_REMOTE_E2E_MAKE_TARGET}"'
+    )
+
+
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_remote_e2e_make_target_is_configurable_without_shell_command_injection() -> None:
+    """Release validation must be able to select test-e2e-full remotely."""
+    script = _read(_DEVPOD_TEST)
+
+    assert "DEVPOD_REMOTE_E2E_MAKE_TARGET" in script
+    assert "FLOE_REMOTE_E2E_MAKE_TARGET=" in script
+    assert 'make "\\${FLOE_REMOTE_E2E_MAKE_TARGET}"' in script
+    assert "DEVPOD_REMOTE_E2E_COMMAND" not in script
+    assert "eval " not in script
 
 
 @pytest.mark.requirement("AC-DevPod-Remote-E2E")
@@ -273,6 +288,21 @@ def test_full_lifecycle_remote_e2e_is_detached_and_resumable() -> None:
     assert "DEVPOD_REMOTE_POLL_FAILURE_LIMIT" in script
     assert "DEVPOD_REMOTE_E2E_TIMEOUT" in script
     assert "test-artifacts/devpod-${REMOTE_RUN_ID}" in script
+
+
+@pytest.mark.requirement("AC-DevPod-Remote-E2E")
+def test_remote_e2e_start_accepts_run_dir_when_devpod_tunnel_exits_nonzero() -> None:
+    """A DevPod tunnel error after nohup start must not kill the detached run."""
+    script = _read(_DEVPOD_TEST)
+    start_start = script.index("start_remote_e2e_run() {")
+    poll_start = script.index("poll_remote_e2e_run() {", start_start)
+    start_function = script[start_start:poll_start]
+
+    assert "start_output=" in start_function
+    assert "start_status=$?" in start_function
+    assert 'grep -Fx "${REMOTE_RUN_DIR}"' in start_function
+    assert "DevPod SSH reported failure after remote E2E start" in start_function
+    assert "printf '%s\\n' \"${remote_dir}\"" in start_function
 
 
 @pytest.mark.requirement("AC-DevPod-Remote-E2E")

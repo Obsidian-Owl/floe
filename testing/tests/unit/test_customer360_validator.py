@@ -575,6 +575,7 @@ validation:
         def validate(self) -> ValidationResult:
             return ValidationResult(status="PASS")
 
+    monkeypatch.delenv("FLOE_DEMO_NAMESPACE", raising=False)
     monkeypatch.setenv("FLOE_DEMO_VALIDATION_MANIFEST", str(manifest))
     monkeypatch.setattr("sys.argv", ["validate_customer_360_demo"])
     monkeypatch.setattr(module, "Customer360Validator", FakeValidator)

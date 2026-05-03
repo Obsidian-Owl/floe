@@ -9,6 +9,8 @@ Tests:
 
 from __future__ import annotations
 
+import builtins
+import importlib.util
 from typing import Any
 
 import pytest
@@ -288,6 +290,46 @@ class TestGreatExpectationsPluginHealthCheck:
         """health_check includes gx_available in details."""
         status = gx_plugin.health_check()
         assert "gx_available" in status.details
+
+    @pytest.mark.requirement("FR-009")
+    def test_health_check_does_not_import_great_expectations(
+        self,
+        gx_plugin,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """health_check uses fast module discovery rather than importing GX."""
+        real_import = builtins.__import__
+
+        def import_without_gx(name: str, *args: object, **kwargs: object) -> object:
+            if name == "great_expectations":
+                raise AssertionError("health_check must not import great_expectations")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(
+            importlib.util,
+            "find_spec",
+            lambda name: object() if name == "great_expectations" else None,
+        )
+        monkeypatch.setattr(builtins, "__import__", import_without_gx)
+
+        status = gx_plugin.health_check()
+
+        assert status.state.value == "healthy"
+        assert status.details["gx_available"] is True
+
+    @pytest.mark.requirement("FR-009")
+    def test_health_check_reports_unavailable_when_gx_module_missing(
+        self,
+        gx_plugin,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """health_check reports unhealthy when Great Expectations is not installed."""
+        monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+
+        status = gx_plugin.health_check()
+
+        assert status.state.value == "unhealthy"
+        assert status.details["gx_available"] is False
 
 
 class TestGreatExpectationsPluginConfigSchema:
