@@ -49,6 +49,7 @@ DOCKERIGNORE = REPO_ROOT / ".dockerignore"
 MAKEFILE = REPO_ROOT / "Makefile"
 DEMO_PLUGIN_RESOLVER = REPO_ROOT / "scripts" / "resolve-demo-plugins.py"
 DEMO_MANIFEST = REPO_ROOT / "demo" / "manifest.yaml"
+DEMO_PORT_FORWARD_SCRIPT = REPO_ROOT / "scripts" / "demo-start-port-forwards.sh"
 
 # The three demo products: disk name (hyphenated) -> container name (underscore)
 DEMO_PRODUCTS: dict[str, str] = {
@@ -369,6 +370,19 @@ class TestDockerfileMacrosAndManifest:
         )
 
     @pytest.mark.requirement("WU11-AC1")
+    def test_demo_manifest_marks_insecure_marquez_http_as_demo_environment(self) -> None:
+        """Demo HTTP lineage config must declare a non-production environment."""
+        manifest = yaml.safe_load(DEMO_MANIFEST.read_text())
+        lineage_backend = manifest["plugins"]["lineage_backend"]
+        config = lineage_backend["config"]
+
+        assert config["allow_insecure_http"] is True
+        assert config["environment"] == "demo", (
+            "demo/manifest.yaml allows in-cluster HTTP for Marquez and must "
+            "explicitly mark that plugin config as demo/non-production."
+        )
+
+    @pytest.mark.requirement("WU11-AC1")
     def test_dockerfile_copies_macros_directory(self) -> None:
         """Verify Dockerfile has a COPY instruction for the macros/ directory.
 
@@ -469,6 +483,17 @@ class TestDockerfilePipOperations:
             assert "--require-hashes" in pip_line, (
                 f"pip install for requirements.txt must use --require-hashes. Line: {pip_line}"
             )
+
+    @pytest.mark.requirement("WU12-AC5")
+    def test_build_stage_suppresses_pip_root_warning(self) -> None:
+        """Build-stage pip runs as root, while the runtime image remains non-root."""
+        content = _read_dockerfile_raw()
+
+        assert "PIP_ROOT_USER_ACTION=ignore" in content, (
+            "Dockerfile build stage must explicitly suppress pip's root-user warning. "
+            "The runtime image still needs to switch to the dagster user."
+        )
+        assert "USER dagster" in content, "Runtime stage must continue to run as non-root user."
 
     @pytest.mark.requirement("WU12-AC2")
     def test_workspace_packages_use_no_deps(self) -> None:
@@ -1513,6 +1538,24 @@ class TestMakefileDemoChain:
             )
 
     @pytest.mark.requirement("WU11-AC6")
+    def test_remote_demo_build_passes_same_image_ref_as_deploy(self) -> None:
+        """The DevPod demo build must use the same image ref Helm deploys.
+
+        Without command-line ``DEMO_IMAGE_*`` overrides, the remote build can
+        recompute a dirty tag from generated artifacts while Helm deploys the
+        local clean SHA tag, leaving Dagster pods in ``ErrImageNeverPull``.
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "demo")
+
+        assert "--command" in body, "demo must use DevPod's explicit command flag."
+        assert "DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)" in body
+        assert "DEMO_IMAGE_TAG=$(DEMO_IMAGE_TAG)" in body
+        assert "FLOE_DEMO_IMAGE_REPOSITORY=$(DEMO_IMAGE_REPOSITORY)" in body
+        assert "FLOE_DEMO_IMAGE_TAG=$(DEMO_IMAGE_TAG)" in body
+        assert "$(DEMO_IMAGE_HELM_SET_ARGS)" in body
+
+    @pytest.mark.requirement("WU11-AC6")
     def test_demo_local_starts_local_port_forwards(self) -> None:
         """Verify demo-local starts localhost port-forwards after deploying.
 
@@ -1521,18 +1564,21 @@ class TestMakefileDemoChain:
         """
         content = _read_makefile_content()
         body = _extract_target_body(content, "demo-local")
+        script = DEMO_PORT_FORWARD_SCRIPT.read_text()
 
         assert "KUBECONFIG" not in body, "demo-local port-forwards must use local kube context."
-        assert ".demo-pids" in body, "demo-local must write pids for make demo-stop."
-        for command in (
-            "kubectl port-forward svc/floe-platform-dagster-webserver 3100:3000 -n floe-dev",
-            "kubectl port-forward svc/floe-platform-polaris 8181:8181 8182:8182 -n floe-dev",
-            "kubectl port-forward svc/floe-platform-minio 9000:9000 9001:9001 -n floe-dev",
-            "kubectl port-forward svc/floe-platform-jaeger-query 16686:16686 -n floe-dev",
-            "kubectl port-forward svc/floe-platform-marquez 5100:5000 -n floe-dev",
-            "kubectl port-forward svc/floe-platform-otel 4317:4317 4318:4318 -n floe-dev",
+        assert "scripts/demo-start-port-forwards.sh" in body
+        assert ".demo-pids" in script, "helper must write pids for make demo-stop."
+        for service_suffix, port_mapping in (
+            ("dagster-webserver", "DAGSTER_HOST_PORT}:3000"),
+            ("polaris", "POLARIS_API_PORT}:8181"),
+            ("minio", "MINIO_API_PORT}:9000"),
+            ("jaeger-query", "JAEGER_PORT}:16686"),
+            ("marquez", "MARQUEZ_PORT}:5000"),
+            ("otel", "OTEL_GRPC_PORT}:4317"),
         ):
-            assert command in body, f"demo-local must start port-forward: {command}"
+            assert service_suffix in script
+            assert port_mapping in script
 
     @pytest.mark.requirement("WU11-AC6")
     def test_demo_local_prints_reachable_urls(self) -> None:
@@ -1547,6 +1593,57 @@ class TestMakefileDemoChain:
         assert "OTel HTTP:     http://localhost:4318" in body
         assert "Stop with: make demo-stop" in body
         assert "http://localhost:3000" not in body
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_demo_targets_use_ready_checked_port_forward_helper(self) -> None:
+        """Demo targets must not print ready before forwarded services respond."""
+        content = _read_makefile_content()
+        remote_body = _extract_target_body(content, "demo")
+        local_body = _extract_target_body(content, "demo-local")
+
+        assert (
+            'KUBECONFIG="$(DEVPOD_KUBECONFIG)" scripts/demo-start-port-forwards.sh' in remote_body
+        )
+        assert "scripts/demo-start-port-forwards.sh" in local_body
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_demo_port_forward_helper_waits_for_dagster_http_health(self) -> None:
+        """The shared helper must verify Dagster HTTP readiness before returning."""
+        assert DEMO_PORT_FORWARD_SCRIPT.exists(), "demo port-forward helper is missing"
+        script = DEMO_PORT_FORWARD_SCRIPT.read_text()
+
+        assert "/server_info" in script
+        assert "curl" in script
+        assert "wait_for_http" in script
+        assert '"${RELEASE}-dagster-webserver" "${DAGSTER_HOST_PORT}:3000"' in script
+        assert 'RELEASE="${FLOE_DEMO_RELEASE:-floe-platform}"' in script
+        assert 'DAGSTER_HOST_PORT="${FLOE_DEMO_DAGSTER_PORT:-3100}"' in script
+
+    @pytest.mark.requirement("WU11-AC6")
+    def test_demo_dbt_accepted_values_use_dbt_1_11_arguments_property(self) -> None:
+        """Demo dbt tests should not emit dbt 1.11 generic-test deprecations."""
+        for product in DEMO_PRODUCTS:
+            schema_path = REPO_ROOT / "demo" / product / "models" / "schema.yml"
+            schema = _load_values_yaml(schema_path)
+            for model in schema.get("models", []):
+                for column in model.get("columns", []):
+                    for test in column.get("tests", []):
+                        if not isinstance(test, dict):
+                            continue
+                        for test_name, config in test.items():
+                            if test_name not in {"accepted_values", "relationships"}:
+                                continue
+                            assert isinstance(config, dict)
+                            assert "arguments" in config, (
+                                f"{schema_path}:{model['name']}.{column['name']} "
+                                f"must nest {test_name} config under arguments"
+                            )
+                            deprecated_argument_keys = {"field", "to", "values"} & set(config)
+                            assert not deprecated_argument_keys, (
+                                f"{schema_path}:{model['name']}.{column['name']} "
+                                f"uses deprecated top-level {test_name} arguments: "
+                                f"{sorted(deprecated_argument_keys)}"
+                            )
 
 
 # ============================================================
@@ -2565,6 +2662,25 @@ class TestGeneratedDefinitions:
         assert "--generate-definitions" in body, (
             f"compile-demo target must include '--generate-definitions' flag "
             f"to generate definitions.py files. Recipe body:\n{body}"
+        )
+
+    @pytest.mark.requirement("WU11-AC8")
+    def test_compile_demo_disables_predeploy_lineage_emission(self) -> None:
+        """compile-demo must not POST OpenLineage before Marquez is deployed.
+
+        The demo manifest keeps runtime lineage enabled. The pre-deploy
+        artifact-generation step runs before the platform services exist, so it
+        must explicitly disable compile-time lineage side effects.
+        """
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "compile-demo")
+        assert body.strip(), (
+            "compile-demo target has no recipe body. Cannot verify lineage emission flag."
+        )
+        assert "--no-lineage-emission" in body, (
+            "compile-demo target must pass '--no-lineage-emission' so "
+            "pre-deploy artifact generation does not attempt Marquez before "
+            f"the platform exists. Recipe body:\n{body}"
         )
 
 

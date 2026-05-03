@@ -32,6 +32,7 @@ class _FakeCompiledArtifacts:
 
     def __init__(self) -> None:
         self.configmap_calls: list[tuple[str, str | None]] = []
+        self.compile_calls: list[dict[str, object]] = []
 
     def to_json_file(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,7 +67,16 @@ def fake_compiled_artifacts(monkeypatch: pytest.MonkeyPatch) -> _FakeCompiledArt
     import floe_core.compilation.stages as stages
 
     artifacts = _FakeCompiledArtifacts()
-    monkeypatch.setattr(stages, "compile_pipeline", lambda _spec, _manifest: artifacts)
+
+    def fake_compile_pipeline(
+        _spec: Path,
+        _manifest: Path,
+        **kwargs: object,
+    ) -> _FakeCompiledArtifacts:
+        artifacts.compile_calls.append(kwargs)
+        return artifacts
+
+    monkeypatch.setattr(stages, "compile_pipeline", fake_compile_pipeline)
     return artifacts
 
 
@@ -863,6 +873,77 @@ class TestPlatformCompileCommand:
         # Verify helpful descriptions are present
         assert "contract" in result.output.lower()
         assert "drift" in result.output.lower()
+
+    @pytest.mark.requirement("FR-010")
+    def test_compile_accepts_no_lineage_emission_flag(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+    ) -> None:
+        """Pre-deploy artifact generation can disable compile-time lineage side effects."""
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+                "--no-lineage-emission",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert fake_compiled_artifacts.compile_calls[-1]["emit_lineage"] is False
+        assert "Compile-time lineage emission: DISABLED" in result.output
+
+    @pytest.mark.requirement("FR-010")
+    def test_compile_enables_lineage_emission_by_default(
+        self,
+        cli_runner: CliRunner,
+        sample_floe_yaml: Path,
+        sample_manifest_yaml: Path,
+        fake_compiled_artifacts: _FakeCompiledArtifacts,
+    ) -> None:
+        """Default CLI behavior still follows manifest-configured compile-time lineage."""
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            [
+                "platform",
+                "compile",
+                "--spec",
+                str(sample_floe_yaml),
+                "--manifest",
+                str(sample_manifest_yaml),
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert fake_compiled_artifacts.compile_calls[-1]["emit_lineage"] is True
+
+    @pytest.mark.requirement("FR-010")
+    def test_compile_help_shows_lineage_emission_flag(
+        self,
+        cli_runner: CliRunner,
+    ) -> None:
+        """Help documents offline compile-time lineage control."""
+        from floe_core.cli.main import cli
+
+        result = cli_runner.invoke(
+            cli,
+            ["platform", "compile", "--help"],
+        )
+
+        assert result.exit_code == 0
+        assert "--lineage-emission / --no-lineage-emission" in result.output
+        assert "compile-time OpenLineage" in result.output
 
 
 class TestPlatformGroup:

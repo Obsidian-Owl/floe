@@ -29,6 +29,7 @@ MANIFEST_PATH_ENV_VARS = ("FLOE_MANIFEST_PATH", "POLARIS_MANIFEST_PATH")
 _DEFAULT_POLARIS_CLIENT_ID = "demo-admin"
 _DEFAULT_POLARIS_CLIENT_SECRET = "demo-secret"  # pragma: allowlist secret  # noqa: S105
 _DEFAULT_POLARIS_ENDPOINT = "http://floe-platform-polaris:8181/api/catalog"
+_DEFAULT_POLARIS_OAUTH2_SERVER_URI = "http://floe-platform-polaris:8181/api/catalog/v1/oauth/tokens"
 _DEFAULT_POLARIS_SCOPE = "PRINCIPAL_ROLE:ALL"
 _DEFAULT_POLARIS_WAREHOUSE = "floe-demo"
 _DEFAULT_MINIO_ACCESS_KEY = "minioadmin"
@@ -248,3 +249,51 @@ def get_polaris_endpoint(manifest_path: Path | None = None) -> str:
         return str(uri)
 
     return _DEFAULT_POLARIS_ENDPOINT
+
+
+def get_polaris_oauth2_server_uri(
+    manifest_path: Path | None = None,
+    *,
+    catalog_endpoint: str | None = None,
+) -> str:
+    """Return the Polaris OAuth2 token endpoint for PyIceberg.
+
+    PyIceberg 0.11 warns when ``oauth2-server-uri`` is omitted and will remove
+    fallback inference in 1.0. Prefer explicit runtime configuration, then
+    derive from the active catalog endpoint so host, in-cluster, and manifest
+    paths stay aligned.
+
+    Args:
+        manifest_path: Optional path to manifest.yaml.
+        catalog_endpoint: Active Polaris REST catalog endpoint. When provided,
+            it is used to derive the token endpoint before manifest fallback.
+
+    Returns:
+        Polaris OAuth2 token endpoint URI string.
+    """
+    for env_var in ("POLARIS_OAUTH2_SERVER_URI", "FLOE_E2E_POLARIS_OAUTH2_URI"):
+        env_uri = _env_or_none(env_var)
+        if env_uri is not None:
+            return env_uri
+
+    if catalog_endpoint is not None and catalog_endpoint.strip():
+        return _derive_oauth2_server_uri(catalog_endpoint)
+
+    raw = _read_manifest(manifest_path)
+    token_url = _catalog_oauth2(raw).get("token_url")
+    if token_url is not None and str(token_url).strip():
+        return str(token_url)
+
+    endpoint = get_polaris_endpoint(manifest_path)
+    if endpoint:
+        return _derive_oauth2_server_uri(endpoint)
+
+    return _DEFAULT_POLARIS_OAUTH2_SERVER_URI
+
+
+def _derive_oauth2_server_uri(catalog_endpoint: str) -> str:
+    """Derive Polaris token endpoint from a catalog endpoint or service base URL."""
+    endpoint = catalog_endpoint.rstrip("/")
+    if endpoint.endswith("/api/catalog"):
+        return f"{endpoint}/v1/oauth/tokens"
+    return f"{endpoint}/api/catalog/v1/oauth/tokens"

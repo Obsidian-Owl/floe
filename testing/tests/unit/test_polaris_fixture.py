@@ -169,6 +169,7 @@ class TestCreatePolarisCatalog:
                 "polaris",
                 type="rest",
                 uri="http://test:8181/api/catalog",
+                **{"oauth2-server-uri": "http://test:8181/api/catalog/v1/oauth/tokens"},
                 warehouse="test_warehouse",
                 credential="test_client:test_secret",
                 scope="TEST_SCOPE",

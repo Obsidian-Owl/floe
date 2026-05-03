@@ -33,6 +33,60 @@ _LOCALHOST_HOSTNAMES: frozenset[str] = frozenset(
         "localhost.localdomain",
     }
 )
+_NON_PRODUCTION_ENVIRONMENTS: frozenset[str] = frozenset(
+    {
+        "ci",
+        "demo",
+        "dev",
+        "development",
+        "kind",
+        "local",
+        "test",
+        "testing",
+    }
+)
+_WARNED_INSECURE_HTTP_HOSTS: set[tuple[str, int]] = set()
+
+
+def _is_non_production_environment(environment: str) -> bool:
+    """Return True for explicitly non-production deployment environments."""
+    return environment.strip().lower() in _NON_PRODUCTION_ENVIRONMENTS
+
+
+def _insecure_http_log_level(
+    *,
+    environment: str,
+    manifest_override: bool,
+    environment_override: bool,
+) -> int:
+    """Choose a log level for explicit non-localhost HTTP Marquez config."""
+    if environment_override:
+        return logging.WARNING
+    if manifest_override and _is_non_production_environment(environment):
+        return logging.INFO
+    return logging.WARNING
+
+
+def _log_insecure_http_once(hostname: str, *, level: int, environment: str) -> None:
+    """Log once when explicit non-localhost HTTP is enabled for Marquez."""
+    key = (hostname, level)
+    if key in _WARNED_INSECURE_HTTP_HOSTS:
+        return
+    _WARNED_INSECURE_HTTP_HOSTS.add(key)
+    if level <= logging.INFO:
+        logger.info(
+            "Non-production HTTP enabled for Marquez URL '%s' "
+            "(environment=%s) via explicit manifest config.",
+            hostname,
+            environment,
+        )
+        return
+
+    logger.warning(
+        "INSECURE HTTP enabled for Marquez URL '%s' - development/test use only! "
+        "Use HTTPS before deploying to production.",
+        hostname,
+    )
 
 
 def _is_localhost(hostname: str) -> bool:
@@ -149,15 +203,16 @@ class MarquezConfig(BaseModel):
                 return self
 
             # Allow HTTP with explicit manifest config or environment override.
-            if (
-                self.allow_insecure_http
-                or os.environ.get("FLOE_ALLOW_INSECURE_HTTP", "").lower() == "true"
-            ):
-                logger.critical(
-                    "INSECURE HTTP enabled for Marquez URL '%s' - "
-                    "development/test use only! Use HTTPS before deploying "
-                    "to production.",
+            env_override = os.environ.get("FLOE_ALLOW_INSECURE_HTTP", "").lower() == "true"
+            if self.allow_insecure_http or env_override:
+                _log_insecure_http_once(
                     hostname,
+                    level=_insecure_http_log_level(
+                        environment=self.environment,
+                        manifest_override=self.allow_insecure_http,
+                        environment_override=env_override,
+                    ),
+                    environment=self.environment,
                 )
                 self.url = v
                 return self

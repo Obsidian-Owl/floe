@@ -1542,6 +1542,7 @@ class TestObservabilityFromManifest:
         assert lineage_backend.type == "marquez"
         assert lineage_backend.config == {
             "url": "http://floe-platform-marquez:5000",
+            "environment": "demo",
             "drain_timeout": 30.0,
             "allow_insecure_http": True,
         }

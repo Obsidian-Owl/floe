@@ -36,6 +36,7 @@ from testing.fixtures.credentials import (
 from testing.fixtures.polaris import (
     PolarisConfig,
     create_polaris_catalog,
+    drop_test_namespace,
     rewrite_table_io_for_host_access,
 )
 from testing.fixtures.polling import wait_for_condition
@@ -362,8 +363,7 @@ class TestPolarisJdbcDurability(IntegrationTestBase):
 
         # Cleanup (best-effort)
         try:
-            fresh_catalog.purge_table(fqn)
-            fresh_catalog.drop_namespace(ns_name)
+            drop_test_namespace(fresh_catalog, ns_name)
         except Exception as exc:
             # Non-fatal — test already passed; cleanup is courtesy
             import logging

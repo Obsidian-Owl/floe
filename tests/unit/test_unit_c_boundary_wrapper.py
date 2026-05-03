@@ -34,6 +34,8 @@ def test_boundary_wrapper_restores_demo_image_before_waiting_for_flux() -> None:
     assert "ensure_remote_demo_image_loaded()" in script
     assert "sync_devpod_checkout" in script
     assert 'local demo_image="${FLOE_DEMO_IMAGE}"' in script
+    assert "DEMO_IMAGE_REPOSITORY=${image_repository_q}" in script
+    assert "DEMO_IMAGE_TAG=${image_tag_q}" in script
     assert "FLOE_DEMO_IMAGE_REPOSITORY=${image_repository_q}" in script
     assert "FLOE_DEMO_IMAGE_TAG=${image_tag_q}" in script
     assert "KIND_CLUSTER_NAME=${kind_cluster_q} make build-demo-image" in script

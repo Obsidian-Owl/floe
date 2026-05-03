@@ -17,6 +17,7 @@ import subprocess
 import uuid
 import warnings
 from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -29,6 +30,7 @@ import yaml
 from testing.fixtures.credentials import (
     get_minio_credentials,
     get_polaris_credentials,
+    get_polaris_oauth2_server_uri,
     get_polaris_scope,
     get_polaris_warehouse,
     resolve_manifest_path,
@@ -129,6 +131,28 @@ def _resolve_polaris_credential(
     return credential, client_id, client_secret
 
 
+def _is_duplicate_polaris_grant_response(response: httpx.Response) -> bool:
+    """Return True when Polaris reports an idempotent duplicate grant as HTTP 500."""
+    return (
+        response.status_code == 500
+        and "grant_records_pkey" in response.text
+        and "sql-state '23505'" in response.text
+    )
+
+
+@contextmanager
+def _suppress_httpx_info_logs() -> Generator[None, None, None]:
+    """Suppress expected httpx request summaries while preserving warnings."""
+    httpx_logger = logging.getLogger("httpx")
+    previous_level = httpx_logger.level
+    if httpx_logger.getEffectiveLevel() <= logging.INFO:
+        httpx_logger.setLevel(logging.WARNING)
+    try:
+        yield
+    finally:
+        httpx_logger.setLevel(previous_level)
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Register custom markers and E2E-scoped rerun config."""
     config.addinivalue_line(
@@ -226,6 +250,7 @@ def pytest_collection_modifyitems(
 
         test_func = item.function
         test_name = item.nodeid
+        item_markers = {mark.name for mark in item.iter_markers()}
 
         try:
             source = inspect.getsource(test_func)
@@ -253,7 +278,7 @@ def pytest_collection_modifyitems(
                 )
 
         # TQR-010: dry_run=True in E2E tests
-        if re.search(r"dry_run\s*=\s*True", source):
+        if "developer_workflow" not in item_markers and re.search(r"dry_run\s*=\s*True", source):
             violations.append(
                 f"TQR WARNING: {test_name} - TQR-010 violation: "
                 "dry_run=True found in E2E test (E2E should execute real operations)"
@@ -734,6 +759,10 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         **{
             "type": "rest",
             "uri": f"{polaris_url}/api/catalog",
+            "oauth2-server-uri": get_polaris_oauth2_server_uri(
+                _MANIFEST_PATH,
+                catalog_endpoint=f"{polaris_url}/api/catalog",
+            ),
             "credential": polaris_credential,
             "scope": _manifest_scope,
             "warehouse": os.environ.get("POLARIS_WAREHOUSE", _manifest_warehouse),
@@ -802,13 +831,19 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         )
 
     # Step 2: Assign principal role to root principal (idempotent)
-    pr_assign_response = httpx.put(
-        f"{polaris_url}/api/management/v1/principals/root/principal-roles",
-        headers=headers,
-        json={"principalRole": {"name": principal_role}},
-        timeout=10.0,
-    )
-    if pr_assign_response.status_code not in (200, 201, 204, 409):
+    with _suppress_httpx_info_logs():
+        pr_assign_response = httpx.put(
+            f"{polaris_url}/api/management/v1/principals/root/principal-roles",
+            headers=headers,
+            json={"principalRole": {"name": principal_role}},
+            timeout=10.0,
+        )
+    if _is_duplicate_polaris_grant_response(pr_assign_response):
+        logger.info(
+            "Principal role %s already assigned to root (duplicate grant record)",
+            principal_role,
+        )
+    elif pr_assign_response.status_code not in (200, 201, 204, 409):
         logger.warning(
             "Failed to assign principal role %s to root: HTTP %s",
             principal_role,
@@ -829,27 +864,36 @@ def polaris_client(wait_for_service: Callable[..., None]) -> Any:
         )
 
     # Step 4: Grant CATALOG_MANAGE_CONTENT privilege
-    grant_response = httpx.put(
-        f"{polaris_url}/api/management/v1/catalogs/{catalog_name}"
-        "/catalog-roles/catalog_admin/grants",
-        headers=headers,
-        json={"grant": {"type": "catalog", "privilege": "CATALOG_MANAGE_CONTENT"}},
-        timeout=10.0,
-    )
-    if grant_response.status_code not in (200, 201, 204, 409):
+    with _suppress_httpx_info_logs():
+        grant_response = httpx.put(
+            f"{polaris_url}/api/management/v1/catalogs/{catalog_name}"
+            "/catalog-roles/catalog_admin/grants",
+            headers=headers,
+            json={"grant": {"type": "catalog", "privilege": "CATALOG_MANAGE_CONTENT"}},
+            timeout=10.0,
+        )
+    if _is_duplicate_polaris_grant_response(grant_response):
+        logger.info("CATALOG_MANAGE_CONTENT already granted (duplicate grant record)")
+    elif grant_response.status_code not in (200, 201, 204, 409):
         logger.warning(
             "Failed to grant CATALOG_MANAGE_CONTENT: HTTP %s",
             grant_response.status_code,
         )
 
     # Step 5: Assign catalog role to principal role (idempotent — 200/204 ok, 409 exists)
-    assign_response = httpx.put(
-        f"{polaris_url}/api/management/v1/principal-roles/{principal_role}/catalog-roles/{catalog_name}",
-        headers=headers,
-        json={"catalogRole": {"name": "catalog_admin"}},
-        timeout=10.0,
-    )
-    if assign_response.status_code not in (200, 204, 409):
+    with _suppress_httpx_info_logs():
+        assign_response = httpx.put(
+            f"{polaris_url}/api/management/v1/principal-roles/{principal_role}/catalog-roles/{catalog_name}",
+            headers=headers,
+            json={"catalogRole": {"name": "catalog_admin"}},
+            timeout=10.0,
+        )
+    if _is_duplicate_polaris_grant_response(assign_response):
+        logger.info(
+            "catalog_admin already assigned to %s (duplicate grant record)",
+            principal_role,
+        )
+    elif assign_response.status_code not in (200, 204, 409):
         logger.warning(
             "Failed to assign catalog_admin to %s: HTTP %s",
             principal_role,

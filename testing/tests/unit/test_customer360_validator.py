@@ -536,6 +536,16 @@ def test_cli_loads_customer360_validation_manifest_by_default(
     tmp_path: Path,
 ) -> None:
     """The release validation CLI gets runnable evidence checks from a manifest by default."""
+    for name in (
+        "FLOE_DEMO_NAMESPACE",
+        "FLOE_DEMO_DAGSTER_URL",
+        "FLOE_DEMO_MARQUEZ_URL",
+        "FLOE_DEMO_JAEGER_URL",
+        "FLOE_DEMO_PLATFORM_EXPECTED_SERVICES",
+        "FLOE_DEMO_COMMAND_TIMEOUT_SECONDS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
     module = importlib.import_module("testing.ci.validate_customer_360_demo")
     manifest = tmp_path / "validation.yaml"
     manifest.write_text(
