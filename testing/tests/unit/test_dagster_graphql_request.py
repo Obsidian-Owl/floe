@@ -36,7 +36,7 @@ class _FakeDagsterClient:
         self._client = _FakeGraphQLClient(result)
 
 
-@pytest.mark.requirement("295")
+@pytest.mark.requirement("15-FR-007")
 def test_execute_dagster_graphql_request_places_variables_on_request() -> None:
     """Avoid gql's deprecated execute(variable_values=...) call shape."""
     dagster_client = _FakeDagsterClient()
@@ -56,7 +56,7 @@ def test_execute_dagster_graphql_request_places_variables_on_request() -> None:
     assert kwargs == {}
 
 
-@pytest.mark.requirement("295")
+@pytest.mark.requirement("15-FR-007")
 def test_execute_dagster_graphql_request_emits_no_gql_deprecation_warning() -> None:
     """Exercise gql.Client.execute with variables using the current request API."""
     dagster_client = _FakeDagsterClient()
@@ -82,7 +82,7 @@ def test_execute_dagster_graphql_request_emits_no_gql_deprecation_warning() -> N
     ]
 
 
-@pytest.mark.requirement("295")
+@pytest.mark.requirement("15-FR-007")
 def test_execute_dagster_graphql_request_rejects_non_dict_results() -> None:
     """Non-object GraphQL responses should fail under optimized Python too."""
     dagster_client = _FakeDagsterClient(result=["not", "a", "dict"])
@@ -91,7 +91,7 @@ def test_execute_dagster_graphql_request_rejects_non_dict_results() -> None:
         execute_dagster_graphql_request(dagster_client, "{ __typename }")
 
 
-@pytest.mark.requirement("295")
+@pytest.mark.requirement("15-FR-007")
 def test_data_pipeline_sensor_query_uses_graphql_request_helper() -> None:
     """The E2E sensor query must not call Dagster's deprecated private wrapper."""
     source = (_REPO_ROOT / "tests/e2e/test_data_pipeline.py").read_text()
