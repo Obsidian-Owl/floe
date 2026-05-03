@@ -256,6 +256,31 @@ def test_remote_e2e_bootstraps_kind_before_running_tests() -> None:
     )
 
 
+@pytest.mark.requirement("297")
+def test_remote_e2e_waits_for_flux_settlement_before_running_tests() -> None:
+    """Remote E2E must not start while Flux is still reconciling the target commit."""
+    script = _read(_DEVPOD_TEST)
+
+    kind_up = script.index("make kind-up")
+    settlement = script.index("wait_for_flux_settlement", kind_up)
+    e2e_target = script.index('IMAGE_LOAD_METHOD=kind make "\\${FLOE_REMOTE_E2E_MAKE_TARGET}"')
+
+    assert kind_up < settlement < e2e_target
+    assert (
+        'DEVPOD_REMOTE_FLUX_HELMRELEASES="${DEVPOD_REMOTE_FLUX_HELMRELEASES:-'
+        'floe-platform floe-jobs-test}"' in script
+    )
+    assert 'DEVPOD_REMOTE_FLUX_GITREPOSITORY="${DEVPOD_REMOTE_FLUX_GITREPOSITORY:-floe}"' in script
+    assert "git rev-parse HEAD" in script
+    assert "status.artifact.revision" in script
+    assert "status.observedGeneration" in script
+    assert "metadata.generation" in script
+    assert 'rollout status "deployment/\\${deployment}"' in script
+    assert 'rollout status "statefulset/\\${statefulset}"' in script
+    assert "Flux settlement failed" in script
+    assert '(exit "\\${flux_rc}")' in script
+
+
 @pytest.mark.requirement("AC-DevPod-Remote-E2E")
 def test_remote_e2e_make_target_is_configurable_without_shell_command_injection() -> None:
     """Release validation must be able to select test-e2e-full remotely."""
