@@ -29,6 +29,21 @@
 #                        (default: 20).
 #   DEVPOD_REMOTE_POLL_FAILURE_LIMIT Consecutive DevPod poll failures tolerated
 #                        before aborting (default: 30).
+#   DEVPOD_REMOTE_FLUX_SETTLEMENT_TIMEOUT Seconds to wait for Flux source,
+#                        HelmRelease, and rollout settlement before E2E starts
+#                        (default: 900).
+#   DEVPOD_REMOTE_FLUX_SETTLEMENT_INTERVAL Seconds between Flux settlement polls
+#                        (default: 10).
+#   DEVPOD_REMOTE_FLUX_GITREPOSITORY Flux GitRepository name to inspect
+#                        (default: floe).
+#   DEVPOD_REMOTE_FLUX_SOURCE_NAMESPACE Namespace containing the GitRepository
+#                        (default: flux-system).
+#   DEVPOD_REMOTE_FLUX_HELMRELEASES Space-separated HelmReleases to wait for
+#                        (default: "floe-platform floe-jobs-test").
+#   DEVPOD_REMOTE_FLUX_DEPLOYMENTS Space-separated Deployments to wait for
+#                        after HelmReleases settle.
+#   DEVPOD_REMOTE_FLUX_STATEFULSETS Space-separated StatefulSets to wait for
+#                        after HelmReleases settle.
 #   DEVPOD_UP_RECOVERY_TIMEOUT Seconds to poll workspace status after a
 #                        transport-level `devpod up` failure (default: 600).
 #   DEVPOD_ENABLE_REMOTE_TUNNELS Set to 1 to establish host service tunnels
@@ -63,6 +78,13 @@ DEVPOD_REMOTE_RUN_ROOT="${DEVPOD_REMOTE_RUN_ROOT:-/tmp/floe-devpod-e2e}"
 DEVPOD_REMOTE_E2E_TIMEOUT="${DEVPOD_REMOTE_E2E_TIMEOUT:-7200}"
 DEVPOD_REMOTE_POLL_INTERVAL="${DEVPOD_REMOTE_POLL_INTERVAL:-20}"
 DEVPOD_REMOTE_POLL_FAILURE_LIMIT="${DEVPOD_REMOTE_POLL_FAILURE_LIMIT:-30}"
+DEVPOD_REMOTE_FLUX_SETTLEMENT_TIMEOUT="${DEVPOD_REMOTE_FLUX_SETTLEMENT_TIMEOUT:-900}"
+DEVPOD_REMOTE_FLUX_SETTLEMENT_INTERVAL="${DEVPOD_REMOTE_FLUX_SETTLEMENT_INTERVAL:-10}"
+DEVPOD_REMOTE_FLUX_GITREPOSITORY="${DEVPOD_REMOTE_FLUX_GITREPOSITORY:-floe}"
+DEVPOD_REMOTE_FLUX_SOURCE_NAMESPACE="${DEVPOD_REMOTE_FLUX_SOURCE_NAMESPACE:-flux-system}"
+DEVPOD_REMOTE_FLUX_HELMRELEASES="${DEVPOD_REMOTE_FLUX_HELMRELEASES:-floe-platform floe-jobs-test}"
+DEVPOD_REMOTE_FLUX_DEPLOYMENTS="${DEVPOD_REMOTE_FLUX_DEPLOYMENTS:-floe-platform-dagster-webserver floe-platform-polaris floe-platform-minio floe-platform-jaeger floe-platform-marquez floe-platform-otel}"
+DEVPOD_REMOTE_FLUX_STATEFULSETS="${DEVPOD_REMOTE_FLUX_STATEFULSETS:-floe-platform-postgresql}"
 DEVPOD_UP_RECOVERY_TIMEOUT="${DEVPOD_UP_RECOVERY_TIMEOUT:-600}"
 DEVPOD_UP_RECOVERY_INTERVAL="${DEVPOD_UP_RECOVERY_INTERVAL:-15}"
 DEVPOD_ENABLE_REMOTE_TUNNELS="${DEVPOD_ENABLE_REMOTE_TUNNELS:-0}"
@@ -163,6 +185,16 @@ if [[ ! "${DEVPOD_REMOTE_POLL_FAILURE_LIMIT}" =~ ^[0-9]+$ ]] || [[ "${DEVPOD_REM
     exit 1
 fi
 
+if [[ ! "${DEVPOD_REMOTE_FLUX_SETTLEMENT_TIMEOUT}" =~ ^[0-9]+$ ]] || [[ "${DEVPOD_REMOTE_FLUX_SETTLEMENT_TIMEOUT}" -lt 1 ]]; then
+    error "Invalid DEVPOD_REMOTE_FLUX_SETTLEMENT_TIMEOUT='${DEVPOD_REMOTE_FLUX_SETTLEMENT_TIMEOUT}'"
+    exit 1
+fi
+
+if [[ ! "${DEVPOD_REMOTE_FLUX_SETTLEMENT_INTERVAL}" =~ ^[0-9]+$ ]] || [[ "${DEVPOD_REMOTE_FLUX_SETTLEMENT_INTERVAL}" -lt 1 ]]; then
+    error "Invalid DEVPOD_REMOTE_FLUX_SETTLEMENT_INTERVAL='${DEVPOD_REMOTE_FLUX_SETTLEMENT_INTERVAL}'"
+    exit 1
+fi
+
 if [[ ! "${DEVPOD_UP_RECOVERY_TIMEOUT}" =~ ^[0-9]+$ ]] || [[ "${DEVPOD_UP_RECOVERY_TIMEOUT}" -lt 1 ]]; then
     error "Invalid DEVPOD_UP_RECOVERY_TIMEOUT='${DEVPOD_UP_RECOVERY_TIMEOUT}'"
     exit 1
@@ -182,6 +214,23 @@ if [[ -z "${DEVPOD_REMOTE_E2E_MAKE_TARGET}" ]]; then
     error "Invalid DEVPOD_REMOTE_E2E_MAKE_TARGET: value cannot be empty"
     exit 1
 fi
+
+for kube_name in "${DEVPOD_REMOTE_FLUX_GITREPOSITORY}" "${DEVPOD_REMOTE_FLUX_SOURCE_NAMESPACE}"; do
+    if [[ ! "${kube_name}" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        error "Invalid Flux resource name '${kube_name}'"
+        exit 1
+    fi
+done
+
+for kube_name_list in \
+    "${DEVPOD_REMOTE_FLUX_HELMRELEASES}" \
+    "${DEVPOD_REMOTE_FLUX_DEPLOYMENTS}" \
+    "${DEVPOD_REMOTE_FLUX_STATEFULSETS}"; do
+    if [[ ! "${kube_name_list}" =~ ^[a-zA-Z0-9._\ -]+$ ]]; then
+        error "Invalid Flux resource list '${kube_name_list}'"
+        exit 1
+    fi
+done
 
 recover_workspace_after_up_failure() {
     local deadline=$((SECONDS + DEVPOD_UP_RECOVERY_TIMEOUT))
@@ -219,6 +268,13 @@ start_remote_e2e_run() {
     local run_dir_q
     local workdir_q
     local make_target_q
+    local flux_settlement_timeout_q
+    local flux_settlement_interval_q
+    local flux_gitrepository_q
+    local flux_source_namespace_q
+    local flux_helmreleases_q
+    local flux_deployments_q
+    local flux_statefulsets_q
     local remote_script
     local start_output=""
     local start_status=0
@@ -226,6 +282,13 @@ start_remote_e2e_run() {
     run_dir_q="$(shell_quote "${REMOTE_RUN_DIR}")"
     workdir_q="$(shell_quote "${DEVPOD_REMOTE_WORKDIR}")"
     make_target_q="$(shell_quote "${DEVPOD_REMOTE_E2E_MAKE_TARGET}")"
+    flux_settlement_timeout_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_SETTLEMENT_TIMEOUT}")"
+    flux_settlement_interval_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_SETTLEMENT_INTERVAL}")"
+    flux_gitrepository_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_GITREPOSITORY}")"
+    flux_source_namespace_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_SOURCE_NAMESPACE}")"
+    flux_helmreleases_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_HELMRELEASES}")"
+    flux_deployments_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_DEPLOYMENTS}")"
+    flux_statefulsets_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_STATEFULSETS}")"
 
     remote_script=$(cat <<REMOTE_SCRIPT
 set -euo pipefail
@@ -238,12 +301,153 @@ cat > "\${run_dir}/run.sh" <<'REMOTE_RUN'
 #!/usr/bin/env bash
 set +e
 mkdir -p "\${FLOE_REMOTE_RUN_DIR}/artifacts"
+resolve_flux_ref_commit() {
+    local ref_type="\${1:?ref type required}"
+    local ref_name="\${2:?ref name required}"
+    local local_ref=""
+    local remote_ref=""
+
+    case "\${ref_type}" in
+        branch)
+            local_ref="refs/remotes/origin/\${ref_name}^{commit}"
+            remote_ref="refs/heads/\${ref_name}"
+            ;;
+        tag)
+            local_ref="refs/tags/\${ref_name}^{commit}"
+            remote_ref="refs/tags/\${ref_name}"
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+
+    git rev-parse --verify --quiet "\${local_ref}" 2>/dev/null && return 0
+    git ls-remote --exit-code origin "\${remote_ref}" 2>/dev/null | awk 'NR == 1 { print $1; exit }'
+}
+
+resolve_flux_expected_revision() {
+    local source_namespace="\${FLOE_REMOTE_FLUX_SOURCE_NAMESPACE}"
+    local gitrepository="\${FLOE_REMOTE_FLUX_GITREPOSITORY}"
+    local state=""
+    local source_branch=""
+    local source_tag=""
+    local source_commit=""
+    local source_semver=""
+
+    state="\$(kubectl get gitrepository "\${gitrepository}" -n "\${source_namespace}" -o 'jsonpath={.spec.ref.branch}{"\t"}{.spec.ref.tag}{"\t"}{.spec.ref.commit}{"\t"}{.spec.ref.semver}' 2>/dev/null || true)"
+    IFS=\$'\t' read -r source_branch source_tag source_commit source_semver <<< "\${state}"
+
+    if [[ -n "\${source_commit}" ]]; then
+        printf '%s\n' "\${source_commit}"
+        return 0
+    fi
+    if [[ -n "\${source_branch}" ]]; then
+        resolve_flux_ref_commit branch "\${source_branch}"
+        return 0
+    fi
+    if [[ -n "\${source_tag}" ]]; then
+        resolve_flux_ref_commit tag "\${source_tag}"
+        return 0
+    fi
+    if [[ -n "\${source_semver}" ]]; then
+        echo "[remote-e2e] GitRepository uses semver \${source_semver}; relying on Flux readiness for source settlement" >&2
+        return 0
+    fi
+
+    git rev-parse --verify --quiet "HEAD^{commit}" 2>/dev/null || true
+}
+
+wait_for_rollout_with_remaining_budget() {
+    local resource="\${1:?resource required}"
+    local namespace="\${2:?namespace required}"
+    local deadline="\${3:?deadline required}"
+    local remaining
+    remaining=\$((deadline - SECONDS))
+
+    if (( remaining < 1 )); then
+        echo "[remote-e2e] ERROR: settlement budget exhausted before \${resource} rollout" >&2
+        return 1
+    fi
+
+    kubectl rollout status "\${resource}" -n "\${namespace}" --timeout="\${remaining}s"
+}
+
+wait_for_flux_settlement() {
+    local namespace="\${TEST_NAMESPACE:-floe-test}"
+    local source_namespace="\${FLOE_REMOTE_FLUX_SOURCE_NAMESPACE}"
+    local gitrepository="\${FLOE_REMOTE_FLUX_GITREPOSITORY}"
+    local helmreleases="\${FLOE_REMOTE_FLUX_HELMRELEASES}"
+    local deployments="\${FLOE_REMOTE_FLUX_DEPLOYMENTS}"
+    local statefulsets="\${FLOE_REMOTE_FLUX_STATEFULSETS}"
+    local timeout="\${FLOE_REMOTE_FLUX_SETTLEMENT_TIMEOUT}"
+    local interval="\${FLOE_REMOTE_FLUX_SETTLEMENT_INTERVAL}"
+    local expected_revision=""
+    local source_revision=""
+    local deadline
+
+    if ! kubectl get namespace "\${source_namespace}" >/dev/null 2>&1; then
+        echo "[remote-e2e] Flux namespace \${source_namespace} not found; skipping settlement gate"
+        return 0
+    fi
+
+    expected_revision="\$(resolve_flux_expected_revision)"
+    deadline=\$((SECONDS + timeout))
+    echo "[remote-e2e] waiting for Flux settlement in namespace \${namespace} (expected revision: \${expected_revision:-unknown})"
+
+    while (( SECONDS < deadline )); do
+        local source_ready=0
+        local helm_ready=1
+        source_revision="\$(kubectl get gitrepository "\${gitrepository}" -n "\${source_namespace}" -o "jsonpath={.status.artifact.revision}" 2>/dev/null || true)"
+        if [[ -z "\${expected_revision}" || "\${source_revision}" == *"\${expected_revision}"* ]]; then
+            source_ready=1
+        fi
+
+        for helmrelease in \${helmreleases}; do
+            local state=""
+            local observed=""
+            local generation=""
+            local ready=""
+            state="\$(kubectl get helmrelease "\${helmrelease}" -n "\${namespace}" -o 'jsonpath={.status.observedGeneration}{"\t"}{.metadata.generation}{"\t"}{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || true)"
+            IFS=\$'\t' read -r observed generation ready <<< "\${state}"
+            if [[ -z "\${observed}" || "\${observed}" != "\${generation}" || "\${ready}" != "True" ]]; then
+                helm_ready=0
+            fi
+        done
+
+        if [[ "\${source_ready}" -eq 1 && "\${helm_ready}" -eq 1 ]]; then
+            echo "[remote-e2e] Flux source and HelmReleases settled"
+            for deployment in \${deployments}; do
+                wait_for_rollout_with_remaining_budget "deployment/\${deployment}" "\${namespace}" "\${deadline}" || return 1
+            done
+            for statefulset in \${statefulsets}; do
+                wait_for_rollout_with_remaining_budget "statefulset/\${statefulset}" "\${namespace}" "\${deadline}" || return 1
+            done
+            return 0
+        fi
+
+        echo "[remote-e2e] Flux not settled yet: source=\${source_revision:-missing}; retrying in \${interval}s"
+        sleep "\${interval}"
+    done
+
+    echo "[remote-e2e] ERROR: Flux did not settle within \${timeout}s" >&2
+    kubectl get gitrepository "\${gitrepository}" -n "\${source_namespace}" -o wide 2>/dev/null >&2 || true
+    kubectl get helmrelease -n "\${namespace}" 2>/dev/null >&2 || true
+    return 1
+}
+
 {
     echo "[remote-e2e] started at \$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     echo "[remote-e2e] workdir=\${FLOE_REMOTE_WORKDIR}"
     cd "\${FLOE_REMOTE_WORKDIR}"
     SKIP_MONITORING=\${SKIP_MONITORING:-true} make kind-up
-    IMAGE_LOAD_METHOD=kind make "\${FLOE_REMOTE_E2E_MAKE_TARGET}"
+    wait_for_flux_settlement
+    flux_rc=\$?
+    if [[ "\${flux_rc}" -ne 0 ]]; then
+        echo "[remote-e2e] Flux settlement failed exit=\${flux_rc}"
+        (exit "\${flux_rc}")
+    else
+        IMAGE_LOAD_METHOD=kind make "\${FLOE_REMOTE_E2E_MAKE_TARGET}"
+    fi
 } > "\${FLOE_REMOTE_RUN_DIR}/output.log" 2>&1
 rc=\$?
 cp -a "\${FLOE_REMOTE_WORKDIR}/test-artifacts/." "\${FLOE_REMOTE_RUN_DIR}/artifacts/" 2>/dev/null || true
@@ -253,6 +457,13 @@ exit 0
 REMOTE_RUN
 chmod +x "\${run_dir}/run.sh"
 FLOE_REMOTE_WORKDIR="\${workdir}" FLOE_REMOTE_RUN_DIR="\${run_dir}" FLOE_REMOTE_E2E_MAKE_TARGET="\${make_target}" \
+    FLOE_REMOTE_FLUX_SETTLEMENT_TIMEOUT=${flux_settlement_timeout_q} \
+    FLOE_REMOTE_FLUX_SETTLEMENT_INTERVAL=${flux_settlement_interval_q} \
+    FLOE_REMOTE_FLUX_GITREPOSITORY=${flux_gitrepository_q} \
+    FLOE_REMOTE_FLUX_SOURCE_NAMESPACE=${flux_source_namespace_q} \
+    FLOE_REMOTE_FLUX_HELMRELEASES=${flux_helmreleases_q} \
+    FLOE_REMOTE_FLUX_DEPLOYMENTS=${flux_deployments_q} \
+    FLOE_REMOTE_FLUX_STATEFULSETS=${flux_statefulsets_q} \
     nohup bash "\${run_dir}/run.sh" > "\${run_dir}/nohup.log" 2>&1 < /dev/null &
 echo \$! > "\${run_dir}/pid"
 printf '%s\n' "\${run_dir}"
