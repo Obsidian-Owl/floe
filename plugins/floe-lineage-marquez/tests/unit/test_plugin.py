@@ -7,6 +7,7 @@ for Marquez deployments.
 
 from __future__ import annotations
 
+import logging
 import os
 from unittest.mock import MagicMock, patch
 
@@ -337,6 +338,63 @@ def test_config_allows_manifest_explicit_internal_http() -> None:
 
     assert config.url == "http://floe-platform-marquez:5000"
     assert config.allow_insecure_http is True
+
+
+@pytest.mark.requirement("REQ-527")
+def test_insecure_http_override_logs_once_at_warning_level(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Production/default in-cluster HTTP should warn once without critical noise."""
+    import floe_lineage_marquez as marquez_module
+
+    marquez_module._WARNED_INSECURE_HTTP_HOSTS.clear()
+    caplog.set_level(logging.WARNING, logger="floe_lineage_marquez")
+
+    for _ in range(2):
+        MarquezConfig(
+            url="http://floe-platform-marquez:5000",
+            allow_insecure_http=True,
+        )
+
+    insecure_records = [
+        record
+        for record in caplog.records
+        if "INSECURE HTTP enabled for Marquez URL" in record.getMessage()
+    ]
+    assert len(insecure_records) == 1
+    assert insecure_records[0].levelno == logging.WARNING
+    assert all(record.levelno < logging.CRITICAL for record in insecure_records)
+
+
+@pytest.mark.requirement("REQ-527")
+def test_manifest_nonprod_insecure_http_logs_once_at_info_level(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Manifest-declared demo/test HTTP should be visible without warning noise."""
+    import floe_lineage_marquez as marquez_module
+
+    marquez_module._WARNED_INSECURE_HTTP_HOSTS.clear()
+    caplog.set_level(logging.INFO, logger="floe_lineage_marquez")
+
+    for _ in range(2):
+        MarquezConfig(
+            url="http://floe-platform-marquez:5000",
+            environment="demo",
+            allow_insecure_http=True,
+        )
+
+    insecure_records = [
+        record
+        for record in caplog.records
+        if "Non-production HTTP enabled for Marquez URL" in record.getMessage()
+    ]
+    assert len(insecure_records) == 1
+    assert insecure_records[0].levelno == logging.INFO
+    assert not [
+        record
+        for record in caplog.records
+        if record.levelno >= logging.WARNING and "Marquez URL" in record.getMessage()
+    ]
 
 
 @pytest.mark.requirement("REQ-527")

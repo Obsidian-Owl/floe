@@ -60,6 +60,7 @@ def test_get_polaris_catalog_uses_env_endpoints_without_eager_service_resolution
         {
             "type": "rest",
             "uri": "http://example.test/api/catalog",
+            "oauth2-server-uri": "http://example.test/api/catalog/v1/oauth/tokens",
             "credential": "id:secret",
             "scope": get_polaris_scope(),
             "warehouse": get_polaris_warehouse(),

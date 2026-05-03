@@ -95,7 +95,7 @@ ensure_remote_demo_image_loaded() {
     sync_devpod_checkout
     info "Remote demo image '${demo_image}' is missing. Rebuilding it in the DevPod workspace..."
     devpod_remote_command \
-        "FLOE_DEMO_IMAGE_REPOSITORY=${image_repository_q} FLOE_DEMO_IMAGE_TAG=${image_tag_q} KIND_CLUSTER_NAME=${kind_cluster_q} make build-demo-image"
+        "DEMO_IMAGE_REPOSITORY=${image_repository_q} DEMO_IMAGE_TAG=${image_tag_q} FLOE_DEMO_IMAGE_REPOSITORY=${image_repository_q} FLOE_DEMO_IMAGE_TAG=${image_tag_q} KIND_CLUSTER_NAME=${kind_cluster_q} make build-demo-image"
 }
 
 ensure_remote_test_runner_image_loaded() {

@@ -20,6 +20,7 @@ import boto3
 from testing.fixtures.credentials import (
     get_minio_credentials,
     get_polaris_credentials,
+    get_polaris_oauth2_server_uri,
     get_polaris_scope,
     get_polaris_warehouse,
 )
@@ -79,6 +80,9 @@ def _get_polaris_catalog(*, fresh: bool = False) -> Any:
             **{
                 "type": "rest",
                 "uri": polaris_url,
+                "oauth2-server-uri": get_polaris_oauth2_server_uri(
+                    catalog_endpoint=polaris_url,
+                ),
                 "credential": os.environ.get("POLARIS_CREDENTIAL", default_cred),
                 "scope": os.environ.get("POLARIS_SCOPE", get_polaris_scope()),
                 "warehouse": os.environ.get("POLARIS_WAREHOUSE", get_polaris_warehouse()),

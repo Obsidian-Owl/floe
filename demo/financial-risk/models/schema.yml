@@ -74,7 +74,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC']
+              arguments:
+                values: ['AAA', 'AA', 'A', 'BBB', 'BB', 'B', 'CCC']
       - name: country
         description: "Country code"
         tests:

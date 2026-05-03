@@ -443,7 +443,9 @@ class TestPromotion(IntegrationTestBase):
             )
 
             # Assert trace_id is populated (OTel correlation)
-            assert len(record.trace_id) > 0, "trace_id must be populated for OTel correlation"
+            assert record.trace_id and record.trace_id.strip(), (
+                "trace_id must be populated for OTel correlation"
+            )
 
             # Assert timestamps
             assert record.promoted_at is not None, "promoted_at must be set"
@@ -510,6 +512,7 @@ class TestPromotion(IntegrationTestBase):
             )
 
     @pytest.mark.e2e
+    @pytest.mark.developer_workflow
     @pytest.mark.requirement("FR-070")
     def test_dry_run_gates_execute(self) -> None:
         """Test that dry_run=True executes gates but makes no state changes.
@@ -554,7 +557,7 @@ class TestPromotion(IntegrationTestBase):
             assert record.promotion_id is not None, "promotion_id must be set"
 
             # Assert trace_id exists
-            assert len(record.trace_id) > 0, "trace_id must be populated"
+            assert record.trace_id and record.trace_id.strip(), "trace_id must be populated"
 
         except (ConnectionError, OSError, Exception) as e:
             # Infrastructure error is expected when OCI registry unavailable
@@ -645,7 +648,7 @@ class TestPromotion(IntegrationTestBase):
 
             # Validate trace_id is a valid hex string (OTel format)
             assert record.trace_id is not None, "trace_id must be present"
-            assert len(record.trace_id) > 0, "trace_id must not be empty"
+            assert record.trace_id.strip(), "trace_id must not be empty"
 
             # OTel trace IDs are 32 hex characters
             # The promote() method formats as: format(span_context.trace_id, "032x")
@@ -702,7 +705,7 @@ class TestPromotion(IntegrationTestBase):
 
             # If we get a record, check for failed gates
             failed_gates = [gr for gr in record.gate_results if gr.status == GateStatus.FAILED]
-            assert len(failed_gates) > 0, (
+            assert failed_gates, (
                 "At least one gate should have FAILED status with invalid scanner command"
             )
 

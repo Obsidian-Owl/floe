@@ -255,6 +255,7 @@ def compile_pipeline(
     manifest_path: Path,
     *,
     dry_run: bool = False,
+    emit_lineage: bool = True,
 ) -> CompiledArtifacts:
     """Execute the 6-stage compilation pipeline.
 
@@ -275,6 +276,10 @@ def compile_pipeline(
         spec_path: Path to floe.yaml file.
         manifest_path: Path to manifest.yaml file.
         dry_run: If True, violations are reported but don't block compilation.
+        emit_lineage: If True, emit compile-time OpenLineage events using
+            manifest configuration. If False, use the NoOp transport for
+            offline/pre-deploy artifact generation while preserving runtime
+            lineage settings in compiled artifacts.
 
     Returns:
         CompiledArtifacts ready for serialization.
@@ -332,7 +337,11 @@ def compile_pipeline(
         # Construct lineage emitter from manifest config (after LOAD, inside pipeline span
         # so TraceCorrelationFacetBuilder can capture the active OTel span context)
         try:
-            _lineage_config = _build_lineage_config(manifest)
+            if emit_lineage:
+                _lineage_config = _build_lineage_config(manifest)
+            else:
+                log.info("compile_time_lineage_emission_disabled")
+                _lineage_config = None
             emitter = create_sync_emitter(_lineage_config, default_namespace="floe.compilation")
         except Exception as _build_err:
             # CWE-532: log type name only — exc_info may contain credential-bearing URLs
@@ -340,6 +349,7 @@ def compile_pipeline(
             emitter = create_sync_emitter(None, default_namespace="floe.compilation")
 
         run_id: UUID | None = None
+        lineage_available = True
         try:
             run_facets: dict[str, Any] = {}
             trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
@@ -349,6 +359,7 @@ def compile_pipeline(
         except Exception as _start_err:
             # CWE-532: log type name only — exc_info may contain credential-bearing URLs
             log.warning("lineage_emit_start_failed", error=type(_start_err).__name__)
+            lineage_available = False
 
         try:
             # Stage 2: VALIDATE - Schema validation and quality provider validation
@@ -573,27 +584,28 @@ def compile_pipeline(
             # Records model presence in lineage graph during compilation;
             # execution-time events are emitted by Dagster at runtime.
             dbt_project_name = _dbt_project_name(spec.metadata.name)
-            for model in transforms.models:
-                model_job_name = f"model.{dbt_project_name}.{model.name}"
-                model_run_id: UUID | None = None
-                try:
-                    model_run_id = emitter.emit_start(job_name=model_job_name)
-                    emitter.emit_complete(model_run_id, model_job_name)
-                except Exception as _model_err:
-                    if model_run_id is not None:
-                        try:
-                            emitter.emit_fail(
-                                model_run_id,
-                                model_job_name,
-                                error_message=type(_model_err).__name__,
-                            )
-                        except Exception:
-                            pass  # Best-effort fail event
-                    log.warning(
-                        "lineage_model_emit_failed",
-                        model=model.name,
-                        error=type(_model_err).__name__,
-                    )
+            if lineage_available:
+                for model in transforms.models:
+                    model_job_name = f"model.{dbt_project_name}.{model.name}"
+                    model_run_id: UUID | None = None
+                    try:
+                        model_run_id = emitter.emit_start(job_name=model_job_name)
+                        emitter.emit_complete(model_run_id, model_job_name)
+                    except Exception as _model_err:
+                        if model_run_id is not None:
+                            try:
+                                emitter.emit_fail(
+                                    model_run_id,
+                                    model_job_name,
+                                    error_message=type(_model_err).__name__,
+                                )
+                            except Exception:
+                                pass  # Best-effort fail event
+                        log.warning(
+                            "lineage_model_emit_failed",
+                            model=model.name,
+                            error=type(_model_err).__name__,
+                        )
 
             # Stage 6: GENERATE - Build final CompiledArtifacts
             stage_start = time.perf_counter()

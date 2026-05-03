@@ -277,3 +277,43 @@ def test_render_flux_manifests_merges_demo_image_into_inline_values(
     assert "existingConfig: {enabled: true}" in rendered_content
     assert 'repository: "floe-dagster-demo"' in rendered_content
     assert 'tag: "local"' in rendered_content
+
+
+@pytest.mark.requirement("AC-2")
+def test_build_demo_image_passes_resolved_image_ref_to_make(tmp_path: Path) -> None:
+    """Kind bootstrap must build the same demo image ref it deploys.
+
+    ``build-demo-image`` can derive a dirty tag from generated artifacts if
+    the resolved image ref is not passed as Make variables. The bootstrap
+    path must therefore forward both the shell ``FLOE_*`` contract and the
+    Make ``DEMO_IMAGE_*`` contract.
+    """
+    result = _run_setup_function(
+        textwrap.dedent(
+            """\
+            mkdir -p "${PROJECT_ROOT}/docker/dagster-demo"
+            touch "${PROJECT_ROOT}/docker/dagster-demo/Dockerfile"
+
+            make() {
+                printf 'make_args=%s\\n' "$*"
+                printf 'DEMO_IMAGE_REPOSITORY=%s\\n' "${DEMO_IMAGE_REPOSITORY:-}"
+                printf 'DEMO_IMAGE_TAG=%s\\n' "${DEMO_IMAGE_TAG:-}"
+                printf 'FLOE_DEMO_IMAGE_REPOSITORY=%s\\n' "${FLOE_DEMO_IMAGE_REPOSITORY:-}"
+                printf 'FLOE_DEMO_IMAGE_TAG=%s\\n' "${FLOE_DEMO_IMAGE_TAG:-}"
+            }
+
+            build_demo_image
+            """
+        ),
+        tmp_path,
+    )
+
+    demo_repo = "floe-dagster-demo"  # pragma: allowlist secret
+
+    assert result.returncode == 0, result.stderr
+    assert "make_args=-C " in result.stdout
+    assert " build-demo-image" in result.stdout
+    assert f"DEMO_IMAGE_REPOSITORY={demo_repo}" in result.stdout
+    assert "DEMO_IMAGE_TAG=local" in result.stdout
+    assert f"FLOE_DEMO_IMAGE_REPOSITORY={demo_repo}" in result.stdout
+    assert "FLOE_DEMO_IMAGE_TAG=local" in result.stdout

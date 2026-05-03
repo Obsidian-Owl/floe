@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import json
 import os
-import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -479,10 +478,6 @@ class TestPlatformDeployment:
         successfully pulled and the pod is running.
         """
         if not _cube_store_enabled_in_test_values():
-            warnings.warn(
-                "Cube Store disabled in values-test.yaml; verifying rollback state instead.",
-                stacklevel=2,
-            )
             _assert_cube_store_rollback_state()
             return
 
@@ -507,10 +502,6 @@ class TestPlatformDeployment:
         is passing, meaning Cube Store is accepting connections.
         """
         if not _cube_store_enabled_in_test_values():
-            warnings.warn(
-                "Cube Store disabled in values-test.yaml; verifying rollback state instead.",
-                stacklevel=2,
-            )
             _assert_cube_store_rollback_state()
             return
 
