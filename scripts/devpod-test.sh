@@ -32,8 +32,18 @@
 #   DEVPOD_REMOTE_FLUX_SETTLEMENT_TIMEOUT Seconds to wait for Flux source,
 #                        HelmRelease, and rollout settlement before E2E starts
 #                        (default: 900).
+#   DEVPOD_REMOTE_FLUX_SETTLEMENT_INTERVAL Seconds between Flux settlement polls
+#                        (default: 10).
+#   DEVPOD_REMOTE_FLUX_GITREPOSITORY Flux GitRepository name to inspect
+#                        (default: floe).
+#   DEVPOD_REMOTE_FLUX_SOURCE_NAMESPACE Namespace containing the GitRepository
+#                        (default: flux-system).
 #   DEVPOD_REMOTE_FLUX_HELMRELEASES Space-separated HelmReleases to wait for
 #                        (default: "floe-platform floe-jobs-test").
+#   DEVPOD_REMOTE_FLUX_DEPLOYMENTS Space-separated Deployments to wait for
+#                        after HelmReleases settle.
+#   DEVPOD_REMOTE_FLUX_STATEFULSETS Space-separated StatefulSets to wait for
+#                        after HelmReleases settle.
 #   DEVPOD_UP_RECOVERY_TIMEOUT Seconds to poll workspace status after a
 #                        transport-level `devpod up` failure (default: 600).
 #   DEVPOD_ENABLE_REMOTE_TUNNELS Set to 1 to establish host service tunnels
@@ -291,6 +301,77 @@ cat > "\${run_dir}/run.sh" <<'REMOTE_RUN'
 #!/usr/bin/env bash
 set +e
 mkdir -p "\${FLOE_REMOTE_RUN_DIR}/artifacts"
+resolve_flux_ref_commit() {
+    local ref_type="\${1:?ref type required}"
+    local ref_name="\${2:?ref name required}"
+    local local_ref=""
+    local remote_ref=""
+
+    case "\${ref_type}" in
+        branch)
+            local_ref="refs/remotes/origin/\${ref_name}^{commit}"
+            remote_ref="refs/heads/\${ref_name}"
+            ;;
+        tag)
+            local_ref="refs/tags/\${ref_name}^{commit}"
+            remote_ref="refs/tags/\${ref_name}"
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+
+    git rev-parse --verify --quiet "\${local_ref}" 2>/dev/null && return 0
+    git ls-remote --exit-code origin "\${remote_ref}" 2>/dev/null | awk 'NR == 1 { print $1; exit }'
+}
+
+resolve_flux_expected_revision() {
+    local source_namespace="\${FLOE_REMOTE_FLUX_SOURCE_NAMESPACE}"
+    local gitrepository="\${FLOE_REMOTE_FLUX_GITREPOSITORY}"
+    local state=""
+    local source_branch=""
+    local source_tag=""
+    local source_commit=""
+    local source_semver=""
+
+    state="\$(kubectl get gitrepository "\${gitrepository}" -n "\${source_namespace}" -o 'jsonpath={.spec.ref.branch}{"\t"}{.spec.ref.tag}{"\t"}{.spec.ref.commit}{"\t"}{.spec.ref.semver}' 2>/dev/null || true)"
+    IFS=\$'\t' read -r source_branch source_tag source_commit source_semver <<< "\${state}"
+
+    if [[ -n "\${source_commit}" ]]; then
+        printf '%s\n' "\${source_commit}"
+        return 0
+    fi
+    if [[ -n "\${source_branch}" ]]; then
+        resolve_flux_ref_commit branch "\${source_branch}"
+        return 0
+    fi
+    if [[ -n "\${source_tag}" ]]; then
+        resolve_flux_ref_commit tag "\${source_tag}"
+        return 0
+    fi
+    if [[ -n "\${source_semver}" ]]; then
+        echo "[remote-e2e] GitRepository uses semver \${source_semver}; relying on Flux readiness for source settlement" >&2
+        return 0
+    fi
+
+    git rev-parse --verify --quiet "HEAD^{commit}" 2>/dev/null || true
+}
+
+wait_for_rollout_with_remaining_budget() {
+    local resource="\${1:?resource required}"
+    local namespace="\${2:?namespace required}"
+    local deadline="\${3:?deadline required}"
+    local remaining
+    remaining=\$((deadline - SECONDS))
+
+    if (( remaining < 1 )); then
+        echo "[remote-e2e] ERROR: settlement budget exhausted before \${resource} rollout" >&2
+        return 1
+    fi
+
+    kubectl rollout status "\${resource}" -n "\${namespace}" --timeout="\${remaining}s"
+}
+
 wait_for_flux_settlement() {
     local namespace="\${TEST_NAMESPACE:-floe-test}"
     local source_namespace="\${FLOE_REMOTE_FLUX_SOURCE_NAMESPACE}"
@@ -309,7 +390,7 @@ wait_for_flux_settlement() {
         return 0
     fi
 
-    expected_revision="\$(git rev-parse HEAD 2>/dev/null || true)"
+    expected_revision="\$(resolve_flux_expected_revision)"
     deadline=\$((SECONDS + timeout))
     echo "[remote-e2e] waiting for Flux settlement in namespace \${namespace} (expected revision: \${expected_revision:-unknown})"
 
@@ -336,10 +417,10 @@ wait_for_flux_settlement() {
         if [[ "\${source_ready}" -eq 1 && "\${helm_ready}" -eq 1 ]]; then
             echo "[remote-e2e] Flux source and HelmReleases settled"
             for deployment in \${deployments}; do
-                kubectl rollout status "deployment/\${deployment}" -n "\${namespace}" --timeout=120s || return 1
+                wait_for_rollout_with_remaining_budget "deployment/\${deployment}" "\${namespace}" "\${deadline}" || return 1
             done
             for statefulset in \${statefulsets}; do
-                kubectl rollout status "statefulset/\${statefulset}" -n "\${namespace}" --timeout=120s || return 1
+                wait_for_rollout_with_remaining_budget "statefulset/\${statefulset}" "\${namespace}" "\${deadline}" || return 1
             done
             return 0
         fi

@@ -271,14 +271,48 @@ def test_remote_e2e_waits_for_flux_settlement_before_running_tests() -> None:
         'floe-platform floe-jobs-test}"' in script
     )
     assert 'DEVPOD_REMOTE_FLUX_GITREPOSITORY="${DEVPOD_REMOTE_FLUX_GITREPOSITORY:-floe}"' in script
-    assert "git rev-parse HEAD" in script
+    assert ".spec.ref.branch" in script
+    assert ".spec.ref.tag" in script
+    assert ".spec.ref.commit" in script
+    assert "refs/remotes/origin/\\${ref_name}^{commit}" in script
+    assert 'remote_ref="refs/heads/\\${ref_name}"' in script
+    assert 'git ls-remote --exit-code origin "\\${remote_ref}"' in script
+    assert 'git rev-parse --verify --quiet "HEAD^{commit}"' in script
+    assert "git rev-parse HEAD" not in script
     assert "status.artifact.revision" in script
     assert "status.observedGeneration" in script
     assert "metadata.generation" in script
-    assert 'rollout status "deployment/\\${deployment}"' in script
-    assert 'rollout status "statefulset/\\${statefulset}"' in script
+    assert (
+        'wait_for_rollout_with_remaining_budget "deployment/\\${deployment}" '
+        '"\\${namespace}" "\\${deadline}"'
+    ) in script
+    assert (
+        'wait_for_rollout_with_remaining_budget "statefulset/\\${statefulset}" '
+        '"\\${namespace}" "\\${deadline}"'
+    ) in script
+    assert "--timeout=120s" not in script
+    assert "remaining=\\$((deadline - SECONDS))" in script
+    assert '--timeout="\\${remaining}s"' in script
     assert "Flux settlement failed" in script
     assert '(exit "\\${flux_rc}")' in script
+
+
+@pytest.mark.requirement("297")
+def test_remote_e2e_flux_settlement_env_vars_are_documented() -> None:
+    """Every remote Flux settlement override must be discoverable in script usage."""
+    script = _read(_DEVPOD_TEST)
+    header = script[: script.index("set -euo pipefail")]
+
+    for variable in (
+        "DEVPOD_REMOTE_FLUX_SETTLEMENT_TIMEOUT",
+        "DEVPOD_REMOTE_FLUX_SETTLEMENT_INTERVAL",
+        "DEVPOD_REMOTE_FLUX_GITREPOSITORY",
+        "DEVPOD_REMOTE_FLUX_SOURCE_NAMESPACE",
+        "DEVPOD_REMOTE_FLUX_HELMRELEASES",
+        "DEVPOD_REMOTE_FLUX_DEPLOYMENTS",
+        "DEVPOD_REMOTE_FLUX_STATEFULSETS",
+    ):
+        assert variable in header
 
 
 @pytest.mark.requirement("AC-DevPod-Remote-E2E")
