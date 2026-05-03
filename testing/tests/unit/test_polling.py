@@ -15,6 +15,7 @@ from testing.fixtures.polling import (
     PollingConfig,
     PollingTimeoutError,
     wait_for_condition,
+    wait_for_http_status,
     wait_for_service,
 )
 
@@ -178,6 +179,91 @@ class TestWaitForService:
         with patch("testing.fixtures.polling._tcp_check", return_value=False):
             result = wait_for_service("unavailable", 9999, timeout=0.2, raise_on_timeout=False)
             assert result is False
+
+
+class TestWaitForHttpStatus:
+    """Tests for wait_for_http_status() function."""
+
+    @pytest.mark.requirement("9c-FR-016")
+    def test_returns_true_when_expected_status_seen(self) -> None:
+        """Test wait_for_http_status returns True when endpoint returns expected status."""
+        response = MagicMock(status_code=200)
+
+        with patch("testing.fixtures.polling.httpx.get", return_value=response):
+            result = wait_for_http_status(
+                "http://polaris:8182/q/health/ready",
+                timeout=5.0,
+            )
+
+        assert result is True
+
+    @pytest.mark.requirement("9c-FR-016")
+    def test_polls_until_expected_status_seen(self) -> None:
+        """Test wait_for_http_status retries transient non-ready statuses."""
+        responses = [
+            MagicMock(status_code=503),
+            MagicMock(status_code=200),
+        ]
+
+        with patch("testing.fixtures.polling.httpx.get", side_effect=responses) as mock_get:
+            result = wait_for_http_status(
+                "http://polaris:8182/q/health/ready",
+                timeout=5.0,
+                interval=0.1,
+            )
+
+        assert result is True
+        assert mock_get.call_count == 2
+
+    @pytest.mark.requirement("9c-FR-016")
+    def test_raises_timeout_with_last_status(self) -> None:
+        """Test timeout error includes the last HTTP status observed."""
+        response = MagicMock(status_code=503)
+
+        with patch("testing.fixtures.polling.httpx.get", return_value=response):
+            with pytest.raises(PollingTimeoutError) as exc_info:
+                wait_for_http_status(
+                    "http://polaris:8182/q/health/ready",
+                    timeout=0.2,
+                    interval=0.1,
+                    description="Polaris readiness",
+                )
+
+        assert "Polaris readiness" in str(exc_info.value)
+        assert "last HTTP status 503" in str(exc_info.value)
+
+    @pytest.mark.requirement("9c-FR-016")
+    def test_no_raise_on_timeout_returns_false(self) -> None:
+        """Test wait_for_http_status returns False when raise_on_timeout=False."""
+        response = MagicMock(status_code=503)
+
+        with patch("testing.fixtures.polling.httpx.get", return_value=response):
+            result = wait_for_http_status(
+                "http://polaris:8182/q/health/ready",
+                timeout=0.2,
+                interval=0.1,
+                raise_on_timeout=False,
+            )
+
+        assert result is False
+
+    @pytest.mark.requirement("9c-FR-016")
+    def test_raises_timeout_with_last_http_error(self) -> None:
+        """Test timeout error includes the last transport error observed."""
+        with patch(
+            "testing.fixtures.polling.httpx.get",
+            side_effect=OSError("connection refused"),
+        ):
+            with pytest.raises(PollingTimeoutError) as exc_info:
+                wait_for_http_status(
+                    "http://polaris:8182/q/health/ready",
+                    timeout=0.2,
+                    interval=0.1,
+                    description="Polaris readiness",
+                )
+
+        assert "Polaris readiness" in str(exc_info.value)
+        assert "connection refused" in str(exc_info.value)
 
 
 class TestTcpCheck:

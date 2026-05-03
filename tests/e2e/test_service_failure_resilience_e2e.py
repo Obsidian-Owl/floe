@@ -21,10 +21,8 @@ from __future__ import annotations
 
 import logging
 import os
-import warnings
 from pathlib import Path
 
-import httpx
 import pytest
 
 from testing.fixtures.kubernetes import (
@@ -32,7 +30,7 @@ from testing.fixtures.kubernetes import (
     check_pod_ready,
     run_kubectl,
 )
-from testing.fixtures.polling import wait_for_condition
+from testing.fixtures.polling import wait_for_condition, wait_for_http_status
 from testing.fixtures.services import ServiceEndpoint
 
 logger = logging.getLogger(__name__)
@@ -63,11 +61,19 @@ class TestServiceFailureResilience:
         This validates pod replacement detection, NOT downtime observation.
         """
         minio_url = os.environ.get("MINIO_URL", ServiceEndpoint("minio").url)
+        minio_ready_url = f"{minio_url}/minio/health/ready"
+        polaris_health_url = os.environ.get(
+            "POLARIS_HEALTH_URL",
+            ServiceEndpoint("polaris-management").url,
+        )
+        polaris_ready_url = f"{polaris_health_url}/q/health/ready"
 
-        # Verify MinIO is healthy before the test
-        response = httpx.get(f"{minio_url}/minio/health/ready", timeout=5.0)
-        assert response.status_code == 200, (
-            "MinIO not healthy before test — cannot test failure resilience"
+        # Verify MinIO is healthy before the test.
+        wait_for_http_status(
+            minio_ready_url,
+            timeout=60.0,
+            interval=3.0,
+            description="MinIO readiness before pod restart",
         )
 
         # Delete pod and assert recovery via UID change
@@ -83,6 +89,19 @@ class TestServiceFailureResilience:
         # Bound covers delete RPC + recovery polling (30s each worst-case).
         assert recovery_secs < 60.0, f"MinIO recovery took {recovery_secs:.1f}s (limit: 60s)"
 
+        wait_for_http_status(
+            minio_ready_url,
+            timeout=120.0,
+            interval=3.0,
+            description="MinIO readiness after pod restart",
+        )
+        wait_for_http_status(
+            polaris_ready_url,
+            timeout=120.0,
+            interval=3.0,
+            description="Polaris readiness after MinIO pod restart",
+        )
+
     @pytest.mark.requirement("AC-2.7")
     def test_polaris_pod_restart_detected(self) -> None:
         """Verify Polaris pod replacement via UID change after deletion.
@@ -93,13 +112,15 @@ class TestServiceFailureResilience:
             "POLARIS_HEALTH_URL",
             ServiceEndpoint("polaris-management").url,
         )
+        polaris_ready_url = f"{polaris_health_url}/q/health/ready"
 
-        # Verify Polaris is healthy (management endpoint, no OAuth needed)
-        response = httpx.get(
-            f"{polaris_health_url}/q/health/ready",
-            timeout=5.0,
+        # Verify Polaris is healthy (management endpoint, no OAuth needed).
+        wait_for_http_status(
+            polaris_ready_url,
+            timeout=120.0,
+            interval=3.0,
+            description="Polaris readiness before pod restart",
         )
-        assert response.status_code == 200, "Polaris not healthy before test"
 
         # Delete pod and assert recovery via UID change
         result = assert_pod_recovery(
@@ -114,21 +135,12 @@ class TestServiceFailureResilience:
         # Bound covers delete RPC + recovery polling (30s each worst-case).
         assert recovery_secs < 60.0, f"Polaris recovery took {recovery_secs:.1f}s (limit: 60s)"
 
-        # Wait for port-forward to reconnect (port 8182 management health)
-        polaris_health_ready = wait_for_condition(
-            lambda: _check_port_forward_health(f"{polaris_health_url}/q/health/ready"),
-            timeout=60.0,
+        wait_for_http_status(
+            polaris_ready_url,
+            timeout=120.0,
             interval=3.0,
-            description="Polaris port-forward health (8182) to recover",
-            raise_on_timeout=False,
+            description="Polaris readiness after pod restart",
         )
-        if not polaris_health_ready:
-            warnings.warn(
-                "Polaris port-forward (8182) did not recover within 60s after pod restart. "
-                "Subsequent tests using port 8182 may fail.",
-                UserWarning,
-                stacklevel=2,
-            )
 
     @pytest.mark.requirement("AC-2.7")
     def test_compilation_during_service_outage(
@@ -197,19 +209,13 @@ class TestServiceFailureResilience:
             f"Polaris pod did not recover within 120s.\n"
             f"Check: kubectl get pods -n {NAMESPACE} -l app.kubernetes.io/component=polaris"
         )
-
-
-def _check_port_forward_health(url: str) -> bool:
-    """Check if a port-forwarded health endpoint is reachable.
-
-    Args:
-        url: Full URL to health endpoint (e.g. http://localhost:8182/q/health/ready).
-
-    Returns:
-        True if endpoint returns HTTP 200.
-    """
-    try:
-        response = httpx.get(url, timeout=3.0)
-        return response.status_code == 200
-    except (httpx.HTTPError, OSError):
-        return False
+        polaris_health_url = os.environ.get(
+            "POLARIS_HEALTH_URL",
+            ServiceEndpoint("polaris-management").url,
+        )
+        wait_for_http_status(
+            f"{polaris_health_url}/q/health/ready",
+            timeout=120.0,
+            interval=3.0,
+            description="Polaris readiness after compilation outage test",
+        )
