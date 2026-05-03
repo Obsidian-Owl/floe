@@ -46,6 +46,7 @@ import pytest
 from dbt_utils import run_dbt
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
+from testing.fixtures.dagster_graphql import execute_dagster_graphql_request
 from testing.fixtures.polaris import rewrite_table_io_for_host_access
 
 ALL_PRODUCTS = ["customer-360", "iot-telemetry", "financial-risk"]
@@ -853,7 +854,7 @@ class TestDataPipeline(IntegrationTestBase):
                     "repositoryLocationName": repo_location_name,
                 },
             }
-            result = dagster_client._execute(sensor_query, variables)
+            result = execute_dagster_graphql_request(dagster_client, sensor_query, variables)
             assert "sensorsOrError" in result, (
                 f"Dagster sensor query response missing 'sensorsOrError'. Got: {result}"
             )
