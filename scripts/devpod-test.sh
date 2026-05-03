@@ -21,6 +21,9 @@
 #                        retained only for debugging DevPod image transport.
 #   DEVPOD_REMOTE_WORKDIR Remote repository root inside the workspace
 #                        (default: /workspace).
+#   DEVPOD_REMOTE_E2E_MAKE_TARGET Make target to run after Kind bootstrap
+#                        (default: test-e2e). Use test-e2e-full for release
+#                        validation with destructive tests.
 #   DEVPOD_REMOTE_E2E_TIMEOUT Remote E2E timeout in seconds (default: 7200).
 #   DEVPOD_REMOTE_POLL_INTERVAL Remote E2E polling interval in seconds
 #                        (default: 20).
@@ -55,6 +58,7 @@ NAMESPACE="${TEST_NAMESPACE:-floe-test}"
 PROVIDER="${DEVPOD_PROVIDER:-hetzner}"
 DEVPOD_E2E_EXECUTION="${DEVPOD_E2E_EXECUTION:-remote}"
 DEVPOD_REMOTE_WORKDIR="${DEVPOD_REMOTE_WORKDIR:-/workspace}"
+DEVPOD_REMOTE_E2E_MAKE_TARGET="${DEVPOD_REMOTE_E2E_MAKE_TARGET:-test-e2e}"
 DEVPOD_REMOTE_RUN_ROOT="${DEVPOD_REMOTE_RUN_ROOT:-/tmp/floe-devpod-e2e}"
 DEVPOD_REMOTE_E2E_TIMEOUT="${DEVPOD_REMOTE_E2E_TIMEOUT:-7200}"
 DEVPOD_REMOTE_POLL_INTERVAL="${DEVPOD_REMOTE_POLL_INTERVAL:-20}"
@@ -174,6 +178,11 @@ if [[ "${DEVPOD_ENABLE_REMOTE_TUNNELS}" != "0" && "${DEVPOD_ENABLE_REMOTE_TUNNEL
     exit 1
 fi
 
+if [[ -z "${DEVPOD_REMOTE_E2E_MAKE_TARGET}" ]]; then
+    error "Invalid DEVPOD_REMOTE_E2E_MAKE_TARGET: value cannot be empty"
+    exit 1
+fi
+
 recover_workspace_after_up_failure() {
     local deadline=$((SECONDS + DEVPOD_UP_RECOVERY_TIMEOUT))
     log "devpod up returned failure; checking whether workspace '${WORKSPACE}' is running before cleanup..."
@@ -209,14 +218,20 @@ provision_workspace() {
 start_remote_e2e_run() {
     local run_dir_q
     local workdir_q
+    local make_target_q
     local remote_script
+    local start_output=""
+    local start_status=0
+    local remote_dir=""
     run_dir_q="$(shell_quote "${REMOTE_RUN_DIR}")"
     workdir_q="$(shell_quote "${DEVPOD_REMOTE_WORKDIR}")"
+    make_target_q="$(shell_quote "${DEVPOD_REMOTE_E2E_MAKE_TARGET}")"
 
     remote_script=$(cat <<REMOTE_SCRIPT
 set -euo pipefail
 run_dir=${run_dir_q}
 workdir=${workdir_q}
+make_target=${make_target_q}
 mkdir -p "\${run_dir}/artifacts"
 rm -f "\${run_dir}/exit-code" "\${run_dir}/output.log" "\${run_dir}/nohup.log"
 cat > "\${run_dir}/run.sh" <<'REMOTE_RUN'
@@ -228,7 +243,7 @@ mkdir -p "\${FLOE_REMOTE_RUN_DIR}/artifacts"
     echo "[remote-e2e] workdir=\${FLOE_REMOTE_WORKDIR}"
     cd "\${FLOE_REMOTE_WORKDIR}"
     SKIP_MONITORING=\${SKIP_MONITORING:-true} make kind-up
-    IMAGE_LOAD_METHOD=kind make test-e2e
+    IMAGE_LOAD_METHOD=kind make "\${FLOE_REMOTE_E2E_MAKE_TARGET}"
 } > "\${FLOE_REMOTE_RUN_DIR}/output.log" 2>&1
 rc=\$?
 cp -a "\${FLOE_REMOTE_WORKDIR}/test-artifacts/." "\${FLOE_REMOTE_RUN_DIR}/artifacts/" 2>/dev/null || true
@@ -237,14 +252,34 @@ echo "\${rc}" > "\${FLOE_REMOTE_RUN_DIR}/exit-code"
 exit 0
 REMOTE_RUN
 chmod +x "\${run_dir}/run.sh"
-FLOE_REMOTE_WORKDIR="\${workdir}" FLOE_REMOTE_RUN_DIR="\${run_dir}" \
+FLOE_REMOTE_WORKDIR="\${workdir}" FLOE_REMOTE_RUN_DIR="\${run_dir}" FLOE_REMOTE_E2E_MAKE_TARGET="\${make_target}" \
     nohup bash "\${run_dir}/run.sh" > "\${run_dir}/nohup.log" 2>&1 < /dev/null &
 echo \$! > "\${run_dir}/pid"
 printf '%s\n' "\${run_dir}"
 REMOTE_SCRIPT
 )
 
-    devpod_remote_bash "${remote_script}"
+    set +e
+    start_output="$(devpod_remote_bash "${remote_script}" 2>&1)"
+    start_status=$?
+    set -e
+
+    remote_dir="$(printf '%s\n' "${start_output}" | grep -Fx "${REMOTE_RUN_DIR}" | tail -1 || true)"
+    if [[ -n "${remote_dir}" ]]; then
+        if [[ "${start_status}" -ne 0 ]]; then
+            error "DevPod SSH reported failure after remote E2E start; continuing with detached run: ${start_output}"
+        fi
+        printf '%s\n' "${remote_dir}"
+        return 0
+    fi
+
+    if [[ "${start_status}" -eq 0 ]]; then
+        printf '%s\n' "${start_output}"
+        return 0
+    fi
+
+    printf '%s\n' "${start_output}" >&2
+    return "${start_status}"
 }
 
 poll_remote_e2e_run() {
