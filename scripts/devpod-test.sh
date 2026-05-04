@@ -205,6 +205,16 @@ if [[ ! "${DEVPOD_UP_RECOVERY_INTERVAL}" =~ ^[0-9]+$ ]] || [[ "${DEVPOD_UP_RECOV
     exit 1
 fi
 
+if [[ "${DEVPOD_REMOTE_RUN_ROOT}" != /* ]]; then
+    error "Invalid DEVPOD_REMOTE_RUN_ROOT='${DEVPOD_REMOTE_RUN_ROOT}': value must be an absolute path"
+    exit 1
+fi
+
+if [[ "${DEVPOD_REMOTE_RUN_ROOT}" == *"/../"* || "${DEVPOD_REMOTE_RUN_ROOT}" == */.. ]]; then
+    error "Invalid DEVPOD_REMOTE_RUN_ROOT='${DEVPOD_REMOTE_RUN_ROOT}': parent traversal is not allowed"
+    exit 1
+fi
+
 if [[ "${DEVPOD_ENABLE_REMOTE_TUNNELS}" != "0" && "${DEVPOD_ENABLE_REMOTE_TUNNELS}" != "1" ]]; then
     error "Invalid DEVPOD_ENABLE_REMOTE_TUNNELS='${DEVPOD_ENABLE_REMOTE_TUNNELS}'. Use: 0|1"
     exit 1
@@ -506,11 +516,15 @@ poll_remote_e2e_run() {
     poll_script=$(cat <<REMOTE_SCRIPT
 set -euo pipefail
 run_dir=${run_dir_q}
+pid=""
 if [[ -f "\${run_dir}/exit-code" ]]; then
     printf 'complete:%s\n' "\$(cat "\${run_dir}/exit-code")"
     exit 0
 fi
-if [[ -f "\${run_dir}/pid" ]] && kill -0 "\$(cat "\${run_dir}/pid")" 2>/dev/null; then
+if [[ -f "\${run_dir}/pid" ]]; then
+    pid=\$(cat "\${run_dir}/pid")
+fi
+if [[ "\${pid}" =~ ^[0-9]+$ ]] && kill -0 "\${pid}" 2>/dev/null; then
     printf 'running\n'
     exit 0
 fi
@@ -594,7 +608,7 @@ run_remote_e2e_detached() {
     poll_status=$?
     if [[ "${poll_status}" -eq 0 ]]; then
         if ! fetch_remote_e2e_artifacts; then
-            return 2
+            return 2  # poll OK but evidence artifacts missing
         fi
         if [[ -f "${LOCAL_REMOTE_ARTIFACTS_DIR}/output.log" ]]; then
             log "--- Remote E2E output (last 30 lines) ---"

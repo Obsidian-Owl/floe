@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 import pytest
@@ -113,4 +115,28 @@ def test_devpod_successful_remote_run_requires_artifact_fetch() -> None:
 
     assert "return 1" in fetch_body
     assert "if ! fetch_remote_e2e_artifacts; then" in run_body
-    assert "return 2" in run_body
+    assert "return 2  # poll OK but evidence artifacts missing" in run_body
+
+
+@pytest.mark.requirement("285")
+def test_devpod_remote_run_root_rejects_relative_and_parent_paths() -> None:
+    """Remote artifact root must be absolute and reject parent traversal."""
+    test_script = Path("scripts/devpod-test.sh").read_text()
+
+    assert 'if [[ "${DEVPOD_REMOTE_RUN_ROOT}" != /* ]]; then' in test_script
+    assert 'if [[ "${DEVPOD_REMOTE_RUN_ROOT}" == *"/../"*' in test_script
+    assert '"${DEVPOD_REMOTE_RUN_ROOT}" == */..' in test_script
+
+
+@pytest.mark.requirement("285")
+def test_devpod_remote_poll_validates_pid_file_before_kill() -> None:
+    """Remote E2E polling must validate PID file content before probing."""
+    test_script = Path("scripts/devpod-test.sh").read_text()
+    poll_body = test_script.split("poll_remote_e2e_run() {", 1)[1].split(
+        "\nfetch_remote_e2e_artifacts() {", 1
+    )[0]
+
+    assert 'pid=\\$(cat "\\${run_dir}/pid")' in poll_body
+    assert '[[ "\\${pid}" =~ ^[0-9]+$ ]]' in poll_body
+    assert 'kill -0 "\\${pid}"' in poll_body
+    assert 'kill -0 "$(cat "${run_dir}/pid")"' not in poll_body
