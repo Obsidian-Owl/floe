@@ -42,6 +42,7 @@ def _has_developer_workflow_mark(expressions: list[ast.expr]) -> bool:
 
 def _module_has_developer_workflow_pytestmark(tree: ast.Module) -> bool:
     """Return True when module-level ``pytestmark`` selects developer workflow tests."""
+    has_developer_workflow_mark = False
     for statement in tree.body:
         value: ast.expr | None = None
         targets: list[ast.expr] = []
@@ -55,9 +56,9 @@ def _module_has_developer_workflow_pytestmark(tree: ast.Module) -> bool:
         if value is None:
             continue
         if any(isinstance(target, ast.Name) and target.id == "pytestmark" for target in targets):
-            return _contains_developer_workflow_mark(value)
+            has_developer_workflow_mark = _contains_developer_workflow_mark(value)
 
-    return False
+    return has_developer_workflow_mark
 
 
 def _class_index(tree: ast.Module) -> dict[str, ast.ClassDef]:
@@ -270,6 +271,40 @@ def test_developer_workflow_guard_catches_module_pytestmark(
     monkeypatch.setattr(sys.modules[__name__], "_E2E_ROOT", tmp_path)
 
     with pytest.raises(AssertionError, match="TestModuleMarker.test_module_marker_flow"):
+        test_developer_workflow_tests_do_not_inherit_service_health_gates()
+
+
+@pytest.mark.requirement("285")
+def test_developer_workflow_guard_honors_final_module_pytestmark(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lane guard must use the effective final module-level pytestmark value."""
+    test_file = tmp_path / "test_reassigned_module_marker.py"
+    test_file.write_text(
+        "\n".join(
+            [
+                "import pytest",
+                "",
+                "pytestmark = [pytest.mark.e2e]",
+                "pytestmark = [pytest.mark.developer_workflow]",
+                "",
+                "class TestReassignedModuleMarker:",
+                "    required_services = ['dagster-webserver']",
+                "",
+                "    def test_reassigned_module_marker_flow(self):",
+                "        pass",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(sys.modules[__name__], "_E2E_ROOT", tmp_path)
+
+    with pytest.raises(
+        AssertionError,
+        match="TestReassignedModuleMarker.test_reassigned_module_marker_flow",
+    ):
         test_developer_workflow_tests_do_not_inherit_service_health_gates()
 
 
