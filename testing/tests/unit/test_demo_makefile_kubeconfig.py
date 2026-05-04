@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 import pytest
@@ -66,3 +68,75 @@ def test_devpod_sync_waits_for_tunnel_readiness_before_returning() -> None:
     assert 'kill -0 "${TUNNEL_PID}"' in sync_script
     assert "SSH tunnel process exited before Kubernetes became reachable" in sync_script
     assert "DEVPOD_TUNNEL_TIMEOUT=120" in env_example
+
+
+@pytest.mark.requirement("285")
+def test_devpod_remote_script_escapes_inner_awk_fields() -> None:
+    """Generated remote script must not expand awk $1 in the local heredoc."""
+    test_script = Path("scripts/devpod-test.sh").read_text()
+
+    assert "awk 'NR == 1 { print \\$1; exit }'" in test_script
+    assert "awk 'NR == 1 { print $1; exit }'" not in test_script
+
+
+@pytest.mark.requirement("285")
+def test_devpod_remote_poll_failure_status_is_preserved() -> None:
+    """Remote E2E lost-process failures must propagate instead of becoming success."""
+    test_script = Path("scripts/devpod-test.sh").read_text()
+    function_body = test_script.split("run_remote_e2e_detached() {", 1)[1].split(
+        "\nestablish_service_tunnels() {", 1
+    )[0]
+
+    assert "local poll_status=0" in function_body
+    assert 'exit_code="$(poll_remote_e2e_run)"' in function_body
+    assert "poll_status=$?" in function_body
+    assert 'return "${poll_status}"' in function_body
+
+
+@pytest.mark.requirement("285")
+def test_devpod_script_exits_with_e2e_status() -> None:
+    """The DevPod lifecycle script must fail when the remote E2E lane fails."""
+    test_script = Path("scripts/devpod-test.sh").read_text()
+    cleanup_section = test_script.split('log "Step 5/5: Cleaning up..."', 1)[1]
+
+    assert 'exit "${TEST_EXIT_CODE}"' in cleanup_section
+
+
+@pytest.mark.requirement("285")
+def test_devpod_successful_remote_run_requires_artifact_fetch() -> None:
+    """Release validation success must include fetched remote evidence artifacts."""
+    test_script = Path("scripts/devpod-test.sh").read_text()
+    fetch_body = test_script.split("fetch_remote_e2e_artifacts() {", 1)[1].split(
+        "\nrun_remote_e2e_detached() {", 1
+    )[0]
+    run_body = test_script.split("run_remote_e2e_detached() {", 1)[1].split(
+        "\nestablish_service_tunnels() {", 1
+    )[0]
+
+    assert "return 1" in fetch_body
+    assert "if ! fetch_remote_e2e_artifacts; then" in run_body
+    assert "return 2  # poll OK but evidence artifacts missing" in run_body
+
+
+@pytest.mark.requirement("285")
+def test_devpod_remote_run_root_rejects_relative_and_parent_paths() -> None:
+    """Remote artifact root must be absolute and reject parent traversal."""
+    test_script = Path("scripts/devpod-test.sh").read_text()
+
+    assert 'if [[ "${DEVPOD_REMOTE_RUN_ROOT}" != /* ]]; then' in test_script
+    assert 'if [[ "${DEVPOD_REMOTE_RUN_ROOT}" == *"/../"*' in test_script
+    assert '"${DEVPOD_REMOTE_RUN_ROOT}" == */..' in test_script
+
+
+@pytest.mark.requirement("285")
+def test_devpod_remote_poll_validates_pid_file_before_kill() -> None:
+    """Remote E2E polling must validate PID file content before probing."""
+    test_script = Path("scripts/devpod-test.sh").read_text()
+    poll_body = test_script.split("poll_remote_e2e_run() {", 1)[1].split(
+        "\nfetch_remote_e2e_artifacts() {", 1
+    )[0]
+
+    assert 'pid=\\$(cat "\\${run_dir}/pid")' in poll_body
+    assert '[[ "\\${pid}" =~ ^[0-9]+$ ]]' in poll_body
+    assert 'kill -0 "\\${pid}"' in poll_body
+    assert 'kill -0 "$(cat "${run_dir}/pid")"' not in poll_body

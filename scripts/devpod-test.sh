@@ -205,6 +205,16 @@ if [[ ! "${DEVPOD_UP_RECOVERY_INTERVAL}" =~ ^[0-9]+$ ]] || [[ "${DEVPOD_UP_RECOV
     exit 1
 fi
 
+if [[ "${DEVPOD_REMOTE_RUN_ROOT}" != /* ]]; then
+    error "Invalid DEVPOD_REMOTE_RUN_ROOT='${DEVPOD_REMOTE_RUN_ROOT}': value must be an absolute path"
+    exit 1
+fi
+
+if [[ "${DEVPOD_REMOTE_RUN_ROOT}" == *"/../"* || "${DEVPOD_REMOTE_RUN_ROOT}" == */.. ]]; then
+    error "Invalid DEVPOD_REMOTE_RUN_ROOT='${DEVPOD_REMOTE_RUN_ROOT}': parent traversal is not allowed"
+    exit 1
+fi
+
 if [[ "${DEVPOD_ENABLE_REMOTE_TUNNELS}" != "0" && "${DEVPOD_ENABLE_REMOTE_TUNNELS}" != "1" ]]; then
     error "Invalid DEVPOD_ENABLE_REMOTE_TUNNELS='${DEVPOD_ENABLE_REMOTE_TUNNELS}'. Use: 0|1"
     exit 1
@@ -322,7 +332,7 @@ resolve_flux_ref_commit() {
     esac
 
     git rev-parse --verify --quiet "\${local_ref}" 2>/dev/null && return 0
-    git ls-remote --exit-code origin "\${remote_ref}" 2>/dev/null | awk 'NR == 1 { print $1; exit }'
+    git ls-remote --exit-code origin "\${remote_ref}" 2>/dev/null | awk 'NR == 1 { print \$1; exit }'
 }
 
 resolve_flux_expected_revision() {
@@ -506,11 +516,15 @@ poll_remote_e2e_run() {
     poll_script=$(cat <<REMOTE_SCRIPT
 set -euo pipefail
 run_dir=${run_dir_q}
+pid=""
 if [[ -f "\${run_dir}/exit-code" ]]; then
     printf 'complete:%s\n' "\$(cat "\${run_dir}/exit-code")"
     exit 0
 fi
-if [[ -f "\${run_dir}/pid" ]] && kill -0 "\$(cat "\${run_dir}/pid")" 2>/dev/null; then
+if [[ -f "\${run_dir}/pid" ]]; then
+    pid=\$(cat "\${run_dir}/pid")
+fi
+if [[ "\${pid}" =~ ^[0-9]+$ ]] && kill -0 "\${pid}" 2>/dev/null; then
     printf 'running\n'
     exit 0
 fi
@@ -577,19 +591,25 @@ fetch_remote_e2e_artifacts() {
         log "Remote E2E artifacts saved to ${LOCAL_REMOTE_ARTIFACTS_DIR}"
     else
         error "Failed to fetch remote E2E artifact bundle from ${REMOTE_RUN_DIR}"
+        return 1
     fi
 }
 
 run_remote_e2e_detached() {
     local remote_dir=""
     local exit_code=""
+    local poll_status=0
 
     log "Starting detached remote E2E run in ${REMOTE_RUN_DIR}..."
     remote_dir="$(start_remote_e2e_run)" || return 1
     log "Remote E2E started: ${remote_dir}"
 
-    if exit_code="$(poll_remote_e2e_run)"; then
-        fetch_remote_e2e_artifacts || true
+    exit_code="$(poll_remote_e2e_run)"
+    poll_status=$?
+    if [[ "${poll_status}" -eq 0 ]]; then
+        if ! fetch_remote_e2e_artifacts; then
+            return 2  # poll OK but evidence artifacts missing
+        fi
         if [[ -f "${LOCAL_REMOTE_ARTIFACTS_DIR}/output.log" ]]; then
             log "--- Remote E2E output (last 30 lines) ---"
             tail -30 "${LOCAL_REMOTE_ARTIFACTS_DIR}/output.log" >&2 || true
@@ -598,9 +618,8 @@ run_remote_e2e_detached() {
         return "${exit_code}"
     fi
 
-    exit_code=$?
     fetch_remote_e2e_artifacts || true
-    return "${exit_code}"
+    return "${poll_status}"
 }
 
 establish_service_tunnels() {
@@ -737,3 +756,4 @@ fi
 
 log "Step 5/5: Cleaning up..."
 # Cleanup happens automatically via the EXIT trap
+exit "${TEST_EXIT_CODE}"
