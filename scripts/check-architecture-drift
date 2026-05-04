@@ -30,6 +30,8 @@ log_ok() { echo -e "${GREEN}[arch-drift]${NC} $1"; }
 
 warnings=0
 violations=0
+readonly PLATFORM_SERVICE_NAMES="dagster|polaris|polaris-management|minio|minio-console|postgres|postgresql|jaeger-query|otel-collector-grpc|otel-collector-http|marquez|oci-registry|oci-registry-auth"
+readonly PLATFORM_SERVICE_MAP_REGEX="(^|[[:space:],{])['\"]?(${PLATFORM_SERVICE_NAMES})['\"]?[[:space:]]*:[[:space:]]*['\"]?[0-9]+['\"]?([[:space:]]*[,}]|[[:space:]]*$)"
 
 # Technology Ownership Rules
 # dbt owns SQL - Python must not parse/validate/transform SQL
@@ -162,7 +164,7 @@ check_platform_contract_literals() {
             ;;
     esac
 
-    if grep -qE "['\"](dagster|polaris|polaris-management|minio|minio-console|postgres|postgresql|jaeger-query|otel-collector-grpc|otel-collector-http|marquez|oci-registry|oci-registry-auth)['\"][[:space:]]*:[[:space:]]*['\"]?[0-9]+['\"]?([[:space:]]*[,}]|[[:space:]]*$)" "$file" 2>/dev/null; then
+    if grep -qE "${PLATFORM_SERVICE_MAP_REGEX}" "$file" 2>/dev/null; then
         log_error "$file: duplicated platform service map detected - use floe_core.contracts.topology"
         violations=$((violations + 1))
     fi
