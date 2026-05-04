@@ -224,6 +224,16 @@ validate_file_path() {
     resolved_dir="$(cd "$candidate_dir" 2>/dev/null && pwd -P)" || return 1
     resolved_path="${resolved_dir}/${candidate_name}"
 
+    # Resolve the final component too. A tracked symlink inside the repo can
+    # otherwise point outside PROJECT_ROOT while still passing the prefix check.
+    if [[ -L "$resolved_path" ]]; then
+        if ! command -v python3 >/dev/null 2>&1; then
+            log_warn "Unable to safely resolve symlink without python3: $file"
+            return 1
+        fi
+        resolved_path=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$resolved_path") || return 1
+    fi
+
     # Ensure path starts with PROJECT_ROOT (no traversal)
     if [[ "$resolved_path" != "${PROJECT_ROOT}"/* ]]; then
         log_warn "Path traversal attempt blocked: $file"

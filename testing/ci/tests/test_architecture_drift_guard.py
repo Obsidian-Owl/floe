@@ -72,6 +72,79 @@ def test_architecture_drift_import_count_reaches_warning_summary() -> None:
 
 
 @pytest.mark.requirement("ALPHA-HARDENING")
+def test_architecture_drift_rejects_changed_symlink_to_external_file(tmp_path: Path) -> None:
+    """Changed symlinks must resolve the final path before project-prefix checks."""
+    parser_module = ("s" + "ql") + ("pa" + "rse")
+    outside_file = tmp_path / "external_drift.py"
+    outside_file.write_text(f"import {parser_module}\n")
+
+    repo = tmp_path / "repo"
+    script_path = repo / "scripts" / "check-architecture-drift"
+    script_path.parent.mkdir(parents=True)
+    script_path.write_text((PROJECT_ROOT / "scripts" / "check-architecture-drift").read_text())
+    script_path.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "floe@example.invalid"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Floe Test"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    (repo / "baseline.py").write_text("print('baseline')\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "baseline"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(["git", "branch", "-M", "main"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "checkout", "-b", "feature"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    (repo / "external_link.py").symlink_to(outside_file)
+    subprocess.run(
+        ["git", "add", "external_link.py"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "add external symlink"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    result = subprocess.run(
+        [str(script_path)],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "SQL parsing detected" not in result.stderr
+
+
+@pytest.mark.requirement("ALPHA-HARDENING")
 def test_architecture_drift_rejects_single_quoted_platform_service_map(
     tmp_path: Path,
 ) -> None:
