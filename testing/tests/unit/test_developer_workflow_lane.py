@@ -13,7 +13,7 @@ _E2E_ROOT = _REPO_ROOT / "tests" / "e2e"
 
 
 def _is_developer_workflow_decorator(decorator: ast.expr) -> bool:
-    """Return True when a decorator is ``pytest.mark.developer_workflow``."""
+    """Return True when an expression is ``pytest.mark.developer_workflow``."""
     if isinstance(decorator, ast.Call):
         decorator = decorator.func
     return (
@@ -24,6 +24,40 @@ def _is_developer_workflow_decorator(decorator: ast.expr) -> bool:
         and isinstance(decorator.value.value, ast.Name)
         and decorator.value.value.id == "pytest"
     )
+
+
+def _contains_developer_workflow_mark(expression: ast.expr) -> bool:
+    """Return True when an expression contains a developer workflow pytest mark."""
+    if _is_developer_workflow_decorator(expression):
+        return True
+    if isinstance(expression, (ast.List, ast.Tuple, ast.Set)):
+        return any(_contains_developer_workflow_mark(element) for element in expression.elts)
+    return False
+
+
+def _has_developer_workflow_mark(expressions: list[ast.expr]) -> bool:
+    """Return True when any expression contains a developer workflow pytest mark."""
+    return any(_contains_developer_workflow_mark(expression) for expression in expressions)
+
+
+def _module_has_developer_workflow_pytestmark(tree: ast.Module) -> bool:
+    """Return True when module-level ``pytestmark`` selects developer workflow tests."""
+    for statement in tree.body:
+        value: ast.expr | None = None
+        targets: list[ast.expr] = []
+        if isinstance(statement, ast.Assign):
+            targets = list(statement.targets)
+            value = statement.value
+        elif isinstance(statement, ast.AnnAssign):
+            targets = [statement.target]
+            value = statement.value
+
+        if value is None:
+            continue
+        if any(isinstance(target, ast.Name) and target.id == "pytestmark" for target in targets):
+            return _contains_developer_workflow_mark(value)
+
+    return False
 
 
 def _class_required_services(node: ast.ClassDef) -> list[str] | None:
@@ -111,12 +145,72 @@ def test_developer_workflow_guard_catches_called_markers(
 
 
 @pytest.mark.requirement("285")
+def test_developer_workflow_guard_catches_class_markers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lane guard must catch class-level developer workflow marks."""
+    test_file = tmp_path / "test_class_marker.py"
+    test_file.write_text(
+        "\n".join(
+            [
+                "import pytest",
+                "",
+                "@pytest.mark.developer_workflow",
+                "class TestClassMarker:",
+                "    required_services = ['dagster-webserver']",
+                "",
+                "    def test_class_marker_flow(self):",
+                "        pass",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(sys.modules[__name__], "_E2E_ROOT", tmp_path)
+
+    with pytest.raises(AssertionError, match="TestClassMarker.test_class_marker_flow"):
+        test_developer_workflow_tests_do_not_inherit_service_health_gates()
+
+
+@pytest.mark.requirement("285")
+def test_developer_workflow_guard_catches_module_pytestmark(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lane guard must catch module-level developer workflow marks."""
+    test_file = tmp_path / "test_module_marker.py"
+    test_file.write_text(
+        "\n".join(
+            [
+                "import pytest",
+                "",
+                "pytestmark = [pytest.mark.developer_workflow]",
+                "",
+                "class TestModuleMarker:",
+                "    required_services = ['dagster-webserver']",
+                "",
+                "    def test_module_marker_flow(self):",
+                "        pass",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(sys.modules[__name__], "_E2E_ROOT", tmp_path)
+
+    with pytest.raises(AssertionError, match="TestModuleMarker.test_module_marker_flow"):
+        test_developer_workflow_tests_do_not_inherit_service_health_gates()
+
+
+@pytest.mark.requirement("285")
 def test_developer_workflow_tests_do_not_inherit_service_health_gates() -> None:
     """Developer workflow tests must not require host port-forwards implicitly."""
     offenders: list[str] = []
 
     for path in sorted(_E2E_ROOT.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        module_has_developer_workflow_mark = _module_has_developer_workflow_pytestmark(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):
                 continue
@@ -125,12 +219,17 @@ def test_developer_workflow_tests_do_not_inherit_service_health_gates() -> None:
             if not required_services:
                 continue
 
+            class_has_developer_workflow_mark = _has_developer_workflow_mark(node.decorator_list)
             for child in node.body:
                 if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
-                if any(
-                    _is_developer_workflow_decorator(decorator)
-                    for decorator in child.decorator_list
+                if not child.name.startswith("test_"):
+                    continue
+
+                if (
+                    module_has_developer_workflow_mark
+                    or class_has_developer_workflow_mark
+                    or _has_developer_workflow_mark(child.decorator_list)
                 ):
                     try:
                         rel_path = path.relative_to(_REPO_ROOT)
