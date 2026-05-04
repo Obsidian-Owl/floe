@@ -1119,7 +1119,7 @@ class TestTelemetryProviderAsyncExport:
 
         provider.shutdown()
 
-    def test_span_creation_is_non_blocking(
+    def test_span_creation_does_not_export_synchronously(
         self,
         telemetry_config: TelemetryConfig,
         mock_grpc_exporter: Mock,
@@ -1130,8 +1130,6 @@ class TestTelemetryProviderAsyncExport:
         This verifies that creating spans does not wait for export to complete,
         which is the key characteristic of BatchSpanProcessor's async behavior.
         """
-        import time
-
         from opentelemetry import trace
 
         provider = TelemetryProvider(telemetry_config)
@@ -1139,20 +1137,18 @@ class TestTelemetryProviderAsyncExport:
 
         tracer = trace.get_tracer(__name__)
 
-        # Create 100 spans and measure time - should be fast since non-blocking
-        start_time = time.monotonic()
+        # Keep the span count below max_export_batch_size. A synchronous span
+        # processor would call the exporter inline; BatchSpanProcessor should
+        # queue these spans until an explicit flush or scheduled export.
         for i in range(100):
             with tracer.start_as_current_span(f"test-span-{i}") as span:
                 span.set_attribute("iteration", i)
-        elapsed_time = time.monotonic() - start_time
 
-        # Non-blocking span creation should be fast (< 500ms for 100 spans)
-        # Use 500ms threshold to account for CI environment variability.
-        # If export was synchronous, this would take much longer (seconds).
-        assert elapsed_time < 0.5, (
-            f"Span creation took {elapsed_time:.3f}s, expected < 0.5s. "
-            "Export appears to be blocking."
-        )
+        mock_grpc_exporter.export.assert_not_called()
+
+        result = provider.force_flush(timeout_millis=5000)
+        assert result is True
+        mock_grpc_exporter.export.assert_called()
 
         provider.shutdown()
 
