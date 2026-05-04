@@ -1077,8 +1077,10 @@ class TestTelemetryProviderAsyncExport:
         """Mock the gRPC OTLP exporter to avoid network calls."""
         from unittest.mock import patch
 
+        from opentelemetry.sdk.trace.export import SpanExportResult
+
         mock_exporter = Mock()
-        mock_exporter.export.return_value = None
+        mock_exporter.export.return_value = SpanExportResult.SUCCESS
         mock_exporter.shutdown.return_value = None
 
         with patch(
