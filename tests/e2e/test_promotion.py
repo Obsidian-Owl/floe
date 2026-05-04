@@ -55,9 +55,6 @@ class TestPromotion(IntegrationTestBase):
     3. Full promotion workflow (requires OCI registry)
     """
 
-    # Services required for E2E promotion tests
-    required_services = ["dagster-webserver"]
-
     def setup_method(self) -> None:
         """Set up test fixtures before each test method."""
         super().setup_method()
