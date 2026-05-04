@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,8 @@ _E2E_ROOT = _REPO_ROOT / "tests" / "e2e"
 
 def _is_developer_workflow_decorator(decorator: ast.expr) -> bool:
     """Return True when a decorator is ``pytest.mark.developer_workflow``."""
+    if isinstance(decorator, ast.Call):
+        decorator = decorator.func
     return (
         isinstance(decorator, ast.Attribute)
         and decorator.attr == "developer_workflow"
@@ -50,6 +53,64 @@ def _class_required_services(node: ast.ClassDef) -> list[str] | None:
 
 
 @pytest.mark.requirement("285")
+def test_developer_workflow_guard_catches_async_methods(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lane guard must catch async developer workflow methods."""
+    test_file = tmp_path / "test_async_lane.py"
+    test_file.write_text(
+        "\n".join(
+            [
+                "import pytest",
+                "",
+                "class TestAsync:",
+                "    required_services = ['dagster-webserver']",
+                "",
+                "    @pytest.mark.developer_workflow",
+                "    async def test_async_flow(self):",
+                "        pass",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(sys.modules[__name__], "_E2E_ROOT", tmp_path)
+
+    with pytest.raises(AssertionError, match="TestAsync.test_async_flow"):
+        test_developer_workflow_tests_do_not_inherit_service_health_gates()
+
+
+@pytest.mark.requirement("285")
+def test_developer_workflow_guard_catches_called_markers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lane guard must catch ``@pytest.mark.developer_workflow()``."""
+    test_file = tmp_path / "test_called_marker.py"
+    test_file.write_text(
+        "\n".join(
+            [
+                "import pytest",
+                "",
+                "class TestCalledMarker:",
+                "    required_services = ['dagster-webserver']",
+                "",
+                "    @pytest.mark.developer_workflow()",
+                "    def test_called_marker_flow(self):",
+                "        pass",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(sys.modules[__name__], "_E2E_ROOT", tmp_path)
+
+    with pytest.raises(AssertionError, match="TestCalledMarker.test_called_marker_flow"):
+        test_developer_workflow_tests_do_not_inherit_service_health_gates()
+
+
+@pytest.mark.requirement("285")
 def test_developer_workflow_tests_do_not_inherit_service_health_gates() -> None:
     """Developer workflow tests must not require host port-forwards implicitly."""
     offenders: list[str] = []
@@ -65,13 +126,16 @@ def test_developer_workflow_tests_do_not_inherit_service_health_gates() -> None:
                 continue
 
             for child in node.body:
-                if not isinstance(child, ast.FunctionDef):
+                if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
                 if any(
                     _is_developer_workflow_decorator(decorator)
                     for decorator in child.decorator_list
                 ):
-                    rel_path = path.relative_to(_REPO_ROOT)
+                    try:
+                        rel_path = path.relative_to(_REPO_ROOT)
+                    except ValueError:
+                        rel_path = path
                     offenders.append(
                         f"{rel_path}:{child.lineno} {node.name}.{child.name} "
                         f"inherits required_services={required_services!r}"
