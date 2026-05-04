@@ -1,0 +1,185 @@
+# PyPI Package Publishing - builds and publishes all floe packages
+#
+# Triggers on version tags (v*.*.*) after the Release workflow validates.
+# Uses PyPI trusted publishing (OIDC) — no API tokens needed.
+# Each package is built independently and uploaded in a single job.
+#
+# Prerequisites:
+#   - Each package registered as a pending publisher on PyPI
+#   - GitHub environment "pypi" created on this repo
+#   - See docs/guides/pypi-trusted-publishers.md for setup
+#
+# Security: all run: blocks use static commands. No untrusted interpolation.
+# GITHUB_REF is safe for tag triggers (not user-controlled content).
+
+name: PyPI Publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build packages without uploading (test mode)'
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: pypi-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION_DEFAULT: "3.10"
+  UV_CACHE_DIR: /tmp/.uv-cache
+
+jobs:
+  build:
+    name: Build Packages
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install build tools
+        run: uv pip install --system build
+
+      - name: Extract version from tag
+        id: version
+        env:
+          GH_REF_TYPE: ${{ github.ref_type }}
+          GH_REF: ${{ github.ref }}
+        run: |
+          if [[ "${GH_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GH_REF#refs/tags/v}"
+          else
+            VERSION="0.0.0.dev0"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building version: ${VERSION}"
+
+      - name: Build all packages
+        run: |
+          set -euo pipefail
+          mkdir -p dist/
+
+          PACKAGES=(
+            packages/floe-core
+            packages/floe-iceberg
+            plugins/floe-alert-alertmanager
+            plugins/floe-alert-email
+            plugins/floe-alert-slack
+            plugins/floe-alert-webhook
+            plugins/floe-catalog-polaris
+            plugins/floe-compute-duckdb
+            plugins/floe-dbt-core
+            plugins/floe-dbt-fusion
+            plugins/floe-identity-keycloak
+            plugins/floe-ingestion-dlt
+            plugins/floe-lineage-marquez
+            plugins/floe-network-security-k8s
+            plugins/floe-orchestrator-dagster
+            plugins/floe-quality-dbt
+            plugins/floe-quality-gx
+            plugins/floe-rbac-k8s
+            plugins/floe-secrets-infisical
+            plugins/floe-secrets-k8s
+            plugins/floe-semantic-cube
+            plugins/floe-storage-s3
+            plugins/floe-telemetry-console
+            plugins/floe-telemetry-jaeger
+          )
+
+          for pkg in "${PACKAGES[@]}"; do
+            echo "::group::Building ${pkg}"
+            python -m build "${pkg}" --outdir dist/
+            echo "::endgroup::"
+          done
+
+          echo "=== Built artifacts ==="
+          ls -la dist/
+          echo "=== Package count ==="
+          WHEEL_COUNT=$(find dist/ -name '*.whl' | wc -l)
+          SDIST_COUNT=$(find dist/ -name '*.tar.gz' | wc -l)
+          echo "Wheels: ${WHEEL_COUNT}, Sdists: ${SDIST_COUNT}"
+
+          if [[ "${WHEEL_COUNT}" -ne 24 || "${SDIST_COUNT}" -ne 24 ]]; then
+            echo "::error::Expected 24 wheels and 24 sdists, got ${WHEEL_COUNT} wheels and ${SDIST_COUNT} sdists"
+            exit 1
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        with:
+          name: python-packages
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    if: github.ref_type == 'tag' && !(inputs.dry_run || false)
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
+        with:
+          name: python-packages
+          path: dist/
+
+      - name: Verify artifacts
+        run: |
+          echo "=== Artifacts to publish ==="
+          ls -la dist/
+          WHEEL_COUNT=$(find dist/ -name '*.whl' | wc -l)
+          echo "Wheels: ${WHEEL_COUNT}"
+          if [[ "${WHEEL_COUNT}" -ne 24 ]]; then
+            echo "::error::Expected 24 wheels, got ${WHEEL_COUNT}"
+            exit 1
+          fi
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b54a51d261f4731310329898 # v1.12.4
+        with:
+          packages-dir: dist/
+          print-hash: true
+          verbose: true
+
+  verify:
+    name: Verify Published Packages
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.10"
+
+      - name: Wait for PyPI index propagation
+        run: sleep 30
+
+      - name: Verify core package installable
+        run: |
+          pip install "floe-core==${RELEASE_VERSION}" --no-deps --dry-run || {
+            echo "::warning::floe-core not yet available on PyPI (index propagation may take a few minutes)"
+          }
