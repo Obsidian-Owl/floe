@@ -100,19 +100,19 @@ git push origin v0.1.0
 
 ## Release Artifacts
 
-Currently, releases create:
+Releases create:
 
 | Artifact | Location | Trigger |
 |----------|----------|---------|
-| GitHub Release | GitHub Releases page | Tag push |
+| GitHub Release | GitHub Releases page | Tag push (`release.yml`) |
+| PyPI packages (24) | pypi.org | Tag push (`pypi-publish.yml`, OIDC trusted publishing) |
+| Helm charts | ghcr.io OCI registry | Tag push (`helm-release.yaml`) |
 
-### Future Artifacts (Phases 3-4)
+### Planned Artifacts
 
 | Artifact | Registry | Status |
 |----------|----------|--------|
-| PyPI packages | pypi.org | Planned |
 | Docker images | ghcr.io | Planned |
-| Helm charts | ghcr.io (OCI) | Planned |
 
 ---
 
@@ -171,11 +171,13 @@ If K8s services take too long to start:
 
 ## Automation Roadmap
 
-Future releases will include:
+Completed:
+- **PyPI publish**: `pypi-publish.yml` with OIDC trusted publishing (24 packages)
+- **Helm chart publish**: `helm-release.yaml` with OCI registry and Cosign signing
 
+Planned:
 1. **python-semantic-release**: Auto-versioning from commits
 2. **towncrier**: Changelog generation from fragments
-3. **PyPI publish**: Automatic package publishing
-4. **Helm chart-releaser**: OCI chart publishing
+3. **Docker image publish**: Application images to GHCR
 
 See `.github/CI.md` for current pipeline documentation.
