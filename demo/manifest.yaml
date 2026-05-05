@@ -24,7 +24,7 @@ metadata:
 # Plugin Configuration
 # =============================================================================
 # These plugins are automatically used by all data products referencing this manifest.
-# Data engineers don't need to configure these - they just write SQL.
+# Data engineers don't need to configure platform services - they declare sources and write SQL.
 
 plugins:
   # Compute: DuckDB for local/demo, can be swapped to Spark/Snowflake in production
@@ -65,6 +65,10 @@ plugins:
       catalog_config:
         uri: http://floe-platform-polaris:8181/api/catalog
         warehouse: floe-demo
+        bucket: floe-iceberg
+        s3_endpoint: http://floe-platform-minio:9000
+        s3_region: us-east-1
+        s3_path_style_access: true
       retry_config:
         max_retries: 3
         initial_delay_seconds: 1.0

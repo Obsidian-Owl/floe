@@ -10,7 +10,7 @@ metadata:
     tier: gold
 
 # Reference the platform manifest for plugin/governance configuration
-# Data engineers inherit all platform settings - just write SQL
+# Data engineers inherit platform services, declare ingestion sources, and write SQL
 platform:
   manifest: "../manifest.yaml"
 

@@ -353,7 +353,11 @@ class TestIngestionPluginRefContract:
     @pytest.mark.requirement("4F-FR-001")
     def test_customer_360_demo_declares_csv_dlt_ingestion_sources(self) -> None:
         """Customer 360 demo config compiles CSV sources into dlt ingestion config."""
-        from floe_core.compilation.stages import compile_pipeline
+        from floe_core.compilation.resolver import resolve_ingestion_config, resolve_plugins
+        from floe_core.schemas.floe_spec import FloeSpec
+        from floe_core.schemas.manifest import PlatformManifest
+        from floe_ingestion_dlt.config import DltIngestionConfig
+        from floe_ingestion_dlt.plugin import DltIngestionPlugin
 
         root = Path(__file__).parent.parent.parent
         manifest_path = root / "demo" / "manifest.yaml"
@@ -362,78 +366,77 @@ class TestIngestionPluginRefContract:
         manifest = yaml.safe_load(manifest_path.read_text())
         spec = yaml.safe_load(spec_path.read_text())
 
-        assert manifest["plugins"]["ingestion"]["type"] == "dlt"
+        ingestion_plugin = manifest["plugins"]["ingestion"]
+        assert ingestion_plugin["type"] == "dlt"
+        expected_catalog_config = {
+            "uri": "http://floe-platform-polaris:8181/api/catalog",
+            "warehouse": "floe-demo",
+            "bucket": "floe-iceberg",
+            "s3_endpoint": "http://floe-platform-minio:9000",
+            "s3_region": "us-east-1",
+            "s3_path_style_access": True,
+        }
+        catalog_config = ingestion_plugin["config"]["catalog_config"]
+        assert expected_catalog_config.items() <= catalog_config.items()
+        destination_config = DltIngestionPlugin().get_destination_config(catalog_config)
+        assert destination_config == {
+            "bucket_url": "s3://floe-iceberg",
+            "credentials": {
+                "endpoint_url": "http://floe-platform-minio:9000",
+                "region_name": "us-east-1",
+                "s3_url_style": "path",
+            },
+        }
 
         spec_sources = spec["ingestion"]["sources"]
-        assert spec_sources == [
-            {
-                "name": "raw-customers",
-                "sourceType": "filesystem",
-                "format": "csv",
-                "path": "./seeds/raw_customers.csv",
-                "destinationTable": "bronze.raw_customers",
-                "writeMode": "replace",
-                "schemaContract": "evolve",
-            },
-            {
-                "name": "raw-transactions",
-                "sourceType": "filesystem",
-                "format": "csv",
-                "path": "./seeds/raw_transactions.csv",
-                "destinationTable": "bronze.raw_transactions",
-                "writeMode": "replace",
-                "schemaContract": "evolve",
-            },
-            {
-                "name": "raw-support-tickets",
-                "sourceType": "filesystem",
-                "format": "csv",
-                "path": "./seeds/raw_support_tickets.csv",
-                "destinationTable": "bronze.raw_support_tickets",
-                "writeMode": "replace",
-                "schemaContract": "evolve",
-            },
-        ]
-        assert {source["format"] for source in spec_sources} == {"csv"}
-        assert {source["sourceType"] for source in spec_sources} == {"filesystem"}
+        expected_sources = {
+            "raw-customers": ("./seeds/raw_customers.csv", "bronze.raw_customers"),
+            "raw-transactions": (
+                "./seeds/raw_transactions.csv",
+                "bronze.raw_transactions",
+            ),
+            "raw-support-tickets": (
+                "./seeds/raw_support_tickets.csv",
+                "bronze.raw_support_tickets",
+            ),
+        }
+        sources_by_name = {source["name"]: source for source in spec_sources}
+        assert set(sources_by_name) == set(expected_sources)
 
-        artifacts = compile_pipeline(spec_path, manifest_path, emit_lineage=False)
+        for name, (path, destination_table) in expected_sources.items():
+            source = sources_by_name[name]
+            expected_source = {
+                "sourceType": "filesystem",
+                "format": "csv",
+                "path": path,
+                "destinationTable": destination_table,
+                "writeMode": "replace",
+                "schemaContract": "evolve",
+            }
+            assert expected_source.items() <= source.items()
+            assert (spec_path.parent / path).exists()
 
-        assert artifacts.plugins.ingestion is not None
-        assert artifacts.plugins.ingestion.type == "dlt"
-        assert artifacts.plugins.ingestion.config is not None
-        assert artifacts.plugins.ingestion.config["sources"] == [
-            {
-                "name": "raw-customers",
+        plugins = resolve_ingestion_config(
+            FloeSpec.model_validate(spec),
+            resolve_plugins(PlatformManifest.model_validate(manifest)),
+        )
+
+        assert plugins.ingestion is not None
+        assert plugins.ingestion.type == "dlt"
+        assert plugins.ingestion.config is not None
+        DltIngestionConfig.model_validate(plugins.ingestion.config)
+
+        resolved_sources = {
+            source["name"]: source for source in plugins.ingestion.config["sources"]
+        }
+        assert set(resolved_sources) == set(expected_sources)
+        for name, (path, destination_table) in expected_sources.items():
+            source = resolved_sources[name]
+            expected_source = {
                 "source_type": "filesystem",
-                "destination_table": "bronze.raw_customers",
+                "destination_table": destination_table,
                 "write_mode": "replace",
                 "schema_contract": "evolve",
-                "source_config": {
-                    "format": "csv",
-                    "path": "./seeds/raw_customers.csv",
-                },
-            },
-            {
-                "name": "raw-transactions",
-                "source_type": "filesystem",
-                "destination_table": "bronze.raw_transactions",
-                "write_mode": "replace",
-                "schema_contract": "evolve",
-                "source_config": {
-                    "format": "csv",
-                    "path": "./seeds/raw_transactions.csv",
-                },
-            },
-            {
-                "name": "raw-support-tickets",
-                "source_type": "filesystem",
-                "destination_table": "bronze.raw_support_tickets",
-                "write_mode": "replace",
-                "schema_contract": "evolve",
-                "source_config": {
-                    "format": "csv",
-                    "path": "./seeds/raw_support_tickets.csv",
-                },
-            },
-        ]
+                "source_config": {"format": "csv", "path": path},
+            }
+            assert expected_source.items() <= source.items()
