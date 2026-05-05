@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from floe_core.plugin_metadata import PluginMetadata
 
 if TYPE_CHECKING:
-    pass
+    from floe_core.schemas.compiled_artifacts import StorageDeploymentBinding
 
 
 @runtime_checkable
@@ -67,6 +67,7 @@ class StoragePlugin(PluginMetadata):
         - get_dbt_profile_config() method
         - get_dagster_io_manager_config() method
         - get_helm_values_override() method
+        - get_deployment_binding() method
 
     Concrete plugins may override:
         - get_pyiceberg_catalog_config() method
@@ -216,5 +217,14 @@ class StoragePlugin(PluginMetadata):
             >>> # S3 (cloud) returns empty dict
             >>> s3_plugin.get_helm_values_override()
             {}
+        """
+        ...
+
+    @abstractmethod
+    def get_deployment_binding(self) -> StorageDeploymentBinding:
+        """Return secret-free storage deployment intent and consumer projections.
+
+        Implementations must describe desired storage deployment state and
+        consumer wiring using references to credentials, not credential values.
         """
         ...

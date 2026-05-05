@@ -66,6 +66,35 @@ class MinIOStorageConfig(BaseModel):
         default=True,
         description="Use path-style access (required for MinIO, LocalStack)",
     )
+    artifact_bucket: str = Field(
+        default="floe-artifacts",
+        description="Bucket for platform artifacts and run outputs.",
+        min_length=1,
+    )
+    credential_secret_name: str = Field(
+        default="floe-platform-minio-credentials",
+        description="Kubernetes Secret name holding MinIO credentials.",
+        min_length=1,
+    )
+    credential_secret_namespace: str = Field(
+        default="floe-system",
+        description="Kubernetes namespace containing the MinIO credential Secret.",
+        min_length=1,
+    )
+    access_key_secret_key: str = Field(
+        default="root-user",
+        description="Secret key containing the MinIO access key.",
+        min_length=1,
+    )
+    secret_key_secret_key: str = Field(
+        default="root-password",
+        description="Secret key containing the MinIO secret key.",
+        min_length=1,
+    )
+    external_endpoint: str | None = Field(
+        default=None,
+        description="Optional endpoint for local tools or users outside the cluster.",
+    )
     access_key_id: SecretStr | None = Field(
         default=None,
         description="Access key ID (falls back to AWS_ACCESS_KEY_ID env var)",

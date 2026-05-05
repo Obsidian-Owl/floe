@@ -25,6 +25,14 @@ import os
 from typing import TYPE_CHECKING, Any, cast
 
 from floe_core.plugins.storage import StoragePlugin
+from floe_core.schemas.compiled_artifacts import (
+    DagsterStorageBinding,
+    DbtStorageBinding,
+    KubernetesSecretRef,
+    StorageCredentialBinding,
+    StorageDeploymentBinding,
+    StorageServiceEndpoint,
+)
 
 from floe_storage_minio.config import MinIOStorageConfig
 
@@ -147,7 +155,7 @@ class MinIOStoragePlugin(StoragePlugin):
     # StoragePlugin abstract methods
     # =========================================================================
 
-    def _get_pyiceberg_s3_properties(self) -> dict[str, str]:
+    def _get_pyiceberg_s3_properties(self, *, include_credentials: bool = True) -> dict[str, str]:
         """Build PyIceberg S3 properties from validated plugin config."""
         config = self._require_config()
 
@@ -156,6 +164,9 @@ class MinIOStoragePlugin(StoragePlugin):
             "s3.region": config.region,
             "s3.path-style-access": str(config.path_style_access).lower(),
         }
+
+        if not include_credentials:
+            return properties
 
         # Source credentials from config or environment
         access_key = (
@@ -200,6 +211,57 @@ class MinIOStoragePlugin(StoragePlugin):
         so catalog plugins do not need to know S3 manifest field names.
         """
         return self._get_pyiceberg_s3_properties()
+
+    def _credential_binding(self) -> StorageCredentialBinding:
+        """Return the Kubernetes Secret reference for MinIO credentials."""
+        config = self._require_config()
+        return StorageCredentialBinding(
+            mode="kubernetes-secret",
+            secret_ref=KubernetesSecretRef(
+                name=config.credential_secret_name,
+                namespace=config.credential_secret_namespace,
+                keys={
+                    "accessKeyId": config.access_key_secret_key,
+                    "secretAccessKey": config.secret_key_secret_key,
+                },
+            ),
+        )
+
+    def get_deployment_binding(self) -> StorageDeploymentBinding:
+        """Return secret-free MinIO deployment binding for compiled artifacts."""
+        config = self._require_config()
+        return StorageDeploymentBinding(
+            provider="minio",
+            endpoint=StorageServiceEndpoint(
+                internal_url=config.endpoint,
+                external_url=config.external_endpoint or config.endpoint,
+                region=config.region,
+                warehouse_path=f"s3://{config.bucket}",
+            ),
+            credentials=self._credential_binding(),
+            dbt=DbtStorageBinding(
+                profile_name="floe",
+                target_name="dev",
+                schema_name="analytics",
+                env_refs={
+                    "s3_access_key_id": "AWS_ACCESS_KEY_ID",
+                    "s3_secret_access_key": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+                },
+            ),
+            dagster=DagsterStorageBinding(
+                resource_key="minio_storage",
+                asset_io_manager_key="iceberg_io_manager",
+                env_refs={
+                    "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+                    "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+                },
+            ),
+            notes=[
+                "MinIO uses S3-compatible protocol settings.",
+                "Credentials are referenced through Kubernetes Secret keys.",
+                f"Artifact bucket: {config.artifact_bucket}",
+            ],
+        )
 
     def get_warehouse_uri(self, namespace: str) -> str:
         """Generate warehouse URI for a namespace.
@@ -255,12 +317,37 @@ class MinIOStoragePlugin(StoragePlugin):
         }
 
     def get_helm_values_override(self) -> dict[str, Any]:
-        """Generate Helm values for MinIO storage.
-
-        MinIO is provided by the platform chart, not deployed by this plugin.
-        Returns an empty dict.
+        """Generate chart values for MinIO and Polaris from MinIO config.
 
         Returns:
-            Empty dictionary (the plugin does not deploy MinIO directly).
+            Helm values using Kubernetes Secret references instead of
+            credential values.
         """
-        return {}
+        config = self._require_config()
+        bucket_names = ",".join([config.bucket, config.artifact_bucket])
+        return {
+            "minio": {
+                "enabled": True,
+                "fullnameOverride": "floe-platform-minio",
+                "auth": {"existingSecret": config.credential_secret_name},
+                "defaultBuckets": bucket_names,
+                "provisioning": {"enabled": False, "fallbackJob": True},
+            },
+            "polaris": {
+                "storage": {
+                    "s3": {
+                        "enabled": True,
+                        "endpoint": config.endpoint,
+                        "region": config.region,
+                        "pathStyleAccess": config.path_style_access,
+                        "credentialSecretName": config.credential_secret_name,
+                        "accessKeySecretKey": config.access_key_secret_key,
+                        "secretKeySecretKey": config.secret_key_secret_key,
+                    }
+                },
+                "bootstrap": {
+                    "defaultBaseLocation": f"s3://{config.bucket}",
+                    "allowedLocations": [f"s3://{config.bucket}"],
+                },
+            },
+        }

@@ -108,11 +108,25 @@ class TestMinIOStorageConfig:
             bucket="floe-data",
             region="eu-west-1",
             path_style_access=False,
-            access_key_id=SecretStr("AKID"),
-            secret_access_key=SecretStr("SECRET"),
+            artifact_bucket="floe-artifacts",
+            credential_secret_name="custom-minio-credentials",  # pragma: allowlist secret
+            credential_secret_namespace="floe-system",  # pragma: allowlist secret
+            access_key_secret_key="root-user",  # pragma: allowlist secret
+            secret_key_secret_key="root-password",  # pragma: allowlist secret
+            external_endpoint="http://localhost:9000",
+            access_key_id=SecretStr("AKID"),  # pragma: allowlist secret
+            secret_access_key=SecretStr("SECRET"),  # pragma: allowlist secret
         )
+        expected_credential_name = "custom-minio-credentials"  # pragma: allowlist secret
+
         assert config.region == "eu-west-1"
         assert config.path_style_access is False
+        assert config.artifact_bucket == "floe-artifacts"
+        assert config.credential_secret_name == expected_credential_name
+        assert config.credential_secret_namespace == "floe-system"  # pragma: allowlist secret
+        assert config.access_key_secret_key == "root-user"  # pragma: allowlist secret
+        assert config.secret_key_secret_key == "root-password"  # pragma: allowlist secret
+        assert config.external_endpoint == "http://localhost:9000"
         assert config.access_key_id is not None
         assert config.access_key_id.get_secret_value() == "AKID"
 
@@ -219,9 +233,24 @@ class TestStoragePluginMethods:
         assert config["region_name"] == "us-east-1"
 
     @pytest.mark.requirement("AC-1")
-    def test_get_helm_values_override_empty(self, configured_plugin: MinIOStoragePlugin) -> None:
-        """get_helm_values_override must return empty dict (MinIO is external)."""
-        assert configured_plugin.get_helm_values_override() == {}
+    def test_get_helm_values_override_uses_secret_refs(
+        self, configured_plugin: MinIOStoragePlugin
+    ) -> None:
+        """get_helm_values_override must configure MinIO without secret values."""
+        values = configured_plugin.get_helm_values_override()
+        payload = str(values)
+
+        assert values["minio"]["enabled"] is True
+        assert values["minio"]["auth"] == {
+            "existingSecret": "floe-platform-minio-credentials"  # pragma: allowlist secret
+        }
+        assert values["minio"]["defaultBuckets"] == "floe-data,floe-artifacts"
+        assert values["polaris"]["storage"]["s3"]["credentialSecretName"] == (
+            "floe-platform-minio-credentials"
+        )
+        assert values["polaris"]["bootstrap"]["defaultBaseLocation"] == "s3://floe-data"
+        assert "minioadmin" not in payload
+        assert "SECRET" not in payload
 
     @pytest.mark.requirement("AC-1")
     def test_get_pyiceberg_fileio(self, configured_plugin: MinIOStoragePlugin) -> None:
@@ -274,3 +303,73 @@ class TestUnconfiguredPlugin:
             plugin.get_pyiceberg_fileio()
         with pytest.raises(PluginConfigurationError, match="not configured"):
             plugin.get_pyiceberg_catalog_config()
+        with pytest.raises(PluginConfigurationError, match="not configured"):
+            plugin.get_deployment_binding()
+
+
+class TestMinIODeploymentBinding:
+    """Tests for secret-free MinIO deployment bindings."""
+
+    def test_get_deployment_binding_returns_secret_free_minio_contract(self) -> None:
+        """MinIO plugin must emit the Task 1 deployment binding contract."""
+        config = MinIOStorageConfig(
+            endpoint="http://floe-platform-minio:9000",
+            bucket="floe-iceberg",
+            region="us-east-1",
+            path_style_access=True,
+            external_endpoint="http://localhost:9000",
+            access_key_id=SecretStr("INLINE_ACCESS_VALUE"),  # pragma: allowlist secret
+            secret_access_key=SecretStr("INLINE_CREDENTIAL_VALUE"),  # pragma: allowlist secret
+        )
+        plugin = MinIOStoragePlugin(config=config)
+
+        binding = plugin.get_deployment_binding()
+        payload = binding.model_dump_json()
+        helm_payload = str(plugin.get_helm_values_override())
+
+        assert binding.provider == "minio"
+        assert binding.endpoint.internal_url == "http://floe-platform-minio:9000"
+        assert binding.endpoint.external_url == "http://localhost:9000"
+        assert binding.endpoint.region == "us-east-1"
+        assert binding.endpoint.warehouse_path == "s3://floe-iceberg"
+        assert binding.credentials.mode == "kubernetes-secret"
+        assert binding.credentials.secret_ref is not None
+        assert binding.credentials.secret_ref.name == "floe-platform-minio-credentials"
+        assert binding.credentials.secret_ref.namespace == "floe-system"
+        assert binding.credentials.secret_ref.keys == {
+            "accessKeyId": "root-user",
+            "secretAccessKey": "root-password",  # pragma: allowlist secret
+        }
+        assert binding.dbt.profile_name == "floe"
+        assert binding.dbt.target_name == "dev"
+        assert binding.dbt.schema_name == "analytics"
+        assert binding.dbt.env_refs == {
+            "s3_access_key_id": "AWS_ACCESS_KEY_ID",
+            "s3_secret_access_key": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+        }
+        assert binding.dagster.resource_key == "minio_storage"
+        assert binding.dagster.asset_io_manager_key == "iceberg_io_manager"
+        assert binding.dagster.env_refs == {
+            "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+        }
+        assert "minioadmin" not in payload
+        assert "secretKey" not in payload
+        assert "INLINE_ACCESS_VALUE" not in payload
+        assert "INLINE_ACCESS_VALUE" not in helm_payload
+        assert "INLINE_CREDENTIAL_VALUE" not in payload
+        assert "INLINE_CREDENTIAL_VALUE" not in helm_payload
+
+    def test_minio_binding_uses_configured_artifact_bucket_in_helm_values(self) -> None:
+        """Helm projection must include the configured warehouse and artifact buckets."""
+        config = MinIOStorageConfig(
+            endpoint="http://floe-platform-minio:9000",
+            bucket="warehouse",
+            artifact_bucket="artifacts",
+        )
+        plugin = MinIOStoragePlugin(config=config)
+
+        assert plugin.get_helm_values_override()["minio"]["defaultBuckets"] == (
+            "warehouse,artifacts"
+        )
+        assert plugin.get_deployment_binding().endpoint.warehouse_path == "s3://warehouse"
