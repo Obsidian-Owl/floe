@@ -128,3 +128,32 @@ def test_floe_spec_rejects_merge_without_primary_key() -> None:
         )
 
     assert "primary" in str(exc_info.value).lower()
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "s3://bucket/key?AWSAccessKeyId=abc&Signature=def",
+        "s3://bucket/key#token=abc",
+    ],
+)
+def test_floe_spec_rejects_credential_bearing_ingestion_path_parts(path: str) -> None:
+    """Object-store paths must not embed credentials in query or fragment parts."""
+    with pytest.raises(ValidationError) as exc_info:
+        FloeSpec.model_validate(
+            _base_floe_spec(
+                ingestion={
+                    "sources": [
+                        {
+                            "name": "raw-customers",
+                            "sourceType": "filesystem",
+                            "format": "csv",
+                            "path": path,
+                            "destinationTable": "bronze.raw_customers",
+                        }
+                    ]
+                }
+            )
+        )
+
+    assert "credential" in str(exc_info.value).lower()

@@ -67,6 +67,23 @@ FORBIDDEN_ENVIRONMENT_FIELDS = frozenset(
 )
 """Fields that must not appear in FloeSpec (environment-agnostic, C004)."""
 
+CREDENTIAL_PATH_PARTS = frozenset(
+    {
+        "credential",
+        "credentials",
+        "access_key",
+        "secret_key",
+        "token",
+        "api_key",
+        "password",
+        "signature",
+        "awsaccesskeyid",
+        "aws_access_key_id",
+        "aws_secret_access_key",
+    }
+)
+"""Credential-like terms forbidden in ingestion source URI query and fragment parts."""
+
 
 class FloeMetadata(BaseModel):
     """Metadata for a FloeSpec data product.
@@ -666,6 +683,11 @@ class IngestionSourceSpec(BaseModel):
             if parsed.username or parsed.password or "@" in parsed.netloc:
                 msg = "path must not contain embedded credentials"
                 raise ValueError(msg)
+            if _contains_credential_path_part(parsed.query) or _contains_credential_path_part(
+                parsed.fragment
+            ):
+                msg = "path must not contain credential-like query or fragment content"
+                raise ValueError(msg)
             if not parsed.netloc:
                 msg = "object-store path must include a bucket or container"
                 raise ValueError(msg)
@@ -980,6 +1002,19 @@ def _find_forbidden_fields(
             forbidden_found.update(_find_forbidden_in_list(value, current_path))
 
     return forbidden_found
+
+
+def _contains_credential_path_part(value: str) -> bool:
+    """Return True when a URI query or fragment contains credential-like terms."""
+    if not value:
+        return False
+
+    lowered = value.lower()
+    normalized = re.sub(r"[^a-z0-9]+", "", lowered)
+    return any(
+        term in lowered or re.sub(r"[^a-z0-9]+", "", term) in normalized
+        for term in CREDENTIAL_PATH_PARTS
+    )
 
 
 __all__ = [
