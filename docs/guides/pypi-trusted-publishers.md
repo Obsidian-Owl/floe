@@ -29,8 +29,8 @@ uses short-lived OIDC tokens.
 
 ### Core packages (2)
 
-- [ ] `floe-core` — Core plugin registry and interfaces for the floe data platform
-- [ ] `floe-iceberg` — IcebergTableManager utility for PyIceberg table operations
+- [x] `floe-core` — Core plugin registry and interfaces for the floe data platform
+- [x] `floe-iceberg` — IcebergTableManager utility for PyIceberg table operations
 
 ### Alert plugins (4)
 
