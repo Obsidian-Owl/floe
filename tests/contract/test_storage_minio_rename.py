@@ -24,6 +24,9 @@ ACTIVE_SCAN_ROOTS = [
     "testing",
     "scripts",
     "docs",
+    "charts",
+    "examples",
+    "docs-site",
     "specs",
 ]
 IGNORED_SCAN_PARTS = {
@@ -47,6 +50,8 @@ FORBIDDEN_PATTERNS = [
     re.compile(r"\btype\s*:\s*" + "s3" + r"\b"),
     re.compile(r"\btype\s*:\s*\{\s*[\"']" + "s3" + r"[\"']\s*\}"),
     re.compile(r"[\"']type[\"']\s*:\s*[\"']" + "s3" + r"[\"']"),
+    re.compile(r"\btype\s*=\s*[\"']" + "s3" + r"[\"']"),
+    re.compile(r"\bstorage\s*=\s*[\"']" + "s3" + r"[\"']"),
 ]
 
 
