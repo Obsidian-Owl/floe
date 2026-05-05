@@ -435,7 +435,7 @@ class DbtStorageBinding(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     profile_fragment: dict[str, Any] = Field(default_factory=dict)
-    env_refs: dict[str, str] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
 
 
 class DagsterStorageBinding(BaseModel):
@@ -444,7 +444,7 @@ class DagsterStorageBinding(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     resources: dict[str, Any] = Field(default_factory=dict)
-    env_refs: dict[str, str] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
 
 
 class StorageConsumerBindings(BaseModel):

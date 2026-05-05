@@ -758,6 +758,20 @@ class TestStorageDeploymentBinding:
         assert restored.deployment.storage.plugin.type == "minio"
         assert restored.deployment.storage.protocol == "s3-compatible"
 
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            lambda: DbtStorageBinding(env_refs={"s3_access_key_id": ""}),
+            lambda: DagsterStorageBinding(env_refs={"AWS_ACCESS_KEY_ID": ""}),
+        ],
+    )
+    def test_consumer_env_ref_values_reject_empty_strings(
+        self,
+        factory: Any,
+    ) -> None:
+        with pytest.raises(ValidationError):
+            factory()
+
 
 class TestStorageCredentialBinding:
     """Tests for storage credential binding validation."""
