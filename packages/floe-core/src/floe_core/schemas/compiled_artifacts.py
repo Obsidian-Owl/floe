@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from floe_core.schemas.data_contract import DataContract
 from floe_core.schemas.quality_config import QualityConfig
@@ -38,6 +38,7 @@ _K8S_NAMESPACE_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 PRODUCT_NAME_PATTERN = r"^[a-zA-Z][a-zA-Z0-9_-]*$"
 _MAX_K8S_NAME_LENGTH = 253
 _MAX_K8S_NAMESPACE_LENGTH = 63
+NonEmptyString = Annotated[str, Field(min_length=1)]
 
 
 def _validate_configmap_name(name: str) -> str:
@@ -269,9 +270,9 @@ class KubernetesSecretRef(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    name: str = Field(..., min_length=1)
+    name: NonEmptyString
     namespace: str | None = None
-    keys: dict[str, str] = Field(default_factory=dict)
+    keys: dict[str, NonEmptyString] = Field(default_factory=dict)
 
 
 class CredentialRef(BaseModel):
@@ -280,8 +281,8 @@ class CredentialRef(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     source: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
-    name: str
-    key: str | None = None
+    name: NonEmptyString
+    key: NonEmptyString | None = None
 
 
 class StorageCredentialBinding(BaseModel):
@@ -291,15 +292,45 @@ class StorageCredentialBinding(BaseModel):
 
     mode: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
     secret_ref: KubernetesSecretRef | None = None
-    env_refs: dict[str, str] = Field(default_factory=dict)
-    service_account_ref: str | None = None
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+    service_account_ref: NonEmptyString | None = None
 
-    def as_credential_ref(self, logical_key: str) -> CredentialRef:
-        """Return a consumer credential reference for a logical key."""
+    @model_validator(mode="after")
+    def validate_mode_sources(self) -> StorageCredentialBinding:
+        """Ensure credential source fields match the selected mode."""
         if self.mode == "kubernetes-secret":
             if self.secret_ref is None:
                 msg = "kubernetes-secret credential binding requires secret_ref"
                 raise ValueError(msg)
+            if self.env_refs or self.service_account_ref is not None:
+                msg = "kubernetes-secret credential binding only accepts secret_ref"
+                raise ValueError(msg)
+            return self
+        if self.mode == "environment":
+            if not self.env_refs:
+                msg = "environment credential binding requires env_refs"
+                raise ValueError(msg)
+            if self.secret_ref is not None or self.service_account_ref is not None:
+                msg = "environment credential binding only accepts env_refs"
+                raise ValueError(msg)
+            return self
+        if self.mode == "workload-identity":
+            if self.service_account_ref is None:
+                msg = "workload-identity credential binding requires service_account_ref"
+                raise ValueError(msg)
+            if self.secret_ref is not None or self.env_refs:
+                msg = "workload-identity credential binding only accepts service_account_ref"
+                raise ValueError(msg)
+            return self
+        if self.secret_ref is not None or self.env_refs or self.service_account_ref is not None:
+            msg = "none credential binding does not accept credential source fields"
+            raise ValueError(msg)
+        return self
+
+    def as_credential_ref(self, logical_key: str) -> CredentialRef:
+        """Return a consumer credential reference for a logical key."""
+        if self.mode == "kubernetes-secret":
+            assert self.secret_ref is not None
             secret_key = self.secret_ref.keys.get(logical_key)
             if secret_key is None:
                 msg = f"credential key {logical_key!r} not present in secret_ref.keys"
@@ -311,7 +342,10 @@ class StorageCredentialBinding(BaseModel):
                 msg = f"credential key {logical_key!r} not present in env_refs"
                 raise ValueError(msg)
             return CredentialRef(source=self.mode, name=env_name)
-        return CredentialRef(source=self.mode, name=self.service_account_ref or "none")
+        if self.mode == "workload-identity":
+            assert self.service_account_ref is not None
+            return CredentialRef(source=self.mode, name=self.service_account_ref)
+        return CredentialRef(source="none", name="none")
 
 
 class StorageWarehouse(BaseModel):

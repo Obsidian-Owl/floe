@@ -27,6 +27,7 @@ from floe_core.schemas.compiled_artifacts import (
     BucketFeatureRequirements,
     CompilationMetadata,
     CompiledArtifacts,
+    CredentialRef,
     DagsterStorageBinding,
     DbtStorageBinding,
     DeploymentConfig,
@@ -756,6 +757,112 @@ class TestStorageDeploymentBinding:
         assert restored.deployment.storage is not None
         assert restored.deployment.storage.plugin.type == "minio"
         assert restored.deployment.storage.protocol == "s3-compatible"
+
+
+class TestStorageCredentialBinding:
+    """Tests for storage credential binding validation."""
+
+    @pytest.mark.parametrize(
+        "binding_kwargs",
+        [
+            {"mode": "kubernetes-secret"},
+            {"mode": "environment"},
+            {"mode": "environment", "env_refs": {}},
+            {"mode": "workload-identity"},
+            {
+                "mode": "none",
+                "secret_ref": KubernetesSecretRef(name="storage-credentials"),
+            },
+            {"mode": "none", "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"}},
+            {"mode": "none", "service_account_ref": "storage-service-account"},
+            {
+                "mode": "kubernetes-secret",
+                "secret_ref": KubernetesSecretRef(name="storage-credentials"),
+                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
+            },
+            {
+                "mode": "kubernetes-secret",
+                "secret_ref": KubernetesSecretRef(name="storage-credentials"),
+                "service_account_ref": "storage-service-account",
+            },
+            {
+                "mode": "environment",
+                "secret_ref": KubernetesSecretRef(name="storage-credentials"),
+                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
+            },
+            {
+                "mode": "environment",
+                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
+                "service_account_ref": "storage-service-account",
+            },
+            {
+                "mode": "workload-identity",
+                "secret_ref": KubernetesSecretRef(name="storage-credentials"),
+                "service_account_ref": "storage-service-account",
+            },
+            {
+                "mode": "workload-identity",
+                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
+                "service_account_ref": "storage-service-account",
+            },
+        ],
+    )
+    def test_mode_inconsistent_credential_bindings_are_rejected(
+        self,
+        binding_kwargs: dict[str, Any],
+    ) -> None:
+        with pytest.raises(ValidationError):
+            StorageCredentialBinding(**binding_kwargs)
+
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            lambda: KubernetesSecretRef(name="storage-credentials", keys={"accessKeyId": ""}),
+            lambda: CredentialRef(source="environment", name=""),
+            lambda: CredentialRef(source="kubernetes-secret", name="storage-credentials", key=""),
+            lambda: StorageCredentialBinding(mode="environment", env_refs={"accessKeyId": ""}),
+            lambda: StorageCredentialBinding(mode="workload-identity", service_account_ref=""),
+        ],
+    )
+    def test_empty_credential_reference_values_are_rejected(
+        self,
+        factory: Any,
+    ) -> None:
+        with pytest.raises(ValidationError):
+            factory()
+
+    def test_environment_credential_ref_uses_configured_env_name(self) -> None:
+        binding = StorageCredentialBinding(
+            mode="environment",
+            env_refs={"accessKeyId": "AWS_ACCESS_KEY_ID"},
+        )
+
+        ref = binding.as_credential_ref("accessKeyId")
+
+        assert ref.source == "environment"
+        assert ref.name == "AWS_ACCESS_KEY_ID"
+        assert ref.key is None
+
+    def test_workload_identity_credential_ref_uses_service_account(self) -> None:
+        binding = StorageCredentialBinding(
+            mode="workload-identity",
+            service_account_ref="storage-service-account",
+        )
+
+        ref = binding.as_credential_ref("accessKeyId")
+
+        assert ref.source == "workload-identity"
+        assert ref.name == "storage-service-account"
+        assert ref.key is None
+
+    def test_none_credential_ref_is_stable(self) -> None:
+        binding = StorageCredentialBinding(mode="none")
+
+        ref = binding.as_credential_ref("accessKeyId")
+
+        assert ref.source == "none"
+        assert ref.name == "none"
+        assert ref.key is None
 
 
 class TestYamlSerialization:
