@@ -297,6 +297,7 @@ def compile_pipeline(
     from floe_core.compilation.dbt_profiles import generate_dbt_profiles
     from floe_core.compilation.loader import load_floe_spec, load_manifest
     from floe_core.compilation.resolver import (
+        resolve_ingestion_config,
         resolve_manifest_inheritance,
         resolve_plugins,
         resolve_transform_compute,
@@ -395,11 +396,23 @@ def compile_pipeline(
                 log.info("compilation_stage_start", stage=CompilationStage.RESOLVE.value)
                 resolved_manifest = resolve_manifest_inheritance(manifest)
                 plugins = resolve_plugins(resolved_manifest)
+                plugins = resolve_ingestion_config(spec, plugins)
                 transforms = resolve_transform_compute(spec, resolved_manifest)
+                ingestion_source_count = (
+                    len(spec.ingestion.sources) if spec.ingestion is not None else None
+                )
                 # Add resolution details as span attributes
                 resolve_span.set_attribute("compile.compute_plugin", plugins.compute.type)
                 resolve_span.set_attribute("compile.orchestrator_plugin", plugins.orchestrator.type)
                 resolve_span.set_attribute("compile.model_count", len(transforms.models))
+                if ingestion_source_count is not None:
+                    resolve_span.set_attribute(
+                        "compile.ingestion_source_count",
+                        ingestion_source_count,
+                    )
+                resolve_log_attrs: dict[str, Any] = {}
+                if ingestion_source_count is not None:
+                    resolve_log_attrs["ingestion_source_count"] = ingestion_source_count
                 duration_ms = (time.perf_counter() - stage_start) * 1000
                 log.info(
                     "compilation_stage_complete",
@@ -408,6 +421,7 @@ def compile_pipeline(
                     orchestrator_plugin=plugins.orchestrator.type,
                     model_count=len(transforms.models),
                     duration_ms=round(duration_ms, 2),
+                    **resolve_log_attrs,
                 )
 
             # Stage 4: ENFORCE - Policy enforcement

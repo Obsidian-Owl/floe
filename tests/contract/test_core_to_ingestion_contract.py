@@ -223,3 +223,50 @@ class TestIngestionPluginRefContract:
         assert reconstructed.plugins.ingestion is not None
         assert reconstructed.plugins.ingestion.type == "dlt"
         assert reconstructed.plugins.ingestion.version == "0.1.0"
+
+    @pytest.mark.requirement("4F-FR-001")
+    def test_compiled_artifacts_ingestion_config_uses_dlt_snake_case_keys(self) -> None:
+        """Serialized ingestion config uses the dlt plugin's snake_case contract."""
+        import json
+
+        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.1.0", config={}),
+            orchestrator=PluginRef(type="dagster", version="0.1.0", config={}),
+            ingestion=PluginRef(
+                type="dlt",
+                version="0.1.0",
+                config={
+                    "catalog_config": {"warehouse": "floe"},
+                    "retry_config": {"max_retries": 4, "initial_delay_seconds": 1.5},
+                    "sources": [
+                        {
+                            "name": "orders_csv",
+                            "source_type": "filesystem",
+                            "format": "csv",
+                            "path": "data/orders.csv",
+                            "destination_table": "bronze.orders",
+                            "write_mode": "append",
+                            "schema_contract": "evolve",
+                        }
+                    ],
+                },
+            ),
+        )
+
+        dumped = plugins.model_dump(mode="json")
+
+        assert dumped["ingestion"]["config"]["sources"] == [
+            {
+                "name": "orders_csv",
+                "source_type": "filesystem",
+                "format": "csv",
+                "path": "data/orders.csv",
+                "destination_table": "bronze.orders",
+                "write_mode": "append",
+                "schema_contract": "evolve",
+            }
+        ]
+        assert "sourceType" not in dumped["ingestion"]["config"]["sources"][0]
+        json.dumps(dumped["ingestion"]["config"])

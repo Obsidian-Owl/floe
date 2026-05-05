@@ -112,6 +112,47 @@ def resolve_plugins(manifest: PlatformManifest) -> ResolvedPlugins:
     )
 
 
+def resolve_ingestion_config(spec: FloeSpec, plugins: ResolvedPlugins) -> ResolvedPlugins:
+    """Merge product-level ingestion sources into resolved ingestion plugin config.
+
+    Args:
+        spec: FloeSpec with optional product ingestion sources.
+        plugins: Resolved plugin selections from the platform manifest.
+
+    Returns:
+        ResolvedPlugins with ingestion sources merged into the ingestion plugin config,
+        or the original plugins object when the product has no ingestion.
+
+    Raises:
+        CompilationException: If product ingestion is declared but no ingestion
+            plugin is selected in the platform manifest.
+    """
+    if spec.ingestion is None:
+        return plugins
+
+    if plugins.ingestion is None:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E202",
+                message="Product declares ingestion sources but no ingestion plugin is selected",
+                suggestion="Add plugins.ingestion to the platform manifest",
+                context={"product": spec.metadata.name},
+            )
+        )
+
+    existing_config = dict(plugins.ingestion.config or {})
+    existing_config["sources"] = [
+        source.model_dump(by_alias=False, exclude_none=True) for source in spec.ingestion.sources
+    ]
+
+    return plugins.model_copy(
+        update={
+            "ingestion": plugins.ingestion.model_copy(update={"config": existing_config}),
+        }
+    )
+
+
 def resolve_manifest_inheritance(
     manifest: PlatformManifest,
 ) -> PlatformManifest:
