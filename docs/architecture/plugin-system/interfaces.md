@@ -735,8 +735,7 @@ class StoragePlugin(ABC):
 **Entry points:**
 ```toml
 [project.entry-points."floe.storage"]
-s3 = "floe_storage_s3:S3Plugin"
-minio = "floe_storage_minio:MinIOPlugin"
+minio = "floe_storage_minio.plugin:MinIOStoragePlugin"
 gcs = "floe_storage_gcs:GCSPlugin"
 ```
 

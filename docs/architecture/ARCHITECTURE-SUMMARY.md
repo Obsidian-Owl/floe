@@ -205,7 +205,7 @@ floe/
 │   ├── floe-orchestrator-airflow/
 │   ├── floe-catalog-polaris/
 │   ├── floe-catalog-glue/
-│   ├── floe-storage-s3/         # S3-compatible storage, including MinIO endpoints
+│   ├── floe-storage-minio/      # MinIO storage with S3-compatible protocol support
 │   ├── floe-observability-jaeger/
 │   ├── floe-observability-datadog/
 │   ├── floe-semantic-cube/

@@ -251,9 +251,9 @@ class StoragePlugin(ABC):
 ### Plugin Registration
 
 ```python
-# pyproject.toml for the implemented floe-storage-s3 plugin
+# pyproject.toml for the implemented floe-storage-minio plugin
 [project.entry-points."floe.storage"]
-s3 = "floe_storage_s3:S3Plugin"
+minio = "floe_storage_minio.plugin:MinIOStoragePlugin"
 ```
 
 ### Platform Configuration
@@ -261,7 +261,7 @@ s3 = "floe_storage_s3:S3Plugin"
 ```yaml
 # manifest.yaml
 plugins:
-  storage: s3  # Plugin name (discovered via entry points)
+  storage: minio  # Plugin name (discovered via entry points)
 
 # Compiler discovers plugin and invokes methods:
 # 1. get_pyiceberg_fileio() → creates FileIO for PyIceberg catalog
@@ -286,20 +286,20 @@ plugins:
 - **Abstraction overhead** - More files/classes than hardcoded URIs
 - **Plugin development** - Requires implementing ABC for each backend
 - **FileIO complexity** - PyIceberg FileIO API has learning curve
-- **Initial setup** - Must install plugin package (e.g., `pip install floe-storage-s3`)
+- **Initial setup** - Must install plugin package (e.g., `pip install floe-storage-minio`)
 
 ### Neutral
 
-- **Implemented storage plugin** - `floe-storage-s3` supports AWS S3 and S3-compatible endpoints such as MinIO
+- **Implemented storage plugin** - `floe-storage-minio` supports MinIO using S3-compatible protocol settings
 - **Provider-native plugins** - GCS or Azure plugins are future/provider-specific extensions, not alpha-shipped packages
 - **Migration path** - Existing hardcoded URIs can coexist during transition
 
 ## Implementation Details
 
-### Reference Implementation: S3Plugin
+### Reference Implementation: MinIOStoragePlugin
 
 ```python
-# floe-storage-s3/src/floe_storage_s3/plugin.py
+# floe-storage-minio/src/floe_storage_minio/plugin.py
 from __future__ import annotations
 
 import os
@@ -371,15 +371,16 @@ class S3Plugin(StoragePlugin):
         return "AWS_ACCESS_KEY_ID" in os.environ and "AWS_SECRET_ACCESS_KEY" in os.environ
 ```
 
-### S3-Compatible MinIO Configuration Example
+### MinIO Configuration Example
 
-MinIO uses the implemented `S3StoragePlugin` with a MinIO endpoint and
-path-style access. It is not a separate alpha-shipped storage plugin package.
+MinIO uses the implemented `MinIOStoragePlugin` with a MinIO endpoint and
+path-style access. The plugin keeps S3-compatible protocol settings for
+PyIceberg and runtime integrations.
 
 ```yaml
 plugins:
   storage:
-    type: s3
+    type: minio
     config:
       endpoint: http://floe-platform-minio:9000
       bucket: floe-data

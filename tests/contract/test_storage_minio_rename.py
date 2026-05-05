@@ -8,7 +8,35 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 OLD_PACKAGE_NAME = "floe-storage-" + "s3"
 OLD_MODULE_NAME = "floe_storage_" + "s3"
 OLD_PLUGIN_CLASS = "S3" + "StoragePlugin"
+OLD_CONFIG_CLASS = "S3" + "StorageConfig"
 NEW_PACKAGE_NAME = "floe-storage-minio"
+ACTIVE_SCAN_ROOTS = [
+    "pyproject.toml",
+    "plugins",
+    "tests",
+    "packages",
+    "docker",
+    ".github",
+    "demo",
+    "testing",
+    "scripts",
+    "docs",
+]
+IGNORED_SCAN_PARTS = {
+    ".venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    "docs/superpowers",
+}
+FORBIDDEN_REFERENCES = [
+    OLD_PACKAGE_NAME,
+    OLD_MODULE_NAME,
+    OLD_PLUGIN_CLASS,
+    OLD_CONFIG_CLASS,
+    "storage.type: " + "s3",
+    "type: " + "s3",
+]
 
 
 def test_storage_plugin_directory_is_strictly_minio() -> None:
@@ -35,3 +63,38 @@ def test_plugin_pyproject_uses_minio_entry_point_only() -> None:
     assert f'name = "{NEW_PACKAGE_NAME}"' in pyproject
     assert 'minio = "floe_storage_minio.plugin:MinIOStoragePlugin"' in pyproject
     assert f's3 = "{OLD_MODULE_NAME}.plugin:{OLD_PLUGIN_CLASS}"' not in pyproject
+
+
+def _active_scan_files() -> list[Path]:
+    files: list[Path] = []
+    for root_name in ACTIVE_SCAN_ROOTS:
+        root = REPO_ROOT / root_name
+        candidates = [root] if root.is_file() else root.rglob("*")
+        for candidate in candidates:
+            if not candidate.is_file():
+                continue
+            relative = candidate.relative_to(REPO_ROOT).as_posix()
+            if any(
+                relative == ignored or relative.startswith(f"{ignored}/")
+                for ignored in IGNORED_SCAN_PARTS
+            ):
+                continue
+            files.append(candidate)
+    return files
+
+
+def test_active_references_do_not_use_old_s3_plugin_names() -> None:
+    """Active docs, code, and config must not reference the old S3 plugin."""
+    matches: list[str] = []
+    for path in _active_scan_files():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            for forbidden in FORBIDDEN_REFERENCES:
+                if forbidden in line:
+                    matches.append(f"{path.relative_to(REPO_ROOT)}:{line_number}: {forbidden}")
+
+    assert matches == []

@@ -67,7 +67,7 @@ For production on AWS, use IAM Roles for Service Accounts (IRSA):
 ```yaml
 # manifest.yaml
 storage:
-  type: s3
+  type: minio
   warehouse_path: s3://my-company-data-lake/floe/iceberg
   config:
     region: us-east-1

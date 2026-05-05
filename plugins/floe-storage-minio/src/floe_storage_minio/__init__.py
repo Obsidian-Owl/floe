@@ -21,7 +21,6 @@ from floe_storage_minio.config import MinIOStorageConfig
 from floe_storage_minio.plugin import MinIOStoragePlugin
 
 __all__ = [
-    "__version__",
     "MinIOStorageConfig",
     "MinIOStoragePlugin",
 ]

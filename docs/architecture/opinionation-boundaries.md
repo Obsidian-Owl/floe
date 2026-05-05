@@ -165,7 +165,7 @@ plugins:
   compute: duckdb                 # Alpha-supported reference path
   orchestrator: dagster           # Alpha-supported reference path
   catalog: polaris                # Alpha-supported reference path
-  storage: s3                     # S3-compatible storage plugin; demo uses MinIO
+  storage: minio                  # MinIO storage plugin; uses S3-compatible protocol fields
   telemetry_backend: jaeger       # Alpha-supported telemetry backend
   lineage_backend: marquez        # Alpha-supported lineage backend
   semantic_layer: cube            # Reference implementation
