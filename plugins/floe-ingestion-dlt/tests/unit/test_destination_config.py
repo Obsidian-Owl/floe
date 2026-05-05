@@ -387,6 +387,71 @@ def test_health_check_distinguishes_object_storage_unreachable(
     assert status.details["object_storage_error"] == "connection refused"
 
 
+def test_health_check_uses_single_timeout_budget_across_catalog_and_storage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catalog and object-storage probes share one health_check wall-clock budget."""
+    catalog_timeouts: list[float] = []
+    object_storage_timeouts: list[float] = []
+    release_object_storage = threading.Event()
+
+    def slow_catalog_check(_catalog_config: dict[str, Any], timeout: float) -> None:
+        catalog_timeouts.append(timeout)
+        threading.Event().wait(0.16)
+        return None
+
+    def blocking_object_storage_check(
+        _catalog_config: dict[str, Any],
+        timeout: float,
+    ) -> str | None:
+        object_storage_timeouts.append(timeout)
+        release_object_storage.wait(1.5)
+        return f"TimeoutError: object_storage health check exceeded {timeout}s"
+
+    plugin = DltIngestionPlugin()
+    plugin.configure(_plugin_config({"uri": "http://polaris:8181/api/catalog", "bucket": "wh"}))
+    plugin.startup()
+    monkeypatch.setattr(plugin, "_check_catalog_reachable", slow_catalog_check)
+    monkeypatch.setattr(plugin, "_check_object_storage_reachable", blocking_object_storage_check)
+
+    start = plugin_module.time.perf_counter()
+    status = plugin.health_check(timeout=0.2)
+    elapsed = plugin_module.time.perf_counter() - start
+
+    release_object_storage.set()
+
+    assert elapsed < 0.3
+    assert status.state is HealthState.UNHEALTHY
+    assert status.details["reason"] == "object_storage_unreachable"
+    assert len(catalog_timeouts) == 1
+    assert 0.19 <= catalog_timeouts[0] <= 0.2
+    assert len(object_storage_timeouts) == 1
+    assert 0 < object_storage_timeouts[0] < 0.08
+
+
+def test_health_check_reports_non_s3_object_storage_as_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-S3 bucket URL is not reported as reachable when no storage probe runs."""
+    plugin = DltIngestionPlugin()
+    plugin.configure(
+        _plugin_config(
+            {
+                "uri": "http://polaris:8181/api/catalog",
+                "bucket_url": "file:///tmp/floe-warehouse",
+            }
+        )
+    )
+    plugin.startup()
+    monkeypatch.setattr(plugin, "_check_catalog_reachable", lambda *_args, **_kwargs: None)
+
+    status = plugin.health_check()
+
+    assert status.state is HealthState.HEALTHY
+    assert status.details["catalog_check"] == "reachable"
+    assert status.details["object_storage_check"] == "skipped_non_s3"
+
+
 def test_catalog_health_check_wall_clock_timeout_does_not_accumulate_workers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -395,7 +460,7 @@ def test_catalog_health_check_wall_clock_timeout_does_not_accumulate_workers(
 
     class BlockingClient:
         def __init__(self, *, timeout: float) -> None:
-            assert timeout == 0.1
+            assert 0 < timeout <= 0.1
 
         def __enter__(self) -> BlockingClient:
             return self
@@ -415,19 +480,22 @@ def test_catalog_health_check_wall_clock_timeout_does_not_accumulate_workers(
     start = plugin_module.time.perf_counter()
     status = plugin.health_check(timeout=0.1)
     elapsed = plugin_module.time.perf_counter() - start
+    release_probe.set()
 
     assert elapsed < 0.75
     assert status.state is HealthState.UNHEALTHY
     assert status.details["reason"] == "catalog_unreachable"
-    assert "catalog health check exceeded 0.1s" in status.details["catalog_error"]
+    assert "catalog health check exceeded" in status.details["catalog_error"]
     assert (
         len([thread for thread in threading.enumerate() if thread.name.startswith("dlt-health")])
-        <= 1
+        <= 2
     )
-    release_probe.set()
     slot = DltIngestionPlugin._health_check_slot("catalog")
     assert slot.acquire(timeout=0.75)
     slot.release()
+    budget_slot = DltIngestionPlugin._health_check_slot("catalog_budget")
+    assert budget_slot.acquire(timeout=0.75)
+    budget_slot.release()
 
 
 def test_catalog_health_check_timeout_applies_from_worker_thread() -> None:

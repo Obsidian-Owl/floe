@@ -310,11 +310,16 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 return status
 
             catalog_config = self._configured_catalog_config()
-            object_storage_configured = (
-                bool(self._bucket_url(catalog_config)) if catalog_config else False
-            )
+            deadline = start + effective_timeout
+            bucket_url = self._bucket_url(catalog_config) if catalog_config else None
+            object_storage_check = self._object_storage_check_state(bucket_url)
             if catalog_config:
-                catalog_error = self._check_catalog_reachable(catalog_config, effective_timeout)
+                catalog_error = self._call_health_probe_with_deadline(
+                    self._check_catalog_reachable,
+                    catalog_config,
+                    deadline,
+                    check_name="catalog",
+                )
                 if catalog_error is not None:
                     elapsed_ms = (time.perf_counter() - start) * 1000
                     return HealthStatus(
@@ -329,23 +334,27 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                         },
                     )
 
-                object_storage_error = self._check_object_storage_reachable(
-                    catalog_config,
-                    effective_timeout,
-                )
-                if object_storage_error is not None:
-                    elapsed_ms = (time.perf_counter() - start) * 1000
-                    return HealthStatus(
-                        state=HealthState.UNHEALTHY,
-                        message="Object storage is unreachable",
-                        details={
-                            "reason": "object_storage_unreachable",
-                            "object_storage_error": object_storage_error,
-                            "response_time_ms": elapsed_ms,
-                            "checked_at": checked_at,
-                            "timeout": effective_timeout,
-                        },
+                if object_storage_check == "configured":
+                    object_storage_error = self._call_health_probe_with_deadline(
+                        self._check_object_storage_reachable,
+                        catalog_config,
+                        deadline,
+                        check_name="object_storage",
                     )
+                    if object_storage_error is not None:
+                        elapsed_ms = (time.perf_counter() - start) * 1000
+                        return HealthStatus(
+                            state=HealthState.UNHEALTHY,
+                            message="Object storage is unreachable",
+                            details={
+                                "reason": "object_storage_unreachable",
+                                "object_storage_error": object_storage_error,
+                                "response_time_ms": elapsed_ms,
+                                "checked_at": checked_at,
+                                "timeout": effective_timeout,
+                            },
+                        )
+                    object_storage_check = "reachable"
 
             elapsed_ms = (time.perf_counter() - start) * 1000
             status = HealthStatus(
@@ -355,9 +364,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     "dlt_version": self._dlt_version,
                     "started": self._started,
                     "catalog_check": "reachable" if catalog_config else "not_configured",
-                    "object_storage_check": "reachable"
-                    if object_storage_configured
-                    else "not_configured",
+                    "object_storage_check": object_storage_check,
                     "response_time_ms": elapsed_ms,
                     "checked_at": checked_at,
                     "timeout": effective_timeout,
@@ -923,6 +930,44 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             return None
         except Exception as exc:
             return f"{type(exc).__name__}: {sanitize_error_message(str(exc))}"
+
+    @staticmethod
+    def _object_storage_check_state(bucket_url: str | None) -> str:
+        if bucket_url is None:
+            return "not_configured"
+        if not bucket_url.startswith("s3://"):
+            return "skipped_non_s3"
+        return "configured"
+
+    def _call_health_probe_with_deadline(
+        self,
+        probe: Callable[[dict[str, Any], float], str | None],
+        catalog_config: dict[str, Any],
+        deadline: float,
+        *,
+        check_name: str,
+    ) -> str | None:
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0:
+            return f"TimeoutError: {check_name} health check exceeded 0s"
+
+        result: list[str | None] = []
+
+        def _probe() -> None:
+            result.append(probe(catalog_config, remaining))
+
+        try:
+            self._run_health_check_with_timeout(
+                _probe,
+                remaining,
+                check_name=f"{check_name}_budget",
+            )
+        except TimeoutError:
+            return f"TimeoutError: {check_name} health check exceeded {remaining}s"
+        except Exception as exc:
+            return f"{type(exc).__name__}: {sanitize_error_message(str(exc))}"
+
+        return result[0] if result else None
 
     @classmethod
     def _run_health_check_with_timeout(
