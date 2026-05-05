@@ -135,8 +135,6 @@ jobs:
     if: github.ref_type == 'tag' && !(inputs.dry_run || false)
     runs-on: ubuntu-latest
     environment: pypi
-    permissions:
-      id-token: write
 
     steps:
       - name: Download build artifacts
@@ -160,6 +158,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@76f52bc884231f62b54a51d261f4731310329898 # v1.12.4
         with:
           packages-dir: dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
           print-hash: true
           verbose: true
 
