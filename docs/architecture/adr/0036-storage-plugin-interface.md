@@ -316,11 +316,11 @@ class MinIOStoragePlugin(StoragePlugin):
     floe_api_version = "2.0.0"
 
     def __init__(self, bucket: str = "floe-warehouse", region: str = "us-east-1"):
-        """Initialize S3 plugin.
+        """Initialize MinIO storage plugin.
 
         Args:
-            bucket: S3 bucket name
-            region: AWS region
+            bucket: MinIO bucket name
+            region: S3-compatible region identifier
         """
         self.bucket = bucket
         self.region = region

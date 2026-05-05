@@ -11,6 +11,7 @@ OLD_MODULE_NAME = "floe_storage_" + "s3"
 OLD_PLUGIN_CLASS = "S3" + "StoragePlugin"
 OLD_CONFIG_CLASS = "S3" + "StorageConfig"
 OLD_SHORT_MINIO_CLASS = "MinIO" + "Plugin"
+OLD_STORAGE_TYPE = "s" + "3"
 NEW_PACKAGE_NAME = "floe-storage-minio"
 ACTIVE_SCAN_ROOTS = [
     "pyproject.toml",
@@ -42,16 +43,21 @@ FORBIDDEN_REFERENCES = [
     OLD_PLUGIN_CLASS,
     OLD_CONFIG_CLASS,
     OLD_SHORT_MINIO_CLASS,
-    "storage.type: " + "s3",
+    "storage.type: " + OLD_STORAGE_TYPE,
 ]
 FORBIDDEN_PATTERNS = [
-    re.compile(r"\bstorage\s*:\s*" + "s3" + r"\b"),
-    re.compile(r"\bstorage\s*:\s*\[[^\]]*\b" + "s3" + r"\b"),
-    re.compile(r"\btype\s*:\s*" + "s3" + r"\b"),
-    re.compile(r"\btype\s*:\s*\{\s*[\"']" + "s3" + r"[\"']\s*\}"),
-    re.compile(r"[\"']type[\"']\s*:\s*[\"']" + "s3" + r"[\"']"),
-    re.compile(r"\btype\s*=\s*[\"']" + "s3" + r"[\"']"),
-    re.compile(r"\bstorage\s*=\s*[\"']" + "s3" + r"[\"']"),
+    re.compile(r"\bstorage\s*:\s*" + OLD_STORAGE_TYPE + r"\b"),
+    re.compile(r"\bstorage\s*:\s*\[[^\]]*\b" + OLD_STORAGE_TYPE + r"\b"),
+    re.compile(r"\bstorage\s*:\s*\{\s*[\"']" + OLD_STORAGE_TYPE + r"[\"']\s*\}"),
+    re.compile(r"\btype\s*:\s*" + OLD_STORAGE_TYPE + r"\b"),
+    re.compile(r"\btype\s*:\s*\{\s*[\"']" + OLD_STORAGE_TYPE + r"[\"']\s*\}"),
+    re.compile(r"\btype\s*:\s*f[\"']" + OLD_STORAGE_TYPE + r"[\"']"),
+    re.compile(r"[\"']type[\"']\s*:\s*[\"']" + OLD_STORAGE_TYPE + r"[\"']"),
+    re.compile(r"[\"']type[\"']\s*:\s*f[\"']" + OLD_STORAGE_TYPE + r"[\"']"),
+    re.compile(r"\btype\s*=\s*[\"']" + OLD_STORAGE_TYPE + r"[\"']"),
+    re.compile(r"\btype\s*=\s*f[\"']" + OLD_STORAGE_TYPE + r"[\"']"),
+    re.compile(r"\bstorage\s*=\s*[\"']" + OLD_STORAGE_TYPE + r"[\"']"),
+    re.compile(r"\bstorage\s*=\s*f[\"']" + OLD_STORAGE_TYPE + r"[\"']"),
 ]
 
 
@@ -79,6 +85,24 @@ def test_plugin_pyproject_uses_minio_entry_point_only() -> None:
     assert f'name = "{NEW_PACKAGE_NAME}"' in pyproject
     assert 'minio = "floe_storage_minio.plugin:MinIOStoragePlugin"' in pyproject
     assert f's3 = "{OLD_MODULE_NAME}.plugin:{OLD_PLUGIN_CLASS}"' not in pyproject
+
+
+def test_forbidden_patterns_cover_python_and_f_string_selection_forms() -> None:
+    """The active scan must catch old plugin selection forms beyond YAML."""
+    old_type = OLD_STORAGE_TYPE
+    forbidden_lines = [
+        f'PluginSelection(type="{old_type}")',
+        f"PluginRef(type='{old_type}')",
+        f'selection = {{"type": "{old_type}"}}',
+        f'selection = {{"type": f"{old_type}"}}',
+        f'PluginSelection(type=f"{old_type}")',
+        f'storage="{old_type}"',
+        f'storage=f"{old_type}"',
+        f'storage: {{"{old_type}"}}',
+    ]
+
+    for line in forbidden_lines:
+        assert any(pattern.search(line) for pattern in FORBIDDEN_PATTERNS), line
 
 
 def _active_scan_files() -> list[Path]:

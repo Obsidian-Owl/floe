@@ -678,7 +678,7 @@ class StoragePlugin(ABC):
     - Helm values for deploying storage services (if self-hosted)
     """
 
-    name: str  # e.g., "s3", "gcs", "azure", "minio"
+    name: str  # e.g., "minio", "gcs", "azure-blob"
     version: str
     floe_api_version: str
 
