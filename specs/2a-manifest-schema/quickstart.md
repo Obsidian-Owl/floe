@@ -43,7 +43,7 @@ plugins:
     connection_secret_ref: polaris-credentials
 
   storage:
-    type: s3
+    type: minio
     config:
       bucket: acme-data-lake
       region: us-east-1
@@ -82,7 +82,7 @@ approved_plugins:
   compute: [duckdb, snowflake]
   orchestrator: [dagster]
   catalog: [polaris, glue]
-  storage: [s3, gcs]
+  storage: [minio, gcs]
   secrets: [kubernetes, external-secrets]
 
 governance:
@@ -131,7 +131,7 @@ plugins:
       database: sales_catalog
 
   storage:
-    type: s3
+    type: minio
     config:
       bucket: acme-sales-data
       prefix: sales/

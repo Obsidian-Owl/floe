@@ -378,7 +378,7 @@ table = pyiceberg_catalog.load_table("bronze.customers")
 
 ```python
 # IcebergTableManager gets FileIO from StoragePlugin
-storage_plugin = plugin_registry.get(PluginType.STORAGE, "s3")
+storage_plugin = plugin_registry.get(PluginType.STORAGE, "minio")
 fileio = storage_plugin.get_pyiceberg_fileio()
 warehouse_uri = storage_plugin.get_warehouse_uri("bronze")
 ```
@@ -465,7 +465,7 @@ These findings emerged during integration analysis after the initial research wa
 
 ### Finding 4: No Concrete StoragePlugin Exists
 
-**Issue**: The `floe.storage` entry point group has zero registrations. IcebergTableManager requires a StoragePlugin for FileIO configuration, but no implementation (e.g., floe-storage-s3) has been built.
+**Issue**: The `floe.storage` entry point group has zero registrations. IcebergTableManager requires a StoragePlugin for FileIO configuration, but no implementation (e.g., floe-storage-minio) has been built.
 
 **Resolution**: A MockStoragePlugin test fixture (T114) is created for testing. The wiring code will gracefully degrade when no StoragePlugin is configured (T117 negative test). A concrete implementation is out of scope for Epic 4D but documented as a dependency.
 

@@ -69,7 +69,7 @@ def _create_artifacts_with_catalog(tmp_path: Path) -> Path:
         "config": {"uri": "http://unreachable-polaris:8181/api/catalog"},
     }
     artifacts_data["plugins"]["storage"] = {
-        "type": "s3",
+        "type": "minio",
         "version": "1.0.0",
         "config": {"endpoint": "http://unreachable-minio:9000"},
     }

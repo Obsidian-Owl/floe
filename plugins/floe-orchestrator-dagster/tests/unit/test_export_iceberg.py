@@ -667,7 +667,7 @@ class TestExportDbtToIceberg:
         )
         registry.configure.assert_any_call(
             PluginType.STORAGE,
-            "s3",
+            "minio",
             {"endpoint": "http://minio:9000", "access-key-id": "test"},
         )
         catalog_plugin.connect.assert_not_called()
@@ -743,7 +743,7 @@ class TestExportDbtToIceberg:
             )
 
         registry.configure.assert_any_call(PluginType.CATALOG, "polaris", {})
-        registry.configure.assert_any_call(PluginType.STORAGE, "s3", {})
+        registry.configure.assert_any_call(PluginType.STORAGE, "minio", {})
         catalog_plugin.connect.assert_not_called()
 
     @pytest.mark.requirement("AC-4")
@@ -1389,7 +1389,7 @@ class TestExportDbtToIceberg:
 
         def connect_side_effect(*_args: object, **_kwargs: object) -> MagicMock:
             registry.configure.assert_any_call(PluginType.CATALOG, "polaris", {})
-            registry.configure.assert_any_call(PluginType.STORAGE, "s3", {})
+            registry.configure.assert_any_call(PluginType.STORAGE, "minio", {})
             return MagicMock()
 
         registry.get.side_effect = get_side_effect

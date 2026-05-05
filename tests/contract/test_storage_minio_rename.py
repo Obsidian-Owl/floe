@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +22,7 @@ ACTIVE_SCAN_ROOTS = [
     "testing",
     "scripts",
     "docs",
+    "specs",
 ]
 IGNORED_SCAN_PARTS = {
     ".venv",
@@ -35,7 +37,12 @@ FORBIDDEN_REFERENCES = [
     OLD_PLUGIN_CLASS,
     OLD_CONFIG_CLASS,
     "storage.type: " + "s3",
-    "type: " + "s3",
+]
+FORBIDDEN_PATTERNS = [
+    re.compile(r"\bstorage\s*:\s*" + "s3" + r"\b"),
+    re.compile(r"\bstorage\s*:\s*\[[^\]]*\b" + "s3" + r"\b"),
+    re.compile(r"\btype\s*:\s*" + "s3" + r"\b"),
+    re.compile(r"[\"']type[\"']\s*:\s*[\"']" + "s3" + r"[\"']"),
 ]
 
 
@@ -96,5 +103,10 @@ def test_active_references_do_not_use_old_s3_plugin_names() -> None:
             for forbidden in FORBIDDEN_REFERENCES:
                 if forbidden in line:
                     matches.append(f"{path.relative_to(REPO_ROOT)}:{line_number}: {forbidden}")
+            for pattern in FORBIDDEN_PATTERNS:
+                if pattern.search(line):
+                    matches.append(
+                        f"{path.relative_to(REPO_ROOT)}:{line_number}: {pattern.pattern}"
+                    )
 
     assert matches == []

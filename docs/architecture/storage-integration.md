@@ -341,10 +341,10 @@ data_architecture:
 ```yaml
 # Full storage configuration schema
 storage:
-  type: minio | s3 | gcs | azure
+  type: minio | gcs | azure
   warehouse_path: string  # URI to Iceberg warehouse root
   config:
-    # MinIO / S3
+    # MinIO / S3 protocol
     endpoint: string      # S3-compatible endpoint (MinIO only)
     region: string        # AWS region
     access_key_ref: string  # K8s Secret reference

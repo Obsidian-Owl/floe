@@ -281,7 +281,7 @@
             }
           ],
           "default": null,
-          "description": "Object storage (s3, gcs, azure-blob, minio)"
+          "description": "Object storage (minio, gcs, azure-blob)"
         },
         "semantic_layer": {
           "anyOf": [

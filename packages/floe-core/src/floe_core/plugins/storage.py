@@ -10,10 +10,10 @@ are responsible for:
 
 Example:
     >>> from floe_core.plugins.storage import StoragePlugin
-    >>> class S3Plugin(StoragePlugin):
+    >>> class MinIOPlugin(StoragePlugin):
     ...     @property
     ...     def name(self) -> str:
-    ...         return "s3"
+    ...         return "minio"
     ...     # ... implement other abstract methods
 """
 
@@ -57,8 +57,8 @@ class StoragePlugin(PluginMetadata):
     """Abstract base class for object storage plugins.
 
     StoragePlugin extends PluginMetadata with storage-specific methods
-    for managing object storage backends. Implementations include S3,
-    GCS, Azure Blob Storage, and MinIO.
+    for managing object storage backends. Implementations include MinIO,
+    GCS, and Azure Blob Storage.
 
     Concrete plugins must implement:
         - All abstract properties from PluginMetadata (name, version, floe_api_version)
@@ -72,10 +72,10 @@ class StoragePlugin(PluginMetadata):
         - get_pyiceberg_catalog_config() method
 
     Example:
-        >>> class S3Plugin(StoragePlugin):
+        >>> class MinIOPlugin(StoragePlugin):
         ...     @property
         ...     def name(self) -> str:
-        ...         return "s3"
+        ...         return "minio"
         ...
         ...     @property
         ...     def version(self) -> str:

@@ -13,7 +13,7 @@ Example:
     >>>
     >>> manager = IcebergTableManager(
     ...     catalog_plugin=polaris_plugin,
-    ...     storage_plugin=s3_plugin,
+    ...     storage_plugin=minio_plugin,
     ...     config=IcebergTableManagerConfig(max_commit_retries=3),
     ... )
     >>> table = manager.create_table(table_config)
@@ -85,7 +85,7 @@ class IcebergTableManager:
     Example:
         >>> manager = IcebergTableManager(
         ...     catalog_plugin=polaris_plugin,
-        ...     storage_plugin=s3_plugin,
+        ...     storage_plugin=minio_plugin,
         ... )
         >>> manager.table_exists("bronze.customers")
         False
@@ -116,7 +116,7 @@ class IcebergTableManager:
             >>> from floe_iceberg import IcebergTableManager, IcebergTableManagerConfig
             >>> manager = IcebergTableManager(
             ...     catalog_plugin=polaris_plugin,
-            ...     storage_plugin=s3_plugin,
+            ...     storage_plugin=minio_plugin,
             ...     config=IcebergTableManagerConfig(max_commit_retries=5),
             ... )
         """

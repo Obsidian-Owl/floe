@@ -96,7 +96,7 @@ class StoragePlugin(ABC):
     """
 
     # Plugin metadata
-    name: str                 # e.g., "s3", "gcs", "azure", "minio"
+    name: str                 # e.g., "minio", "gcs", "azure"
     version: str              # Plugin version (semver)
     floe_api_version: str     # Supported floe-core API version
 
@@ -107,7 +107,7 @@ class StoragePlugin(ABC):
         Returns:
             FileIO instance (S3FileIO, GCSFileIO, AzureFileIO, etc.)
 
-        Example (S3):
+        Example (MinIO using S3 protocol):
             from pyiceberg.io.pyarrow import PyArrowFileIO
             return PyArrowFileIO(
                 {
@@ -308,10 +308,10 @@ from pyiceberg.io.pyarrow import PyArrowFileIO
 from floe_core.plugins import StoragePlugin
 
 
-class S3Plugin(StoragePlugin):
-    """Storage plugin for AWS S3."""
+class MinIOPlugin(StoragePlugin):
+    """Storage plugin for MinIO."""
 
-    name = "s3"
+    name = "minio"
     version = "0.1.0"
     floe_api_version = "2.0.0"
 
@@ -592,7 +592,7 @@ warehouse = "s3://my-bucket/warehouse"
 ```python
 # ❌ ANTI-PATTERN: Coupled to core
 def get_warehouse_uri(storage_type: str) -> str:
-    if storage_type == "s3":
+    if storage_type == "minio":
         return "s3://bucket/warehouse"
     elif storage_type == "gcs":
         return "gs://bucket/warehouse"
@@ -603,7 +603,7 @@ def get_warehouse_uri(storage_type: str) -> str:
 
 ```python
 # ✅ CORRECT: Composable, extensible
-storage_plugin = registry.discover("floe.storage")["s3"]
+storage_plugin = registry.discover("floe.storage")["minio"]
 fileio = storage_plugin.get_pyiceberg_fileio()
 warehouse = storage_plugin.get_warehouse_uri("bronze")
 ```

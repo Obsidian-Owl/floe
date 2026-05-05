@@ -262,7 +262,7 @@ plugins:
   orchestrator: dagster              # HOW jobs schedule
   dbt_runtime: local                 # WHERE dbt runs ← NEW
   catalog: polaris                   # WHERE metadata stores
-  storage: s3                        # WHERE data stores
+  storage: minio                     # WHERE data stores
   observability: jaeger              # WHERE traces send
   semantic_layer: cube               # HOW data consumed
   ingestion: dlt                     # HOW data ingested

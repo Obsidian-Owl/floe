@@ -56,7 +56,7 @@ def _make_required_plugins() -> dict[str, Any]:
             },
         },
         "storage": {
-            "type": "s3",
+            "type": "minio",
             "config": {
                 "endpoint": ServiceEndpoint("minio").url,
                 "bucket": "floe-iceberg",

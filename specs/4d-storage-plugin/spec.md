@@ -319,7 +319,7 @@ CompiledArtifacts (floe-core)
 ### Current Gaps (to be addressed in implementation)
 
 1. **DagsterOrchestratorPlugin.create_definitions()** does not yet wire IcebergIOManager into the resource dict. Phase 14 (Wiring & Integration) tasks address this.
-2. **No concrete StoragePlugin implementations exist** — the `floe.storage` entry point group has zero registrations. IcebergTableManager can be tested with a MockStoragePlugin fixture until a real implementation (e.g., floe-storage-s3) is built.
+2. **No concrete StoragePlugin implementations exist** — the `floe.storage` entry point group has zero registrations. IcebergTableManager can be tested with a MockStoragePlugin fixture until a real implementation (e.g., floe-storage-minio) is built.
 3. **DriftDetector soft circular dependency** — DriftDetector in `packages/floe-iceberg/` imports from `floe_core` which may transitively reference iceberg types. Mitigated via lazy imports; a formal `DriftDetectorProtocol` in floe-core is a future improvement.
 
 ### Component Boundary Summary
