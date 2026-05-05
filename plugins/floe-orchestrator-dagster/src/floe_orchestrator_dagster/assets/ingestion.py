@@ -217,6 +217,8 @@ def _validate_required_source_fields(source_config: Mapping[str, Any]) -> None:
 
 def _is_source_like(source_ref: Any) -> bool:
     """Return True for lightweight dlt-like source/resource objects."""
+    if isinstance(source_ref, str | bytes | int | float | bool | dict | list | tuple | set):
+        return False
     return callable(source_ref) or any(
         hasattr(source_ref, attr)
         for attr in (

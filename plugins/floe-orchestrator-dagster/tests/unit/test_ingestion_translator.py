@@ -483,6 +483,86 @@ class TestCreateIngestionAssets:
             asset_def(context)
 
     @pytest.mark.requirement("4F-FR-060")
+    def test_source_asset_string_source_value_uses_source_builder(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """String JSON source values must not be treated as executable sources."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        built_source = SourceLike()
+        build_dlt_source = MagicMock(return_value=built_source)
+        monkeypatch.setattr(
+            "floe_orchestrator_dagster.assets.ingestion.build_dlt_source",
+            build_dlt_source,
+        )
+        source_config = {
+            "name": "users",
+            "source_type": "rest_api",
+            "source_config": {"source": "https://example.test/users"},
+            "destination_table": "bronze.users",
+        }
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {"sources": [source_config]}
+        ingestion_plugin = MagicMock()
+        ingestion_plugin.name = "dlt"
+        ingestion_plugin.version = "0.1.0"
+        pipeline = object()
+        ingestion_plugin.create_pipeline.return_value = pipeline
+        ingestion_plugin.run.return_value = IngestionResult(success=True)
+
+        asset_def = create_ingestion_assets(mock_ref, project_dir=tmp_path)[0]
+        context = build_op_context(resources={"ingestion": ingestion_plugin})
+
+        asset_def(context)
+
+        build_dlt_source.assert_called_once_with(source_config, project_dir=tmp_path)
+        assert ingestion_plugin.run.call_args.kwargs["source"] is built_source
+
+    @pytest.mark.requirement("4F-FR-060")
+    def test_source_asset_dict_source_value_uses_source_builder(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Dict JSON source values must not be treated as executable sources."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        built_source = SourceLike()
+        build_dlt_source = MagicMock(return_value=built_source)
+        monkeypatch.setattr(
+            "floe_orchestrator_dagster.assets.ingestion.build_dlt_source",
+            build_dlt_source,
+        )
+        source_config = {
+            "name": "users",
+            "source_type": "rest_api",
+            "source_config": {"source": {"url": "https://example.test/users"}},
+            "destination_table": "bronze.users",
+        }
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {"sources": [source_config]}
+        ingestion_plugin = MagicMock()
+        ingestion_plugin.name = "dlt"
+        ingestion_plugin.version = "0.1.0"
+        pipeline = object()
+        ingestion_plugin.create_pipeline.return_value = pipeline
+        ingestion_plugin.run.return_value = IngestionResult(success=True)
+
+        asset_def = create_ingestion_assets(mock_ref, project_dir=tmp_path)[0]
+        context = build_op_context(resources={"ingestion": ingestion_plugin})
+
+        asset_def(context)
+
+        build_dlt_source.assert_called_once_with(source_config, project_dir=tmp_path)
+        assert ingestion_plugin.run.call_args.kwargs["source"] is built_source
+
+    @pytest.mark.requirement("4F-FR-060")
     def test_source_asset_rejects_plain_object_source(self, tmp_path: Path) -> None:
         """Plain object() is not enough to bypass JSON source construction."""
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
