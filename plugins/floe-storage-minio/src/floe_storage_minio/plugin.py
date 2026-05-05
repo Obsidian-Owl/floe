@@ -1,22 +1,22 @@
-"""S3StoragePlugin implementation for floe.
+"""MinIOStoragePlugin implementation for floe.
 
 This module provides the concrete StoragePlugin implementation for
-S3-compatible object storage (AWS S3, MinIO, etc.).
+MinIO object storage using S3-compatible protocol settings.
 
 Example:
-    >>> from floe_storage_s3.plugin import S3StoragePlugin
-    >>> from floe_storage_s3.config import S3StorageConfig
-    >>> config = S3StorageConfig(
+    >>> from floe_storage_minio.plugin import MinIOStoragePlugin
+    >>> from floe_storage_minio.config import MinIOStorageConfig
+    >>> config = MinIOStorageConfig(
     ...     endpoint="http://minio:9000",
     ...     bucket="floe-data",
     ... )
-    >>> plugin = S3StoragePlugin(config=config)
+    >>> plugin = MinIOStoragePlugin(config=config)
     >>> plugin.name
-    's3'
+    'minio'
 
 Requirements Covered:
-    - AC-1: S3StoragePlugin exists and is discoverable
-    - AC-2: S3StorageConfig validates manifest config
+    - AC-1: MinIOStoragePlugin exists and is discoverable
+    - AC-2: MinIOStorageConfig validates manifest config
 """
 
 from __future__ import annotations
@@ -26,49 +26,49 @@ from typing import TYPE_CHECKING, Any, cast
 
 from floe_core.plugins.storage import StoragePlugin
 
-from floe_storage_s3.config import S3StorageConfig
+from floe_storage_minio.config import MinIOStorageConfig
 
 if TYPE_CHECKING:
     from floe_core.plugins.storage import FileIO
     from pydantic import BaseModel
 
-NOT_CONFIGURED_MSG = "S3StoragePlugin not configured — instantiate with config parameter"
-TRACER_NAME = "floe.storage.s3"
+NOT_CONFIGURED_MSG = "MinIOStoragePlugin not configured - instantiate with config parameter"
+TRACER_NAME = "floe.storage.minio"
 
 
-class S3StoragePlugin(StoragePlugin):
-    """S3-compatible storage plugin implementing the StoragePlugin ABC.
+class MinIOStoragePlugin(StoragePlugin):
+    """MinIO storage plugin implementing the StoragePlugin ABC.
 
-    This plugin provides object storage functionality via S3-compatible
-    backends (AWS S3, MinIO, etc.), including PyIceberg FileIO creation,
+    This plugin provides object storage functionality via MinIO, including
+    PyIceberg FileIO creation using S3-compatible protocol keys,
     warehouse URI generation, and integration configs for dbt and Dagster.
 
     Attributes:
-        config: The S3StorageConfig instance for this plugin, or None if
+        config: The MinIOStorageConfig instance for this plugin, or None if
             not yet configured.
 
     Example:
-        >>> config = S3StorageConfig(endpoint="http://minio:9000", bucket="data")
-        >>> plugin = S3StoragePlugin(config=config)
+        >>> config = MinIOStorageConfig(endpoint="http://minio:9000", bucket="data")
+        >>> plugin = MinIOStoragePlugin(config=config)
         >>> plugin.get_warehouse_uri("bronze")
         's3://data/bronze/'
     """
 
-    def __init__(self, config: S3StorageConfig | None = None) -> None:
-        """Initialize the S3 storage plugin.
+    def __init__(self, config: MinIOStorageConfig | None = None) -> None:
+        """Initialize the MinIO storage plugin.
 
         Args:
-            config: Configuration for S3 storage. When None, the plugin
+            config: Configuration for MinIO storage. When None, the plugin
                 is in an unconfigured state (methods will raise RuntimeError).
         """
         super().__init__()
         self._config = config
 
-    def _require_config(self) -> S3StorageConfig:
+    def _require_config(self) -> MinIOStorageConfig:
         """Return config or raise if not configured.
 
         Returns:
-            The validated S3StorageConfig.
+            The validated MinIOStorageConfig.
 
         Raises:
             PluginConfigurationError: If plugin is not configured.
@@ -77,10 +77,10 @@ class S3StoragePlugin(StoragePlugin):
             from floe_core.plugin_errors import PluginConfigurationError
 
             raise PluginConfigurationError(
-                "s3",
-                [{"field": "_config", "message": "Plugin 's3' not configured"}],
+                "minio",
+                [{"field": "_config", "message": "Plugin 'minio' not configured"}],
             )
-        return cast(S3StorageConfig, self._config)
+        return cast(MinIOStorageConfig, self._config)
 
     # =========================================================================
     # PluginMetadata abstract properties
@@ -91,9 +91,9 @@ class S3StoragePlugin(StoragePlugin):
         """Return the plugin name.
 
         Returns:
-            The plugin identifier "s3".
+            The plugin identifier "minio".
         """
-        return "s3"
+        return "minio"
 
     @property
     def version(self) -> str:
@@ -120,7 +120,7 @@ class S3StoragePlugin(StoragePlugin):
         Returns:
             Human-readable description of the plugin.
         """
-        return "S3-compatible object storage plugin for Iceberg data"
+        return "MinIO object storage plugin for Iceberg data"
 
     @property
     def tracer_name(self) -> str:
@@ -139,9 +139,9 @@ class S3StoragePlugin(StoragePlugin):
         """Return the configuration schema for this plugin.
 
         Returns:
-            The S3StorageConfig Pydantic model class.
+            The MinIOStorageConfig Pydantic model class.
         """
-        return S3StorageConfig
+        return MinIOStorageConfig
 
     # =========================================================================
     # StoragePlugin abstract methods

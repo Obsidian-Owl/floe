@@ -70,7 +70,7 @@ dependencies = [
     "floe-alert-alertmanager",
     "floe-alert-webhook",
     # Storage plugins
-    "floe-storage-s3",
+    "floe-storage-minio",
 ]
 
 [project.optional-dependencies]
@@ -121,7 +121,7 @@ floe-secrets-infisical = { path = "plugins/floe-secrets-infisical", editable = t
 floe-secrets-k8s = { path = "plugins/floe-secrets-k8s", editable = true }
 floe-rbac-k8s = { path = "plugins/floe-rbac-k8s", editable = true }
 floe-orchestrator-dagster = { path = "plugins/floe-orchestrator-dagster", editable = true }
-floe-storage-s3 = { path = "plugins/floe-storage-s3", editable = true }
+floe-storage-minio = { path = "plugins/floe-storage-minio", editable = true }
 floe-semantic-cube = { path = "plugins/floe-semantic-cube", editable = true }
 floe-dbt-core = { path = "plugins/floe-dbt-core", editable = true }
 floe-dbt-fusion = { path = "plugins/floe-dbt-fusion", editable = true }
@@ -146,6 +146,7 @@ pythonpath = [
     "plugins/floe-secrets-k8s/src",
     "plugins/floe-rbac-k8s/src",
     "plugins/floe-orchestrator-dagster/src",
+    "plugins/floe-storage-minio/src",
     "plugins/floe-dbt-core/src",
     "plugins/floe-dbt-fusion/src",
     "plugins/floe-network-security-k8s/src",

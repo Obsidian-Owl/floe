@@ -2042,9 +2042,9 @@ requires-dist = [
 ]
 
 [[package]]
-name = "floe-storage-s3"
+name = "floe-storage-minio"
 version = "0.1.0"
-source = { editable = "plugins/floe-storage-s3" }
+source = { editable = "plugins/floe-storage-minio" }
 dependencies = [
     { name = "floe-core" },
     { name = "pydantic" },
@@ -2132,7 +2132,7 @@ dependencies = [
     { name = "floe-secrets-infisical" },
     { name = "floe-secrets-k8s" },
     { name = "floe-semantic-cube" },
-    { name = "floe-storage-s3" },
+    { name = "floe-storage-minio" },
     { name = "floe-telemetry-console" },
     { name = "floe-telemetry-jaeger" },
     { name = "import-linter" },
@@ -2197,7 +2197,7 @@ requires-dist = [
     { name = "floe-secrets-infisical", editable = "plugins/floe-secrets-infisical" },
     { name = "floe-secrets-k8s", editable = "plugins/floe-secrets-k8s" },
     { name = "floe-semantic-cube", editable = "plugins/floe-semantic-cube" },
-    { name = "floe-storage-s3", editable = "plugins/floe-storage-s3" },
+    { name = "floe-storage-minio", editable = "plugins/floe-storage-minio" },
     { name = "floe-telemetry-console", editable = "plugins/floe-telemetry-console" },
     { name = "floe-telemetry-jaeger", editable = "plugins/floe-telemetry-jaeger" },
     { name = "import-linter", specifier = ">=2.0" },

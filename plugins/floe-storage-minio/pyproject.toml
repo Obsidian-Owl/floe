@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "floe-storage-s3"
+name = "floe-storage-minio"
 version = "0.1.0"
-description = "S3-compatible object storage plugin for the floe data platform"
+description = "MinIO object storage plugin for the floe data platform"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -42,18 +42,18 @@ Documentation = "https://github.com/Obsidian-Owl/floe/tree/main/docs"
 Repository = "https://github.com/Obsidian-Owl/floe"
 
 [project.entry-points."floe.storage"]
-s3 = "floe_storage_s3.plugin:S3StoragePlugin"
+minio = "floe_storage_minio.plugin:MinIOStoragePlugin"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/floe_storage_s3"]
+packages = ["src/floe_storage_minio"]
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""
 
 [tool.hatch.build]
 include = [
-    "src/floe_storage_s3/**/*.py",
-    "src/floe_storage_s3/py.typed",
+    "src/floe_storage_minio/**/*.py",
+    "src/floe_storage_minio/py.typed",
 ]
 
 [tool.mypy]
