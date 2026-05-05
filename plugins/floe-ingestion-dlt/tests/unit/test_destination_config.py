@@ -76,10 +76,10 @@ def test_destination_config_accepts_explicit_bucket_url() -> None:
     }
 
 
-def test_create_pipeline_passes_filesystem_destination_and_sets_pyiceberg_env(
+def test_create_pipeline_passes_filesystem_destination_without_leaking_pyiceberg_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Pipeline creation wires dlt filesystem destination and PyIceberg catalog env."""
+    """Pipeline creation wires dlt filesystem destination without mutating process env."""
     destination_calls: list[dict[str, Any]] = []
     pipeline_calls: list[dict[str, Any]] = []
     fake_destination = object()
@@ -153,7 +153,76 @@ def test_create_pipeline_passes_filesystem_destination_and_sets_pyiceberg_env(
     assert "PYICEBERG_CATALOG__POLARIS__S3__SECRET_ACCESS_KEY" not in os.environ
 
 
-def test_create_pipeline_restores_plugin_env_when_existing_value_is_present(
+def test_run_serializes_pyiceberg_env_for_concurrent_catalog_configs() -> None:
+    """Concurrent dlt runs cannot observe each other's transient PyIceberg env."""
+    first_entered = threading.Event()
+    release_first = threading.Event()
+    observations: dict[str, tuple[str | None, str | None]] = {}
+
+    class FakePipeline:
+        def __init__(self, name: str, catalog_config: dict[str, Any]) -> None:
+            self.pipeline_name = name
+            self._floe_iceberg_catalog_config = catalog_config
+
+        def run(self, _source: object, **_kwargs: Any) -> object:
+            if self.pipeline_name == "first":
+                first_entered.set()
+                release_first.wait(1.5)
+            observations[self.pipeline_name] = (
+                os.environ.get("ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"),
+                os.environ.get("PYICEBERG_CATALOG__POLARIS__URI"),
+            )
+            return SimpleNamespace(metrics={})
+
+    plugin = DltIngestionPlugin()
+    plugin.startup()
+
+    first = FakePipeline(
+        "first",
+        {
+            "catalog_name": "polaris",
+            "uri": "http://polaris-one:8181/api/catalog",
+        },
+    )
+    second = FakePipeline(
+        "second",
+        {
+            "catalog_name": "polaris",
+            "uri": "http://polaris-two:8181/api/catalog",
+        },
+    )
+
+    first_thread = threading.Thread(
+        target=lambda: plugin.run(first, source=object(), table_name="orders"),
+        name="first-run",
+    )
+    second_thread = threading.Thread(
+        target=lambda: plugin.run(second, source=object(), table_name="orders"),
+        name="second-run",
+    )
+
+    first_thread.start()
+    assert first_entered.wait(0.75)
+    second_thread.start()
+    threading.Event().wait(0.2)
+
+    assert "second" not in observations
+
+    release_first.set()
+    first_thread.join(0.75)
+    second_thread.join(0.75)
+
+    assert not first_thread.is_alive()
+    assert not second_thread.is_alive()
+    assert observations == {
+        "first": ("polaris", "http://polaris-one:8181/api/catalog"),
+        "second": ("polaris", "http://polaris-two:8181/api/catalog"),
+    }
+    assert "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
+
+
+def test_create_pipeline_preserves_plugin_env_when_existing_value_is_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Pipeline creation does not overwrite caller-owned PyIceberg env values."""
@@ -321,7 +390,8 @@ def test_health_check_distinguishes_object_storage_unreachable(
 def test_catalog_health_check_wall_clock_timeout_does_not_accumulate_workers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A blocking catalog probe returns within timeout and does not leave worker threads."""
+    """A blocking catalog probe returns within timeout without unbounded workers."""
+    release_probe = threading.Event()
 
     class BlockingClient:
         def __init__(self, *, timeout: float) -> None:
@@ -334,7 +404,7 @@ def test_catalog_health_check_wall_clock_timeout_does_not_accumulate_workers(
             return None
 
         def get(self, _url: str) -> SimpleNamespace:
-            threading.Event().wait(1.5)
+            release_probe.wait(1.5)
             return SimpleNamespace(status_code=200)
 
     monkeypatch.setattr(plugin_module.httpx, "Client", BlockingClient)
@@ -350,9 +420,48 @@ def test_catalog_health_check_wall_clock_timeout_does_not_accumulate_workers(
     assert status.state is HealthState.UNHEALTHY
     assert status.details["reason"] == "catalog_unreachable"
     assert "catalog health check exceeded 0.1s" in status.details["catalog_error"]
-    assert [
-        thread.name for thread in threading.enumerate() if thread.name.startswith("dlt-health")
-    ] == []
+    assert (
+        len([thread for thread in threading.enumerate() if thread.name.startswith("dlt-health")])
+        <= 1
+    )
+    release_probe.set()
+    slot = DltIngestionPlugin._health_check_slot("catalog")
+    assert slot.acquire(timeout=0.75)
+    slot.release()
+
+
+def test_catalog_health_check_timeout_applies_from_worker_thread() -> None:
+    """Worker-thread health checks still have a deterministic wall-clock timeout."""
+    result: list[str] = []
+    release_probe = threading.Event()
+
+    def worker_call() -> None:
+        try:
+            DltIngestionPlugin._run_health_check_with_timeout(
+                lambda: release_probe.wait(1.5),
+                0.1,
+                check_name="catalog_worker",
+            )
+        except Exception as exc:  # noqa: BLE001 - verifying surfaced error type/message
+            result.append(f"{type(exc).__name__}: {exc}")
+
+    thread = threading.Thread(target=worker_call, name="health-caller")
+    start = plugin_module.time.perf_counter()
+    thread.start()
+    thread.join(0.75)
+    elapsed = plugin_module.time.perf_counter() - start
+
+    assert not thread.is_alive()
+    assert elapsed < 0.75
+    assert result == ["TimeoutError: catalog_worker health check exceeded 0.1s"]
+    assert (
+        len([thread for thread in threading.enumerate() if thread.name.startswith("dlt-health")])
+        <= 1
+    )
+    release_probe.set()
+    slot = DltIngestionPlugin._health_check_slot("catalog_worker")
+    assert slot.acquire(timeout=0.75)
+    slot.release()
 
 
 def test_catalog_health_check_passes_timeout_to_httpx(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -444,9 +553,10 @@ def test_object_storage_health_check_has_wall_clock_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A blocking object-storage probe returns within the requested timeout."""
+    release_probe = threading.Event()
 
     def blocking_get_fs_token_paths(*_args: Any, **_kwargs: Any) -> tuple[object, None, list[str]]:
-        threading.Event().wait(1.5)
+        release_probe.wait(1.5)
         return object(), None, ["bucket"]
 
     monkeypatch.setattr(plugin_module.fsspec, "get_fs_token_paths", blocking_get_fs_token_paths)
@@ -461,3 +571,44 @@ def test_object_storage_health_check_has_wall_clock_timeout(
 
     assert elapsed < 0.75
     assert error == "TimeoutError: object_storage health check exceeded 0.1s"
+    release_probe.set()
+    slot = DltIngestionPlugin._health_check_slot("object_storage")
+    assert slot.acquire(timeout=0.75)
+    slot.release()
+
+
+def test_object_storage_health_check_timeout_applies_from_worker_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Object-storage probes keep wall-clock timeout behavior in worker hosts."""
+    release_probe = threading.Event()
+
+    def blocking_get_fs_token_paths(*_args: Any, **_kwargs: Any) -> tuple[object, None, list[str]]:
+        release_probe.wait(1.5)
+        return object(), None, ["bucket"]
+
+    monkeypatch.setattr(plugin_module.fsspec, "get_fs_token_paths", blocking_get_fs_token_paths)
+    plugin = DltIngestionPlugin()
+    result: list[str | None] = []
+
+    def worker_call() -> None:
+        result.append(
+            plugin._check_object_storage_reachable(
+                {"bucket": "bucket", "s3_endpoint": "http://minio:9000"},
+                timeout=0.1,
+            )
+        )
+
+    thread = threading.Thread(target=worker_call, name="object-storage-health-caller")
+    start = plugin_module.time.perf_counter()
+    thread.start()
+    thread.join(0.75)
+    elapsed = plugin_module.time.perf_counter() - start
+
+    assert not thread.is_alive()
+    assert elapsed < 0.75
+    assert result == ["TimeoutError: object_storage health check exceeded 0.1s"]
+    release_probe.set()
+    slot = DltIngestionPlugin._health_check_slot("object_storage")
+    assert slot.acquire(timeout=0.75)
+    slot.release()

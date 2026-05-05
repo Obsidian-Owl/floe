@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import signal
 import threading
 import time
 import uuid
@@ -106,6 +105,10 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         >>> status.state
         <HealthState.HEALTHY: 'healthy'>
     """
+
+    _iceberg_env_lock = threading.RLock()
+    _health_slots_lock = threading.Lock()
+    _health_check_slots: dict[str, threading.Lock] = {}
 
     def __init__(self) -> None:
         """Initialize plugin state."""
@@ -838,20 +841,18 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             yield
             return
 
-        plugin_env = self._iceberg_environment(catalog_config)
-        previous = {key: os.environ.get(key) for key in plugin_env}
-        try:
-            os.environ.update(plugin_env)
-            yield
-        finally:
-            for key, value in previous.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
-
-    def _pyiceberg_catalog_kwargs(self, catalog_config: dict[str, Any]) -> dict[str, str]:
-        return {"type": "rest", **self._pyiceberg_catalog_properties(catalog_config)}
+        with self._iceberg_env_lock:
+            plugin_env = self._iceberg_environment(catalog_config)
+            previous = {key: os.environ.get(key) for key in plugin_env}
+            try:
+                os.environ.update(plugin_env)
+                yield
+            finally:
+                for key, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
 
     def _catalog_health_url(self, catalog_config: dict[str, Any]) -> str:
         uri = str(self._first_config_value(catalog_config, "uri", "catalog_uri") or "").rstrip("/")
@@ -923,29 +924,50 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         except Exception as exc:
             return f"{type(exc).__name__}: {sanitize_error_message(str(exc))}"
 
-    @staticmethod
+    @classmethod
     def _run_health_check_with_timeout(
+        cls,
         check: Callable[[], None],
         timeout: float,
         *,
         check_name: str,
     ) -> None:
-        if threading.current_thread() is not threading.main_thread():
-            check()
-            return
+        slot = cls._health_check_slot(check_name)
+        if not slot.acquire(blocking=False):
+            raise TimeoutError(f"{check_name} health check already running")
 
-        previous_handler = signal.getsignal(signal.SIGALRM)
-        previous_timer = signal.setitimer(signal.ITIMER_REAL, timeout)
+        done = threading.Event()
+        errors: list[BaseException] = []
 
-        def _timeout_handler(_signum: int, _frame: object) -> None:
-            raise TimeoutError(f"{check_name} health check exceeded {timeout}s")
+        def _worker() -> None:
+            try:
+                check()
+            except BaseException as exc:  # noqa: BLE001 - propagated to caller
+                errors.append(exc)
+            finally:
+                done.set()
+                slot.release()
 
-        signal.signal(signal.SIGALRM, _timeout_handler)
+        thread = threading.Thread(
+            target=_worker,
+            name=f"dlt-health-{check_name}",
+            daemon=True,
+        )
         try:
-            check()
-        finally:
-            signal.setitimer(signal.ITIMER_REAL, previous_timer[0], previous_timer[1])
-            signal.signal(signal.SIGALRM, previous_handler)
+            thread.start()
+        except BaseException:
+            slot.release()
+            raise
+
+        if not done.wait(timeout):
+            raise TimeoutError(f"{check_name} health check exceeded {timeout}s")
+        if errors:
+            raise errors[0]
+
+    @classmethod
+    def _health_check_slot(cls, check_name: str) -> threading.Lock:
+        with cls._health_slots_lock:
+            return cls._health_check_slots.setdefault(check_name, threading.Lock())
 
     # -----------------------------------------------------------------------
     # SinkConnector ABC implementation (Epic 4G - Reverse ETL)
