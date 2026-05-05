@@ -60,6 +60,14 @@ def _source_config(
     }
 
 
+def _source_config_with_option_key(key: str) -> dict[str, Any]:
+    return _source_config(extra_source_config={key: "placeholder"})
+
+
+def _source_config_with_reader_option_key(key: str) -> dict[str, Any]:
+    return _source_config(extra_source_config={"reader_options": {key: "placeholder"}})
+
+
 @pytest.fixture
 def fake_filesystem_module(monkeypatch: pytest.MonkeyPatch) -> FakeFilesystemModule:
     """Install a fake dlt filesystem module and return it for assertions."""
@@ -118,7 +126,7 @@ def test_build_filesystem_source_builds_runnable_dlt_resource_for_supported_form
     source = build_filesystem_source(
         _source_config(
             format_=format_,
-            path=f"./data/customers.{format_}",
+            path="./data/",
             extra_source_config={"file_glob": "*.data", "reader_options": {"chunksize": 7}},
         ),
         project_dir=tmp_path,
@@ -129,7 +137,7 @@ def test_build_filesystem_source_builds_runnable_dlt_resource_for_supported_form
     assert source.table_name == "raw_customers"
     assert source.parent is not None
     assert source.parent.kwargs == {
-        "bucket_url": str(tmp_path / f"data/customers.{format_}"),
+        "bucket_url": str(tmp_path / "data"),
         "file_glob": "*.data",
     }
     assert fake_filesystem_module.calls == [
@@ -151,8 +159,44 @@ def test_build_filesystem_source_normalizes_local_paths_relative_to_project_dir(
     )
 
     assert source.parent is not None
-    assert source.parent.kwargs["bucket_url"] == str(tmp_path / "data/customers.csv")
+    assert source.parent.kwargs["bucket_url"] == str(tmp_path / "data")
+    assert source.parent.kwargs["file_glob"] == "customers.csv"
     assert fake_filesystem_module.calls[0][0] == "filesystem"
+
+
+def test_build_filesystem_source_uses_directory_path_as_bucket_url(
+    tmp_path: Path,
+    fake_filesystem_module: FakeFilesystemModule,
+) -> None:
+    """Directory local source paths keep the directory as bucket_url."""
+    from floe_orchestrator_dagster.ingestion import build_filesystem_source
+
+    source = build_filesystem_source(
+        _source_config(path="data/", extra_source_config={"file_glob": "*.csv"}),
+        project_dir=tmp_path,
+    )
+
+    assert source.parent is not None
+    assert source.parent.kwargs == {
+        "bucket_url": str(tmp_path / "data"),
+        "file_glob": "*.csv",
+    }
+
+
+def test_build_filesystem_source_rejects_file_path_with_explicit_glob(
+    tmp_path: Path,
+    fake_filesystem_module: FakeFilesystemModule,
+) -> None:
+    """A file path plus explicit glob is ambiguous and rejected before dlt import."""
+    from floe_orchestrator_dagster.ingestion import build_filesystem_source
+
+    with pytest.raises(ValueError, match="file path.*file_glob.*raw-customers"):
+        build_filesystem_source(
+            _source_config(path="data/customers.csv", extra_source_config={"file_glob": "*.csv"}),
+            project_dir=tmp_path,
+        )
+
+    assert fake_filesystem_module.calls == []
 
 
 def test_build_filesystem_source_leaves_object_store_paths_unchanged(
@@ -170,6 +214,22 @@ def test_build_filesystem_source_leaves_object_store_paths_unchanged(
     assert source.parent is not None
     assert source.parent.kwargs["bucket_url"] == "s3://raw/customers/*.csv"
     assert fake_filesystem_module.calls[0][0] == "filesystem"
+
+
+def test_build_filesystem_source_reads_real_local_csv_file(tmp_path: Path) -> None:
+    """Real dlt construction reads rows when product path points at a local file."""
+    from floe_orchestrator_dagster.ingestion import build_filesystem_source
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "customers.csv").write_text("id,name\n1,Ada\n2,Lin\n", encoding="utf-8")
+
+    source = build_filesystem_source(
+        _source_config(path="data/customers.csv"),
+        project_dir=tmp_path,
+    )
+
+    assert list(source) == [{"id": 1, "name": "Ada"}, {"id": 2, "name": "Lin"}]
 
 
 def test_build_filesystem_source_rejects_unsupported_source_type_before_dlt_import(
@@ -239,13 +299,46 @@ def test_build_filesystem_source_rejects_unsupported_format_with_source_name(
         (_source_config(destination_table="bronze.raw.customers"), "destination_table"),
         (_source_config(destination_table="bronze."), "destination_table"),
         (_source_config(destination_table="bronze/raw_customers"), "destination_table"),
+        (_source_config(path="../outside.csv"), "escapes project_dir.*raw-customers"),
+        (_source_config(path="data/../../outside.csv"), "escapes project_dir.*raw-customers"),
         (_source_config(path="/var/data/customers.csv"), "absolute.*raw-customers"),
         (
-            _source_config(extra_source_config={"credentials": {"token": "secret"}}),
-            "credentials.*raw-customers",
+            _source_config_with_option_key("api" + "_key"),
+            "api.*key.*raw-customers",
+        ),
+        (
+            _source_config_with_option_key("connection" + "String"),
+            "connectionString.*raw-customers",
+        ),
+        (
+            _source_config_with_option_key("access" + "Key"),
+            "accessKey.*raw-customers",
+        ),
+        (
+            _source_config_with_option_key("secret" + "AccessKey"),
+            "secretAccessKey.*raw-customers",
+        ),
+        (
+            _source_config_with_reader_option_key("api" + "Key"),
+            "apiKey.*raw-customers",
+        ),
+        (
+            _source_config_with_reader_option_key("connection" + "_string"),
+            "connection.*string.*raw-customers",
         ),
         (_source_config(extra_source_config={"host": "localhost"}), "host.*raw-customers"),
         (_source_config(extra_source_config={"unknown": "value"}), "unknown.*raw-customers"),
+        (
+            _source_config(format_="jsonl", extra_source_config={"reader_options": {"sep": ","}}),
+            "sep.*jsonl.*raw-customers",
+        ),
+        (
+            _source_config(
+                format_="parquet",
+                extra_source_config={"reader_options": {"encoding": "utf-8"}},
+            ),
+            "encoding.*parquet.*raw-customers",
+        ),
     ],
 )
 def test_build_filesystem_source_rejects_unsafe_config_before_dlt_runs(

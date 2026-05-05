@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -14,7 +15,13 @@ _SAFE_SOURCE_CONFIG_KEYS = {"format", "path", "include_glob", "file_glob", "read
 _CONNECTION_LIKE_KEYS = {
     "endpoint",
     "access_key",
+    "accessKey",
+    "api_key",
+    "apiKey",
     "secret_key",
+    "secretKey",
+    "secret_access_key",
+    "secretAccessKey",
     "token",
     "database",
     "host",
@@ -22,8 +29,36 @@ _CONNECTION_LIKE_KEYS = {
     "username",
     "password",
     "credentials",
+    "connection_string",
+    "connectionString",
+}
+_NORMALIZED_CONNECTION_LIKE_KEYS = {
+    re.sub(r"[^a-z0-9]", "", key.lower()) for key in _CONNECTION_LIKE_KEYS
+}
+_READER_OPTION_ALLOWLISTS = {
+    "csv": {
+        "chunksize",
+        "sep",
+        "delimiter",
+        "header",
+        "names",
+        "dtype",
+        "encoding",
+        "quotechar",
+        "escapechar",
+        "na_values",
+        "keep_default_na",
+    },
+    "jsonl": {"chunksize"},
+    "parquet": {"chunksize", "use_pyarrow"},
 }
 _IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+@dataclass(frozen=True)
+class _FilesystemTarget:
+    bucket_url: str
+    file_glob: str
 
 
 def build_filesystem_source(
@@ -37,10 +72,15 @@ def build_filesystem_source(
     table_name = _validate_destination_table(source_config, source_name)
     nested_config = _nested_source_config(source_config, source_name)
     file_format = _file_format(nested_config, source_name)
-    bucket_url = _bucket_url(nested_config, project_dir=project_dir, source_name=source_name)
-    file_glob = _file_glob(nested_config, source_name)
-    reader_options = _reader_options(nested_config, source_name)
     _validate_json_safe_keys(nested_config, source_name)
+    file_glob = _file_glob(nested_config, source_name)
+    target = _filesystem_target(
+        nested_config,
+        file_glob=file_glob,
+        project_dir=project_dir,
+        source_name=source_name,
+    )
+    reader_options = _reader_options(nested_config, file_format, source_name)
 
     from dlt.sources.filesystem import filesystem, read_csv, read_jsonl, read_parquet
 
@@ -49,7 +89,7 @@ def build_filesystem_source(
         "jsonl": read_jsonl,
         "parquet": read_parquet,
     }
-    filesystem_resource = filesystem(bucket_url=bucket_url, file_glob=file_glob)
+    filesystem_resource = filesystem(bucket_url=target.bucket_url, file_glob=target.file_glob)
     dlt_resource = filesystem_resource | readers[file_format](**reader_options)
     return dlt_resource.with_name(table_name).apply_hints(table_name=table_name)
 
@@ -98,12 +138,13 @@ def _file_format(nested_config: Mapping[str, Any], source_name: str) -> str:
     return file_format
 
 
-def _bucket_url(
+def _filesystem_target(
     nested_config: Mapping[str, Any],
     *,
+    file_glob: str,
     project_dir: Path,
     source_name: str,
-) -> str:
+) -> _FilesystemTarget:
     path = nested_config.get("path")
     if not isinstance(path, str) or not path:
         raise ValueError(f"path is required for {source_name!r}")
@@ -111,7 +152,7 @@ def _bucket_url(
     parsed = urlsplit(path)
     if parsed.scheme:
         if parsed.scheme in _OBJECT_STORE_SCHEMES:
-            return path
+            return _FilesystemTarget(bucket_url=path, file_glob=file_glob)
         raise ValueError(
             f"path URI scheme must be one of s3://, gs://, or az:// for {source_name!r}"
         )
@@ -119,7 +160,26 @@ def _bucket_url(
     local_path = Path(path)
     if local_path.is_absolute():
         raise ValueError(f"absolute local paths are not portable for {source_name!r}")
-    return str(project_dir / local_path)
+
+    project_root = project_dir.resolve()
+    resolved_path = (project_root / local_path).resolve()
+    try:
+        resolved_path.relative_to(project_root)
+    except ValueError:
+        raise ValueError(f"path escapes project_dir for {source_name!r}") from None
+
+    if _is_directory_path(path, resolved_path):
+        return _FilesystemTarget(bucket_url=str(resolved_path), file_glob=file_glob)
+
+    if _has_explicit_glob(nested_config):
+        raise ValueError(
+            f"file path cannot be combined with file_glob/include_glob for {source_name!r}"
+        )
+    return _FilesystemTarget(bucket_url=str(resolved_path.parent), file_glob=resolved_path.name)
+
+
+def _is_directory_path(raw_path: str, resolved_path: Path) -> bool:
+    return raw_path.endswith("/") or resolved_path.is_dir() or not Path(raw_path).suffix
 
 
 def _file_glob(nested_config: Mapping[str, Any], source_name: str) -> str:
@@ -135,21 +195,33 @@ def _file_glob(nested_config: Mapping[str, Any], source_name: str) -> str:
     return glob_value
 
 
-def _reader_options(nested_config: Mapping[str, Any], source_name: str) -> dict[str, Any]:
+def _reader_options(
+    nested_config: Mapping[str, Any],
+    file_format: str,
+    source_name: str,
+) -> dict[str, Any]:
     reader_options = nested_config.get("reader_options", {})
     if not isinstance(reader_options, Mapping):
         raise ValueError(f"reader_options must be a mapping for {source_name!r}")
-    blocked_keys = sorted(set(reader_options) & _CONNECTION_LIKE_KEYS)
+    blocked_keys = _credential_like_keys(reader_options)
     if blocked_keys:
         blocked = ", ".join(blocked_keys)
         raise ValueError(
             f"reader_options contains connection-like keys {blocked} for {source_name!r}"
         )
+    allowlist = _READER_OPTION_ALLOWLISTS[file_format]
+    unsupported_options = sorted(set(reader_options) - allowlist)
+    if unsupported_options:
+        unsupported = ", ".join(unsupported_options)
+        raise ValueError(
+            f"reader_options contains unsupported keys {unsupported} "
+            f"for {file_format} source {source_name!r}"
+        )
     return dict(reader_options)
 
 
 def _validate_json_safe_keys(nested_config: Mapping[str, Any], source_name: str) -> None:
-    connection_like_keys = sorted(set(nested_config) & _CONNECTION_LIKE_KEYS)
+    connection_like_keys = _credential_like_keys(nested_config)
     if connection_like_keys:
         blocked = ", ".join(connection_like_keys)
         raise ValueError(
@@ -162,6 +234,24 @@ def _validate_json_safe_keys(nested_config: Mapping[str, Any], source_name: str)
         raise ValueError(
             f"source_config contains unsupported keys {unsupported} for {source_name!r}"
         )
+
+
+def _has_explicit_glob(nested_config: Mapping[str, Any]) -> bool:
+    return (
+        nested_config.get("file_glob") is not None or nested_config.get("include_glob") is not None
+    )
+
+
+def _credential_like_keys(mapping: Mapping[str, Any]) -> list[str]:
+    return sorted(
+        key
+        for key in mapping
+        if isinstance(key, str) and _normalize_key(key) in _NORMALIZED_CONNECTION_LIKE_KEYS
+    )
+
+
+def _normalize_key(key: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", key.lower())
 
 
 __all__ = [
