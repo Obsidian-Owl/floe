@@ -1,0 +1,169 @@
+"""JSON-safe dlt filesystem source construction."""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
+
+_OBJECT_STORE_SCHEMES = {"s3", "gs", "az"}
+_SUPPORTED_FORMATS = {"csv", "jsonl", "parquet"}
+_SAFE_SOURCE_CONFIG_KEYS = {"format", "path", "include_glob", "file_glob", "reader_options"}
+_CONNECTION_LIKE_KEYS = {
+    "endpoint",
+    "access_key",
+    "secret_key",
+    "token",
+    "database",
+    "host",
+    "port",
+    "username",
+    "password",
+    "credentials",
+}
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def build_filesystem_source(
+    source_config: Mapping[str, Any],
+    *,
+    project_dir: Path,
+) -> Any:
+    """Build a dlt filesystem source or resource from compiled ingestion config."""
+    source_name = _source_name(source_config)
+    _validate_source_type(source_config, source_name)
+    table_name = _validate_destination_table(source_config, source_name)
+    nested_config = _nested_source_config(source_config, source_name)
+    file_format = _file_format(nested_config, source_name)
+    bucket_url = _bucket_url(nested_config, project_dir=project_dir, source_name=source_name)
+    file_glob = _file_glob(nested_config, source_name)
+    reader_options = _reader_options(nested_config, source_name)
+    _validate_json_safe_keys(nested_config, source_name)
+
+    from dlt.sources.filesystem import filesystem, read_csv, read_jsonl, read_parquet
+
+    readers = {
+        "csv": read_csv,
+        "jsonl": read_jsonl,
+        "parquet": read_parquet,
+    }
+    filesystem_resource = filesystem(bucket_url=bucket_url, file_glob=file_glob)
+    dlt_resource = filesystem_resource | readers[file_format](**reader_options)
+    return dlt_resource.with_name(table_name).apply_hints(table_name=table_name)
+
+
+def _source_name(source_config: Mapping[str, Any]) -> str:
+    source_name = source_config.get("name", "unnamed")
+    return str(source_name)
+
+
+def _validate_source_type(source_config: Mapping[str, Any], source_name: str) -> None:
+    source_type = source_config.get("source_type", "missing")
+    if source_type != "filesystem":
+        raise ValueError(f"Unsupported ingestion source_type {source_type!r} for {source_name!r}")
+
+
+def _validate_destination_table(source_config: Mapping[str, Any], source_name: str) -> str:
+    destination_table = source_config.get("destination_table")
+    if not isinstance(destination_table, str):
+        raise ValueError(f"destination_table is required for {source_name!r}")
+    parts = destination_table.split(".")
+    if len(parts) != 2 or any(part.strip() != part or not part for part in parts):
+        raise ValueError(f"destination_table must be exactly namespace.table for {source_name!r}")
+    if any(_IDENTIFIER.fullmatch(part) is None for part in parts):
+        raise ValueError(
+            f"destination_table contains unsafe identifier characters for {source_name!r}"
+        )
+    return parts[1]
+
+
+def _nested_source_config(
+    source_config: Mapping[str, Any],
+    source_name: str,
+) -> Mapping[str, Any]:
+    nested_config = source_config.get("source_config")
+    if not isinstance(nested_config, Mapping):
+        raise ValueError(f"source_config must be a mapping for {source_name!r}")
+    return nested_config
+
+
+def _file_format(nested_config: Mapping[str, Any], source_name: str) -> str:
+    file_format = nested_config.get("format")
+    if not isinstance(file_format, str) or not file_format:
+        raise ValueError(f"format is required for {source_name!r}")
+    if file_format not in _SUPPORTED_FORMATS:
+        raise ValueError(f"Unsupported filesystem format {file_format!r} for {source_name!r}")
+    return file_format
+
+
+def _bucket_url(
+    nested_config: Mapping[str, Any],
+    *,
+    project_dir: Path,
+    source_name: str,
+) -> str:
+    path = nested_config.get("path")
+    if not isinstance(path, str) or not path:
+        raise ValueError(f"path is required for {source_name!r}")
+
+    parsed = urlsplit(path)
+    if parsed.scheme:
+        if parsed.scheme in _OBJECT_STORE_SCHEMES:
+            return path
+        raise ValueError(
+            f"path URI scheme must be one of s3://, gs://, or az:// for {source_name!r}"
+        )
+
+    local_path = Path(path)
+    if local_path.is_absolute():
+        raise ValueError(f"absolute local paths are not portable for {source_name!r}")
+    return str(project_dir / local_path)
+
+
+def _file_glob(nested_config: Mapping[str, Any], source_name: str) -> str:
+    file_glob = nested_config.get("file_glob")
+    include_glob = nested_config.get("include_glob")
+    if file_glob is not None and include_glob is not None and file_glob != include_glob:
+        raise ValueError(f"file_glob and include_glob conflict for {source_name!r}")
+    glob_value = file_glob if file_glob is not None else include_glob
+    if glob_value is None:
+        return "*"
+    if not isinstance(glob_value, str) or not glob_value:
+        raise ValueError(f"file_glob must be a non-empty string for {source_name!r}")
+    return glob_value
+
+
+def _reader_options(nested_config: Mapping[str, Any], source_name: str) -> dict[str, Any]:
+    reader_options = nested_config.get("reader_options", {})
+    if not isinstance(reader_options, Mapping):
+        raise ValueError(f"reader_options must be a mapping for {source_name!r}")
+    blocked_keys = sorted(set(reader_options) & _CONNECTION_LIKE_KEYS)
+    if blocked_keys:
+        blocked = ", ".join(blocked_keys)
+        raise ValueError(
+            f"reader_options contains connection-like keys {blocked} for {source_name!r}"
+        )
+    return dict(reader_options)
+
+
+def _validate_json_safe_keys(nested_config: Mapping[str, Any], source_name: str) -> None:
+    connection_like_keys = sorted(set(nested_config) & _CONNECTION_LIKE_KEYS)
+    if connection_like_keys:
+        blocked = ", ".join(connection_like_keys)
+        raise ValueError(
+            f"source_config contains connection-like keys {blocked} for {source_name!r}"
+        )
+
+    unsupported_keys = sorted(set(nested_config) - _SAFE_SOURCE_CONFIG_KEYS)
+    if unsupported_keys:
+        unsupported = ", ".join(unsupported_keys)
+        raise ValueError(
+            f"source_config contains unsupported keys {unsupported} for {source_name!r}"
+        )
+
+
+__all__ = [
+    "build_filesystem_source",
+]
