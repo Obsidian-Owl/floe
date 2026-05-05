@@ -30,7 +30,7 @@ def _write_manifest(path: Path) -> dict[str, object]:
             {
                 "plugins": {
                     "catalog": {"type": "polaris", "config": {}},
-                    "storage": {"type": "s3", "config": {}},
+                    "storage": {"type": "minio", "config": {}},
                     "lineage_backend": lineage_backend,
                 }
             }
@@ -55,7 +55,7 @@ def _write_product(
             {
                 "plugins": {
                     "catalog": {"type": "polaris", "config": {}},
-                    "storage": {"type": "s3", "config": {}},
+                    "storage": {"type": "minio", "config": {}},
                     "lineage_backend": lineage_backend,
                 },
                 "dbt_profiles": {

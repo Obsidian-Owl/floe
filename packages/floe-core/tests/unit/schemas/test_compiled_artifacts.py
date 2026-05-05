@@ -196,7 +196,7 @@ class TestResolvedPlugins:
             compute=PluginRef(type="duckdb", version="0.9.0"),
             orchestrator=PluginRef(type="dagster", version="1.5.0"),
             catalog=PluginRef(type="polaris", version="0.1.0"),
-            storage=PluginRef(type="s3", version="1.0.0"),
+            storage=PluginRef(type="minio", version="1.0.0"),
             ingestion=PluginRef(type="dlt", version="0.4.0"),
             semantic=PluginRef(type="cube", version="0.35.0"),
         )

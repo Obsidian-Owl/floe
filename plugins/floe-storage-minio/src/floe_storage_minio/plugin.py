@@ -238,10 +238,10 @@ class MinIOStoragePlugin(StoragePlugin):
         }
 
     def get_dagster_io_manager_config(self) -> dict[str, Any]:
-        """Generate Dagster IOManager configuration for S3 storage.
+        """Generate Dagster IOManager configuration for MinIO storage.
 
         Returns:
-            Dictionary with S3 config for Dagster IOManager.
+            Dictionary with MinIO S3-compatible config for Dagster IOManager.
 
         Raises:
             RuntimeError: If plugin is not configured.
@@ -255,12 +255,12 @@ class MinIOStoragePlugin(StoragePlugin):
         }
 
     def get_helm_values_override(self) -> dict[str, Any]:
-        """Generate Helm values for S3 storage.
+        """Generate Helm values for MinIO storage.
 
-        S3 is an external service — no Helm deployment is needed.
+        MinIO is provided by the platform chart, not deployed by this plugin.
         Returns an empty dict.
 
         Returns:
-            Empty dictionary (S3 is external, not self-hosted).
+            Empty dictionary (the plugin does not deploy MinIO directly).
         """
         return {}

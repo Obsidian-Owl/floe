@@ -86,7 +86,7 @@ class TestValidPluginSelection:
             compute={"type": "duckdb"},
             orchestrator={"type": "dagster"},
             catalog={"type": "polaris"},
-            storage={"type": "s3"},
+            storage={"type": "minio"},
         )
 
         assert plugins.compute is not None
@@ -96,7 +96,7 @@ class TestValidPluginSelection:
         assert plugins.catalog is not None
         assert plugins.catalog.type == "polaris"
         assert plugins.storage is not None
-        assert plugins.storage.type == "s3"
+        assert plugins.storage.type == "minio"
 
     @pytest.mark.requirement("001-FR-006")
     def test_plugins_config_all_12_categories(self) -> None:
@@ -110,7 +110,7 @@ class TestValidPluginSelection:
             compute={"type": "duckdb"},
             orchestrator={"type": "dagster"},
             catalog={"type": "polaris"},
-            storage={"type": "s3"},
+            storage={"type": "minio"},
             semantic_layer={"type": "cube"},
             ingestion={"type": "dlt"},
             secrets={"type": "k8s-secrets"},

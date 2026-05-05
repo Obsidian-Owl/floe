@@ -1381,7 +1381,7 @@ class TestDemoPluginResolver:
         assert "floe-orchestrator-dagster" in packages
         assert "floe-catalog-polaris" in packages
         assert "floe-compute-duckdb" in packages
-        assert "floe-storage-s3" in packages
+        assert "floe-storage-minio" in packages
         assert "floe-dbt-core" in packages
         assert "floe-iceberg" in packages
         assert packages == sorted(set(packages)), (
@@ -2704,7 +2704,7 @@ class TestGeneratedDefinitions:
 
 ORCHESTRATOR_PYPROJECT = REPO_ROOT / "plugins" / "floe-orchestrator-dagster" / "pyproject.toml"
 ROOT_PYPROJECT = REPO_ROOT / "pyproject.toml"
-STORAGE_S3_PYPROJECT = REPO_ROOT / "plugins" / "floe-storage-s3" / "pyproject.toml"
+STORAGE_MINIO_PYPROJECT = REPO_ROOT / "plugins" / "floe-storage-minio" / "pyproject.toml"
 
 # Required packages in the [project.optional-dependencies] docker group
 REQUIRED_DOCKER_EXTRAS: list[str] = [
@@ -2790,12 +2790,12 @@ class TestDemoImageLockedRuntimeDependencies:
         )
 
     @pytest.mark.requirement("WU12-AC3")
-    def test_s3_storage_declares_pyiceberg_s3_fileio_dependency(self) -> None:
+    def test_minio_storage_declares_pyiceberg_s3_fileio_dependency(self) -> None:
         """S3 FileIO support must be a plugin dependency, not a Dockerfile install."""
-        data: dict[str, Any] = tomllib.loads(STORAGE_S3_PYPROJECT.read_text())
+        data: dict[str, Any] = tomllib.loads(STORAGE_MINIO_PYPROJECT.read_text())
         dependencies: list[str] = data["project"]["dependencies"]
 
         assert any(dep.startswith("pyiceberg[s3fs]") for dep in dependencies), (
-            "floe-storage-s3 uses pyiceberg.io.fsspec.FsspecFileIO and must declare "
+            "floe-storage-minio uses pyiceberg.io.fsspec.FsspecFileIO and must declare "
             "the pyiceberg[s3fs] extra so Docker and non-Docker installs get S3 FileIO."
         )

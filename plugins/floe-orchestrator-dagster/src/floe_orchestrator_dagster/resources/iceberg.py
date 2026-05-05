@@ -14,7 +14,7 @@ Example:
     >>> from floe_orchestrator_dagster.resources import create_iceberg_resources
     >>> resources = create_iceberg_resources(
     ...     catalog_ref=PluginRef(type="polaris", version="0.1.0", config={...}),
-    ...     storage_ref=PluginRef(type="s3", version="1.0.0", config={...}),
+    ...     storage_ref=PluginRef(type="minio", version="1.0.0", config={...}),
     ... )
     >>> # resources == {"iceberg": IcebergIOManager(...)}
 
@@ -73,7 +73,7 @@ def create_iceberg_resources(
         >>> from floe_core.schemas.compiled_artifacts import PluginRef
         >>> resources = create_iceberg_resources(
         ...     catalog_ref=PluginRef(type="polaris", version="0.1.0", config={...}),
-        ...     storage_ref=PluginRef(type="s3", version="1.0.0", config={...}),
+        ...     storage_ref=PluginRef(type="minio", version="1.0.0", config={...}),
         ... )
         >>> definitions = Definitions(assets=assets, resources=resources)
 

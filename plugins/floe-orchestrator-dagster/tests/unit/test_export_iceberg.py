@@ -167,7 +167,7 @@ def artifacts_with_catalog() -> CompiledArtifacts:
             config={"uri": "http://polaris:8181"},
         ),
         storage=PluginRef(
-            type="s3",
+            type="minio",
             version="1.0.0",
             config={"endpoint": "http://minio:9000", "access-key-id": "test"},
         ),
@@ -179,7 +179,7 @@ def artifacts_with_catalog_none_config() -> CompiledArtifacts:
     """CompiledArtifacts with configured catalog/storage refs and config=None."""
     return _make_artifacts(
         catalog=PluginRef(type="polaris", version="0.1.0", config=None),
-        storage=PluginRef(type="s3", version="1.0.0", config=None),
+        storage=PluginRef(type="minio", version="1.0.0", config=None),
     )
 
 
@@ -225,7 +225,7 @@ class TestExportDbtToIceberg:
                 config={"uri": "http://polaris:8181"},
             ),
             storage=PluginRef(
-                type="s3",
+                type="minio",
                 version="1.0.0",
                 config={"endpoint": "http://minio:9000", "access-key-id": "test"},
             ),
@@ -283,7 +283,7 @@ class TestExportDbtToIceberg:
                 config={"uri": "http://polaris:8181"},
             ),
             storage=PluginRef(
-                type="s3",
+                type="minio",
                 version="1.0.0",
                 config={"endpoint": "http://minio:9000", "access-key-id": "test"},
             ),
@@ -338,7 +338,7 @@ class TestExportDbtToIceberg:
                 config={"uri": "http://polaris:8181"},
             ),
             storage=PluginRef(
-                type="s3",
+                type="minio",
                 version="1.0.0",
                 config={"endpoint": "http://minio:9000", "access-key-id": "test"},
             ),
@@ -383,7 +383,7 @@ class TestExportDbtToIceberg:
                 config={"uri": "http://polaris:8181"},
             ),
             storage=PluginRef(
-                type="s3",
+                type="minio",
                 version="1.0.0",
                 config={"endpoint": "http://minio:9000", "access-key-id": "test"},
             ),
@@ -431,7 +431,7 @@ class TestExportDbtToIceberg:
                 config={"uri": "http://polaris:8181"},
             ),
             storage=PluginRef(
-                type="s3",
+                type="minio",
                 version="1.0.0",
                 config={"endpoint": "http://minio:9000", "access-key-id": "test"},
             ),
@@ -475,7 +475,7 @@ class TestExportDbtToIceberg:
                 config={"uri": "http://polaris:8181"},
             ),
             storage=PluginRef(
-                type="s3",
+                type="minio",
                 version="1.0.0",
                 config={"endpoint": "http://minio:9000", "access-key-id": "test"},
             ),
@@ -528,7 +528,7 @@ class TestExportDbtToIceberg:
                 config={"uri": "http://polaris:8181"},
             ),
             storage=PluginRef(
-                type="s3",
+                type="minio",
                 version="1.0.0",
                 config={"endpoint": "http://minio:9000"},
             ),
@@ -1314,7 +1314,7 @@ class TestExportDbtToIceberg:
                 config={"uri": specific_uri},
             ),
             storage=PluginRef(
-                type="s3",
+                type="minio",
                 version="1.0.0",
                 config={"endpoint": "http://minio:9000"},
             ),
@@ -1372,7 +1372,7 @@ class TestExportDbtToIceberg:
 
         artifacts = _make_artifacts(
             catalog=PluginRef(type="polaris", version="0.1.0", config={}),
-            storage=PluginRef(type="s3", version="1.0.0", config={}),
+            storage=PluginRef(type="minio", version="1.0.0", config={}),
         )
 
         mock_conn = MagicMock()
@@ -1423,7 +1423,7 @@ class TestExportDbtToIceberg:
         artifacts = _make_artifacts(
             catalog=PluginRef(type="polaris", version="0.1.0", config={}),
             storage=PluginRef(
-                type="s3",
+                type="minio",
                 version="1.0.0",
                 config={"endpoint": "http://minio:9000", "path_style_access": True},
             ),
@@ -1483,7 +1483,7 @@ class TestExportDbtToIceberg:
 
         artifacts = _make_artifacts(
             catalog=PluginRef(type="polaris", version="0.1.0", config={}),
-            storage=PluginRef(type="s3", version="1.0.0", config={}),
+            storage=PluginRef(type="minio", version="1.0.0", config={}),
         )
 
         registry = MagicMock()
@@ -1528,7 +1528,7 @@ class TestExportDbtToIceberg:
         ("none_plugin_type", "expected_message"),
         [
             ("catalog", "Catalog plugin config for polaris"),
-            ("storage", "Storage plugin config for s3"),
+            ("storage", "Storage plugin config for minio"),
         ],
     )
     def test_export_configure_returning_none_raises_runtime_error(
@@ -1543,7 +1543,7 @@ class TestExportDbtToIceberg:
 
         artifacts = _make_artifacts(
             catalog=PluginRef(type="polaris", version="0.1.0", config={}),
-            storage=PluginRef(type="s3", version="1.0.0", config={}),
+            storage=PluginRef(type="minio", version="1.0.0", config={}),
         )
 
         registry = MagicMock()

@@ -24,7 +24,7 @@ def _plugins_with_iceberg() -> ResolvedPlugins:
         compute=PluginRef(type="duckdb", version="1.0.0", config=None),
         orchestrator=PluginRef(type="dagster", version="1.0.0", config=None),
         catalog=PluginRef(type="polaris", version="0.1.0", config={"uri": "http://polaris"}),
-        storage=PluginRef(type="s3", version="1.0.0", config={"bucket": "test"}),
+        storage=PluginRef(type="minio", version="1.0.0", config={"bucket": "test"}),
         ingestion=None,
         semantic=None,
     )

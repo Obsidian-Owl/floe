@@ -184,8 +184,9 @@ class TestPluginSystem:
             "STORAGE is a config-only plugin type — manifest.storage defines the "
             "object storage backend (S3, GCS, Azure) at the infrastructure level."
         )
-        assert artifacts.plugins.storage.type == "s3", (
-            f"Expected storage type 's3' from demo manifest, got '{artifacts.plugins.storage.type}'"
+        assert artifacts.plugins.storage.type == "minio", (
+            "Expected storage type 'minio' from demo manifest, got "
+            f"'{artifacts.plugins.storage.type}'"
         )
 
         self.logger.info(f"Storage config validated: type={artifacts.plugins.storage.type}")

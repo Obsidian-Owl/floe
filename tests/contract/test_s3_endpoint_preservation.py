@@ -28,7 +28,7 @@ def _make_polaris_config() -> PolarisCatalogConfig:
         warehouse="test-warehouse",
         oauth2=OAuth2Config(
             client_id="test-client",
-            client_secret="test-secret",
+            client_secret="test-secret",  # pragma: allowlist secret
             token_url="http://polaris:8181/api/catalog/v1/oauth/tokens",
         ),
     )
@@ -45,7 +45,7 @@ def _make_resolved_plugins(storage_endpoint: str) -> ResolvedPlugins:
             config={"uri": "http://polaris:8181/api/catalog"},
         ),
         storage=PluginRef(
-            type="s3",
+            type="minio",
             version="1.0.0",
             config={"endpoint": storage_endpoint},
         ),

@@ -65,7 +65,7 @@ def _make_artifacts(*, transforms: ResolvedTransforms | None = None) -> Compiled
             compute=PluginRef(type="duckdb", version="0.9.0"),
             orchestrator=PluginRef(type="dagster", version="1.5.0"),
             catalog=PluginRef(type="polaris", version="0.1.0", config={"uri": "memory://"}),
-            storage=PluginRef(type="s3", version="1.0.0", config={"endpoint": "memory://"}),
+            storage=PluginRef(type="minio", version="1.0.0", config={"endpoint": "memory://"}),
         ),
         transforms=transforms,
     )

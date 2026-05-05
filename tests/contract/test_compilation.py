@@ -110,8 +110,8 @@ class TestCompilation:
             "Storage config must be resolved from manifest.storage section. "
             "STORAGE is a config-only plugin type configured at infrastructure level."
         )
-        assert artifacts.plugins.storage.type == "s3", (
-            f"Expected s3 storage from demo manifest, got '{artifacts.plugins.storage.type}'"
+        assert artifacts.plugins.storage.type == "minio", (
+            f"Expected minio storage from demo manifest, got '{artifacts.plugins.storage.type}'"
         )
 
         # Observability assertions
