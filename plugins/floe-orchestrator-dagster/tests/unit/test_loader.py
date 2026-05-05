@@ -318,6 +318,24 @@ def project_dir_with_ingestion_empty_config(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def project_dir_with_ingestion_plugin_settings_only(tmp_path: Path) -> Path:
+    """Temporary project dir with ingestion selected but only plugin settings."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "catalog_config": {"dataset_name": "raw"},
+                "retry_config": {"max_attempts": 3},
+            },
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
 def project_dir_with_ingestion_flat_config(tmp_path: Path) -> Path:
     """Temporary project dir with legacy flat ingestion workload config."""
     pdir = tmp_path / "dbt_project"
@@ -1282,6 +1300,21 @@ def test_runtime_allows_selected_ingestion_with_empty_config(
 
     resources = result.resources or {}
     assert "ingestion" not in resources
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_ignores_ingestion_plugin_settings_without_sources(
+    project_dir_with_ingestion_plugin_settings_only: Path,
+) -> None:
+    """Plugin-level ingestion settings without sources are not executable workloads."""
+    result = load_product_definitions(
+        PRODUCT_NAME,
+        project_dir_with_ingestion_plugin_settings_only,
+    )
+
+    resources = result.resources or {}
+    assert "ingestion" not in resources
+    assert not any(name.startswith("run_ingestion_") for name in _asset_names(result))
 
 
 @pytest.mark.requirement("AC-5")

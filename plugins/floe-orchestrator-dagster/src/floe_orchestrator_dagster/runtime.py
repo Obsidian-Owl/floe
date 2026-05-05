@@ -50,13 +50,24 @@ def _has_ingestion_workloads(plugins: Any | None) -> bool:
         return True
     if not config:
         return False
-    keys = set(config)
-    if keys != {"sources"}:
+
+    sources = config.get("sources")
+    if "sources" in config and not isinstance(sources, list):
         return True
-    sources = config["sources"]
-    if not isinstance(sources, list):
+    if isinstance(sources, list) and sources:
         return True
-    return len(sources) > 0
+
+    flat_workload_keys = {
+        "source_type",
+        "source_config",
+        "destination_table",
+        "write_mode",
+        "schema_contract",
+        "cursor_field",
+        "primary_key",
+        "name",
+    }
+    return bool(flat_workload_keys.intersection(config))
 
 
 def _lineage_namespace(artifacts: CompiledArtifacts) -> str | None:
