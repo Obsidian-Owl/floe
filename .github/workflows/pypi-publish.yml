@@ -1,18 +1,19 @@
 # PyPI Package Publishing - builds and publishes all floe packages
 #
 # Triggers on version tags (v*.*.*) after the Release workflow validates.
-# Uses PyPI trusted publishing (OIDC) — no API tokens needed.
+# Uses account-scoped PyPI API token stored as PYPI_API_TOKEN secret.
 # Each package is built independently and uploaded in a single job.
 #
 # Prerequisites:
-#   - Each package registered as a pending publisher on PyPI
-#   - GitHub environment "pypi" created on this repo
-#   - See docs/guides/pypi-trusted-publishers.md for setup
+#   - PYPI_API_TOKEN secret configured in GitHub environment "pypi"
+#   - See docs/guides/pypi-trusted-publishers.md for future OIDC migration
 #
 # Security: all run: blocks use static commands. No untrusted interpolation.
 # GITHUB_REF is safe for tag triggers (not user-controlled content).
 
 name: PyPI Publish
+
+permissions: {}
 
 on:
   push:
@@ -38,6 +39,8 @@ jobs:
   build:
     name: Build Packages
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -134,6 +137,8 @@ jobs:
     needs: build
     if: github.ref_type == 'tag' && !(inputs.dry_run || false)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     environment: pypi
 
     steps:
@@ -166,6 +171,8 @@ jobs:
     name: Verify Published Packages
     needs: [build, publish]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       RELEASE_VERSION: ${{ needs.build.outputs.version }}
     steps:
