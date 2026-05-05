@@ -19,7 +19,6 @@ const disallowedSnippets = [
   { pattern: /make\s+kind-delete/u, message: 'references missing Makefile target make kind-delete' },
   { pattern: /\.claude\//u, message: 'links internal .claude path' },
   { pattern: /\bfloe\s+schema\s+export\b/u, message: "references unsupported CLI command 'floe schema export'" },
-  { pattern: /\bfloe-storage-minio\b/u, message: 'references non-existent package floe-storage-minio' },
   { pattern: /\bDBTTestsPlugin\b/u, message: 'references stale DBTTestsPlugin name' },
 ];
 

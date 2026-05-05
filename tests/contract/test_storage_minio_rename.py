@@ -87,6 +87,21 @@ def test_plugin_pyproject_uses_minio_entry_point_only() -> None:
     assert f's3 = "{OLD_MODULE_NAME}.plugin:{OLD_PLUGIN_CLASS}"' not in pyproject
 
 
+def test_storage_plugin_registry_rejects_old_s3_alias() -> None:
+    """Registry validation must accept MinIO and reject the removed S3 alias."""
+    from floe_core.schemas.plugins import PLUGIN_REGISTRY, validate_plugin_selection
+
+    assert PLUGIN_REGISTRY["storage"] == ["minio", "gcs", "azure-blob"]
+    validate_plugin_selection("storage", "minio")
+
+    try:
+        validate_plugin_selection("storage", OLD_STORAGE_TYPE)
+    except ValueError as exc:
+        assert OLD_STORAGE_TYPE in str(exc)
+    else:
+        raise AssertionError("storage s3 alias unexpectedly accepted")
+
+
 def test_forbidden_patterns_cover_python_and_f_string_selection_forms() -> None:
     """The active scan must catch old plugin selection forms beyond YAML."""
     old_type = OLD_STORAGE_TYPE
