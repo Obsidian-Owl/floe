@@ -24,9 +24,13 @@ import hashlib
 import os
 import time
 import uuid
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
+import fsspec
 import structlog
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.ingestion import (
@@ -826,8 +830,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         catalog_config: dict[str, Any],
         timeout: float,
     ) -> str | None:
-        _ = timeout
-        try:
+        def _catalog_check() -> None:
             from pyiceberg.catalog import load_catalog
 
             catalog_name = str(catalog_config.get("catalog_name", "polaris"))
@@ -836,6 +839,13 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 **self._pyiceberg_catalog_kwargs(catalog_config),
             )
             catalog.list_namespaces()
+
+        try:
+            self._run_health_check_with_timeout(
+                _catalog_check,
+                timeout,
+                check_name="catalog",
+            )
             return None
         except Exception as exc:
             return f"{type(exc).__name__}: {sanitize_error_message(str(exc))}"
@@ -845,13 +855,10 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         catalog_config: dict[str, Any],
         timeout: float,
     ) -> str | None:
-        _ = timeout
         bucket_url = self._bucket_url(catalog_config)
         if bucket_url is None or not bucket_url.startswith("s3://"):
             return None
         try:
-            import fsspec
-
             fs, _, paths = fsspec.get_fs_token_paths(
                 bucket_url,
                 key=os.environ.get("AWS_ACCESS_KEY_ID"),
@@ -865,12 +872,35 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     "region_name": os.environ.get("AWS_REGION")
                     or self._first_config_value(catalog_config, "s3_region", "region"),
                 },
-                config_kwargs={"s3": {"addressing_style": "path"}},
+                config_kwargs={
+                    "connect_timeout": timeout,
+                    "read_timeout": timeout,
+                    "s3": {"addressing_style": "path"},
+                },
             )
             fs.ls(paths[0], detail=False, max_items=1)
             return None
         except Exception as exc:
             return f"{type(exc).__name__}: {sanitize_error_message(str(exc))}"
+
+    @staticmethod
+    def _run_health_check_with_timeout(
+        check: Callable[[], None],
+        timeout: float,
+        *,
+        check_name: str,
+    ) -> None:
+        executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix=f"dlt-health-{check_name}",
+        )
+        future = executor.submit(check)
+        try:
+            future.result(timeout=timeout)
+        except FutureTimeoutError as exc:
+            raise TimeoutError(f"{check_name} health check exceeded {timeout}s") from exc
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
 
     # -----------------------------------------------------------------------
     # SinkConnector ABC implementation (Epic 4G - Reverse ETL)

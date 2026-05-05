@@ -10,6 +10,7 @@ import pytest
 from floe_core.plugin_metadata import HealthState
 from floe_core.plugins.ingestion import IngestionConfig
 
+import floe_ingestion_dlt.plugin as plugin_module
 from floe_ingestion_dlt.config import DltIngestionConfig, IngestionSourceConfig
 from floe_ingestion_dlt.plugin import DltIngestionPlugin
 
@@ -228,3 +229,90 @@ def test_health_check_distinguishes_object_storage_unreachable(
     assert status.state is HealthState.UNHEALTHY
     assert status.details["reason"] == "object_storage_unreachable"
     assert status.details["object_storage_error"] == "connection refused"
+
+
+def test_catalog_health_check_is_bounded_by_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Catalog reachability check reports timeout when PyIceberg blocks."""
+    result_timeouts: list[float] = []
+    shutdown_calls: list[dict[str, bool]] = []
+
+    class BlockingFuture:
+        def result(self, timeout: float) -> None:
+            result_timeouts.append(timeout)
+            raise plugin_module.FutureTimeoutError()
+
+    class BlockingExecutor:
+        def __init__(self, max_workers: int, thread_name_prefix: str) -> None:
+            assert max_workers == 1
+            assert thread_name_prefix == "dlt-health-catalog"
+
+        def submit(self, _func: object) -> BlockingFuture:
+            return BlockingFuture()
+
+        def shutdown(self, *, wait: bool, cancel_futures: bool) -> None:
+            shutdown_calls.append({"wait": wait, "cancel_futures": cancel_futures})
+
+    monkeypatch.setattr(plugin_module, "ThreadPoolExecutor", BlockingExecutor)
+
+    plugin = DltIngestionPlugin()
+    error = plugin._check_catalog_reachable(
+        {"uri": "http://polaris:8181/api/catalog"},
+        timeout=0.25,
+    )
+
+    assert result_timeouts == [0.25]
+    assert shutdown_calls == [{"wait": False, "cancel_futures": True}]
+    assert error == "TimeoutError: catalog health check exceeded 0.25s"
+
+
+def test_object_storage_health_check_passes_timeout_to_s3fs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Object storage reachability configures bounded S3 client timeouts."""
+    calls: list[dict[str, Any]] = []
+
+    class FakeFilesystem:
+        def ls(self, path: str, *, detail: bool, max_items: int) -> list[str]:
+            assert path == "bucket"
+            assert detail is False
+            assert max_items == 1
+            return []
+
+    def fake_get_fs_token_paths(
+        *args: Any,
+        **kwargs: Any,
+    ) -> tuple[FakeFilesystem, None, list[str]]:
+        calls.append({"args": args, "kwargs": kwargs})
+        return FakeFilesystem(), None, ["bucket"]
+
+    monkeypatch.setattr(plugin_module.fsspec, "get_fs_token_paths", fake_get_fs_token_paths)
+
+    plugin = DltIngestionPlugin()
+    error = plugin._check_object_storage_reachable(
+        {
+            "bucket": "bucket",
+            "s3_endpoint": "http://minio:9000",
+            "s3_region": "us-east-1",
+        },
+        timeout=0.75,
+    )
+
+    assert error is None
+    assert calls == [
+        {
+            "args": ("s3://bucket",),
+            "kwargs": {
+                "key": os.environ.get("AWS_ACCESS_KEY_ID"),
+                "secret": os.environ.get("AWS_SECRET_ACCESS_KEY"),
+                "client_kwargs": {
+                    "endpoint_url": "http://minio:9000",
+                    "region_name": os.environ.get("AWS_REGION") or "us-east-1",
+                },
+                "config_kwargs": {
+                    "connect_timeout": 0.75,
+                    "read_timeout": 0.75,
+                    "s3": {"addressing_style": "path"},
+                },
+            },
+        }
+    ]
