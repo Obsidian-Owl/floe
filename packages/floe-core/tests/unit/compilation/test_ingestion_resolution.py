@@ -121,6 +121,31 @@ def test_resolve_ingestion_config_fails_without_ingestion_plugin() -> None:
     assert exc_info.value.error.context == {"product": "orders-product"}
 
 
+def test_resolve_ingestion_config_fails_for_non_dlt_ingestion_plugin() -> None:
+    """Product ingestion source resolution is currently dlt-specific."""
+    from floe_core.compilation.errors import CompilationException
+    from floe_core.compilation.resolver import resolve_ingestion_config
+
+    plugins = ResolvedPlugins(
+        compute=PluginRef(type="duckdb", version="0.9.0", config={}),
+        orchestrator=PluginRef(type="dagster", version="1.5.0", config={}),
+        ingestion=PluginRef(type="airbyte", version="0.1.0", config={}),
+    )
+
+    with pytest.raises(CompilationException) as exc_info:
+        resolve_ingestion_config(_spec_with_ingestion(), plugins)
+
+    assert exc_info.value.error.code == "E201"
+    assert (
+        exc_info.value.error.message
+        == "Product-level ingestion sources currently require the dlt ingestion plugin"
+    )
+    assert exc_info.value.error.context == {
+        "product": "orders-product",
+        "ingestion_plugin": "airbyte",
+    }
+
+
 def test_compile_pipeline_merges_product_ingestion_sources(
     tmp_path: Path,
     patch_version_compat: Any,

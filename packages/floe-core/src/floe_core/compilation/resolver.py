@@ -124,8 +124,8 @@ def resolve_ingestion_config(spec: FloeSpec, plugins: ResolvedPlugins) -> Resolv
         or the original plugins object when the product has no ingestion.
 
     Raises:
-        CompilationException: If product ingestion is declared but no ingestion
-            plugin is selected in the platform manifest.
+        CompilationException: If product ingestion is declared without a supported
+            ingestion plugin selected in the platform manifest.
     """
     if spec.ingestion is None:
         return plugins
@@ -138,6 +138,22 @@ def resolve_ingestion_config(spec: FloeSpec, plugins: ResolvedPlugins) -> Resolv
                 message="Product declares ingestion sources but no ingestion plugin is selected",
                 suggestion="Add plugins.ingestion to the platform manifest",
                 context={"product": spec.metadata.name},
+            )
+        )
+
+    if plugins.ingestion.type != "dlt":
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=(
+                    "Product-level ingestion sources currently require the dlt ingestion plugin"
+                ),
+                suggestion="Set plugins.ingestion.type to dlt in the platform manifest",
+                context={
+                    "product": spec.metadata.name,
+                    "ingestion_plugin": plugins.ingestion.type,
+                },
             )
         )
 
