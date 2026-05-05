@@ -19,6 +19,7 @@ ACTIVE_SCAN_ROOTS = [
     "packages",
     "docker",
     ".github",
+    ".claude",
     "demo",
     "testing",
     "scripts",
