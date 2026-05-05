@@ -23,15 +23,31 @@ import pytest
 from pydantic import ValidationError
 
 from floe_core.schemas.compiled_artifacts import (
+    BucketAccessRequirements,
+    BucketFeatureRequirements,
     CompilationMetadata,
     CompiledArtifacts,
+    DagsterStorageBinding,
+    DbtStorageBinding,
+    DeploymentConfig,
+    DeploymentRenderings,
+    KubernetesSecretRef,
     ObservabilityConfig,
     PluginRef,
+    PolarisStorageBinding,
     ProductIdentity,
+    PyIcebergStorageBinding,
     ResolvedGovernance,
     ResolvedModel,
     ResolvedPlugins,
     ResolvedTransforms,
+    StorageBucketRequirement,
+    StorageConsumerBindings,
+    StorageCredentialBinding,
+    StorageDeploymentBinding,
+    StorageEndpointBinding,
+    StorageProvisioningIntent,
+    StorageWarehouse,
 )
 from floe_core.schemas.versions import (
     COMPILED_ARTIFACTS_VERSION,
@@ -573,6 +589,173 @@ class TestCompiledArtifactsExtensions:
         assert artifacts.transforms is not None
         assert artifacts.dbt_profiles is not None
         assert artifacts.governance is not None
+
+
+class TestStorageDeploymentBinding:
+    """Tests for compiled storage deployment bindings."""
+
+    def _binding(self) -> StorageDeploymentBinding:
+        endpoint = StorageEndpointBinding(
+            client_endpoint="http://floe-platform-minio:9000",
+            internal_endpoint="http://floe-platform-minio:9000",
+            external_endpoint="http://localhost:9000",
+            region="us-east-1",
+            path_style_access=True,
+        )
+        credentials = StorageCredentialBinding(
+            mode="kubernetes-secret",
+            secret_ref=KubernetesSecretRef(
+                name="floe-platform-minio-credentials",
+                keys={
+                    "accessKeyId": "root-user",
+                    "secretAccessKey": "root-password",  # pragma: allowlist secret
+                },
+            ),
+        )
+        bucket_features = BucketFeatureRequirements(
+            versioning="optional",
+            encryption="platform-default",
+            object_lock="disabled",
+            lifecycle="optional",
+            retention="disabled",
+        )
+        bucket_access = BucketAccessRequirements(
+            read_write_identities=["floe-platform"],
+            admin_identities=["floe-platform-admin"],
+        )
+        warehouse = StorageBucketRequirement(
+            name="floe-iceberg",
+            uri="s3://floe-iceberg",
+            purpose="warehouse",
+            create_policy="create-if-missing",
+            required_features=bucket_features,
+            access=bucket_access,
+        )
+        artifacts = StorageBucketRequirement(
+            name="floe-artifacts",
+            uri="s3://floe-artifacts",
+            purpose="artifacts",
+            create_policy="create-if-missing",
+            required_features=bucket_features,
+            access=bucket_access,
+        )
+        return StorageDeploymentBinding(
+            plugin=PluginRef(
+                type="minio",
+                version="0.1.0",
+                config={"endpoint": "http://floe-platform-minio:9000"},
+            ),
+            protocol="s3-compatible",
+            warehouse=StorageWarehouse(uri="s3://floe-iceberg", bucket="floe-iceberg"),
+            allowed_locations=["s3://floe-iceberg"],
+            buckets=[warehouse, artifacts],
+            credentials=credentials,
+            consumers=StorageConsumerBindings(
+                pyiceberg=PyIcebergStorageBinding(
+                    endpoint=endpoint,
+                    properties={
+                        "s3.endpoint": "http://floe-platform-minio:9000",
+                        "s3.region": "us-east-1",
+                        "s3.path-style-access": "true",
+                    },
+                    credential_refs={
+                        "s3.access-key-id": credentials.as_credential_ref("accessKeyId"),
+                        "s3.secret-access-key": credentials.as_credential_ref("secretAccessKey"),
+                    },
+                ),
+                polaris=PolarisStorageBinding(
+                    storage_type="S3",
+                    default_base_location="s3://floe-iceberg",
+                    allowed_locations=["s3://floe-iceberg"],
+                    endpoint=endpoint,
+                    credential_refs={
+                        "accessKeyId": credentials.as_credential_ref("accessKeyId"),
+                        "secretAccessKey": credentials.as_credential_ref("secretAccessKey"),
+                    },
+                ),
+                dbt=DbtStorageBinding(
+                    profile_fragment={
+                        "s3_endpoint": "http://floe-platform-minio:9000",
+                        "s3_region": "us-east-1",
+                        "s3_path_style_access": True,
+                    },
+                    env_refs={
+                        "s3_access_key_id": "AWS_ACCESS_KEY_ID",
+                        "s3_secret_access_key": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+                    },
+                ),
+                dagster=DagsterStorageBinding(
+                    resources={
+                        "bucket": "floe-iceberg",
+                        "endpoint_url": "http://floe-platform-minio:9000",
+                        "region_name": "us-east-1",
+                    },
+                    env_refs={
+                        "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+                        # pragma: allowlist nextline secret
+                        "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",
+                    },
+                ),
+            ),
+            provisioning=StorageProvisioningIntent(
+                enabled=True,
+                mode="helm-job",
+                default_create_policy="create-if-missing",
+                buckets=[warehouse, artifacts],
+            ),
+            renderings=DeploymentRenderings(
+                helm={
+                    "floe-platform": {
+                        "minio": {"enabled": True},
+                        "polaris": {
+                            "storage": {
+                                "s3": {
+                                    "enabled": True,
+                                    "endpoint": "http://floe-platform-minio:9000",
+                                    "region": "us-east-1",
+                                    "pathStyleAccess": True,
+                                }
+                            }
+                        },
+                    }
+                }
+            ),
+        )
+
+    def test_storage_deployment_binding_serializes_without_secret_values(self) -> None:
+        binding = self._binding()
+        payload = binding.model_dump_json()
+
+        assert "minioadmin" not in payload
+        assert "rootPassword" not in payload
+        assert "secretKey" not in payload
+        assert "floe-platform-minio-credentials" in payload
+
+    def test_compiled_artifacts_accept_deployment_storage_binding(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        artifacts = CompiledArtifacts(
+            metadata=sample_compilation_metadata,
+            identity=sample_product_identity,
+            observability=sample_observability_config,
+            plugins=ResolvedPlugins(
+                compute=PluginRef(type="duckdb", version="0.1.0"),
+                orchestrator=PluginRef(type="dagster", version="0.1.0"),
+                catalog=PluginRef(type="polaris", version="0.1.0"),
+                storage=PluginRef(type="minio", version="0.1.0"),
+            ),
+            deployment=DeploymentConfig(storage=self._binding()),
+        )
+
+        restored = CompiledArtifacts.model_validate(artifacts.model_dump(mode="json"))
+
+        assert restored.deployment is not None
+        assert restored.deployment.storage is not None
+        assert restored.deployment.storage.plugin.type == "minio"
+        assert restored.deployment.storage.protocol == "s3-compatible"
 
 
 class TestYamlSerialization:

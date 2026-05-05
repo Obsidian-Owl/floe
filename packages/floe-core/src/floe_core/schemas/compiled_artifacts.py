@@ -264,6 +264,209 @@ class ResolvedPlugins(BaseModel):
     )
 
 
+class KubernetesSecretRef(BaseModel):
+    """Reference to keys in a Kubernetes Secret."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(..., min_length=1)
+    namespace: str | None = None
+    keys: dict[str, str] = Field(default_factory=dict)
+
+
+class CredentialRef(BaseModel):
+    """Secret-free credential reference used by consumer projections."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
+    name: str
+    key: str | None = None
+
+
+class StorageCredentialBinding(BaseModel):
+    """Secret-free storage credential source."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    mode: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
+    secret_ref: KubernetesSecretRef | None = None
+    env_refs: dict[str, str] = Field(default_factory=dict)
+    service_account_ref: str | None = None
+
+    def as_credential_ref(self, logical_key: str) -> CredentialRef:
+        """Return a consumer credential reference for a logical key."""
+        if self.mode == "kubernetes-secret":
+            if self.secret_ref is None:
+                msg = "kubernetes-secret credential binding requires secret_ref"
+                raise ValueError(msg)
+            secret_key = self.secret_ref.keys.get(logical_key)
+            if secret_key is None:
+                msg = f"credential key {logical_key!r} not present in secret_ref.keys"
+                raise ValueError(msg)
+            return CredentialRef(source=self.mode, name=self.secret_ref.name, key=secret_key)
+        if self.mode == "environment":
+            env_name = self.env_refs.get(logical_key)
+            if env_name is None:
+                msg = f"credential key {logical_key!r} not present in env_refs"
+                raise ValueError(msg)
+            return CredentialRef(source=self.mode, name=env_name)
+        return CredentialRef(source=self.mode, name=self.service_account_ref or "none")
+
+
+class StorageWarehouse(BaseModel):
+    """Resolved warehouse location for Iceberg data."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    uri: str = Field(..., min_length=1)
+    bucket: str = Field(..., min_length=1)
+    prefix: str | None = None
+
+
+class BucketFeatureRequirements(BaseModel):
+    """Bucket-level feature requirements."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    versioning: Literal["required", "optional", "disabled"] = "optional"
+    encryption: Literal["required", "optional", "disabled", "platform-default"] = "platform-default"
+    object_lock: Literal["required", "optional", "disabled"] = "disabled"
+    lifecycle: Literal["required", "optional", "disabled"] = "optional"
+    retention: Literal["required", "optional", "disabled"] = "disabled"
+
+
+class BucketAccessRequirements(BaseModel):
+    """Identity access requirements for a bucket."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    read_write_identities: list[str] = Field(default_factory=list)
+    read_only_identities: list[str] = Field(default_factory=list)
+    admin_identities: list[str] = Field(default_factory=list)
+
+
+class StorageBucketRequirement(BaseModel):
+    """Desired bucket or bucket-prefix requirement."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(..., min_length=1)
+    uri: str = Field(..., min_length=1)
+    purpose: Literal["warehouse", "artifacts", "landing", "quarantine", "checkpoints", "exports"]
+    prefixes: list[str] = Field(default_factory=list)
+    create_policy: Literal["create-if-missing", "must-exist", "never-create"]
+    required_features: BucketFeatureRequirements
+    access: BucketAccessRequirements
+    tags: dict[str, str] = Field(default_factory=dict)
+
+
+class StorageEndpointBinding(BaseModel):
+    """Role-specific storage endpoints."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    client_endpoint: str = Field(..., min_length=1)
+    internal_endpoint: str | None = None
+    external_endpoint: str | None = None
+    region: str = Field(..., min_length=1)
+    path_style_access: bool = False
+
+
+class PyIcebergStorageBinding(BaseModel):
+    """PyIceberg catalog and FileIO storage projection."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    endpoint: StorageEndpointBinding
+    properties: dict[str, str] = Field(default_factory=dict)
+    credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+
+
+class PolarisStorageBinding(BaseModel):
+    """Apache Polaris storage projection."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    storage_type: Literal["S3", "GCS", "AZURE"]
+    default_base_location: str = Field(..., min_length=1)
+    allowed_locations: list[str] = Field(default_factory=list)
+    endpoint: StorageEndpointBinding | None = None
+    credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+
+
+class DbtStorageBinding(BaseModel):
+    """dbt profile storage projection."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    profile_fragment: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, str] = Field(default_factory=dict)
+
+
+class DagsterStorageBinding(BaseModel):
+    """Dagster resource storage projection."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    resources: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, str] = Field(default_factory=dict)
+
+
+class StorageConsumerBindings(BaseModel):
+    """Tool-specific storage projections generated by the storage plugin."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    pyiceberg: PyIcebergStorageBinding
+    polaris: PolarisStorageBinding | None = None
+    dbt: DbtStorageBinding | None = None
+    dagster: DagsterStorageBinding | None = None
+
+
+class StorageProvisioningIntent(BaseModel):
+    """Desired runtime provisioning behavior for storage resources."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    enabled: bool = False
+    mode: Literal["helm-job", "external", "manual", "future-plugin-runtime"]
+    default_create_policy: Literal["create-if-missing", "must-exist", "never-create"]
+    buckets: list[StorageBucketRequirement] = Field(default_factory=list)
+
+
+class DeploymentRenderings(BaseModel):
+    """Deployment-tool renderings derived from typed bindings."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    helm: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+class StorageDeploymentBinding(BaseModel):
+    """Secret-free storage deployment binding."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    plugin: PluginRef
+    protocol: Literal["s3-compatible", "s3", "gcs", "azure-blob"]
+    warehouse: StorageWarehouse
+    allowed_locations: list[str] = Field(default_factory=list)
+    buckets: list[StorageBucketRequirement] = Field(default_factory=list)
+    credentials: StorageCredentialBinding
+    consumers: StorageConsumerBindings
+    provisioning: StorageProvisioningIntent
+    renderings: DeploymentRenderings
+
+
+class DeploymentConfig(BaseModel):
+    """Deployment bindings derived during compilation."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    storage: StorageDeploymentBinding | None = None
+
+
 class ResolvedModel(BaseModel):
     """A transform model with resolved compute target and quality configuration.
 
@@ -698,6 +901,11 @@ class CompiledArtifacts(BaseModel):
         description="Resolved plugin selections (v0.2.0+, optional for backward compat)",
     )
 
+    deployment: DeploymentConfig | None = Field(
+        default=None,
+        description="Deployment bindings derived from resolved plugin configuration",
+    )
+
     transforms: ResolvedTransforms | None = Field(
         default=None,
         description="Compiled transform configuration (v0.2.0+, optional for backward compat)",
@@ -950,7 +1158,11 @@ __all__ = [
     # Core artifacts
     "CompiledArtifacts",
     "CompilationMetadata",
+    "CredentialRef",
+    "DeploymentConfig",
     "DeploymentMode",
+    "DeploymentRenderings",
+    "KubernetesSecretRef",
     "ManifestRef",
     "ObservabilityConfig",
     "ProductIdentity",
@@ -964,4 +1176,18 @@ __all__ = [
     "ResolvedGovernance",
     # Enforcement summary (v0.3.0 - Epic 3B)
     "EnforcementResultSummary",
+    # Deployment bindings
+    "BucketAccessRequirements",
+    "BucketFeatureRequirements",
+    "DagsterStorageBinding",
+    "DbtStorageBinding",
+    "PolarisStorageBinding",
+    "PyIcebergStorageBinding",
+    "StorageBucketRequirement",
+    "StorageConsumerBindings",
+    "StorageCredentialBinding",
+    "StorageDeploymentBinding",
+    "StorageEndpointBinding",
+    "StorageProvisioningIntent",
+    "StorageWarehouse",
 ]
