@@ -12,7 +12,6 @@ from unittest.mock import MagicMock
 
 import pytest
 from floe_core.plugins.ingestion import IngestionConfig, IngestionResult
-from testing.fixtures.credentials import get_minio_credentials
 
 from floe_ingestion_dlt.errors import PipelineConfigurationError
 from floe_ingestion_dlt.plugin import DltIngestionPlugin
@@ -429,9 +428,8 @@ class TestGetDestinationConfig:
     def test_get_destination_config_basic(self) -> None:
         """Test get_destination_config() with basic catalog configuration.
 
-        Given catalog_config with uri and warehouse, when get_destination_config()
-        is called, then it returns dict with destination="iceberg",
-        catalog_type="rest", catalog_uri, and warehouse.
+        Given catalog_config with catalog-only fields, when get_destination_config()
+        is called, then it returns an empty dlt filesystem destination config.
         """
         plugin = DltIngestionPlugin()
         catalog_config = {
@@ -441,63 +439,56 @@ class TestGetDestinationConfig:
 
         result = plugin.get_destination_config(catalog_config)
 
-        assert result["destination"] == "iceberg"
-        assert result["catalog_type"] == "rest"
-        assert result["catalog_uri"] == "http://polaris:8181/api/catalog"
-        assert result["warehouse"] == "floe_warehouse"
+        assert result == {}
 
     @pytest.mark.requirement("4F-FR-020")
     def test_get_destination_config_s3_config(self) -> None:
         """Test get_destination_config() with S3/MinIO configuration.
 
         Given catalog_config with s3_endpoint, s3_access_key, s3_secret_key,
-        s3_region, when get_destination_config() is called, then all S3
-        parameters are mapped to output dict.
+        s3_region, when get_destination_config() is called, then only
+        non-secret filesystem credential parameters are mapped.
         """
         plugin = DltIngestionPlugin()
-        _expected_access, _expected_secret = get_minio_credentials()
         catalog_config = {
             "uri": "http://polaris:8181/api/catalog",
             "warehouse": "floe_warehouse",
             "s3_endpoint": "http://minio:9000",
-            "s3_access_key": _expected_access,
-            "s3_secret_key": _expected_secret,  # pragma: allowlist secret
+            "s3_access_key": "AKIAEXAMPLE",  # pragma: allowlist secret
+            "s3_secret_key": "secret",  # pragma: allowlist secret
             "s3_region": "us-east-1",
         }
 
         result = plugin.get_destination_config(catalog_config)
 
-        assert result["destination"] == "iceberg"
-        assert result["catalog_type"] == "rest"
-        assert result["s3_endpoint"] == "http://minio:9000"
-        assert result["s3_access_key"] == _expected_access
-        assert result["s3_secret_key"] == _expected_secret  # pragma: allowlist secret
-        assert result["s3_region"] == "us-east-1"
+        assert result == {
+            "credentials": {
+                "endpoint_url": "http://minio:9000",
+                "region_name": "us-east-1",
+                "s3_url_style": "path",
+            }
+        }
 
     @pytest.mark.requirement("4F-FR-019")
     def test_get_destination_config_minimal(self) -> None:
         """Test get_destination_config() with empty catalog_config.
 
         Given empty catalog_config {}, when get_destination_config() is called,
-        then it returns dict with just destination and catalog_type (base fields).
+        then it returns no dlt filesystem kwargs.
         """
         plugin = DltIngestionPlugin()
         catalog_config: dict[str, str] = {}
 
         result = plugin.get_destination_config(catalog_config)
 
-        assert result["destination"] == "iceberg"
-        assert result["catalog_type"] == "rest"
-        assert "catalog_uri" not in result
-        assert "warehouse" not in result
-        assert "s3_endpoint" not in result
+        assert result == {}
 
     @pytest.mark.requirement("4F-FR-020")
     def test_get_destination_config_partial_s3(self) -> None:
         """Test get_destination_config() with partial S3 configuration.
 
         Given catalog_config with only s3_endpoint (no keys/region), when
-        get_destination_config() is called, then only s3_endpoint appears
+        get_destination_config() is called, then only endpoint credentials appear
         in output dict (no empty/null S3 fields).
         """
         plugin = DltIngestionPlugin()
@@ -509,13 +500,12 @@ class TestGetDestinationConfig:
 
         result = plugin.get_destination_config(catalog_config)
 
-        assert result["destination"] == "iceberg"
-        assert result["catalog_type"] == "rest"
-        assert result["s3_endpoint"] == "http://minio:9000"
-        # Verify keys/region are not present
-        assert "s3_access_key" not in result
-        assert "s3_secret_key" not in result
-        assert "s3_region" not in result
+        assert result == {
+            "credentials": {
+                "endpoint_url": "http://minio:9000",
+                "s3_url_style": "path",
+            }
+        }
 
     @pytest.mark.requirement("4F-FR-019")
     def test_get_destination_config_not_started_ok(self) -> None:
@@ -533,8 +523,7 @@ class TestGetDestinationConfig:
         # Should not raise RuntimeError
         result = plugin.get_destination_config(catalog_config)
 
-        assert result["destination"] == "iceberg"
-        assert result["catalog_type"] == "rest"
+        assert result == {}
 
 
 class TestIncrementalLoading:

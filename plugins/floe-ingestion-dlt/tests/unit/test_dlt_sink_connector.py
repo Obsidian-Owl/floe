@@ -378,7 +378,8 @@ class TestDltSinkConnector:
 
         result = dlt_plugin.get_destination_config(catalog_config)
 
-        assert result["s3_access_key"] == "AKIAEXAMPLE"
+        assert "s3_access_key" not in result
+        assert "s3_secret_key" not in result
 
         # Verify warning was actually emitted (structlog writes to stdout)
         assert "s3_credentials_in_config" in capsys.readouterr().out, (

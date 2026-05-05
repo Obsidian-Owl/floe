@@ -21,6 +21,7 @@ Requirements Covered:
 from __future__ import annotations
 
 import hashlib
+import os
 import time
 import uuid
 from datetime import datetime, timezone
@@ -277,29 +278,8 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 )
                 return status
 
-            # Check 2: dlt is importable
             try:
                 import dlt as _dlt  # noqa: F401
-
-                elapsed_ms = (time.perf_counter() - start) * 1000
-                status = HealthStatus(
-                    state=HealthState.HEALTHY,
-                    message="dlt ingestion plugin is healthy",
-                    details={
-                        "dlt_version": self._dlt_version,
-                        "started": self._started,
-                        "response_time_ms": elapsed_ms,
-                        "checked_at": checked_at,
-                        "timeout": effective_timeout,
-                    },
-                )
-                logger.info(
-                    "health_check_completed",
-                    state=status.state.value,
-                    dlt_version=self._dlt_version,
-                    response_time_ms=elapsed_ms,
-                )
-                return status
             except ImportError:
                 elapsed_ms = (time.perf_counter() - start) * 1000
                 status = HealthStatus(
@@ -319,6 +299,68 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     response_time_ms=elapsed_ms,
                 )
                 return status
+
+            catalog_config = self._configured_catalog_config()
+            object_storage_configured = (
+                bool(self._bucket_url(catalog_config)) if catalog_config else False
+            )
+            if catalog_config:
+                catalog_error = self._check_catalog_reachable(catalog_config, effective_timeout)
+                if catalog_error is not None:
+                    elapsed_ms = (time.perf_counter() - start) * 1000
+                    return HealthStatus(
+                        state=HealthState.UNHEALTHY,
+                        message="Iceberg catalog is unreachable",
+                        details={
+                            "reason": "catalog_unreachable",
+                            "catalog_error": catalog_error,
+                            "response_time_ms": elapsed_ms,
+                            "checked_at": checked_at,
+                            "timeout": effective_timeout,
+                        },
+                    )
+
+                object_storage_error = self._check_object_storage_reachable(
+                    catalog_config,
+                    effective_timeout,
+                )
+                if object_storage_error is not None:
+                    elapsed_ms = (time.perf_counter() - start) * 1000
+                    return HealthStatus(
+                        state=HealthState.UNHEALTHY,
+                        message="Object storage is unreachable",
+                        details={
+                            "reason": "object_storage_unreachable",
+                            "object_storage_error": object_storage_error,
+                            "response_time_ms": elapsed_ms,
+                            "checked_at": checked_at,
+                            "timeout": effective_timeout,
+                        },
+                    )
+
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            status = HealthStatus(
+                state=HealthState.HEALTHY,
+                message="dlt ingestion plugin is healthy",
+                details={
+                    "dlt_version": self._dlt_version,
+                    "started": self._started,
+                    "catalog_check": "reachable" if catalog_config else "not_configured",
+                    "object_storage_check": "reachable"
+                    if object_storage_configured
+                    else "not_configured",
+                    "response_time_ms": elapsed_ms,
+                    "checked_at": checked_at,
+                    "timeout": effective_timeout,
+                },
+            )
+            logger.info(
+                "health_check_completed",
+                state=status.state.value,
+                dlt_version=self._dlt_version,
+                response_time_ms=elapsed_ms,
+            )
+            return status
 
     def create_pipeline(self, config: IngestionConfig) -> Any:
         """Create a dlt pipeline from configuration.
@@ -375,10 +417,20 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
 
             import dlt
 
-            pipeline = dlt.pipeline(
-                pipeline_name=pipeline_name,
-                dataset_name=dataset_name,
-            )
+            pipeline_kwargs: dict[str, Any] = {
+                "pipeline_name": pipeline_name,
+                "dataset_name": dataset_name,
+            }
+            catalog_config = self._pipeline_catalog_config(config)
+            if catalog_config:
+                from dlt.destinations import filesystem
+
+                self._apply_iceberg_environment(catalog_config)
+                pipeline_kwargs["destination"] = filesystem(
+                    **self.get_destination_config(catalog_config)
+                )
+
+            pipeline = dlt.pipeline(**pipeline_kwargs)
 
             logger.info(
                 "pipeline_created",
@@ -387,6 +439,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 source_type=config.source_type,
                 destination_table=config.destination_table,
                 write_mode=config.write_mode,
+                has_destination=bool(catalog_config),
             )
 
             return pipeline
@@ -487,6 +540,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     "write_disposition": write_disposition,
                     "table_name": table_name,
                     "schema_contract": schema_contract,
+                    "table_format": kwargs.get("table_format", "iceberg"),
                 }
 
                 # Add primary_key if provided with merge disposition
@@ -594,8 +648,9 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
     def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
         """Generate Iceberg destination configuration for dlt.
 
-        Maps the platform's catalog config (Polaris REST catalog) to dlt's
-        Iceberg destination parameters.
+        Maps platform catalog/storage settings to dlt filesystem destination
+        kwargs. dlt's Iceberg support is the filesystem destination plus
+        PyIceberg catalog configuration, not a standalone ``iceberg`` destination.
 
         Args:
             catalog_config: Catalog connection configuration with keys:
@@ -607,47 +662,215 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 - s3_region: Optional S3 region
 
         Returns:
-            dlt destination configuration dict for Iceberg.
+            dlt filesystem destination kwargs for Iceberg writes.
         """
         tracer = get_tracer()
         with ingestion_span(tracer, "get_destination_config"):
-            dest_config: dict[str, Any] = {
-                "destination": "iceberg",
-                "catalog_type": "rest",
-            }
+            dest_config: dict[str, Any] = {}
 
-            # Map catalog URI
-            if "uri" in catalog_config:
-                dest_config["catalog_uri"] = catalog_config["uri"]
+            bucket_url = self._bucket_url(catalog_config)
+            if bucket_url is not None:
+                dest_config["bucket_url"] = bucket_url
 
-            # Map warehouse
-            if "warehouse" in catalog_config:
-                dest_config["warehouse"] = catalog_config["warehouse"]
+            credentials: dict[str, Any] = {}
+            s3_endpoint = self._first_config_value(
+                catalog_config,
+                "s3_endpoint",
+                "endpoint",
+                "minio_endpoint",
+            )
+            if s3_endpoint is not None:
+                credentials["endpoint_url"] = str(s3_endpoint)
+            s3_region = self._first_config_value(catalog_config, "s3_region", "region")
+            if s3_region is not None:
+                credentials["region_name"] = str(s3_region)
+            path_style = catalog_config.get(
+                "s3_path_style_access",
+                catalog_config.get("path_style_access", s3_endpoint is not None),
+            )
+            if path_style:
+                credentials["s3_url_style"] = "path"
+            if credentials:
+                dest_config["credentials"] = credentials
 
-            # Map S3/MinIO storage config
-            if "s3_endpoint" in catalog_config:
-                dest_config["s3_endpoint"] = catalog_config["s3_endpoint"]
-            if "s3_access_key" in catalog_config:
+            if "s3_access_key" in catalog_config or "s3_secret_key" in catalog_config:
                 logger.warning(
                     "s3_credentials_in_config",
                     message="S3 credentials should use environment variables "
                     "(AWS_ACCESS_KEY_ID), not config passthrough. See FR-018.",
                 )
-                dest_config["s3_access_key"] = catalog_config["s3_access_key"]
-            if "s3_secret_key" in catalog_config:
-                dest_config["s3_secret_key"] = catalog_config["s3_secret_key"]
-            if "s3_region" in catalog_config:
-                dest_config["s3_region"] = catalog_config["s3_region"]
 
             logger.info(
                 "destination_config_generated",
-                catalog_type="rest",
-                has_uri="uri" in catalog_config,
-                has_warehouse="warehouse" in catalog_config,
-                has_s3="s3_endpoint" in catalog_config,
+                destination="filesystem",
+                has_bucket_url="bucket_url" in dest_config,
+                has_s3_endpoint=bool(credentials.get("endpoint_url")),
             )
 
             return dest_config
+
+    def _configured_catalog_config(self) -> dict[str, Any]:
+        catalog_config = getattr(self._config, "catalog_config", None)
+        return dict(catalog_config) if isinstance(catalog_config, dict) else {}
+
+    def _pipeline_catalog_config(self, config: IngestionConfig) -> dict[str, Any]:
+        source_catalog_config = config.source_config.get("catalog_config")
+        if isinstance(source_catalog_config, dict) and source_catalog_config:
+            return dict(source_catalog_config)
+        return self._configured_catalog_config()
+
+    @staticmethod
+    def _first_config_value(catalog_config: dict[str, Any], *keys: str) -> Any | None:
+        for key in keys:
+            value = catalog_config.get(key)
+            if value not in (None, ""):
+                return value
+        return None
+
+    def _bucket_url(self, catalog_config: dict[str, Any]) -> str | None:
+        bucket_url = self._first_config_value(
+            catalog_config,
+            "bucket_url",
+            "storage_url",
+            "base_location",
+            "default_base_location",
+        )
+        if bucket_url is not None:
+            return str(bucket_url)
+        bucket = self._first_config_value(catalog_config, "bucket", "s3_bucket")
+        if bucket is None:
+            return None
+        bucket_str = str(bucket)
+        return bucket_str if "://" in bucket_str else f"s3://{bucket_str}"
+
+    def _pyiceberg_catalog_properties(self, catalog_config: dict[str, Any]) -> dict[str, str]:
+        properties: dict[str, str] = {}
+        uri = self._first_config_value(catalog_config, "uri", "catalog_uri")
+        if uri is not None:
+            properties["uri"] = str(uri)
+        warehouse = self._first_config_value(catalog_config, "warehouse")
+        if warehouse is not None:
+            properties["warehouse"] = str(warehouse)
+
+        oauth2 = catalog_config.get("oauth2")
+        credential = os.environ.get("POLARIS_CREDENTIAL") or self._first_config_value(
+            catalog_config,
+            "credential",
+        )
+        if credential is None and isinstance(oauth2, dict):
+            client_id = oauth2.get("client_id")
+            client_secret = oauth2.get("client_secret")
+            if client_id and client_secret:
+                credential = f"{client_id}:{client_secret}"
+        if credential is not None:
+            properties["credential"] = str(credential)
+
+        scope = os.environ.get("POLARIS_SCOPE") or self._first_config_value(catalog_config, "scope")
+        if scope is None and isinstance(oauth2, dict):
+            scope = oauth2.get("scope")
+        if scope is not None:
+            properties["scope"] = str(scope)
+
+        oauth2_server_uri = self._first_config_value(
+            catalog_config,
+            "oauth2_server_uri",
+            "oauth2-server-uri",
+            "token_url",
+        )
+        if oauth2_server_uri is None and isinstance(oauth2, dict):
+            oauth2_server_uri = oauth2.get("token_url") or oauth2.get("oauth2_server_uri")
+        if oauth2_server_uri is not None:
+            properties["oauth2-server-uri"] = str(oauth2_server_uri)
+
+        s3_endpoint = self._first_config_value(catalog_config, "s3_endpoint", "endpoint")
+        if s3_endpoint is not None:
+            properties["s3.endpoint"] = str(s3_endpoint)
+        aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+        if aws_access_key:
+            properties["s3.access-key-id"] = aws_access_key
+        aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+        if aws_secret_key:
+            properties["s3.secret-access-key"] = aws_secret_key
+        region = os.environ.get("AWS_REGION") or self._first_config_value(
+            catalog_config,
+            "s3_region",
+            "region",
+        )
+        if region is not None:
+            properties["s3.region"] = str(region)
+        path_style = catalog_config.get(
+            "s3_path_style_access",
+            catalog_config.get("path_style_access", s3_endpoint is not None),
+        )
+        if path_style:
+            properties["s3.path-style-access"] = "true"
+        return properties
+
+    def _apply_iceberg_environment(self, catalog_config: dict[str, Any]) -> None:
+        catalog_name = str(catalog_config.get("catalog_name", "polaris"))
+        env_catalog = catalog_name.upper().replace("-", "_")
+        prefix = f"PYICEBERG_CATALOG__{env_catalog}__"
+
+        os.environ["ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"] = catalog_name
+        os.environ["ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE"] = "rest"
+        os.environ[f"{prefix}TYPE"] = "rest"
+        for key, value in self._pyiceberg_catalog_properties(catalog_config).items():
+            env_key = key.upper().replace(".", "__").replace("-", "_")
+            os.environ[f"{prefix}{env_key}"] = value
+
+    def _pyiceberg_catalog_kwargs(self, catalog_config: dict[str, Any]) -> dict[str, str]:
+        return {"type": "rest", **self._pyiceberg_catalog_properties(catalog_config)}
+
+    def _check_catalog_reachable(
+        self,
+        catalog_config: dict[str, Any],
+        timeout: float,
+    ) -> str | None:
+        _ = timeout
+        try:
+            from pyiceberg.catalog import load_catalog
+
+            catalog_name = str(catalog_config.get("catalog_name", "polaris"))
+            catalog = load_catalog(
+                catalog_name,
+                **self._pyiceberg_catalog_kwargs(catalog_config),
+            )
+            catalog.list_namespaces()
+            return None
+        except Exception as exc:
+            return f"{type(exc).__name__}: {sanitize_error_message(str(exc))}"
+
+    def _check_object_storage_reachable(
+        self,
+        catalog_config: dict[str, Any],
+        timeout: float,
+    ) -> str | None:
+        _ = timeout
+        bucket_url = self._bucket_url(catalog_config)
+        if bucket_url is None or not bucket_url.startswith("s3://"):
+            return None
+        try:
+            import fsspec
+
+            fs, _, paths = fsspec.get_fs_token_paths(
+                bucket_url,
+                key=os.environ.get("AWS_ACCESS_KEY_ID"),
+                secret=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+                client_kwargs={
+                    "endpoint_url": self._first_config_value(
+                        catalog_config,
+                        "s3_endpoint",
+                        "endpoint",
+                    ),
+                    "region_name": os.environ.get("AWS_REGION")
+                    or self._first_config_value(catalog_config, "s3_region", "region"),
+                },
+                config_kwargs={"s3": {"addressing_style": "path"}},
+            )
+            fs.ls(paths[0], detail=False, max_items=1)
+            return None
+        except Exception as exc:
+            return f"{type(exc).__name__}: {sanitize_error_message(str(exc))}"
 
     # -----------------------------------------------------------------------
     # SinkConnector ABC implementation (Epic 4G - Reverse ETL)
