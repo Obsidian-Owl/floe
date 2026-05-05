@@ -256,9 +256,13 @@ def project_dir_with_ingestion(tmp_path: Path) -> Path:
             config={
                 "sources": [
                     {
-                        "name": "github-events",
-                        "source_type": "rest_api",
-                        "destination_table": "bronze.github_events",
+                        "name": "raw_customers",
+                        "source_type": "filesystem",
+                        "source_config": {
+                            "format": "csv",
+                            "path": "data/raw_customers.csv",
+                        },
+                        "destination_table": "bronze.raw_customers",
                     }
                 ]
             },
@@ -399,9 +403,13 @@ def project_dir_with_ingestion_no_manifest(tmp_path: Path) -> Path:
             config={
                 "sources": [
                     {
-                        "name": "github-events",
-                        "source_type": "rest_api",
-                        "destination_table": "bronze.github_events",
+                        "name": "raw_customers",
+                        "source_type": "filesystem",
+                        "source_config": {
+                            "format": "csv",
+                            "path": "data/raw_customers.csv",
+                        },
+                        "destination_table": "bronze.raw_customers",
                     }
                 ]
             },
@@ -1232,12 +1240,15 @@ def test_runtime_semantic_asset_depends_on_compiled_model_assets(
 
 
 @pytest.mark.requirement("AC-5")
-def test_runtime_fails_loudly_when_ingestion_configured(
+def test_runtime_wires_ingestion_when_configured(
     project_dir_with_ingestion: Path,
 ) -> None:
-    """Dagster ingestion runtime is blocked until source construction exists."""
-    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
-        load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion)
+    """Dagster runtime wires filesystem ingestion resources and assets."""
+    result = load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion)
+
+    resources = result.resources or {}
+    assert "ingestion" in resources
+    assert "run_ingestion_raw_customers" in _asset_names(result)
 
 
 @pytest.mark.requirement("AC-5")
@@ -1278,7 +1289,7 @@ def test_runtime_fails_for_flat_ingestion_workload_config(
     project_dir_with_ingestion_flat_config: Path,
 ) -> None:
     """Legacy flat non-empty ingestion config is a workload and must fail."""
-    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+    with pytest.raises(Exception, match="sources"):
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_flat_config)
 
 
@@ -1287,7 +1298,7 @@ def test_runtime_fails_for_non_list_ingestion_sources(
     project_dir_with_ingestion_sources_dict: Path,
 ) -> None:
     """Malformed non-list sources config must fail loudly."""
-    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+    with pytest.raises(Exception, match="sources"):
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_sources_dict)
 
 
@@ -1296,7 +1307,7 @@ def test_runtime_fails_for_sources_none_before_missing_manifest(
     project_dir_with_ingestion_sources_none_no_manifest: Path,
 ) -> None:
     """Explicit sources=None is malformed and fails before manifest inspection."""
-    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+    with pytest.raises(Exception, match="sources"):
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_sources_none_no_manifest)
 
 
@@ -1305,7 +1316,7 @@ def test_runtime_fails_for_empty_sources_with_other_workload_keys(
     project_dir_with_ingestion_empty_sources_and_flat_keys: Path,
 ) -> None:
     """Empty sources plus flat workload keys is still a workload config."""
-    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+    with pytest.raises(Exception, match="Extra inputs"):
         load_product_definitions(
             PRODUCT_NAME,
             project_dir_with_ingestion_empty_sources_and_flat_keys,
@@ -1313,11 +1324,11 @@ def test_runtime_fails_for_empty_sources_with_other_workload_keys(
 
 
 @pytest.mark.requirement("AC-5")
-def test_runtime_ingestion_failure_precedes_missing_manifest(
+def test_runtime_still_requires_dbt_manifest_with_valid_ingestion(
     project_dir_with_ingestion_no_manifest: Path,
 ) -> None:
-    """Unsupported ingestion error must win before dbt manifest inspection."""
-    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+    """Valid ingestion wiring does not bypass existing dbt manifest validation."""
+    with pytest.raises(Exception, match="manifest.json does not exist"):
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_no_manifest)
 
 

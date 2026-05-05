@@ -1,4 +1,4 @@
-"""Integration tests for blocked ingestion orchestrator runtime wiring (T032)."""
+"""Integration tests for ingestion orchestrator runtime wiring."""
 
 from __future__ import annotations
 
@@ -112,8 +112,8 @@ class TestIngestionWiringIntegration:
 
     @pytest.mark.integration
     @pytest.mark.requirement("4F-FR-059")
-    def test_definitions_fail_loudly_with_ingestion_configured(self, tmp_path: Path) -> None:
-        """Loader-path Definitions reject ingestion until source construction exists."""
+    def test_definitions_wire_filesystem_ingestion(self, tmp_path: Path) -> None:
+        """Loader-path Definitions include filesystem ingestion resources and assets."""
         from floe_orchestrator_dagster.loader import load_product_definitions
 
         artifacts = _compiled_artifacts(
@@ -123,14 +123,13 @@ class TestIngestionWiringIntegration:
                 "config": {
                     "sources": [
                         {
-                            "name": "github-events",
-                            "source_type": "rest_api",
-                            "destination_table": "bronze.github_events",
-                        },
-                        {
-                            "name": "warehouse_users",
-                            "source_type": "sql_database",
-                            "destination_table": "bronze.users",
+                            "name": "raw_customers",
+                            "source_type": "filesystem",
+                            "source_config": {
+                                "format": "csv",
+                                "path": "data/raw_customers.csv",
+                            },
+                            "destination_table": "bronze.raw_customers",
                         },
                     ]
                 },
@@ -138,7 +137,33 @@ class TestIngestionWiringIntegration:
         )
         project_dir = _write_project(tmp_path, artifacts)
 
-        with pytest.raises(ValueError, match="Dagster ingestion runtime is not enabled"):
+        definitions = load_product_definitions("ingestion-test-pipeline", project_dir)
+
+        assert "ingestion" in definitions.resources
+        assert "run_ingestion_raw_customers" in _asset_names(definitions)
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-059")
+    def test_definitions_fail_loudly_with_malformed_sources(self, tmp_path: Path) -> None:
+        """Loader-path Definitions reject malformed ingestion sources config."""
+        from floe_orchestrator_dagster.loader import load_product_definitions
+
+        artifacts = _compiled_artifacts(
+            ingestion={
+                "type": "dlt",
+                "version": "0.1.0",
+                "config": {
+                    "sources": {
+                        "name": "raw_customers",
+                        "source_type": "filesystem",
+                        "destination_table": "bronze.raw_customers",
+                    }
+                },
+            },
+        )
+        project_dir = _write_project(tmp_path, artifacts)
+
+        with pytest.raises(Exception, match="sources"):
             load_product_definitions("ingestion-test-pipeline", project_dir)
 
     @pytest.mark.integration
@@ -148,6 +173,29 @@ class TestIngestionWiringIntegration:
         from floe_orchestrator_dagster.loader import load_product_definitions
 
         artifacts = _compiled_artifacts(ingestion=None)
+        project_dir = _write_project(tmp_path, artifacts)
+
+        definitions = load_product_definitions("ingestion-test-pipeline", project_dir)
+
+        assert "ingestion" not in definitions.resources
+        assert not any(name.startswith("run_ingestion_") for name in _asset_names(definitions))
+
+    @pytest.mark.integration
+    @pytest.mark.requirement("4F-FR-063")
+    def test_definitions_degrade_with_selected_ingestion_no_sources(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Selected ingestion with no sources remains non-blocking."""
+        from floe_orchestrator_dagster.loader import load_product_definitions
+
+        artifacts = _compiled_artifacts(
+            ingestion={
+                "type": "dlt",
+                "version": "0.1.0",
+                "config": {"sources": []},
+            },
+        )
         project_dir = _write_project(tmp_path, artifacts)
 
         definitions = load_product_definitions("ingestion-test-pipeline", project_dir)

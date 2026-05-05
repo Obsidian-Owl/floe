@@ -31,11 +31,6 @@ _PROJECT_DIR_REQUIRED_MESSAGE = (
     "and compiled_artifacts.json are resolved from one product directory; use the "
     "generated definitions.py loader/shim path for runtime definitions."
 )
-_INGESTION_RUNTIME_DISABLED_MESSAGE = (
-    "Dagster ingestion runtime is not enabled because compiled JSON config cannot yet "
-    "construct executable dlt source objects; implement a source-construction layer "
-    "before enabling ingestion assets."
-)
 logger = logging.getLogger(__name__)
 
 
@@ -216,8 +211,6 @@ def build_product_definitions(
     policy.validate_required_plugins(artifacts.plugins)
 
     plugins = artifacts.plugins
-    if _has_ingestion_workloads(plugins):
-        raise ValueError(_INGESTION_RUNTIME_DISABLED_MESSAGE)
 
     manifest_path = project_dir / "target" / "manifest.json"
 
@@ -337,6 +330,13 @@ def build_product_definitions(
         ),
     }
     assets: list[Any] = [_dbt_assets_fn]
+
+    if _has_ingestion_workloads(plugins):
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+        from floe_orchestrator_dagster.resources.ingestion import create_ingestion_resources
+
+        resources.update(create_ingestion_resources(plugins.ingestion))
+        assets.extend(create_ingestion_assets(plugins.ingestion, project_dir=project_dir))
 
     if plugins and plugins.semantic:
         semantic_resources = _create_semantic_resources(plugins)
