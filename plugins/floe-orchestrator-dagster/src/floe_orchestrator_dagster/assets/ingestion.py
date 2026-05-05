@@ -19,10 +19,13 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dagster import AssetKey, asset
 from floe_core.plugins.ingestion import IngestionConfig
+
+from floe_orchestrator_dagster.ingestion import build_dlt_source
 
 if TYPE_CHECKING:
     from dagster import AssetsDefinition
@@ -111,18 +114,22 @@ class FloeIngestionTranslator:
 
 def create_ingestion_assets(
     ingestion_ref: PluginRef,
+    *,
+    project_dir: Path,
 ) -> list[AssetsDefinition]:
     """Create Dagster asset definitions for ingestion pipelines.
 
-    Creates helper assets only when source configuration already contains
-    explicit executable dlt source objects. Normal compiled JSON ingestion
-    configuration is not executable yet and fails loudly.
+    Creates helper assets from compiled JSON ingestion configuration. Source
+    objects are constructed during materialization so compiled artifacts can
+    stay JSON-safe. Tests and internal callers may still pass an executable
+    ``source_config.source`` object directly.
 
     For direct dlt integration, use FloeIngestionTranslator with the
     ``@dlt_assets`` decorator instead.
 
     Args:
         ingestion_ref: Resolved ingestion plugin reference from CompiledArtifacts.
+        project_dir: Project root used to resolve JSON-safe source paths.
 
     Returns:
         List containing ingestion runner asset definitions.
@@ -142,7 +149,7 @@ def create_ingestion_assets(
         ...         }]
         ...     },
         ... )
-        >>> assets = create_ingestion_assets(ref)
+        >>> assets = create_ingestion_assets(ref, project_dir=Path("."))
         >>> len(assets)
         1
 
@@ -163,13 +170,13 @@ def create_ingestion_assets(
             raise ValueError(f"normalized ingestion asset name collision: {asset_name}")
         asset_names.add(asset_name)
         _validate_required_source_fields(source_config)
-        _validate_executable_source(source_config)
         assets.append(
             _create_ingestion_asset(
                 ingestion_type=ingestion_type,
                 ingestion_version=ingestion_version,
                 asset_name=asset_name,
                 source_config=source_config,
+                project_dir=project_dir,
             )
         )
 
@@ -208,25 +215,6 @@ def _validate_required_source_fields(source_config: Mapping[str, Any]) -> None:
             )
 
 
-def _validate_executable_source(source_config: Mapping[str, Any]) -> None:
-    """Require an explicit non-JSON dlt source object before creating assets."""
-    source_ref = (source_config.get("source_config") or {}).get("source")
-    if (
-        source_ref is None
-        or isinstance(
-            source_ref,
-            str | bytes | int | float | bool | dict | list | tuple | set,
-        )
-        or not _is_source_like(source_ref)
-    ):
-        source_name = source_config.get("name", "<unnamed>")
-        raise ValueError(
-            "Dagster ingestion helper requires source_config.source to contain an "
-            f"executable dlt source object for source {source_name!r}; normal compiled "
-            "JSON config cannot construct runnable ingestion assets yet."
-        )
-
-
 def _is_source_like(source_ref: Any) -> bool:
     """Return True for lightweight dlt-like source/resource objects."""
     return callable(source_ref) or any(
@@ -261,6 +249,7 @@ def _create_ingestion_asset(
     ingestion_version: str,
     asset_name: str,
     source_config: dict[str, Any],
+    project_dir: Path,
 ) -> AssetsDefinition:
     source_name = str(source_config["name"])
 
@@ -293,6 +282,7 @@ def _create_ingestion_asset(
             write_mode=source_config.get("write_mode", "append"),
             schema_contract=source_config.get("schema_contract", "evolve"),
         )
+        dlt_source = _source_from_config(source_config, config, project_dir=project_dir)
         pipeline = ingestion_plugin.create_pipeline(config)
         run_kwargs = {
             "write_disposition": config.write_mode,
@@ -300,10 +290,8 @@ def _create_ingestion_asset(
             "schema_contract": config.schema_contract,
             "cursor_field": source_config.get("cursor_field"),
             "primary_key": source_config.get("primary_key"),
+            "source": dlt_source,
         }
-        source = config.source_config.get("source")
-        if source is not None:
-            run_kwargs["source"] = source
 
         result = ingestion_plugin.run(pipeline, **run_kwargs)
 
@@ -314,6 +302,19 @@ def _create_ingestion_asset(
         return result
 
     return _run_ingestion_source
+
+
+def _source_from_config(
+    source_config: Mapping[str, Any],
+    config: IngestionConfig,
+    *,
+    project_dir: Path,
+) -> Any:
+    """Return an executable dlt source from a direct object or compiled JSON."""
+    source_ref = config.source_config.get("source")
+    if source_ref is not None and _is_source_like(source_ref):
+        return source_ref
+    return build_dlt_source(source_config, project_dir=project_dir)
 
 
 __all__ = [
