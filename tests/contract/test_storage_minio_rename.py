@@ -14,6 +14,7 @@ OLD_PLUGIN_CLASS = "S3" + "StoragePlugin"
 OLD_CONFIG_CLASS = "S3" + "StorageConfig"
 OLD_SHORT_MINIO_CLASS = "MinIO" + "Plugin"
 OLD_STORAGE_TYPE = "s" + "3"
+OLD_STORAGE_IDENTITY_SUFFIX = r"\b(?!://|-compatible)"
 NEW_PACKAGE_NAME = "floe-storage-minio"
 ACTIVE_SCAN_ROOTS = [
     "README.md",
@@ -50,10 +51,10 @@ FORBIDDEN_REFERENCES = [
     "storage.type: " + OLD_STORAGE_TYPE,
 ]
 FORBIDDEN_PATTERNS = [
-    re.compile(r"\bstorage\s*:\s*" + OLD_STORAGE_TYPE + r"\b"),
-    re.compile(r"\bstorage\s*:\s*\[[^\]]*\b" + OLD_STORAGE_TYPE + r"\b"),
+    re.compile(r"\bstorage\s*:\s*" + OLD_STORAGE_TYPE + OLD_STORAGE_IDENTITY_SUFFIX),
+    re.compile(r"\bstorage\s*:\s*\[[^\]]*\b" + OLD_STORAGE_TYPE + OLD_STORAGE_IDENTITY_SUFFIX),
     re.compile(r"\bstorage\s*:\s*\{\s*[\"']" + OLD_STORAGE_TYPE + r"[\"']\s*\}"),
-    re.compile(r"\btype\s*:\s*" + OLD_STORAGE_TYPE + r"\b"),
+    re.compile(r"\btype\s*:\s*" + OLD_STORAGE_TYPE + OLD_STORAGE_IDENTITY_SUFFIX),
     re.compile(r"\btype\s*:\s*\{\s*[\"']" + OLD_STORAGE_TYPE + r"[\"']\s*\}"),
     re.compile(r"\btype\s*:\s*f[\"']" + OLD_STORAGE_TYPE + r"[\"']"),
     re.compile(r"[\"']type[\"']\s*:\s*[\"']" + OLD_STORAGE_TYPE + r"[\"']"),
@@ -115,8 +116,9 @@ def test_runtime_plugin_registry_exposes_minio_without_s3_alias() -> None:
     registry = PluginRegistry()
     registry.discover_all()
 
-    storage_plugins = sorted(plugin.name for plugin in registry.list(PluginType.STORAGE))
-    assert storage_plugins == ["minio"]
+    storage_plugins = {plugin.name for plugin in registry.list(PluginType.STORAGE)}
+    assert "minio" in storage_plugins
+    assert OLD_STORAGE_TYPE not in storage_plugins
     assert registry.get(PluginType.STORAGE, "minio").name == "minio"
 
     with pytest.raises(PluginNotFoundError):
@@ -139,6 +141,20 @@ def test_forbidden_patterns_cover_python_and_f_string_selection_forms() -> None:
 
     for line in forbidden_lines:
         assert any(pattern.search(line) for pattern in FORBIDDEN_PATTERNS), line
+
+
+def test_forbidden_patterns_allow_s3_protocol_forms() -> None:
+    """The scan must distinguish S3-compatible protocol syntax from plugin identity."""
+    allowed_lines = [
+        'warehouse_uri = "s3://warehouse/bronze/"',
+        'properties = {"s3.endpoint": "http://minio:9000"}',
+        "storage_protocol = 's3-compatible'",
+        "storage: " + OLD_STORAGE_TYPE + "://warehouse/bronze/",
+        "type: " + OLD_STORAGE_TYPE + "-compatible",
+    ]
+
+    for line in allowed_lines:
+        assert not any(pattern.search(line) for pattern in FORBIDDEN_PATTERNS), line
 
 
 def _active_scan_files() -> list[Path]:

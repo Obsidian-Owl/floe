@@ -296,11 +296,17 @@ plugins:
 
 ## Implementation Details
 
-### Reference Implementation: MinIOStoragePlugin
+### Reference Implementation Excerpt: MinIOStoragePlugin
+
+The production implementation in `plugins/floe-storage-minio` is the source of
+truth. This excerpt shows the public plugin shape and S3-compatible runtime
+configuration methods that architecture consumers depend on.
 
 ```python
 # floe-storage-minio/src/floe_storage_minio/plugin.py
 from typing import Any
+from pydantic import BaseModel
+from floe_core.plugin_errors import PluginConfigurationError
 from floe_core.plugins import StoragePlugin
 from floe_storage_minio.config import MinIOStorageConfig
 
@@ -310,29 +316,57 @@ class MinIOStoragePlugin(StoragePlugin):
 
     def __init__(self, config: MinIOStorageConfig | None = None) -> None:
         """Initialize MinIO storage plugin with validated config."""
+        super().__init__()
         self._config = config
 
     @property
     def name(self) -> str:
         return "minio"
 
+    @property
+    def version(self) -> str:
+        return "0.1.0"
+
+    @property
+    def floe_api_version(self) -> str:
+        return "1.0"
+
+    @property
+    def description(self) -> str:
+        return "MinIO object storage plugin for Iceberg data"
+
+    @property
+    def tracer_name(self) -> str:
+        return "floe.storage.minio"
+
+    def get_config_schema(self) -> type[BaseModel]:
+        return MinIOStorageConfig
+
+    def _get_pyiceberg_s3_properties(self) -> dict[str, str]:
+        config = self._require_config()
+        return {
+            "s3.endpoint": config.endpoint,
+            "s3.region": config.region,
+            "s3.path-style-access": str(config.path_style_access).lower(),
+        }
+
     def _require_config(self) -> MinIOStorageConfig:
         if self._config is None:
-            raise RuntimeError("MinIOStoragePlugin requires config")
+            raise PluginConfigurationError(
+                "minio",
+                [{"field": "_config", "message": "Plugin 'minio' not configured"}],
+            )
         return self._config
 
     def get_pyiceberg_fileio(self):
         """Create PyIceberg FileIO for MinIO using S3-compatible keys."""
         from pyiceberg.io.fsspec import FsspecFileIO
 
-        config = self._require_config()
-        return FsspecFileIO(
-            properties={
-                "s3.endpoint": config.endpoint,
-                "s3.region": config.region,
-                "s3.path-style-access": str(config.path_style_access).lower(),
-            }
-        )
+        return FsspecFileIO(properties=self._get_pyiceberg_s3_properties())
+
+    def get_pyiceberg_catalog_config(self) -> dict[str, Any]:
+        """Return PyIceberg catalog config for S3-backed table loading."""
+        return self._get_pyiceberg_s3_properties()
 
     def get_warehouse_uri(self, namespace: str) -> str:
         """Generate S3-compatible warehouse URI."""
@@ -357,11 +391,12 @@ class MinIOStoragePlugin(StoragePlugin):
             "bucket": config.bucket,
             "endpoint_url": config.endpoint,
             "region_name": config.region,
-            "storage_options": {
-                "aws_access_key_id": "${env:AWS_ACCESS_KEY_ID}",
-                "aws_secret_access_key": "${env:AWS_SECRET_ACCESS_KEY}",
-            }
+            "path_style_access": config.path_style_access,
         }
+
+    def get_helm_values_override(self) -> dict[str, Any]:
+        """Return Helm overrides; the platform chart deploys MinIO."""
+        return {}
 ```
 
 ### MinIO Configuration Example
