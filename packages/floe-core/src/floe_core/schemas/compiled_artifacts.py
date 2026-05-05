@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from floe_core.schemas.data_contract import DataContract
 from floe_core.schemas.quality_config import QualityConfig
@@ -56,6 +56,26 @@ def _validate_configmap_name(name: str) -> str:
 
 def _validate_configmap_namespace(namespace: str) -> str:
     """Validate ConfigMap metadata.namespace as a Kubernetes namespace name."""
+    if len(namespace) > _MAX_K8S_NAMESPACE_LENGTH:
+        raise ValueError(
+            f"Invalid namespace: {namespace!r} exceeds {_MAX_K8S_NAMESPACE_LENGTH} characters"
+        )
+    if not _K8S_NAMESPACE_PATTERN.fullmatch(namespace):
+        raise ValueError(f"Invalid namespace: {namespace!r} must match Kubernetes namespace rules")
+    return namespace
+
+
+def _validate_kubernetes_secret_name(name: str) -> str:
+    """Validate Secret metadata.name as a Kubernetes DNS subdomain."""
+    if len(name) > _MAX_K8S_NAME_LENGTH:
+        raise ValueError(f"Invalid Secret name: {name!r} exceeds {_MAX_K8S_NAME_LENGTH} characters")
+    if not _K8S_DNS_SUBDOMAIN_PATTERN.fullmatch(name):
+        raise ValueError(f"Invalid Secret name: {name!r} must match Kubernetes DNS subdomain rules")
+    return name
+
+
+def _validate_kubernetes_namespace(namespace: str) -> str:
+    """Validate Kubernetes metadata.namespace as a namespace name."""
     if len(namespace) > _MAX_K8S_NAMESPACE_LENGTH:
         raise ValueError(
             f"Invalid namespace: {namespace!r} exceeds {_MAX_K8S_NAMESPACE_LENGTH} characters"
@@ -274,6 +294,18 @@ class KubernetesSecretRef(BaseModel):
     namespace: NonEmptyString
     keys: dict[str, NonEmptyString] = Field(default_factory=dict)
 
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, name: str) -> str:
+        """Validate the referenced Secret name."""
+        return _validate_kubernetes_secret_name(name)
+
+    @field_validator("namespace")
+    @classmethod
+    def validate_namespace(cls, namespace: str) -> str:
+        """Validate the referenced Secret namespace."""
+        return _validate_kubernetes_namespace(namespace)
+
 
 class CredentialRef(BaseModel):
     """Secret-free credential reference used by consumer projections."""
@@ -283,6 +315,19 @@ class CredentialRef(BaseModel):
     source: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
     name: NonEmptyString
     key: NonEmptyString | None = None
+
+    @model_validator(mode="after")
+    def validate_key_for_source(self) -> CredentialRef:
+        """Ensure only Kubernetes Secret credential refs carry key names."""
+        if self.source == "kubernetes-secret":
+            if self.key is None:
+                msg = "kubernetes-secret credential ref requires key"
+                raise ValueError(msg)
+            return self
+        if self.key is not None:
+            msg = f"{self.source} credential ref does not accept key"
+            raise ValueError(msg)
+        return self
 
 
 class StorageCredentialBinding(BaseModel):

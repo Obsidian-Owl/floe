@@ -671,8 +671,17 @@ class TestStorageDeploymentBinding:
     @pytest.mark.parametrize(
         "factory",
         [
-            lambda: DbtStorageBinding(env_refs={"s3_access_key_id": ""}),
-            lambda: DagsterStorageBinding(env_refs={"AWS_ACCESS_KEY_ID": ""}),
+            lambda: DbtStorageBinding(
+                profile_name="floe",
+                target_name="dev",
+                schema_name="analytics",
+                env_refs={"s3_access_key_id": ""},
+            ),
+            lambda: DagsterStorageBinding(
+                resource_key="minio_storage",
+                asset_io_manager_key="iceberg_io_manager",
+                env_refs={"AWS_ACCESS_KEY_ID": ""},
+            ),
         ],
     )
     def test_consumer_env_ref_values_reject_empty_strings(
@@ -685,6 +694,30 @@ class TestStorageDeploymentBinding:
 
 class TestStorageCredentialBinding:
     """Tests for storage credential binding validation."""
+
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            lambda: KubernetesSecretRef(name="Bad_Name", namespace="floe-system"),
+            lambda: KubernetesSecretRef(name="storage-credentials", namespace="Bad_Namespace"),
+        ],
+    )
+    def test_kubernetes_secret_ref_rejects_invalid_identifiers(
+        self,
+        factory: Any,
+    ) -> None:
+        with pytest.raises(ValidationError):
+            factory()
+
+    def test_kubernetes_secret_ref_accepts_dns_label_identifiers(self) -> None:
+        ref = KubernetesSecretRef(
+            name="storage-credentials",
+            namespace="floe-system",
+            keys={"accessKeyId": "root-user"},
+        )
+
+        assert ref.name == "storage-credentials"
+        assert ref.namespace == "floe-system"
 
     @pytest.mark.parametrize(
         "binding_kwargs",
@@ -775,6 +808,30 @@ class TestStorageCredentialBinding:
         with pytest.raises(ValidationError):
             factory()
 
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            lambda: CredentialRef(source="kubernetes-secret", name="storage-credentials"),
+            lambda: CredentialRef(
+                source="environment",
+                name="AWS_ACCESS_KEY_ID",
+                key="accessKeyId",
+            ),
+            lambda: CredentialRef(
+                source="workload-identity",
+                name="storage-service-account",
+                key="accessKeyId",
+            ),
+            lambda: CredentialRef(source="none", name="none", key="accessKeyId"),
+        ],
+    )
+    def test_credential_ref_key_matches_source(
+        self,
+        factory: Any,
+    ) -> None:
+        with pytest.raises(ValidationError):
+            factory()
+
     def test_environment_credential_ref_uses_configured_env_name(self) -> None:
         binding = StorageCredentialBinding(
             mode="environment",
@@ -786,6 +843,28 @@ class TestStorageCredentialBinding:
         assert ref.source == "environment"
         assert ref.name == "AWS_ACCESS_KEY_ID"
         assert ref.key is None
+
+    def test_environment_credential_ref_raises_for_missing_logical_key(self) -> None:
+        binding = StorageCredentialBinding(
+            mode="environment",
+            env_refs={"accessKeyId": "AWS_ACCESS_KEY_ID"},
+        )
+
+        with pytest.raises(ValueError, match="not present in env_refs"):
+            binding.as_credential_ref("secretAccessKey")
+
+    def test_kubernetes_secret_credential_ref_raises_for_missing_logical_key(self) -> None:
+        binding = StorageCredentialBinding(
+            mode="kubernetes-secret",
+            secret_ref=KubernetesSecretRef(
+                name="storage-credentials",
+                namespace="floe-system",
+                keys={"accessKeyId": "root-user"},
+            ),
+        )
+
+        with pytest.raises(ValueError, match="not present in secret_ref.keys"):
+            binding.as_credential_ref("secretAccessKey")
 
     def test_workload_identity_credential_ref_uses_service_account(self) -> None:
         binding = StorageCredentialBinding(
