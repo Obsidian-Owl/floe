@@ -522,8 +522,8 @@ class TestObservability(IntegrationTestBase):
             dagster_client: Dagster GraphQL client.
             project_root: Repository root fixture.
         """
-        from floe_core.compiler import compile_pipeline
-        from floe_core.telemetry import (
+        from floe_core.compilation.stages import compile_pipeline
+        from floe_core.telemetry.initialization import (
             ensure_telemetry_initialized,
             reset_telemetry,
         )
