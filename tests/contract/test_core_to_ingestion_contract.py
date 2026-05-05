@@ -15,8 +15,10 @@ Requirements Covered:
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
+import yaml
 
 
 class TestIngestionPluginRefContract:
@@ -347,3 +349,91 @@ class TestIngestionPluginRefContract:
         assert reconstructed.plugins.ingestion is not None
         assert reconstructed.plugins.ingestion.config is not None
         assert reconstructed.plugins.ingestion.config["sources"] == sources
+
+    @pytest.mark.requirement("4F-FR-001")
+    def test_customer_360_demo_declares_csv_dlt_ingestion_sources(self) -> None:
+        """Customer 360 demo config compiles CSV sources into dlt ingestion config."""
+        from floe_core.compilation.stages import compile_pipeline
+
+        root = Path(__file__).parent.parent.parent
+        manifest_path = root / "demo" / "manifest.yaml"
+        spec_path = root / "demo" / "customer-360" / "floe.yaml"
+
+        manifest = yaml.safe_load(manifest_path.read_text())
+        spec = yaml.safe_load(spec_path.read_text())
+
+        assert manifest["plugins"]["ingestion"]["type"] == "dlt"
+
+        spec_sources = spec["ingestion"]["sources"]
+        assert spec_sources == [
+            {
+                "name": "raw-customers",
+                "sourceType": "filesystem",
+                "format": "csv",
+                "path": "./seeds/raw_customers.csv",
+                "destinationTable": "bronze.raw_customers",
+                "writeMode": "replace",
+                "schemaContract": "evolve",
+            },
+            {
+                "name": "raw-transactions",
+                "sourceType": "filesystem",
+                "format": "csv",
+                "path": "./seeds/raw_transactions.csv",
+                "destinationTable": "bronze.raw_transactions",
+                "writeMode": "replace",
+                "schemaContract": "evolve",
+            },
+            {
+                "name": "raw-support-tickets",
+                "sourceType": "filesystem",
+                "format": "csv",
+                "path": "./seeds/raw_support_tickets.csv",
+                "destinationTable": "bronze.raw_support_tickets",
+                "writeMode": "replace",
+                "schemaContract": "evolve",
+            },
+        ]
+        assert {source["format"] for source in spec_sources} == {"csv"}
+        assert {source["sourceType"] for source in spec_sources} == {"filesystem"}
+
+        artifacts = compile_pipeline(spec_path, manifest_path, emit_lineage=False)
+
+        assert artifacts.plugins.ingestion is not None
+        assert artifacts.plugins.ingestion.type == "dlt"
+        assert artifacts.plugins.ingestion.config is not None
+        assert artifacts.plugins.ingestion.config["sources"] == [
+            {
+                "name": "raw-customers",
+                "source_type": "filesystem",
+                "destination_table": "bronze.raw_customers",
+                "write_mode": "replace",
+                "schema_contract": "evolve",
+                "source_config": {
+                    "format": "csv",
+                    "path": "./seeds/raw_customers.csv",
+                },
+            },
+            {
+                "name": "raw-transactions",
+                "source_type": "filesystem",
+                "destination_table": "bronze.raw_transactions",
+                "write_mode": "replace",
+                "schema_contract": "evolve",
+                "source_config": {
+                    "format": "csv",
+                    "path": "./seeds/raw_transactions.csv",
+                },
+            },
+            {
+                "name": "raw-support-tickets",
+                "source_type": "filesystem",
+                "destination_table": "bronze.raw_support_tickets",
+                "write_mode": "replace",
+                "schema_contract": "evolve",
+                "source_config": {
+                    "format": "csv",
+                    "path": "./seeds/raw_support_tickets.csv",
+                },
+            },
+        ]

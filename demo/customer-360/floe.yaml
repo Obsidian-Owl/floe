@@ -14,6 +14,30 @@ metadata:
 platform:
   manifest: "../manifest.yaml"
 
+ingestion:
+  sources:
+    - name: raw-customers
+      sourceType: filesystem
+      format: csv
+      path: ./seeds/raw_customers.csv
+      destinationTable: bronze.raw_customers
+      writeMode: replace
+      schemaContract: evolve
+    - name: raw-transactions
+      sourceType: filesystem
+      format: csv
+      path: ./seeds/raw_transactions.csv
+      destinationTable: bronze.raw_transactions
+      writeMode: replace
+      schemaContract: evolve
+    - name: raw-support-tickets
+      sourceType: filesystem
+      format: csv
+      path: ./seeds/raw_support_tickets.csv
+      destinationTable: bronze.raw_support_tickets
+      writeMode: replace
+      schemaContract: evolve
+
 transforms:
   - name: stg_crm_customers
     tags: [staging]

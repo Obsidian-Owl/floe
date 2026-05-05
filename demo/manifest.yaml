@@ -57,6 +57,18 @@ plugins:
         scope: PRINCIPAL_ROLE:ALL
         token_url: http://floe-platform-polaris:8181/api/catalog/v1/oauth/tokens
 
+  # Ingestion: dlt loads data-engineer-owned sources into Iceberg via Polaris
+  ingestion:
+    type: dlt
+    version: 0.1.0
+    config:
+      catalog_config:
+        uri: http://floe-platform-polaris:8181/api/catalog
+        warehouse: floe-demo
+      retry_config:
+        max_retries: 3
+        initial_delay_seconds: 1.0
+
   # Storage: MinIO S3-compatible storage for demo
   storage:
     type: s3
