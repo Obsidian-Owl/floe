@@ -63,8 +63,11 @@ plugins:
     config:
       endpoint: http://floe-platform-minio:9000
       bucket: floe-iceberg
+      artifact_bucket: floe-artifacts
       region: us-east-1
       path_style_access: true
+      credential_secret_name: floe-platform-minio-credentials  # pragma: allowlist secret
+      credential_secret_namespace: floe-system  # pragma: allowlist secret
 
   # Lineage backend: Marquez receives runtime OpenLineage events from Dagster
   lineage_backend:

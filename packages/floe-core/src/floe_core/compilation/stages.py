@@ -40,7 +40,9 @@ if TYPE_CHECKING:
     from floe_core.enforcement.result import EnforcementResult
     from floe_core.schemas.compiled_artifacts import (
         CompiledArtifacts,
+        DeploymentConfig,
         ResolvedGovernance,
+        ResolvedPlugins,
     )
     from floe_core.schemas.manifest import GovernanceConfig, PlatformManifest
 
@@ -248,6 +250,73 @@ def _build_lineage_config(manifest: PlatformManifest) -> dict[str, Any] | None:
     if url is not None:
         config["url"] = url
     return config
+
+
+def _build_storage_deployment_binding(
+    plugins: ResolvedPlugins,
+) -> DeploymentConfig | None:
+    """Build deployment bindings from resolved storage plugin configuration."""
+    if plugins.storage is None:
+        return None
+
+    from floe_core.compilation.errors import CompilationError, CompilationException
+    from floe_core.plugin_errors import PluginError
+    from floe_core.plugin_registry import PluginRegistry
+    from floe_core.plugin_types import PluginType
+    from floe_core.plugins.storage import StoragePlugin
+    from floe_core.schemas.compiled_artifacts import DeploymentConfig
+
+    registry = PluginRegistry()
+    registry.discover_all()
+    try:
+        registry.configure(
+            PluginType.STORAGE,
+            plugins.storage.type,
+            plugins.storage.config or {},
+        )
+        storage_plugin = registry.get(PluginType.STORAGE, plugins.storage.type)
+    except PluginError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=f"Storage plugin {plugins.storage.type!r} could not be resolved",
+                suggestion=(
+                    "Install the storage plugin package and verify "
+                    "plugins.storage.type in the platform manifest"
+                ),
+                context={"storage_plugin": plugins.storage.type},
+            )
+        ) from exc
+
+    if not isinstance(storage_plugin, StoragePlugin):
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=f"Plugin {plugins.storage.type!r} is not a StoragePlugin",
+                suggestion="Use a plugin registered under the floe.storage entry point group",
+                context={"storage_plugin": plugins.storage.type},
+            )
+        )
+
+    try:
+        return DeploymentConfig(storage=storage_plugin.get_deployment_binding())
+    except PluginError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=(
+                    f"Storage plugin {plugins.storage.type!r} could not build deployment binding"
+                ),
+                suggestion=(
+                    "Verify plugins.storage.config in the platform manifest and "
+                    "ensure the storage plugin can build its deployment binding"
+                ),
+                context={"storage_plugin": plugins.storage.type},
+            )
+        ) from exc
 
 
 def compile_pipeline(
@@ -527,6 +596,7 @@ def compile_pipeline(
                     plugins=plugins,
                     product_name=spec.metadata.name,
                 )
+                deployment = _build_storage_deployment_binding(plugins)
                 compile_span.set_attribute("compile.profile_name", spec.metadata.name)
                 duration_ms = (time.perf_counter() - stage_start) * 1000
                 log.info(
@@ -626,6 +696,7 @@ def compile_pipeline(
                     enforcement_result=enforcement_result,
                     quality_config=quality_config,
                     governance=resolved_governance,
+                    deployment=deployment,
                 )
                 generate_span.set_attribute("compile.artifacts_version", artifacts.version)
                 duration_ms = (time.perf_counter() - stage_start) * 1000

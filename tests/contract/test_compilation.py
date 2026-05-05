@@ -104,15 +104,18 @@ class TestCompilation:
             f"Expected dagster orchestrator, got {artifacts.plugins.orchestrator.type}"
         )
 
-        # Storage config flows from manifest (AC-10.3: STORAGE is config-only,
-        # not discovered via entry points — validated here at contract tier)
+        # Storage plugin config flows from the manifest into the plugin-backed
+        # deployment binding contract.
         assert artifacts.plugins.storage is not None, (
-            "Storage config must be resolved from manifest.storage section. "
-            "STORAGE is a config-only plugin type configured at infrastructure level."
+            "Storage config must be resolved from the manifest plugins.storage section."
         )
         assert artifacts.plugins.storage.type == "minio", (
             f"Expected minio storage from demo manifest, got '{artifacts.plugins.storage.type}'"
         )
+        assert artifacts.deployment is not None
+        assert artifacts.deployment.storage is not None
+        assert artifacts.deployment.storage.provider == "minio"
+        assert artifacts.deployment.storage.endpoint.warehouse_path == "s3://floe-iceberg"
 
         # Observability assertions
         assert artifacts.observability.lineage is True, "Lineage must be enabled for customer-360"
