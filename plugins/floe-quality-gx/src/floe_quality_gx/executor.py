@@ -297,6 +297,13 @@ def create_dataframe_from_connection(
 
     dialect = connection_config.get("dialect", "duckdb")
 
+    if "dataframe" in connection_config or dialect in {"pandas", "dataframe"}:
+        dataframe = connection_config.get("dataframe")
+        if not isinstance(dataframe, pd.DataFrame):
+            msg = "connection_config['dataframe'] must be a pandas DataFrame"
+            raise TypeError(msg)
+        return dataframe.copy(deep=True)
+
     if dialect == "duckdb":
         import duckdb
 
