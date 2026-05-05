@@ -10,6 +10,7 @@ OLD_PACKAGE_NAME = "floe-storage-" + "s3"
 OLD_MODULE_NAME = "floe_storage_" + "s3"
 OLD_PLUGIN_CLASS = "S3" + "StoragePlugin"
 OLD_CONFIG_CLASS = "S3" + "StorageConfig"
+OLD_SHORT_MINIO_CLASS = "MinIO" + "Plugin"
 NEW_PACKAGE_NAME = "floe-storage-minio"
 ACTIVE_SCAN_ROOTS = [
     "pyproject.toml",
@@ -36,12 +37,14 @@ FORBIDDEN_REFERENCES = [
     OLD_MODULE_NAME,
     OLD_PLUGIN_CLASS,
     OLD_CONFIG_CLASS,
+    OLD_SHORT_MINIO_CLASS,
     "storage.type: " + "s3",
 ]
 FORBIDDEN_PATTERNS = [
     re.compile(r"\bstorage\s*:\s*" + "s3" + r"\b"),
     re.compile(r"\bstorage\s*:\s*\[[^\]]*\b" + "s3" + r"\b"),
     re.compile(r"\btype\s*:\s*" + "s3" + r"\b"),
+    re.compile(r"\btype\s*:\s*\{\s*[\"']" + "s3" + r"[\"']\s*\}"),
     re.compile(r"[\"']type[\"']\s*:\s*[\"']" + "s3" + r"[\"']"),
 ]
 

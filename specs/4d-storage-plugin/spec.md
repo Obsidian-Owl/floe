@@ -310,7 +310,7 @@ The complete integration chain from configuration to Dagster execution:
 ```
 CompiledArtifacts (floe-core)
   → PluginRegistry.get(CATALOG, "polaris") → CatalogPlugin
-  → PluginRegistry.get(STORAGE, "s3")      → StoragePlugin
+  → PluginRegistry.get(STORAGE, "minio")   → StoragePlugin
   → IcebergTableManager(catalog_plugin, storage_plugin)
   → IcebergIOManager(table_manager=..., default_write_mode=...)
   → Dagster Definitions(resources={"iceberg": io_manager})
@@ -319,7 +319,7 @@ CompiledArtifacts (floe-core)
 ### Current Gaps (to be addressed in implementation)
 
 1. **DagsterOrchestratorPlugin.create_definitions()** does not yet wire IcebergIOManager into the resource dict. Phase 14 (Wiring & Integration) tasks address this.
-2. **No concrete StoragePlugin implementations exist** — the `floe.storage` entry point group has zero registrations. IcebergTableManager can be tested with a MockStoragePlugin fixture until a real implementation (e.g., floe-storage-minio) is built.
+2. **Limited concrete StoragePlugin coverage** — `floe-storage-minio` provides the current concrete `floe.storage` implementation for local S3-compatible storage. IcebergTableManager can still use MockStoragePlugin fixtures for provider-neutral tests until additional storage providers are built.
 3. **DriftDetector soft circular dependency** — DriftDetector in `packages/floe-iceberg/` imports from `floe_core` which may transitively reference iceberg types. Mitigated via lazy imports; a formal `DriftDetectorProtocol` in floe-core is a future improvement.
 
 ### Component Boundary Summary

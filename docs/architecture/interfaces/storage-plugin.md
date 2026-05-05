@@ -121,7 +121,7 @@ class StoragePlugin(ABC):
 
 | Plugin | Description | Self-Hosted |
 |--------|-------------|-------------|
-| `MinIOPlugin` | Self-hosted S3-compatible storage (on-premises, multi-cloud) | Yes |
+| `MinIOStoragePlugin` | Self-hosted S3-compatible storage (on-premises, multi-cloud) | Yes |
 | `GCSPlugin` | Google Cloud Storage | No |
 | `AzureBlobPlugin` | Azure Blob Storage | No |
 

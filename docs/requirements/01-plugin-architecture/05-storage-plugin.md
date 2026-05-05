@@ -152,7 +152,7 @@ StoragePlugin wraps PyIceberg FileIO pattern for pluggable object storage backen
 - [ ] S3Plugin: AWS S3 with IAM or access keys
 - [ ] GCSPlugin: Google Cloud Storage with service account
 - [ ] AzurePlugin: Azure Blob Storage with SAS tokens
-- [ ] MinIOPlugin: S3-compatible local/on-prem storage
+- [ ] MinIOStoragePlugin: S3-compatible local/on-prem storage
 - [ ] All backends pass compliance test suite
 
 **Enforcement**: Multi-backend integration tests, portability tests

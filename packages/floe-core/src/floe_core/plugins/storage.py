@@ -10,7 +10,7 @@ are responsible for:
 
 Example:
     >>> from floe_core.plugins.storage import StoragePlugin
-    >>> class MinIOPlugin(StoragePlugin):
+    >>> class MinIOStoragePlugin(StoragePlugin):
     ...     @property
     ...     def name(self) -> str:
     ...         return "minio"
@@ -72,7 +72,7 @@ class StoragePlugin(PluginMetadata):
         - get_pyiceberg_catalog_config() method
 
     Example:
-        >>> class MinIOPlugin(StoragePlugin):
+        >>> class MinIOStoragePlugin(StoragePlugin):
         ...     @property
         ...     def name(self) -> str:
         ...         return "minio"

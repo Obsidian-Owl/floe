@@ -308,7 +308,7 @@ from pyiceberg.io.pyarrow import PyArrowFileIO
 from floe_core.plugins import StoragePlugin
 
 
-class MinIOPlugin(StoragePlugin):
+class MinIOStoragePlugin(StoragePlugin):
     """Storage plugin for MinIO."""
 
     name = "minio"
@@ -565,12 +565,12 @@ def test_compiler_with_mock_storage():
 
 ```python
 # tests/integration/test_minio_plugin.py
-from floe_storage_minio import MinIOPlugin
+from floe_storage_minio import MinIOStoragePlugin
 
 
 def test_minio_plugin_generates_valid_fileio():
-    """Test MinIOPlugin generates valid PyIceberg FileIO."""
-    plugin = MinIOPlugin(endpoint="http://minio:9000")
+    """Test MinIOStoragePlugin generates valid PyIceberg FileIO."""
+    plugin = MinIOStoragePlugin(endpoint="http://minio:9000")
     fileio = plugin.get_pyiceberg_fileio()
 
     assert fileio is not None

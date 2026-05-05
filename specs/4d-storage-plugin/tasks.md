@@ -366,7 +366,7 @@
 
 ### StoragePlugin Stub
 
-- [ ] T113 Document that no concrete StoragePlugin implementation exists yet (floe.storage entry point has zero registrations) — add note to quickstart.md
+- [ ] T113 Document that MinIO is the current concrete StoragePlugin implementation and non-MinIO providers remain future work — add note to quickstart.md
 - [ ] T114 [P] Create MockStoragePlugin test fixture in `packages/floe-iceberg/tests/conftest.py` for use in wiring tests
 
 ### Wiring Tests
