@@ -29,6 +29,7 @@ See Also:
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
@@ -676,17 +677,18 @@ class IngestionSourceSpec(BaseModel):
             raise ValueError(msg)
 
         parsed = urlsplit(v)
+        if _contains_credential_path_part(parsed.query) or _contains_credential_path_part(
+            parsed.fragment
+        ):
+            msg = "path must not contain credential-like query or fragment content"
+            raise ValueError(msg)
+
         if parsed.scheme:
             if parsed.scheme not in {"s3", "gs", "az"}:
                 msg = "path URI scheme must be one of s3://, gs://, or az://"
                 raise ValueError(msg)
             if parsed.username or parsed.password or "@" in parsed.netloc:
                 msg = "path must not contain embedded credentials"
-                raise ValueError(msg)
-            if _contains_credential_path_part(parsed.query) or _contains_credential_path_part(
-                parsed.fragment
-            ):
-                msg = "path must not contain credential-like query or fragment content"
                 raise ValueError(msg)
             if not parsed.netloc:
                 msg = "object-store path must include a bucket or container"
@@ -698,6 +700,25 @@ class IngestionSourceSpec(BaseModel):
             raise ValueError(msg)
         if "://" in v:
             msg = "path URI scheme must be one of s3://, gs://, or az://"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("primary_key")
+    @classmethod
+    def validate_primary_key(cls, v: str | list[str] | None) -> str | list[str] | None:
+        """Validate primary key fields are non-empty when provided."""
+        if v is None:
+            return v
+        if isinstance(v, str):
+            if not v.strip():
+                msg = "primaryKey must contain a non-empty field name"
+                raise ValueError(msg)
+            return v
+        if not v:
+            msg = "primaryKey list must contain at least one field name"
+            raise ValueError(msg)
+        if any(not field.strip() for field in v):
+            msg = "primaryKey list members must be non-empty field names"
             raise ValueError(msg)
         return v
 
@@ -727,7 +748,7 @@ class ProductIngestionSpec(BaseModel):
     ) -> list[IngestionSourceSpec]:
         """Validate that ingestion source names are unique."""
         names = [source.name for source in v]
-        duplicates = {name for name in names if names.count(name) > 1}
+        duplicates = {name for name, count in Counter(names).items() if count > 1}
         if duplicates:
             msg = (
                 f"Duplicate ingestion source names are not allowed: {', '.join(sorted(duplicates))}"

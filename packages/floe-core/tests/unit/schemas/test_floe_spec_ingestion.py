@@ -223,3 +223,69 @@ def test_floe_spec_rejects_credential_bearing_ingestion_path_parts(path: str) ->
         )
 
     assert "credential" in str(exc_info.value).lower()
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "./data/customers.csv?AWSAccessKeyId=abc&Signature=def",
+        "./data/customers.csv#token=abc",
+    ],
+)
+def test_floe_spec_rejects_relative_paths_with_credential_bearing_parts(path: str) -> None:
+    """Relative ingestion paths must not embed credentials in query or fragment parts."""
+    with pytest.raises(ValidationError) as exc_info:
+        FloeSpec.model_validate(
+            _base_floe_spec(
+                ingestion={
+                    "sources": [
+                        {
+                            "name": "raw-customers",
+                            "sourceType": "filesystem",
+                            "format": "csv",
+                            "path": path,
+                            "destinationTable": "bronze.raw_customers",
+                        }
+                    ]
+                }
+            )
+        )
+
+    assert "credential" in str(exc_info.value).lower()
+
+
+@pytest.mark.parametrize(
+    "primary_key",
+    [
+        "",
+        "   ",
+        [],
+        [""],
+        ["id", ""],
+        ["id", "   "],
+    ],
+)
+def test_floe_spec_rejects_merge_with_empty_primary_key_values(
+    primary_key: str | list[str],
+) -> None:
+    """Merge primary keys must contain one or more non-empty field names."""
+    with pytest.raises(ValidationError) as exc_info:
+        FloeSpec.model_validate(
+            _base_floe_spec(
+                ingestion={
+                    "sources": [
+                        {
+                            "name": "raw-customers",
+                            "sourceType": "filesystem",
+                            "format": "csv",
+                            "path": "./data/customers.csv",
+                            "destinationTable": "bronze.raw_customers",
+                            "writeMode": "merge",
+                            "primaryKey": primary_key,
+                        }
+                    ]
+                }
+            )
+        )
+
+    assert "primary" in str(exc_info.value).lower()
