@@ -223,6 +223,15 @@ repos:
         stages: [pre-push]
         pass_filenames: false
 
+      # Docs content validation (matches CI - catches stale claims before push)
+      - id: docs-content
+        name: docs content validation
+        entry: uv run --no-sync python testing/ci/validate-docs-content.py
+        language: system
+        stages: [pre-push]
+        files: ^docs/
+        pass_filenames: false
+
       # Helm chart linting (matches CI - validates Helm charts before push)
       - id: helm-lint
         name: helm lint (charts)
