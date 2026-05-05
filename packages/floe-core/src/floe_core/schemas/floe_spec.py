@@ -28,7 +28,9 @@ See Also:
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -593,6 +595,125 @@ class DestinationConfig(BaseModel):
         return v
 
 
+class IngestionSourceSpec(BaseModel):
+    """Declarative product-level ingestion source in floe.yaml.
+
+    Defines a data-engineer-owned ingestion source without embedding
+    environment-specific connection details. Runtime credentials and
+    endpoints are resolved from platform configuration in later stages.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    name: Annotated[str, Field(min_length=1, max_length=100)]
+    source_type: Annotated[
+        Literal["filesystem"],
+        Field(alias="sourceType", description="Declarative source type"),
+    ]
+    format: Literal["csv", "jsonl", "parquet"]
+    path: Annotated[str, Field(min_length=1)]
+    destination_table: Annotated[
+        str,
+        Field(alias="destinationTable", min_length=1),
+    ]
+    write_mode: Annotated[
+        Literal["append", "replace", "merge"],
+        Field(default="append", alias="writeMode"),
+    ]
+    schema_contract: Annotated[
+        Literal["evolve", "freeze"],
+        Field(default="evolve", alias="schemaContract"),
+    ]
+    cursor_field: Annotated[str | None, Field(default=None, alias="cursorField")]
+    primary_key: Annotated[str | list[str] | None, Field(default=None, alias="primaryKey")]
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """Validate source name uses portable identifier characters."""
+        if re.fullmatch(r"[A-Za-z0-9_-]+", v) is None:
+            msg = "name may contain only alphanumeric characters, underscores, and hyphens"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("destination_table")
+    @classmethod
+    def validate_destination_table(cls, v: str) -> str:
+        """Validate destination table is exactly namespace.table."""
+        parts = v.split(".")
+        if len(parts) != 2 or any(part.strip() != part or not part for part in parts):
+            msg = "destinationTable must be exactly namespace.table with non-empty parts"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, v: str) -> str:
+        """Validate path is relative local storage or an approved object-store URI."""
+        path = v.strip()
+        if not path:
+            msg = "path must not be empty"
+            raise ValueError(msg)
+        if path != v:
+            msg = "path must not contain leading or trailing whitespace"
+            raise ValueError(msg)
+
+        parsed = urlsplit(v)
+        if parsed.scheme:
+            if parsed.scheme not in {"s3", "gs", "az"}:
+                msg = "path URI scheme must be one of s3://, gs://, or az://"
+                raise ValueError(msg)
+            if parsed.username or parsed.password or "@" in parsed.netloc:
+                msg = "path must not contain embedded credentials"
+                raise ValueError(msg)
+            if not parsed.netloc:
+                msg = "object-store path must include a bucket or container"
+                raise ValueError(msg)
+            return v
+
+        if v.startswith("/"):
+            msg = "local path must be relative"
+            raise ValueError(msg)
+        if "://" in v:
+            msg = "path URI scheme must be one of s3://, gs://, or az://"
+            raise ValueError(msg)
+        return v
+
+    @model_validator(mode="after")
+    def validate_merge_primary_key(self) -> IngestionSourceSpec:
+        """Require a primary key for merge writes."""
+        if self.write_mode == "merge" and not self.primary_key:
+            msg = "primaryKey is required when writeMode is merge"
+            raise ValueError(msg)
+        return self
+
+
+class ProductIngestionSpec(BaseModel):
+    """Product-level ingestion configuration for floe.yaml."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    sources: Annotated[
+        list[IngestionSourceSpec],
+        Field(min_length=1, description="Ingestion sources for this data product"),
+    ]
+
+    @field_validator("sources")
+    @classmethod
+    def validate_unique_source_names(
+        cls, v: list[IngestionSourceSpec]
+    ) -> list[IngestionSourceSpec]:
+        """Validate that ingestion source names are unique."""
+        names = [source.name for source in v]
+        duplicates = {name for name in names if names.count(name) > 1}
+        if duplicates:
+            msg = (
+                f"Duplicate ingestion source names are not allowed: {', '.join(sorted(duplicates))}"
+            )
+            raise ValueError(msg)
+        return v
+
+
 class PlatformRef(BaseModel):
     """Reference to a platform manifest.
 
@@ -734,6 +855,10 @@ class FloeSpec(BaseModel):
         default=None,
         description="Optional reverse ETL destinations (Epic 4G)",
     )
+    ingestion: ProductIngestionSpec | None = Field(
+        default=None,
+        description="Optional ingestion sources",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -860,6 +985,8 @@ def _find_forbidden_fields(
 __all__ = [
     "DestinationConfig",
     "FloeMetadata",
+    "IngestionSourceSpec",
+    "ProductIngestionSpec",
     "TransformSpec",
     "ScheduleSpec",
     "PlatformRef",
