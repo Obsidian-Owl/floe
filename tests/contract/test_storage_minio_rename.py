@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OLD_PACKAGE_NAME = "floe-storage-" + "s3"
 OLD_MODULE_NAME = "floe_storage_" + "s3"
@@ -14,6 +16,8 @@ OLD_SHORT_MINIO_CLASS = "MinIO" + "Plugin"
 OLD_STORAGE_TYPE = "s" + "3"
 NEW_PACKAGE_NAME = "floe-storage-minio"
 ACTIVE_SCAN_ROOTS = [
+    "README.md",
+    "uv.lock",
     "pyproject.toml",
     "plugins",
     "tests",
@@ -100,6 +104,23 @@ def test_storage_plugin_registry_rejects_old_s3_alias() -> None:
         assert OLD_STORAGE_TYPE in str(exc)
     else:
         raise AssertionError("storage s3 alias unexpectedly accepted")
+
+
+def test_runtime_plugin_registry_exposes_minio_without_s3_alias() -> None:
+    """Runtime entry point discovery must expose MinIO and reject the old alias."""
+    from floe_core.plugin_errors import PluginNotFoundError
+    from floe_core.plugin_registry import PluginRegistry
+    from floe_core.plugin_types import PluginType
+
+    registry = PluginRegistry()
+    registry.discover_all()
+
+    storage_plugins = sorted(plugin.name for plugin in registry.list(PluginType.STORAGE))
+    assert storage_plugins == ["minio"]
+    assert registry.get(PluginType.STORAGE, "minio").name == "minio"
+
+    with pytest.raises(PluginNotFoundError):
+        registry.get(PluginType.STORAGE, OLD_STORAGE_TYPE)
 
 
 def test_forbidden_patterns_cover_python_and_f_string_selection_forms() -> None:

@@ -300,75 +300,68 @@ plugins:
 
 ```python
 # floe-storage-minio/src/floe_storage_minio/plugin.py
-from __future__ import annotations
-
-import os
 from typing import Any
-from pyiceberg.io.pyarrow import PyArrowFileIO
 from floe_core.plugins import StoragePlugin
+from floe_storage_minio.config import MinIOStorageConfig
 
 
 class MinIOStoragePlugin(StoragePlugin):
     """Storage plugin for MinIO."""
 
-    name = "minio"
-    version = "0.1.0"
-    floe_api_version = "2.0.0"
+    def __init__(self, config: MinIOStorageConfig | None = None) -> None:
+        """Initialize MinIO storage plugin with validated config."""
+        self._config = config
 
-    def __init__(self, bucket: str = "floe-warehouse", region: str = "us-east-1"):
-        """Initialize MinIO storage plugin.
+    @property
+    def name(self) -> str:
+        return "minio"
 
-        Args:
-            bucket: MinIO bucket name
-            region: S3-compatible region identifier
-        """
-        self.bucket = bucket
-        self.region = region
+    def _require_config(self) -> MinIOStorageConfig:
+        if self._config is None:
+            raise RuntimeError("MinIOStoragePlugin requires config")
+        return self._config
 
-    def get_pyiceberg_fileio(self) -> PyArrowFileIO:
-        """Create PyIceberg FileIO for S3."""
-        return PyArrowFileIO(
-            {
-                "s3.endpoint": f"https://s3.{self.region}.amazonaws.com",
-                "s3.access-key-id": os.getenv("AWS_ACCESS_KEY_ID", ""),
-                "s3.secret-access-key": os.getenv("AWS_SECRET_ACCESS_KEY", ""),
-                "s3.region": self.region,
+    def get_pyiceberg_fileio(self):
+        """Create PyIceberg FileIO for MinIO using S3-compatible keys."""
+        from pyiceberg.io.fsspec import FsspecFileIO
+
+        config = self._require_config()
+        return FsspecFileIO(
+            properties={
+                "s3.endpoint": config.endpoint,
+                "s3.region": config.region,
+                "s3.path-style-access": str(config.path_style_access).lower(),
             }
         )
 
     def get_warehouse_uri(self, namespace: str) -> str:
-        """Generate S3 warehouse URI."""
-        return f"s3://{self.bucket}/warehouse/{namespace}"
+        """Generate S3-compatible warehouse URI."""
+        config = self._require_config()
+        return f"s3://{config.bucket}/{namespace}/"
 
     def get_dbt_profile_config(self) -> dict[str, Any]:
-        """Generate dbt-duckdb S3 filesystems config."""
+        """Generate dbt-duckdb S3-compatible filesystem config."""
+        config = self._require_config()
         return {
-            "filesystems": {
-                "s3": {
-                    "key_id": "${env:AWS_ACCESS_KEY_ID}",
-                    "secret": "${env:AWS_SECRET_ACCESS_KEY}",
-                    "region": self.region,
-                }
-            }
+            "s3_region": config.region,
+            "s3_endpoint": config.endpoint,
+            "s3_path_style_access": config.path_style_access,
+            "s3_access_key_id": '{{ env_var("AWS_ACCESS_KEY_ID") }}',
+            "s3_secret_access_key": '{{ env_var("AWS_SECRET_ACCESS_KEY") }}',
         }
 
     def get_dagster_io_manager_config(self) -> dict[str, Any]:
-        """Generate Dagster IOManager S3 config."""
+        """Generate Dagster IOManager S3-compatible config."""
+        config = self._require_config()
         return {
+            "bucket": config.bucket,
+            "endpoint_url": config.endpoint,
+            "region_name": config.region,
             "storage_options": {
                 "aws_access_key_id": "${env:AWS_ACCESS_KEY_ID}",
                 "aws_secret_access_key": "${env:AWS_SECRET_ACCESS_KEY}",
-                "region_name": self.region,
             }
         }
-
-    def get_helm_values_override(self) -> dict[str, Any]:
-        """No services to deploy for AWS S3 (cloud)."""
-        return {}  # External cloud storage
-
-    def validate_credentials(self) -> bool:
-        """Validate AWS credentials are set."""
-        return "AWS_ACCESS_KEY_ID" in os.environ and "AWS_SECRET_ACCESS_KEY" in os.environ
 ```
 
 ### MinIO Configuration Example
@@ -566,11 +559,14 @@ def test_compiler_with_mock_storage():
 ```python
 # tests/integration/test_minio_plugin.py
 from floe_storage_minio import MinIOStoragePlugin
+from floe_storage_minio.config import MinIOStorageConfig
 
 
 def test_minio_plugin_generates_valid_fileio():
     """Test MinIOStoragePlugin generates valid PyIceberg FileIO."""
-    plugin = MinIOStoragePlugin(endpoint="http://minio:9000")
+    plugin = MinIOStoragePlugin(
+        config=MinIOStorageConfig(endpoint="http://minio:9000", bucket="warehouse")
+    )
     fileio = plugin.get_pyiceberg_fileio()
 
     assert fileio is not None
