@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -116,12 +117,18 @@ def test_resolve_ingestion_config_fails_without_ingestion_plugin() -> None:
     with pytest.raises(CompilationException) as exc_info:
         resolve_ingestion_config(_spec_with_ingestion(), plugins)
 
-    assert exc_info.value.error.code == "E202"
+    assert exc_info.value.error.code == "E201"
     assert exc_info.value.error.context == {"product": "orders-product"}
 
 
-def test_compile_pipeline_merges_product_ingestion_sources(tmp_path: Path) -> None:
+def test_compile_pipeline_merges_product_ingestion_sources(
+    tmp_path: Path,
+    patch_version_compat: Any,
+    mock_compute_plugin: Any,
+) -> None:
     """Stage 3 merges floe.yaml ingestion into compiled plugin artifacts."""
+    _ = (patch_version_compat, mock_compute_plugin)
+
     from floe_core.compilation.stages import compile_pipeline
 
     spec_path = tmp_path / "floe.yaml"
@@ -190,8 +197,14 @@ plugins:
     assert "path" not in artifacts.plugins.ingestion.config["sources"][0]
 
 
-def test_compile_pipeline_fails_when_product_ingestion_has_no_plugin(tmp_path: Path) -> None:
+def test_compile_pipeline_fails_when_product_ingestion_has_no_plugin(
+    tmp_path: Path,
+    patch_version_compat: Any,
+    mock_compute_plugin: Any,
+) -> None:
     """Compilation rejects product ingestion without manifest plugin selection."""
+    _ = (patch_version_compat, mock_compute_plugin)
+
     from floe_core.compilation.errors import CompilationException
     from floe_core.compilation.stages import compile_pipeline
 
@@ -234,7 +247,7 @@ plugins:
     with pytest.raises(CompilationException) as exc_info:
         compile_pipeline(spec_path, manifest_path, emit_lineage=False)
 
-    assert exc_info.value.error.code == "E202"
+    assert exc_info.value.error.code == "E201"
 
 
 def test_no_ingestion_spec_returns_same_plugins() -> None:

@@ -29,7 +29,7 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedPlugins,
     ResolvedTransforms,
 )
-from floe_core.schemas.floe_spec import FloeSpec
+from floe_core.schemas.floe_spec import FloeSpec, IngestionSourceSpec
 from floe_core.schemas.manifest import PlatformManifest
 
 # Default plugin version when not specified
@@ -134,7 +134,7 @@ def resolve_ingestion_config(spec: FloeSpec, plugins: ResolvedPlugins) -> Resolv
         raise CompilationException(
             CompilationError(
                 stage=CompilationStage.RESOLVE,
-                code="E202",
+                code="E201",
                 message="Product declares ingestion sources but no ingestion plugin is selected",
                 suggestion="Add plugins.ingestion to the platform manifest",
                 context={"product": spec.metadata.name},
@@ -142,22 +142,27 @@ def resolve_ingestion_config(spec: FloeSpec, plugins: ResolvedPlugins) -> Resolv
         )
 
     existing_config = dict(plugins.ingestion.config or {})
-    existing_config["sources"] = []
-    for source in spec.ingestion.sources:
-        source_config = {"format": source.format, "path": source.path}
-        resolved_source = source.model_dump(
-            by_alias=False,
-            exclude={"format", "path"},
-            exclude_none=True,
-        )
-        resolved_source["source_config"] = source_config
-        existing_config["sources"].append(resolved_source)
+    existing_config["sources"] = [
+        _resolve_ingestion_source_config(source) for source in spec.ingestion.sources
+    ]
 
     return plugins.model_copy(
         update={
             "ingestion": plugins.ingestion.model_copy(update={"config": existing_config}),
         }
     )
+
+
+def _resolve_ingestion_source_config(source: IngestionSourceSpec) -> dict[str, object]:
+    """Convert a product ingestion source to the dlt plugin config contract."""
+    source_config = {"format": source.format, "path": source.path}
+    resolved_source = source.model_dump(
+        by_alias=False,
+        exclude={"format", "path"},
+        exclude_none=True,
+    )
+    resolved_source["source_config"] = source_config
+    return resolved_source
 
 
 def resolve_manifest_inheritance(
