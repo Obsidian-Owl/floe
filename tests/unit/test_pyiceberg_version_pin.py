@@ -37,7 +37,7 @@ _DOCKERFILE = _REPO_ROOT / "docker" / "dagster-demo" / "Dockerfile"
 # The 2 pyproject.toml files with version constraints
 _FLOE_ICEBERG_TOML = _REPO_ROOT / "packages" / "floe-iceberg" / "pyproject.toml"
 _POLARIS_TOML = _REPO_ROOT / "plugins" / "floe-catalog-polaris" / "pyproject.toml"
-_STORAGE_S3_TOML = _REPO_ROOT / "plugins" / "floe-storage-s3" / "pyproject.toml"
+_STORAGE_MINIO_TOML = _REPO_ROOT / "plugins" / "floe-storage-minio" / "pyproject.toml"
 
 # All 5 files
 _ALL_FILES: list[Path] = [
@@ -270,7 +270,7 @@ class TestInstallSitesUseReleasedVersion:
         declared in package metadata.
         """
         content = _strip_comments(_DOCKERFILE.read_text())
-        storage_metadata = _strip_comments(_STORAGE_S3_TOML.read_text())
+        storage_metadata = _strip_comments(_STORAGE_MINIO_TOML.read_text())
 
         assert "uv export --frozen" in content and "--extra docker" in content, (
             "Dockerfile must install dependencies from the frozen uv export, "
@@ -286,7 +286,7 @@ class TestInstallSitesUseReleasedVersion:
             f"Found: {direct_pyiceberg_installs}"
         )
         assert '"pyiceberg[s3fs]>=0.11.1"' in storage_metadata, (
-            "floe-storage-s3 must declare pyiceberg[s3fs]>=0.11.1 so the "
+            "MinIO storage plugin must declare pyiceberg[s3fs]>=0.11.1 so the "
             "Dockerfile's uv export installs the released S3-capable PyIceberg package."
         )
 

@@ -13,7 +13,6 @@ NEW_PACKAGE_NAME = "floe-storage-minio"
 
 def test_storage_plugin_directory_is_strictly_minio() -> None:
     """Storage plugin directory must use the MinIO package name only."""
-    assert REPO_ROOT.name == "w1-storage-minio"
     assert not (REPO_ROOT / "plugins" / OLD_PACKAGE_NAME).exists()
     assert (REPO_ROOT / "plugins" / NEW_PACKAGE_NAME).is_dir()
 
