@@ -527,6 +527,7 @@ class TestObservability(IntegrationTestBase):
             ensure_telemetry_initialized,
             reset_telemetry,
         )
+        from opentelemetry import trace as otel_trace
 
         from testing.fixtures.polling import wait_for_condition
 
@@ -537,6 +538,7 @@ class TestObservability(IntegrationTestBase):
         spec_path = project_root / "demo" / "customer-360" / "floe.yaml"
         manifest_path = project_root / "demo" / "manifest.yaml"
         service_name = "customer-360"
+        test_run_id = f"w3-observability-{e2e_namespace}"
         start_time = int(time.time() * 1_000_000)
 
         saved_env = {
@@ -550,7 +552,11 @@ class TestObservability(IntegrationTestBase):
             os.environ["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
             os.environ["OTEL_SERVICE_NAME"] = service_name
             ensure_telemetry_initialized()
-            artifacts = compile_pipeline(spec_path, manifest_path)
+            tracer = otel_trace.get_tracer("floe.e2e.observability")
+            with tracer.start_as_current_span("w3_observability_compile") as span:
+                span.set_attribute("floe.test_run_id", test_run_id)
+                span.set_attribute("floe.product_name", service_name)
+                artifacts = compile_pipeline(spec_path, manifest_path)
             assert artifacts.metadata.product_name == service_name
         finally:
             reset_telemetry()
@@ -576,16 +582,34 @@ class TestObservability(IntegrationTestBase):
                 return []
             return list(response.json().get("data") or [])
 
-        traces_available = wait_for_condition(
-            lambda: len(_fresh_trace_data()) > 0,
+        def _trace_tag_pairs(trace: dict[str, Any]) -> list[tuple[str, Any]]:
+            return [
+                (str(tag.get("key")), tag.get("value"))
+                for span in trace.get("spans", [])
+                for tag in span.get("tags", [])
+                if isinstance(tag, dict) and tag.get("key")
+            ]
+
+        def _matching_trace(traces: list[dict[str, Any]]) -> dict[str, Any] | None:
+            for trace in traces:
+                if any(
+                    key == "floe.test_run_id" and value == test_run_id
+                    for key, value in _trace_tag_pairs(trace)
+                ):
+                    return trace
+            return None
+
+        wait_for_condition(
+            lambda: _matching_trace(_fresh_trace_data()) is not None,
             timeout=30.0,
             interval=3.0,
             description="fresh customer-360 compilation traces in Jaeger",
             raise_on_timeout=False,
         )
-        traces = _fresh_trace_data() if traces_available else []
+        traces = _fresh_trace_data()
+        matching_trace = _matching_trace(traces)
 
-        if not traces:
+        if matching_trace is None:
             services: list[Any] = []
             services_error = ""
             try:
@@ -601,35 +625,34 @@ class TestObservability(IntegrationTestBase):
             pytest.fail(
                 "OBSERVABILITY GAP: No fresh traces found for 'customer-360' inside "
                 "the current test window.\n"
-                f"Available Jaeger services: {services}.{services_error}"
+                f"Available Jaeger services: {services}. "
+                f"Traces in window: {len(traces)}.{services_error}"
             )
 
         # Validate trace structure contains real spans
-        first_trace = traces[0]
-        assert "traceID" in first_trace, "Trace missing traceID"
-        assert "spans" in first_trace, "Trace missing spans"
-        assert len(first_trace["spans"]) > 0, (
+        assert "traceID" in matching_trace, "Trace missing traceID"
+        assert "spans" in matching_trace, "Trace missing spans"
+        assert len(matching_trace["spans"]) > 0, (
             "Trace exists but has no spans. OTel instrumentation is emitting "
             "empty traces without span data."
         )
 
-        spans = first_trace["spans"]
+        spans = matching_trace["spans"]
         assert all(span.get("operationName") for span in spans), (
             "At least one span has empty operationName -- OTel instrumentation "
             "is not setting span names"
         )
 
-        tag_keys = {
-            tag.get("key")
-            for span in spans
-            for tag in span.get("tags", [])
-            if isinstance(tag, dict) and tag.get("key")
-        }
+        tag_keys = {key for key, _value in _trace_tag_pairs(matching_trace)}
         assert any(
             str(key).startswith(("compile.", "governance.", "enforcement.", "floe."))
             for key in tag_keys
         ), (
             "TRACE GAP: Fresh customer-360 trace has no Floe domain attributes.\n"
+            f"Tag keys found: {sorted(str(key) for key in tag_keys)}"
+        )
+        assert any(str(key).startswith("compile.") for key in tag_keys), (
+            "TRACE GAP: Fresh customer-360 trace has no compile span attributes.\n"
             f"Tag keys found: {sorted(str(key) for key in tag_keys)}"
         )
 
