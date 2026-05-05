@@ -35,6 +35,10 @@ Use these guides for the current alpha documentation paths. Legacy numbered arch
 - [SCD Patterns](scd-patterns.md)
 - [Quality Plugin](quality-plugin.md)
 
+## Distribution
+
+- [PyPI Trusted Publisher Setup](pypi-trusted-publishers.md)
+
 ## Architecture And Reference
 
 - [Architecture Summary](../architecture/ARCHITECTURE-SUMMARY.md)

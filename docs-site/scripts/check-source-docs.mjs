@@ -9,6 +9,8 @@ const defaultManifestPath = path.join(defaultDocsSiteRoot, 'docs-manifest.json')
 const allowedHetznerSources = new Set([
   'docs/contributing/devpod-hetzner.md',
   'docs/contributing/release-validation.md',
+  'docs/releases/v0.1.0-alpha.1-release-notes.md',
+  'docs/releases/v0.1.0-alpha.1-checklist.md',
 ]);
 
 const disallowedSnippets = [
