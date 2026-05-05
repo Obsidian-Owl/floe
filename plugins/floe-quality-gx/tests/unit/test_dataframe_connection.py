@@ -64,12 +64,11 @@ def test_run_suite_validates_supplied_dataframe(
     source_df = pd.DataFrame(
         {
             "customer_id": [1, 2, 3],
-            "email": ["a@example.com", "b@example.com", "c@example.com"],
-            "status": ["active", "pending", "active"],
+            "segment": ["enterprise", "smb", "startup"],
         }
     )
     suite = QualitySuite(
-        model_name="customers",
+        model_name="mart_customer_360",
         checks=[
             QualityCheck(
                 name="customer_id_not_null",
@@ -86,18 +85,18 @@ def test_run_suite_validates_supplied_dataframe(
                 severity=SeverityLevel.CRITICAL,
             ),
             QualityCheck(
-                name="status_values_in_set",
+                name="segment_values",
                 type="values_in_set",
-                column="status",
+                column="segment",
                 dimension=Dimension.VALIDITY,
                 severity=SeverityLevel.WARNING,
-                parameters={"value_set": ["active", "pending"]},
+                parameters={"value_set": ["enterprise", "mid_market", "smb", "startup", "unknown"]},
             ),
             QualityCheck(
-                name="row_count_between",
+                name="row_count_bounds",
                 type="row_count_between",
                 dimension=Dimension.COMPLETENESS,
-                severity=SeverityLevel.CRITICAL,
+                severity=SeverityLevel.WARNING,
                 parameters={"min_value": 3, "max_value": 3},
             ),
         ],
@@ -108,16 +107,17 @@ def test_run_suite_validates_supplied_dataframe(
         {"dialect": "pandas", "dataframe": source_df},
     )
 
-    assert result.suite_name == "customers_suite"
-    assert result.model_name == "customers"
+    assert result.suite_name == "mart_customer_360_suite"
+    assert result.model_name == "mart_customer_360"
+    assert result.passed is True
     assert result.summary["total"] == 4
     assert result.summary["passed"] == 4
     assert result.summary["failed"] == 0
     assert [check.check_name for check in result.checks] == [
         "customer_id_not_null",
         "customer_id_unique",
-        "status_values_in_set",
-        "row_count_between",
+        "segment_values",
+        "row_count_bounds",
     ]
     assert all(check.passed for check in result.checks)
     assert result.checks[0].records_checked == 3
