@@ -29,7 +29,7 @@ def _spec_with_ingestion() -> FloeSpec:
                         "name": "orders_csv",
                         "sourceType": "filesystem",
                         "format": "csv",
-                        "path": "data/orders.csv",
+                        "path": "./data/customers.csv",
                         "destinationTable": "bronze.orders",
                         "writeMode": "merge",
                         "schemaContract": "freeze",
@@ -73,15 +73,16 @@ def test_resolve_ingestion_config_merges_product_sources() -> None:
         {
             "name": "orders_csv",
             "source_type": "filesystem",
-            "format": "csv",
-            "path": "data/orders.csv",
             "destination_table": "bronze.orders",
             "write_mode": "merge",
             "schema_contract": "freeze",
             "cursor_field": "updated_at",
             "primary_key": ["order_id"],
+            "source_config": {"format": "csv", "path": "./data/customers.csv"},
         }
     ]
+    assert "format" not in resolved.ingestion.config["sources"][0]
+    assert "path" not in resolved.ingestion.config["sources"][0]
 
 
 def test_resolve_ingestion_config_preserves_manifest_config() -> None:
@@ -179,13 +180,14 @@ plugins:
         {
             "name": "orders_csv",
             "source_type": "filesystem",
-            "format": "csv",
-            "path": "data/orders.csv",
             "destination_table": "bronze.orders",
             "write_mode": "append",
             "schema_contract": "evolve",
+            "source_config": {"format": "csv", "path": "data/orders.csv"},
         }
     ]
+    assert "format" not in artifacts.plugins.ingestion.config["sources"][0]
+    assert "path" not in artifacts.plugins.ingestion.config["sources"][0]
 
 
 def test_compile_pipeline_fails_when_product_ingestion_has_no_plugin(tmp_path: Path) -> None:

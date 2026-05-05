@@ -239,6 +239,7 @@ class TestIngestionPluginRefContract:
             ResolvedPlugins,
         )
         from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
+        from floe_ingestion_dlt.config import DltIngestionConfig
 
         artifacts = CompiledArtifacts(
             version="2.0.0",
@@ -291,11 +292,13 @@ class TestIngestionPluginRefContract:
                             {
                                 "name": "orders_csv",
                                 "source_type": "filesystem",
-                                "format": "csv",
-                                "path": "data/orders.csv",
                                 "destination_table": "bronze.orders",
                                 "write_mode": "append",
                                 "schema_contract": "evolve",
+                                "source_config": {
+                                    "format": "csv",
+                                    "path": "data/orders.csv",
+                                },
                             }
                         ],
                     },
@@ -310,17 +313,20 @@ class TestIngestionPluginRefContract:
             {
                 "name": "orders_csv",
                 "source_type": "filesystem",
-                "format": "csv",
-                "path": "data/orders.csv",
                 "destination_table": "bronze.orders",
                 "write_mode": "append",
                 "schema_contract": "evolve",
+                "source_config": {
+                    "format": "csv",
+                    "path": "data/orders.csv",
+                },
             }
         ]
         assert isinstance(sources, list)
         assert all(isinstance(source, dict) for source in sources)
         assert {
             "source_type",
+            "source_config",
             "destination_table",
             "write_mode",
             "schema_contract",
@@ -331,7 +337,10 @@ class TestIngestionPluginRefContract:
             "writeMode",
             "schemaContract",
         }.isdisjoint(sources[0])
+        assert "format" not in sources[0]
+        assert "path" not in sources[0]
         json.dumps(sources)
+        DltIngestionConfig.model_validate(dumped["plugins"]["ingestion"]["config"])
 
         reconstructed = CompiledArtifacts.model_validate(dumped)
 

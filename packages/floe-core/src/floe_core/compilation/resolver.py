@@ -142,9 +142,16 @@ def resolve_ingestion_config(spec: FloeSpec, plugins: ResolvedPlugins) -> Resolv
         )
 
     existing_config = dict(plugins.ingestion.config or {})
-    existing_config["sources"] = [
-        source.model_dump(by_alias=False, exclude_none=True) for source in spec.ingestion.sources
-    ]
+    existing_config["sources"] = []
+    for source in spec.ingestion.sources:
+        source_config = {"format": source.format, "path": source.path}
+        resolved_source = source.model_dump(
+            by_alias=False,
+            exclude={"format", "path"},
+            exclude_none=True,
+        )
+        resolved_source["source_config"] = source_config
+        existing_config["sources"].append(resolved_source)
 
     return plugins.model_copy(
         update={
