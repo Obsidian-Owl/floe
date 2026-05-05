@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from types import SimpleNamespace
 from typing import Any
 
@@ -142,14 +143,100 @@ def test_create_pipeline_passes_filesystem_destination_and_sets_pyiceberg_env(
             "destination": fake_destination,
         }
     ]
-    assert os.environ["ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"] == "polaris"
-    assert os.environ["ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE"] == "rest"
-    assert os.environ["PYICEBERG_CATALOG__POLARIS__TYPE"] == "rest"
-    assert os.environ["PYICEBERG_CATALOG__POLARIS__URI"] == "http://polaris:8181/api/catalog"
-    assert os.environ["PYICEBERG_CATALOG__POLARIS__WAREHOUSE"] == "floe-demo"
-    assert os.environ["PYICEBERG_CATALOG__POLARIS__S3__ENDPOINT"] == ("http://minio:9000")
-    assert os.environ["PYICEBERG_CATALOG__POLARIS__S3__ACCESS_KEY_ID"] == ("env-access")
-    assert os.environ["PYICEBERG_CATALOG__POLARIS__S3__SECRET_ACCESS_KEY"] == ("env-secret")
+    assert "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME" not in os.environ
+    assert "ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__TYPE" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__WAREHOUSE" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__S3__ENDPOINT" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__S3__ACCESS_KEY_ID" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__S3__SECRET_ACCESS_KEY" not in os.environ
+
+
+def test_create_pipeline_restores_plugin_env_when_existing_value_is_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pipeline creation does not overwrite caller-owned PyIceberg env values."""
+    import dlt
+    import dlt.destinations
+
+    monkeypatch.setenv("ICEBERG_CATALOG__ICEBERG_CATALOG_NAME", "caller-catalog")
+    monkeypatch.setattr(dlt.destinations, "filesystem", lambda **_kwargs: object())
+    monkeypatch.setattr(dlt, "pipeline", lambda **kwargs: SimpleNamespace(**kwargs))
+
+    plugin = DltIngestionPlugin()
+    plugin.configure(_plugin_config({"uri": "http://polaris:8181/api/catalog", "bucket": "wh"}))
+    plugin.startup()
+
+    plugin.create_pipeline(
+        IngestionConfig(
+            source_type="filesystem",
+            source_config={},
+            destination_table="bronze.orders",
+        )
+    )
+
+    assert os.environ["ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"] == "caller-catalog"
+    assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
+
+
+def test_create_pipeline_restores_plugin_env_when_destination_creation_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Destination setup failures do not leave plugin-owned PyIceberg env behind."""
+    import dlt.destinations
+
+    def raise_destination(**_kwargs: Any) -> object:
+        raise RuntimeError("destination failed")
+
+    monkeypatch.setattr(dlt.destinations, "filesystem", raise_destination)
+
+    plugin = DltIngestionPlugin()
+    plugin.configure(_plugin_config({"uri": "http://polaris:8181/api/catalog", "bucket": "wh"}))
+    plugin.startup()
+
+    with pytest.raises(RuntimeError, match="destination failed"):
+        plugin.create_pipeline(
+            IngestionConfig(
+                source_type="filesystem",
+                source_config={},
+                destination_table="bronze.orders",
+            )
+        )
+
+    assert "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
+
+
+def test_create_pipeline_restores_plugin_env_when_pipeline_creation_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """dlt.pipeline failures do not leave plugin-owned PyIceberg env behind."""
+    import dlt
+    import dlt.destinations
+
+    monkeypatch.setattr(dlt.destinations, "filesystem", lambda **_kwargs: object())
+
+    def raise_pipeline(**_kwargs: Any) -> object:
+        raise RuntimeError("pipeline failed")
+
+    monkeypatch.setattr(dlt, "pipeline", raise_pipeline)
+
+    plugin = DltIngestionPlugin()
+    plugin.configure(_plugin_config({"uri": "http://polaris:8181/api/catalog", "bucket": "wh"}))
+    plugin.startup()
+
+    with pytest.raises(RuntimeError, match="pipeline failed"):
+        plugin.create_pipeline(
+            IngestionConfig(
+                source_type="filesystem",
+                source_config={},
+                destination_table="bronze.orders",
+            )
+        )
+
+    assert "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
 
 
 def test_create_pipeline_prefers_source_config_catalog_over_plugin_config(
@@ -231,38 +318,73 @@ def test_health_check_distinguishes_object_storage_unreachable(
     assert status.details["object_storage_error"] == "connection refused"
 
 
-def test_catalog_health_check_is_bounded_by_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Catalog reachability check reports timeout when PyIceberg blocks."""
-    result_timeouts: list[float] = []
-    shutdown_calls: list[dict[str, bool]] = []
+def test_catalog_health_check_wall_clock_timeout_does_not_accumulate_workers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A blocking catalog probe returns within timeout and does not leave worker threads."""
 
-    class BlockingFuture:
-        def result(self, timeout: float) -> None:
-            result_timeouts.append(timeout)
-            raise plugin_module.FutureTimeoutError()
+    class BlockingClient:
+        def __init__(self, *, timeout: float) -> None:
+            assert timeout == 0.1
 
-    class BlockingExecutor:
-        def __init__(self, max_workers: int, thread_name_prefix: str) -> None:
-            assert max_workers == 1
-            assert thread_name_prefix == "dlt-health-catalog"
+        def __enter__(self) -> BlockingClient:
+            return self
 
-        def submit(self, _func: object) -> BlockingFuture:
-            return BlockingFuture()
+        def __exit__(self, *_args: object) -> None:
+            return None
 
-        def shutdown(self, *, wait: bool, cancel_futures: bool) -> None:
-            shutdown_calls.append({"wait": wait, "cancel_futures": cancel_futures})
+        def get(self, _url: str) -> SimpleNamespace:
+            threading.Event().wait(1.5)
+            return SimpleNamespace(status_code=200)
 
-    monkeypatch.setattr(plugin_module, "ThreadPoolExecutor", BlockingExecutor)
+    monkeypatch.setattr(plugin_module.httpx, "Client", BlockingClient)
+    plugin = DltIngestionPlugin()
+    plugin.configure(_plugin_config({"uri": "http://polaris:8181/api/catalog"}))
+    plugin.startup()
+
+    start = plugin_module.time.perf_counter()
+    status = plugin.health_check(timeout=0.1)
+    elapsed = plugin_module.time.perf_counter() - start
+
+    assert elapsed < 0.75
+    assert status.state is HealthState.UNHEALTHY
+    assert status.details["reason"] == "catalog_unreachable"
+    assert "catalog health check exceeded 0.1s" in status.details["catalog_error"]
+    assert [
+        thread.name for thread in threading.enumerate() if thread.name.startswith("dlt-health")
+    ] == []
+
+
+def test_catalog_health_check_passes_timeout_to_httpx(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Catalog reachability uses bounded HTTP client timeouts."""
+    client_timeouts: list[float] = []
+    requests: list[tuple[str, str]] = []
+
+    class FakeClient:
+        def __init__(self, *, timeout: float) -> None:
+            client_timeouts.append(timeout)
+
+        def __enter__(self) -> FakeClient:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def get(self, url: str) -> SimpleNamespace:
+            requests.append(("GET", url))
+            return SimpleNamespace(status_code=401)
+
+    monkeypatch.setattr(plugin_module.httpx, "Client", FakeClient)
 
     plugin = DltIngestionPlugin()
     error = plugin._check_catalog_reachable(
-        {"uri": "http://polaris:8181/api/catalog"},
+        {"uri": "http://polaris:8181/api/catalog", "warehouse": "floe"},
         timeout=0.25,
     )
 
-    assert result_timeouts == [0.25]
-    assert shutdown_calls == [{"wait": False, "cancel_futures": True}]
-    assert error == "TimeoutError: catalog health check exceeded 0.25s"
+    assert error is None
+    assert client_timeouts == [0.25]
+    assert requests == [("GET", "http://polaris:8181/api/catalog/v1/config?warehouse=floe")]
 
 
 def test_object_storage_health_check_passes_timeout_to_s3fs(
@@ -316,3 +438,26 @@ def test_object_storage_health_check_passes_timeout_to_s3fs(
             },
         }
     ]
+
+
+def test_object_storage_health_check_has_wall_clock_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A blocking object-storage probe returns within the requested timeout."""
+
+    def blocking_get_fs_token_paths(*_args: Any, **_kwargs: Any) -> tuple[object, None, list[str]]:
+        threading.Event().wait(1.5)
+        return object(), None, ["bucket"]
+
+    monkeypatch.setattr(plugin_module.fsspec, "get_fs_token_paths", blocking_get_fs_token_paths)
+
+    plugin = DltIngestionPlugin()
+    start = plugin_module.time.perf_counter()
+    error = plugin._check_object_storage_reachable(
+        {"bucket": "bucket", "s3_endpoint": "http://minio:9000"},
+        timeout=0.1,
+    )
+    elapsed = plugin_module.time.perf_counter() - start
+
+    assert elapsed < 0.75
+    assert error == "TimeoutError: object_storage health check exceeded 0.1s"

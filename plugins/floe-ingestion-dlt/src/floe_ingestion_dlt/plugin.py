@@ -22,15 +22,17 @@ from __future__ import annotations
 
 import hashlib
 import os
+import signal
+import threading
 import time
 import uuid
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FutureTimeoutError
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import fsspec
+import httpx
 import structlog
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.ingestion import (
@@ -429,12 +431,13 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             if catalog_config:
                 from dlt.destinations import filesystem
 
-                self._apply_iceberg_environment(catalog_config)
                 pipeline_kwargs["destination"] = filesystem(
                     **self.get_destination_config(catalog_config)
                 )
 
             pipeline = dlt.pipeline(**pipeline_kwargs)
+            if catalog_config:
+                pipeline._floe_iceberg_catalog_config = catalog_config
 
             logger.info(
                 "pipeline_created",
@@ -552,7 +555,11 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     run_kwargs["primary_key"] = primary_key
 
                 # Execute the pipeline
-                load_info = pipeline.run(source, **run_kwargs)
+                catalog_config = getattr(pipeline, "_floe_iceberg_catalog_config", None)
+                if not isinstance(catalog_config, dict):
+                    catalog_config = None
+                with self._temporary_iceberg_environment(catalog_config):
+                    load_info = pipeline.run(source, **run_kwargs)
 
                 elapsed = time.perf_counter() - start_time
 
@@ -810,20 +817,51 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             properties["s3.path-style-access"] = "true"
         return properties
 
-    def _apply_iceberg_environment(self, catalog_config: dict[str, Any]) -> None:
+    def _iceberg_environment(self, catalog_config: dict[str, Any]) -> dict[str, str]:
         catalog_name = str(catalog_config.get("catalog_name", "polaris"))
         env_catalog = catalog_name.upper().replace("-", "_")
         prefix = f"PYICEBERG_CATALOG__{env_catalog}__"
 
-        os.environ["ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"] = catalog_name
-        os.environ["ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE"] = "rest"
-        os.environ[f"{prefix}TYPE"] = "rest"
+        env = {
+            "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME": catalog_name,
+            "ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE": "rest",
+            f"{prefix}TYPE": "rest",
+        }
         for key, value in self._pyiceberg_catalog_properties(catalog_config).items():
             env_key = key.upper().replace(".", "__").replace("-", "_")
-            os.environ[f"{prefix}{env_key}"] = value
+            env[f"{prefix}{env_key}"] = value
+        return env
+
+    @contextmanager
+    def _temporary_iceberg_environment(self, catalog_config: dict[str, Any] | None) -> Any:
+        if not catalog_config:
+            yield
+            return
+
+        plugin_env = self._iceberg_environment(catalog_config)
+        previous = {key: os.environ.get(key) for key in plugin_env}
+        try:
+            os.environ.update(plugin_env)
+            yield
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
     def _pyiceberg_catalog_kwargs(self, catalog_config: dict[str, Any]) -> dict[str, str]:
         return {"type": "rest", **self._pyiceberg_catalog_properties(catalog_config)}
+
+    def _catalog_health_url(self, catalog_config: dict[str, Any]) -> str:
+        uri = str(self._first_config_value(catalog_config, "uri", "catalog_uri") or "").rstrip("/")
+        warehouse = self._first_config_value(catalog_config, "warehouse")
+        if not uri:
+            raise ValueError("catalog uri is required for catalog health check")
+        health_url = f"{uri}/v1/config"
+        if warehouse is not None:
+            health_url = f"{health_url}?warehouse={warehouse}"
+        return health_url
 
     def _check_catalog_reachable(
         self,
@@ -831,14 +869,8 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         timeout: float,
     ) -> str | None:
         def _catalog_check() -> None:
-            from pyiceberg.catalog import load_catalog
-
-            catalog_name = str(catalog_config.get("catalog_name", "polaris"))
-            catalog = load_catalog(
-                catalog_name,
-                **self._pyiceberg_catalog_kwargs(catalog_config),
-            )
-            catalog.list_namespaces()
+            with httpx.Client(timeout=timeout) as client:
+                client.get(self._catalog_health_url(catalog_config))
 
         try:
             self._run_health_check_with_timeout(
@@ -858,7 +890,8 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         bucket_url = self._bucket_url(catalog_config)
         if bucket_url is None or not bucket_url.startswith("s3://"):
             return None
-        try:
+
+        def _object_storage_check() -> None:
             fs, _, paths = fsspec.get_fs_token_paths(
                 bucket_url,
                 key=os.environ.get("AWS_ACCESS_KEY_ID"),
@@ -879,6 +912,13 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 },
             )
             fs.ls(paths[0], detail=False, max_items=1)
+
+        try:
+            self._run_health_check_with_timeout(
+                _object_storage_check,
+                timeout,
+                check_name="object_storage",
+            )
             return None
         except Exception as exc:
             return f"{type(exc).__name__}: {sanitize_error_message(str(exc))}"
@@ -890,17 +930,22 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         *,
         check_name: str,
     ) -> None:
-        executor = ThreadPoolExecutor(
-            max_workers=1,
-            thread_name_prefix=f"dlt-health-{check_name}",
-        )
-        future = executor.submit(check)
+        if threading.current_thread() is not threading.main_thread():
+            check()
+            return
+
+        previous_handler = signal.getsignal(signal.SIGALRM)
+        previous_timer = signal.setitimer(signal.ITIMER_REAL, timeout)
+
+        def _timeout_handler(_signum: int, _frame: object) -> None:
+            raise TimeoutError(f"{check_name} health check exceeded {timeout}s")
+
+        signal.signal(signal.SIGALRM, _timeout_handler)
         try:
-            future.result(timeout=timeout)
-        except FutureTimeoutError as exc:
-            raise TimeoutError(f"{check_name} health check exceeded {timeout}s") from exc
+            check()
         finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+            signal.setitimer(signal.ITIMER_REAL, previous_timer[0], previous_timer[1])
+            signal.signal(signal.SIGALRM, previous_handler)
 
     # -----------------------------------------------------------------------
     # SinkConnector ABC implementation (Epic 4G - Reverse ETL)
