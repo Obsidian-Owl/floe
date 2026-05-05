@@ -229,35 +229,84 @@ class TestIngestionPluginRefContract:
         """Serialized ingestion config uses the dlt plugin's snake_case contract."""
         import json
 
-        from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+        from floe_core.schemas.compiled_artifacts import (
+            CompilationMetadata,
+            CompiledArtifacts,
+            ManifestRef,
+            ObservabilityConfig,
+            PluginRef,
+            ProductIdentity,
+            ResolvedPlugins,
+        )
+        from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
 
-        plugins = ResolvedPlugins(
-            compute=PluginRef(type="duckdb", version="0.1.0", config={}),
-            orchestrator=PluginRef(type="dagster", version="0.1.0", config={}),
-            ingestion=PluginRef(
-                type="dlt",
-                version="0.1.0",
-                config={
-                    "catalog_config": {"warehouse": "floe"},
-                    "retry_config": {"max_retries": 4, "initial_delay_seconds": 1.5},
-                    "sources": [
-                        {
-                            "name": "orders_csv",
-                            "source_type": "filesystem",
-                            "format": "csv",
-                            "path": "data/orders.csv",
-                            "destination_table": "bronze.orders",
-                            "write_mode": "append",
-                            "schema_contract": "evolve",
-                        }
-                    ],
-                },
+        artifacts = CompiledArtifacts(
+            version="2.0.0",
+            metadata=CompilationMetadata(
+                compiled_at=datetime.now(timezone.utc),
+                floe_version="0.1.0",
+                source_hash="abc123",
+                product_name="test",
+                product_version="1.0.0",
+            ),
+            identity=ProductIdentity(
+                product_id="test.product",
+                domain="test",
+                repository="https://github.com/test/product",
+            ),
+            mode="simple",
+            inheritance_chain=[
+                ManifestRef(
+                    name="test",
+                    version="1.0.0",
+                    scope="enterprise",
+                    ref="oci://test",
+                )
+            ],
+            observability=ObservabilityConfig(
+                telemetry=TelemetryConfig(
+                    enabled=True,
+                    resource_attributes=ResourceAttributes(
+                        service_name="test",
+                        service_version="1.0.0",
+                        deployment_environment="dev",
+                        floe_namespace="test",
+                        floe_product_name="test",
+                        floe_product_version="1.0.0",
+                        floe_mode="dev",
+                    ),
+                ),
+                lineage_namespace="test",
+            ),
+            plugins=ResolvedPlugins(
+                compute=PluginRef(type="duckdb", version="0.1.0", config={}),
+                orchestrator=PluginRef(type="dagster", version="0.1.0", config={}),
+                ingestion=PluginRef(
+                    type="dlt",
+                    version="0.1.0",
+                    config={
+                        "catalog_config": {"warehouse": "floe"},
+                        "retry_config": {"max_retries": 4, "initial_delay_seconds": 1.5},
+                        "sources": [
+                            {
+                                "name": "orders_csv",
+                                "source_type": "filesystem",
+                                "format": "csv",
+                                "path": "data/orders.csv",
+                                "destination_table": "bronze.orders",
+                                "write_mode": "append",
+                                "schema_contract": "evolve",
+                            }
+                        ],
+                    },
+                ),
             ),
         )
 
-        dumped = plugins.model_dump(mode="json")
+        dumped = artifacts.model_dump(mode="json")
+        sources = dumped["plugins"]["ingestion"]["config"]["sources"]
 
-        assert dumped["ingestion"]["config"]["sources"] == [
+        assert sources == [
             {
                 "name": "orders_csv",
                 "source_type": "filesystem",
@@ -268,5 +317,24 @@ class TestIngestionPluginRefContract:
                 "schema_contract": "evolve",
             }
         ]
-        assert "sourceType" not in dumped["ingestion"]["config"]["sources"][0]
-        json.dumps(dumped["ingestion"]["config"])
+        assert isinstance(sources, list)
+        assert all(isinstance(source, dict) for source in sources)
+        assert {
+            "source_type",
+            "destination_table",
+            "write_mode",
+            "schema_contract",
+        }.issubset(sources[0])
+        assert {
+            "sourceType",
+            "destinationTable",
+            "writeMode",
+            "schemaContract",
+        }.isdisjoint(sources[0])
+        json.dumps(sources)
+
+        reconstructed = CompiledArtifacts.model_validate(dumped)
+
+        assert reconstructed.plugins.ingestion is not None
+        assert reconstructed.plugins.ingestion.config is not None
+        assert reconstructed.plugins.ingestion.config["sources"] == sources

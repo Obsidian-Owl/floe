@@ -412,7 +412,7 @@ def compile_pipeline(
                     )
                 resolve_log_attrs: dict[str, Any] = {}
                 if ingestion_source_count is not None:
-                    resolve_log_attrs["ingestion_source_count"] = ingestion_source_count
+                    resolve_log_attrs["compile.ingestion_source_count"] = ingestion_source_count
                 duration_ms = (time.perf_counter() - stage_start) * 1000
                 log.info(
                     "compilation_stage_complete",
