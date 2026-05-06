@@ -29,9 +29,14 @@ from floe_core.schemas.compiled_artifacts import (
     DagsterStorageBinding,
     DbtStorageBinding,
     KubernetesSecretRef,
+    StorageBucketRequirement,
+    StorageCapabilities,
     StorageCredentialBinding,
     StorageDeploymentBinding,
+    StorageProvisioningIntent,
+    StorageRuntimeBinding,
     StorageServiceEndpoint,
+    StorageWarehouse,
 )
 
 from floe_storage_minio.config import MinIOStorageConfig
@@ -230,24 +235,88 @@ class MinIOStoragePlugin(StoragePlugin):
     def get_deployment_binding(self) -> StorageDeploymentBinding:
         """Return secret-free MinIO deployment binding for compiled artifacts."""
         config = self._require_config()
+        warehouse_uri = f"s3://{config.bucket}"
+        artifact_uri = f"s3://{config.artifact_bucket}"
+        allowed_locations = [warehouse_uri]
+        bucket_requirements = [
+            StorageBucketRequirement(
+                name=config.bucket,
+                uri=warehouse_uri,
+                purpose="warehouse",
+                create_policy="create-if-missing",
+            )
+        ]
+        if config.artifact_bucket != config.bucket:
+            allowed_locations.append(artifact_uri)
+            bucket_requirements.append(
+                StorageBucketRequirement(
+                    name=config.artifact_bucket,
+                    uri=artifact_uri,
+                    purpose="artifacts",
+                    create_policy="create-if-missing",
+                )
+            )
+
+        runtime_env_refs = {
+            "accessKeyId": "AWS_ACCESS_KEY_ID",
+            "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+        }
+        s3_runtime_properties = {
+            "s3.endpoint": config.endpoint,
+            "s3.region": config.region,
+            "s3.path-style-access": str(config.path_style_access).lower(),
+        }
+        dbt_profile_fragment = {
+            "s3_endpoint": config.endpoint,
+            "s3_region": config.region,
+            "s3_path_style_access": config.path_style_access,
+        }
+        dagster_resources = {
+            "bucket": config.bucket,
+            "endpoint_url": config.endpoint,
+            "region_name": config.region,
+            "path_style_access": config.path_style_access,
+        }
+
         return StorageDeploymentBinding(
             provider="minio",
+            protocol="s3-compatible",
             endpoint=StorageServiceEndpoint(
                 internal_url=config.endpoint,
                 external_url=config.external_endpoint or config.endpoint,
                 region=config.region,
-                warehouse_path=f"s3://{config.bucket}",
+                warehouse_path=warehouse_uri,
+                path_style_access=config.path_style_access,
             ),
+            warehouse=StorageWarehouse(
+                uri=warehouse_uri,
+                bucket=config.bucket,
+            ),
+            allowed_locations=allowed_locations,
+            buckets=bucket_requirements,
             credentials=self._credential_binding(),
+            capabilities=StorageCapabilities(
+                protocols=["s3-compatible"],
+                credential_modes=["kubernetes-secret"],
+                sts_supported=False,
+                path_style_access=config.path_style_access,
+            ),
+            provisioning=StorageProvisioningIntent(
+                enabled=True,
+                mode="helm-job",
+                default_create_policy="create-if-missing",
+            ),
+            runtime=StorageRuntimeBinding(
+                pyiceberg_properties=s3_runtime_properties,
+                dbt_profile_fragment=dbt_profile_fragment,
+                dagster_resources=dagster_resources,
+                env_refs=runtime_env_refs,
+            ),
             dbt=DbtStorageBinding(
                 profile_name="floe",
                 target_name="dev",
                 schema_name="analytics",
-                profile_fragment={
-                    "s3_endpoint": config.endpoint,
-                    "s3_region": config.region,
-                    "s3_path_style_access": config.path_style_access,
-                },
+                profile_fragment=dbt_profile_fragment,
                 env_refs={
                     "s3_access_key_id": "AWS_ACCESS_KEY_ID",
                     "s3_secret_access_key": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
@@ -256,13 +325,7 @@ class MinIOStoragePlugin(StoragePlugin):
             dagster=DagsterStorageBinding(
                 resource_key="minio_storage",
                 asset_io_manager_key="iceberg_io_manager",
-                resources={
-                    "namespace": "default",
-                    "bucket": config.bucket,
-                    "endpoint_url": config.endpoint,
-                    "region_name": config.region,
-                    "path_style_access": config.path_style_access,
-                },
+                resources=dagster_resources,
                 env_refs={
                     "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
                     "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
@@ -329,7 +392,7 @@ class MinIOStoragePlugin(StoragePlugin):
         }
 
     def get_helm_values_override(self) -> dict[str, Any]:
-        """Generate chart values for MinIO and Polaris from MinIO config.
+        """Generate deprecated chart values for legacy StoragePlugin callers.
 
         Returns:
             Helm values using Kubernetes Secret references instead of

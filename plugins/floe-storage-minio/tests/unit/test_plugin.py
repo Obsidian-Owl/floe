@@ -311,10 +311,10 @@ class TestMinIODeploymentBinding:
     """Tests for secret-free MinIO deployment bindings."""
 
     def test_get_deployment_binding_returns_secret_free_minio_contract(self) -> None:
-        """MinIO plugin must emit the Task 1 deployment binding contract."""
+        """MinIO plugin must emit neutral storage state without catalog projections."""
         config = MinIOStorageConfig(
-            endpoint="http://floe-platform-minio:9000",
-            bucket="floe-iceberg",
+            endpoint="http://minio:9000",
+            bucket="floe-data",
             region="us-east-1",
             path_style_access=True,
             external_endpoint="http://localhost:9000",
@@ -328,10 +328,37 @@ class TestMinIODeploymentBinding:
         helm_payload = str(plugin.get_helm_values_override())
 
         assert binding.provider == "minio"
-        assert binding.endpoint.internal_url == "http://floe-platform-minio:9000"
+        assert binding.protocol == "s3-compatible"
+        assert binding.endpoint.internal_url == "http://minio:9000"
         assert binding.endpoint.external_url == "http://localhost:9000"
         assert binding.endpoint.region == "us-east-1"
-        assert binding.endpoint.warehouse_path == "s3://floe-iceberg"
+        assert binding.endpoint.warehouse_path == "s3://floe-data"
+        assert binding.endpoint.path_style_access is True
+        assert binding.warehouse is not None
+        assert binding.warehouse.uri == "s3://floe-data"
+        assert binding.warehouse.bucket == "floe-data"
+        assert binding.allowed_locations == ["s3://floe-data", "s3://floe-artifacts"]
+        assert [bucket.purpose for bucket in binding.buckets] == ["warehouse", "artifacts"]
+        assert binding.buckets[0].name == "floe-data"
+        assert binding.buckets[0].purpose == "warehouse"
+        assert binding.buckets[0].create_policy == "create-if-missing"
+        assert binding.capabilities.protocols == ["s3-compatible"]
+        assert binding.capabilities.credential_modes == ["kubernetes-secret"]
+        assert binding.capabilities.sts_supported is False
+        assert binding.capabilities.path_style_access is True
+        assert binding.provisioning.enabled is True
+        assert binding.provisioning.mode == "helm-job"
+        assert binding.provisioning.default_create_policy == "create-if-missing"
+        assert binding.runtime.pyiceberg_properties == {
+            "s3.endpoint": "http://minio:9000",
+            "s3.region": "us-east-1",
+            "s3.path-style-access": "true",
+        }
+        assert binding.runtime.env_refs == {
+            "accessKeyId": "AWS_ACCESS_KEY_ID",
+            "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+        }
+        assert not hasattr(binding, "polaris")
         assert binding.credentials.mode == "kubernetes-secret"
         assert binding.credentials.secret_ref is not None
         assert binding.credentials.secret_ref.name == "floe-platform-minio-credentials"
@@ -361,7 +388,7 @@ class TestMinIODeploymentBinding:
         assert "INLINE_CREDENTIAL_VALUE" not in helm_payload
 
     def test_minio_binding_uses_configured_artifact_bucket_in_helm_values(self) -> None:
-        """Helm projection must include the configured warehouse and artifact buckets."""
+        """Deprecated Helm projection must include configured storage buckets."""
         config = MinIOStorageConfig(
             endpoint="http://floe-platform-minio:9000",
             bucket="warehouse",
