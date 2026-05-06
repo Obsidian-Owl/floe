@@ -71,8 +71,13 @@ Layer 1: FOUNDATION (Framework Code)
 
 | File | Owner | Purpose |
 |------|-------|---------|
-| `manifest.yaml` | Platform Team | Define guardrails (rarely changes) |
-| `floe.yaml` | Data Engineers | Define pipelines (changes frequently) |
+| `manifest.yaml` | Platform Team | Define guardrails, selected plugins, and platform-owned service/destination settings (rarely changes) |
+| `floe.yaml` | Data Engineers | Define product transforms and declarative ingestion sources (changes frequently) |
+
+For ingestion, this keeps the platform/data-engineer split concrete:
+platform teams select and configure dlt, Polaris, and MinIO/S3 once in
+`manifest.yaml`; product teams declare source name, file format, path,
+destination raw table, write mode, and schema contract in `floe.yaml`.
 
 ### Opinionation Boundaries
 
@@ -150,6 +155,24 @@ floe documents **14 plugin categories** for extensibility (see [plugin-system/in
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins.
 
 **See**: [interfaces/](interfaces/index.md) for complete ABC definitions with method signatures
+
+### Example: Product Ingestion Boundary
+
+Customer 360 now exercises the ingestion boundary without requiring data
+engineers to write Dagster or dlt code:
+
+```text
+floe.yaml ingestion.sources
+  -> CompiledArtifacts.plugins.ingestion.config.sources
+  -> Dagster ingestion asset construction
+  -> DltIngestionPlugin
+  -> Iceberg raw tables via Polaris + MinIO/S3
+```
+
+The supported alpha filesystem formats are CSV, JSONL, and Parquet. E2E
+coverage validates the Customer 360 CSV demo path separately from the
+CSV/JSONL/Parquet platform matrix so the demo remains simple while the platform
+still guards common landed-file ingestion issues.
 
 ### Example: ComputePlugin
 

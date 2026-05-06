@@ -303,11 +303,9 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
     ) -> dict[str, Any]:
         """Deprecated compatibility wrapper for ingestion resource creation.
 
-        The canonical Dagster runtime currently fails loudly when ingestion is
-        configured because compiled JSON config cannot construct executable dlt
-        source objects yet. Add a source-construction layer before enabling
-        ingestion resources/assets in
-        ``floe_orchestrator_dagster.runtime.build_product_definitions``.
+        The canonical Dagster runtime now wires ingestion resources and assets
+        in ``floe_orchestrator_dagster.runtime.build_product_definitions`` and
+        constructs executable dlt filesystem sources from compiled JSON config.
         This helper remains for existing low-level tests and callers.
 
         Args:

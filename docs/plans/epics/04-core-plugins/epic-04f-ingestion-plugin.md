@@ -217,11 +217,10 @@ class DltIngestionPlugin(IngestionPlugin):
 
 ### US4: Dagster Asset Factories (P1)
 
-> Superseded (2026-04-25 Task 2): Canonical Dagster runtime ingestion is
-> intentionally disabled until compiled JSON config can construct executable dlt
-> source objects. Configured ingestion fails loudly during runtime definition
-> loading; these asset-factory criteria are historical plan text, not current
-> implemented runtime behavior.
+> Superseded (2026-05-06 dlt ingestion E2E work): Canonical Dagster runtime
+> ingestion can now construct executable dlt filesystem sources from compiled
+> JSON config. These asset-factory criteria remain historical plan text for the
+> earlier disabled runtime state.
 
 **As a** data engineer
 **I want** Dagster assets generated from dlt sources
@@ -241,9 +240,9 @@ class DltIngestionPlugin(IngestionPlugin):
 
 1. **dlt is default but pluggable** - Airbyte can be substituted
 2. **Iceberg-native destination** - No intermediate staging
-3. **Dagster integration** - Historical/future plan only: canonical Dagster
-   runtime currently fails loudly for configured ingestion until compiled JSON
-   config can construct executable dlt source objects.
+3. **Dagster integration** - Canonical Dagster runtime now constructs
+   executable dlt filesystem sources from compiled JSON config. The remaining
+   plan text in this section is historical.
 4. **Incremental by default** - Uses dlt's incremental loading
 
 ### dlt vs Airbyte Trade-offs

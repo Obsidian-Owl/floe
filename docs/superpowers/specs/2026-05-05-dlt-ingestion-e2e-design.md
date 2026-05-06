@@ -9,10 +9,11 @@ reinforce Floe's user experience promise that platform engineers choose and
 operate capabilities once, while data engineers declare product intent in
 `floe.yaml` and inherit the governed runtime.
 
-The current Dagster runtime also has a known blocker: compiled JSON ingestion
-configuration cannot construct executable dlt source objects, so runtime loading
-fails loudly when ingestion workloads are present. This design closes that
-product-experience gap instead of bypassing it with test-only Python objects.
+The Dagster runtime previously had a known blocker: compiled JSON ingestion
+configuration could not construct executable dlt source objects, so runtime
+loading failed loudly when ingestion workloads were present. This design closes
+that product-experience gap instead of bypassing it with test-only Python
+objects.
 
 ## Goals
 
@@ -224,3 +225,61 @@ References:
   lacks executable dlt source objects.
 - E2E tests use isolated namespaces/prefixes and clean up Iceberg/S3 artifacts.
 - No E2E ingestion test mocks dlt, Polaris, or MinIO/S3.
+
+## Implementation Evidence
+
+Implemented scope:
+
+- `floe.yaml` now supports product-owned filesystem ingestion declarations for
+  `csv`, `jsonl`, and `parquet` with destination table, write mode, schema
+  contract, cursor, and primary-key fields.
+- `floe-core` resolves product ingestion sources into
+  `CompiledArtifacts.plugins.ingestion.config.sources` while preserving
+  platform-owned manifest config such as dlt retry, Polaris, and MinIO/S3
+  destination settings.
+- `floe-orchestrator-dagster` constructs executable dlt filesystem resources
+  from compiled JSON config at runtime. Executable dlt objects remain out of
+  `CompiledArtifacts`.
+- `floe-ingestion-dlt` writes through dlt filesystem destination + Iceberg table
+  format using PyIceberg/Polaris configuration, scopes unavoidable PyIceberg
+  environment mutation, sanitizes source/path error context, and applies a
+  single health-check timeout budget.
+- Customer 360 demo config declares three CSV sources:
+  `raw-customers`, `raw-transactions`, and `raw-support-tickets`.
+
+E2E coverage added:
+
+- `tests/e2e/test_customer360_dlt_ingestion.py` compiles the Customer 360 demo,
+  runs each configured source through the same `build_dlt_source` +
+  `DltIngestionPlugin` path used by Dagster ingestion assets, and verifies raw
+  Iceberg rows through PyIceberg with isolated namespace and MinIO prefix
+  cleanup.
+- `tests/e2e/test_dlt_ingestion_format_matrix.py` covers CSV, JSONL, and
+  Parquet landed files in MinIO and verifies exact row counts, expected columns,
+  representative row content, and deterministic cleanup.
+- Edge cases covered in the matrix are missing object path, malformed JSONL,
+  schema freeze rejecting an added column on second load, and unsupported format
+  failure before table creation.
+
+Validation run during implementation:
+
+- `uv run pytest packages/floe-core/tests/unit/schemas/test_floe_spec_ingestion.py packages/floe-core/tests/unit/compilation/test_ingestion_resolution.py tests/contract/test_core_to_ingestion_contract.py plugins/floe-orchestrator-dagster/tests/unit/test_ingestion_filesystem_sources.py plugins/floe-orchestrator-dagster/tests/unit/test_ingestion_translator.py plugins/floe-orchestrator-dagster/tests/unit/test_loader.py plugins/floe-ingestion-dlt/tests/unit/test_destination_config.py -q`
+  passed: 162 tests.
+- `make lint` passed.
+- `make typecheck` passed: no issues in 353 source files.
+- `make test-unit` passed: 10,282 passed, 1 skipped, 1 xfailed; coverage
+  87.69%.
+- `uv run pytest plugins/floe-orchestrator-dagster/tests/integration/test_ingestion_wiring.py plugins/floe-ingestion-dlt/tests/integration/test_dlt_iceberg_destination.py -q`
+  produced 4 passed and 1 infrastructure-blocked failure. The failing test
+  could not connect to Polaris OAuth at `localhost:8181`.
+- `uv run pytest tests/e2e/test_customer360_dlt_ingestion.py tests/e2e/test_dlt_ingestion_format_matrix.py -q`
+  exited before test bodies because Dagster `localhost:3000`, Polaris
+  `localhost:8181`, and MinIO `localhost:9000` were unreachable.
+- `make test-e2e` exited before product tests because the Kubernetes cluster
+  `floe-test` was unreachable.
+
+Live service follow-up:
+
+- Re-run the integration and E2E commands above when the local Kind or DevPod
+  platform stack is available. The current implementation evidence separates
+  product/unit correctness from missing live infrastructure.
