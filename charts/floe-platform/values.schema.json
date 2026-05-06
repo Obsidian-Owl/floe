@@ -330,6 +330,10 @@
                 "pathStyleAccess": {
                   "type": "boolean"
                 },
+                "stsEnabled": {
+                  "type": "boolean",
+                  "description": "Whether Polaris should use STS for S3 storage integration"
+                },
                 "credentialSecretName": {
                   "type": "string",
                   "description": "Kubernetes Secret containing S3 credentials"
@@ -341,12 +345,6 @@
                 "secretKeySecretKey": {
                   "type": "string",
                   "description": "Key in credentialSecretName containing the S3 secret key"
-                },
-                "accessKey": {
-                  "type": "string"
-                },
-                "secretKey": {
-                  "type": "string"
                 }
               }
             }

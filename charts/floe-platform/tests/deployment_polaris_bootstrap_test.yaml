@@ -80,38 +80,24 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POLARIS_STORAGE_AWS_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: floe-platform-minio-credentials
-                key: root-user
+            name: AWS_REGION
+            value: us-east-1
           any: true
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POLARIS_STORAGE_AWS_SECRET_KEY
-            valueFrom:
-              secretKeyRef:
-                name: floe-platform-minio-credentials
-                key: root-password
+            name: AWS_ENDPOINT_URL_S3
+            value: http://minio:9000
           any: true
-      - contains:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POLARIS_STORAGE_AWS_ACCESS_KEY
+          any: true
+      - notContains:
           path: spec.template.spec.containers[0].env
           content:
             name: POLARIS_SERVICE_IDENTITY_AWS_IAM_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: floe-platform-minio-credentials
-                key: root-user
-          any: true
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: POLARIS_SERVICE_IDENTITY_AWS_IAM_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: floe-platform-minio-credentials
-                key: root-password
           any: true
       - contains:
           path: spec.template.spec.containers[0].env
@@ -160,38 +146,14 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POLARIS_STORAGE_AWS_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: floe-platform-minio
-                key: root-user
+            name: AWS_REGION
+            value: us-east-1
           any: true
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: POLARIS_STORAGE_AWS_SECRET_KEY
-            valueFrom:
-              secretKeyRef:
-                name: floe-platform-minio
-                key: root-password
-          any: true
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: POLARIS_SERVICE_IDENTITY_AWS_IAM_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: floe-platform-minio
-                key: root-user
-          any: true
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: POLARIS_SERVICE_IDENTITY_AWS_IAM_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: floe-platform-minio
-                key: root-password
+            name: AWS_ENDPOINT_URL_S3
+            value: http://floe-platform-minio:9000
           any: true
       - contains:
           path: spec.template.spec.containers[0].env
@@ -212,17 +174,16 @@ tests:
                 key: root-password
           any: true
 
-  - it: should require explicit S3 credential secret when Polaris auth uses an external secret
+  - it: should require explicit S3 credential secret for external S3 storage
     template: templates/deployment-polaris.yaml
     set:
       minio.enabled: false
       polaris.enabled: true
-      polaris.auth.existingSecret: polaris-oauth-secret  # pragma: allowlist secret
       polaris.storage.s3.enabled: true
       polaris.storage.s3.endpoint: "https://s3.example.com"
     asserts:
       - failedTemplate:
-          errorMessage: "polaris.storage.s3.credentialSecretName is required when polaris.storage.s3.enabled=true, minio.enabled=false, and polaris.auth.existingSecret is set"
+          errorMessage: "polaris.storage.s3.credentialSecretName is required when polaris.storage.s3.enabled=true and minio.enabled=false"
 
   - it: should query both schema version and Polaris realm state before bootstrapping
     template: templates/deployment-polaris.yaml

@@ -391,10 +391,6 @@ polaris:
       credentialSecretName: ""
       accessKeySecretKey: ""
       secretKeySecretKey: ""
-      # Deprecated transitional fallback for non-MinIO deployments that still
-      # let this chart generate a Polaris-owned S3 credential secret.
-      accessKey: ""
-      secretKey: ""
 
   # Catalog bootstrap configuration
   bootstrap:

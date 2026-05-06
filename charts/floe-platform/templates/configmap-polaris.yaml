@@ -22,7 +22,11 @@ data:
     {{- if .Values.polaris.storage.s3.enabled }}
     # S3 storage configuration
     quarkus.s3.endpoint-override={{ .Values.polaris.storage.s3.endpoint }}
-    quarkus.s3.path-style-access={{ .Values.polaris.storage.s3.pathStyleAccess | default true }}
+    {{- $pathStyleAccess := true }}
+    {{- if hasKey .Values.polaris.storage.s3 "pathStyleAccess" }}
+    {{- $pathStyleAccess = .Values.polaris.storage.s3.pathStyleAccess }}
+    {{- end }}
+    quarkus.s3.path-style-access={{ $pathStyleAccess }}
     quarkus.s3.aws.region={{ .Values.polaris.storage.s3.region | default "us-east-1" }}
     quarkus.s3.aws.credentials.type=static
     # Note: AWS and Polaris storage credentials are provided via secret-backed

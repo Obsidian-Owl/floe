@@ -217,26 +217,6 @@ spec:
                 secretKeyRef:
                   name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
                   key: {{ include "floe-platform.polaris.s3SecretKeySecretKey" . | quote }}
-            - name: POLARIS_STORAGE_AWS_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
-                  key: {{ include "floe-platform.polaris.s3AccessKeySecretKey" . | quote }}
-            - name: POLARIS_STORAGE_AWS_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
-                  key: {{ include "floe-platform.polaris.s3SecretKeySecretKey" . | quote }}
-            - name: POLARIS_SERVICE_IDENTITY_AWS_IAM_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
-                  key: {{ include "floe-platform.polaris.s3AccessKeySecretKey" . | quote }}
-            - name: POLARIS_SERVICE_IDENTITY_AWS_IAM_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
-                  key: {{ include "floe-platform.polaris.s3SecretKeySecretKey" . | quote }}
             - name: QUARKUS_S3_AWS_CREDENTIALS_STATIC_PROVIDER_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
@@ -251,10 +231,6 @@ spec:
               value: {{ .Values.polaris.storage.s3.region | quote }}
             - name: AWS_ENDPOINT_URL_S3
               value: {{ .Values.polaris.storage.s3.endpoint | quote }}
-            {{- if .Values.polaris.storage.s3.stsEndpoint }}
-            - name: AWS_ENDPOINT_URL_STS
-              value: {{ .Values.polaris.storage.s3.stsEndpoint | quote }}
-            {{- end }}
             {{- end }}
             {{- with .Values.polaris.env }}
             {{- toYaml . | nindent 12 }}

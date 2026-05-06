@@ -105,6 +105,7 @@ tests:
       polaris.storage.s3.enabled: true
       polaris.storage.s3.endpoint: "http://minio:9000"
       polaris.storage.s3.region: "us-east-1"
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
       polaris.bootstrap.defaultBaseLocation: "s3://warehouse/data"
       polaris.bootstrap.allowedLocations:
         - "s3://warehouse"
@@ -172,6 +173,7 @@ tests:
       polaris.storage.s3.enabled: true
       polaris.storage.s3.endpoint: "http://minio:9000"
       polaris.storage.s3.region: "us-east-1"
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
       polaris.bootstrap.defaultBaseLocation: "s3://warehouse/data"
       polaris.bootstrap.allowedLocations:
         - "s3://warehouse"
@@ -180,21 +182,52 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: "table-default\\.s3\\.endpoint"
 
-  - it: should set catalog-level s3.endpoint in catalog properties
+  - it: should render generated Polaris storage binding fields in catalog JSON
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
       polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
       polaris.storage.s3.enabled: true
-      polaris.storage.s3.endpoint: "http://minio:9000"
-      polaris.storage.s3.region: "us-east-1"
-      polaris.bootstrap.defaultBaseLocation: "s3://warehouse/data"
+      polaris.storage.s3.endpoint: "http://floe-platform-minio:9000"
+      polaris.storage.s3.region: "eu-west-1"
+      polaris.storage.s3.pathStyleAccess: false
+      polaris.storage.s3.stsEnabled: true
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
+      polaris.bootstrap.defaultBaseLocation: "s3://warehouse"
       polaris.bootstrap.allowedLocations:
         - "s3://warehouse"
+        - "s3://warehouse/silver"
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '"s3\.endpoint":\s*"http://minio:9000"'
+          pattern: '"default-base-location":\s*"s3://warehouse"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"s3\.endpoint":\s*"http://floe-platform-minio:9000"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"s3\.path-style-access":\s*"false"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"s3\.region":\s*"eu-west-1"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"allowedLocations":\s*\["s3://warehouse","s3://warehouse/silver"\]'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"endpoint":\s*"http://floe-platform-minio:9000"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"endpointInternal":\s*"http://floe-platform-minio:9000"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"pathStyleAccess":\s*false'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"region":\s*"eu-west-1"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"stsUnavailable":\s*false'
 
   # --- Job spec ---
   - it: should have restartPolicy Never
