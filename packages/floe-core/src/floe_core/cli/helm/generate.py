@@ -29,9 +29,88 @@ from floe_core.helm import (
     HelmValuesGenerator,
 )
 from floe_core.helm.parsing import parse_set_values
+from floe_core.schemas.compiled_artifacts import CompiledArtifacts, StorageDeploymentBinding
 
 # Type alias for Helm values
 HelmValues = dict[str, Any]
+
+
+def _load_compiled_artifacts(artifact_path: Path) -> CompiledArtifacts:
+    """Load compiled artifacts from JSON or YAML."""
+    if artifact_path.suffix in (".yaml", ".yml"):
+        return CompiledArtifacts.from_yaml_file(artifact_path)
+    return CompiledArtifacts.from_json_file(artifact_path)
+
+
+def _bucket_from_s3_uri(uri: str) -> str:
+    """Return bucket name from an s3:// URI."""
+    if uri.startswith("s3://"):
+        return uri.removeprefix("s3://").split("/", 1)[0]
+    return uri
+
+
+def _storage_helm_values(artifacts: CompiledArtifacts) -> dict[str, Any]:
+    """Derive Helm storage values from compiled storage deployment binding."""
+    if artifacts.deployment is None or artifacts.deployment.storage is None:
+        return {}
+
+    storage = artifacts.deployment.storage
+    if storage.provider != "minio":
+        return {}
+
+    storage_config: dict[str, Any] = {}
+    if artifacts.plugins is not None and artifacts.plugins.storage is not None:
+        raw_config = artifacts.plugins.storage.config
+        if isinstance(raw_config, dict):
+            storage_config = raw_config
+
+    return _minio_storage_helm_values(storage, storage_config)
+
+
+def _minio_storage_helm_values(
+    storage: StorageDeploymentBinding,
+    storage_config: dict[str, Any],
+) -> dict[str, Any]:
+    """Derive MinIO and Polaris values from the compiled storage binding."""
+    warehouse_bucket = _bucket_from_s3_uri(storage.endpoint.warehouse_path)
+    artifact_bucket = storage_config.get("artifact_bucket")
+    bucket_names = [warehouse_bucket]
+    if isinstance(artifact_bucket, str) and artifact_bucket and artifact_bucket != warehouse_bucket:
+        bucket_names.append(artifact_bucket)
+
+    secret_ref = storage.credentials.secret_ref
+    credential_secret_name = secret_ref.name if secret_ref is not None else ""
+    credential_keys = secret_ref.keys if secret_ref is not None else {}
+
+    return {
+        "minio": {
+            "enabled": True,
+            "fullnameOverride": "floe-platform-minio",
+            "auth": {"existingSecret": credential_secret_name},
+            "defaultBuckets": ",".join(bucket_names),
+            "provisioning": {"enabled": False, "fallbackJob": True},
+        },
+        "polaris": {
+            "storage": {
+                "s3": {
+                    "enabled": True,
+                    "endpoint": storage.endpoint.internal_url,
+                    "region": storage.endpoint.region,
+                    "pathStyleAccess": bool(storage_config.get("path_style_access", True)),
+                    "credentialSecretName": credential_secret_name,
+                    "accessKeySecretKey": credential_keys.get("accessKeyId", "root-user"),
+                    "secretKeySecretKey": credential_keys.get(
+                        "secretAccessKey",
+                        "root-password",
+                    ),
+                }
+            },
+            "bootstrap": {
+                "defaultBaseLocation": storage.endpoint.warehouse_path,
+                "allowedLocations": [storage.endpoint.warehouse_path],
+            },
+        },
+    }
 
 
 @click.command(
@@ -167,7 +246,14 @@ def generate_command(
                     exit_code=ExitCode.FILE_NOT_FOUND,
                 )
             info(f"Loading artifact: {artifact_path}")
-            # Future: Extract plugin values from CompiledArtifacts
+            try:
+                artifacts = _load_compiled_artifacts(artifact_path)
+                base_values = _storage_helm_values(artifacts)
+            except Exception as e:
+                error_exit(
+                    f"Failed to load artifact: {artifact_path}: {e}",
+                    exit_code=ExitCode.GENERAL_ERROR,
+                )
 
     # Create generator with configuration
     config = HelmValuesConfig.with_defaults(environment=environments[0])

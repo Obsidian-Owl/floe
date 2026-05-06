@@ -154,9 +154,9 @@ polaris:
       endpoint: "http://floe-platform-minio:9000"
       region: "us-east-1"
       pathStyleAccess: true
-      # MinIO default credentials for local development - production uses IAM/IRSA
-      accessKey: "minioadmin"  # pragma: allowlist secret
-      secretKey: "minioadmin123"  # pragma: allowlist secret
+      credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
+      accessKeySecretKey: "root-user"  # pragma: allowlist secret
+      secretKeySecretKey: "root-password"  # pragma: allowlist secret
   bootstrap:
     enabled: true
     catalogName: "floe-demo"
