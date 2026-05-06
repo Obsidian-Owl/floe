@@ -40,6 +40,7 @@ from floe_core.plugins.ingestion import (
     IngestionResult,
 )
 from floe_core.plugins.sink import EgressResult, SinkConfig, SinkConnector
+from floe_core.telemetry.sanitization import sanitize_error_message
 
 from floe_ingestion_dlt.config import (
     VALID_SCHEMA_CONTRACTS,
@@ -62,7 +63,6 @@ from floe_ingestion_dlt.tracing import (
     record_egress_result,
     record_ingestion_error,
     record_ingestion_result,
-    sanitize_error_message,
 )
 
 if TYPE_CHECKING:
@@ -494,6 +494,8 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         schema_contract_mode = kwargs.get("schema_contract", "evolve")
         cursor_field = kwargs.get("cursor_field")
         primary_key = kwargs.get("primary_key")
+        source_name = kwargs.get("source_name")
+        source_path = kwargs.get("source_path")
 
         # Map schema_contract string to dlt's expected format
         if schema_contract_mode == "evolve":
@@ -610,7 +612,11 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
 
             except Exception as e:
                 elapsed = time.perf_counter() - start_time
-                error_msg = sanitize_error_message(str(e))
+                error_msg = self._with_source_error_context(
+                    sanitize_error_message(str(e)),
+                    source_name=source_name,
+                    source_path=source_path,
+                )
 
                 # Check if this is a schema contract violation
                 # dlt raises exceptions containing "schema" and "contract" when
@@ -665,6 +671,23 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     duration_seconds=elapsed,
                     errors=[error_msg],
                 )
+
+    @staticmethod
+    def _with_source_error_context(
+        error_msg: str,
+        *,
+        source_name: Any,
+        source_path: Any,
+    ) -> str:
+        """Prefix an ingestion error with source identity when provided."""
+        context: list[str] = []
+        if source_name not in (None, ""):
+            context.append(f"source={source_name}")
+        if source_path not in (None, ""):
+            context.append(f"path={source_path}")
+        if not context:
+            return error_msg
+        return f"{', '.join(context)}: {error_msg}"
 
     def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
         """Generate Iceberg destination configuration for dlt.
@@ -1169,7 +1192,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 table_name = kwargs.get("table_name", "egress_output")
                 write_disposition = kwargs.get("write_disposition", "append")
 
-                pipeline = dlt.pipeline(
+                pipeline = dlt.pipeline(  # type: ignore[call-overload]
                     pipeline_name=f"floe_egress_{sink_type}",
                     destination=sink_type,
                     credentials=connection_config or None,
