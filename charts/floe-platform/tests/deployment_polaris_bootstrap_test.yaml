@@ -95,6 +95,42 @@ tests:
                 name: floe-platform-minio-credentials
                 key: root-password
           any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POLARIS_SERVICE_IDENTITY_AWS_IAM_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: floe-platform-minio-credentials
+                key: root-user
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POLARIS_SERVICE_IDENTITY_AWS_IAM_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: floe-platform-minio-credentials
+                key: root-password
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUARKUS_S3_AWS_CREDENTIALS_STATIC_PROVIDER_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: floe-platform-minio-credentials
+                key: root-user
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUARKUS_S3_AWS_CREDENTIALS_STATIC_PROVIDER_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: floe-platform-minio-credentials
+                key: root-password
+          any: true
 
   - it: should source demo runtime S3 credentials from the rendered MinIO secret
     template: templates/deployment-polaris.yaml
@@ -134,6 +170,42 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: POLARIS_STORAGE_AWS_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: floe-platform-minio
+                key: root-password
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POLARIS_SERVICE_IDENTITY_AWS_IAM_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: floe-platform-minio
+                key: root-user
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POLARIS_SERVICE_IDENTITY_AWS_IAM_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: floe-platform-minio
+                key: root-password
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUARKUS_S3_AWS_CREDENTIALS_STATIC_PROVIDER_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: floe-platform-minio
+                key: root-user
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUARKUS_S3_AWS_CREDENTIALS_STATIC_PROVIDER_SECRET_ACCESS_KEY
             valueFrom:
               secretKeyRef:
                 name: floe-platform-minio

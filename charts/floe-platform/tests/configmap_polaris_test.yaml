@@ -21,6 +21,9 @@ tests:
       - notMatchRegex:
           path: data["application.properties"]
           pattern: auto-bootstrap-types
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: quarkus\.s3\.aws\.credentials\.type=static
 
   # RAC-1 defense-in-depth: in-memory mode still must not render the stale flag.
   - it: should omit auto-bootstrap-types when persistence.type is in-memory
@@ -36,6 +39,9 @@ tests:
       - notMatchRegex:
           path: data["application.properties"]
           pattern: auto-bootstrap-types
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: quarkus\.s3\.aws\.credentials\.type=static
 
   # RAC-4: Secret output must stay in the parser-accepted realm,clientId,clientSecret form.
   - it: should render bootstrap-credentials in the expected Polaris root credential format
@@ -43,7 +49,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.auth.bootstrapCredentials.clientId: demo-admin
-      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret  # pragma: allowlist secret
     asserts:
       - isKind:
           of: Secret
