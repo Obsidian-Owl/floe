@@ -2057,23 +2057,28 @@ class TestHelmValuesImageOverride:
         )
 
     @pytest.mark.requirement("WU11-AC3")
-    def test_values_demo_minio_credentials_match_polaris_storage(self) -> None:
-        """Verify demo MinIO credentials match the Polaris S3 storage config.
+    def test_values_profiles_polaris_storage_use_minio_secret_ref(self) -> None:
+        """Verify demo and E2E Polaris storage read the MinIO Secret.
 
-        `make demo` layers values-dev before values-demo. The demo file must
-        override MinIO auth explicitly so Polaris does not sign S3 requests with
-        credentials that differ from the deployed MinIO root credentials.
+        `make demo` layers values-dev before values-demo. The demo and test
+        profiles must wire Polaris to the MinIO root credential Secret instead
+        of duplicating raw access keys under Polaris S3 storage values.
         """
-        values = _load_values_yaml(VALUES_DEMO)
-        polaris_s3 = values.get("polaris", {}).get("storage", {}).get("s3", {})
-        minio_auth = values.get("minio", {}).get("auth", {})
+        for values_path in (VALUES_DEMO, VALUES_TEST):
+            values = _load_values_yaml(values_path)
+            polaris_s3 = values.get("polaris", {}).get("storage", {}).get("s3", {})
 
-        assert minio_auth.get("rootUser") == polaris_s3.get("accessKey"), (
-            "values-demo.yaml minio.auth.rootUser must match polaris.storage.s3.accessKey."
-        )
-        assert minio_auth.get("rootPassword") == polaris_s3.get("secretKey"), (
-            "values-demo.yaml minio.auth.rootPassword must match polaris.storage.s3.secretKey."
-        )
+            assert "accessKey" not in polaris_s3
+            assert "secretKey" not in polaris_s3
+            assert polaris_s3.get("credentialSecretName") == "floe-platform-minio", (
+                f"{values_path.name} Polaris S3 storage must read the MinIO credential Secret."
+            )
+            assert polaris_s3.get("accessKeySecretKey") == "root-user", (
+                f"{values_path.name} Polaris S3 storage must use the MinIO access key field."
+            )
+            assert polaris_s3.get("secretKeySecretKey") == "root-password", (
+                f"{values_path.name} Polaris S3 storage must use the MinIO secret key field."
+            )
 
     @pytest.mark.requirement("WU11-AC3")
     def test_values_demo_minio_provisions_polaris_warehouse_bucket(self) -> None:

@@ -175,8 +175,9 @@ polaris:
       endpoint: "http://floe-platform-minio:9000"
       region: "us-east-1"
       pathStyleAccess: true
-      accessKey: "minioadmin"  # pragma: allowlist secret
-      secretKey: "minioadmin123"  # pragma: allowlist secret
+      credentialSecretName: "floe-platform-minio"  # pragma: allowlist secret
+      accessKeySecretKey: "root-user"  # pragma: allowlist secret
+      secretKeySecretKey: "root-password"  # pragma: allowlist secret
   bootstrap:
     enabled: true
     # Keep the test platform aligned with demo/manifest.yaml so the deployed
