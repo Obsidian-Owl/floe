@@ -188,6 +188,23 @@ def _resolve_duckdb_path_from_profiles(
     )
 
 
+def _apply_compiled_storage_endpoint(
+    catalog_config: dict[str, Any],
+    artifacts: CompiledArtifacts,
+) -> dict[str, Any]:
+    """Apply compiled storage endpoint projection to PyIceberg catalog config."""
+    deployment = artifacts.deployment
+    if deployment is None or deployment.storage is None:
+        return catalog_config
+
+    storage = deployment.storage
+    return {
+        **catalog_config,
+        "s3.endpoint": storage.endpoint.internal_url,
+        "s3.region": storage.endpoint.region,
+    }
+
+
 def export_dbt_to_iceberg(
     context: Any,
     product_name: str,
@@ -250,7 +267,10 @@ def export_dbt_to_iceberg(
     import duckdb
     from pyiceberg.exceptions import NoSuchTableError
 
-    catalog_connection_config = storage_plugin.get_pyiceberg_catalog_config()
+    catalog_connection_config = _apply_compiled_storage_endpoint(
+        storage_plugin.get_pyiceberg_catalog_config(),
+        artifacts,
+    )
     iceberg_config = IcebergTableManagerConfig.from_governance(artifacts.governance)
     catalog = _require_write_capable_catalog(
         catalog_plugin.connect(config=catalog_connection_config),

@@ -1,13 +1,13 @@
-"""Contract test: S3 endpoint preservation through config chain (AC-3).
+"""Contract test: storage endpoint preservation through config chain (AC-3).
 
-Traces the s3.endpoint from CompiledArtifacts.plugins.storage.config.endpoint
+Traces the storage endpoint from CompiledArtifacts.plugins.storage.config.endpoint
 through to the catalog config dict passed to PyIceberg, asserting no
 intermediate layer silently replaces it or introduces table-default.* keys.
 
 This is a cross-package contract test (floe_core + floe_catalog_polaris).
 
 Requirements:
-    AC-3: S3 endpoint flows from manifest.yaml through to PyIceberg FileIO
+    AC-3: storage endpoint flows from manifest.yaml through to PyIceberg FileIO
           without corruption
 """
 
@@ -56,7 +56,7 @@ def _make_resolved_plugins(storage_endpoint: str) -> ResolvedPlugins:
 
 @pytest.mark.requirement("AC-3")
 def test_endpoint_preserved_through_connect() -> None:
-    """Client s3.endpoint in connect() config is stored for later use.
+    """Client storage endpoint in connect() config is stored for later use.
 
     The endpoint defined in manifest.yaml flows through compiled_artifacts
     storage.config.endpoint into the catalog connect() config dict. Verify
@@ -77,7 +77,7 @@ def test_endpoint_preserved_through_connect() -> None:
     ):
         plugin.connect({"s3.endpoint": client_endpoint})
 
-    # s3.endpoint MUST appear in the config passed to load_catalog
+    # PyIceberg s3.endpoint MUST appear in the config passed to load_catalog
     assert captured_config.get("s3.endpoint") == client_endpoint
 
     # Plugin MUST store the client endpoint for post-load fixup
@@ -153,9 +153,9 @@ def test_storage_plugin_ref_carries_endpoint() -> None:
     """CompiledArtifacts storage plugin ref MUST carry the endpoint value.
 
     This validates the contract: storage.config.endpoint in CompiledArtifacts
-    is the authoritative source of the S3 endpoint value.
+    is the authoritative source of the storage endpoint value.
     """
-    endpoint = "http://my-s3-endpoint:9000"
+    endpoint = "http://my-storage-endpoint:9000"
     plugins = _make_resolved_plugins(endpoint)
 
     assert plugins.storage is not None

@@ -243,6 +243,11 @@ class MinIOStoragePlugin(StoragePlugin):
                 profile_name="floe",
                 target_name="dev",
                 schema_name="analytics",
+                profile_fragment={
+                    "s3_endpoint": config.endpoint,
+                    "s3_region": config.region,
+                    "s3_path_style_access": config.path_style_access,
+                },
                 env_refs={
                     "s3_access_key_id": "AWS_ACCESS_KEY_ID",
                     "s3_secret_access_key": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
@@ -251,6 +256,13 @@ class MinIOStoragePlugin(StoragePlugin):
             dagster=DagsterStorageBinding(
                 resource_key="minio_storage",
                 asset_io_manager_key="iceberg_io_manager",
+                resources={
+                    "namespace": "default",
+                    "bucket": config.bucket,
+                    "endpoint_url": config.endpoint,
+                    "region_name": config.region,
+                    "path_style_access": config.path_style_access,
+                },
                 env_refs={
                     "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
                     "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret

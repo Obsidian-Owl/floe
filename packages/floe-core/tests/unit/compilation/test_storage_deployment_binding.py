@@ -39,6 +39,13 @@ def test_demo_compile_emits_minio_storage_deployment_binding() -> None:
     assert storage.credentials.mode == "kubernetes-secret"
     assert storage.credentials.secret_ref is not None
     assert storage.credentials.secret_ref.name == "floe-platform-minio-credentials"
+    assert storage.dbt.profile_fragment["s3_endpoint"] == "http://floe-platform-minio:9000"
+    assert storage.dagster.resources["endpoint_url"] == "http://floe-platform-minio:9000"
+    assert artifacts.dbt_profiles is not None
+    dev_profile = artifacts.dbt_profiles["customer-360"]["outputs"]["dev"]
+    assert dev_profile["s3_endpoint"] == "http://floe-platform-minio:9000"
+    assert dev_profile["s3_region"] == "us-east-1"
+    assert dev_profile["s3_access_key_id"] == "{{ env_var('AWS_ACCESS_KEY_ID') }}"
     assert "minioadmin" not in payload
 
 

@@ -591,12 +591,17 @@ def compile_pipeline(
                 attributes={"compile.stage": CompilationStage.COMPILE.value},
             ) as compile_span:
                 log.info("compilation_stage_start", stage=CompilationStage.COMPILE.value)
+                deployment = _build_storage_deployment_binding(plugins)
+                storage_dbt_binding = None
+                if deployment is not None and deployment.storage is not None:
+                    storage_dbt_binding = deployment.storage.dbt
+
                 # Generate dbt profiles using compute plugin
                 dbt_profiles = generate_dbt_profiles(
                     plugins=plugins,
                     product_name=spec.metadata.name,
+                    storage_binding=storage_dbt_binding,
                 )
-                deployment = _build_storage_deployment_binding(plugins)
                 compile_span.set_attribute("compile.profile_name", spec.metadata.name)
                 duration_ms = (time.perf_counter() - stage_start) * 1000
                 log.info(

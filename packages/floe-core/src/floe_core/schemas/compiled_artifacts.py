@@ -412,6 +412,7 @@ class DbtStorageBinding(BaseModel):
     profile_name: NonEmptyString
     target_name: NonEmptyString
     schema_name: NonEmptyString
+    profile_fragment: dict[str, Any] = Field(default_factory=dict)
     env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
 
 
@@ -422,6 +423,7 @@ class DagsterStorageBinding(BaseModel):
 
     resource_key: NonEmptyString
     asset_io_manager_key: NonEmptyString
+    resources: dict[str, Any] = Field(default_factory=dict)
     env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
 
 

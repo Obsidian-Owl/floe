@@ -14,11 +14,18 @@ from floe_core.plugin_types import PluginType
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
+    DagsterStorageBinding,
+    DbtStorageBinding,
+    DeploymentConfig,
+    KubernetesSecretRef,
     ObservabilityConfig,
     PluginRef,
     ResolvedModel,
     ResolvedPlugins,
     ResolvedTransforms,
+    StorageCredentialBinding,
+    StorageDeploymentBinding,
+    StorageServiceEndpoint,
 )
 from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
 
@@ -28,7 +35,46 @@ from floe_orchestrator_dagster.validation.iceberg_outputs import (
 )
 
 
-def _make_artifacts(*, transforms: ResolvedTransforms | None = None) -> CompiledArtifacts:
+def _make_storage_deployment(endpoint: str) -> DeploymentConfig:
+    """Build a compiled MinIO storage deployment binding."""
+    return DeploymentConfig(
+        storage=StorageDeploymentBinding(
+            provider="minio",
+            endpoint=StorageServiceEndpoint(
+                internal_url=endpoint,
+                external_url=endpoint,
+                region="us-east-1",
+                warehouse_path="s3://floe-iceberg",
+            ),
+            credentials=StorageCredentialBinding(
+                mode="kubernetes-secret",
+                secret_ref=KubernetesSecretRef(
+                    name="floe-platform-minio",
+                    namespace="floe-system",
+                    keys={
+                        "accessKeyId": "root-user",
+                        "secretAccessKey": "root-password",  # pragma: allowlist secret
+                    },
+                ),
+            ),
+            dbt=DbtStorageBinding(
+                profile_name="floe",
+                target_name="dev",
+                schema_name="analytics",
+            ),
+            dagster=DagsterStorageBinding(
+                resource_key="minio_storage",
+                asset_io_manager_key="iceberg_io_manager",
+            ),
+        )
+    )
+
+
+def _make_artifacts(
+    *,
+    transforms: ResolvedTransforms | None = None,
+    deployment: DeploymentConfig | None = None,
+) -> CompiledArtifacts:
     """Build compiled artifacts with configured catalog and storage plugins."""
     return CompiledArtifacts(
         version="0.5.0",
@@ -68,6 +114,7 @@ def _make_artifacts(*, transforms: ResolvedTransforms | None = None) -> Compiled
             storage=PluginRef(type="minio", version="1.0.0", config={"endpoint": "memory://"}),
         ),
         transforms=transforms,
+        deployment=deployment,
     )
 
 
@@ -118,3 +165,43 @@ def test_validate_iceberg_outputs_passes_storage_catalog_config_to_catalog() -> 
     storage_plugin.get_pyiceberg_fileio.assert_not_called()
     catalog.load_table.assert_called_once_with("customer_360.mart_customer_360")
     assert result.table_names == ["customer_360.mart_customer_360"]
+
+
+@pytest.mark.requirement("ALPHA-ICEBERG")
+def test_validate_iceberg_outputs_prefers_compiled_storage_endpoint() -> None:
+    """Compiled storage binding endpoint must override plugin config endpoint."""
+    artifacts = _make_artifacts(
+        transforms=ResolvedTransforms(
+            models=[ResolvedModel(name="mart_customer_360", compute="duckdb")],
+            default_compute="duckdb",
+        ),
+        deployment=_make_storage_deployment("http://compiled-minio:9000"),
+    )
+    catalog_plugin = MagicMock()
+    storage_plugin = MagicMock()
+    catalog = MagicMock()
+    catalog.load_table.return_value = MagicMock()
+    storage_plugin.get_pyiceberg_catalog_config.return_value = {
+        "s3.endpoint": "http://plugin-config-minio:9000",
+        "s3.region": "us-west-2",
+        "s3.path-style-access": "true",
+    }
+    catalog_plugin.connect.return_value = catalog
+    registry = MagicMock()
+
+    def get_side_effect(plugin_type: PluginType, _name: str) -> MagicMock:
+        if plugin_type is PluginType.CATALOG:
+            return catalog_plugin
+        return storage_plugin
+
+    registry.get.side_effect = get_side_effect
+    registry.configure.return_value = MagicMock()
+
+    with patch("floe_core.plugin_registry.get_registry", return_value=registry):
+        validate_iceberg_outputs(artifacts)
+
+    catalog_plugin.connect.assert_called_once()
+    connect_config = catalog_plugin.connect.call_args.kwargs["config"]
+    assert connect_config["s3.endpoint"] == "http://compiled-minio:9000"
+    assert connect_config["s3.region"] == "us-east-1"
+    assert connect_config["s3.path-style-access"] == "true"
