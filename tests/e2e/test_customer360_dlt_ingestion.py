@@ -7,6 +7,7 @@ validates the raw Iceberg tables directly through PyIceberg.
 
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -76,7 +77,6 @@ def _host_catalog_config(base_config: dict[str, Any]) -> dict[str, Any]:
     """Rewrite compiled catalog config to host-reachable Polaris and MinIO."""
     polaris_catalog_url = f"{ServiceEndpoint('polaris').url}/api/catalog"
     minio_url = ServiceEndpoint("minio").url
-    minio_access_key, minio_secret_key = get_minio_credentials()
     polaris_client_id, polaris_client_secret = get_polaris_credentials(DEMO_MANIFEST)
 
     return {
@@ -92,8 +92,6 @@ def _host_catalog_config(base_config: dict[str, Any]) -> dict[str, Any]:
         "s3_endpoint": minio_url,
         "s3_region": base_config.get("s3_region", "us-east-1"),
         "s3_path_style_access": True,
-        "s3_access_key": minio_access_key,
-        "s3_secret_key": minio_secret_key,  # pragma: allowlist secret
     }
 
 
@@ -112,15 +110,43 @@ def _isolated_ingestion_config(
     config["sources"] = [
         {
             **dict(source),
-            "destination_table": str(source["destination_table"]).replace(
-                "bronze.",
-                f"{namespace}.",
-                1,
+            "destination_table": _isolated_destination_table(
+                str(source["destination_table"]),
+                isolated_namespace=namespace,
+                source_name=str(source.get("name", "<unnamed>")),
             ),
         }
         for source in config["sources"]
     ]
     return DltIngestionConfig.model_validate(config)
+
+
+def _isolated_destination_table(
+    destination_table: str,
+    *,
+    isolated_namespace: str,
+    source_name: str,
+) -> str:
+    """Map a required bronze.table logical target into the isolated namespace."""
+    parts = destination_table.split(".")
+    if len(parts) != 2 or any(not part for part in parts):
+        pytest.fail(
+            f"Customer 360 ingestion source {source_name!r} must target "
+            f"exactly bronze.<table>; got {destination_table!r}"
+        )
+    logical_namespace, table = parts
+    if logical_namespace != "bronze":
+        pytest.fail(
+            f"Customer 360 ingestion source {source_name!r} must target "
+            f"the bronze namespace; got {destination_table!r}"
+        )
+    if destination_table not in LOGICAL_RAW_TABLES:
+        expected = ", ".join(LOGICAL_RAW_TABLES)
+        pytest.fail(
+            f"Customer 360 ingestion source {source_name!r} targets unexpected "
+            f"raw table {destination_table!r}; expected one of: {expected}"
+        )
+    return f"{isolated_namespace}.{table}"
 
 
 def _table_identifier(raw_identifier: Any) -> str:
@@ -164,6 +190,24 @@ def _purge_namespace(catalog: Any, namespace: str) -> None:
             raise
 
 
+def _cleanup_namespace_objects(minio: Any, *, bucket: str, namespace: str) -> int:
+    """Remove leftover MinIO objects written under an isolated namespace prefix."""
+    if not minio.bucket_exists(bucket):
+        return 0
+
+    from minio.deleteobjects import DeleteObject
+
+    objects = list(minio.list_objects(bucket, prefix=namespace, recursive=True))
+    delete_objects = [DeleteObject(obj.object_name) for obj in objects]
+    if not delete_objects:
+        return 0
+
+    errors = list(minio.remove_objects(bucket, delete_objects))
+    if errors:
+        pytest.fail(f"Failed to delete MinIO objects for namespace {namespace}: {errors}")
+    return len(delete_objects)
+
+
 def _row_count(catalog: Any, table_identifier: str) -> int:
     """Return a PyIceberg row count using host-reachable MinIO table IO."""
     table = catalog.load_table(table_identifier)
@@ -174,6 +218,44 @@ def _row_count(catalog: Any, table_identifier: str) -> int:
 def _table_name(destination_table: str) -> str:
     """Extract the physical table name from a namespace-qualified table."""
     return destination_table.rsplit(".", 1)[-1]
+
+
+def _expected_csv_row_count(source: Any) -> int:
+    """Return exact expected rows from a configured Customer 360 CSV source."""
+    if source.source_type != "filesystem":
+        pytest.fail(f"Customer 360 source {source.name!r} must be filesystem-backed")
+    if source.source_config.get("format") != "csv":
+        pytest.fail(f"Customer 360 source {source.name!r} must be configured as CSV")
+
+    raw_path = source.source_config.get("path")
+    if not isinstance(raw_path, str) or not raw_path:
+        pytest.fail(f"Customer 360 source {source.name!r} must declare a CSV path")
+    if urlsplit(raw_path).scheme:
+        pytest.fail(
+            f"Customer 360 source {source.name!r} must use a local demo seed path; got {raw_path!r}"
+        )
+
+    project_root = CUSTOMER_360_DIR.resolve()
+    csv_path = (project_root / raw_path).resolve()
+    try:
+        csv_path.relative_to(project_root)
+    except ValueError:
+        pytest.fail(f"Customer 360 source {source.name!r} path escapes demo project: {raw_path!r}")
+    if not csv_path.is_file():
+        pytest.fail(f"Customer 360 CSV source file not found: {csv_path}")
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        row_count = sum(1 for _row in csv.reader(csv_file))
+    assert row_count > 0, f"Customer 360 CSV source {csv_path} should include a header"
+    return row_count - 1
+
+
+def _expected_row_counts_by_table(ingestion_config: DltIngestionConfig) -> dict[str, int]:
+    """Return exact expected row counts keyed by isolated physical table name."""
+    return {
+        _table_name(source.destination_table): _expected_csv_row_count(source)
+        for source in ingestion_config.sources
+    }
 
 
 def _ingest_sources(
@@ -227,6 +309,7 @@ class TestCustomer360DltIngestion(IntegrationTestBase):
         namespace = _isolated_bronze_namespace(e2e_namespace)
         artifacts = _load_customer360_artifacts(tmp_path)
         ingestion_config = _isolated_ingestion_config(artifacts, namespace=namespace)
+        expected_counts = _expected_row_counts_by_table(ingestion_config)
         bucket = str(ingestion_config.catalog_config["bucket"])
 
         minio_access_key, minio_secret_key = get_minio_credentials()
@@ -236,29 +319,36 @@ class TestCustomer360DltIngestion(IntegrationTestBase):
 
         with minio_client_context(MinIOConfig(endpoint=_host_minio_endpoint_for_client())) as minio:
             ensure_bucket(minio, bucket)
-
-        _purge_namespace(polaris_with_write_grants, namespace)
-        polaris_with_write_grants.create_namespace(namespace)
-
-        plugin = DltIngestionPlugin()
-        plugin.configure(ingestion_config)
-        plugin.startup()
-        try:
-            _ingest_sources(plugin, ingestion_config)
-
-            available_tables = _table_names(polaris_with_write_grants, namespace)
-            for logical_table in LOGICAL_RAW_TABLES:
-                table_name = _table_name(logical_table)
-                assert table_name in available_tables, (
-                    f"Expected Customer 360 raw table {namespace}.{table_name} "
-                    f"for logical table {logical_table}; available tables: {available_tables}"
-                )
-
-                count = _row_count(polaris_with_write_grants, f"{namespace}.{table_name}")
-                assert count > 0, (
-                    f"Expected {namespace}.{table_name} for logical table "
-                    f"{logical_table} to contain rows"
-                )
-        finally:
-            plugin.shutdown()
+            _cleanup_namespace_objects(minio, bucket=bucket, namespace=namespace)
             _purge_namespace(polaris_with_write_grants, namespace)
+            polaris_with_write_grants.create_namespace(namespace)
+
+            plugin = DltIngestionPlugin()
+            plugin.configure(ingestion_config)
+            plugin.startup()
+            try:
+                _ingest_sources(plugin, ingestion_config)
+
+                available_tables = _table_names(polaris_with_write_grants, namespace)
+                for logical_table in LOGICAL_RAW_TABLES:
+                    table_name = _table_name(logical_table)
+                    assert table_name in available_tables, (
+                        f"Expected Customer 360 raw table {namespace}.{table_name} "
+                        f"for logical table {logical_table}; available tables: {available_tables}"
+                    )
+
+                    count = _row_count(polaris_with_write_grants, f"{namespace}.{table_name}")
+                    expected_count = expected_counts[table_name]
+                    assert count == expected_count, (
+                        f"Expected {namespace}.{table_name} for logical table "
+                        f"{logical_table} to contain exactly {expected_count} rows "
+                        f"from its seed CSV, got {count}"
+                    )
+            finally:
+                plugin.shutdown()
+                _purge_namespace(polaris_with_write_grants, namespace)
+                _cleanup_namespace_objects(
+                    minio,
+                    bucket=bucket,
+                    namespace=namespace,
+                )
