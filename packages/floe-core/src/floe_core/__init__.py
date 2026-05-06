@@ -34,72 +34,65 @@ See Also:
 
 from __future__ import annotations
 
+from importlib import import_module
+from typing import Any
+
 __version__ = "0.1.0"
 
-# =============================================================================
-# Submodule re-exports (explicit)
-# =============================================================================
-from floe_core import plugins as plugins  # noqa: PLC0414
-from floe_core import rbac as rbac  # noqa: PLC0414
-from floe_core import schemas as schemas  # noqa: PLC0414
-from floe_core import telemetry as telemetry  # noqa: PLC0414
+_SUBMODULE_EXPORTS = {
+    "plugins": "floe_core.plugins",
+    "rbac": "floe_core.rbac",
+    "schemas": "floe_core.schemas",
+    "telemetry": "floe_core.telemetry",
+}
 
-# =============================================================================
-# Essential public API
-# =============================================================================
-# Compilation pipeline (Epic 2B)
-from floe_core.compilation.errors import CompilationError
+_PUBLIC_EXPORTS = {
+    "AuthenticationError": "floe_core.plugin_errors",
+    "CatalogConfig": "floe_core.plugins",
+    "CatalogError": "floe_core.plugin_errors",
+    "CatalogPlugin": "floe_core.plugins",
+    "CatalogUnavailableError": "floe_core.plugin_errors",
+    "CompilationError": "floe_core.compilation.errors",
+    "CompiledArtifacts": "floe_core.schemas.compiled_artifacts",
+    "ComputeConfig": "floe_core.plugins",
+    "ComputePlugin": "floe_core.plugins",
+    "ConflictError": "floe_core.plugin_errors",
+    "ConnectionResult": "floe_core.plugins",
+    "ConnectionStatus": "floe_core.compute_config",
+    "FloeSpec": "floe_core.schemas.floe_spec",
+    "HealthState": "floe_core.plugin_metadata",
+    "HealthStatus": "floe_core.plugin_metadata",
+    "NotFoundError": "floe_core.plugin_errors",
+    "NotSupportedError": "floe_core.plugin_errors",
+    "PluginMetadata": "floe_core.plugin_metadata",
+    "PluginRegistry": "floe_core.plugin_registry",
+    "PluginType": "floe_core.plugin_types",
+    "ResourceSpec": "floe_core.plugins",
+    "WORKLOAD_PRESETS": "floe_core.compute_config",
+    "compile_pipeline": "floe_core.compilation.stages",
+    "get_registry": "floe_core.plugin_registry",
+}
 
-# Compilation pipeline (essential export)
-from floe_core.compilation.stages import compile_pipeline
 
-# Compute config
-from floe_core.compute_config import WORKLOAD_PRESETS, ConnectionStatus
+def __getattr__(name: str) -> Any:
+    """Lazily load public exports to keep package import side-effect light."""
+    if name in _SUBMODULE_EXPORTS:
+        module = import_module(_SUBMODULE_EXPORTS[name])
+        globals()[name] = module
+        return module
 
-# Plugin error hierarchy
-from floe_core.plugin_errors import (
-    AuthenticationError,
-    CatalogError,
-    CatalogUnavailableError,
-    ConflictError,
-    NotFoundError,
-    NotSupportedError,
-)
+    if name in _PUBLIC_EXPORTS:
+        module = import_module(_PUBLIC_EXPORTS[name])
+        value = getattr(module, name)
+        globals()[name] = value
+        return value
 
-# Health types and PluginMetadata ABC
-from floe_core.plugin_metadata import (
-    HealthState,
-    HealthStatus,
-    PluginMetadata,
-)
+    raise AttributeError(f"module 'floe_core' has no attribute {name!r}")
 
-# Plugin registry singleton
-from floe_core.plugin_registry import (
-    PluginRegistry,
-    get_registry,
-)
 
-# Plugin type categories
-from floe_core.plugin_types import PluginType
-
-# =============================================================================
-# Backward compatibility exports (for test compatibility)
-# =============================================================================
-# NOTE: These are re-exports for backward compatibility with test code.
-# New code should import from the specific submodule (e.g., floe_core.plugins).
-# Plugin ABCs
-from floe_core.plugins import (
-    CatalogConfig,
-    CatalogPlugin,
-    ComputeConfig,
-    ComputePlugin,
-    ConnectionResult,
-    ResourceSpec,
-)
-
-# Key schema exports
-from floe_core.schemas.compiled_artifacts import CompiledArtifacts
-from floe_core.schemas.floe_spec import FloeSpec
+def __dir__() -> list[str]:
+    """Return stable public attributes for interactive tooling."""
+    return sorted(set(globals()) | set(__all__))
 
 # =============================================================================
 # Public API (15 symbols) + Backward Compatibility Exports
