@@ -46,6 +46,14 @@ from floe_core.schemas.versions import (
 from pydantic import ValidationError
 
 
+@pytest.fixture(autouse=True)
+def _disable_plugin_instrumentation_audit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep compilation contract tests focused on artifact contracts."""
+    import floe_core.compilation.stages as stages
+
+    monkeypatch.setattr(stages, "_discover_plugins_for_audit", lambda: [])
+
+
 class TestCompilation:
     """Contract tests for the compilation pipeline.
 
@@ -116,6 +124,17 @@ class TestCompilation:
         assert artifacts.deployment.storage is not None
         assert artifacts.deployment.storage.provider == "minio"
         assert artifacts.deployment.storage.endpoint.warehouse_path == "s3://floe-iceberg"
+        assert artifacts.deployment.storage.warehouse is not None
+        assert artifacts.deployment.catalog is not None
+        assert artifacts.deployment.catalog.provider == "polaris"
+        assert (
+            artifacts.deployment.catalog.polaris.endpoint_internal
+            == artifacts.deployment.storage.endpoint.internal_url
+        )
+        assert (
+            artifacts.deployment.catalog.polaris.default_base_location
+            == artifacts.deployment.storage.warehouse.uri
+        )
 
         # Observability assertions
         assert artifacts.observability.lineage is True, "Lineage must be enabled for customer-360"
