@@ -107,7 +107,7 @@ yet have a first-class composition layer for cross-plugin contracts.
 
 ## Non-Goals
 
-- Do not add a `storage.type: s3` alias.
+- Do not add an alias for the old `s3` storage plugin type.
 - Do not ship native AWS S3, GCS, Azure, Glue, Nessie, or Hive in this work.
 - Do not uplift every plugin category in this PR.
 - Do not make Helm values the canonical storage API.

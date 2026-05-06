@@ -186,14 +186,21 @@ class LineageBackendPlugin(ABC):
 
 ### Example: StoragePlugin
 
+Target semantic surface:
+
 ```python
 class StoragePlugin(ABC):
+    def get_deployment_binding(self) -> StorageDeploymentBinding
     def get_pyiceberg_fileio(self) -> FileIO
-    def get_warehouse_uri(self, namespace: str) -> str
-    def get_dbt_profile_config(self) -> dict[str, Any]
-    def get_dagster_io_manager_config(self) -> dict[str, Any]
-    def get_helm_values_override(self) -> dict[str, Any]
 ```
+
+Storage plugins emit neutral, secret-free storage bindings. `floe-core`
+validates compatibility; catalog, compute, orchestrator, and Helm renderers
+translate the typed deployment bindings they own.
+
+During migration, the live ABC may still require legacy helper methods for
+existing plugins. Those methods are compatibility surface, not the composition
+contract.
 
 ## Repository Structure
 

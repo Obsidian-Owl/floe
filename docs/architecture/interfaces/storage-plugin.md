@@ -11,7 +11,8 @@ sovereignty compliance, and hybrid cloud deployments while keeping catalog,
 compute, orchestrator, and Helm-specific translation out of the storage plugin.
 
 **Key Pattern**: storage plugins emit secret-free storage desired state;
-consumer plugins translate that state into their own deployment/runtime
+`floe-core` resolves compatibility and attaches typed deployment bindings;
+consumer plugins translate those bindings into their owned deployment/runtime
 surfaces.
 
 ## Composition Role
@@ -20,15 +21,22 @@ Storage plugins participate in Floe's composition resolver:
 
 1. The storage plugin emits a neutral `StorageDeploymentBinding`.
 2. The selected catalog plugin declares storage requirements.
-3. `floe-core` validates compatibility before deployment values are rendered.
+3. `floe-core` validates compatibility and builds typed deployment bindings
+   before deployment values are rendered.
 4. Consumer plugins translate the neutral storage binding into their owned
    config.
 
-For example, MinIO emits S3-compatible endpoint, bucket, path-style, no-STS,
-and credential-ref facts. Polaris translates those facts into
-`storageConfigInfo`; MinIO does not know Polaris bootstrap JSON.
+For example, MinIO emits S3-compatible endpoint, bucket, path-style, STS
+capability, provisioning intent, runtime fragments, and credential-ref facts.
+Polaris translates those facts into `storageConfigInfo`; MinIO does not know
+Polaris bootstrap JSON.
 
 ## Interface Definition
+
+The snippet below shows the target semantic contract. The current migration-era
+ABC may still expose legacy helper methods for dbt, Dagster, warehouse URI, and
+Helm fragments until the plugin uplift tracker closes them out. Those helpers
+are compatibility surface, not the architecture contract.
 
 ```python
 from abc import ABC, abstractmethod
@@ -69,10 +77,9 @@ class StoragePlugin(ABC):
         pass
 ```
 
-Legacy helper methods such as `get_dbt_profile_config()`,
-`get_dagster_io_manager_config()`, and `get_helm_values_override()` may exist
-during migration, but the target architecture is typed deployment bindings plus
-consumer-owned translators.
+Legacy helper methods for dbt, Dagster, or chart fragments may exist during
+migration, but the target architecture is typed deployment bindings plus
+consumer-owned translators. They are not the semantic contract.
 
 ## Reference Implementations
 

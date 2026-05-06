@@ -776,9 +776,9 @@ Make the docs match the implemented contract:
 
 Run:
 
-```bash
-rg -n "MinIO plugin owns.*Polaris|StoragePlugin.*get_helm_values_override|storage plugin generates all consumer projections|storage.type: s3|floe-storage-s3|floe_storage_s3" docs packages plugins tests
-```
+Run the stale-architecture scan from the Task 8 prompt. It checks for old
+storage-owned Polaris translation claims, old storage-owned Helm override
+claims, and old S3 package/type names.
 
 Expected: no active alpha docs or tests preserve the old architecture. S3
 protocol references may remain when they describe S3-compatible protocol, AWS

@@ -70,7 +70,9 @@ class FileIO(ABC):
 
 ## Decision
 
-Create **StoragePlugin interface** that wraps PyIceberg FileIO for pluggable storage backends.
+Create a **StoragePlugin interface** that emits a neutral, secret-free storage
+deployment binding for pluggable object storage backends and still supports
+direct PyIceberg FileIO use where runtime code needs it.
 
 ### 2026-05 Composition Update
 
@@ -86,8 +88,8 @@ N x M coupling problem as new catalogs and storage backends are added.
 The revised rule is:
 
 ```text
-StoragePlugin emits StorageDeploymentBinding.
-CatalogPlugin declares storage requirements and emits CatalogDeploymentBinding.
+StoragePlugin emits neutral StorageDeploymentBinding.
+CatalogPlugin declares storage requirements and translates storage into CatalogDeploymentBinding.
 Compute and orchestrator plugins consume runtime storage facts.
 floe-core validates compatibility through the composition resolver.
 Helm renders resolved deployment bindings.
@@ -100,177 +102,47 @@ semantic contract.
 
 ```python
 from abc import ABC, abstractmethod
-from typing import Any
 from pyiceberg.io import FileIO
+from floe_core.schemas.compiled_artifacts import StorageDeploymentBinding
 
 
 class StoragePlugin(ABC):
-    """Plugin interface for storage backends.
+    """Plugin interface for object storage backends.
 
-    Wraps PyIceberg FileIO pattern to provide:
-    - PyIceberg-compatible FileIO instance
-    - Credential management
-    - Helm values for deploying storage services (if self-hosted)
-
-    Plugin Lifecycle:
-    1. Discovered via entry point: floe.storage
-    2. Instantiated by PluginRegistry
-    3. Invoked during compilation (generates dbt profiles, Dagster IOManager config)
-    4. Invoked during deployment (generates Helm values for MinIO, etc.)
+    Storage plugins own provider facts only:
+    - protocol and endpoint roles
+    - warehouse and bucket requirements
+    - credential references
+    - capabilities and provisioning intent
+    - neutral runtime fragments for consumers to translate
     """
 
-    # Plugin metadata
     name: str                 # e.g., "minio", "gcs", "azure"
     version: str              # Plugin version (semver)
     floe_api_version: str     # Supported floe-core API version
 
     @abstractmethod
+    def get_deployment_binding(self) -> StorageDeploymentBinding:
+        """Return secret-free storage desired state for compilation."""
+        pass
+
+    @abstractmethod
     def get_pyiceberg_fileio(self) -> FileIO:
-        """Create PyIceberg FileIO instance for this storage backend.
-
-        Returns:
-            FileIO instance (S3FileIO, GCSFileIO, AzureFileIO, etc.)
-
-        Example (MinIO using S3 protocol):
-            from pyiceberg.io.pyarrow import PyArrowFileIO
-            return PyArrowFileIO(
-                {
-                    "s3.endpoint": "https://s3.amazonaws.com",
-                    "s3.access-key-id": os.getenv("AWS_ACCESS_KEY_ID"),
-                    "s3.secret-access-key": os.getenv("AWS_SECRET_ACCESS_KEY"),
-                }
-            )
-
-        Example (MinIO):
-            return PyArrowFileIO(
-                {
-                    "s3.endpoint": "http://minio:9000",
-                    "s3.access-key-id": "minioadmin",
-                    "s3.secret-access-key": "minioadmin",
-                    "s3.path-style-access": "true",  # MinIO requires path-style
-                }
-            )
-        """
+        """Create PyIceberg FileIO instance for direct runtime use."""
         pass
-
-    @abstractmethod
-    def get_warehouse_uri(self, namespace: str) -> str:
-        """Generate warehouse URI for Iceberg catalog.
-
-        Args:
-            namespace: Catalog namespace (e.g., "bronze", "silver", "gold")
-
-        Returns:
-            Storage URI for warehouse location
-
-        Example (S3):
-            "s3://my-bucket/warehouse/bronze"
-
-        Example (GCS):
-            "gs://my-bucket/warehouse/bronze"
-
-        Example (Azure):
-            "abfss://container@account.dfs.core.windows.net/warehouse/bronze"
-
-        Example (MinIO):
-            "s3://warehouse/bronze"  # Path-style, no bucket in URI
-        """
-        pass
-
-    @abstractmethod
-    def get_dbt_profile_config(self) -> dict[str, Any]:
-        """Generate dbt profile configuration for this storage backend.
-
-        For dbt-duckdb with Polaris plugin, this provides the 'filesystems'
-        config that tells DuckDB how to access Iceberg data files.
-
-        Returns:
-            Dictionary with storage-specific config for dbt profiles.yml
-
-        Example (S3):
-            {
-                "filesystems": {
-                    "s3": {
-                        "key_id": "${env:AWS_ACCESS_KEY_ID}",
-                        "secret": "${env:AWS_SECRET_ACCESS_KEY}",
-                        "region": "us-east-1"
-                    }
-                }
-            }
-
-        Example (GCS):
-            {
-                "filesystems": {
-                    "gcs": {
-                        "credential": "${env:GOOGLE_APPLICATION_CREDENTIALS}"
-                    }
-                }
-            }
-        """
-        pass
-
-    @abstractmethod
-    def get_dagster_io_manager_config(self) -> dict[str, Any]:
-        """Generate Dagster IOManager configuration.
-
-        For Dagster's Iceberg IOManager, this provides storage-specific
-        configuration.
-
-        Returns:
-            Dictionary with storage config for Dagster IOManager
-
-        Example (S3):
-            {
-                "storage_options": {
-                    "aws_access_key_id": "${env:AWS_ACCESS_KEY_ID}",
-                    "aws_secret_access_key": "${env:AWS_SECRET_ACCESS_KEY}",
-                    "region_name": "us-east-1"
-                }
-            }
-        """
-        pass
-
-    @abstractmethod
-    def get_helm_values_override(self) -> dict[str, Any]:
-        """Generate Helm values for deploying storage services.
-
-        For self-hosted storage (MinIO), this provides Helm chart values.
-        For cloud storage (S3, GCS, Azure), this returns empty dict.
-
-        Returns:
-            Helm values dictionary for storage chart.
-            Empty dict if storage is external (cloud).
-
-        Example (MinIO self-hosted):
-            {
-                "minio": {
-                    "enabled": true,
-                    "mode": "standalone",
-                    "rootUser": "minioadmin",
-                    "rootPassword": "minioadmin",
-                    "persistence": {
-                        "enabled": true,
-                        "size": "10Gi"
-                    }
-                }
-            }
-
-        Example (S3 cloud):
-            {}  # No services to deploy
-        """
-        pass
-
-    def validate_credentials(self) -> bool:
-        """Validate storage credentials are configured.
-
-        Optional method. Plugins can override to check credentials
-        before deployment (e.g., verify AWS_ACCESS_KEY_ID).
-
-        Returns:
-            True if credentials valid, False otherwise.
-        """
-        return True  # Default: no validation
 ```
+
+This is the target semantic interface. During migration, the live ABC may still
+include legacy abstract helpers for dbt, Dagster, warehouse URI, and Helm
+fragments so existing plugins instantiate cleanly. Those helpers are
+compatibility surface only; new integration logic should use
+`get_deployment_binding()` and consumer-owned translators.
+
+Provider-specific consumer projections are owned by the consumer. Polaris, for
+example, translates MinIO's neutral binding into `storageConfigInfo`, endpoint
+fields, path-style access, STS semantics, allowed locations, and Kubernetes
+Secret references. Helm renders that resolved binding; it does not reconstruct
+semantic storage facts from raw chart credentials or legacy plugin config.
 
 ### Plugin Registration
 
@@ -287,11 +159,11 @@ minio = "floe_storage_minio.plugin:MinIOStoragePlugin"
 plugins:
   storage: minio  # Plugin name (discovered via entry points)
 
-# Compiler discovers plugin and invokes methods:
-# 1. get_pyiceberg_fileio() → creates FileIO for PyIceberg catalog
-# 2. get_warehouse_uri("bronze") → generates "s3://bucket/warehouse/bronze"
-# 3. get_dbt_profile_config() → adds filesystems config to dbt profiles.yml
-# 4. get_dagster_io_manager_config() → adds storage_options to IOManager
+# Compiler discovers plugin and invokes:
+# 1. get_deployment_binding() -> neutral storage desired state
+# 2. composition resolver -> storage/catalog compatibility validation
+# 3. catalog translator -> catalog-owned deployment binding
+# 4. Helm/runtime renderers -> generated config from typed bindings
 ```
 
 ## Consequences
@@ -323,8 +195,9 @@ plugins:
 ### Reference Implementation Excerpt: MinIOStoragePlugin
 
 The production implementation in `plugins/floe-storage-minio` is the source of
-truth. This excerpt shows the public plugin shape and S3-compatible runtime
-configuration methods that architecture consumers depend on.
+truth. This excerpt shows the public plugin shape: MinIO emits S3-compatible
+provider facts and credential references, not Polaris bootstrap JSON or raw
+credential values.
 
 ```python
 # floe-storage-minio/src/floe_storage_minio/plugin.py
@@ -392,36 +265,78 @@ class MinIOStoragePlugin(StoragePlugin):
         """Return PyIceberg catalog config for S3-backed table loading."""
         return self._get_pyiceberg_s3_properties()
 
-    def get_warehouse_uri(self, namespace: str) -> str:
-        """Generate S3-compatible warehouse URI."""
+    def get_deployment_binding(self) -> StorageDeploymentBinding:
+        """Return secret-free MinIO deployment binding for compiled artifacts."""
         config = self._require_config()
-        return f"s3://{config.bucket}/{namespace}/"
-
-    def get_dbt_profile_config(self) -> dict[str, Any]:
-        """Generate dbt-duckdb S3-compatible filesystem config."""
-        config = self._require_config()
-        return {
-            "s3_region": config.region,
-            "s3_endpoint": config.endpoint,
-            "s3_path_style_access": config.path_style_access,
-            "s3_access_key_id": '{{ env_var("AWS_ACCESS_KEY_ID") }}',
-            "s3_secret_access_key": '{{ env_var("AWS_SECRET_ACCESS_KEY") }}',
-        }
-
-    def get_dagster_io_manager_config(self) -> dict[str, Any]:
-        """Generate Dagster IOManager S3-compatible config."""
-        config = self._require_config()
-        return {
-            "bucket": config.bucket,
-            "endpoint_url": config.endpoint,
-            "region_name": config.region,
-            "path_style_access": config.path_style_access,
-        }
-
-    def get_helm_values_override(self) -> dict[str, Any]:
-        """Return Helm overrides; the platform chart deploys MinIO."""
-        return {}
+        return StorageDeploymentBinding(
+            provider="minio",
+            protocol="s3-compatible",
+            endpoint=StorageServiceEndpoint(
+                internal_url=config.endpoint,
+                external_url=config.external_endpoint or config.endpoint,
+                region=config.region,
+                warehouse_path=f"s3://{config.bucket}",
+                path_style_access=config.path_style_access,
+            ),
+            warehouse=StorageWarehouse(uri=f"s3://{config.bucket}", bucket=config.bucket),
+            allowed_locations=[f"s3://{config.bucket}"],
+            buckets=[
+                StorageBucketRequirement(
+                    name=config.bucket,
+                    uri=f"s3://{config.bucket}",
+                    purpose="warehouse",
+                    create_policy="create-if-missing",
+                )
+            ],
+            credentials=StorageCredentialBinding(
+                mode="kubernetes-secret",
+                secret_ref=KubernetesSecretRef(
+                    name=config.credential_secret_name,
+                    namespace=config.credential_secret_namespace,
+                    keys={
+                        "accessKeyId": config.access_key_secret_key,
+                        "secretAccessKey": config.secret_key_secret_key,
+                    },
+                ),
+            ),
+            capabilities=StorageCapabilities(
+                protocols=["s3-compatible"],
+                credential_modes=["kubernetes-secret"],
+                sts_supported=False,
+                path_style_access=config.path_style_access,
+            ),
+            provisioning=StorageProvisioningIntent(
+                enabled=True,
+                mode="helm-job",
+                default_create_policy="create-if-missing",
+            ),
+            runtime=StorageRuntimeBinding(
+                pyiceberg_properties={
+                    "s3.endpoint": config.endpoint,
+                    "s3.region": config.region,
+                    "s3.path-style-access": str(config.path_style_access).lower(),
+                },
+                env_refs={
+                    "accessKeyId": "AWS_ACCESS_KEY_ID",
+                    "secretAccessKey": "AWS_SECRET_ACCESS_KEY",
+                },
+            ),
+            dbt=DbtStorageBinding(
+                profile_name="floe",
+                target_name="dev",
+                schema_name="analytics",
+            ),
+            dagster=DagsterStorageBinding(
+                resource_key="minio_storage",
+                asset_io_manager_key="iceberg_io_manager",
+            ),
+        )
 ```
+
+The `dbt` and `dagster` fields are currently required schema fields for
+secret-free runtime identity hints. They are not permission for storage plugins
+to own dbt profile generation or Dagster resource construction; those consumers
+translate the compiled binding.
 
 ### MinIO Configuration Example
 
@@ -447,9 +362,9 @@ plugins:
 from __future__ import annotations
 
 import os
-from typing import Any
 from pyiceberg.io.pyarrow import PyArrowFileIO
 from floe_core.plugins import StoragePlugin
+from floe_core.schemas.compiled_artifacts import StorageDeploymentBinding
 
 
 class GCSPlugin(StoragePlugin):
@@ -481,35 +396,14 @@ class GCSPlugin(StoragePlugin):
             }
         )
 
-    def get_warehouse_uri(self, namespace: str) -> str:
-        """Generate GCS warehouse URI."""
-        return f"gs://{self.bucket}/warehouse/{namespace}"
+    def get_deployment_binding(self) -> StorageDeploymentBinding:
+        """Return secret-free GCS desired state.
 
-    def get_dbt_profile_config(self) -> dict[str, Any]:
-        """Generate dbt-duckdb GCS filesystems config."""
-        return {
-            "filesystems": {
-                "gcs": {
-                    "credential": "${env:GOOGLE_APPLICATION_CREDENTIALS}",
-                }
-            }
-        }
-
-    def get_dagster_io_manager_config(self) -> dict[str, Any]:
-        """Generate Dagster IOManager GCS config."""
-        return {
-            "storage_options": {
-                "token": "${env:GOOGLE_APPLICATION_CREDENTIALS}",
-            }
-        }
-
-    def get_helm_values_override(self) -> dict[str, Any]:
-        """No services to deploy for GCS (cloud)."""
-        return {}  # External cloud storage
-
-    def validate_credentials(self) -> bool:
-        """Validate GCP credentials are set."""
-        return "GOOGLE_APPLICATION_CREDENTIALS" in os.environ
+        A real implementation would declare GCS protocol/capability facts and
+        workload identity or Secret references. Catalog plugins would translate
+        those facts into catalog-specific deployment config.
+        """
+        ...
 ```
 
 ## Decision Criteria: When to Create Plugin vs Configuration
@@ -533,7 +427,8 @@ Per ADR-0037 (Composability Principle):
 ### dbt Integration
 
 ```yaml
-# dbt profiles.yml (generated by compiler via StoragePlugin)
+# dbt profiles.yml (dbt/compute integration derives filesystem config
+# from the compiled storage binding)
 floe:
   target: dev
   outputs:
@@ -545,7 +440,7 @@ floe:
           config:
             catalog:
               uri: http://polaris:8181
-            filesystems:  # From StoragePlugin.get_dbt_profile_config()
+            filesystems:  # Derived from the compiled storage binding
               s3:
                 key_id: ${AWS_ACCESS_KEY_ID}
                 secret: ${AWS_SECRET_ACCESS_KEY}
@@ -555,7 +450,7 @@ floe:
 ### Dagster Integration
 
 ```python
-# Dagster definitions (generated by compiler via StoragePlugin)
+# Dagster definitions consume the compiled storage binding.
 from dagster import Definitions
 from dagster_iceberg import IcebergIOManager
 
@@ -565,11 +460,7 @@ defs = Definitions(
         "io_manager": IcebergIOManager(
             catalog_uri="http://polaris:8181",
             warehouse="s3://floe-warehouse/bronze",
-            storage_options={  # From StoragePlugin.get_dagster_io_manager_config()
-                "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID"),
-                "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
-                "region_name": "us-east-1",
-            },
+            storage_options=artifacts.deployment.storage.runtime.pyiceberg_properties,
         )
     },
 )
@@ -578,15 +469,15 @@ defs = Definitions(
 ### PyIceberg Catalog Integration
 
 ```python
-# Catalog loading (generated by compiler via StoragePlugin)
+# Catalog loading consumes catalog-owned deployment/runtime config.
 from pyiceberg.catalog import load_catalog
 
 catalog = load_catalog(
     "polaris",
     type="rest",
     uri="http://polaris:8181",
-    warehouse=storage_plugin.get_warehouse_uri("bronze"),  # "s3://bucket/warehouse/bronze"
-    io_impl=storage_plugin.get_pyiceberg_fileio(),  # S3FileIO instance
+    warehouse=artifacts.deployment.catalog.polaris.default_base_location,
+    **artifacts.deployment.storage.runtime.pyiceberg_properties,
 )
 ```
 
@@ -598,19 +489,19 @@ catalog = load_catalog(
 # tests/unit/test_storage_plugin.py
 from unittest.mock import Mock
 from floe_core.plugins import StoragePlugin
+from floe_core.schemas.compiled_artifacts import StorageDeploymentBinding
 
 
 def test_compiler_with_mock_storage():
     """Test compiler with mocked storage plugin."""
     mock_plugin = Mock(spec=StoragePlugin)
-    mock_plugin.get_warehouse_uri.return_value = "s3://test-bucket/warehouse/bronze"
-    mock_plugin.get_dbt_profile_config.return_value = {"filesystems": {"s3": {}}}
+    mock_plugin.get_deployment_binding.return_value = StorageDeploymentBinding(...)
 
     compiler = Compiler(storage_plugin=mock_plugin)
     artifacts = compiler.compile(spec)
 
-    assert artifacts.dbt_profiles["floe"]["outputs"]["dev"]["plugins"]
-    mock_plugin.get_warehouse_uri.assert_called_once_with("bronze")
+    assert artifacts.deployment.storage is not None
+    mock_plugin.get_deployment_binding.assert_called_once()
 ```
 
 ### Integration Tests (Real Plugin)
@@ -659,8 +550,9 @@ def get_warehouse_uri(storage_type: str) -> str:
 ```python
 # ✅ CORRECT: Composable, extensible
 storage_plugin = registry.discover("floe.storage")["minio"]
-fileio = storage_plugin.get_pyiceberg_fileio()
-warehouse = storage_plugin.get_warehouse_uri("bronze")
+storage = storage_plugin.get_deployment_binding()
+catalog = catalog_plugin.build_catalog_deployment(storage)
+deployment = DeploymentConfig(storage=storage, catalog=catalog)
 ```
 
 ## Security Considerations
@@ -670,7 +562,8 @@ warehouse = storage_plugin.get_warehouse_uri("bronze")
 - **AWS**: Use IAM roles (preferred) or access keys (K8s Secrets)
 - **GCP**: Use Workload Identity (preferred) or service account JSON (K8s Secrets)
 - **Azure**: Use Managed Identity (preferred) or SAS tokens (K8s Secrets)
-- **MinIO**: Use K8s Secrets for credentials (NOT environment variables in production)
+- **MinIO**: Use K8s Secret references in compiled artifacts and chart values
+  (NOT raw credential values)
 
 ### Access Control
 
@@ -686,14 +579,16 @@ warehouse = storage_plugin.get_warehouse_uri("bronze")
 
 ## Relationship with Table Operations (IcebergTableManager)
 
-**Important clarification**: `StoragePlugin` handles **FileIO** (object storage access), NOT Iceberg table operations.
+**Important clarification**: `StoragePlugin` handles neutral storage desired
+state and direct **FileIO** access, NOT Iceberg table operations or
+catalog-specific deployment JSON.
 
 Table operations (create_table, evolve_schema, write_data, manage_snapshots) are handled by `IcebergTableManager`, an **internal utility class** in `floe-iceberg` package (Epic 4D).
 
 ```
 ┌─────────────────────┐     ┌─────────────────────┐
 │   StoragePlugin     │     │   CatalogPlugin     │
-│  (FileIO: S3/GCS)   │     │  (Polaris catalog)  │
+│ (neutral binding)   │     │ (catalog binding)   │
 └──────────┬──────────┘     └──────────┬──────────┘
            │                           │
            └───────────┬───────────────┘
@@ -713,7 +608,7 @@ Table operations (create_table, evolve_schema, write_data, manage_snapshots) are
 - Iceberg is **enforced** (ADR-0005), not pluggable
 - Table operations are Iceberg-specific, no need for abstraction
 - CatalogPlugin already returns PyIceberg Catalog for table registration
-- StoragePlugin already provides FileIO for data access
+- StoragePlugin already provides storage bindings and FileIO for data access
 
 See: Epic 4D (Storage Plugin) specification for full details.
 
@@ -725,7 +620,9 @@ See: Epic 4D (Storage Plugin) specification for full details.
 
 ### Q: How do we handle storage-specific features (S3 Transfer Acceleration)?
 
-**A:** Plugin can include extra methods beyond ABC for backend-specific features. Core uses only ABC methods. Users access plugin directly for advanced features.
+**A:** Backend-specific features belong in capabilities or provider-owned
+binding fields when they affect composition. Extra provider methods can exist
+for direct advanced use, but they are not the cross-plugin contract.
 
 ### Q: What about custom S3-compatible storage (NetApp, Dell EMC)?
 

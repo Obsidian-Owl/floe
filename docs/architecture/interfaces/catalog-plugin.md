@@ -13,7 +13,9 @@ implements the namespace-based product identity model from ADR-0030.
 ## Composition Role
 
 Catalog plugins declare what they require from storage and translate neutral
-storage bindings into catalog-specific deployment/runtime config.
+storage bindings into catalog-specific deployment/runtime config. `floe-core`
+owns compatibility resolution and passes the typed storage binding to the
+selected catalog plugin.
 
 This avoids an N x M plugin coupling problem:
 
@@ -24,8 +26,9 @@ This avoids an N x M plugin coupling problem:
   config.
 
 For example, `PolarisCatalogPlugin` accepts MinIO's S3-compatible storage
-binding and emits Polaris-owned `storageConfigInfo`, endpoint/internal endpoint,
-path-style, no-STS, allowed locations, and storage Secret references.
+binding and emits Polaris-owned `storageConfigInfo` inputs, endpoint/internal
+endpoint, path-style access, STS unavailable/enabled semantics, allowed
+locations, and storage Secret references.
 
 ## Interface Definition
 
@@ -137,7 +140,8 @@ class CatalogPlugin(ABC):
         """Translate neutral storage desired state into catalog deployment config.
 
         The catalog plugin owns catalog-specific deployment and bootstrap
-        config. Polaris, for example, owns `storageConfigInfo`; MinIO does not.
+        config. Polaris, for example, owns `storageConfigInfo`, endpoint fields,
+        STS semantics, allowed locations, and credential refs; MinIO does not.
         """
         pass
 

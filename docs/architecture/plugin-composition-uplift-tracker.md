@@ -7,7 +7,9 @@ Last updated: 2026-05-07
 ## Purpose
 
 This document tracks adoption of Floe's composition model across plugin
-families after the storage-side closeout PR.
+families after the storage-side closeout PR. Follow-on plugin-family uplift is
+tracked here, outside the storage PR, unless a plugin is required for the
+implemented Iceberg runtime path.
 
 The storage PR should establish the pattern for the Iceberg runtime path. Other
 plugins should adopt the pattern only when they participate in concrete
@@ -69,6 +71,8 @@ clear target state.
   catalog/storage selections with actionable errors.
 - `floe helm generate` renders from deployment bindings only.
 - Architecture docs describe the composition model.
+- Raw storage credentials are absent from compiled artifacts and generated
+  chart values; Kubernetes Secret refs carry credential identity.
 - DevPod + Hetzner E2E is run, product failures are separated from infra
   failures, and billable Hetzner resources are directly verified and cleaned up.
 

@@ -161,6 +161,19 @@ class CatalogPlugin(ABC):
         pass
 
     @abstractmethod
+    def get_storage_requirements(self) -> PluginRequirements:
+        """Return storage requirements for composition validation."""
+        pass
+
+    @abstractmethod
+    def build_catalog_deployment(
+        self,
+        storage: StorageDeploymentBinding,
+    ) -> CatalogDeploymentBinding:
+        """Translate neutral storage state into catalog-owned deployment config."""
+        pass
+
+    @abstractmethod
     def create_namespace(self, namespace: str, properties: dict | None = None):
         """Create namespace."""
         pass
@@ -667,7 +680,9 @@ openmetadata = "floe_lineage_openmetadata:OpenMetadataPlugin"
 ## StoragePlugin
 
 Per ADR-0036, storage backends (S3, GCS, Azure, MinIO) are pluggable through a
-neutral storage deployment binding backed by the PyIceberg FileIO pattern:
+neutral storage deployment binding backed by the PyIceberg FileIO pattern. This
+is the target semantic interface; the live migration-era ABC may still require
+legacy helper methods until plugin uplift removes that compatibility surface.
 
 ```python
 class StoragePlugin(ABC):
@@ -696,9 +711,12 @@ class StoragePlugin(ABC):
         pass
 ```
 
-Catalog, compute, orchestrator, and deployment plugins translate the neutral
-storage binding into their own config. Storage plugins must not emit
-catalog-specific bootstrap JSON or Helm values as the semantic contract.
+`floe-core` validates storage/catalog compatibility and carries the typed
+deployment bindings in `CompiledArtifacts`. Catalog, compute, orchestrator, and
+deployment plugins translate the neutral storage binding into their own config.
+Storage plugins must not emit catalog-specific bootstrap JSON or Helm values as
+the semantic contract, and renderers must not reconstruct storage facts from
+legacy chart values.
 
 **Entry points:**
 ```toml
