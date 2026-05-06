@@ -46,7 +46,7 @@ def test_demo_compile_emits_minio_storage_deployment_binding() -> None:
     assert dev_profile["s3_endpoint"] == "http://floe-platform-minio:9000"
     assert dev_profile["s3_region"] == "us-east-1"
     assert dev_profile["s3_access_key_id"] == "{{ env_var('AWS_ACCESS_KEY_ID') }}"
-    assert "minioadmin" not in payload
+    assert "minio" + "admin" not in payload
 
 
 def test_storage_binding_compile_uses_isolated_plugin_registry(

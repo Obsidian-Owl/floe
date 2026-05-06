@@ -484,6 +484,23 @@ def test_minio_persistence_enabled_in_test_values() -> None:
     )
 
 
+@pytest.mark.e2e
+@pytest.mark.requirement("STORAGE-MINIO-SECURITY")
+def test_test_values_polaris_storage_uses_minio_secret_ref() -> None:
+    """values-test.yaml must exercise the same MinIO Secret-ref path as demo."""
+    values_path = (
+        Path(__file__).parent.parent.parent / "charts" / "floe-platform" / "values-test.yaml"
+    )
+    values = yaml.safe_load(values_path.read_text())
+    polaris_s3 = values["polaris"]["storage"]["s3"]
+
+    assert "accessKey" not in polaris_s3
+    assert "secretKey" not in polaris_s3
+    assert polaris_s3["credentialSecretName"] == "floe-platform-minio"  # pragma: allowlist secret
+    assert polaris_s3["accessKeySecretKey"] == "root-user"  # pragma: allowlist secret
+    assert polaris_s3["secretKeySecretKey"] == "root-password"  # pragma: allowlist secret
+
+
 def _read_e2e_script() -> str:
     """Read and return the content of testing/ci/test-e2e.sh."""
     script_path = Path(__file__).parent.parent.parent / "testing" / "ci" / "test-e2e.sh"

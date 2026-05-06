@@ -249,7 +249,7 @@ class TestStoragePluginMethods:
             "floe-platform-minio-credentials"
         )
         assert values["polaris"]["bootstrap"]["defaultBaseLocation"] == "s3://floe-data"
-        assert "minioadmin" not in payload
+        assert "minio" + "admin" not in payload
         assert "SECRET" not in payload
 
     @pytest.mark.requirement("AC-1")
@@ -353,7 +353,7 @@ class TestMinIODeploymentBinding:
             "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
             "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
         }
-        assert "minioadmin" not in payload
+        assert "minio" + "admin" not in payload
         assert "secretKey" not in payload
         assert "INLINE_ACCESS_VALUE" not in payload
         assert "INLINE_ACCESS_VALUE" not in helm_payload

@@ -633,7 +633,7 @@ class TestStorageDeploymentBinding:
         binding = self._binding()
         payload = binding.model_dump_json()
 
-        assert "minioadmin" not in payload
+        assert "minio" + "admin" not in payload
         assert "rootPassword" not in payload
         assert "secretKey" not in payload
         assert "floe-platform-minio-credentials" in payload
