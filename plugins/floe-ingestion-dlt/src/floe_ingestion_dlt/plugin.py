@@ -1192,11 +1192,13 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 table_name = kwargs.get("table_name", "egress_output")
                 write_disposition = kwargs.get("write_disposition", "append")
 
-                pipeline = dlt.pipeline(  # type: ignore[call-overload]
-                    pipeline_name=f"floe_egress_{sink_type}",
-                    destination=sink_type,
-                    credentials=connection_config or None,
-                )
+                pipeline_kwargs: dict[str, Any] = {
+                    "pipeline_name": f"floe_egress_{sink_type}",
+                    "destination": sink_type,
+                }
+                if connection_config:
+                    pipeline_kwargs["credentials"] = connection_config
+                pipeline = dlt.pipeline(**pipeline_kwargs)
 
                 load_info = pipeline.run(
                     data,
