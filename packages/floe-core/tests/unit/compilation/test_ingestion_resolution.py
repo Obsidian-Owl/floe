@@ -54,6 +54,7 @@ def _plugins_with_ingestion_config() -> ResolvedPlugins:
                 "catalog_config": {
                     "uri": "http://polaris:8181/api/catalog",
                     "warehouse": "floe",
+                    "bucket": "floe-iceberg",
                 },
                 "retry_config": {"max_retries": 5, "initial_delay_seconds": 2.0},
             },
@@ -97,6 +98,7 @@ def test_resolve_ingestion_config_preserves_manifest_config() -> None:
     assert resolved.ingestion.config["catalog_config"] == {
         "uri": "http://polaris:8181/api/catalog",
         "warehouse": "floe",
+        "bucket": "floe-iceberg",
     }
     assert resolved.ingestion.config["retry_config"] == {
         "max_retries": 5,
@@ -143,6 +145,34 @@ def test_resolve_ingestion_config_fails_for_non_dlt_ingestion_plugin() -> None:
     assert exc_info.value.error.context == {
         "product": "orders-product",
         "ingestion_plugin": "airbyte",
+    }
+
+
+def test_resolve_ingestion_config_fails_without_dlt_destination_catalog_config() -> None:
+    """Product dlt ingestion requires platform-owned Iceberg destination settings."""
+    from floe_core.compilation.errors import CompilationException
+    from floe_core.compilation.resolver import resolve_ingestion_config
+
+    plugins = ResolvedPlugins(
+        compute=PluginRef(type="duckdb", version="0.9.0", config={}),
+        orchestrator=PluginRef(type="dagster", version="1.5.0", config={}),
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={"catalog_config": {"uri": "http://polaris:8181/api/catalog"}},
+        ),
+    )
+
+    with pytest.raises(CompilationException) as exc_info:
+        resolve_ingestion_config(_spec_with_ingestion(), plugins)
+
+    assert exc_info.value.error.code == "E201"
+    assert exc_info.value.error.message == (
+        "dlt product ingestion requires an Iceberg destination catalog_config"
+    )
+    assert exc_info.value.error.context == {
+        "product": "orders-product",
+        "missing": ["bucket", "warehouse"],
     }
 
 
@@ -195,6 +225,8 @@ plugins:
     config:
       catalog_config:
         uri: http://polaris:8181/api/catalog
+        warehouse: floe
+        bucket: floe-iceberg
       retry_config:
         max_retries: 5
         initial_delay_seconds: 2.0
@@ -206,7 +238,9 @@ plugins:
     assert artifacts.plugins.ingestion is not None
     assert artifacts.plugins.ingestion.config is not None
     assert artifacts.plugins.ingestion.config["catalog_config"] == {
-        "uri": "http://polaris:8181/api/catalog"
+        "uri": "http://polaris:8181/api/catalog",
+        "warehouse": "floe",
+        "bucket": "floe-iceberg",
     }
     assert artifacts.plugins.ingestion.config["sources"] == [
         {
@@ -304,7 +338,13 @@ def test_manifest_selected_dlt_receives_product_ingestion_sources() -> None:
             "ingestion": {
                 "type": "dlt",
                 "version": "0.1.0",
-                "config": {"catalog_config": {"warehouse": "floe"}},
+                "config": {
+                    "catalog_config": {
+                        "uri": "http://polaris:8181/api/catalog",
+                        "warehouse": "floe",
+                        "bucket": "floe-iceberg",
+                    }
+                },
             },
         },
     )
@@ -313,5 +353,9 @@ def test_manifest_selected_dlt_receives_product_ingestion_sources() -> None:
 
     assert resolved.ingestion is not None
     assert resolved.ingestion.config is not None
-    assert resolved.ingestion.config["catalog_config"] == {"warehouse": "floe"}
+    assert resolved.ingestion.config["catalog_config"] == {
+        "uri": "http://polaris:8181/api/catalog",
+        "warehouse": "floe",
+        "bucket": "floe-iceberg",
+    }
     assert resolved.ingestion.config["sources"][0]["source_type"] == "filesystem"

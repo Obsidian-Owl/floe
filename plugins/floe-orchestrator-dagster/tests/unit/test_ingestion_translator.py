@@ -246,6 +246,11 @@ class TestCreateIngestionAssets:
             "schema_contract": "evolve",
         }
         mock_ref.config = {
+            "catalog_config": {
+                "bucket": "floe-iceberg",
+                "s3_endpoint": "http://minio:9000",
+                "s3_region": "us-east-1",
+            },
             "sources": [
                 source_config,
             ],
@@ -263,7 +268,15 @@ class TestCreateIngestionAssets:
 
         output = asset_def(context)
 
-        build_dlt_source.assert_called_once_with(source_config, project_dir=tmp_path)
+        build_dlt_source.assert_called_once_with(
+            source_config,
+            project_dir=tmp_path,
+            filesystem_config={
+                "bucket": "floe-iceberg",
+                "s3_endpoint": "http://minio:9000",
+                "s3_region": "us-east-1",
+            },
+        )
         ingestion_plugin.run.assert_called_once_with(
             pipeline,
             write_disposition="replace",
@@ -525,7 +538,11 @@ class TestCreateIngestionAssets:
 
         asset_def(context)
 
-        build_dlt_source.assert_called_once_with(source_config, project_dir=tmp_path)
+        build_dlt_source.assert_called_once_with(
+            source_config,
+            project_dir=tmp_path,
+            filesystem_config={},
+        )
         assert ingestion_plugin.run.call_args.kwargs["source"] is built_source
 
     @pytest.mark.requirement("4F-FR-060")
@@ -565,7 +582,11 @@ class TestCreateIngestionAssets:
 
         asset_def(context)
 
-        build_dlt_source.assert_called_once_with(source_config, project_dir=tmp_path)
+        build_dlt_source.assert_called_once_with(
+            source_config,
+            project_dir=tmp_path,
+            filesystem_config={},
+        )
         assert ingestion_plugin.run.call_args.kwargs["source"] is built_source
 
     @pytest.mark.requirement("4F-FR-060")

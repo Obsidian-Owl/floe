@@ -160,6 +160,7 @@ def create_ingestion_assets(
     ingestion_type = ingestion_ref.type
     ingestion_version = ingestion_ref.version
     ingestion_config = ingestion_ref.config or {}
+    filesystem_config = _filesystem_config(ingestion_config)
     source_configs = _source_configs(ingestion_config)
     assets: list[AssetsDefinition] = []
     asset_names: set[str] = set()
@@ -177,6 +178,7 @@ def create_ingestion_assets(
                 asset_name=asset_name,
                 source_config=source_config,
                 project_dir=project_dir,
+                filesystem_config=filesystem_config,
             )
         )
 
@@ -203,6 +205,12 @@ def _source_configs(ingestion_config: Mapping[str, Any]) -> list[dict[str, Any]]
     if not sources:
         raise ValueError("Dagster ingestion helper requires at least one ingestion source")
     return [dict(source) for source in sources]
+
+
+def _filesystem_config(ingestion_config: Mapping[str, Any]) -> dict[str, Any]:
+    """Return platform-owned filesystem connection settings for dlt sources."""
+    catalog_config = ingestion_config.get("catalog_config")
+    return dict(catalog_config) if isinstance(catalog_config, Mapping) else {}
 
 
 def _validate_required_source_fields(source_config: Mapping[str, Any]) -> None:
@@ -252,6 +260,7 @@ def _create_ingestion_asset(
     asset_name: str,
     source_config: dict[str, Any],
     project_dir: Path,
+    filesystem_config: Mapping[str, Any],
 ) -> AssetsDefinition:
     source_name = str(source_config["name"])
 
@@ -284,7 +293,12 @@ def _create_ingestion_asset(
             write_mode=source_config.get("write_mode", "append"),
             schema_contract=source_config.get("schema_contract", "evolve"),
         )
-        dlt_source = _source_from_config(source_config, config, project_dir=project_dir)
+        dlt_source = _source_from_config(
+            source_config,
+            config,
+            project_dir=project_dir,
+            filesystem_config=filesystem_config,
+        )
         pipeline = ingestion_plugin.create_pipeline(config)
         run_kwargs = {
             "write_disposition": config.write_mode,
@@ -313,12 +327,17 @@ def _source_from_config(
     config: IngestionConfig,
     *,
     project_dir: Path,
+    filesystem_config: Mapping[str, Any],
 ) -> Any:
     """Return an executable dlt source from a direct object or compiled JSON."""
     source_ref = config.source_config.get("source")
     if source_ref is not None and _is_source_like(source_ref):
         return source_ref
-    return build_dlt_source(source_config, project_dir=project_dir)
+    return build_dlt_source(
+        source_config,
+        project_dir=project_dir,
+        filesystem_config=filesystem_config,
+    )
 
 
 def _source_path(source_config: Mapping[str, Any]) -> str | None:

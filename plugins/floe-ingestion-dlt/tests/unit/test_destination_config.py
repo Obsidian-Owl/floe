@@ -13,6 +13,7 @@ from floe_core.plugins.ingestion import IngestionConfig
 
 import floe_ingestion_dlt.plugin as plugin_module
 from floe_ingestion_dlt.config import DltIngestionConfig, IngestionSourceConfig
+from floe_ingestion_dlt.errors import PipelineConfigurationError
 from floe_ingestion_dlt.plugin import DltIngestionPlugin
 
 
@@ -151,6 +152,22 @@ def test_create_pipeline_passes_filesystem_destination_without_leaking_pyiceberg
     assert "PYICEBERG_CATALOG__POLARIS__S3__ENDPOINT" not in os.environ
     assert "PYICEBERG_CATALOG__POLARIS__S3__ACCESS_KEY_ID" not in os.environ
     assert "PYICEBERG_CATALOG__POLARIS__S3__SECRET_ACCESS_KEY" not in os.environ
+
+
+def test_configured_create_pipeline_requires_catalog_config() -> None:
+    """Configured dlt ingestion cannot create a pipeline without an Iceberg destination."""
+    plugin = DltIngestionPlugin()
+    plugin.configure(_plugin_config({}))
+    plugin.startup()
+
+    with pytest.raises(PipelineConfigurationError, match="catalog_config is required"):
+        plugin.create_pipeline(
+            IngestionConfig(
+                source_type="filesystem",
+                source_config={},
+                destination_table="bronze.orders",
+            )
+        )
 
 
 def test_run_serializes_pyiceberg_env_for_concurrent_catalog_configs() -> None:

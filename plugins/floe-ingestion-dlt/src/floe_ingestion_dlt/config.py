@@ -293,7 +293,7 @@ class DltIngestionConfig(BaseModel):
         cls,
         v: list[IngestionSourceConfig],
     ) -> list[IngestionSourceConfig]:
-        """Validate that all source names are unique.
+        """Validate that all source names and destination tables are unique.
 
         Args:
             v: The list of source configurations.
@@ -302,11 +302,17 @@ class DltIngestionConfig(BaseModel):
             The validated source list.
 
         Raises:
-            ValueError: If duplicate source names are found.
+            ValueError: If duplicate source names or destination tables are found.
         """
         names = [s.name for s in v]
         if len(names) != len(set(names)):
             duplicates = [n for n in names if names.count(n) > 1]
             msg = f"Duplicate source names found: {sorted(set(duplicates))}"
+            raise ValueError(msg)
+
+        destinations = [s.destination_table for s in v]
+        duplicate_destinations = [table for table in destinations if destinations.count(table) > 1]
+        if duplicate_destinations:
+            msg = f"Duplicate destination tables found: {sorted(set(duplicate_destinations))}"
             raise ValueError(msg)
         return v

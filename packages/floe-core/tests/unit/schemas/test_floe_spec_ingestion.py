@@ -149,6 +149,36 @@ def test_floe_spec_rejects_duplicate_ingestion_source_names() -> None:
     assert "raw-customers" in str(exc_info.value)
 
 
+def test_floe_spec_rejects_duplicate_ingestion_destination_tables() -> None:
+    """Each product ingestion source must target a distinct destination table."""
+    with pytest.raises(ValidationError) as exc_info:
+        FloeSpec.model_validate(
+            _base_floe_spec(
+                ingestion={
+                    "sources": [
+                        {
+                            "name": "raw-customers-csv",
+                            "sourceType": "filesystem",
+                            "format": "csv",
+                            "path": "./data/customers.csv",
+                            "destinationTable": "bronze.raw_customers",
+                        },
+                        {
+                            "name": "raw-customers-jsonl",
+                            "sourceType": "filesystem",
+                            "format": "jsonl",
+                            "path": "./data/customers.jsonl",
+                            "destinationTable": "bronze.raw_customers",
+                        },
+                    ]
+                }
+            )
+        )
+
+    assert "duplicate" in str(exc_info.value).lower()
+    assert "bronze.raw_customers" in str(exc_info.value)
+
+
 def test_floe_spec_rejects_environment_specific_ingestion_fields() -> None:
     """Ingestion sources must not contain environment-specific fields."""
     with pytest.raises(ValidationError) as exc_info:

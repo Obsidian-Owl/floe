@@ -438,6 +438,12 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 "dataset_name": dataset_name,
             }
             catalog_config = self._pipeline_catalog_config(config)
+            if self.is_configured and not catalog_config:
+                raise PipelineConfigurationError(
+                    "catalog_config is required for configured dlt ingestion pipelines",
+                    source_type=config.source_type,
+                    destination_table=config.destination_table,
+                )
             if catalog_config:
                 from dlt.destinations import filesystem
 

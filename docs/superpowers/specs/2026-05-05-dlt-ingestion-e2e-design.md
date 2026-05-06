@@ -18,7 +18,8 @@ objects.
 ## Goals
 
 - Keep Customer 360 as a simple user-facing demo: local CSV files become raw
-  Iceberg tables, then dbt builds the existing Customer 360 mart.
+  Iceberg tables through dlt, while the existing seed-backed dbt mart remains
+  unchanged until the raw-table `source()` migration.
 - Add a platform ingestion E2E matrix for realistic landing-zone ingestion:
   CSV, JSONL, and Parquet from MinIO/S3-compatible storage.
 - Convert declarative ingestion configuration into executable dlt runtime
@@ -112,8 +113,9 @@ Validate:
 - Runtime creates one ingestion execution unit per source.
 - dlt loads `raw_customers.csv`, `raw_transactions.csv`, and
   `raw_support_tickets.csv`.
-- Data lands in the raw Iceberg tables expected by the existing dbt models.
-- dbt produces `mart_customer_360`.
+- Data lands in raw Iceberg tables with expected rows and columns.
+- The existing dbt seed-based `mart_customer_360` flow remains unchanged for
+  alpha compatibility; migrating dbt to read these raw tables is a follow-on.
 - `IngestionResult` reports success and expected row counts.
 - `health_check()` is healthy against real dlt plus real destination/catalog
   reachability.
@@ -216,8 +218,9 @@ References:
 
 ## Acceptance Criteria
 
-- Customer 360 has a declared CSV ingestion path and passes its E2E demo flow
-  through real dlt, Polaris, MinIO/S3, and dbt.
+- Customer 360 has a declared CSV ingestion path and proves raw-table loading
+  through real dlt, Polaris, and MinIO/S3 without changing the existing
+  seed-backed dbt demo flow.
 - The platform matrix E2E passes for CSV, JSONL, and Parquet from MinIO/S3.
 - Edge-case E2E failures are deterministic and produce ownership-routed error
   messages.
@@ -238,8 +241,10 @@ Implemented scope:
   platform-owned manifest config such as dlt retry, Polaris, and MinIO/S3
   destination settings.
 - `floe-orchestrator-dagster` constructs executable dlt filesystem resources
-  from compiled JSON config at runtime. Executable dlt objects remain out of
-  `CompiledArtifacts`.
+  from compiled JSON config at runtime. Object-store source credentials use the
+  same platform-owned catalog endpoint/region/path-style settings plus runtime
+  AWS environment as the destination, while executable dlt objects remain out
+  of `CompiledArtifacts`.
 - `floe-ingestion-dlt` writes through dlt filesystem destination + Iceberg table
   format using PyIceberg/Polaris configuration, scopes unavoidable PyIceberg
   environment mutation, sanitizes source/path error context, and applies a

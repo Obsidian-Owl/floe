@@ -110,7 +110,7 @@ def _configure_s3_environment(
     monkeypatch: pytest.MonkeyPatch,
     catalog_config: dict[str, Any],
 ) -> None:
-    """Expose MinIO credentials to dlt filesystem source and Iceberg destination."""
+    """Expose MinIO credentials to dlt through the runtime AWS environment."""
     access_key, secret_key = get_minio_credentials()
     endpoint = str(catalog_config["s3_endpoint"])
     region = str(catalog_config["s3_region"])
@@ -119,11 +119,6 @@ def _configure_s3_environment(
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", secret_key)
     monkeypatch.setenv("AWS_REGION", region)
     monkeypatch.setenv("AWS_ENDPOINT_URL", endpoint)
-    monkeypatch.setenv("SOURCES__FILESYSTEM__CREDENTIALS__AWS_ACCESS_KEY_ID", access_key)
-    monkeypatch.setenv("SOURCES__FILESYSTEM__CREDENTIALS__AWS_SECRET_ACCESS_KEY", secret_key)
-    monkeypatch.setenv("SOURCES__FILESYSTEM__CREDENTIALS__REGION_NAME", region)
-    monkeypatch.setenv("SOURCES__FILESYSTEM__CREDENTIALS__ENDPOINT_URL", endpoint)
-    monkeypatch.setenv("SOURCES__FILESYSTEM__CREDENTIALS__S3_URL_STYLE", "path")
 
 
 def _put_object(minio: Any, *, bucket: str, object_name: str, payload: bytes) -> None:
@@ -221,7 +216,12 @@ def _configure_plugin(
     return plugin
 
 
-def _run_source(plugin: DltIngestionPlugin, source: IngestionSourceConfig) -> IngestionResult:
+def _run_source(
+    plugin: DltIngestionPlugin,
+    source: IngestionSourceConfig,
+    *,
+    catalog_config: dict[str, Any],
+) -> IngestionResult:
     """Run one filesystem source through Dagster source construction and dlt."""
     source_dict = source.model_dump(mode="python")
     pipeline = plugin.create_pipeline(
@@ -233,7 +233,11 @@ def _run_source(plugin: DltIngestionPlugin, source: IngestionSourceConfig) -> In
             schema_contract=source.schema_contract,
         )
     )
-    dlt_source = build_dlt_source(source_dict, project_dir=PROJECT_ROOT)
+    dlt_source = build_dlt_source(
+        source_dict,
+        project_dir=PROJECT_ROOT,
+        filesystem_config=catalog_config,
+    )
     return plugin.run(
         pipeline,
         source=dlt_source,
@@ -426,7 +430,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                 )
 
                 plugin = _configure_plugin(source, catalog_config)
-                result = _run_source(plugin, source)
+                result = _run_source(plugin, source, catalog_config=catalog_config)
                 assert result.success, result.errors
 
                 assert _table_name(table_identifier) in _table_names(
@@ -484,7 +488,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                 polaris_with_write_grants.create_namespace(namespace)
 
                 plugin = _configure_plugin(source, catalog_config)
-                result = _run_source(plugin, source)
+                result = _run_source(plugin, source, catalog_config=catalog_config)
 
                 _assert_failed_with(result, "missing_object_source", f"s3://{bucket}/{prefix}/")
                 _assert_no_table_or_rows(polaris_with_write_grants, namespace, table_identifier)
@@ -536,7 +540,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                 )
 
                 plugin = _configure_plugin(source, catalog_config)
-                result = _run_source(plugin, source)
+                result = _run_source(plugin, source, catalog_config=catalog_config)
 
                 _assert_failed_with(
                     result,
@@ -598,7 +602,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                 )
 
                 plugin = _configure_plugin(source, catalog_config)
-                first_result = _run_source(plugin, source)
+                first_result = _run_source(plugin, source, catalog_config=catalog_config)
                 assert first_result.success, first_result.errors
 
                 _put_object(
@@ -611,7 +615,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                         ]
                     ),
                 )
-                second_result = _run_source(plugin, source)
+                second_result = _run_source(plugin, source, catalog_config=catalog_config)
 
                 _assert_failed_with(second_result, "schema", "contract", "new_column")
             finally:

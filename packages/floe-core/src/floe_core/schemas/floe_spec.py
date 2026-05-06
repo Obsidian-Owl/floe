@@ -746,12 +746,24 @@ class ProductIngestionSpec(BaseModel):
     def validate_unique_source_names(
         cls, v: list[IngestionSourceSpec]
     ) -> list[IngestionSourceSpec]:
-        """Validate that ingestion source names are unique."""
+        """Validate ingestion sources do not collide at source or table level."""
         names = [source.name for source in v]
-        duplicates = {name for name, count in Counter(names).items() if count > 1}
-        if duplicates:
+        duplicate_names = {name for name, count in Counter(names).items() if count > 1}
+        if duplicate_names:
             msg = (
-                f"Duplicate ingestion source names are not allowed: {', '.join(sorted(duplicates))}"
+                "Duplicate ingestion source names are not allowed: "
+                f"{', '.join(sorted(duplicate_names))}"
+            )
+            raise ValueError(msg)
+
+        destination_tables = [source.destination_table for source in v]
+        duplicate_tables = {
+            table for table, count in Counter(destination_tables).items() if count > 1
+        }
+        if duplicate_tables:
+            msg = (
+                "Duplicate ingestion destination tables are not allowed: "
+                f"{', '.join(sorted(duplicate_tables))}"
             )
             raise ValueError(msg)
         return v

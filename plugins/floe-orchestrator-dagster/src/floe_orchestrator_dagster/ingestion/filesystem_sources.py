@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -65,6 +66,7 @@ def build_filesystem_source(
     source_config: Mapping[str, Any],
     *,
     project_dir: Path,
+    filesystem_config: Mapping[str, Any] | None = None,
 ) -> Any:
     """Build a dlt filesystem source or resource from compiled ingestion config."""
     source_name = _source_name(source_config)
@@ -89,7 +91,17 @@ def build_filesystem_source(
         "jsonl": read_jsonl,
         "parquet": read_parquet,
     }
-    filesystem_resource = filesystem(bucket_url=target.bucket_url, file_glob=target.file_glob)
+    filesystem_kwargs: dict[str, Any] = {
+        "bucket_url": target.bucket_url,
+        "file_glob": target.file_glob,
+    }
+    credentials = _object_store_credentials(
+        target.bucket_url,
+        filesystem_config=filesystem_config or {},
+    )
+    if credentials:
+        filesystem_kwargs["credentials"] = credentials
+    filesystem_resource = filesystem(**filesystem_kwargs)
     dlt_resource = filesystem_resource | readers[file_format](**reader_options)
     return dlt_resource.with_name(table_name).apply_hints(table_name=table_name)
 
@@ -176,6 +188,58 @@ def _filesystem_target(
             f"file path cannot be combined with file_glob/include_glob for {source_name!r}"
         )
     return _FilesystemTarget(bucket_url=str(resolved_path.parent), file_glob=resolved_path.name)
+
+
+def _object_store_credentials(
+    bucket_url: str,
+    *,
+    filesystem_config: Mapping[str, Any],
+) -> dict[str, str]:
+    """Build dlt filesystem credentials from platform config and runtime env."""
+    if urlsplit(bucket_url).scheme != "s3":
+        return {}
+
+    credentials: dict[str, str] = {}
+    aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+    if aws_access_key:
+        credentials["aws_access_key_id"] = aws_access_key
+    aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    if aws_secret_key:
+        credentials["aws_secret_access_key"] = aws_secret_key
+    aws_session_token = os.environ.get("AWS_SESSION_TOKEN")
+    if aws_session_token:
+        credentials["aws_session_token"] = aws_session_token
+
+    endpoint_url = _first_config_value(
+        filesystem_config,
+        "s3_endpoint",
+        "endpoint",
+        "minio_endpoint",
+    )
+    if endpoint_url is not None:
+        credentials["endpoint_url"] = str(endpoint_url)
+    region_name = os.environ.get("AWS_REGION") or _first_config_value(
+        filesystem_config,
+        "s3_region",
+        "region",
+    )
+    if region_name is not None:
+        credentials["region_name"] = str(region_name)
+    path_style = filesystem_config.get(
+        "s3_path_style_access",
+        filesystem_config.get("path_style_access", endpoint_url is not None),
+    )
+    if path_style:
+        credentials["s3_url_style"] = "path"
+    return credentials
+
+
+def _first_config_value(config: Mapping[str, Any], *keys: str) -> Any | None:
+    for key in keys:
+        value = config.get(key)
+        if value not in (None, ""):
+            return value
+    return None
 
 
 def _is_directory_path(raw_path: str, resolved_path: Path) -> bool:

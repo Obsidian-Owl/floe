@@ -199,11 +199,11 @@ def test_build_filesystem_source_rejects_file_path_with_explicit_glob(
     assert fake_filesystem_module.calls == []
 
 
-def test_build_filesystem_source_leaves_object_store_paths_unchanged(
+def test_build_filesystem_source_leaves_object_store_paths_unchanged_without_config(
     tmp_path: Path,
     fake_filesystem_module: FakeFilesystemModule,
 ) -> None:
-    """Object-store URIs remain environment-provided dlt filesystem locations."""
+    """Object-store URIs remain unchanged when no platform filesystem config is present."""
     from floe_orchestrator_dagster.ingestion import build_filesystem_source
 
     source = build_filesystem_source(
@@ -214,6 +214,42 @@ def test_build_filesystem_source_leaves_object_store_paths_unchanged(
     assert source.parent is not None
     assert source.parent.kwargs["bucket_url"] == "s3://raw/customers/*.csv"
     assert fake_filesystem_module.calls[0][0] == "filesystem"
+
+
+def test_build_filesystem_source_wires_s3_config_from_platform_and_env(
+    tmp_path: Path,
+    fake_filesystem_module: FakeFilesystemModule,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """S3/MinIO filesystem reads receive endpoint config without product-owned secrets."""
+    from floe_orchestrator_dagster.ingestion import build_filesystem_source
+
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "env-access")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "env-secret")  # pragma: allowlist secret
+
+    source = build_filesystem_source(
+        _source_config(path="s3://raw/customers/", extra_source_config={"file_glob": "*.csv"}),
+        project_dir=tmp_path,
+        filesystem_config={
+            "s3_endpoint": "http://minio:9000",
+            "s3_region": "us-east-1",
+            "s3_path_style_access": True,
+        },
+    )
+
+    assert source.parent is not None
+    assert source.parent.kwargs == {
+        "bucket_url": "s3://raw/customers/",
+        "file_glob": "*.csv",
+        "credentials": {
+            "aws_access_key_id": "env-access",
+            "aws_secret_access_key": "env-secret",  # pragma: allowlist secret
+            "endpoint_url": "http://minio:9000",
+            "region_name": "us-east-1",
+            "s3_url_style": "path",
+        },
+    }
+    assert fake_filesystem_module.calls[0] == ("filesystem", source.parent.kwargs)
 
 
 def test_build_filesystem_source_reads_real_local_csv_file(tmp_path: Path) -> None:
