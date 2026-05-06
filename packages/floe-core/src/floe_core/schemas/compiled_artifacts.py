@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -39,6 +40,22 @@ PRODUCT_NAME_PATTERN = r"^[a-zA-Z][a-zA-Z0-9_-]*$"
 _MAX_K8S_NAME_LENGTH = 253
 _MAX_K8S_NAMESPACE_LENGTH = 63
 NonEmptyString = Annotated[str, Field(min_length=1)]
+_SECRET_FIELD_MARKERS = (
+    "access-key",
+    "access_key",
+    "accesskey",
+    "credential",
+    "password",
+    "secret",
+    "token",
+)
+_SECRET_VALUE_MARKERS = (
+    "minioadmin",
+    "password",
+    "raw-secret-value",
+    "secret-value",
+    "token",
+)
 
 
 def _validate_configmap_name(name: str) -> str:
@@ -83,6 +100,44 @@ def _validate_kubernetes_namespace(namespace: str) -> str:
     if not _K8S_NAMESPACE_PATTERN.fullmatch(namespace):
         raise ValueError(f"Invalid namespace: {namespace!r} must match Kubernetes namespace rules")
     return namespace
+
+
+def _assert_no_secret_material(value: Any, path: str) -> None:
+    """Reject raw credential-looking fields in serialized artifact fragments."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key).lower()
+            child_path = f"{path}.{key}"
+            if any(marker in key_text for marker in _SECRET_FIELD_MARKERS):
+                msg = (
+                    f"{child_path} looks like raw credential material; use env_refs "
+                    "or CredentialRef fields instead"
+                )
+                raise ValueError(msg)
+            _assert_no_secret_material(child, child_path)
+        return
+
+    if isinstance(value, list | tuple | set | frozenset):
+        for index, child in enumerate(value):
+            _assert_no_secret_material(child, f"{path}[{index}]")
+        return
+
+    if isinstance(value, str):
+        value_text = value.lower()
+        if any(marker in value_text for marker in _SECRET_VALUE_MARKERS):
+            msg = (
+                f"{path} looks like raw credential material; use env_refs "
+                "or CredentialRef fields instead"
+            )
+            raise ValueError(msg)
+        return
+
+    if isinstance(value, Iterable):
+        msg = (
+            f"{path} contains unsupported runtime fragment type {type(value).__name__}; "
+            "use JSON-compatible dict, list, string, number, boolean, or null values"
+        )
+        raise ValueError(msg)
 
 
 class CompilationMetadata(BaseModel):
@@ -393,6 +448,71 @@ class StorageCredentialBinding(BaseModel):
         return CredentialRef(source="none", name="none")
 
 
+class StorageWarehouse(BaseModel):
+    """Resolved warehouse location owned by a storage deployment binding."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    uri: NonEmptyString
+    bucket: NonEmptyString
+    prefix: str = ""
+
+
+class StorageBucketRequirement(BaseModel):
+    """Desired storage bucket state emitted by storage plugins."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: NonEmptyString
+    uri: NonEmptyString
+    purpose: Literal["warehouse", "artifacts", "landing", "quarantine", "checkpoints", "exports"]
+    create_policy: Literal["create-if-missing", "must-exist", "never-create"]
+    prefixes: list[str] = Field(default_factory=list)
+    features: dict[str, str] = Field(default_factory=dict)
+    tags: dict[str, str] = Field(default_factory=dict)
+
+
+class StorageCapabilities(BaseModel):
+    """Storage protocol and credential capabilities available to consumers."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    protocols: list[NonEmptyString] = Field(default_factory=list)
+    credential_modes: list[NonEmptyString] = Field(default_factory=list)
+    sts_supported: bool = False
+    path_style_access: bool = False
+
+
+class StorageProvisioningIntent(BaseModel):
+    """Storage provisioning desired state without performing side effects."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    enabled: bool = False
+    mode: Literal["helm-job", "external", "manual", "future-plugin-runtime"] = "manual"
+    default_create_policy: Literal["create-if-missing", "must-exist", "never-create"] = (
+        "never-create"
+    )
+
+
+class StorageRuntimeBinding(BaseModel):
+    """Runtime-specific storage fragments derived from neutral storage state."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    pyiceberg_properties: dict[str, str] = Field(default_factory=dict)
+    dbt_profile_fragment: dict[str, Any] = Field(default_factory=dict)
+    dagster_resources: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+
+    @field_validator("pyiceberg_properties", "dbt_profile_fragment", "dagster_resources")
+    @classmethod
+    def validate_secret_free_fragments(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure runtime fragments carry config only, not credential values."""
+        _assert_no_secret_material(value, "runtime")
+        return value
+
+
 class StorageServiceEndpoint(BaseModel):
     """Resolved storage service endpoint for deployment consumers."""
 
@@ -402,6 +522,7 @@ class StorageServiceEndpoint(BaseModel):
     external_url: NonEmptyString
     region: NonEmptyString
     warehouse_path: NonEmptyString
+    path_style_access: bool = False
 
 
 class DbtStorageBinding(BaseModel):
@@ -415,6 +536,13 @@ class DbtStorageBinding(BaseModel):
     profile_fragment: dict[str, Any] = Field(default_factory=dict)
     env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
 
+    @field_validator("profile_fragment")
+    @classmethod
+    def validate_secret_free_profile_fragment(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure dbt profile fragments do not inline credential values."""
+        _assert_no_secret_material(value, "dbt.profile_fragment")
+        return value
+
 
 class DagsterStorageBinding(BaseModel):
     """Dagster resource storage projection."""
@@ -426,6 +554,13 @@ class DagsterStorageBinding(BaseModel):
     resources: dict[str, Any] = Field(default_factory=dict)
     env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
 
+    @field_validator("resources")
+    @classmethod
+    def validate_secret_free_resources(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure Dagster resource fragments do not inline credential values."""
+        _assert_no_secret_material(value, "dagster.resources")
+        return value
+
 
 class StorageDeploymentBinding(BaseModel):
     """Secret-free storage deployment binding."""
@@ -433,11 +568,42 @@ class StorageDeploymentBinding(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     provider: Literal["minio"]
+    protocol: NonEmptyString = "s3-compatible"
     endpoint: StorageServiceEndpoint
+    warehouse: StorageWarehouse | None = None
+    allowed_locations: list[NonEmptyString] = Field(default_factory=list)
+    buckets: list[StorageBucketRequirement] = Field(default_factory=list)
     credentials: StorageCredentialBinding
+    capabilities: StorageCapabilities = Field(default_factory=StorageCapabilities)
+    provisioning: StorageProvisioningIntent = Field(default_factory=StorageProvisioningIntent)
+    runtime: StorageRuntimeBinding = Field(default_factory=StorageRuntimeBinding)
     dbt: DbtStorageBinding
     dagster: DagsterStorageBinding
     notes: list[str] = Field(default_factory=list)
+
+
+class PolarisCatalogDeploymentBinding(BaseModel):
+    """Polaris catalog-owned storage configuration for deployment renderers."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    storage_type: Literal["S3"]
+    default_base_location: NonEmptyString
+    allowed_locations: list[NonEmptyString]
+    endpoint: NonEmptyString
+    endpoint_internal: NonEmptyString
+    path_style_access: bool
+    sts_unavailable: bool
+    credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+
+
+class CatalogDeploymentBinding(BaseModel):
+    """Secret-free catalog deployment binding."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provider: Literal["polaris"]
+    polaris: PolarisCatalogDeploymentBinding
 
 
 class DeploymentConfig(BaseModel):
@@ -446,6 +612,7 @@ class DeploymentConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     storage: StorageDeploymentBinding | None = None
+    catalog: CatalogDeploymentBinding | None = None
 
 
 class ResolvedModel(BaseModel):
@@ -1137,6 +1304,7 @@ class CompiledArtifacts(BaseModel):
 
 __all__ = [
     # Core artifacts
+    "CatalogDeploymentBinding",
     "CompiledArtifacts",
     "CompilationMetadata",
     "CredentialRef",
@@ -1159,7 +1327,13 @@ __all__ = [
     # Deployment bindings
     "DagsterStorageBinding",
     "DbtStorageBinding",
+    "PolarisCatalogDeploymentBinding",
+    "StorageBucketRequirement",
+    "StorageCapabilities",
     "StorageCredentialBinding",
     "StorageDeploymentBinding",
+    "StorageProvisioningIntent",
+    "StorageRuntimeBinding",
     "StorageServiceEndpoint",
+    "StorageWarehouse",
 ]

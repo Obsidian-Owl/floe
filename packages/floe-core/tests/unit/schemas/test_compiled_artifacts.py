@@ -23,6 +23,7 @@ import pytest
 from pydantic import ValidationError
 
 from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
     CompilationMetadata,
     CompiledArtifacts,
     CredentialRef,
@@ -32,20 +33,26 @@ from floe_core.schemas.compiled_artifacts import (
     KubernetesSecretRef,
     ObservabilityConfig,
     PluginRef,
+    PolarisCatalogDeploymentBinding,
     ProductIdentity,
     ResolvedGovernance,
     ResolvedModel,
     ResolvedPlugins,
     ResolvedTransforms,
+    StorageBucketRequirement,
+    StorageCapabilities,
     StorageCredentialBinding,
     StorageDeploymentBinding,
+    StorageProvisioningIntent,
+    StorageRuntimeBinding,
     StorageServiceEndpoint,
+    StorageWarehouse,
 )
+from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
 from floe_core.schemas.versions import (
     COMPILED_ARTIFACTS_VERSION,
     COMPILED_ARTIFACTS_VERSION_HISTORY,
 )
-from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
 
 @pytest.fixture
@@ -586,6 +593,74 @@ class TestCompiledArtifactsExtensions:
 class TestStorageDeploymentBinding:
     """Tests for compiled storage deployment bindings."""
 
+    def _rich_binding(self) -> StorageDeploymentBinding:
+        credentials = StorageCredentialBinding(
+            mode="kubernetes-secret",
+            secret_ref=KubernetesSecretRef(
+                name="floe-platform-minio-credentials",
+                namespace="floe-system",
+                keys={
+                    "accessKeyId": "access-key-id",
+                    "secretAccessKey": "secret-access-key",
+                },
+            ),
+        )
+        return StorageDeploymentBinding(
+            provider="minio",
+            protocol="s3-compatible",
+            endpoint=StorageServiceEndpoint(
+                internal_url="http://floe-platform-minio:9000",
+                external_url="http://localhost:9000",
+                region="us-east-1",
+                warehouse_path="s3://floe-iceberg",
+                path_style_access=True,
+            ),
+            warehouse=StorageWarehouse(uri="s3://floe-iceberg", bucket="floe-iceberg"),
+            allowed_locations=["s3://floe-iceberg"],
+            buckets=[
+                StorageBucketRequirement(
+                    name="floe-iceberg",
+                    uri="s3://floe-iceberg",
+                    purpose="warehouse",
+                    create_policy="create-if-missing",
+                )
+            ],
+            credentials=credentials,
+            capabilities=StorageCapabilities(
+                protocols=["s3-compatible"],
+                credential_modes=["kubernetes-secret"],
+                sts_supported=False,
+                path_style_access=True,
+            ),
+            provisioning=StorageProvisioningIntent(
+                enabled=True,
+                mode="helm-job",
+                default_create_policy="create-if-missing",
+            ),
+            runtime=StorageRuntimeBinding(
+                pyiceberg_properties={"s3.endpoint": "http://floe-platform-minio:9000"},
+            ),
+            dbt=DbtStorageBinding(
+                profile_name="floe",
+                target_name="dev",
+                schema_name="analytics",
+                env_refs={
+                    "s3_access_key_id": "AWS_ACCESS_KEY_ID",
+                    "s3_secret_access_key": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+                },
+            ),
+            dagster=DagsterStorageBinding(
+                resource_key="minio_storage",
+                asset_io_manager_key="iceberg_io_manager",
+                env_refs={
+                    "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+                    # pragma: allowlist nextline secret
+                    "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",
+                },
+            ),
+            notes=["Local MinIO storage deployment binding."],
+        )
+
     def _binding(self) -> StorageDeploymentBinding:
         endpoint = StorageServiceEndpoint(
             internal_url="http://floe-platform-minio:9000",
@@ -638,6 +713,92 @@ class TestStorageDeploymentBinding:
         assert "secretKey" not in payload
         assert "floe-platform-minio-credentials" in payload
 
+    def test_rich_storage_deployment_binding_serializes_desired_state(self) -> None:
+        binding = self._rich_binding()
+        payload = binding.model_dump(mode="json")
+
+        assert payload["provider"] == "minio"
+        assert payload["protocol"] == "s3-compatible"
+        assert payload["endpoint"]["path_style_access"] is True
+        assert payload["warehouse"] == {
+            "uri": "s3://floe-iceberg",
+            "bucket": "floe-iceberg",
+            "prefix": "",
+        }
+        assert payload["allowed_locations"] == ["s3://floe-iceberg"]
+        assert payload["buckets"][0]["create_policy"] == "create-if-missing"
+        assert payload["capabilities"] == {
+            "protocols": ["s3-compatible"],
+            "credential_modes": ["kubernetes-secret"],
+            "sts_supported": False,
+            "path_style_access": True,
+        }
+        assert payload["provisioning"] == {
+            "enabled": True,
+            "mode": "helm-job",
+            "default_create_policy": "create-if-missing",
+        }
+        assert payload["runtime"]["pyiceberg_properties"] == {
+            "s3.endpoint": "http://floe-platform-minio:9000"
+        }
+
+    @pytest.mark.parametrize(
+        ("field_name", "fragment"),
+        [
+            ("pyiceberg_properties", {"s3.secret-access-key": "raw-secret-value"}),
+            ("dbt_profile_fragment", {"outputs": {"dev": {"password": "raw-secret-value"}}}),
+            ("dagster_resources", {"storage": {"token": "raw-secret-value"}}),
+            ("dbt_profile_fragment", {"settings": {"raw-secret-value"}}),
+            ("dagster_resources", {"settings": frozenset({"raw-secret-value"})}),
+        ],
+    )
+    def test_storage_runtime_binding_rejects_raw_secret_fragments(
+        self,
+        field_name: str,
+        fragment: dict[str, Any],
+    ) -> None:
+        with pytest.raises(ValidationError, match="raw credential material"):
+            StorageRuntimeBinding(**{field_name: fragment})
+
+    @pytest.mark.parametrize(
+        "fragment",
+        [
+            {"password": "raw-secret-value"},
+            {"settings": {"value": "raw-secret-value"}},
+            {"settings": {"raw-secret-value"}},
+        ],
+    )
+    def test_dbt_storage_binding_rejects_raw_secret_profile_fragment(
+        self,
+        fragment: dict[str, Any],
+    ) -> None:
+        with pytest.raises(ValidationError, match="raw credential material"):
+            DbtStorageBinding(
+                profile_name="floe",
+                target_name="dev",
+                schema_name="analytics",
+                profile_fragment=fragment,
+            )
+
+    @pytest.mark.parametrize(
+        "resources",
+        [
+            {"storage": {"token": "raw-secret-value"}},
+            {"storage": {"value": "raw-secret-value"}},
+            {"storage": frozenset({"raw-secret-value"})},
+        ],
+    )
+    def test_dagster_storage_binding_rejects_raw_secret_resources(
+        self,
+        resources: dict[str, Any],
+    ) -> None:
+        with pytest.raises(ValidationError, match="raw credential material"):
+            DagsterStorageBinding(
+                resource_key="minio_storage",
+                asset_io_manager_key="iceberg_io_manager",
+                resources=resources,
+            )
+
     def test_compiled_artifacts_accept_deployment_storage_binding(
         self,
         sample_compilation_metadata: CompilationMetadata,
@@ -667,6 +828,66 @@ class TestStorageDeploymentBinding:
         )
         assert restored.deployment.storage.dbt.profile_name == "floe"
         assert restored.deployment.storage.dagster.resource_key == "minio_storage"
+
+    def test_compiled_artifacts_accept_storage_and_catalog_deployment_bindings(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        storage = self._rich_binding()
+        catalog = CatalogDeploymentBinding(
+            provider="polaris",
+            polaris=PolarisCatalogDeploymentBinding(
+                storage_type="S3",
+                default_base_location="s3://floe-iceberg",
+                allowed_locations=["s3://floe-iceberg"],
+                endpoint="http://localhost:9000",
+                endpoint_internal="http://floe-platform-minio:9000",
+                path_style_access=True,
+                sts_unavailable=True,
+                credential_refs={
+                    "accessKeyId": storage.credentials.as_credential_ref("accessKeyId"),
+                    "secretAccessKey": storage.credentials.as_credential_ref(
+                        "secretAccessKey"
+                    ),
+                },
+            ),
+        )
+        artifacts = CompiledArtifacts(
+            metadata=sample_compilation_metadata,
+            identity=sample_product_identity,
+            observability=sample_observability_config,
+            plugins=ResolvedPlugins(
+                compute=PluginRef(type="duckdb", version="0.1.0"),
+                orchestrator=PluginRef(type="dagster", version="0.1.0"),
+                catalog=PluginRef(type="polaris", version="0.1.0"),
+                storage=PluginRef(type="minio", version="0.1.0"),
+            ),
+            deployment=DeploymentConfig(storage=storage, catalog=catalog),
+        )
+
+        restored = CompiledArtifacts.model_validate(artifacts.model_dump(mode="json"))
+        serialized = restored.model_dump_json()
+
+        assert restored.deployment is not None
+        assert restored.deployment.storage is not None
+        assert restored.deployment.catalog is not None
+        assert restored.deployment.catalog.provider == "polaris"
+        assert (
+            restored.deployment.catalog.polaris.default_base_location
+            == "s3://floe-iceberg"
+        )
+        assert restored.deployment.catalog.polaris.allowed_locations == ["s3://floe-iceberg"]
+        assert restored.deployment.catalog.polaris.path_style_access is True
+        assert restored.deployment.catalog.polaris.sts_unavailable is True
+        assert (
+            restored.deployment.catalog.polaris.credential_refs["secretAccessKey"].key
+            == "secret-access-key"
+        )
+        assert "minioadmin" not in serialized
+        assert "minio-secret-value" not in serialized
+        assert "raw-secret-value" not in serialized
 
     @pytest.mark.parametrize(
         "factory",
