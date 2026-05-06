@@ -272,6 +272,26 @@ def _table_rows(catalog: Any, table_identifier: str) -> list[dict[str, Any]]:
     return cast("list[dict[str, Any]]", table.scan().to_arrow().to_pylist())
 
 
+def _table_column_names(catalog: Any, table_identifier: str) -> set[str]:
+    """Return column names from the committed Iceberg table schema."""
+    table = catalog.load_table(table_identifier)
+    schema = table.schema()
+    return {str(field.name) for field in schema.fields}
+
+
+def _assert_expected_columns(
+    catalog: Any,
+    table_identifier: str,
+    expected_columns: set[str],
+) -> None:
+    """Assert representative source columns exist in the Iceberg schema."""
+    column_names = _table_column_names(catalog, table_identifier)
+    assert expected_columns.issubset(column_names), (
+        f"Expected {table_identifier} schema to include {sorted(expected_columns)}; "
+        f"actual columns: {sorted(column_names)}"
+    )
+
+
 def _assert_representative_row(
     rows: list[dict[str, Any]],
     representative_row: dict[str, Any],
@@ -325,6 +345,26 @@ def _cleanup_prefix(minio: Any, *, bucket: str, prefix: str) -> int:
     if errors:
         pytest.fail(f"Failed to delete MinIO objects for prefix {prefix}: {errors}")
     return len(delete_objects)
+
+
+def _shutdown_plugin(plugin: DltIngestionPlugin | None) -> Exception | None:
+    """Shutdown a plugin, returning the error so cleanup can still run."""
+    if plugin is None:
+        return None
+    try:
+        plugin.shutdown()
+    except Exception as exc:  # noqa: BLE001
+        return exc
+    return None
+
+
+def _assert_no_table_or_rows(catalog: Any, namespace: str, table_identifier: str) -> None:
+    """Assert a failed ingestion did not commit table rows."""
+    table_name = _table_name(table_identifier)
+    if table_name not in _table_names(catalog, namespace):
+        return
+    rows = _table_rows(catalog, table_identifier)
+    assert rows == [], f"Expected failed ingestion not to commit rows to {table_identifier}"
 
 
 def _assert_failed_with(result: IngestionResult, *expected_fragments: str) -> None:
@@ -395,14 +435,20 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                 )
                 rows = _table_rows(polaris_with_write_grants, table_identifier)
                 assert len(rows) == case.expected_rows
+                _assert_expected_columns(
+                    polaris_with_write_grants,
+                    table_identifier,
+                    set(case.representative_row),
+                )
                 _assert_representative_row(rows, case.representative_row)
                 if case.file_format == "jsonl":
                     assert any(row.get("campaign") is None for row in rows)
             finally:
-                if plugin is not None:
-                    plugin.shutdown()
+                shutdown_error = _shutdown_plugin(plugin)
                 _purge_namespace(polaris_with_write_grants, namespace)
                 _cleanup_prefix(minio, bucket=bucket, prefix=namespace)
+                if shutdown_error is not None:
+                    raise shutdown_error
 
     def test_missing_object_path_returns_failed_ingestion_result(
         self,
@@ -441,11 +487,13 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                 result = _run_source(plugin, source)
 
                 _assert_failed_with(result, "missing_object_source", f"s3://{bucket}/{prefix}/")
+                _assert_no_table_or_rows(polaris_with_write_grants, namespace, table_identifier)
             finally:
-                if plugin is not None:
-                    plugin.shutdown()
+                shutdown_error = _shutdown_plugin(plugin)
                 _purge_namespace(polaris_with_write_grants, namespace)
                 _cleanup_prefix(minio, bucket=bucket, prefix=namespace)
+                if shutdown_error is not None:
+                    raise shutdown_error
 
     def test_malformed_jsonl_fails_with_source_name_and_path(
         self,
@@ -495,11 +543,13 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                     "bad_jsonl_source",
                     f"s3://{bucket}/{prefix}/",
                 )
+                _assert_no_table_or_rows(polaris_with_write_grants, namespace, table_identifier)
             finally:
-                if plugin is not None:
-                    plugin.shutdown()
+                shutdown_error = _shutdown_plugin(plugin)
                 _purge_namespace(polaris_with_write_grants, namespace)
                 _cleanup_prefix(minio, bucket=bucket, prefix=namespace)
+                if shutdown_error is not None:
+                    raise shutdown_error
 
     def test_schema_freeze_rejects_added_column_on_second_load(
         self,
@@ -565,10 +615,11 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
 
                 _assert_failed_with(second_result, "schema", "contract", "new_column")
             finally:
-                if plugin is not None:
-                    plugin.shutdown()
+                shutdown_error = _shutdown_plugin(plugin)
                 _purge_namespace(polaris_with_write_grants, namespace)
                 _cleanup_prefix(minio, bucket=bucket, prefix=namespace)
+                if shutdown_error is not None:
+                    raise shutdown_error
 
     def test_unsupported_format_fails_before_empty_table_is_created(
         self,

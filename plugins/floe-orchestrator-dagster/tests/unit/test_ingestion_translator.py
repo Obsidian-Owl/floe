@@ -271,6 +271,8 @@ class TestCreateIngestionAssets:
             schema_contract="evolve",
             cursor_field=None,
             primary_key=None,
+            source_name="raw-customers",
+            source_path="./data/customers.csv",
             source=built_source,
         )
         assert output is result
@@ -378,6 +380,8 @@ class TestCreateIngestionAssets:
             schema_contract="freeze",
             cursor_field=None,
             primary_key=None,
+            source_name="pipelines",
+            source_path="https://example.test/api",
             source=executable_source,
         )
         assert output is result
@@ -437,6 +441,8 @@ class TestCreateIngestionAssets:
             schema_contract="freeze",
             cursor_field="updated_at",
             primary_key=["id"],
+            source_name="orders-api",
+            source_path="https://example.test/orders",
             source=executable_source,
         )
         assert output is result
@@ -669,5 +675,7 @@ class TestCreateIngestionAssets:
             schema_contract="evolve",
             cursor_field=None,
             primary_key=None,
+            source_name="pipelines",
+            source_path=None,
             source=executable_source,
         )

@@ -613,7 +613,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             except Exception as e:
                 elapsed = time.perf_counter() - start_time
                 error_msg = self._with_source_error_context(
-                    sanitize_error_message(str(e)),
+                    str(e),
                     source_name=source_name,
                     source_path=source_path,
                 )
@@ -678,6 +678,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         *,
         source_name: Any,
         source_path: Any,
+        max_length: int = 500,
     ) -> str:
         """Prefix an ingestion error with source identity when provided."""
         context: list[str] = []
@@ -686,8 +687,8 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         if source_path not in (None, ""):
             context.append(f"path={source_path}")
         if not context:
-            return error_msg
-        return f"{', '.join(context)}: {error_msg}"
+            return sanitize_error_message(error_msg, max_length=max_length)
+        return sanitize_error_message(f"{', '.join(context)}: {error_msg}", max_length=max_length)
 
     def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
         """Generate Iceberg destination configuration for dlt.

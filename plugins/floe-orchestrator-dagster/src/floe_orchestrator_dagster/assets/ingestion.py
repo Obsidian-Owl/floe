@@ -292,6 +292,8 @@ def _create_ingestion_asset(
             "schema_contract": config.schema_contract,
             "cursor_field": source_config.get("cursor_field"),
             "primary_key": source_config.get("primary_key"),
+            "source_name": source_name,
+            "source_path": _source_path(source_config.get("source_config") or {}),
             "source": dlt_source,
         }
 
@@ -317,6 +319,15 @@ def _source_from_config(
     if source_ref is not None and _is_source_like(source_ref):
         return source_ref
     return build_dlt_source(source_config, project_dir=project_dir)
+
+
+def _source_path(source_config: Mapping[str, Any]) -> str | None:
+    """Return the best source location label for ingestion error context."""
+    for key in ("path", "url", "base_url", "uri"):
+        value = source_config.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
 
 
 __all__ = [

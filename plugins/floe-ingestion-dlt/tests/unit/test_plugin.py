@@ -167,6 +167,35 @@ class TestRunPipeline:
         assert len(result.errors) > 0
         assert "Pipeline execution failed" in result.errors[0]
 
+    @pytest.mark.requirement("4F-FR-049")
+    def test_run_failure_sanitizes_source_context(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Source error context must not leak credential-bearing source paths."""
+        mock_pipeline = MagicMock()
+        mock_pipeline.run.side_effect = Exception(
+            "extract failed: password=exception-secret-token"  # pragma: allowlist secret
+        )
+
+        result = dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+            source_name="api_key=source-secret-token",  # pragma: allowlist secret
+            source_path=(
+                "s3://user:path-secret-token@bucket/raw/events.jsonl"  # pragma: allowlist secret
+                "?token=query-secret-token&safe=value"  # pragma: allowlist secret
+            ),
+        )
+
+        assert result.success is False
+        error = result.errors[0]
+        assert len(error) <= 500
+        assert "source=api_key=<REDACTED>" in error
+        assert "path=s3://<REDACTED>@bucket/raw/events.jsonl?token=<REDACTED>" in error
+        assert "source-secret-token" not in error
+        assert "path-secret-token" not in error
+        assert "query-secret-token" not in error
+        assert "exception-secret-token" not in error
+
     @pytest.mark.requirement("4F-FR-018")
     def test_run_empty_source_returns_zero_rows(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Test run returns zero rows for empty source data.
