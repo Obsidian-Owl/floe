@@ -305,6 +305,52 @@ by the polaris bootstrap Job and every test Job. Do NOT inline the
 {{- end }}
 
 {{/*
+Polaris S3 credential secret name.
+Storage credentials are a separate concern from Polaris OAuth credentials. When
+the operator does not provide an explicit S3 credential secret, local MinIO
+deployments reuse the MinIO root credential secret; external S3 deployments can
+fall back to the Polaris-generated secret during the transition away from raw
+chart credential values.
+*/}}
+{{- define "floe-platform.polaris.s3CredentialSecretName" -}}
+{{- if .Values.polaris.storage.s3.credentialSecretName }}
+{{- .Values.polaris.storage.s3.credentialSecretName }}
+{{- else if .Values.minio.enabled }}
+{{- include "floe-platform.minio.secretName" . }}
+{{- else if .Values.polaris.auth.existingSecret }}
+{{- fail "polaris.storage.s3.credentialSecretName is required when polaris.storage.s3.enabled=true, minio.enabled=false, and polaris.auth.existingSecret is set" }}
+{{- else }}
+{{- include "floe-platform.polaris.credentialSecretName" . }}
+{{- end }}
+{{- end }}
+
+{{/*
+Key containing the S3 access key inside the selected S3 credential secret.
+*/}}
+{{- define "floe-platform.polaris.s3AccessKeySecretKey" -}}
+{{- if .Values.polaris.storage.s3.accessKeySecretKey }}
+{{- .Values.polaris.storage.s3.accessKeySecretKey }}
+{{- else if .Values.minio.enabled }}
+{{- "root-user" }}
+{{- else }}
+{{- "aws-access-key-id" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Key containing the S3 secret key inside the selected S3 credential secret.
+*/}}
+{{- define "floe-platform.polaris.s3SecretKeySecretKey" -}}
+{{- if .Values.polaris.storage.s3.secretKeySecretKey }}
+{{- .Values.polaris.storage.s3.secretKeySecretKey }}
+{{- else if .Values.minio.enabled }}
+{{- "root-password" }}
+{{- else }}
+{{- "aws-secret-access-key" }}
+{{- end }}
+{{- end }}
+
+{{/*
 Standard (non-destructive) test runner ServiceAccount name.
 Used by test Jobs in templates/tests/ for e2e and integration test suites.
 */}}

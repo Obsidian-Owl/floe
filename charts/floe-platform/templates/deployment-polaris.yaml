@@ -210,13 +210,13 @@ spec:
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
-                  key: aws-access-key-id
+                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
+                  key: {{ include "floe-platform.polaris.s3AccessKeySecretKey" . | quote }}
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
-                  key: aws-secret-access-key
+                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
+                  key: {{ include "floe-platform.polaris.s3SecretKeySecretKey" . | quote }}
             - name: AWS_REGION
               value: {{ .Values.polaris.storage.s3.region | quote }}
             - name: AWS_ENDPOINT_URL_S3

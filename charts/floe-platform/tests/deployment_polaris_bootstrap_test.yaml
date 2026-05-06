@@ -13,7 +13,7 @@ tests:
       polaris.persistence.jdbc.url: jdbc:postgresql://floe-platform-postgresql:5432/polaris
       polaris.persistence.jdbc.username: floe
       polaris.auth.bootstrapCredentials.clientId: demo-admin
-      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret  # pragma: allowlist secret
     asserts:
       - isKind:
           of: Deployment
@@ -47,6 +47,75 @@ tests:
       - notExists:
           path: spec.template.spec.initContainers
 
+  - it: should source runtime S3 credentials from configured storage secret keys
+    template: templates/deployment-polaris.yaml
+    set:
+      polaris.enabled: true
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "http://minio:9000"
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
+      polaris.storage.s3.accessKeySecretKey: "root-user"  # pragma: allowlist secret
+      polaris.storage.s3.secretKeySecretKey: "root-password"  # pragma: allowlist secret
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[0].env[2].name
+          value: AWS_ACCESS_KEY_ID
+      - equal:
+          path: spec.template.spec.containers[0].env[2].valueFrom.secretKeyRef.name
+          value: floe-platform-minio-credentials
+      - equal:
+          path: spec.template.spec.containers[0].env[2].valueFrom.secretKeyRef.key
+          value: root-user
+      - equal:
+          path: spec.template.spec.containers[0].env[3].name
+          value: AWS_SECRET_ACCESS_KEY
+      - equal:
+          path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.name
+          value: floe-platform-minio-credentials
+      - equal:
+          path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.key
+          value: root-password
+
+  - it: should source demo runtime S3 credentials from the rendered MinIO secret
+    template: templates/deployment-polaris.yaml
+    values:
+      - ../values-demo.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.template.spec.containers[0].env[2].name
+          value: AWS_ACCESS_KEY_ID
+      - equal:
+          path: spec.template.spec.containers[0].env[2].valueFrom.secretKeyRef.name
+          value: floe-platform-minio
+      - equal:
+          path: spec.template.spec.containers[0].env[2].valueFrom.secretKeyRef.key
+          value: root-user
+      - equal:
+          path: spec.template.spec.containers[0].env[3].name
+          value: AWS_SECRET_ACCESS_KEY
+      - equal:
+          path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.name
+          value: floe-platform-minio
+      - equal:
+          path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.key
+          value: root-password
+
+  - it: should require explicit S3 credential secret when Polaris auth uses an external secret
+    template: templates/deployment-polaris.yaml
+    set:
+      minio.enabled: false
+      polaris.enabled: true
+      polaris.auth.existingSecret: polaris-oauth-secret  # pragma: allowlist secret
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "https://s3.example.com"
+    asserts:
+      - failedTemplate:
+          errorMessage: "polaris.storage.s3.credentialSecretName is required when polaris.storage.s3.enabled=true, minio.enabled=false, and polaris.auth.existingSecret is set"
+
   - it: should query both schema version and Polaris realm state before bootstrapping
     template: templates/deployment-polaris.yaml
     set:
@@ -55,7 +124,7 @@ tests:
       polaris.persistence.jdbc.url: jdbc:postgresql://floe-platform-postgresql:5432/polaris
       polaris.persistence.jdbc.username: floe
       polaris.auth.bootstrapCredentials.clientId: demo-admin
-      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret  # pragma: allowlist secret
     asserts:
       - matchRegex:
           path: spec.template.spec.initContainers[1].command[2]
@@ -81,7 +150,7 @@ tests:
       polaris.persistence.jdbc.url: jdbc:postgresql://postgres.external:5544/polaris
       polaris.persistence.jdbc.username: floe
       polaris.auth.bootstrapCredentials.clientId: demo-admin
-      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret  # pragma: allowlist secret
     asserts:
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
@@ -105,7 +174,7 @@ tests:
       polaris.persistence.jdbc.username: floe
       polaris.image.tag: 1.2.0-incubating
       polaris.auth.bootstrapCredentials.clientId: demo-admin
-      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret  # pragma: allowlist secret
     asserts:
       - equal:
           path: spec.template.spec.initContainers[2].image

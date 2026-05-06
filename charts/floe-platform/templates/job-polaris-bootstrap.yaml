@@ -134,13 +134,13 @@ spec:
             - name: S3_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
-                  key: aws-access-key-id
+                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
+                  key: {{ include "floe-platform.polaris.s3AccessKeySecretKey" . | quote }}
             - name: S3_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
-                  key: aws-secret-access-key
+                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
+                  key: {{ include "floe-platform.polaris.s3SecretKeySecretKey" . | quote }}
             {{- end }}
           command:
             - sh

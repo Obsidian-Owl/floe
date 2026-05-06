@@ -37,7 +37,7 @@ HelmValues = dict[str, Any]
 
 def _load_compiled_artifacts(artifact_path: Path) -> CompiledArtifacts:
     """Load compiled artifacts from JSON or YAML."""
-    if artifact_path.suffix in (".yaml", ".yml"):
+    if artifact_path.suffix.lower() in (".yaml", ".yml"):
         return CompiledArtifacts.from_yaml_file(artifact_path)
     return CompiledArtifacts.from_json_file(artifact_path)
 
@@ -67,6 +67,15 @@ def _storage_helm_values(artifacts: CompiledArtifacts) -> dict[str, Any]:
     return _minio_storage_helm_values(storage, storage_config)
 
 
+def _bool_storage_config(storage_config: dict[str, Any], key: str, default: bool) -> bool:
+    """Return a boolean storage config value, rejecting ambiguous raw strings."""
+    raw_value = storage_config.get(key, default)
+    if isinstance(raw_value, bool):
+        return raw_value
+    msg = f"storage config {key!r} must be a boolean"
+    raise ValueError(msg)
+
+
 def _minio_storage_helm_values(
     storage: StorageDeploymentBinding,
     storage_config: dict[str, Any],
@@ -78,15 +87,25 @@ def _minio_storage_helm_values(
     if isinstance(artifact_bucket, str) and artifact_bucket and artifact_bucket != warehouse_bucket:
         bucket_names.append(artifact_bucket)
 
-    secret_ref = storage.credentials.secret_ref
-    credential_secret_name = secret_ref.name if secret_ref is not None else ""
-    credential_keys = secret_ref.keys if secret_ref is not None else {}
+    access_key_ref = storage.credentials.as_credential_ref("accessKeyId")
+    secret_key_ref = storage.credentials.as_credential_ref("secretAccessKey")
+    if (
+        access_key_ref.source != "kubernetes-secret"
+        or secret_key_ref.source != "kubernetes-secret"
+        or access_key_ref.key is None
+        or secret_key_ref.key is None
+    ):
+        msg = "MinIO Helm values require Kubernetes Secret credential references"
+        raise ValueError(msg)
+    if access_key_ref.name != secret_key_ref.name:
+        msg = "MinIO Helm values require access and secret keys in the same Kubernetes Secret"
+        raise ValueError(msg)
 
     return {
         "minio": {
             "enabled": True,
             "fullnameOverride": "floe-platform-minio",
-            "auth": {"existingSecret": credential_secret_name},
+            "auth": {"existingSecret": access_key_ref.name},
             "defaultBuckets": ",".join(bucket_names),
             "provisioning": {"enabled": False, "fallbackJob": True},
         },
@@ -96,13 +115,14 @@ def _minio_storage_helm_values(
                     "enabled": True,
                     "endpoint": storage.endpoint.internal_url,
                     "region": storage.endpoint.region,
-                    "pathStyleAccess": bool(storage_config.get("path_style_access", True)),
-                    "credentialSecretName": credential_secret_name,
-                    "accessKeySecretKey": credential_keys.get("accessKeyId", "root-user"),
-                    "secretKeySecretKey": credential_keys.get(
-                        "secretAccessKey",
-                        "root-password",
+                    "pathStyleAccess": _bool_storage_config(
+                        storage_config,
+                        "path_style_access",
+                        True,
                     ),
+                    "credentialSecretName": access_key_ref.name,
+                    "accessKeySecretKey": access_key_ref.key,
+                    "secretKeySecretKey": secret_key_ref.key,
                 }
             },
             "bootstrap": {
@@ -296,7 +316,7 @@ def generate_command(
         else:
             # Single environment (guaranteed non-empty by default=("dev",))
             env = environments[0] if environments else "dev"
-            if output and output.suffix in (".yaml", ".yml"):
+            if output and output.suffix.lower() in (".yaml", ".yml"):
                 target_file = output
             else:
                 target_file = (output or Path("target/helm")) / f"values-{env}.yaml"

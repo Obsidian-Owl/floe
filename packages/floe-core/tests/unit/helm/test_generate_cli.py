@@ -349,6 +349,23 @@ class TestGenerateCommand:
             values = yaml.safe_load(f)
         assert values["global"]["environment"] == "staging"
 
+    @pytest.mark.requirement("9b-FR-060")
+    def test_generate_single_environment_to_uppercase_yaml_file(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Test single-env generation treats uppercase YAML suffixes as files."""
+        output_file = tmp_path / "custom-values.YAML"
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result = runner.invoke(
+                generate_command,
+                ["--env", "staging", "--output", str(output_file)],
+            )
+
+        assert result.exit_code == 0
+        assert output_file.exists()
+        assert not (output_file / "values-staging.yaml").exists()
+
     @pytest.mark.requirement("9b-FR-063")
     def test_generate_with_set_values(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test generating with --set overrides."""

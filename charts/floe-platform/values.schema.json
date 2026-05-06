@@ -330,6 +330,18 @@
                 "pathStyleAccess": {
                   "type": "boolean"
                 },
+                "credentialSecretName": {
+                  "type": "string",
+                  "description": "Kubernetes Secret containing S3 credentials"
+                },
+                "accessKeySecretKey": {
+                  "type": "string",
+                  "description": "Key in credentialSecretName containing the S3 access key"
+                },
+                "secretKeySecretKey": {
+                  "type": "string",
+                  "description": "Key in credentialSecretName containing the S3 secret key"
+                },
                 "accessKey": {
                   "type": "string"
                 },

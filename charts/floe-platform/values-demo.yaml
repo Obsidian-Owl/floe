@@ -154,7 +154,7 @@ polaris:
       endpoint: "http://floe-platform-minio:9000"
       region: "us-east-1"
       pathStyleAccess: true
-      credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
+      credentialSecretName: "floe-platform-minio"  # pragma: allowlist secret
       accessKeySecretKey: "root-user"  # pragma: allowlist secret
       secretKeySecretKey: "root-password"  # pragma: allowlist secret
   bootstrap:

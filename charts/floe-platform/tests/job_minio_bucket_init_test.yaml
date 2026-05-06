@@ -15,7 +15,7 @@ tests:
       minio.enabled: true
       minio.provisioning.fallbackJob: true
       minio.auth.rootUser: minioadmin
-      minio.auth.rootPassword: minioadmin123
+      minio.auth.rootPassword: minioadmin123  # pragma: allowlist secret
       polaris.bootstrap.defaultBaseLocation: "s3://floe-iceberg"
     asserts:
       - isKind:
@@ -68,3 +68,38 @@ tests:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
           pattern: 'mc mb --ignore-existing "local/floe-iceberg"'
+
+  - it: should create every bucket listed in minio.defaultBuckets
+    set:
+      minio.enabled: true
+      minio.provisioning.fallbackJob: true
+      minio.auth.rootUser: minioadmin
+      minio.auth.rootPassword: minioadmin123  # pragma: allowlist secret
+      minio.defaultBuckets: "floe-iceberg,floe-artifacts"
+      polaris.bootstrap.defaultBaseLocation: "s3://floe-iceberg"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'mc mb --ignore-existing "local/floe-iceberg"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'mc mb --ignore-existing "local/floe-artifacts"'
+
+  - it: should ignore empty entries in minio.defaultBuckets
+    set:
+      minio.enabled: true
+      minio.provisioning.fallbackJob: true
+      minio.auth.rootUser: minioadmin
+      minio.auth.rootPassword: minioadmin123  # pragma: allowlist secret
+      minio.defaultBuckets: "floe-iceberg,, floe-artifacts,"
+      polaris.bootstrap.defaultBaseLocation: "s3://floe-iceberg"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'mc mb --ignore-existing "local/floe-iceberg"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'mc mb --ignore-existing "local/floe-artifacts"'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: 'mc mb --ignore-existing "local/"'
