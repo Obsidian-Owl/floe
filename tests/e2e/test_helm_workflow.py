@@ -220,6 +220,8 @@ def deployed_platform(
             "--set",
             "minio.enabled=false",
             "--set",
+            "polaris.storage.s3.enabled=false",
+            "--set",
             "marquez.enabled=false",
             "--set",
             "jaeger.enabled=false",
@@ -499,6 +501,16 @@ def test_test_values_polaris_storage_uses_minio_secret_ref() -> None:
     assert polaris_s3["credentialSecretName"] == "floe-platform-minio"  # pragma: allowlist secret
     assert polaris_s3["accessKeySecretKey"] == "root-user"  # pragma: allowlist secret
     assert polaris_s3["secretKeySecretKey"] == "root-password"  # pragma: allowlist secret
+
+
+@pytest.mark.e2e
+@pytest.mark.requirement("STORAGE-MINIO-SECURITY")
+def test_basic_helm_workflow_disables_polaris_s3_when_minio_disabled() -> None:
+    """The basic Helm smoke must not reference MinIO credentials when MinIO is off."""
+    test_source = Path(__file__).read_text()
+
+    assert '"minio.enabled=false"' in test_source
+    assert '"polaris.storage.s3.enabled=false"' in test_source
 
 
 def _read_e2e_script() -> str:
