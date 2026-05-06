@@ -20,21 +20,26 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from floe_core.cli.helm.generate import generate_command
+from floe_core.cli.helm.generate import _storage_helm_values, generate_command
 from floe_core.helm.parsing import parse_set_values, parse_value
 from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
     CompilationMetadata,
     CompiledArtifacts,
+    CredentialRef,
     DagsterStorageBinding,
     DbtStorageBinding,
     DeploymentConfig,
     KubernetesSecretRef,
     ObservabilityConfig,
     PluginRef,
+    PolarisCatalogDeploymentBinding,
     ProductIdentity,
     ResolvedModel,
     ResolvedPlugins,
     ResolvedTransforms,
+    StorageBucketRequirement,
+    StorageCapabilities,
     StorageCredentialBinding,
     StorageDeploymentBinding,
     StorageServiceEndpoint,
@@ -85,14 +90,16 @@ def _write_minio_artifact(path: Path) -> None:
                 type="minio",
                 version="0.1.0",
                 config={
-                    "endpoint": "http://floe-platform-minio:9000",
-                    "bucket": "floe-iceberg",
-                    "artifact_bucket": "floe-artifacts",
+                    "endpoint": "http://legacy-plugin-config-minio:9000",
+                    "bucket": "legacy-plugin-config-warehouse",
+                    "artifact_bucket": "legacy-plugin-config-artifacts",
                     "region": "us-east-1",
-                    "path_style_access": True,
-                    "credential_secret_name": credential_secret_name,
-                    "access_key_secret_key": access_key_secret_key,
-                    "secret_key_secret_key": secret_key_secret_key,
+                    "path_style_access": False,
+                    "credential_secret_name": "legacy-plugin-config-secret",
+                    "access_key_secret_key": "legacy-access-key",
+                    "secret_key_secret_key": "legacy-secret-key",
+                    "raw_access_key": "legacy-inline-access-value",  # pragma: allowlist secret
+                    "raw_secret_key": "legacy-inline-secret-value",  # pragma: allowlist secret
                 },
             ),
         ),
@@ -104,7 +111,22 @@ def _write_minio_artifact(path: Path) -> None:
                     external_url="http://localhost:9000",
                     region="us-east-1",
                     warehouse_path="s3://floe-iceberg",
+                    path_style_access=True,
                 ),
+                buckets=[
+                    StorageBucketRequirement(
+                        name="floe-iceberg",
+                        uri="s3://floe-iceberg",
+                        purpose="warehouse",
+                        create_policy="create-if-missing",
+                    ),
+                    StorageBucketRequirement(
+                        name="floe-artifacts",
+                        uri="s3://floe-artifacts",
+                        purpose="artifacts",
+                        create_policy="create-if-missing",
+                    ),
+                ],
                 credentials=StorageCredentialBinding(
                     mode="kubernetes-secret",
                     secret_ref=KubernetesSecretRef(
@@ -116,6 +138,12 @@ def _write_minio_artifact(path: Path) -> None:
                         },
                     ),
                 ),
+                capabilities=StorageCapabilities(
+                    protocols=["s3-compatible"],
+                    credential_modes=["kubernetes-secret"],
+                    sts_supported=False,
+                    path_style_access=True,
+                ),
                 dbt=DbtStorageBinding(
                     profile_name="floe",
                     target_name="dev",
@@ -125,7 +153,31 @@ def _write_minio_artifact(path: Path) -> None:
                     resource_key="minio_storage",
                     asset_io_manager_key="iceberg_io_manager",
                 ),
-            )
+            ),
+            catalog=CatalogDeploymentBinding(
+                provider="polaris",
+                polaris=PolarisCatalogDeploymentBinding(
+                    storage_type="S3",
+                    default_base_location="s3://floe-iceberg",
+                    allowed_locations=["s3://floe-iceberg"],
+                    endpoint="http://localhost:9000",
+                    endpoint_internal="http://floe-platform-minio:9000",
+                    path_style_access=True,
+                    sts_unavailable=True,
+                    credential_refs={
+                        "accessKeyId": CredentialRef(
+                            source="kubernetes-secret",
+                            name=credential_secret_name,
+                            key=access_key_secret_key,
+                        ),
+                        "secretAccessKey": CredentialRef(
+                            source="kubernetes-secret",
+                            name=credential_secret_name,
+                            key=secret_key_secret_key,
+                        ),
+                    },
+                ),
+            ),
         ),
         transforms=ResolvedTransforms(
             models=[ResolvedModel(name="model_demo", compute="duckdb")],
@@ -572,6 +624,68 @@ class TestGenerateCommand:
         assert f"Loading artifact: {artifact_file}" in result.output
 
     @pytest.mark.requirement("9b-FR-060")
+    def test_storage_helm_values_use_typed_storage_and_catalog_bindings(
+        self, tmp_path: Path
+    ) -> None:
+        """Helm storage values must render from typed deployment bindings only."""
+        artifact_file = tmp_path / "compiled_artifacts.json"
+        _write_minio_artifact(artifact_file)
+        artifacts = CompiledArtifacts.from_json_file(artifact_file)
+
+        values = _storage_helm_values(artifacts)
+
+        expected_credential_secret = "floe-platform-minio-credentials"  # pragma: allowlist secret
+        polaris_s3 = values["polaris"]["storage"]["s3"]
+        rendered = yaml.safe_dump(values)
+        assert values["minio"]["defaultBuckets"] == "floe-iceberg,floe-artifacts"
+        assert "legacy-plugin-config-warehouse" not in rendered
+        assert "legacy-plugin-config-artifacts" not in rendered
+        assert polaris_s3["endpoint"] == "http://floe-platform-minio:9000"
+        assert "legacy-plugin-config-minio" not in rendered
+        assert polaris_s3["pathStyleAccess"] is True
+        assert polaris_s3["stsEnabled"] is False
+        assert polaris_s3["credentialSecretName"] == expected_credential_secret
+        assert polaris_s3["accessKeySecretKey"] == "root-user"  # pragma: allowlist secret
+        assert polaris_s3["secretKeySecretKey"] == "root-password"  # pragma: allowlist secret
+        assert "legacy-plugin-config-secret" not in rendered
+        assert "legacy-access-key" not in rendered
+        assert "legacy-secret-key" not in rendered
+        assert "legacy-inline-access-value" not in rendered
+        assert "legacy-inline-secret-value" not in rendered
+        assert "accessKey" not in polaris_s3
+        assert "secretKey" not in polaris_s3
+
+    @pytest.mark.requirement("9b-FR-060")
+    def test_storage_helm_values_reject_missing_polaris_credential_ref(
+        self, tmp_path: Path
+    ) -> None:
+        """Missing Polaris credential refs must fail with Helm validation errors."""
+        artifact_file = tmp_path / "compiled_artifacts.json"
+        _write_minio_artifact(artifact_file)
+        artifacts = CompiledArtifacts.from_json_file(artifact_file)
+        assert artifacts.deployment is not None
+        assert artifacts.deployment.catalog is not None
+
+        catalog = artifacts.deployment.catalog
+        polaris = catalog.polaris.model_copy(
+            update={
+                "credential_refs": {
+                    "accessKeyId": catalog.polaris.credential_refs["accessKeyId"],
+                }
+            }
+        )
+        artifacts = artifacts.model_copy(
+            update={
+                "deployment": artifacts.deployment.model_copy(
+                    update={"catalog": catalog.model_copy(update={"polaris": polaris})}
+                )
+            }
+        )
+
+        with pytest.raises(ValueError, match="secretAccessKey"):
+            _storage_helm_values(artifacts)
+
+    @pytest.mark.requirement("9b-FR-060")
     def test_helm_generate_uses_storage_binding_from_artifact(
         self, runner: CliRunner, tmp_path: Path
     ) -> None:
@@ -593,6 +707,8 @@ class TestGenerateCommand:
         assert values["minio"]["auth"] == {"existingSecret": expected_credential_secret}
         assert values["minio"]["defaultBuckets"] == "floe-iceberg,floe-artifacts"
         assert values["polaris"]["storage"]["s3"]["endpoint"] == ("http://floe-platform-minio:9000")
+        assert values["polaris"]["storage"]["s3"]["pathStyleAccess"] is True
+        assert values["polaris"]["storage"]["s3"]["stsEnabled"] is False
         assert values["polaris"]["storage"]["s3"]["credentialSecretName"] == (
             expected_credential_secret
         )

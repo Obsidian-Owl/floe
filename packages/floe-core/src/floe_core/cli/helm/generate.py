@@ -29,7 +29,12 @@ from floe_core.helm import (
     HelmValuesGenerator,
 )
 from floe_core.helm.parsing import parse_set_values
-from floe_core.schemas.compiled_artifacts import CompiledArtifacts, StorageDeploymentBinding
+from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
+    CompiledArtifacts,
+    CredentialRef,
+    StorageDeploymentBinding,
+)
 
 # Type alias for Helm values
 HelmValues = dict[str, Any]
@@ -42,13 +47,6 @@ def _load_compiled_artifacts(artifact_path: Path) -> CompiledArtifacts:
     return CompiledArtifacts.from_json_file(artifact_path)
 
 
-def _bucket_from_s3_uri(uri: str) -> str:
-    """Return bucket name from an s3:// URI."""
-    if uri.startswith("s3://"):
-        return uri.removeprefix("s3://").split("/", 1)[0]
-    return uri
-
-
 def _storage_helm_values(artifacts: CompiledArtifacts) -> dict[str, Any]:
     """Derive Helm storage values from compiled storage deployment binding."""
     if artifacts.deployment is None or artifacts.deployment.storage is None:
@@ -58,34 +56,37 @@ def _storage_helm_values(artifacts: CompiledArtifacts) -> dict[str, Any]:
     if storage.provider != "minio":
         return {}
 
-    storage_config: dict[str, Any] = {}
-    if artifacts.plugins is not None and artifacts.plugins.storage is not None:
-        raw_config = artifacts.plugins.storage.config
-        if isinstance(raw_config, dict):
-            storage_config = raw_config
+    catalog = artifacts.deployment.catalog
+    if catalog is None:
+        msg = "MinIO Helm values require catalog deployment binding"
+        raise ValueError(msg)
+    if catalog.provider != "polaris":
+        msg = "MinIO Helm values require Polaris catalog deployment binding"
+        raise ValueError(msg)
 
-    return _minio_storage_helm_values(storage, storage_config)
+    return _minio_storage_helm_values(storage, catalog)
 
 
-def _bool_storage_config(storage_config: dict[str, Any], key: str, default: bool) -> bool:
-    """Return a boolean storage config value, rejecting ambiguous raw strings."""
-    raw_value = storage_config.get(key, default)
-    if isinstance(raw_value, bool):
-        return raw_value
-    msg = f"storage config {key!r} must be a boolean"
+def _require_kubernetes_secret_ref(ref: CredentialRef | None, logical_key: str) -> CredentialRef:
+    """Return a Kubernetes Secret credential ref or raise a Helm-specific error."""
+    if ref is not None and ref.source == "kubernetes-secret" and ref.key is not None:
+        return ref
+    msg = f"MinIO Helm values require Kubernetes Secret credential reference for {logical_key}"
     raise ValueError(msg)
 
 
 def _minio_storage_helm_values(
     storage: StorageDeploymentBinding,
-    storage_config: dict[str, Any],
+    catalog: CatalogDeploymentBinding,
 ) -> dict[str, Any]:
-    """Derive MinIO and Polaris values from the compiled storage binding."""
-    warehouse_bucket = _bucket_from_s3_uri(storage.endpoint.warehouse_path)
-    artifact_bucket = storage_config.get("artifact_bucket")
-    bucket_names = [warehouse_bucket]
-    if isinstance(artifact_bucket, str) and artifact_bucket and artifact_bucket != warehouse_bucket:
-        bucket_names.append(artifact_bucket)
+    """Derive MinIO and Polaris values from typed deployment bindings."""
+    bucket_names = []
+    for bucket in storage.buckets:
+        if bucket.name not in bucket_names:
+            bucket_names.append(bucket.name)
+    if not bucket_names:
+        msg = "MinIO Helm values require storage bucket requirements"
+        raise ValueError(msg)
 
     access_key_ref = storage.credentials.as_credential_ref("accessKeyId")
     secret_key_ref = storage.credentials.as_credential_ref("secretAccessKey")
@@ -101,6 +102,19 @@ def _minio_storage_helm_values(
         msg = "MinIO Helm values require access and secret keys in the same Kubernetes Secret"
         raise ValueError(msg)
 
+    polaris = catalog.polaris
+    polaris_access_ref = _require_kubernetes_secret_ref(
+        polaris.credential_refs.get("accessKeyId"),
+        "accessKeyId",
+    )
+    polaris_secret_ref = _require_kubernetes_secret_ref(
+        polaris.credential_refs.get("secretAccessKey"),
+        "secretAccessKey",
+    )
+    if polaris_access_ref.name != polaris_secret_ref.name:
+        msg = "Polaris Helm values require access and secret keys in the same Kubernetes Secret"
+        raise ValueError(msg)
+
     return {
         "minio": {
             "enabled": True,
@@ -113,21 +127,18 @@ def _minio_storage_helm_values(
             "storage": {
                 "s3": {
                     "enabled": True,
-                    "endpoint": storage.endpoint.internal_url,
+                    "endpoint": polaris.endpoint_internal,
                     "region": storage.endpoint.region,
-                    "pathStyleAccess": _bool_storage_config(
-                        storage_config,
-                        "path_style_access",
-                        True,
-                    ),
-                    "credentialSecretName": access_key_ref.name,
-                    "accessKeySecretKey": access_key_ref.key,
-                    "secretKeySecretKey": secret_key_ref.key,
+                    "pathStyleAccess": polaris.path_style_access,
+                    "stsEnabled": not polaris.sts_unavailable,
+                    "credentialSecretName": polaris_access_ref.name,
+                    "accessKeySecretKey": polaris_access_ref.key,
+                    "secretKeySecretKey": polaris_secret_ref.key,
                 }
             },
             "bootstrap": {
-                "defaultBaseLocation": storage.endpoint.warehouse_path,
-                "allowedLocations": [storage.endpoint.warehouse_path],
+                "defaultBaseLocation": polaris.default_base_location,
+                "allowedLocations": polaris.allowed_locations,
             },
         },
     }
