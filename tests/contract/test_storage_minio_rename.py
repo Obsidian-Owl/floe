@@ -66,6 +66,19 @@ FORBIDDEN_PATTERNS = [
 ]
 
 
+def _is_allowed_non_plugin_s3_reference(path: Path, line: str) -> bool:
+    """Allow S3 dialect references that are not Floe storage plugin identities."""
+    relative = path.relative_to(REPO_ROOT).as_posix()
+    stripped = line.strip()
+    return (
+        relative == "tests/e2e/conftest.py"
+        and stripped == f'f"        - type: {OLD_STORAGE_TYPE}\\n"'
+    ) or (
+        relative == "tests/e2e/test_dbt_e2e_profile.py"
+        and f'secret_entry.get("type") == "{OLD_STORAGE_TYPE}"' in line
+    )
+
+
 def test_storage_plugin_directory_is_strictly_minio() -> None:
     """Storage plugin directory must use the MinIO package name only."""
     assert not (REPO_ROOT / "plugins" / OLD_PACKAGE_NAME).exists()
@@ -157,6 +170,24 @@ def test_forbidden_patterns_allow_s3_protocol_forms() -> None:
         assert not any(pattern.search(line) for pattern in FORBIDDEN_PATTERNS), line
 
 
+def test_allowed_non_plugin_s3_references_are_narrow() -> None:
+    """DuckDB S3 secret syntax is allowed without restoring the old plugin alias."""
+    assert _is_allowed_non_plugin_s3_reference(
+        REPO_ROOT / "tests/e2e/conftest.py",
+        '        f"        - type: ' + OLD_STORAGE_TYPE + '\\n"',
+    )
+    assert _is_allowed_non_plugin_s3_reference(
+        REPO_ROOT / "tests/e2e/test_dbt_e2e_profile.py",
+        '            isinstance(secret_entry, dict) and secret_entry.get("type") == "'
+        + OLD_STORAGE_TYPE
+        + '"',
+    )
+    assert not _is_allowed_non_plugin_s3_reference(
+        REPO_ROOT / "demo/customer_360/floe.yaml",
+        "type: " + OLD_STORAGE_TYPE,
+    )
+
+
 def _active_scan_files() -> list[Path]:
     files: list[Path] = []
     for root_name in ACTIVE_SCAN_ROOTS:
@@ -190,6 +221,8 @@ def test_active_references_do_not_use_old_s3_plugin_names() -> None:
                     matches.append(f"{path.relative_to(REPO_ROOT)}:{line_number}: {forbidden}")
             for pattern in FORBIDDEN_PATTERNS:
                 if pattern.search(line):
+                    if _is_allowed_non_plugin_s3_reference(path, line):
+                        continue
                     matches.append(
                         f"{path.relative_to(REPO_ROOT)}:{line_number}: {pattern.pattern}"
                     )

@@ -77,6 +77,24 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.key
           value: root-password
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POLARIS_STORAGE_AWS_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: floe-platform-minio-credentials
+                key: root-user
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POLARIS_STORAGE_AWS_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: floe-platform-minio-credentials
+                key: root-password
+          any: true
 
   - it: should source demo runtime S3 credentials from the rendered MinIO secret
     template: templates/deployment-polaris.yaml
@@ -103,6 +121,24 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.key
           value: root-password
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POLARIS_STORAGE_AWS_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: floe-platform-minio
+                key: root-user
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POLARIS_STORAGE_AWS_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: floe-platform-minio
+                key: root-password
+          any: true
 
   - it: should require explicit S3 credential secret when Polaris auth uses an external secret
     template: templates/deployment-polaris.yaml

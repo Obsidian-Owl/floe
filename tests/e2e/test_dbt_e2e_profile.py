@@ -281,6 +281,22 @@ class TestProfileStructure:
 
     @pytest.mark.requirement("WU-24-T2")
     @pytest.mark.parametrize("product", list(DEMO_PRODUCTS.keys()))
+    def test_profile_uses_duckdb_s3_secret_type(
+        self,
+        dbt_e2e_profile: dict[str, Path],
+        product: str,
+    ) -> None:
+        """Profile secret entries must use DuckDB's supported S3 secret type."""
+        dev_output = self._load_profile_output(dbt_e2e_profile, product)
+        secrets = dev_output["secrets"]
+
+        assert any(
+            isinstance(secret_entry, dict) and secret_entry.get("type") == "s3"
+            for secret_entry in secrets
+        ), f"Profile for '{product}' must declare a DuckDB S3 secret: {secrets!r}"
+
+    @pytest.mark.requirement("WU-24-T2")
+    @pytest.mark.parametrize("product", list(DEMO_PRODUCTS.keys()))
     def test_profile_database_is_ice(
         self,
         dbt_e2e_profile: dict[str, Path],

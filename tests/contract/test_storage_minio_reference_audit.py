@@ -31,6 +31,15 @@ FORBIDDEN_PATTERNS = [
 ]
 
 
+def _is_allowed_non_plugin_s3_reference(path: Path, line: str) -> bool:
+    """Allow S3 dialect references that are not Floe storage plugin identities."""
+    relative = path.relative_to(ROOT).as_posix()
+    return (
+        relative == "tests/e2e/conftest.py"
+        and line.strip() == f'f"        - type: {OLD_STORAGE_TYPE}\\n"'
+    )
+
+
 def test_active_alpha_paths_do_not_reference_old_s3_plugin_name() -> None:
     """Guard active alpha paths against the retired S3 storage plugin name."""
     offenders: list[str] = []
@@ -45,6 +54,8 @@ def test_active_alpha_paths_do_not_reference_old_s3_plugin_name() -> None:
             for line_number, line in enumerate(text.splitlines(), start=1):
                 for pattern in FORBIDDEN_PATTERNS:
                     if pattern.search(line):
+                        if _is_allowed_non_plugin_s3_reference(path, line):
+                            continue
                         offenders.append(
                             f"{path.relative_to(ROOT)}:{line_number} matches {pattern.pattern!r}"
                         )

@@ -102,6 +102,19 @@ dagster:
         # into /app/demo/*/target. Keep this aligned with values-test.yaml.
         runK8sConfig:
           containerConfig:
+            env:
+              - name: AWS_ACCESS_KEY_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: floe-platform-minio
+                    key: root-user
+              - name: AWS_SECRET_ACCESS_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: floe-platform-minio
+                    key: root-password
+              - name: AWS_REGION
+                value: us-east-1
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: false

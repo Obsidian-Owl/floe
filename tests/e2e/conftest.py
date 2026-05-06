@@ -1622,7 +1622,7 @@ def _build_dbt_iceberg_profile(
         f"            OAUTH2_GRANT_TYPE: client_credentials\n"
         f"            ACCESS_DELEGATION_MODE: none\n"
         f"      secrets:\n"
-        f"        - type: {'minio'}\n"
+        f"        - type: s3\n"
         "          key_id: \"{{ env_var('AWS_ACCESS_KEY_ID') }}\"\n"
         "          secret: \"{{ env_var('AWS_SECRET_ACCESS_KEY') }}\"\n"
         "          endpoint: \"{{ env_var('FLOE_E2E_S3_ENDPOINT') }}\"\n"

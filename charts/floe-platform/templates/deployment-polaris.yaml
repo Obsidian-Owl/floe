@@ -217,6 +217,16 @@ spec:
                 secretKeyRef:
                   name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
                   key: {{ include "floe-platform.polaris.s3SecretKeySecretKey" . | quote }}
+            - name: POLARIS_STORAGE_AWS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
+                  key: {{ include "floe-platform.polaris.s3AccessKeySecretKey" . | quote }}
+            - name: POLARIS_STORAGE_AWS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
+                  key: {{ include "floe-platform.polaris.s3SecretKeySecretKey" . | quote }}
             - name: AWS_REGION
               value: {{ .Values.polaris.storage.s3.region | quote }}
             - name: AWS_ENDPOINT_URL_S3
