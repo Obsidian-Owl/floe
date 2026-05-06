@@ -34,7 +34,7 @@ from testing.fixtures.services import ServiceEndpoint
 
 pytestmark = [
     pytest.mark.e2e,
-    pytest.mark.developer_workflow,
+    pytest.mark.platform_blackbox,
     pytest.mark.requirement("4F-E2E-CUSTOMER360-DLT"),
 ]
 
@@ -319,14 +319,17 @@ class TestCustomer360DltIngestion(IntegrationTestBase):
 
         with minio_client_context(MinIOConfig(endpoint=_host_minio_endpoint_for_client())) as minio:
             ensure_bucket(minio, bucket)
-            _cleanup_namespace_objects(minio, bucket=bucket, namespace=namespace)
-            _purge_namespace(polaris_with_write_grants, namespace)
-            polaris_with_write_grants.create_namespace(namespace)
-
-            plugin = DltIngestionPlugin()
-            plugin.configure(ingestion_config)
-            plugin.startup()
+            plugin: DltIngestionPlugin | None = None
+            plugin_started = False
             try:
+                _cleanup_namespace_objects(minio, bucket=bucket, namespace=namespace)
+                _purge_namespace(polaris_with_write_grants, namespace)
+                polaris_with_write_grants.create_namespace(namespace)
+
+                plugin = DltIngestionPlugin()
+                plugin.configure(ingestion_config)
+                plugin.startup()
+                plugin_started = True
                 _ingest_sources(plugin, ingestion_config)
 
                 available_tables = _table_names(polaris_with_write_grants, namespace)
@@ -345,10 +348,17 @@ class TestCustomer360DltIngestion(IntegrationTestBase):
                         f"from its seed CSV, got {count}"
                     )
             finally:
-                plugin.shutdown()
+                shutdown_error: Exception | None = None
+                if plugin_started and plugin is not None:
+                    try:
+                        plugin.shutdown()
+                    except Exception as exc:  # noqa: BLE001
+                        shutdown_error = exc
                 _purge_namespace(polaris_with_write_grants, namespace)
                 _cleanup_namespace_objects(
                     minio,
                     bucket=bucket,
                     namespace=namespace,
                 )
+                if shutdown_error is not None:
+                    raise shutdown_error
