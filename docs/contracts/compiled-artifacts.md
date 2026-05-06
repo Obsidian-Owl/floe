@@ -9,6 +9,7 @@ CompiledArtifacts is the **single source of truth** for pipeline execution. It c
 - Compiled transforms
 - Governance policies
 - Observability settings
+- Secret-free deployment bindings for composed platform services
 - Optional Data Mesh contracts
 
 ```
@@ -93,6 +94,9 @@ class CompiledArtifacts(BaseModel):
     input_ports: list[InputPort] | None = None
     data_contracts: list[DataContract] | None = None
 
+    # Deployment bindings (secret-free, renderer consumed)
+    deployment: DeploymentConfig | None = None
+
 
 class CompilationMetadata(BaseModel):
     """Information about the compilation process."""
@@ -125,6 +129,31 @@ class ManifestRef(BaseModel):
     scope: Literal["enterprise", "domain"]
     ref: str  # OCI reference
 ```
+
+## Deployment Bindings
+
+Deployment bindings are the resolved, secret-free contract between plugin
+composition and deployment renderers.
+
+```python
+class DeploymentConfig(BaseModel):
+    storage: StorageDeploymentBinding | None = None
+    catalog: CatalogDeploymentBinding | None = None
+```
+
+Storage plugins emit neutral storage desired state. Catalog plugins translate
+that state into catalog-owned deployment config after the composition resolver
+validates compatibility.
+
+Rules:
+
+- Raw secrets are forbidden. Use Kubernetes Secret refs, environment refs,
+  workload identity refs, or `none`.
+- Helm values are renderer output, not the semantic contract.
+- Compile declares bucket requirements and compatibility issues; it does not
+  create buckets or call live infrastructure.
+- A new catalog plugin should add storage requirements and a catalog deployment
+  translator without changing existing storage plugins.
 
 ## Plugin Configuration
 

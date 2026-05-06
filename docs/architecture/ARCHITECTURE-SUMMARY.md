@@ -33,6 +33,7 @@ floe is built on **composability** as a core architectural principle (ADR-0037):
 
 - **Plugin Architecture > Configuration Switches**: Extensibility via entry points (`floe.computes`, `floe.orchestrators`, etc.), not if/else config
 - **Interface > Implementation**: Define ABCs (ComputePlugin, TelemetryBackendPlugin, LineageBackendPlugin), not concrete classes
+- **Composition Contracts > Cross-Plugin Coupling**: Plugins declare capabilities and requirements; `floe-core` validates compatibility and passes typed bindings between plugins
 - **Progressive Disclosure**: Point to detailed docs, don't duplicate content
 - **Opt-in Complexity**: Start simple (2-tier), with architecture direction toward Data Mesh-compatible (3-tier) governance. See [Capability Status](capability-status.md) for the current alpha-validated state.
 
@@ -43,6 +44,11 @@ floe is built on **composability** as a core architectural principle (ADR-0037):
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins.
 
 **See**: [ADR-0037: Composability Principle](adr/0037-composability-principle.md)
+
+Storage-side plugin composition is tracked in
+[Plugin Composition Uplift Tracker](plugin-composition-uplift-tracker.md). The
+immediate target is storage/catalog/compute/orchestrator/deployment composition
+for the Iceberg runtime path; broader plugin uplift is staged after that PR.
 
 ### Four-Layer Architecture
 
@@ -122,6 +128,7 @@ Layer 1: FOUNDATION (Framework Code)
 | `platform-enforcement.md` | How platform constraints are enforced |
 | `platform-services.md` | Layer 3 services (orchestrator, catalog, etc.) |
 | `plugin-system/` | Plugin structure and discovery |
+| `plugin-composition-uplift-tracker.md` | Composition resolver and typed adapter adoption plan |
 | `interfaces/` | Abstract Base Classes for all plugins |
 | `opinionation-boundaries.md` | What's enforced vs pluggable |
 | `platform-artifacts.md` | OCI registry storage model |

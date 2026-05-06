@@ -5,7 +5,27 @@
 **Entry Point**: `floe.catalogs`
 **ADR**: [ADR-0008: Repository Split](../adr/0008-repository-split.md), [ADR-0030: Namespace-Based Identity](../adr/0030-namespace-identity.md)
 
-CatalogPlugin abstracts Iceberg catalog implementations (Polaris, Glue, Hive, Unity, Nessie), providing consistent namespace management, table operations, and credential vending. It also implements the namespace-based product identity model from ADR-0030.
+CatalogPlugin abstracts Iceberg catalog implementations (Polaris, Glue, Hive,
+Unity, Nessie), providing consistent namespace management, table operations,
+credential vending, and catalog-owned deployment translation. It also
+implements the namespace-based product identity model from ADR-0030.
+
+## Composition Role
+
+Catalog plugins declare what they require from storage and translate neutral
+storage bindings into catalog-specific deployment/runtime config.
+
+This avoids an N x M plugin coupling problem:
+
+- Storage plugins do not know every catalog's bootstrap format.
+- Catalog plugins do not own storage provider configuration.
+- `floe-core` validates compatibility before deployment rendering.
+- Helm renders resolved deployment bindings instead of inventing catalog/storage
+  config.
+
+For example, `PolarisCatalogPlugin` accepts MinIO's S3-compatible storage
+binding and emits Polaris-owned `storageConfigInfo`, endpoint/internal endpoint,
+path-style, no-STS, allowed locations, and storage Secret references.
 
 ## Interface Definition
 
@@ -17,6 +37,11 @@ from datetime import datetime
 from typing import Literal
 from pyiceberg.catalog import Catalog
 from pyiceberg.table import Table
+from floe_core.composition import PluginRequirements
+from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
+    StorageDeploymentBinding,
+)
 
 # ─────────────────────────────────────────────────────────────────
 # Identity Management Types (ADR-0030)
@@ -96,6 +121,23 @@ class CatalogPlugin(ABC):
 
         Returns:
             PyIceberg Catalog instance
+        """
+        pass
+
+    @abstractmethod
+    def get_storage_requirements(self) -> PluginRequirements:
+        """Return storage requirements for composition validation."""
+        pass
+
+    @abstractmethod
+    def build_catalog_deployment(
+        self,
+        storage: StorageDeploymentBinding,
+    ) -> CatalogDeploymentBinding:
+        """Translate neutral storage desired state into catalog deployment config.
+
+        The catalog plugin owns catalog-specific deployment and bootstrap
+        config. Polaris, for example, owns `storageConfigInfo`; MinIO does not.
         """
         pass
 

@@ -1,431 +1,366 @@
-# Storage MinIO Architecture Design
+# Storage Composition Closeout Design
 
 Status: Approved for planning
-Date: 2026-05-05
+Date: 2026-05-07
 Author: Codex
 
 ## Summary
 
-Floe should replace the current S3-compatible storage plugin naming and wiring
-with a strict MinIO alpha implementation backed by a generic, deployer-neutral
-storage deployment binding in `CompiledArtifacts`.
+Floe should finish the storage-side MinIO work by replacing the remaining
+chart-driven storage coupling with a composition model:
 
-The binding is the canonical storage contract. It records secret-free desired
-state for warehouse locations, bucket requirements, credential references,
-consumer-specific projections, provisioning intent, and deployment renderings.
-Helm values are a derived rendering for the current `floe-platform` chart, not
-the semantic contract itself.
+```text
+selected plugins
+  -> plugin capabilities and requirements
+  -> composition resolver
+  -> neutral storage binding
+  -> consumer-owned deployment/runtime bindings
+  -> Helm/Kubernetes rendering
+```
 
-This preserves Floe's composability principles: storage remains a plugin
-boundary, `CompiledArtifacts` remains the resolved source of truth, and Helm is
-one deployment projection rather than the architecture.
+The strict `floe-storage-minio` rename remains correct. The missing piece is
+not a backwards-compatibility alias. The missing piece is a small,
+typed compatibility layer in `floe-core` that validates whether selected
+plugins compose and routes storage facts to the plugin that owns each
+translation.
 
-## Problem
+For this storage closeout, the immediate priority is the Iceberg runtime path:
+storage, catalog, compute/dbt, orchestrator/Dagster, deployment rendering, and
+credential binding. Broader plugin adoption is tracked separately so this PR
+does not become a platform-wide rewrite.
 
-The current implementation splits storage truth across several surfaces:
+## Research Validation
 
-- `demo/manifest.yaml` selects `plugins.storage.type: s3`, even though the
-  configured endpoint is MinIO.
-- `plugins/floe-storage-s3` is named as an S3 plugin but currently serves the
-  MinIO demo path.
-- `charts/floe-platform/values.yaml` owns `minio:` and
-  `polaris.storage.s3.*` values independently of the storage plugin.
-- `floe helm generate --artifact` has a placeholder for extracting plugin values
-  from `CompiledArtifacts`, but does not yet do so.
-- `PolarisCatalogPlugin` stores and reapplies `s3.endpoint`, which is a
-  consumer projection concern rather than Polaris-owned storage truth.
+The redesign is based on current Floe code and official upstream contracts:
 
-This conflicts with Floe's target architecture. `CompiledArtifacts` should be
-the resolved runtime source of truth, and storage is explicitly a pluggable
-component under ADR-0036 and ADR-0037.
+- Apache Polaris documents MinIO-backed catalog creation as S3 storage with an
+  explicit endpoint. It also distinguishes `endpoint` for clients from
+  `endpointInternal` for Polaris server-side access, supports path-style access,
+  allowed locations, region, and no-STS behavior.
+  Source: https://polaris.apache.org/in-dev/unreleased/getting-started/creating-a-catalog/s3/catalog-minio/
+- Apache Polaris Helm exposes storage credential secret references under
+  `storage.secret.*`, confirming that storage credentials are a deployment
+  concern and should be referenced, not copied into semantic artifacts.
+  Source: https://polaris.apache.org/in-dev/unreleased/helm-chart/reference/
+- Apache Iceberg's REST catalog exists to reduce client/catalog compatibility
+  problems and supports secure table sharing with credential vending or remote
+  signing.
+  Source: https://iceberg.apache.org/rest-catalog-spec/
+- PyIceberg supports S3-compatible storage through explicit endpoint and
+  FileIO/catalog properties, including S3 endpoint and path-style settings.
+  Source: https://py.iceberg.apache.org/configuration/
+- Kubernetes supports secret consumption through Secret references and
+  `secretKeyRef`, which matches Floe's secret-free compiled artifact contract.
+  Source: https://kubernetes.io/docs/concepts/configuration/secret/
+- Helm values are chart inputs and override layers. They are useful deployment
+  renderings but should not be the semantic platform contract.
+  Source: https://helm.sh/docs/chart_template_guide/values_files/
+- S3 bucket requirements are larger than a name list: naming rules, region,
+  versioning, lifecycle, encryption, Object Lock, retention, tags, and access
+  posture all matter for future cloud and enterprise storage plugins.
+  Source: https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html
+
+## Current Problem
+
+The current branch has made good progress:
+
+- The alpha storage implementation has been strictly renamed to
+  `floe-storage-minio`.
+- `CompiledArtifacts.deployment.storage` exists and is secret-free.
+- `floe helm generate --artifact` derives MinIO and Polaris chart values from
+  the compiled storage binding.
+- dbt and Dagster paths consume compiled storage projections in places.
+
+The architecture is still incomplete:
+
+- `StorageDeploymentBinding` is too narrow. It has `provider`, endpoint,
+  credentials, `dbt`, and `dagster`, but no protocol, bucket requirements,
+  capability surface, or catalog-neutral composition contract.
+- `MinIOStoragePlugin` still emits Polaris-shaped Helm values. That makes the
+  storage plugin aware of a catalog plugin's deployment surface.
+- `job-polaris-bootstrap.yaml` still assembles `storageConfigInfo` in Helm
+  shell from `polaris.storage.s3.*`. That leaves Helm as a storage integration
+  brain.
+- Polaris server-side storage configuration is being patched through env vars,
+  but the remote DevPod lane still fails at table creation because the selected
+  env surfaces do not match the actual upstream integration boundary.
+- Compatibility is implicit in chart values and tests instead of explicit in a
+  resolver that can fail fast.
+
+The failure mode is architectural: Floe has plugin discovery, but it does not
+yet have a first-class composition layer for cross-plugin contracts.
 
 ## Goals
 
-- Strictly rename the alpha storage implementation from S3-compatible to MinIO.
-- Add a generic storage deployment binding to `CompiledArtifacts`.
-- Treat the typed storage binding as canonical and Helm values as derived
-  output.
-- Keep compiled artifacts free of raw secrets.
-- Generate PyIceberg, Polaris, dbt, Dagster, provisioning, and Helm projections
-  from the MinIO storage plugin.
-- Keep bucket creation as a deployment/runtime action for alpha while modeling
-  bucket requirements in the artifact.
-- Shape the alpha contract so future native S3, GCS, Azure, and plugin-owned
-  runtime provisioning can reuse it.
-- Prove the full path with tests and E2E validation:
-  `storage.type: minio` -> compile -> generated Helm values -> deploy ->
-  Polaris configured -> data lands in MinIO.
+- Keep the strict MinIO rename with no compatibility alias.
+- Make `CompiledArtifacts.deployment.storage` the neutral storage contract.
+- Add composition resolver primitives in `floe-core` for capabilities,
+  requirements, validation, and typed binding handoff.
+- Move Polaris-specific storage translation out of MinIO and Helm.
+- Keep secrets out of compiled artifacts and generated docs.
+- Model bucket requirements explicitly enough for MinIO now and S3/GCS/Azure
+  later.
+- Keep compile side-effect free: compile validates and emits desired state;
+  deploy/render steps create or verify live infrastructure.
+- Update architecture docs so the implemented direction and target state agree.
+- Add a tracking document for plugin-family uplift after the storage PR.
 
 ## Non-Goals
 
-- Do not ship a native AWS S3 plugin in alpha.
-- Do not provide a `s3` compatibility alias or migration shim. There are no
-  consumers to preserve.
-- Do not call Kubernetes, MinIO, Polaris, or cloud APIs during compile.
-- Do not serialize raw access keys, secret keys, root passwords, client
-  secrets, or equivalent secret material in compiled artifacts.
-- Do not make Helm chart values the canonical storage contract.
-- Do not solve multi-storage mappings for alpha.
-
-## Source Context And Validation
-
-The design was validated against current Floe code and primary external
-documentation:
-
-- PyIceberg supports REST catalog configuration and S3-style catalog/FileIO
-  properties through config files, environment variables, and Python API
-  properties.
-  Source: https://py.iceberg.apache.org/configuration/
-- Iceberg REST catalog is the integration boundary for REST-compatible query
-  engines and secure catalog access.
-  Source: https://iceberg.apache.org/rest-catalog-spec/
-- Apache Polaris models storage configuration separately for S3, Azure, and
-  GCS, including S3 endpoint, internal endpoint, path-style access, allowed
-  locations, region, and credential/role configuration.
-  Source: https://polaris.apache.org/in-dev/unreleased/command-line-interface/
-- Kubernetes supports secret injection through `secretKeyRef` and mounted
-  secret volumes, which supports secret-free compiled artifacts.
-  Source: https://kubernetes.io/docs/concepts/configuration/secret/
-- Helm values are a deployment override/projection mechanism, not a semantic
-  platform contract.
-  Source: https://helm.sh/docs/v3/chart_template_guide/values_files/
-- MinIO bucket creation is idempotently available through the MinIO client.
-  Source: https://min.io/docs/minio/linux/reference/minio-mc/mc-mb.html
-- S3 bucket concerns such as naming, lifecycle, versioning, encryption, Object
-  Lock, and identity-based access are bucket-level requirements that should be
-  modeled explicitly for future native cloud plugins.
-  Sources:
-  - https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html
-  - https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html
-  - https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html
-  - https://docs.aws.amazon.com/AmazonS3/latest/userguide/default-bucket-encryption.html
-  - https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html
-  - https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html
+- Do not add a `storage.type: s3` alias.
+- Do not ship native AWS S3, GCS, Azure, Glue, Nessie, or Hive in this work.
+- Do not uplift every plugin category in this PR.
+- Do not make Helm values the canonical storage API.
+- Do not create a universal adapter that hides incompatibilities.
+- Do not perform live MinIO, Polaris, Kubernetes, or cloud API calls during
+  compile.
 
 ## Architecture Decision
 
-Use a typed, generic storage deployment binding in `CompiledArtifacts`:
+Use a composition resolver plus typed adapter contracts.
+
+### Core Composition Primitives
 
 ```python
-class CompiledArtifacts(BaseModel):
-    ...
-    deployment: DeploymentConfig | None = None
+class PluginCapabilities(BaseModel):
+    plugin_type: str
+    plugin_name: str
+    capabilities: dict[str, Any]
 
 
-class DeploymentConfig(BaseModel):
-    storage: StorageDeploymentBinding | None = None
+class PluginRequirements(BaseModel):
+    plugin_type: str
+    plugin_name: str
+    requirements: dict[str, Any]
+
+
+class CompositionIssue(BaseModel):
+    severity: Literal["error", "warning"]
+    code: str
+    message: str
+    plugins: list[str]
+
+
+class CompositionValidationResult(BaseModel):
+    valid: bool
+    issues: list[CompositionIssue]
 ```
 
-The storage binding is generic. MinIO is the only alpha implementation:
+The resolver lives in `floe-core` because plugin compatibility is a platform
+contract, not a chart behavior. It must be deterministic and side-effect free.
+
+### Neutral Storage Binding
 
 ```python
 class StorageDeploymentBinding(BaseModel):
-    plugin: PluginRef
+    provider: Literal["minio"]
     protocol: Literal["s3-compatible", "s3", "gcs", "azure-blob"]
+    endpoint: StorageServiceEndpoint
     warehouse: StorageWarehouse
     allowed_locations: list[str]
     buckets: list[StorageBucketRequirement]
     credentials: StorageCredentialBinding
-    consumers: StorageConsumerBindings
+    capabilities: StorageCapabilities
     provisioning: StorageProvisioningIntent
-    renderings: DeploymentRenderings
+    runtime: StorageRuntimeBinding
 ```
 
 Rules:
 
-- `plugin.type == "minio"` for alpha.
-- `protocol == "s3-compatible"` for alpha MinIO.
-- The typed storage binding is canonical.
-- `renderings.helm["floe-platform"]` is derived from the binding.
-- Raw secrets are forbidden anywhere under `deployment.storage`.
-- Future native storage plugins extend the same model or add typed variants
-  without making Helm values the public contract.
+- `provider == "minio"` and `protocol == "s3-compatible"` for alpha.
+- `endpoint` has explicit roles: client workload endpoint, internal service
+  endpoint, external endpoint, region, and path-style access.
+- `credentials` uses refs only: Kubernetes Secret, environment, workload
+  identity, or none.
+- `buckets` declares desired state. Compile never creates buckets.
+- `capabilities` declares facts such as path-style support, STS availability,
+  credential modes, and supported URI schemes.
+- `runtime` exposes storage-owned FileIO/dbt/Dagster-neutral facts, not
+  catalog-owned deployment config.
 
-## Strict Rename
+### Consumer-Owned Translation
 
-The alpha storage implementation becomes MinIO-specific:
-
-- Rename `plugins/floe-storage-s3` to `plugins/floe-storage-minio`.
-- Rename import package `floe_storage_s3` to `floe_storage_minio`.
-- Rename `S3StoragePlugin` to `MinIOStoragePlugin`.
-- Rename `S3StorageConfig` to `MinIOStorageConfig`.
-- Rename entry point to:
-
-```toml
-[project.entry-points."floe.storage"]
-minio = "floe_storage_minio.plugin:MinIOStoragePlugin"
-```
-
-- Update manifests to use `plugins.storage.type: minio`.
-- Update tests, docs, demo packaging, PyIceberg dependency checks, plugin
-  discovery checks, examples, and user-facing text.
-- Remove active alpha claims that Floe ships a native S3 plugin.
-- Do not keep `s3` as an alias.
-
-The MinIO plugin owns MinIO-specific facts:
-
-- S3-compatible endpoint shape.
-- Path-style access.
-- Internal Kubernetes service endpoint.
-- Bucket defaults.
-- MinIO chart values.
-- PyIceberg S3-compatible properties.
-- Polaris S3-compatible storage projection.
-- Future provisioning intent.
-
-## Secret Handling
-
-Compiled artifacts are deployable and auditable, but not secret-bearing.
+Storage plugins emit neutral storage facts. Consumer plugins translate those
+facts into their own deployment/runtime shapes.
 
 ```python
-class StorageCredentialBinding(BaseModel):
-    mode: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
-    secret_ref: KubernetesSecretRef | None = None
-    env_refs: dict[str, str] = {}
-    service_account_ref: str | None = None
+class CatalogPlugin:
+    def get_storage_requirements(self) -> PluginRequirements:
+        ...
 
-
-class KubernetesSecretRef(BaseModel):
-    name: str
-    namespace: str | None = None
-    keys: dict[str, str]
+    def build_catalog_deployment(
+        self,
+        storage: StorageDeploymentBinding,
+    ) -> CatalogDeploymentBinding:
+        ...
 ```
 
-Rules:
+For Polaris + MinIO, `PolarisCatalogPlugin` owns:
 
-- `CompiledArtifacts` must not contain raw `accessKey`, `secretKey`,
-  `rootPassword`, `clientSecret`, or equivalent values.
-- Helm renderings should reference existing or generated secret names instead
-  of embedding raw storage credentials.
-- Runtime pods and bootstrap jobs consume credentials through Kubernetes Secret
-  references or environment references.
-- Future native AWS S3 should prefer workload identity or IRSA-style bindings
-  over static keys.
+- `storageConfigInfo.storageType == "S3"`
+- `default-base-location`
+- `allowedLocations`
+- `endpoint` and `endpointInternal`
+- `pathStyleAccess`
+- `stsUnavailable`
+- Polaris/Helm storage secret references
+- bootstrap payload shape
 
-## Compilation And Deployment Flow
+For a future catalog:
 
-The compile pipeline resolves and configures the selected storage plugin, then
-asks it for the storage deployment binding:
+- Glue can reject `protocol == "s3-compatible"` and require native `s3` plus
+  workload identity.
+- Nessie can accept MinIO if it supports client-side S3-compatible FileIO
+  rather than Polaris-style server-side storage configuration.
+- Hive can declare whether it needs server-side storage access or only
+  warehouse URI and client FileIO configuration.
+
+Adding a catalog should require implementing the catalog plugin's requirements
+and translator, not editing the MinIO plugin.
+
+## Compatibility Rules
+
+The resolver must fail early for incompatible selections.
+
+Examples:
+
+```text
+catalog=glue, storage=minio
+  -> error: Glue requires protocol=s3 and AWS identity. Got s3-compatible.
+
+catalog=polaris, storage=minio
+  -> valid when endpoint.internal_url, path_style_access=true,
+     sts_supported=false, allowed_locations includes warehouse, and
+     credentials are reference-backed.
+
+catalog=polaris, storage=minio, credentials=none
+  -> error: Polaris requires server-side storage credentials or a supported
+     credential vending/workload identity mode.
+```
+
+Compatibility checks are not a migration layer. They are explicit proof that
+the selected plugin graph can produce a deployable platform.
+
+## Bucket Requirements
+
+Bucket requirements should be modeled now because users will need more than
+one storage location:
+
+- Warehouse bucket for Iceberg table data and metadata.
+- Artifacts bucket for compiled artifacts, dbt outputs, release evidence, logs,
+  and run metadata.
+- Landing/raw bucket or prefix for ingestion.
+- Quarantine bucket or prefix for rejected records.
+- Checkpoint bucket or prefix for streaming and ingestion state.
+- Export bucket or prefix for downstream delivery.
+- Environment, domain, or product separation by bucket or prefix.
+- Pre-existing enterprise buckets that must be verified but not created.
+- Versioning, lifecycle, encryption, object lock, retention, tags, and
+  identity-scoped access.
+
+Alpha defaults:
+
+```text
+warehouse bucket: floe-iceberg, create-if-missing
+artifact bucket: floe-artifacts, create-if-missing
+provisioning mode: helm-job
+versioning/encryption/lifecycle: modeled but not enforced for MinIO alpha
+```
+
+## Deployment Flow
 
 ```text
 manifest.yaml
   plugins.storage.type: minio
-  plugins.storage.config: ...
+  plugins.catalog.type: polaris
 
-compile pipeline
-  resolve_plugins()
-  configure MinIO plugin with manifest config
-  MinIOStoragePlugin.get_deployment_binding()
-  build CompiledArtifacts.deployment.storage
+compile
+  resolve plugins
+  build neutral storage binding
+  ask catalog plugin for storage requirements
+  run composition resolver
+  emit CompiledArtifacts.deployment.storage
+  emit CompiledArtifacts.deployment.catalog
 
-floe helm generate --artifact target/compiled_artifacts.json
-  load CompiledArtifacts
-  read deployment.storage.renderings.helm["floe-platform"]
-  merge with chart defaults, environment values, and user overrides
+helm generate
+  read deployment bindings
+  render chart-compatible values
+  do not rediscover storage config
 
 helm install/upgrade
-  deploy MinIO, Polaris, bucket-init, and bootstrap jobs from generated values
+  create MinIO buckets through bucket-init job
+  bootstrap Polaris using catalog-owned deployment binding
+  mount/pass storage credentials through Secret refs
 ```
 
-Ownership rules:
+## Architecture Document Updates Required
 
-- Compile validates configuration and emits desired state.
-- Compile does not call live infrastructure.
-- Helm generation consumes artifacts and does not rediscover storage config
-  independently.
-- Chart defaults remain safe empty defaults, not the source of MinIO truth.
-- Environment values files can still set resource sizing, images, and demo
-  topology, but should not redefine the storage contract independently.
+The PR must update these documents:
 
-## Provisioning And Bucket Requirements
-
-Alpha keeps bucket creation as a deployment/runtime action, but the storage
-binding models bucket requirements rather than a bare list of names.
-
-```python
-class StorageProvisioningIntent(BaseModel):
-    enabled: bool
-    mode: Literal["helm-job", "external", "manual", "future-plugin-runtime"]
-    default_create_policy: Literal["create-if-missing", "must-exist", "never-create"]
-    buckets: list[StorageBucketRequirement]
-
-
-class StorageBucketRequirement(BaseModel):
-    name: str
-    uri: str
-    purpose: Literal[
-        "warehouse",
-        "artifacts",
-        "landing",
-        "quarantine",
-        "checkpoints",
-        "exports",
-    ]
-    prefixes: list[str] = []
-    create_policy: Literal["create-if-missing", "must-exist", "never-create"]
-    required_features: BucketFeatureRequirements
-    access: BucketAccessRequirements
-    tags: dict[str, str] = {}
-```
-
-Alpha MinIO defaults:
-
-- `mode: helm-job`
-- `default_create_policy: create-if-missing`
-- Required buckets:
-  - `floe-iceberg`, purpose `warehouse`
-  - `floe-artifacts`, purpose `artifacts`
-- Versioning, encryption, object lock, lifecycle, retention, and access
-  constraints are modeled as requirements but may be `optional`,
-  `platform-default`, or `disabled` for alpha.
-
-Common bucket requirements to support over time:
-
-- Warehouse bucket for Iceberg tables.
-- Artifacts bucket for compiled artifacts, dbt outputs, release evidence, logs,
-  or run metadata.
-- Landing/raw bucket or prefix for ingestion.
-- Quarantine bucket or prefix for rejected records.
-- Checkpoint bucket or prefix for streaming or ingestion state.
-- Export bucket or prefix for downstream delivery.
-- Per-environment separation through buckets or prefixes.
-- Per-domain or per-product separation through buckets or prefixes.
-- Pre-existing enterprise buckets that Floe must verify but not create.
-- Versioning, lifecycle, encryption, Object Lock, retention, tags, and
-  identity-scoped access.
-
-Rules:
-
-- Compile declares bucket requirements only.
-- Compile never creates buckets.
-- Helm bucket-init creates missing MinIO buckets idempotently in alpha.
-- Native cloud plugins can later use `must-exist` or `never-create`.
-- Future `floe platform storage provision` and `floe platform storage verify`
-  commands consume the same requirements.
-
-## Consumer Bindings
-
-The storage plugin generates typed consumer projections. Consumers do not
-rebuild storage config independently.
-
-```python
-class StorageConsumerBindings(BaseModel):
-    pyiceberg: PyIcebergStorageBinding
-    polaris: PolarisStorageBinding | None = None
-    dbt: DbtStorageBinding | None = None
-    dagster: DagsterStorageBinding | None = None
-
-
-class StorageEndpointBinding(BaseModel):
-    client_endpoint: str
-    internal_endpoint: str | None = None
-    external_endpoint: str | None = None
-    region: str
-    path_style_access: bool
-
-
-class PyIcebergStorageBinding(BaseModel):
-    endpoint: StorageEndpointBinding
-    properties: dict[str, str]
-    credential_refs: dict[str, CredentialRef]
-
-
-class PolarisStorageBinding(BaseModel):
-    storage_type: Literal["S3", "GCS", "AZURE"]
-    default_base_location: str
-    allowed_locations: list[str]
-    endpoint: StorageEndpointBinding | None = None
-    credential_refs: dict[str, CredentialRef]
-
-
-class DbtStorageBinding(BaseModel):
-    profile_fragment: dict[str, Any]
-    env_refs: dict[str, str]
-
-
-class DagsterStorageBinding(BaseModel):
-    resources: dict[str, Any]
-    env_refs: dict[str, str]
-```
-
-Rules:
-
-- MinIO generates all consumer projections.
-- PyIceberg, Polaris, dbt, and Dagster receive tool-specific config from
-  `deployment.storage.consumers`.
-- Consumer projections remain secret-free.
-- Endpoint roles are explicit:
-  - `client_endpoint`: workload/data pods.
-  - `internal_endpoint`: server-side services such as Polaris.
-  - `external_endpoint`: optional local/user access.
-- Polaris can consume S3-shaped config internally, but it receives that as a
-  projection from the MinIO storage binding.
-- dbt profile generation merges storage binding output with compute profile
-  output.
-- Dagster resource creation consumes compiled storage bindings rather than
-  re-deriving storage config from plugin refs at runtime.
+- `docs/architecture/adr/0036-storage-plugin-interface.md`: replace
+  consumer-specific storage plugin methods as the target model with neutral
+  storage binding plus composition resolver.
+- `docs/architecture/interfaces/storage-plugin.md`: document
+  `get_deployment_binding()` as the primary compile-time method and move
+  dbt/Dagster/Helm methods to compatibility/deprecation notes.
+- `docs/architecture/interfaces/catalog-plugin.md`: add catalog storage
+  requirements and catalog deployment binding translation.
+- `docs/architecture/plugin-system/interfaces.md`: align plugin interface
+  summary with composition levels and typed adapter contracts.
+- `docs/architecture/opinionation-boundaries.md`: clarify that storage is
+  pluggable through neutral bindings and that catalog/storage compatibility is
+  validated by `floe-core`.
+- `docs/contracts/compiled-artifacts.md`: document `deployment.storage` and
+  `deployment.catalog` as deployment bindings.
+- `docs/architecture/plugin-composition-uplift-tracker.md`: track follow-on
+  adoption for all plugin categories.
 
 ## Testing And Acceptance
 
 Acceptance gates:
 
+- Schema tests for neutral storage binding, bucket requirements, credential
+  refs, capabilities, and side-effect-free serialization.
 - Unit tests for `MinIOStoragePlugin.get_deployment_binding()`.
-- Schema tests for `CompiledArtifacts.deployment.storage`.
-- Strict rename tests proving no active alpha path references
-  `floe-storage-s3`, `floe_storage_s3`, or `storage.type: s3`.
-- Security tests proving compiled artifacts and generated Helm values do not
-  contain demo credential strings.
-- Helm generation tests proving `floe helm generate --artifact` projects the
-  MinIO binding into chart-compatible values.
-- Chart tests proving Polaris bootstrap receives storage config from generated
-  values and credentials through secret references.
-- Contract tests proving dbt, Dagster, PyIceberg, and Polaris consume the same
-  endpoint, bucket, and warehouse values from the binding.
-- E2E test proving:
-  `storage.type: minio` -> compile -> generated Helm values -> deploy ->
-  bucket exists -> Polaris catalog uses generated storage config -> data lands
-  in MinIO.
-
-Verification tiers:
-
-- Fast unit and contract: schema, plugin binding, no-secret assertions.
-- Helm/chart: render and schema validation.
-- Integration: local Kind/MinIO/Polaris bootstrap.
-- E2E: full demo data path.
+- Unit tests for `PolarisCatalogPlugin.build_catalog_deployment(storage)`.
+- Composition resolver tests for valid Polaris+MinIO and invalid Glue+MinIO
+  style cases.
+- Helm generation tests proving values come from deployment bindings, not from
+  raw `plugins.storage.config`.
+- Chart tests proving Polaris bootstrap consumes generated catalog deployment
+  config and storage Secret refs.
+- Contract tests proving dbt, Dagster, PyIceberg, and Polaris agree on endpoint,
+  warehouse, bucket, region, path-style access, and credential refs.
+- Security tests proving compiled artifacts and generated values contain no raw
+  MinIO, AWS, Polaris, or OAuth secret values.
+- DevPod + Hetzner remote E2E proving data lands in MinIO and direct provider
+  cleanup is verified after the run.
 
 ## Risks
 
-- The binding can become too broad if it tries to model every cloud storage
-  capability immediately. Keep alpha fields focused while leaving room for
-  typed feature requirements.
-- Derived Helm values can drift from typed binding fields unless generated in
-  one place and tested against the canonical binding.
-- Removing the `s3` name without an alias is intentionally disruptive. This is
-  acceptable because there are no consumers, but tests and docs must be updated
-  comprehensively.
-- Chart secret handling requires careful migration because existing demo values
-  include raw MinIO credentials.
-- Dagster and dbt runtime paths currently derive storage config from plugin refs
-  or compute config. Moving them to compiled storage bindings changes runtime
-  wiring and needs focused contract tests.
+- The resolver can become a giant universal abstraction. Keep it limited to
+  capabilities, requirements, and compatibility issues.
+- The storage binding can become too broad. Model stable object-storage
+  concepts, not every provider-specific knob.
+- Existing tests assert `polaris.storage.s3.*` chart values. Those tests need
+  to move up to generated deployment bindings rather than preserve the chart as
+  the semantic source of truth.
+- Polaris' upstream config surface is evolving. Use official CLI/Helm/API
+  fields where available and keep Polaris-specific decisions inside the Polaris
+  plugin.
 
 ## Success Criteria
 
-The design is successful if, after implementation:
-
-- `pip install floe-storage-minio` works.
-- `floe-storage-s3` and `storage.type: s3` are absent from active alpha paths.
-- `CompiledArtifacts.deployment.storage` is the secret-free source of storage
-  truth.
-- Helm generation consumes the compiled storage binding and produces chart
-  values for MinIO and Polaris.
-- Polaris no longer owns independent MinIO endpoint configuration.
-- dbt, Dagster, PyIceberg, and Polaris projections agree on endpoint, warehouse,
-  bucket, and credential references.
-- E2E validation proves data lands in MinIO through the plugin-driven path.
-
-## Next Step
-
-After user review, create an implementation plan. The plan should stage work so
-the contract/schema, plugin rename, chart rendering, runtime consumers, and E2E
-validation can be reviewed independently.
+- MinIO storage remains strict with no S3 alias.
+- `CompiledArtifacts.deployment.storage` is neutral, secret-free, and capable
+  enough for future storage backends.
+- `CompiledArtifacts.deployment.catalog` contains Polaris-owned deployment and
+  bootstrap config derived from the neutral storage binding.
+- `floe helm generate` renders storage and catalog values from deployment
+  bindings.
+- MinIO no longer emits Polaris-specific storage config.
+- Helm no longer constructs semantic `storageConfigInfo` from independent chart
+  values.
+- A new catalog plugin can be added by declaring storage requirements and
+  implementing catalog-owned translation, without changing MinIO.
+- The storage PR includes architecture doc updates and the plugin uplift tracker.

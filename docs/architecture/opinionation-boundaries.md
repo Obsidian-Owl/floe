@@ -104,6 +104,9 @@ Platform Team selects these once in `manifest.yaml`:
 - Multi-cloud strategies (S3 + GCS for disaster recovery)
 - Cost optimization (MinIO vs cloud object storage)
 - All storage via PyIceberg FileIO (enforced)
+- Storage/catalog compatibility is validated by `floe-core` composition
+  contracts. Storage plugins emit neutral storage bindings; catalog plugins
+  translate those bindings into catalog-owned deployment config.
 
 **Telemetry Backend**
 - Existing telemetry investments (Datadog APM, Grafana Cloud)

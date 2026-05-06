@@ -72,6 +72,30 @@ class FileIO(ABC):
 
 Create **StoragePlugin interface** that wraps PyIceberg FileIO for pluggable storage backends.
 
+### 2026-05 Composition Update
+
+The target interface is now a neutral storage deployment binding plus
+composition resolver, not storage-owned projections for every consumer.
+
+The original interface correctly identified the storage plugin boundary, but
+methods such as `get_dbt_profile_config()`, `get_dagster_io_manager_config()`,
+and `get_helm_values_override()` encourage storage plugins to know too much
+about compute, orchestration, catalog, and deployment renderers. That creates an
+N x M coupling problem as new catalogs and storage backends are added.
+
+The revised rule is:
+
+```text
+StoragePlugin emits StorageDeploymentBinding.
+CatalogPlugin declares storage requirements and emits CatalogDeploymentBinding.
+Compute and orchestrator plugins consume runtime storage facts.
+floe-core validates compatibility through the composition resolver.
+Helm renders resolved deployment bindings.
+```
+
+Legacy helper methods can remain during migration, but they are not the
+semantic contract.
+
 ### StoragePlugin Interface
 
 ```python
