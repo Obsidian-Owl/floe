@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 import pytest
 from floe_core.compilation.stages import compile_pipeline
 from floe_core.plugins.ingestion import IngestionConfig
-from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+from floe_core.schemas.compiled_artifacts import CompiledArtifacts, PluginRef
 from floe_ingestion_dlt.config import DltIngestionConfig
 from floe_ingestion_dlt.plugin import DltIngestionPlugin
 from floe_orchestrator_dagster.ingestion import build_dlt_source
@@ -47,6 +47,24 @@ LOGICAL_RAW_TABLES = (
     "bronze.raw_transactions",
     "bronze.raw_support_tickets",
 )
+EXPECTED_ROW_SUBSETS: dict[str, dict[str, str]] = {
+    "raw_customers": {
+        "customer_id": "C001",
+        "email": "joshua.davis1@example.com",
+        "segment": "smb",
+    },
+    "raw_transactions": {
+        "txn_id": "TXN0001",
+        "customer_id": "C088",
+        "status": "refunded",
+    },
+    "raw_support_tickets": {
+        "ticket_id": "TK0001",
+        "customer_id": "C473",
+        "category": "account",
+        "priority": "critical",
+    },
+}
 
 
 def _isolated_bronze_namespace(e2e_namespace: str) -> str:
@@ -101,8 +119,7 @@ def _isolated_ingestion_config(
     namespace: str,
 ) -> DltIngestionConfig:
     """Build dlt config with Customer 360 sources targeting an isolated namespace."""
-    ingestion_ref = artifacts.plugins.ingestion
-    assert ingestion_ref is not None, "Customer 360 artifacts should include dlt ingestion"
+    ingestion_ref = _ingestion_ref(artifacts)
     assert ingestion_ref.config is not None, "dlt ingestion config should be resolved"
 
     config = dict(ingestion_ref.config)
@@ -119,6 +136,14 @@ def _isolated_ingestion_config(
         for source in config["sources"]
     ]
     return DltIngestionConfig.model_validate(config)
+
+
+def _ingestion_ref(artifacts: CompiledArtifacts) -> PluginRef:
+    """Return the compiled ingestion plugin ref with clear test failures."""
+    assert artifacts.plugins is not None, "Customer 360 artifacts should include resolved plugins"
+    ingestion_ref = artifacts.plugins.ingestion
+    assert ingestion_ref is not None, "Customer 360 artifacts should include dlt ingestion"
+    return ingestion_ref
 
 
 def _isolated_destination_table(
@@ -210,9 +235,26 @@ def _cleanup_namespace_objects(minio: Any, *, bucket: str, namespace: str) -> in
 
 def _row_count(catalog: Any, table_identifier: str) -> int:
     """Return a PyIceberg row count using host-reachable MinIO table IO."""
+    return len(_table_rows(catalog, table_identifier))
+
+
+def _table_rows(catalog: Any, table_identifier: str) -> list[dict[str, Any]]:
+    """Return PyIceberg rows using host-reachable MinIO table IO."""
     table = catalog.load_table(table_identifier)
     rewrite_table_io_for_host_access(table)
-    return len(table.scan().to_arrow())
+    return cast("list[dict[str, Any]]", table.scan().to_arrow().to_pylist())
+
+
+def _assert_expected_seed_row(catalog: Any, table_identifier: str, table_name: str) -> None:
+    """Assert a representative fixed seed row survived ingestion."""
+    expected_subset = EXPECTED_ROW_SUBSETS[table_name]
+    rows = _table_rows(catalog, table_identifier)
+    assert any(
+        all(row.get(column) == value for column, value in expected_subset.items()) for row in rows
+    ), (
+        f"Expected {table_identifier} to contain seed row subset {expected_subset}; "
+        f"sample rows: {rows[:3]}"
+    )
 
 
 def _table_name(destination_table: str) -> str:
@@ -346,6 +388,11 @@ class TestCustomer360DltIngestion(IntegrationTestBase):
                         f"Expected {namespace}.{table_name} for logical table "
                         f"{logical_table} to contain exactly {expected_count} rows "
                         f"from its seed CSV, got {count}"
+                    )
+                    _assert_expected_seed_row(
+                        polaris_with_write_grants,
+                        f"{namespace}.{table_name}",
+                        table_name,
                     )
             finally:
                 shutdown_error: Exception | None = None
