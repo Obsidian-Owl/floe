@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from floe_core.compilation.errors import (
+from floe_core.composition.error_codes import (
     COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED,
     COMPOSITION_PROTOCOL_UNSUPPORTED,
     COMPOSITION_STORAGE_MISSING,
