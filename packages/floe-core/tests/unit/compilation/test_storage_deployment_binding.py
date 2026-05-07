@@ -68,6 +68,7 @@ def test_demo_compile_emits_minio_storage_deployment_binding() -> None:
     assert storage.dagster.resources["endpoint_url"] == "http://floe-platform-minio:9000"
     assert artifacts.deployment.catalog is not None
     assert artifacts.deployment.catalog.provider == "polaris"
+    assert artifacts.deployment.catalog.polaris.warehouse == "floe-demo"
     assert (
         artifacts.deployment.catalog.polaris.endpoint_internal
         == artifacts.deployment.storage.endpoint.internal_url

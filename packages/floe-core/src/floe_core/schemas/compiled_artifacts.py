@@ -149,8 +149,38 @@ def _assert_no_secret_material(value: Any, path: str) -> None:
         raise ValueError(msg)
 
 
+def _assert_json_compatible_fragment(value: Any, path: str) -> None:
+    """Reject values that cannot be serialized into compiled artifact JSON."""
+    if value is None or isinstance(value, str | int | float | bool):
+        return
+
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if not isinstance(key, str):
+                msg = (
+                    f"{path} contains unsupported runtime fragment key type "
+                    f"{type(key).__name__}; use string keys for JSON-compatible maps"
+                )
+                raise ValueError(msg)
+            _assert_json_compatible_fragment(child, f"{path}.{key}")
+        return
+
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            _assert_json_compatible_fragment(child, f"{path}[{index}]")
+        return
+
+    msg = (
+        f"{path} contains unsupported runtime fragment type {type(value).__name__}; "
+        "use JSON-compatible dict, list, string, number, boolean, or null values"
+    )
+    raise ValueError(msg)
+
+
 def _assert_dlt_filesystem_fragment_secret_free(value: Any, path: str) -> None:
     """Reject secrets while allowing dlt filesystem credential config containers."""
+    _assert_json_compatible_fragment(value, path)
+
     if isinstance(value, dict):
         for key, child in value.items():
             child_path = f"{path}.{key}"

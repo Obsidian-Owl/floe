@@ -1029,6 +1029,22 @@ class TestIngestionDeploymentBinding:
                 env_refs={},
             )
 
+    def test_dlt_binding_rejects_opaque_filesystem_fragment_values(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import DltIngestionBinding
+
+        with pytest.raises(ValidationError, match="JSON-compatible"):
+            DltIngestionBinding(
+                plugin_name="dlt",
+                destination="filesystem",
+                table_format="iceberg",
+                source_filesystem={},
+                destination_filesystem={"credentials": {"endpoint_url": object()}},
+                iceberg_catalog_env={},
+                env_refs={},
+            )
+
 
 class TestStorageCredentialBinding:
     """Tests for storage credential binding validation."""
