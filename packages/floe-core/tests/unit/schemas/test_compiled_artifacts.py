@@ -15,6 +15,7 @@ Requirements: FR-003, FR-007, FR-011
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -1041,6 +1042,26 @@ class TestIngestionDeploymentBinding:
                 table_format="iceberg",
                 source_filesystem={},
                 destination_filesystem={"credentials": {"endpoint_url": object()}},
+                iceberg_catalog_env={},
+                env_refs={},
+            )
+
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_dlt_binding_rejects_non_finite_filesystem_fragment_numbers(
+        self,
+        value: float,
+    ) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import DltIngestionBinding
+
+        with pytest.raises(ValidationError, match="finite"):
+            DltIngestionBinding(
+                plugin_name="dlt",
+                destination="filesystem",
+                table_format="iceberg",
+                source_filesystem={},
+                destination_filesystem={"credentials": {"endpoint_url": value}},
                 iceberg_catalog_env={},
                 env_refs={},
             )

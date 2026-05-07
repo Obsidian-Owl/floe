@@ -18,6 +18,7 @@ See Also:
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Iterable
 from datetime import datetime
@@ -151,6 +152,10 @@ def _assert_no_secret_material(value: Any, path: str) -> None:
 
 def _assert_json_compatible_fragment(value: Any, path: str) -> None:
     """Reject values that cannot be serialized into compiled artifact JSON."""
+    if isinstance(value, float) and not math.isfinite(value):
+        msg = f"{path} contains non-finite number {value!r}; use finite JSON numbers"
+        raise ValueError(msg)
+
     if value is None or isinstance(value, str | int | float | bool):
         return
 
