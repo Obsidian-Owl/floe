@@ -50,6 +50,8 @@ def _runtime_binding() -> dict[str, Any]:
         },
         "iceberg_catalog_env": {
             "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME": "polaris",
+            "ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE": "rest",
+            "PYICEBERG_CATALOG__POLARIS__TYPE": "rest",
             "PYICEBERG_CATALOG__POLARIS__URI": "http://runtime-polaris:8181/api/catalog",
         },
         "env_refs": {
@@ -480,6 +482,71 @@ def test_partial_runtime_binding_uses_legacy_catalog_env(
 
     assert observations == {"during_run": ("polaris", "http://legacy-polaris:8181/api/catalog")}
     assert "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
+
+
+def test_incomplete_runtime_catalog_env_uses_legacy_catalog_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Incomplete runtime catalog env must not suppress legacy catalog config fallback."""
+    observations: dict[str, tuple[str | None, str | None, str | None, str | None]] = {}
+
+    class FakePipeline:
+        def __init__(self, **kwargs: Any) -> None:
+            self.pipeline_name = kwargs["pipeline_name"]
+
+        def run(self, _source: object, **_kwargs: Any) -> object:
+            observations["during_run"] = (
+                os.environ.get("ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"),
+                os.environ.get("ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE"),
+                os.environ.get("PYICEBERG_CATALOG__POLARIS__TYPE"),
+                os.environ.get("PYICEBERG_CATALOG__POLARIS__URI"),
+            )
+            return SimpleNamespace(metrics={})
+
+    import dlt
+    import dlt.destinations
+
+    monkeypatch.setattr(dlt.destinations, "filesystem", lambda **_kwargs: object())
+    monkeypatch.setattr(dlt, "pipeline", FakePipeline)
+    monkeypatch.setenv("ICEBERG_CATALOG__ICEBERG_CATALOG_NAME", "caller-catalog")
+
+    plugin = DltIngestionPlugin()
+    plugin.configure(
+        _plugin_config(
+            {
+                "uri": "http://legacy-polaris:8181/api/catalog",
+                "bucket": "legacy-bucket",
+            }
+        )
+    )
+    plugin.startup()
+
+    runtime_binding = _runtime_binding()
+    runtime_binding["iceberg_catalog_env"] = {
+        "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME": "polaris",
+    }
+    pipeline = plugin.create_pipeline(
+        IngestionConfig(
+            source_type="filesystem",
+            source_config={},
+            destination_table="bronze.orders",
+            runtime_binding=runtime_binding,
+        )
+    )
+    plugin.run(pipeline, source=object(), table_name="orders")
+
+    assert observations == {
+        "during_run": (
+            "polaris",
+            "rest",
+            "rest",
+            "http://legacy-polaris:8181/api/catalog",
+        )
+    }
+    assert os.environ["ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"] == "caller-catalog"
+    assert "ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__TYPE" not in os.environ
     assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
 
 

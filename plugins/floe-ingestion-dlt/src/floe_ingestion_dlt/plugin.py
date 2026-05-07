@@ -87,6 +87,15 @@ _DEFAULT_TIMEOUT: float = 5.0
 # Supported sink types for reverse ETL (FR-006)
 _SUPPORTED_SINKS: list[str] = ["rest_api", "sql_database"]
 
+_REQUIRED_RUNTIME_ICEBERG_ENV_KEYS: frozenset[str] = frozenset(
+    {
+        "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME",
+        "ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE",
+        "PYICEBERG_CATALOG__POLARIS__TYPE",
+        "PYICEBERG_CATALOG__POLARIS__URI",
+    }
+)
+
 
 class DltIngestionPlugin(IngestionPlugin, SinkConnector):
     """dlt-based ingestion plugin for the floe data platform.
@@ -908,7 +917,12 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
     @staticmethod
     def _runtime_binding_has_catalog_env(binding: Mapping[str, Any]) -> bool:
         iceberg_catalog_env = binding.get("iceberg_catalog_env")
-        return isinstance(iceberg_catalog_env, Mapping) and bool(iceberg_catalog_env)
+        if not isinstance(iceberg_catalog_env, Mapping):
+            return False
+        return all(
+            iceberg_catalog_env.get(required_key) not in (None, "")
+            for required_key in _REQUIRED_RUNTIME_ICEBERG_ENV_KEYS
+        )
 
     @staticmethod
     def _first_config_value(catalog_config: dict[str, Any], *keys: str) -> Any | None:
