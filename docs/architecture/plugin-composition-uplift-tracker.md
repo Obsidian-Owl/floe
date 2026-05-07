@@ -87,3 +87,4 @@ clear target state.
 | PCU-004 | Ingestion | Add landing/quarantine/checkpoint bucket requirements | Ingestion consumes storage bucket requirements |
 | PCU-005 | Security | Connect credential binding to identity/secrets plugins | Workload identity and external secret modes are resolver-validated |
 | PCU-006 | Network | Generate network policies from deployment bindings | Policies use plugin endpoints rather than static chart service assumptions |
+| PCU-007 | Iceberg runtime | Extract writer contract from orchestrator export paths | Dagster and future orchestrators delegate Iceberg table mutation to `floe-iceberg` |
