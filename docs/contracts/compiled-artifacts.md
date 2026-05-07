@@ -159,6 +159,24 @@ Rules:
 - A new catalog plugin should add storage requirements and a catalog deployment
   translator without changing existing storage plugins.
 
+### Composition Error Codes
+
+Plugin composition diagnostics use `COMPOSITION_*` codes. These codes are
+operator-facing and map to the action needed to fix the platform selection or
+compiled artifact. Legacy numeric `E*` codes remain valid for broader
+compilation stages outside plugin composition.
+
+| Code | Meaning | Operator action |
+| --- | --- | --- |
+| `COMPOSITION_PLUGIN_MISSING` | A selected plugin cannot be found or loaded. | Install the plugin package or fix the manifest plugin type. |
+| `COMPOSITION_PLUGIN_INTERFACE_INVALID` | A registry entry does not implement the required plugin interface. | Register the plugin under the correct entry point group or fix the plugin class. |
+| `COMPOSITION_PLUGIN_CONFIG_INVALID` | A plugin exists but its config or provider-owned binding is invalid. | Fix the plugin config in `manifest.yaml`. |
+| `COMPOSITION_STORAGE_MISSING` | A storage-dependent plugin was selected without a storage plugin. | Select a storage plugin or remove the storage-dependent consumer. |
+| `COMPOSITION_PROTOCOL_UNSUPPORTED` | Selected plugins do not share a required storage protocol. | Choose compatible storage/catalog providers or adjust provider config. |
+| `COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED` | Selected plugins do not share a required credential mode. | Choose compatible credential modes or update provider config. |
+| `COMPOSITION_DEPLOYMENT_BINDING_MISSING` | A selected plugin does not emit the required typed deployment binding. | Upgrade or fix the plugin implementation. |
+| `COMPOSITION_RENDERER_PRECONDITION_FAILED` | A renderer cannot render the compiled artifact shape. | Recompile with required deployment bindings or fix the artifact before rendering. |
+
 ## Plugin Configuration
 
 ```python
