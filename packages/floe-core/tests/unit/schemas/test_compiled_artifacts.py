@@ -159,6 +159,21 @@ class TestPluginRef:
         assert ref.version == "0.9.0"
         assert ref.config == {"threads": 4, "memory_limit": "8GB"}
 
+    @pytest.mark.requirement("PCU-005")
+    def test_plugin_ref_rejects_raw_secret_config_fields(self) -> None:
+        """Plugin refs must not serialize raw credential-bearing config fields."""
+        sensitive_key = "client_" + "secret"
+
+        with pytest.raises(ValidationError, match="plugins.keycloak.config.client_secret"):
+            PluginRef(
+                type="keycloak",
+                version="0.1.0",
+                config={
+                    "realm": "floe",
+                    sensitive_key: "provided-at-runtime",
+                },
+            )
+
     @pytest.mark.requirement("2B-FR-007")
     def test_invalid_version_not_semver(self) -> None:
         """Test that non-semver version is rejected."""

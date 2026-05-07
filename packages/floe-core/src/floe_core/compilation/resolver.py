@@ -28,6 +28,7 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedModel,
     ResolvedPlugins,
     ResolvedTransforms,
+    sanitize_plugin_config_for_artifact,
 )
 from floe_core.schemas.floe_spec import FloeSpec
 from floe_core.schemas.manifest import PlatformManifest
@@ -55,6 +56,8 @@ def _to_plugin_ref(
     plugin_type = getattr(plugin, "type", "")
     version = getattr(plugin, "version", None) or default_version
     config = getattr(plugin, "config", None)
+    if config is not None:
+        config = sanitize_plugin_config_for_artifact(config)
     return PluginRef(type=plugin_type, version=version, config=config)
 
 

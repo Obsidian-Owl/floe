@@ -45,6 +45,7 @@ if TYPE_CHECKING:
         ResolvedPlugins,
     )
     from floe_core.schemas.manifest import GovernanceConfig, PlatformManifest
+    from floe_core.schemas.plugins import PluginsConfig, PluginSelection
 
 logger = structlog.get_logger(__name__)
 
@@ -252,8 +253,19 @@ def _build_lineage_config(manifest: PlatformManifest) -> dict[str, Any] | None:
     return config
 
 
+def _runtime_plugin_config(
+    selection: PluginSelection | None,
+    fallback: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Return manifest config for runtime plugin setup, falling back to artifact config."""
+    if selection is not None and selection.config is not None:
+        return selection.config
+    return fallback or {}
+
+
 def _build_storage_deployment_binding(
     plugins: ResolvedPlugins,
+    manifest_plugins: PluginsConfig,
 ) -> DeploymentConfig | None:
     """Build deployment bindings from resolved storage plugin configuration."""
     if plugins.storage is None:
@@ -278,11 +290,12 @@ def _build_storage_deployment_binding(
 
     registry = PluginRegistry()
     registry.discover_all()
+    storage_config = _runtime_plugin_config(manifest_plugins.storage, plugins.storage.config)
     try:
         registry.configure(
             PluginType.STORAGE,
             plugins.storage.type,
-            plugins.storage.config or {},
+            storage_config,
         )
         storage_plugin = registry.get(PluginType.STORAGE, plugins.storage.type)
     except PluginError as exc:
@@ -332,10 +345,14 @@ def _build_storage_deployment_binding(
 
     try:
         if plugins.secrets is not None:
+            secrets_config = _runtime_plugin_config(
+                manifest_plugins.secrets,
+                plugins.secrets.config,
+            )
             registry.configure(
                 PluginType.SECRETS,
                 plugins.secrets.type,
-                plugins.secrets.config or {},
+                secrets_config,
             )
             secrets_plugin = registry.get(PluginType.SECRETS, plugins.secrets.type)
             if not isinstance(secrets_plugin, SecretsPlugin):
@@ -370,10 +387,14 @@ def _build_storage_deployment_binding(
 
     try:
         if plugins.identity is not None:
+            identity_config = _runtime_plugin_config(
+                manifest_plugins.identity,
+                plugins.identity.config,
+            )
             registry.configure(
                 PluginType.IDENTITY,
                 plugins.identity.type,
-                plugins.identity.config or {},
+                identity_config,
             )
             identity_plugin = registry.get(PluginType.IDENTITY, plugins.identity.type)
             if not isinstance(identity_plugin, IdentityPlugin):
@@ -462,11 +483,12 @@ def _build_storage_deployment_binding(
     if plugins.catalog is None:
         return DeploymentConfig(storage=storage_binding)
 
+    catalog_config = _runtime_plugin_config(manifest_plugins.catalog, plugins.catalog.config)
     try:
         registry.configure(
             PluginType.CATALOG,
             plugins.catalog.type,
-            plugins.catalog.config or {},
+            catalog_config,
         )
         catalog_plugin = registry.get(PluginType.CATALOG, plugins.catalog.type)
     except PluginError as exc:
@@ -819,7 +841,7 @@ def compile_pipeline(
                 attributes={"compile.stage": CompilationStage.COMPILE.value},
             ) as compile_span:
                 log.info("compilation_stage_start", stage=CompilationStage.COMPILE.value)
-                deployment = _build_storage_deployment_binding(plugins)
+                deployment = _build_storage_deployment_binding(plugins, resolved_manifest.plugins)
                 storage_dbt_binding = None
                 if deployment is not None and deployment.storage is not None:
                     storage_dbt_binding = deployment.storage.dbt

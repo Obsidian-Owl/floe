@@ -115,6 +115,47 @@ def test_resolve_plugins_preserves_secrets_and_identity_selections() -> None:
     assert resolved.identity.config == {"realm": "floe"}
 
 
+def test_resolve_plugins_strips_secret_material_from_security_provider_config() -> None:
+    """Security provider configs should project secret-free artifact config."""
+    sensitive_key = "client_" + "secret"
+    manifest = PlatformManifest(
+        api_version="floe.dev/v1",
+        kind="Manifest",
+        metadata=ManifestMetadata(name="platform", version="1.0.0", owner="test@example.com"),
+        plugins=PluginsConfig(
+            compute=PluginSelection(type="duckdb", version="0.9.0"),
+            orchestrator=PluginSelection(type="dagster", version="1.5.0"),
+            secrets=PluginSelection(
+                type="infisical",
+                version="0.1.0",
+                config={
+                    "client_id": "floe-platform",
+                    sensitive_key: "provided-at-runtime",
+                    "secret_path": "/floe/platform",
+                },
+            ),
+            identity=PluginSelection(
+                type="keycloak",
+                version="0.1.0",
+                config={
+                    "realm": "floe",
+                    sensitive_key: "provided-at-runtime",
+                },
+            ),
+        ),
+    )
+
+    resolved = resolve_plugins(manifest)
+
+    assert resolved.secrets is not None
+    assert resolved.secrets.config == {
+        "client_id": "floe-platform",
+        "secret_path": "/floe/platform",
+    }
+    assert resolved.identity is not None
+    assert resolved.identity.config == {"realm": "floe"}
+
+
 class TestResolvePlugins:
     """Tests for resolve_plugins function."""
 
