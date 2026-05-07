@@ -50,12 +50,12 @@ _SECRET_FIELD_MARKERS = (
     "token",
 )
 _SECRET_VALUE_MARKERS = (
-    "minioadmin",
     "password",
     "raw-secret-value",
     "secret-value",
     "token",
 )
+_DEFAULT_ADMIN_CREDENTIAL_PATTERN = re.compile(r"(?<![a-z0-9])[a-z0-9_-]*admin[0-9]*(?![a-z0-9])")
 
 
 def _validate_configmap_name(name: str) -> str:
@@ -124,7 +124,9 @@ def _assert_no_secret_material(value: Any, path: str) -> None:
 
     if isinstance(value, str):
         value_text = value.lower()
-        if any(marker in value_text for marker in _SECRET_VALUE_MARKERS):
+        if any(marker in value_text for marker in _SECRET_VALUE_MARKERS) or (
+            _DEFAULT_ADMIN_CREDENTIAL_PATTERN.search(value_text) is not None
+        ):
             msg = (
                 f"{path} looks like raw credential material; use env_refs "
                 "or CredentialRef fields instead"

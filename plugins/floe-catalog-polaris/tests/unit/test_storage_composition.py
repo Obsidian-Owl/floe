@@ -104,7 +104,6 @@ def test_build_catalog_deployment_translates_storage_binding_to_polaris_binding(
     assert binding.polaris.credential_refs["secretAccessKey"].key == "secret-access-key"
 
     payload = binding.model_dump_json()
-    assert "minioadmin" not in payload
     assert "raw-secret-value" not in payload
 
 

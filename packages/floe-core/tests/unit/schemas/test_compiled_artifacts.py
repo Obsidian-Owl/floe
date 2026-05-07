@@ -749,6 +749,8 @@ class TestStorageDeploymentBinding:
             ("dbt_profile_fragment", {"outputs": {"dev": {"password": "raw-secret-value"}}}),
             ("dagster_resources", {"storage": {"token": "raw-secret-value"}}),
             ("dbt_profile_fragment", {"settings": {"raw-secret-value"}}),
+            ("dbt_profile_fragment", {"settings": {"storage-admin"}}),
+            ("dbt_profile_fragment", {"settings": {"uri": "s3://storage-admin@localhost:9000"}}),
             ("dagster_resources", {"settings": frozenset({"raw-secret-value"})}),
         ],
     )
@@ -880,7 +882,6 @@ class TestStorageDeploymentBinding:
             restored.deployment.catalog.polaris.credential_refs["secretAccessKey"].key
             == "secret-access-key"
         )
-        assert "minioadmin" not in serialized
         assert "minio-secret-value" not in serialized
         assert "raw-secret-value" not in serialized
 
