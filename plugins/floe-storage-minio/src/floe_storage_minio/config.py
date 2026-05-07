@@ -24,15 +24,17 @@ class MinIOStorageConfig(BaseModel):
 
     Configures connection to MinIO object storage.
     Credentials can be provided directly or sourced from environment
-    variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY).
+    variables (MINIO_ACCESS_KEY_ID/MINIO_SECRET_ACCESS_KEY, then AWS_* fallback).
 
     Attributes:
         endpoint: MinIO endpoint URL (e.g., http://minio:9000).
         bucket: Bucket name for data storage.
         region: S3-compatible region (default: us-east-1).
         path_style_access: Use path-style access (required for MinIO).
-        access_key_id: Optional access key (falls back to AWS_ACCESS_KEY_ID env).
-        secret_access_key: Optional secret key (falls back to AWS_SECRET_ACCESS_KEY env).
+        access_key_id: Optional access key (falls back to MINIO_ACCESS_KEY_ID,
+            then AWS_ACCESS_KEY_ID env).
+        secret_access_key: Optional secret key (falls back to MINIO_SECRET_ACCESS_KEY,
+            then AWS_SECRET_ACCESS_KEY env).
 
     Example:
         >>> config = MinIOStorageConfig(
@@ -49,6 +51,7 @@ class MinIOStorageConfig(BaseModel):
         ...,
         description="MinIO endpoint URL",
         min_length=1,
+        pattern=r"^https?://",
         examples=["http://floe-platform-minio:9000", "https://s3.amazonaws.com"],
     )
     bucket: str = Field(
@@ -97,9 +100,11 @@ class MinIOStorageConfig(BaseModel):
     )
     access_key_id: SecretStr | None = Field(
         default=None,
-        description="Access key ID (falls back to AWS_ACCESS_KEY_ID env var)",
+        description=("Access key ID (falls back to MINIO_ACCESS_KEY_ID, then AWS_ACCESS_KEY_ID)"),
     )
     secret_access_key: SecretStr | None = Field(
         default=None,
-        description="Secret access key (falls back to AWS_SECRET_ACCESS_KEY env var)",
+        description=(
+            "Secret access key (falls back to MINIO_SECRET_ACCESS_KEY, then AWS_SECRET_ACCESS_KEY)"
+        ),
     )

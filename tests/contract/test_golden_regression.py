@@ -81,8 +81,10 @@ class TestCompiledArtifactsContract:
 
         required_fields = golden["required"]
 
-        # These fields must never be removed
-        baseline_required = ["version"]
+        # These fields must never be removed.
+        # Version has a default on the current Pydantic contract, so it is a
+        # stable property but not a required constructor field.
+        baseline_required = ["metadata", "identity", "observability"]
         for field in baseline_required:
             assert field in required_fields, (
                 f"Required field '{field}' removed from CompiledArtifacts. "
@@ -114,8 +116,8 @@ class TestCompiledArtifactsContract:
             "This is a MAJOR version change."
         )
 
-        # metadata, dbt_profiles, dagster_config MUST exist
-        expected_properties = ["metadata", "dbt_profiles", "dagster_config"]
+        # metadata, dbt_profiles, and deployment MUST exist
+        expected_properties = ["metadata", "dbt_profiles", "deployment"]
         for prop in expected_properties:
             assert prop in properties, (
                 f"Schema missing '{prop}' property. This is a breaking change."
@@ -437,6 +439,46 @@ class TestV06IngestionArtifacts:
         # Verify ingestion config survived round-trip
         assert artifacts.plugins.ingestion.config is not None, (
             "Ingestion plugin config became None after round-trip"
+        )
+
+
+class TestV010DeploymentArtifacts:
+    """Test v0.10.0 golden artifacts with deployment bindings."""
+
+    @pytest.mark.requirement("CONTRACT-001")
+    def test_v010_with_deployment_can_be_parsed(self) -> None:
+        """Test that v0.10.0 golden artifact includes deployment bindings."""
+        golden = load_golden("v0.10_compiled_artifacts_with_deployment.json")
+
+        assert golden["version"] == "0.10.0", (
+            f"Expected version 0.10.0, got {golden.get('version')}"
+        )
+        assert "deployment" in golden, "Missing 'deployment' section"
+        assert golden["deployment"]["storage"]["provider"] == "minio"
+        assert golden["deployment"]["catalog"]["provider"] == "polaris"
+
+    @pytest.mark.requirement("CONTRACT-001")
+    def test_v010_with_deployment_round_trips_via_pydantic(self) -> None:
+        """Test that v0.10.0 deployment bindings survive Pydantic round-trip."""
+        from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+
+        golden = load_golden("v0.10_compiled_artifacts_with_deployment.json")
+        golden_without_comment = {k: v for k, v in golden.items() if k != "$comment"}
+
+        artifacts = CompiledArtifacts.model_validate(golden_without_comment)
+
+        assert artifacts.deployment is not None, "Deployment became None after round-trip"
+        assert artifacts.deployment.storage is not None, (
+            "Storage deployment binding became None after round-trip"
+        )
+        assert artifacts.deployment.catalog is not None, (
+            "Catalog deployment binding became None after round-trip"
+        )
+        assert artifacts.deployment.storage.provider == "minio"
+        assert artifacts.deployment.catalog.provider == "polaris"
+        assert artifacts.deployment.storage.credentials.secret_ref is not None
+        assert artifacts.deployment.storage.credentials.secret_ref.name == (
+            "floe-platform-minio-credentials"
         )
 
 

@@ -69,6 +69,7 @@ spec:
 {{- end }}
         - name: wait-for-polaris
           image: curlimages/curl:8.5.0@sha256:08e466006f0860e54fc299378de998935333e0e130a15f6f98482e9f8dab3058
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -105,6 +106,7 @@ spec:
       containers:
         - name: bootstrap
           image: curlimages/curl:8.5.0@sha256:08e466006f0860e54fc299378de998935333e0e130a15f6f98482e9f8dab3058
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -146,13 +148,15 @@ spec:
             - sh
             - -c
             - |
-              trap 'rm -f /tmp/response.txt /tmp/verify.txt' EXIT
+              RESPONSE_FILE="$(mktemp)"
+              VERIFY_FILE="$(mktemp)"
+              trap 'rm -f "$RESPONSE_FILE" "$VERIFY_FILE"' EXIT
               set -e
               log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] BOOTSTRAP: $*"; }
               is_duplicate_grant_record_error() {
-                [ -f /tmp/response.txt ] || return 1
-                grep -q 'grant_records_pkey' /tmp/response.txt && \
-                  grep -q "sql-state '23505'" /tmp/response.txt
+                [ -f "$RESPONSE_FILE" ] || return 1
+                grep -q 'grant_records_pkey' "$RESPONSE_FILE" && \
+                  grep -q "sql-state '23505'" "$RESPONSE_FILE"
               }
 
               # Preflight: check required environment variables
@@ -262,7 +266,7 @@ spec:
               )
               {{- end }}
 
-              HTTP_CODE=$(printf '%s' "$CATALOG_JSON" | curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
+              HTTP_CODE=$(printf '%s' "$CATALOG_JSON" | curl -s -o "$RESPONSE_FILE" -w '%{http_code}' -X POST \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/catalogs" \
@@ -274,27 +278,27 @@ spec:
                 log "Catalog '$POLARIS_CATALOG_NAME' already exists (HTTP 409) - OK"
               else
                 log "ERROR: Failed to create catalog (HTTP $HTTP_CODE)" >&2
-                head -5 /tmp/response.txt >&2
+                log "Response body captured but not printed to avoid exposing credentials" >&2
                 exit 1
               fi
 
               # Verify catalog exists via management API
               {{- $step = add $step 1 }}
               log "Step {{ $step }}/{{ $totalSteps }}: Verifying catalog '$POLARIS_CATALOG_NAME' via management API..."
-              VERIFY_CODE=$(curl -s -o /tmp/verify.txt -w '%{http_code}' \
+              VERIFY_CODE=$(curl -s -o "$VERIFY_FILE" -w '%{http_code}' \
                 -H "Authorization: Bearer $TOKEN" \
                 "$POLARIS_URL/api/management/v1/catalogs/$POLARIS_CATALOG_NAME")
 
               if [ "$VERIFY_CODE" != "200" ]; then
                 log "ERROR: Catalog verification failed (HTTP $VERIFY_CODE)" >&2
-                head -5 /tmp/verify.txt >&2
+                log "Verification response captured but not printed to avoid exposing credentials" >&2
                 exit 1
               fi
 
               # Verify response contains expected catalog name
-              if ! grep -q '"name"' /tmp/verify.txt; then
+              if ! grep -q '"name"' "$VERIFY_FILE"; then
                 log "ERROR: Catalog verification response missing 'name' field" >&2
-                head -5 /tmp/verify.txt >&2
+                log "Verification response captured but not printed to avoid exposing credentials" >&2
                 exit 1
               fi
               log "Catalog '$POLARIS_CATALOG_NAME' verified successfully"
@@ -336,7 +340,7 @@ spec:
               {{- end }}
               {{- $step = add $step 1 }}
               log "Step {{ $step }}/{{ $totalSteps }}: Creating principal role '$PRINCIPAL_ROLE'..."
-              PR_CREATE_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
+              PR_CREATE_CODE=$(curl -s -o "$RESPONSE_FILE" -w '%{http_code}' -X POST \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/principal-roles" \
@@ -353,7 +357,7 @@ spec:
 
               {{- $step = add $step 1 }}
               log "Step {{ $step }}/{{ $totalSteps }}: Assigning principal role '$PRINCIPAL_ROLE' to principal '$BOOTSTRAP_PRINCIPAL'..."
-              PR_ASSIGN_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X PUT \
+              PR_ASSIGN_CODE=$(curl -s -o "$RESPONSE_FILE" -w '%{http_code}' -X PUT \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/principals/$BOOTSTRAP_PRINCIPAL/principal-roles" \
@@ -367,13 +371,12 @@ spec:
                 log "Principal role '$PRINCIPAL_ROLE' already assigned to '$BOOTSTRAP_PRINCIPAL' (duplicate grant record, Polaris returned HTTP 500) - OK"
               else
                 log "ERROR: Failed to assign principal role (HTTP $PR_ASSIGN_CODE). Check Polaris logs for detail." >&2
-                head -5 /tmp/response.txt >&2
                 exit 1
               fi
 
               {{- $step = add $step 1 }}
               log "Step {{ $step }}/{{ $totalSteps }}: Creating catalog role '$CATALOG_ROLE' on catalog '$CATALOG_NAME'..."
-              ROLE_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X POST \
+              ROLE_CODE=$(curl -s -o "$RESPONSE_FILE" -w '%{http_code}' -X POST \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/catalogs/$CATALOG_NAME/catalog-roles" \
@@ -385,7 +388,7 @@ spec:
                 log "Catalog role '$CATALOG_ROLE' already exists (HTTP 409) - OK"
               else
                 log "ERROR: Failed to create catalog role (HTTP $ROLE_CODE)" >&2
-                head -5 /tmp/response.txt >&2
+                log "Response body captured but not printed to avoid exposing credentials" >&2
                 exit 1
               fi
 
@@ -393,7 +396,7 @@ spec:
               {{- $step = add $step 1 }}
               {{- range .Values.polaris.bootstrap.grants.privileges }}
               log "Step {{ $step }}/{{ $totalSteps }}: Granting privilege '{{ . }}' to catalog role '$CATALOG_ROLE'..."
-              GRANT_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X PUT \
+              GRANT_CODE=$(curl -s -o "$RESPONSE_FILE" -w '%{http_code}' -X PUT \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/catalogs/$CATALOG_NAME/catalog-roles/$CATALOG_ROLE/grants" \
@@ -407,7 +410,7 @@ spec:
                 log "Privilege '{{ . }}' already granted (duplicate grant record, Polaris returned HTTP 500) - OK"
               else
                 log "ERROR: Failed to grant privilege '{{ . }}' (HTTP $GRANT_CODE)" >&2
-                head -5 /tmp/response.txt >&2
+                log "Response body captured but not printed to avoid exposing credentials" >&2
                 exit 1
               fi
               {{- end }}
@@ -415,7 +418,7 @@ spec:
               # Assign catalog role to principal role (idempotent — 200/201/204 success, 409 already assigned)
               {{- $step = add $step 1 }}
               log "Step {{ $step }}/{{ $totalSteps }}: Assigning catalog role '$CATALOG_ROLE' to principal role '$PRINCIPAL_ROLE'..."
-              ASSIGN_CODE=$(curl -s -o /tmp/response.txt -w '%{http_code}' -X PUT \
+              ASSIGN_CODE=$(curl -s -o "$RESPONSE_FILE" -w '%{http_code}' -X PUT \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 "$POLARIS_URL/api/management/v1/principal-roles/$PRINCIPAL_ROLE/catalog-roles/$CATALOG_NAME" \
@@ -429,7 +432,7 @@ spec:
                 log "Catalog role '$CATALOG_ROLE' already assigned to '$PRINCIPAL_ROLE' (duplicate grant record, Polaris returned HTTP 500) - OK"
               else
                 log "ERROR: Failed to assign catalog role (HTTP $ASSIGN_CODE)" >&2
-                head -5 /tmp/response.txt >&2
+                log "Response body captured but not printed to avoid exposing credentials" >&2
                 exit 1
               fi
               {{- end }}

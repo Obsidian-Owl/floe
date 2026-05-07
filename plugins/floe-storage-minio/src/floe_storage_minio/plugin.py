@@ -22,6 +22,7 @@ Requirements Covered:
 from __future__ import annotations
 
 import os
+import warnings
 from typing import TYPE_CHECKING, Any, cast
 
 from floe_core.plugins.storage import StoragePlugin
@@ -45,7 +46,6 @@ if TYPE_CHECKING:
     from floe_core.plugins.storage import FileIO
     from pydantic import BaseModel
 
-NOT_CONFIGURED_MSG = "MinIOStoragePlugin not configured - instantiate with config parameter"
 TRACER_NAME = "floe.storage.minio"
 
 
@@ -173,16 +173,18 @@ class MinIOStoragePlugin(StoragePlugin):
         if not include_credentials:
             return properties
 
-        # Source credentials from config or environment
+        # Source service-specific credentials first to avoid accidental AWS
+        # credential reuse, while preserving AWS_* compatibility for S3 tooling.
         access_key = (
             config.access_key_id.get_secret_value()
             if config.access_key_id
-            else os.environ.get("AWS_ACCESS_KEY_ID", "")
+            else os.environ.get("MINIO_ACCESS_KEY_ID") or os.environ.get("AWS_ACCESS_KEY_ID", "")
         )
         secret_key = (
             config.secret_access_key.get_secret_value()
             if config.secret_access_key
-            else os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+            else os.environ.get("MINIO_SECRET_ACCESS_KEY")
+            or os.environ.get("AWS_SECRET_ACCESS_KEY", "")
         )
 
         if access_key:
@@ -197,7 +199,8 @@ class MinIOStoragePlugin(StoragePlugin):
 
         Returns a FsspecFileIO configured with S3 endpoint, region,
         and credentials. Credentials are sourced from config or
-        environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY).
+        environment variables (MINIO_ACCESS_KEY_ID/MINIO_SECRET_ACCESS_KEY,
+        then AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY).
 
         Returns:
             A PyIceberg FsspecFileIO instance configured for S3.
@@ -398,6 +401,12 @@ class MinIOStoragePlugin(StoragePlugin):
             Helm values using Kubernetes Secret references instead of
             credential values.
         """
+        warnings.warn(
+            "MinIOStoragePlugin.get_helm_values_override() is deprecated; use "
+            "get_deployment_binding() and deployment renderers instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         config = self._require_config()
         bucket_names = ",".join([config.bucket, config.artifact_bucket])
         return {

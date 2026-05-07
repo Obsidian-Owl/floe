@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 from floe_core import HealthState, HealthStatus
-from floe_core.composition.models import PluginRequirements
+from floe_core.composition.models import PluginRequirements, RequirementSet
 from floe_core.plugin_errors import CatalogUnavailableError, NotSupportedError
 from floe_core.plugins import CatalogPlugin
 from floe_core.plugins.catalog import Catalog
@@ -393,13 +393,13 @@ class PolarisCatalogPlugin(CatalogPlugin):
         return PluginRequirements(
             plugin_type="catalog",
             plugin_name="polaris",
-            requirements={
-                "protocols": ["s3-compatible", "s3"],
-                "credential_modes": ["kubernetes-secret", "workload-identity"],
-                "requires_server_side_storage_access": True,
-                "supports_no_sts": True,
-                "supports_path_style_access": True,
-            },
+            requirements=RequirementSet(
+                protocols=["s3-compatible", "s3"],
+                credential_modes=["kubernetes-secret", "workload-identity"],
+                requires_server_side_storage_access=True,
+                supports_no_sts=True,
+                supports_path_style_access=True,
+            ),
         )
 
     def build_catalog_deployment(

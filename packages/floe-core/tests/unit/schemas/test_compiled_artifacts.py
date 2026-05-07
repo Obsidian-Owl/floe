@@ -601,7 +601,7 @@ class TestStorageDeploymentBinding:
                 namespace="floe-system",
                 keys={
                     "accessKeyId": "access-key-id",
-                    "secretAccessKey": "secret-access-key",
+                    "secretAccessKey": "secret-access-key",  # pragma: allowlist secret
                 },
             ),
         )
@@ -745,8 +745,14 @@ class TestStorageDeploymentBinding:
     @pytest.mark.parametrize(
         ("field_name", "fragment"),
         [
-            ("pyiceberg_properties", {"s3.secret-access-key": "raw-secret-value"}),
-            ("dbt_profile_fragment", {"outputs": {"dev": {"password": "raw-secret-value"}}}),
+            (
+                "pyiceberg_properties",
+                {"s3.secret-access-key": "raw-secret-value"},  # pragma: allowlist secret
+            ),
+            (
+                "dbt_profile_fragment",
+                {"outputs": {"dev": {"password": "raw-secret-value"}}},  # pragma: allowlist secret
+            ),
             ("dagster_resources", {"storage": {"token": "raw-secret-value"}}),
             ("dbt_profile_fragment", {"settings": {"raw-secret-value"}}),
             ("dbt_profile_fragment", {"settings": {"storage-admin"}}),
@@ -765,7 +771,7 @@ class TestStorageDeploymentBinding:
     @pytest.mark.parametrize(
         "fragment",
         [
-            {"password": "raw-secret-value"},
+            {"password": "raw-secret-value"},  # pragma: allowlist secret
             {"settings": {"value": "raw-secret-value"}},
             {"settings": {"raw-secret-value"}},
         ],
@@ -1692,11 +1698,14 @@ class TestCompiledArtifactsVersionBump:
 
     @pytest.mark.requirement("T1-AC-6")
     def test_version_history_0_10_0_references_stale_table_recovery(self) -> None:
-        """Test that the 0.10.0 history entry mentions stale table recovery."""
+        """Test that the 0.10.0 history entry mentions contract additions."""
         entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.10.0", "")
         entry_lower = entry.lower()
         assert "stale" in entry_lower and "recovery" in entry_lower, (
             f"Version 0.10.0 history entry does not reference stale table recovery: '{entry}'"
+        )
+        assert "deployment" in entry_lower, (
+            f"Version 0.10.0 history entry does not reference deployment bindings: '{entry}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")

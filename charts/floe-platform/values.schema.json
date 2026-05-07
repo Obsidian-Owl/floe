@@ -288,6 +288,22 @@
           "type": "integer",
           "minimum": 1
         },
+        "persistence": {
+          "type": "object",
+          "description": "Polaris database persistence configuration",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "size": {
+              "type": "string",
+              "pattern": "^[0-9]+(Gi|Mi)$"
+            },
+            "storageClass": {
+              "type": "string"
+            }
+          }
+        },
         "auth": {
           "type": "object",
           "description": "Authentication configuration",

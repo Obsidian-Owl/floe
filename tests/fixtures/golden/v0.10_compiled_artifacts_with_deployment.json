@@ -1,0 +1,241 @@
+{
+  "$comment": "Golden fixture: CompiledArtifacts v0.10.0 with storage/catalog deployment bindings. DO NOT MODIFY without CONTRACT-001 review.",
+  "version": "0.10.0",
+  "metadata": {
+    "compiled_at": "2026-05-07T00:00:00Z",
+    "floe_version": "0.3.0",
+    "source_hash": "sha256:golden_deployment_fixture",
+    "product_name": "golden-deployment-test",
+    "product_version": "1.0.0"
+  },
+  "identity": {
+    "product_id": "analytics.golden_deployment_test",
+    "domain": "analytics",
+    "repository": "github.com/acme/golden-deployment-test",
+    "namespace_registered": true,
+    "registration_timestamp": "2026-05-07T00:00:00Z"
+  },
+  "mode": "centralized",
+  "inheritance_chain": [],
+  "observability": {
+    "telemetry": {
+      "enabled": true,
+      "otlp_endpoint": "http://otel-collector:4317",
+      "otlp_protocol": "grpc",
+      "sampling": {
+        "dev": 1.0,
+        "staging": 0.5,
+        "prod": 0.1
+      },
+      "resource_attributes": {
+        "service_name": "golden-deployment-test",
+        "service_version": "1.0.0",
+        "deployment_environment": "prod",
+        "floe_namespace": "analytics",
+        "floe_product_name": "golden-deployment-test",
+        "floe_product_version": "1.0.0",
+        "floe_mode": "prod"
+      },
+      "authentication": null,
+      "batch_processor": {
+        "max_queue_size": 2048,
+        "max_export_batch_size": 512,
+        "schedule_delay_millis": 5000,
+        "export_timeout_millis": 30000
+      },
+      "logging": {
+        "log_level": "INFO",
+        "json_output": true
+      },
+      "backend": "jaeger"
+    },
+    "lineage": true,
+    "lineage_namespace": "golden-deployment-test"
+  },
+  "plugins": {
+    "compute": {
+      "type": "duckdb",
+      "version": "0.9.0",
+      "config": {}
+    },
+    "orchestrator": {
+      "type": "dagster",
+      "version": "0.1.0",
+      "config": {}
+    },
+    "storage": {
+      "type": "minio",
+      "version": "0.1.0",
+      "config": {
+        "endpoint": "http://floe-platform-minio:9000",
+        "bucket": "floe-iceberg"
+      }
+    },
+    "catalog": {
+      "type": "polaris",
+      "version": "0.1.0",
+      "config": {}
+    }
+  },
+  "deployment": {
+    "storage": {
+      "provider": "minio",
+      "protocol": "s3-compatible",
+      "endpoint": {
+        "internal_url": "http://floe-platform-minio:9000",
+        "external_url": "http://localhost:9000",
+        "region": "us-east-1",
+        "warehouse_path": "s3://floe-iceberg",
+        "path_style_access": true
+      },
+      "warehouse": {
+        "uri": "s3://floe-iceberg",
+        "bucket": "floe-iceberg",
+        "prefix": ""
+      },
+      "allowed_locations": ["s3://floe-iceberg", "s3://floe-artifacts"],
+      "buckets": [
+        {
+          "name": "floe-iceberg",
+          "uri": "s3://floe-iceberg",
+          "purpose": "warehouse",
+          "create_policy": "create-if-missing",
+          "prefixes": [],
+          "features": {},
+          "tags": {}
+        },
+        {
+          "name": "floe-artifacts",
+          "uri": "s3://floe-artifacts",
+          "purpose": "artifacts",
+          "create_policy": "create-if-missing",
+          "prefixes": [],
+          "features": {},
+          "tags": {}
+        }
+      ],
+      "credentials": {
+        "mode": "kubernetes-secret",
+        "secret_ref": {
+          "name": "floe-platform-minio-credentials",
+          "namespace": "floe-system",
+          "keys": {
+            "accessKeyId": "root-user",
+            "secretAccessKey": "root-password"
+          }
+        },
+        "env_refs": {},
+        "service_account_ref": null
+      },
+      "capabilities": {
+        "protocols": ["s3-compatible"],
+        "credential_modes": ["kubernetes-secret"],
+        "sts_supported": false,
+        "path_style_access": true
+      },
+      "provisioning": {
+        "enabled": true,
+        "mode": "helm-job",
+        "default_create_policy": "create-if-missing"
+      },
+      "runtime": {
+        "pyiceberg_properties": {
+          "s3.endpoint": "http://floe-platform-minio:9000",
+          "s3.region": "us-east-1",
+          "s3.path-style-access": "true"
+        },
+        "dbt_profile_fragment": {
+          "s3_endpoint": "http://floe-platform-minio:9000",
+          "s3_region": "us-east-1",
+          "s3_path_style_access": true
+        },
+        "dagster_resources": {
+          "bucket": "floe-iceberg",
+          "endpoint_url": "http://floe-platform-minio:9000",
+          "region_name": "us-east-1",
+          "path_style_access": true
+        },
+        "env_refs": {
+          "accessKeyId": "AWS_ACCESS_KEY_ID",
+          "secretAccessKey": "AWS_SECRET_ACCESS_KEY"
+        }
+      },
+      "dbt": {
+        "profile_name": "floe",
+        "target_name": "dev",
+        "schema_name": "analytics",
+        "profile_fragment": {
+          "s3_endpoint": "http://floe-platform-minio:9000",
+          "s3_region": "us-east-1",
+          "s3_path_style_access": true
+        },
+        "env_refs": {
+          "s3_access_key_id": "AWS_ACCESS_KEY_ID",
+          "s3_secret_access_key": "AWS_SECRET_ACCESS_KEY"
+        }
+      },
+      "dagster": {
+        "resource_key": "minio_storage",
+        "asset_io_manager_key": "iceberg_io_manager",
+        "resources": {
+          "bucket": "floe-iceberg",
+          "endpoint_url": "http://floe-platform-minio:9000",
+          "region_name": "us-east-1",
+          "path_style_access": true
+        },
+        "env_refs": {
+          "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+          "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY"
+        }
+      },
+      "notes": ["MinIO uses S3-compatible protocol settings."]
+    },
+    "catalog": {
+      "provider": "polaris",
+      "polaris": {
+        "storage_type": "S3",
+        "default_base_location": "s3://floe-iceberg",
+        "allowed_locations": ["s3://floe-iceberg", "s3://floe-artifacts"],
+        "endpoint": "http://localhost:9000",
+        "endpoint_internal": "http://floe-platform-minio:9000",
+        "path_style_access": true,
+        "sts_unavailable": true,
+        "credential_refs": {
+          "accessKeyId": {
+            "source": "kubernetes-secret",
+            "name": "floe-platform-minio-credentials",
+            "key": "root-user"
+          },
+          "secretAccessKey": {
+            "source": "kubernetes-secret",
+            "name": "floe-platform-minio-credentials",
+            "key": "root-password"
+          }
+        }
+      }
+    }
+  },
+  "transforms": {
+    "models": [
+      {
+        "name": "customers",
+        "compute": "duckdb",
+        "tags": ["analytics"],
+        "depends_on": []
+      }
+    ],
+    "default_compute": "duckdb"
+  },
+  "dbt_profiles": {
+    "golden-deployment-test": {
+      "target": "dev",
+      "outputs": {
+        "dev": {
+          "type": "duckdb",
+          "path": "/tmp/golden.duckdb",
+          "s3_endpoint": "http://floe-platform-minio:9000"
+        }
+      }
+    }
+  }
+}

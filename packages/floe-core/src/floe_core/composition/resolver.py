@@ -52,8 +52,8 @@ class CompositionResolver:
     ) -> list[CompositionIssue]:
         """Validate storage capabilities against catalog requirements."""
         issues: list[CompositionIssue] = []
-        storage_protocols = list(storage.capabilities.get("protocols", []))
-        required_protocols = list(catalog.requirements.get("protocols", []))
+        storage_protocols = list(storage.capabilities.protocols)
+        required_protocols = list(catalog.requirements.protocols)
         if required_protocols and not set(storage_protocols).intersection(required_protocols):
             issues.append(
                 CompositionIssue(
@@ -68,8 +68,8 @@ class CompositionResolver:
                 )
             )
 
-        storage_modes = list(storage.capabilities.get("credential_modes", []))
-        required_modes = list(catalog.requirements.get("credential_modes", []))
+        storage_modes = list(storage.capabilities.credential_modes)
+        required_modes = list(catalog.requirements.credential_modes)
         if required_modes and not set(storage_modes).intersection(required_modes):
             issues.append(
                 CompositionIssue(

@@ -260,7 +260,7 @@ def _build_storage_deployment_binding(
         return None
 
     from floe_core.compilation.errors import CompilationError, CompilationException
-    from floe_core.composition.models import PluginCapabilities
+    from floe_core.composition.models import CapabilitySet, PluginCapabilities
     from floe_core.composition.resolver import CompositionResolver
     from floe_core.plugin_errors import PluginError
     from floe_core.plugin_registry import PluginRegistry
@@ -360,12 +360,12 @@ def _build_storage_deployment_binding(
         storage_capabilities = PluginCapabilities(
             plugin_type="storage",
             plugin_name=storage_plugin.name,
-            capabilities={
-                "protocols": storage_binding.capabilities.protocols,
-                "credential_modes": storage_binding.capabilities.credential_modes,
-                "path_style_access": storage_binding.capabilities.path_style_access,
-                "sts": storage_binding.capabilities.sts_supported,
-            },
+            capabilities=CapabilitySet(
+                protocols=storage_binding.capabilities.protocols,
+                credential_modes=storage_binding.capabilities.credential_modes,
+                path_style_access=storage_binding.capabilities.path_style_access,
+                sts=storage_binding.capabilities.sts_supported,
+            ),
         )
         catalog_requirements = catalog_plugin.get_storage_requirements()
         composition = CompositionResolver().validate(
@@ -714,16 +714,16 @@ def compile_pipeline(
             # Only runs when governance config is present in the manifest
             if manifest.governance is not None:
                 synthetic_dbt_manifest: dict[str, Any] = {"nodes": {}}
-                dbt_project_name = _dbt_project_name(spec.metadata.name)
+                dbt_project_id = _dbt_project_name(spec.metadata.name)
                 for model in transforms.models:
-                    node_key = f"model.{dbt_project_name}.{model.name}"
+                    node_key = f"model.{dbt_project_id}.{model.name}"
                     synthetic_dbt_manifest["nodes"][node_key] = {
                         "name": model.name,
                         "resource_type": "model",
                         "tags": list(model.tags) if model.tags else [],
                         "depends_on": {
                             "nodes": [
-                                f"model.{dbt_project_name}.{d}" for d in (model.depends_on or [])
+                                f"model.{dbt_project_id}.{d}" for d in (model.depends_on or [])
                             ]
                         },
                         "description": "",
@@ -757,10 +757,10 @@ def compile_pipeline(
             # Per-model lineage emission (non-blocking).
             # Records model presence in lineage graph during compilation;
             # execution-time events are emitted by Dagster at runtime.
-            dbt_project_name = _dbt_project_name(spec.metadata.name)
+            dbt_project_id = _dbt_project_name(spec.metadata.name)
             if lineage_available:
                 for model in transforms.models:
-                    model_job_name = f"model.{dbt_project_name}.{model.name}"
+                    model_job_name = f"model.{dbt_project_id}.{model.name}"
                     model_run_id: UUID | None = None
                     try:
                         model_run_id = emitter.emit_start(job_name=model_job_name)

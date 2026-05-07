@@ -1,5 +1,4472 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "AuthoritativeDefinition": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "title": "AuthoritativeDefinition",
+      "type": "object"
+    },
+    "BatchSpanProcessorConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for BatchSpanProcessor.\n\nBatchSpanProcessor is used for async, non-blocking span export.\nSpans are buffered in a queue and exported in batches.\n\nConfiguration guidelines by throughput:\n- Low (<100 spans/s): queue=512, batch=256, delay=10s\n- Medium (100-1000 spans/s): queue=2048, batch=512, delay=5s (default)\n- High (>1000 spans/s): queue=8192, batch=1024, delay=2s\n\nAttributes:\n    max_queue_size: Maximum spans buffered in memory (default: 2048)\n    max_export_batch_size: Spans per export batch (default: 512)\n    schedule_delay_millis: Export interval in ms (default: 5000)\n    export_timeout_millis: Per-batch export timeout in ms (default: 30000)\n\nExamples:\n    >>> # Default configuration (medium throughput)\n    >>> config = BatchSpanProcessorConfig()\n\n    >>> # High throughput configuration\n    >>> config = BatchSpanProcessorConfig(\n    ...     max_queue_size=8192,\n    ...     max_export_batch_size=1024,\n    ...     schedule_delay_millis=2000,\n    ... )",
+      "properties": {
+        "max_queue_size": {
+          "default": 2048,
+          "description": "Maximum spans buffered in memory",
+          "exclusiveMinimum": 0,
+          "title": "Max Queue Size",
+          "type": "integer"
+        },
+        "max_export_batch_size": {
+          "default": 512,
+          "description": "Spans per export batch",
+          "exclusiveMinimum": 0,
+          "title": "Max Export Batch Size",
+          "type": "integer"
+        },
+        "schedule_delay_millis": {
+          "default": 5000,
+          "description": "Export interval in milliseconds",
+          "exclusiveMinimum": 0,
+          "title": "Schedule Delay Millis",
+          "type": "integer"
+        },
+        "export_timeout_millis": {
+          "default": 30000,
+          "description": "Per-batch export timeout in milliseconds",
+          "exclusiveMinimum": 0,
+          "title": "Export Timeout Millis",
+          "type": "integer"
+        }
+      },
+      "title": "BatchSpanProcessorConfig",
+      "type": "object"
+    },
+    "CalculationParameters": {
+      "additionalProperties": false,
+      "description": "Layer 3 of scoring model: calculation parameters.\n\nControls how the final quality score is calculated, including\nbaseline score and influence capping to prevent extreme swings.\n\nExample:\n    >>> params = CalculationParameters(\n    ...     baseline_score=70,\n    ...     max_positive_influence=30,\n    ...     max_negative_influence=50,\n    ... )\n    >>> # All checks pass: score = min(100, 70 + 30) = 100\n    >>> # All checks fail: score = max(0, 70 - 50) = 20",
+      "properties": {
+        "baseline_score": {
+          "default": 70,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Baseline Score",
+          "type": "integer"
+        },
+        "max_positive_influence": {
+          "default": 30,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Max Positive Influence",
+          "type": "integer"
+        },
+        "max_negative_influence": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Max Negative Influence",
+          "type": "integer"
+        },
+        "severity_weights": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "default": {
+            "critical": 3.0,
+            "warning": 1.0,
+            "info": 0.5
+          },
+          "description": "Mapping of severity levels to numeric weights",
+          "propertyNames": {
+            "$ref": "#/$defs/SeverityLevel"
+          },
+          "title": "Severity Weights",
+          "type": "object"
+        }
+      },
+      "title": "CalculationParameters",
+      "type": "object"
+    },
+    "CatalogDeploymentBinding": {
+      "additionalProperties": false,
+      "description": "Secret-free catalog deployment binding.",
+      "properties": {
+        "provider": {
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "polaris": {
+          "$ref": "#/$defs/PolarisCatalogDeploymentBinding"
+        }
+      },
+      "required": [
+        "provider",
+        "polaris"
+      ],
+      "title": "CatalogDeploymentBinding",
+      "type": "object"
+    },
+    "CompilationMetadata": {
+      "additionalProperties": false,
+      "description": "Information about the compilation process.\n\nAttributes:\n    compiled_at: Timestamp of compilation\n    floe_version: Version of floe used for compilation\n    source_hash: SHA256 hash of input files\n    product_name: Name of the data product\n    product_version: Version of the data product",
+      "properties": {
+        "compiled_at": {
+          "description": "Timestamp of compilation",
+          "format": "date-time",
+          "title": "Compiled At",
+          "type": "string"
+        },
+        "floe_version": {
+          "description": "Version of floe used for compilation",
+          "title": "Floe Version",
+          "type": "string"
+        },
+        "source_hash": {
+          "description": "SHA256 hash of input files",
+          "title": "Source Hash",
+          "type": "string"
+        },
+        "product_name": {
+          "description": "Name of the data product",
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$",
+          "title": "Product Name",
+          "type": "string"
+        },
+        "product_version": {
+          "description": "Version of the data product",
+          "title": "Product Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "compiled_at",
+        "floe_version",
+        "source_hash",
+        "product_name",
+        "product_version"
+      ],
+      "title": "CompilationMetadata",
+      "type": "object"
+    },
+    "CredentialRef": {
+      "additionalProperties": false,
+      "description": "Secret-free credential reference used by consumer projections.",
+      "properties": {
+        "source": {
+          "enum": [
+            "kubernetes-secret",
+            "environment",
+            "workload-identity",
+            "none"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "key": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key"
+        }
+      },
+      "required": [
+        "source",
+        "name"
+      ],
+      "title": "CredentialRef",
+      "type": "object"
+    },
+    "CustomProperty": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "property": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Property"
+        },
+        "value": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "title": "CustomProperty",
+      "type": "object"
+    },
+    "DagsterStorageBinding": {
+      "additionalProperties": false,
+      "description": "Dagster resource storage projection.",
+      "properties": {
+        "resource_key": {
+          "minLength": 1,
+          "title": "Resource Key",
+          "type": "string"
+        },
+        "asset_io_manager_key": {
+          "minLength": 1,
+          "title": "Asset Io Manager Key",
+          "type": "string"
+        },
+        "resources": {
+          "additionalProperties": true,
+          "title": "Resources",
+          "type": "object"
+        },
+        "env_refs": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Env Refs",
+          "type": "object"
+        }
+      },
+      "required": [
+        "resource_key",
+        "asset_io_manager_key"
+      ],
+      "title": "DagsterStorageBinding",
+      "type": "object"
+    },
+    "DataQuality": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "authoritativeDefinitions": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/AuthoritativeDefinition"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Authoritativedefinitions"
+        },
+        "businessImpact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Businessimpact"
+        },
+        "customProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CustomProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customproperties"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "dimension": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dimension"
+        },
+        "method": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Method"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "schedule": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schedule"
+        },
+        "scheduler": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scheduler"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Severity"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tags"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "metric": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metric"
+        },
+        "rule": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rule"
+        },
+        "arguments": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Arguments"
+        },
+        "mustBe": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mustbe"
+        },
+        "mustNotBe": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mustnotbe"
+        },
+        "mustBeGreaterThan": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mustbegreaterthan"
+        },
+        "mustBeGreaterOrEqualTo": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mustbegreaterorequalto"
+        },
+        "mustBeLessThan": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mustbelessthan"
+        },
+        "mustBeLessOrEqualTo": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mustbelessorequalto"
+        },
+        "mustBeBetween": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mustbebetween"
+        },
+        "mustNotBeBetween": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mustnotbebetween"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Query"
+        },
+        "engine": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine"
+        },
+        "implementation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Implementation"
+        }
+      },
+      "title": "DataQuality",
+      "type": "object"
+    },
+    "DbtStorageBinding": {
+      "additionalProperties": false,
+      "description": "dbt profile storage projection.",
+      "properties": {
+        "profile_name": {
+          "minLength": 1,
+          "title": "Profile Name",
+          "type": "string"
+        },
+        "target_name": {
+          "minLength": 1,
+          "title": "Target Name",
+          "type": "string"
+        },
+        "schema_name": {
+          "minLength": 1,
+          "title": "Schema Name",
+          "type": "string"
+        },
+        "profile_fragment": {
+          "additionalProperties": true,
+          "title": "Profile Fragment",
+          "type": "object"
+        },
+        "env_refs": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Env Refs",
+          "type": "object"
+        }
+      },
+      "required": [
+        "profile_name",
+        "target_name",
+        "schema_name"
+      ],
+      "title": "DbtStorageBinding",
+      "type": "object"
+    },
+    "DeploymentConfig": {
+      "additionalProperties": false,
+      "description": "Deployment bindings derived during compilation.",
+      "properties": {
+        "storage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StorageDeploymentBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "catalog": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogDeploymentBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "DeploymentConfig",
+      "type": "object"
+    },
+    "Description": {
+      "properties": {
+        "usage": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Usage"
+        },
+        "purpose": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Purpose"
+        },
+        "limitations": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limitations"
+        },
+        "authoritativeDefinitions": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/AuthoritativeDefinition"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Authoritativedefinitions"
+        },
+        "customProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CustomProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customproperties"
+        }
+      },
+      "title": "Description",
+      "type": "object"
+    },
+    "Dimension": {
+      "description": "Quality dimensions for data quality scoring.\n\nEach quality check is mapped to one dimension. Dimension weights\ndetermine how much each dimension contributes to the overall score.\n\nAttributes:\n    COMPLETENESS: Data is present where expected (not_null, expect_column_to_exist)\n    ACCURACY: Data values are correct (expect_column_values_to_be_between)\n    VALIDITY: Data conforms to defined rules (regex, accepted_values)\n    CONSISTENCY: Data is consistent across sources (relationships, uniqueness)\n    TIMELINESS: Data is current and up-to-date (timestamp checks)",
+      "enum": [
+        "completeness",
+        "accuracy",
+        "validity",
+        "consistency",
+        "timeliness"
+      ],
+      "title": "Dimension",
+      "type": "string"
+    },
+    "DimensionWeights": {
+      "additionalProperties": false,
+      "description": "Layer 1 of scoring model: weights for quality dimensions.\n\nWeights determine how much each dimension contributes to the overall\nquality score. Must sum to 1.0.\n\nExample:\n    >>> weights = DimensionWeights(\n    ...     completeness=0.30,\n    ...     accuracy=0.25,\n    ...     validity=0.20,\n    ...     consistency=0.15,\n    ...     timeliness=0.10,\n    ... )\n    >>> weights.completeness\n    0.30",
+      "properties": {
+        "completeness": {
+          "default": 0.25,
+          "maximum": 1.0,
+          "minimum": 0,
+          "title": "Completeness",
+          "type": "number"
+        },
+        "accuracy": {
+          "default": 0.25,
+          "maximum": 1.0,
+          "minimum": 0,
+          "title": "Accuracy",
+          "type": "number"
+        },
+        "validity": {
+          "default": 0.2,
+          "maximum": 1.0,
+          "minimum": 0,
+          "title": "Validity",
+          "type": "number"
+        },
+        "consistency": {
+          "default": 0.15,
+          "maximum": 1.0,
+          "minimum": 0,
+          "title": "Consistency",
+          "type": "number"
+        },
+        "timeliness": {
+          "default": 0.15,
+          "maximum": 1.0,
+          "minimum": 0,
+          "title": "Timeliness",
+          "type": "number"
+        }
+      },
+      "title": "DimensionWeights",
+      "type": "object"
+    },
+    "EnforcementResultSummary": {
+      "additionalProperties": false,
+      "description": "Lightweight summary of enforcement result for inclusion in CompiledArtifacts.\n\nThis summary contains only the essential metrics for downstream consumption.\nFull violation details are exported separately (SARIF/JSON/HTML).\n\nContract Version: 0.7.0 (Epic 3E additions)\n\nAttributes:\n    passed: Overall pass/fail status.\n    error_count: Number of error-severity violations.\n    warning_count: Number of warning-severity violations.\n    policy_types_checked: List of policy types that were enforced.\n    models_validated: Number of models that were validated.\n    enforcement_level: Applied enforcement level (off, warn, strict).\n    rbac_principal: Authenticated principal name from RBAC validation (Epic 3E).\n    secrets_scanned: Count of secret scanning violations found (Epic 3E).\n\nExample:\n    >>> summary = EnforcementResultSummary(\n    ...     passed=False,\n    ...     error_count=3,\n    ...     warning_count=5,\n    ...     policy_types_checked=[\"naming\", \"coverage\", \"documentation\"],\n    ...     models_validated=50,\n    ...     enforcement_level=\"strict\",\n    ... )\n    >>> summary.passed\n    False\n\nSee Also:\n    - data-model.md: EnforcementResultSummary entity specification\n    - EnforcementResult: Full result in enforcement module",
+      "properties": {
+        "passed": {
+          "description": "Overall pass/fail status",
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "error_count": {
+          "description": "Number of error-severity violations",
+          "minimum": 0,
+          "title": "Error Count",
+          "type": "integer"
+        },
+        "warning_count": {
+          "description": "Number of warning-severity violations",
+          "minimum": 0,
+          "title": "Warning Count",
+          "type": "integer"
+        },
+        "policy_types_checked": {
+          "description": "List of policy types that were enforced",
+          "items": {
+            "type": "string"
+          },
+          "title": "Policy Types Checked",
+          "type": "array"
+        },
+        "models_validated": {
+          "description": "Number of models that were validated",
+          "minimum": 0,
+          "title": "Models Validated",
+          "type": "integer"
+        },
+        "enforcement_level": {
+          "description": "Applied enforcement level",
+          "enum": [
+            "off",
+            "warn",
+            "strict"
+          ],
+          "title": "Enforcement Level",
+          "type": "string"
+        },
+        "rbac_principal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Authenticated principal name from RBAC validation",
+          "title": "Rbac Principal"
+        },
+        "secrets_scanned": {
+          "default": 0,
+          "description": "Count of secret scanning violations found",
+          "minimum": 0,
+          "title": "Secrets Scanned",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "passed",
+        "error_count",
+        "warning_count",
+        "policy_types_checked",
+        "models_validated",
+        "enforcement_level"
+      ],
+      "title": "EnforcementResultSummary",
+      "type": "object"
+    },
+    "GateTier": {
+      "additionalProperties": false,
+      "description": "Quality gate requirements for a single tier.\n\nDefines minimum coverage and required test types for a quality tier.\n\nExample:\n    >>> gold = GateTier(\n    ...     min_test_coverage=100,\n    ...     required_tests=[\"not_null\", \"unique\", \"accepted_values\"],\n    ...     min_score=90,\n    ...     overridable=False,\n    ... )",
+      "properties": {
+        "min_test_coverage": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Min Test Coverage",
+          "type": "number"
+        },
+        "required_tests": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Tests",
+          "type": "array"
+        },
+        "min_score": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Min Score",
+          "type": "integer"
+        },
+        "overridable": {
+          "default": true,
+          "title": "Overridable",
+          "type": "boolean"
+        }
+      },
+      "title": "GateTier",
+      "type": "object"
+    },
+    "KubernetesSecretRef": {
+      "additionalProperties": false,
+      "description": "Reference to keys in a Kubernetes Secret.",
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "namespace": {
+          "minLength": 1,
+          "title": "Namespace",
+          "type": "string"
+        },
+        "keys": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Keys",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "namespace"
+      ],
+      "title": "KubernetesSecretRef",
+      "type": "object"
+    },
+    "LoggingConfig": {
+      "additionalProperties": false,
+      "description": "Logging configuration for structured log output.\n\nControls structlog configuration with trace context injection.\nLog level can be set per environment or globally.\n\nEnvironment Variables:\n    FLOE_LOG_LEVEL: Override log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)\n    FLOE_LOG_JSON: Set to \"false\" to use console output instead of JSON\n\nAttributes:\n    log_level: Minimum log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)\n    json_output: Output format - JSON (True) or console (False)\n\nExamples:\n    >>> logging_config = LoggingConfig(log_level=\"DEBUG\", json_output=True)\n    >>> # Or use environment variables:\n    >>> # FLOE_LOG_LEVEL=DEBUG FLOE_LOG_JSON=false python app.py",
+      "properties": {
+        "log_level": {
+          "description": "Minimum log level (case-insensitive). Override with FLOE_LOG_LEVEL env var.",
+          "pattern": "^(?i)(DEBUG|INFO|WARNING|ERROR|CRITICAL)$",
+          "title": "Log Level",
+          "type": "string"
+        },
+        "json_output": {
+          "description": "Output format - JSON (True) or console (False). Override with FLOE_LOG_JSON env var.",
+          "title": "Json Output",
+          "type": "boolean"
+        }
+      },
+      "title": "LoggingConfig",
+      "type": "object"
+    },
+    "ManifestRef": {
+      "additionalProperties": false,
+      "description": "Reference to a manifest in the inheritance chain.\n\nAttributes:\n    name: Manifest name\n    version: Manifest version\n    scope: Manifest scope (enterprise or domain)\n    ref: OCI reference",
+      "properties": {
+        "name": {
+          "description": "Manifest name",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "description": "Manifest version",
+          "title": "Version",
+          "type": "string"
+        },
+        "scope": {
+          "description": "Manifest scope",
+          "enum": [
+            "enterprise",
+            "domain"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "ref": {
+          "description": "OCI reference",
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "scope",
+        "ref"
+      ],
+      "title": "ManifestRef",
+      "type": "object"
+    },
+    "ObservabilityConfig": {
+      "additionalProperties": false,
+      "description": "Observability settings including telemetry configuration.\n\nThis configuration controls all observability aspects:\n- OpenTelemetry traces, metrics, and logs (via TelemetryConfig)\n- OpenLineage data lineage tracking\n- Lineage namespace for correlation\n\nAttributes:\n    telemetry: Full OpenTelemetry configuration (TelemetryConfig)\n    lineage: Whether OpenLineage is enabled\n    lineage_namespace: Namespace for lineage events\n\nExamples:\n    >>> from floe_core.schemas.telemetry import TelemetryConfig, ResourceAttributes\n    >>> config = ObservabilityConfig(\n    ...     telemetry=TelemetryConfig(\n    ...         enabled=True,\n    ...         resource_attributes=ResourceAttributes(\n    ...             service_name=\"my-pipeline\",\n    ...             service_version=\"1.0.0\",\n    ...             deployment_environment=\"prod\",\n    ...             floe_namespace=\"analytics\",\n    ...             floe_product_name=\"customer-360\",\n    ...             floe_product_version=\"2.1.0\",\n    ...             floe_mode=\"prod\",\n    ...         ),\n    ...     ),\n    ...     lineage=True,\n    ...     lineage_namespace=\"my-pipeline\",\n    ... )",
+      "properties": {
+        "telemetry": {
+          "$ref": "#/$defs/TelemetryConfig",
+          "description": "OpenTelemetry configuration (traces, metrics, logs)"
+        },
+        "lineage": {
+          "default": true,
+          "description": "Whether OpenLineage is enabled",
+          "title": "Lineage",
+          "type": "boolean"
+        },
+        "lineage_namespace": {
+          "description": "Namespace for lineage events",
+          "minLength": 1,
+          "title": "Lineage Namespace",
+          "type": "string"
+        },
+        "lineage_endpoint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "OpenLineage HTTP endpoint for lineage events",
+          "title": "Lineage Endpoint"
+        },
+        "lineage_transport": {
+          "anyOf": [
+            {
+              "enum": [
+                "http",
+                "console",
+                "noop"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "OpenLineage transport type",
+          "title": "Lineage Transport"
+        }
+      },
+      "required": [
+        "telemetry",
+        "lineage_namespace"
+      ],
+      "title": "ObservabilityConfig",
+      "type": "object"
+    },
+    "OpenDataContractStandard": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
+        "apiVersion": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Apiversion"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "tenant": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tenant"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tags"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
+        "servers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Server"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Servers"
+        },
+        "dataProduct": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataproduct"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Description"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "domain": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Domain"
+        },
+        "schema": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/SchemaObject"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema"
+        },
+        "support": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Support"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Support"
+        },
+        "price": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pricing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "team": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Team"
+            },
+            {
+              "items": {
+                "$ref": "#/$defs/TeamMember"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Team"
+        },
+        "roles": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Role"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Roles"
+        },
+        "slaDefaultElement": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sladefaultelement"
+        },
+        "slaProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ServiceLevelAgreementProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slaproperties"
+        },
+        "authoritativeDefinitions": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/AuthoritativeDefinition"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Authoritativedefinitions"
+        },
+        "customProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CustomProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customproperties"
+        },
+        "contractCreatedTs": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Contractcreatedts"
+        }
+      },
+      "title": "OpenDataContractStandard",
+      "type": "object"
+    },
+    "PluginRef": {
+      "additionalProperties": false,
+      "description": "Reference to a resolved plugin.\n\nContains the plugin type, version, and configuration after\nresolution from the platform manifest.\n\nAttributes:\n    type: Plugin type name (e.g., \"duckdb\", \"snowflake\")\n    version: Plugin version (semver)\n    config: Plugin-specific configuration dictionary\n\nExample:\n    >>> plugin = PluginRef(\n    ...     type=\"duckdb\",\n    ...     version=\"0.9.0\",\n    ...     config={\"threads\": 4, \"memory_limit\": \"8GB\"}\n    ... )\n    >>> plugin.type\n    'duckdb'\n\nSee Also:\n    - data-model.md: PluginRef entity specification",
+      "properties": {
+        "type": {
+          "description": "Plugin type name (e.g., 'duckdb', 'snowflake')",
+          "examples": [
+            "duckdb",
+            "snowflake",
+            "dagster"
+          ],
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "version": {
+          "description": "Plugin version (semver)",
+          "examples": [
+            "0.9.0",
+            "1.2.3"
+          ],
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Plugin-specific configuration",
+          "examples": [
+            {
+              "memory_limit": "8GB",
+              "threads": 4
+            }
+          ],
+          "title": "Config"
+        }
+      },
+      "required": [
+        "type",
+        "version"
+      ],
+      "title": "PluginRef",
+      "type": "object"
+    },
+    "PolarisCatalogDeploymentBinding": {
+      "additionalProperties": false,
+      "description": "Polaris catalog-owned storage configuration for deployment renderers.",
+      "properties": {
+        "storage_type": {
+          "const": "S3",
+          "title": "Storage Type",
+          "type": "string"
+        },
+        "default_base_location": {
+          "minLength": 1,
+          "title": "Default Base Location",
+          "type": "string"
+        },
+        "allowed_locations": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Allowed Locations",
+          "type": "array"
+        },
+        "endpoint": {
+          "minLength": 1,
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "endpoint_internal": {
+          "minLength": 1,
+          "title": "Endpoint Internal",
+          "type": "string"
+        },
+        "path_style_access": {
+          "title": "Path Style Access",
+          "type": "boolean"
+        },
+        "sts_unavailable": {
+          "title": "Sts Unavailable",
+          "type": "boolean"
+        },
+        "credential_refs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/CredentialRef"
+          },
+          "title": "Credential Refs",
+          "type": "object"
+        }
+      },
+      "required": [
+        "storage_type",
+        "default_base_location",
+        "allowed_locations",
+        "endpoint",
+        "endpoint_internal",
+        "path_style_access",
+        "sts_unavailable"
+      ],
+      "title": "PolarisCatalogDeploymentBinding",
+      "type": "object"
+    },
+    "Pricing": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "priceAmount": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Priceamount"
+        },
+        "priceCurrency": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pricecurrency"
+        },
+        "priceUnit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Priceunit"
+        }
+      },
+      "title": "Pricing",
+      "type": "object"
+    },
+    "ProductIdentity": {
+      "additionalProperties": false,
+      "description": "Product identity information from catalog registration.\n\nSee ADR-0030 for the namespace-based identity model.\n\nAttributes:\n    product_id: Fully qualified product ID (e.g., 'sales.customer_360')\n    domain: Domain name (e.g., 'sales')\n    repository: Source repository URL\n    namespace_registered: Whether registered in catalog\n    registration_timestamp: When first registered",
+      "properties": {
+        "product_id": {
+          "description": "Fully qualified product ID",
+          "minLength": 1,
+          "title": "Product Id",
+          "type": "string"
+        },
+        "domain": {
+          "description": "Domain name",
+          "minLength": 1,
+          "title": "Domain",
+          "type": "string"
+        },
+        "repository": {
+          "description": "Source repository URL",
+          "title": "Repository",
+          "type": "string"
+        },
+        "namespace_registered": {
+          "default": false,
+          "description": "Whether registered in catalog",
+          "title": "Namespace Registered",
+          "type": "boolean"
+        },
+        "registration_timestamp": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When first registered",
+          "title": "Registration Timestamp"
+        }
+      },
+      "required": [
+        "product_id",
+        "domain",
+        "repository"
+      ],
+      "title": "ProductIdentity",
+      "type": "object"
+    },
+    "QualityCheck": {
+      "additionalProperties": false,
+      "description": "Individual quality check definition.\n\nDefines a single quality check with dimension mapping and severity.\nUsed both at compile-time (in floe.yaml) and runtime (execution).\n\nExample:\n    >>> check = QualityCheck(\n    ...     name=\"customer_id_not_null\",\n    ...     type=\"not_null\",\n    ...     column=\"customer_id\",\n    ...     dimension=Dimension.COMPLETENESS,\n    ...     severity=SeverityLevel.CRITICAL,\n    ... )",
+      "properties": {
+        "name": {
+          "description": "Check identifier (unique within model)",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "description": "Check type (not_null, unique, expect_column_values_to_be_between, etc.)",
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target column (None for table-level checks)",
+          "title": "Column"
+        },
+        "dimension": {
+          "$ref": "#/$defs/Dimension",
+          "description": "Quality dimension (completeness, accuracy, validity, consistency, timeliness)"
+        },
+        "severity": {
+          "$ref": "#/$defs/SeverityLevel",
+          "default": "warning",
+          "description": "Check severity (critical, warning, info)"
+        },
+        "custom_weight": {
+          "anyOf": [
+            {
+              "maximum": 10.0,
+              "minimum": 0.1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Custom Weight"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "description": "Check-specific parameters (min_value, max_value, regex, etc.)",
+          "title": "Parameters",
+          "type": "object"
+        },
+        "enabled": {
+          "default": true,
+          "description": "Whether check is active",
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "dimension"
+      ],
+      "title": "QualityCheck",
+      "type": "object"
+    },
+    "QualityConfig": {
+      "additionalProperties": false,
+      "description": "Top-level quality configuration with three-tier inheritance.\n\nThis is the resolved quality configuration after inheritance from\nEnterprise \u2192 Domain \u2192 Product levels.\n\nExample:\n    >>> config = QualityConfig(\n    ...     provider=\"great_expectations\",\n    ...     quality_gates=QualityGates(),\n    ...     dimension_weights=DimensionWeights(),\n    ...     calculation=CalculationParameters(),\n    ...     thresholds=QualityThresholds(),\n    ... )",
+      "properties": {
+        "provider": {
+          "description": "Quality plugin name (e.g., 'great_expectations', 'dbt_expectations')",
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "quality_gates": {
+          "$ref": "#/$defs/QualityGates"
+        },
+        "dimension_weights": {
+          "$ref": "#/$defs/DimensionWeights"
+        },
+        "calculation": {
+          "$ref": "#/$defs/CalculationParameters"
+        },
+        "thresholds": {
+          "$ref": "#/$defs/QualityThresholds"
+        },
+        "check_timeout_seconds": {
+          "default": 300,
+          "maximum": 3600,
+          "minimum": 1,
+          "title": "Check Timeout Seconds",
+          "type": "integer"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "provider"
+      ],
+      "title": "QualityConfig",
+      "type": "object"
+    },
+    "QualityGates": {
+      "additionalProperties": false,
+      "description": "Tier-based quality requirements (bronze/silver/gold).\n\nEach tier defines progressively stricter requirements.\n\nExample:\n    >>> gates = QualityGates(\n    ...     bronze=GateTier(min_test_coverage=50),\n    ...     silver=GateTier(min_test_coverage=80, required_tests=[\"not_null\"]),\n    ...     gold=GateTier(min_test_coverage=100, required_tests=[\"not_null\", \"unique\"]),\n    ... )",
+      "properties": {
+        "bronze": {
+          "$ref": "#/$defs/GateTier"
+        },
+        "silver": {
+          "$ref": "#/$defs/GateTier"
+        },
+        "gold": {
+          "$ref": "#/$defs/GateTier"
+        }
+      },
+      "title": "QualityGates",
+      "type": "object"
+    },
+    "QualityThresholds": {
+      "additionalProperties": false,
+      "description": "Quality score thresholds for enforcement.\n\nmin_score blocks deployment; warn_score emits warnings.\n\nExample:\n    >>> thresholds = QualityThresholds(min_score=70, warn_score=85)\n    >>> # Score 60 -> FLOE-DQ102 (blocks deployment)\n    >>> # Score 75 -> Warning emitted, deployment allowed\n    >>> # Score 90 -> Clean deployment",
+      "properties": {
+        "min_score": {
+          "default": 70,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Min Score",
+          "type": "integer"
+        },
+        "warn_score": {
+          "default": 85,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Warn Score",
+          "type": "integer"
+        }
+      },
+      "title": "QualityThresholds",
+      "type": "object"
+    },
+    "Relationship": {
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From"
+        },
+        "to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "To"
+        },
+        "customProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CustomProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customproperties"
+        }
+      },
+      "title": "Relationship",
+      "type": "object"
+    },
+    "ResolvedGovernance": {
+      "additionalProperties": false,
+      "description": "Governance settings after inheritance resolution.\n\nContains security and compliance settings resolved from the\ninheritance chain, with child manifests unable to weaken parent policies.\n\nAttributes:\n    pii_encryption: PII encryption policy (required or optional)\n    audit_logging: Audit logging policy (enabled or disabled)\n    policy_enforcement_level: Enforcement level (off, warn, strict)\n    data_retention_days: Data retention period in days\n    default_ttl_hours: Table-level partition TTL in hours\n    snapshot_keep_last: Minimum Iceberg snapshots to retain per table\n\nExample:\n    >>> governance = ResolvedGovernance(\n    ...     pii_encryption=\"required\",\n    ...     audit_logging=\"enabled\",\n    ...     policy_enforcement_level=\"strict\",\n    ...     data_retention_days=90,\n    ...     default_ttl_hours=720,\n    ...     snapshot_keep_last=10,\n    ... )\n    >>> governance.pii_encryption\n    'required'\n\nSee Also:\n    - data-model.md: ResolvedGovernance entity specification",
+      "properties": {
+        "pii_encryption": {
+          "anyOf": [
+            {
+              "enum": [
+                "required",
+                "optional"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "PII encryption policy",
+          "title": "Pii Encryption"
+        },
+        "audit_logging": {
+          "anyOf": [
+            {
+              "enum": [
+                "enabled",
+                "disabled"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Audit logging policy",
+          "title": "Audit Logging"
+        },
+        "policy_enforcement_level": {
+          "anyOf": [
+            {
+              "enum": [
+                "off",
+                "warn",
+                "strict"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Policy enforcement level",
+          "title": "Policy Enforcement Level"
+        },
+        "data_retention_days": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Data retention period in days",
+          "title": "Data Retention Days"
+        },
+        "default_ttl_hours": {
+          "anyOf": [
+            {
+              "maximum": 8760,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Table-level partition TTL in hours",
+          "title": "Default Ttl Hours"
+        },
+        "snapshot_keep_last": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Minimum Iceberg snapshots to retain per table",
+          "title": "Snapshot Keep Last"
+        },
+        "stale_table_recovery_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "strict",
+                "repair"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Configured stale Iceberg metadata recovery mode for runtimes",
+          "title": "Stale Table Recovery Mode"
+        }
+      },
+      "title": "ResolvedGovernance",
+      "type": "object"
+    },
+    "ResolvedModel": {
+      "additionalProperties": false,
+      "description": "A transform model with resolved compute target and quality configuration.\n\nRepresents a single dbt model after compilation, with the compute\ntarget resolved (never None - uses platform default if not specified)\nand optional quality checks attached from the quality gate configuration.\n\nAttributes:\n    name: Model name (dbt model identifier).\n    compute: Resolved compute target (never None).\n    tags: dbt tags for selection.\n    depends_on: Explicit dependencies (model names).\n    quality_checks: Quality checks assigned to this model (from quality gates).\n    quality_tier: Quality tier for this model (bronze, silver, gold).\n\nExample:\n    >>> model = ResolvedModel(\n    ...     name=\"stg_customers\",\n    ...     compute=\"duckdb\",\n    ...     tags=[\"staging\", \"customers\"],\n    ...     depends_on=[\"raw_customers\"],\n    ...     quality_tier=\"silver\",\n    ... )\n    >>> model.compute\n    'duckdb'\n\nSee Also:\n    - data-model.md: ResolvedModel entity specification\n    - quality_config.py: QualityGates tier definitions",
+      "properties": {
+        "name": {
+          "description": "Model name (dbt model identifier)",
+          "examples": [
+            "stg_customers",
+            "fct_orders"
+          ],
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "compute": {
+          "description": "Resolved compute target (never None)",
+          "examples": [
+            "duckdb",
+            "snowflake"
+          ],
+          "minLength": 1,
+          "title": "Compute",
+          "type": "string"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "dbt tags for selection",
+          "examples": [
+            [
+              "staging",
+              "customers"
+            ]
+          ],
+          "title": "Tags"
+        },
+        "depends_on": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Explicit dependencies (model names)",
+          "examples": [
+            [
+              "raw_customers",
+              "raw_orders"
+            ]
+          ],
+          "title": "Depends On"
+        },
+        "quality_checks": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/QualityCheck"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Quality checks for this model",
+          "title": "Quality Checks"
+        },
+        "quality_tier": {
+          "anyOf": [
+            {
+              "enum": [
+                "bronze",
+                "silver",
+                "gold"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Quality tier for this model",
+          "title": "Quality Tier"
+        }
+      },
+      "required": [
+        "name",
+        "compute"
+      ],
+      "title": "ResolvedModel",
+      "type": "object"
+    },
+    "ResolvedPlugins": {
+      "additionalProperties": false,
+      "description": "Resolved plugin selections after inheritance.\n\nContains references to all resolved plugins that will be used\nfor pipeline execution. Required plugins (compute, orchestrator)\nmust be present; optional plugins may be None.\n\nAttributes:\n    compute: Resolved compute plugin (required)\n    orchestrator: Resolved orchestrator plugin (required)\n    catalog: Resolved catalog plugin (optional)\n    storage: Resolved storage plugin (optional)\n    ingestion: Resolved ingestion plugin (optional)\n    semantic: Resolved semantic layer plugin (optional)\n\nExample:\n    >>> plugins = ResolvedPlugins(\n    ...     compute=PluginRef(type=\"duckdb\", version=\"0.9.0\"),\n    ...     orchestrator=PluginRef(type=\"dagster\", version=\"1.5.0\"),\n    ...     catalog=PluginRef(type=\"polaris\", version=\"0.1.0\"),\n    ... )\n    >>> plugins.compute.type\n    'duckdb'\n\nSee Also:\n    - data-model.md: ResolvedPlugins entity specification",
+      "properties": {
+        "compute": {
+          "$ref": "#/$defs/PluginRef",
+          "description": "Resolved compute plugin (required)"
+        },
+        "orchestrator": {
+          "$ref": "#/$defs/PluginRef",
+          "description": "Resolved orchestrator plugin (required)"
+        },
+        "catalog": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resolved catalog plugin (optional)"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resolved storage plugin (optional)"
+        },
+        "ingestion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resolved ingestion plugin (optional)"
+        },
+        "semantic": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resolved semantic layer plugin (optional)"
+        },
+        "lineage_backend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resolved lineage backend plugin (optional, v0.5.0+)"
+        }
+      },
+      "required": [
+        "compute",
+        "orchestrator"
+      ],
+      "title": "ResolvedPlugins",
+      "type": "object"
+    },
+    "ResolvedTransforms": {
+      "additionalProperties": false,
+      "description": "Compiled transform configuration.\n\nContains the list of resolved models and the default compute target\nused for models that don't specify an override.\n\nAttributes:\n    models: List of resolved models with compute targets\n    default_compute: Default compute target from platform\n\nExample:\n    >>> transforms = ResolvedTransforms(\n    ...     models=[\n    ...         ResolvedModel(name=\"stg_customers\", compute=\"duckdb\"),\n    ...         ResolvedModel(name=\"fct_orders\", compute=\"duckdb\"),\n    ...     ],\n    ...     default_compute=\"duckdb\"\n    ... )\n    >>> len(transforms.models)\n    2\n\nSee Also:\n    - data-model.md: ResolvedTransforms entity specification",
+      "properties": {
+        "models": {
+          "description": "List of resolved models with compute targets",
+          "items": {
+            "$ref": "#/$defs/ResolvedModel"
+          },
+          "minItems": 1,
+          "title": "Models",
+          "type": "array"
+        },
+        "default_compute": {
+          "description": "Default compute target from platform",
+          "examples": [
+            "duckdb",
+            "snowflake"
+          ],
+          "minLength": 1,
+          "title": "Default Compute",
+          "type": "string"
+        }
+      },
+      "required": [
+        "models",
+        "default_compute"
+      ],
+      "title": "ResolvedTransforms",
+      "type": "object"
+    },
+    "ResourceAttributes": {
+      "additionalProperties": false,
+      "description": "OpenTelemetry resource attributes for service identification.\n\nApplied to all traces, metrics, and logs from the service.\nFollows OpenTelemetry semantic conventions plus Floe-specific attributes.\n\nAttributes:\n    service_name: Service identifier (e.g., 'floe-core', 'floe-dagster')\n    service_version: Service version following semver\n    deployment_environment: Target environment (dev, staging, prod)\n    floe_namespace: Polaris catalog namespace (mandatory per ADR-0006)\n    floe_product_name: Data product name\n    floe_product_version: Data product version\n    floe_mode: Execution mode matching environment\n\nExamples:\n    >>> attrs = ResourceAttributes(\n    ...     service_name=\"floe-core\",\n    ...     service_version=\"1.0.0\",\n    ...     deployment_environment=\"prod\",\n    ...     floe_namespace=\"analytics\",\n    ...     floe_product_name=\"customer-360\",\n    ...     floe_product_version=\"2.1.0\",\n    ...     floe_mode=\"prod\",\n    ... )",
+      "properties": {
+        "service_name": {
+          "description": "Service identifier",
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Service Name",
+          "type": "string"
+        },
+        "service_version": {
+          "description": "Service version (semver)",
+          "pattern": "^\\d+\\.\\d+\\.\\d+.*$",
+          "title": "Service Version",
+          "type": "string"
+        },
+        "deployment_environment": {
+          "description": "Deployment environment",
+          "enum": [
+            "dev",
+            "staging",
+            "prod"
+          ],
+          "title": "Deployment Environment",
+          "type": "string"
+        },
+        "floe_namespace": {
+          "description": "Polaris catalog namespace (mandatory)",
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Floe Namespace",
+          "type": "string"
+        },
+        "floe_product_name": {
+          "description": "Data product name",
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Floe Product Name",
+          "type": "string"
+        },
+        "floe_product_version": {
+          "description": "Data product version",
+          "title": "Floe Product Version",
+          "type": "string"
+        },
+        "floe_mode": {
+          "description": "Execution mode",
+          "enum": [
+            "dev",
+            "staging",
+            "prod"
+          ],
+          "title": "Floe Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "service_name",
+        "service_version",
+        "deployment_environment",
+        "floe_namespace",
+        "floe_product_name",
+        "floe_product_version",
+        "floe_mode"
+      ],
+      "title": "ResourceAttributes",
+      "type": "object"
+    },
+    "Role": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "access": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Access"
+        },
+        "firstLevelApprovers": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Firstlevelapprovers"
+        },
+        "secondLevelApprovers": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Secondlevelapprovers"
+        },
+        "customProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CustomProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customproperties"
+        }
+      },
+      "title": "Role",
+      "type": "object"
+    },
+    "SamplingConfig": {
+      "additionalProperties": false,
+      "description": "Environment-based sampling configuration.\n\nControls trace sampling ratio per environment to balance\nobservability coverage with data volume/cost.\n\nAttributes:\n    dev: Sampling ratio for development (default: 100%)\n    staging: Sampling ratio for staging (default: 50%)\n    prod: Sampling ratio for production (default: 10%)\n\nExamples:\n    >>> sampling = SamplingConfig(dev=1.0, staging=0.5, prod=0.1)\n    >>> sampling.get_ratio(\"prod\")\n    0.1",
+      "properties": {
+        "dev": {
+          "default": 1.0,
+          "description": "Development sampling ratio (0.0-1.0)",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Dev",
+          "type": "number"
+        },
+        "staging": {
+          "default": 0.5,
+          "description": "Staging sampling ratio (0.0-1.0)",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Staging",
+          "type": "number"
+        },
+        "prod": {
+          "default": 0.1,
+          "description": "Production sampling ratio (0.0-1.0)",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Prod",
+          "type": "number"
+        }
+      },
+      "title": "SamplingConfig",
+      "type": "object"
+    },
+    "SchemaObject": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "physicalType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Physicaltype"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "businessName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Businessname"
+        },
+        "authoritativeDefinitions": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/AuthoritativeDefinition"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Authoritativedefinitions"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tags"
+        },
+        "customProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CustomProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customproperties"
+        },
+        "logicalType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Logicaltype"
+        },
+        "physicalName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Physicalname"
+        },
+        "dataGranularityDescription": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Datagranularitydescription"
+        },
+        "properties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/SchemaProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Properties"
+        },
+        "relationships": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Relationship"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relationships"
+        },
+        "quality": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/DataQuality"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quality"
+        }
+      },
+      "title": "SchemaObject",
+      "type": "object"
+    },
+    "SchemaProperty": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "physicalType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Physicaltype"
+        },
+        "physicalName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Physicalname"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "businessName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Businessname"
+        },
+        "authoritativeDefinitions": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/AuthoritativeDefinition"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Authoritativedefinitions"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tags"
+        },
+        "customProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CustomProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customproperties"
+        },
+        "primaryKey": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Primarykey"
+        },
+        "primaryKeyPosition": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Primarykeyposition"
+        },
+        "logicalType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Logicaltype"
+        },
+        "logicalTypeOptions": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Logicaltypeoptions"
+        },
+        "required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Required"
+        },
+        "unique": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unique"
+        },
+        "partitioned": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Partitioned"
+        },
+        "partitionKeyPosition": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Partitionkeyposition"
+        },
+        "classification": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Classification"
+        },
+        "encryptedName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Encryptedname"
+        },
+        "transformSourceObjects": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transformsourceobjects"
+        },
+        "transformLogic": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transformlogic"
+        },
+        "transformDescription": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transformdescription"
+        },
+        "examples": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Examples"
+        },
+        "criticalDataElement": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Criticaldataelement"
+        },
+        "relationships": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Relationship"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relationships"
+        },
+        "quality": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/DataQuality"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quality"
+        },
+        "properties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/SchemaProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Properties"
+        },
+        "items": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SchemaProperty"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "SchemaProperty",
+      "type": "object"
+    },
+    "Server": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "server": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Server"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Type"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "environment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Environment"
+        },
+        "roles": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Role"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Roles"
+        },
+        "customProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CustomProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customproperties"
+        },
+        "account": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Account"
+        },
+        "catalog": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog"
+        },
+        "database": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Database"
+        },
+        "dataset": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataset"
+        },
+        "delimiter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delimiter"
+        },
+        "endpointUrl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Endpointurl"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Format"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Host"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "port": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Port"
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Region"
+        },
+        "regionName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Regionname"
+        },
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schema"
+        },
+        "serviceName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Servicename"
+        },
+        "stagingDir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stagingdir"
+        },
+        "stream": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stream"
+        },
+        "warehouse": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Warehouse"
+        }
+      },
+      "title": "Server",
+      "type": "object"
+    },
+    "ServiceLevelAgreementProperty": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "property": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Property"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "valueExt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valueext"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "element": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Element"
+        },
+        "driver": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Driver"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "scheduler": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scheduler"
+        },
+        "schedule": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schedule"
+        }
+      },
+      "title": "ServiceLevelAgreementProperty",
+      "type": "object"
+    },
+    "SeverityLevel": {
+      "description": "Severity levels for quality checks.\n\nSeverity determines the weight of a check in the quality score.\nHigher severity checks have more impact on the final score.\n\nAttributes:\n    CRITICAL: Critical checks (default weight: 3.0). Failures significantly impact score.\n    WARNING: Warning checks (default weight: 1.0). Standard business rule violations.\n    INFO: Informational checks (default weight: 0.5). Nice-to-have validations.",
+      "enum": [
+        "critical",
+        "warning",
+        "info"
+      ],
+      "title": "SeverityLevel",
+      "type": "string"
+    },
+    "StorageBucketRequirement": {
+      "additionalProperties": false,
+      "description": "Desired storage bucket state emitted by storage plugins.",
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "uri": {
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        },
+        "purpose": {
+          "enum": [
+            "warehouse",
+            "artifacts",
+            "landing",
+            "quarantine",
+            "checkpoints",
+            "exports"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
+        "create_policy": {
+          "enum": [
+            "create-if-missing",
+            "must-exist",
+            "never-create"
+          ],
+          "title": "Create Policy",
+          "type": "string"
+        },
+        "prefixes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Prefixes",
+          "type": "array"
+        },
+        "features": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Features",
+          "type": "object"
+        },
+        "tags": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "uri",
+        "purpose",
+        "create_policy"
+      ],
+      "title": "StorageBucketRequirement",
+      "type": "object"
+    },
+    "StorageCapabilities": {
+      "additionalProperties": false,
+      "description": "Storage protocol and credential capabilities available to consumers.",
+      "properties": {
+        "protocols": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Protocols",
+          "type": "array"
+        },
+        "credential_modes": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Credential Modes",
+          "type": "array"
+        },
+        "sts_supported": {
+          "default": false,
+          "title": "Sts Supported",
+          "type": "boolean"
+        },
+        "path_style_access": {
+          "default": false,
+          "title": "Path Style Access",
+          "type": "boolean"
+        }
+      },
+      "title": "StorageCapabilities",
+      "type": "object"
+    },
+    "StorageCredentialBinding": {
+      "additionalProperties": false,
+      "description": "Secret-free storage credential source.",
+      "properties": {
+        "mode": {
+          "enum": [
+            "kubernetes-secret",
+            "environment",
+            "workload-identity",
+            "none"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "secret_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KubernetesSecretRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "env_refs": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Env Refs",
+          "type": "object"
+        },
+        "service_account_ref": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Service Account Ref"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "StorageCredentialBinding",
+      "type": "object"
+    },
+    "StorageDeploymentBinding": {
+      "additionalProperties": false,
+      "description": "Secret-free storage deployment binding.",
+      "properties": {
+        "provider": {
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "protocol": {
+          "default": "s3-compatible",
+          "minLength": 1,
+          "title": "Protocol",
+          "type": "string"
+        },
+        "endpoint": {
+          "$ref": "#/$defs/StorageServiceEndpoint"
+        },
+        "warehouse": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StorageWarehouse"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "allowed_locations": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Allowed Locations",
+          "type": "array"
+        },
+        "buckets": {
+          "items": {
+            "$ref": "#/$defs/StorageBucketRequirement"
+          },
+          "title": "Buckets",
+          "type": "array"
+        },
+        "credentials": {
+          "$ref": "#/$defs/StorageCredentialBinding"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/StorageCapabilities"
+        },
+        "provisioning": {
+          "$ref": "#/$defs/StorageProvisioningIntent"
+        },
+        "runtime": {
+          "$ref": "#/$defs/StorageRuntimeBinding"
+        },
+        "dbt": {
+          "$ref": "#/$defs/DbtStorageBinding"
+        },
+        "dagster": {
+          "$ref": "#/$defs/DagsterStorageBinding"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Notes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "provider",
+        "endpoint",
+        "credentials",
+        "dbt",
+        "dagster"
+      ],
+      "title": "StorageDeploymentBinding",
+      "type": "object"
+    },
+    "StorageProvisioningIntent": {
+      "additionalProperties": false,
+      "description": "Storage provisioning desired state without performing side effects.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "mode": {
+          "default": "manual",
+          "enum": [
+            "helm-job",
+            "external",
+            "manual",
+            "future-plugin-runtime"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "default_create_policy": {
+          "default": "never-create",
+          "enum": [
+            "create-if-missing",
+            "must-exist",
+            "never-create"
+          ],
+          "title": "Default Create Policy",
+          "type": "string"
+        }
+      },
+      "title": "StorageProvisioningIntent",
+      "type": "object"
+    },
+    "StorageRuntimeBinding": {
+      "additionalProperties": false,
+      "description": "Runtime-specific storage fragments derived from neutral storage state.",
+      "properties": {
+        "pyiceberg_properties": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Pyiceberg Properties",
+          "type": "object"
+        },
+        "dbt_profile_fragment": {
+          "additionalProperties": true,
+          "title": "Dbt Profile Fragment",
+          "type": "object"
+        },
+        "dagster_resources": {
+          "additionalProperties": true,
+          "title": "Dagster Resources",
+          "type": "object"
+        },
+        "env_refs": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Env Refs",
+          "type": "object"
+        }
+      },
+      "title": "StorageRuntimeBinding",
+      "type": "object"
+    },
+    "StorageServiceEndpoint": {
+      "additionalProperties": false,
+      "description": "Resolved storage service endpoint for deployment consumers.",
+      "properties": {
+        "internal_url": {
+          "minLength": 1,
+          "title": "Internal Url",
+          "type": "string"
+        },
+        "external_url": {
+          "minLength": 1,
+          "title": "External Url",
+          "type": "string"
+        },
+        "region": {
+          "minLength": 1,
+          "title": "Region",
+          "type": "string"
+        },
+        "warehouse_path": {
+          "minLength": 1,
+          "title": "Warehouse Path",
+          "type": "string"
+        },
+        "path_style_access": {
+          "default": false,
+          "title": "Path Style Access",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "internal_url",
+        "external_url",
+        "region",
+        "warehouse_path"
+      ],
+      "title": "StorageServiceEndpoint",
+      "type": "object"
+    },
+    "StorageWarehouse": {
+      "additionalProperties": false,
+      "description": "Resolved warehouse location owned by a storage deployment binding.",
+      "properties": {
+        "uri": {
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        },
+        "bucket": {
+          "minLength": 1,
+          "title": "Bucket",
+          "type": "string"
+        },
+        "prefix": {
+          "default": "",
+          "title": "Prefix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri",
+        "bucket"
+      ],
+      "title": "StorageWarehouse",
+      "type": "object"
+    },
+    "Support": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "channel": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Channel"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "invitationUrl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Invitationurl"
+        },
+        "customProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CustomProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customproperties"
+        }
+      },
+      "title": "Support",
+      "type": "object"
+    },
+    "Team": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "members": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/TeamMember"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Members"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tags"
+        },
+        "customProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CustomProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customproperties"
+        },
+        "authoritativeDefinitions": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/AuthoritativeDefinition"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Authoritativedefinitions"
+        }
+      },
+      "title": "Team",
+      "type": "object"
+    },
+    "TeamMember": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "username": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Username"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        },
+        "dateIn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Datein"
+        },
+        "dateOut": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dateout"
+        },
+        "replacedByUsername": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Replacedbyusername"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tags"
+        },
+        "customProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CustomProperty"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Customproperties"
+        },
+        "authoritativeDefinitions": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/AuthoritativeDefinition"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Authoritativedefinitions"
+        }
+      },
+      "title": "TeamMember",
+      "type": "object"
+    },
+    "TelemetryAuth": {
+      "additionalProperties": false,
+      "description": "Authentication for OTLP exports.\n\nSupports API key and bearer token authentication for\nSaaS backends (Datadog, Grafana Cloud, etc.).\n\nAttributes:\n    auth_type: Authentication mechanism\n    api_key: API key credential (SecretStr)\n    bearer_token: Bearer token credential (SecretStr)\n    header_name: HTTP header for credentials\n\nExamples:\n    >>> auth = TelemetryAuth(\n    ...     auth_type=\"api_key\",\n    ...     api_key=SecretStr(\"dd-api-key-xxx\"),\n    ...     header_name=\"DD-API-KEY\",\n    ... )",
+      "properties": {
+        "auth_type": {
+          "description": "Authentication mechanism",
+          "enum": [
+            "api_key",
+            "bearer"
+          ],
+          "title": "Auth Type",
+          "type": "string"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "API key (for api_key auth_type)",
+          "title": "Api Key"
+        },
+        "bearer_token": {
+          "anyOf": [
+            {
+              "format": "password",
+              "type": "string",
+              "writeOnly": true
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bearer token (for bearer auth_type)",
+          "title": "Bearer Token"
+        },
+        "header_name": {
+          "default": "Authorization",
+          "description": "HTTP header name for credentials",
+          "title": "Header Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "auth_type"
+      ],
+      "title": "TelemetryAuth",
+      "type": "object"
+    },
+    "TelemetryConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for OpenTelemetry telemetry emission.\n\nCentral configuration included in CompiledArtifacts.\nPlatform Team configures via manifest.yaml; Data Engineers inherit.\n\nThree-Layer Architecture (per ADR-0006, ADR-0035):\n- Layer 1 (Emission): OpenTelemetry SDK - ENFORCED\n- Layer 2 (Collection): OTLP Collector - ENFORCED\n- Layer 3 (Backend): Storage/Viz - PLUGGABLE (via TelemetryBackendPlugin)\n\nAttributes:\n    enabled: Whether telemetry is enabled (default: True)\n    otlp_endpoint: OTLP Collector endpoint\n    otlp_protocol: Export protocol (grpc or http)\n    sampling: Environment-based sampling configuration\n    resource_attributes: Service identification attributes\n    authentication: Optional OTLP authentication\n    batch_processor: BatchSpanProcessor configuration for async export\n\nExamples:\n    >>> config = TelemetryConfig(\n    ...     enabled=True,\n    ...     otlp_endpoint=\"http://localhost:4317\",\n    ...     resource_attributes=ResourceAttributes(...),\n    ... )",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "Enable telemetry emission",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "otlp_endpoint": {
+          "default": "http://localhost:4317",
+          "description": "OTLP Collector endpoint (Layer 2). Default 'localhost' is for local development. For K8s, use 'http://otel-collector:4317' (internal) or 'https://otlp.example.com:443' (external with TLS).",
+          "title": "Otlp Endpoint",
+          "type": "string"
+        },
+        "otlp_protocol": {
+          "default": "grpc",
+          "description": "OTLP export protocol",
+          "enum": [
+            "grpc",
+            "http"
+          ],
+          "title": "Otlp Protocol",
+          "type": "string"
+        },
+        "sampling": {
+          "$ref": "#/$defs/SamplingConfig",
+          "description": "Environment-based sampling"
+        },
+        "resource_attributes": {
+          "$ref": "#/$defs/ResourceAttributes",
+          "description": "Service identification attributes"
+        },
+        "authentication": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TelemetryAuth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional OTLP authentication"
+        },
+        "batch_processor": {
+          "$ref": "#/$defs/BatchSpanProcessorConfig",
+          "description": "BatchSpanProcessor configuration for async export"
+        },
+        "logging": {
+          "$ref": "#/$defs/LoggingConfig",
+          "description": "Structured logging configuration with trace context"
+        },
+        "backend": {
+          "default": "console",
+          "description": "Telemetry backend plugin name (e.g., 'console', 'jaeger')",
+          "title": "Backend",
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource_attributes"
+      ],
+      "title": "TelemetryConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Output of floe compile - unified for all deployment modes.\n\nCompiledArtifacts is the single source of truth for pipeline execution.\nIt contains resolved, validated configuration after manifest inheritance.\n\nThe observability field contains TelemetryConfig which provides:\n- OpenTelemetry SDK configuration (Layer 1 - ENFORCED)\n- OTLP Collector endpoint (Layer 2 - ENFORCED)\n- Backend plugin selection (Layer 3 - PLUGGABLE)\n\nContract Version: 0.5.0 (see docstring header for version history)\n\nAttributes:\n    version: Schema version (semver) - default 0.5.0\n    metadata: Compilation metadata\n    identity: Product identity from catalog\n    mode: Deployment mode (simple, centralized, mesh)\n    inheritance_chain: Manifest inheritance lineage\n    observability: Observability configuration with TelemetryConfig\n    plugins: Resolved plugin selections (v0.2.0+)\n    transforms: Compiled transform configuration (v0.2.0+)\n    dbt_profiles: Generated profiles.yml content (v0.2.0+)\n    governance: Resolved governance settings (v0.2.0+, optional)\n    enforcement_result: Enforcement result summary (v0.3.0+, optional)\n    data_contracts: Validated data contracts (v0.3.0+, Epic 3C)\n\nExamples:\n    >>> from datetime import datetime\n    >>> from floe_core.schemas.telemetry import TelemetryConfig, ResourceAttributes\n    >>> artifacts = CompiledArtifacts(\n    ...     version=\"0.2.0\",\n    ...     metadata=CompilationMetadata(\n    ...         compiled_at=datetime.now(),\n    ...         floe_version=\"0.2.0\",\n    ...         source_hash=\"sha256:abc123\",\n    ...         product_name=\"my-pipeline\",\n    ...         product_version=\"1.0.0\",\n    ...     ),\n    ...     identity=ProductIdentity(\n    ...         product_id=\"default.my_pipeline\",\n    ...         domain=\"default\",\n    ...         repository=\"github.com/acme/my-pipeline\",\n    ...     ),\n    ...     mode=\"simple\",\n    ...     observability=ObservabilityConfig(\n    ...         telemetry=TelemetryConfig(\n    ...             resource_attributes=ResourceAttributes(...),\n    ...         ),\n    ...         lineage_namespace=\"my-pipeline\",\n    ...     ),\n    ...     plugins=ResolvedPlugins(\n    ...         compute=PluginRef(type=\"duckdb\", version=\"0.9.0\"),\n    ...         orchestrator=PluginRef(type=\"dagster\", version=\"1.5.0\"),\n    ...     ),\n    ...     transforms=ResolvedTransforms(\n    ...         models=[ResolvedModel(name=\"stg_customers\", compute=\"duckdb\")],\n    ...         default_compute=\"duckdb\",\n    ...     ),\n    ...     dbt_profiles={\"default\": {\"target\": \"dev\", \"outputs\": {...}}},\n    ... )\n\nSee Also:\n    - docs/contracts/compiled-artifacts.md: Full specification\n    - ADR-0012: CompiledArtifacts contract design\n    - TelemetryConfig: OpenTelemetry configuration",
+  "properties": {
+    "version": {
+      "default": "0.10.0",
+      "description": "Schema version (semver)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Version",
+      "type": "string"
+    },
+    "metadata": {
+      "$ref": "#/$defs/CompilationMetadata",
+      "description": "Compilation metadata"
+    },
+    "identity": {
+      "$ref": "#/$defs/ProductIdentity",
+      "description": "Product identity from catalog"
+    },
+    "mode": {
+      "default": "simple",
+      "description": "Deployment mode (simple, centralized, mesh)",
+      "enum": [
+        "simple",
+        "centralized",
+        "mesh"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "inheritance_chain": {
+      "description": "Manifest inheritance lineage",
+      "items": {
+        "$ref": "#/$defs/ManifestRef"
+      },
+      "title": "Inheritance Chain",
+      "type": "array"
+    },
+    "observability": {
+      "$ref": "#/$defs/ObservabilityConfig",
+      "description": "Observability configuration with TelemetryConfig"
+    },
+    "plugins": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ResolvedPlugins"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Resolved plugin selections (v0.2.0+, optional for backward compat)"
+    },
+    "deployment": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DeploymentConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Deployment bindings derived from resolved plugin configuration"
+    },
+    "transforms": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ResolvedTransforms"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Compiled transform configuration (v0.2.0+, optional for backward compat)"
+    },
+    "dbt_profiles": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Generated profiles.yml content (v0.2.0+, optional for backward compat)",
+      "title": "Dbt Profiles"
+    },
+    "governance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ResolvedGovernance"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Resolved governance settings (v0.2.0+, optional)"
+    },
+    "enforcement_result": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EnforcementResultSummary"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Enforcement result summary (v0.3.0+, optional for backward compat)"
+    },
+    "data_contracts": {
+      "description": "Validated data contracts with schema hash and validation metadata (v0.3.0+)",
+      "items": {
+        "$ref": "#/$defs/OpenDataContractStandard"
+      },
+      "title": "Data Contracts",
+      "type": "array"
+    },
+    "quality_config": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QualityConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Resolved quality configuration"
+    }
+  },
+  "required": [
+    "metadata",
+    "identity",
+    "observability"
+  ],
+  "title": "CompiledArtifacts",
+  "type": "object",
   "$comment": {
     "generated_by": "scripts/generate-contract-golden",
     "contract_version": "2.0.0",
@@ -8,30 +4475,5 @@
       "MINOR": "Add optional field, new enum value",
       "PATCH": "Documentation only"
     }
-  },
-  "title": "CompiledArtifacts",
-  "description": "Cross-package contract schema (placeholder - install floe_core to generate)",
-  "type": "object",
-  "properties": {
-    "version": {
-      "type": "string",
-      "description": "Schema version"
-    },
-    "metadata": {
-      "type": "object"
-    },
-    "dbt_profiles": {
-      "type": "object"
-    },
-    "dagster_config": {
-      "type": "object"
-    },
-    "data_contracts": {
-      "type": "array",
-      "description": "Data contracts for pipeline validation (Epic 3C)"
-    }
-  },
-  "required": [
-    "version"
-  ]
+  }
 }

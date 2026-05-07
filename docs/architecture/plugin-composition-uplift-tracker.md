@@ -73,8 +73,9 @@ clear target state.
 - Architecture docs describe the composition model.
 - Raw storage credentials are absent from compiled artifacts and generated
   chart values; Kubernetes Secret refs carry credential identity.
-- DevPod + Hetzner E2E is run, product failures are separated from infra
-  failures, and billable Hetzner resources are directly verified and cleaned up.
+- Remote infrastructure E2E is run, product failures are separated from
+  infrastructure failures, and billable resources are directly verified and
+  cleaned up.
 
 ## Future Tracking Items
 

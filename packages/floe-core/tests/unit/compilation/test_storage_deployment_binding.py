@@ -10,7 +10,7 @@ import yaml
 
 from floe_core.compilation.errors import CompilationException
 from floe_core.compilation.stages import CompilationStage, compile_pipeline
-from floe_core.composition.models import PluginRequirements
+from floe_core.composition.models import PluginRequirements, RequirementSet
 from floe_core.plugin_errors import PluginConfigurationError
 from floe_core.plugins.catalog import CatalogPlugin
 from floe_core.plugins.storage import FileIO, StoragePlugin
@@ -29,6 +29,7 @@ from floe_core.schemas.compiled_artifacts import (
 )
 
 ROOT = Path(__file__).resolve().parents[5]
+pytestmark = pytest.mark.requirement("AC-4")
 
 
 @pytest.fixture(autouse=True)
@@ -256,7 +257,7 @@ def test_incompatible_storage_catalog_composition_raises_structured_error(
                         namespace="floe-system",
                         keys={
                             "accessKeyId": "accesskey",
-                            "secretAccessKey": "secretkey",
+                            "secretAccessKey": "secretkey",  # pragma: allowlist secret
                         },
                     ),
                 ),
@@ -327,10 +328,10 @@ def test_incompatible_storage_catalog_composition_raises_structured_error(
             return PluginRequirements(
                 plugin_type="catalog",
                 plugin_name="polaris",
-                requirements={
-                    "protocols": ["s3"],
-                    "credential_modes": ["kubernetes-secret"],
-                },
+                requirements=RequirementSet(
+                    protocols=["s3"],
+                    credential_modes=["kubernetes-secret"],
+                ),
             )
 
         def build_catalog_deployment(

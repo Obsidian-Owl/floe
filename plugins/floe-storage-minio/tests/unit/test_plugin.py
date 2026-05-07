@@ -161,6 +161,12 @@ class TestMinIOStorageConfig:
             MinIOStorageConfig(endpoint="", bucket="data")
 
     @pytest.mark.requirement("AC-2")
+    def test_endpoint_requires_http_url(self) -> None:
+        """Endpoint must be an explicit HTTP or HTTPS URL."""
+        with pytest.raises(ValidationError):
+            MinIOStorageConfig(endpoint="minio:9000", bucket="data")
+
+    @pytest.mark.requirement("AC-2")
     def test_empty_bucket_rejected(self) -> None:
         """Empty bucket must raise ValidationError."""
         with pytest.raises(ValidationError):
@@ -283,6 +289,25 @@ class TestStoragePluginMethods:
         assert "s3.path_style_access" not in config
         assert "path_style_access" not in config
 
+    @pytest.mark.requirement("AC-2")
+    def test_pyiceberg_catalog_config_prefers_minio_env_credentials(
+        self, configured_plugin: MinIOStoragePlugin
+    ) -> None:
+        """MinIO-specific env vars must win over ambient AWS credentials."""
+        with patch.dict(
+            "os.environ",
+            {
+                "MINIO_ACCESS_KEY_ID": "minio-access",
+                "MINIO_SECRET_ACCESS_KEY": "minio-secret",  # pragma: allowlist secret
+                "AWS_ACCESS_KEY_ID": "aws-access",
+                "AWS_SECRET_ACCESS_KEY": "aws-secret",  # pragma: allowlist secret
+            },
+        ):
+            config = configured_plugin.get_pyiceberg_catalog_config()
+
+        assert config["s3.access-key-id"] == "minio-access"
+        assert config["s3.secret-access-key"] == "minio-secret"
+
 
 class TestUnconfiguredPlugin:
     """Test that unconfigured plugin raises clear errors."""
@@ -310,6 +335,7 @@ class TestUnconfiguredPlugin:
 class TestMinIODeploymentBinding:
     """Tests for secret-free MinIO deployment bindings."""
 
+    @pytest.mark.requirement("AC-4")
     def test_get_deployment_binding_returns_secret_free_minio_contract(self) -> None:
         """MinIO plugin must emit neutral storage state without catalog projections."""
         config = MinIOStorageConfig(
@@ -387,6 +413,7 @@ class TestMinIODeploymentBinding:
         assert "INLINE_CREDENTIAL_VALUE" not in payload
         assert "INLINE_CREDENTIAL_VALUE" not in helm_payload
 
+    @pytest.mark.requirement("AC-4")
     def test_minio_binding_uses_configured_artifact_bucket_in_helm_values(self) -> None:
         """Deprecated Helm projection must include configured storage buckets."""
         config = MinIOStorageConfig(

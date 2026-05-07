@@ -432,7 +432,9 @@ class StorageCredentialBinding(BaseModel):
     def as_credential_ref(self, logical_key: str) -> CredentialRef:
         """Return a consumer credential reference for a logical key."""
         if self.mode == "kubernetes-secret":
-            assert self.secret_ref is not None
+            if self.secret_ref is None:
+                msg = "kubernetes-secret credential binding requires secret_ref"
+                raise ValueError(msg)
             secret_key = self.secret_ref.keys.get(logical_key)
             if secret_key is None:
                 msg = f"credential key {logical_key!r} not present in secret_ref.keys"
@@ -445,7 +447,9 @@ class StorageCredentialBinding(BaseModel):
                 raise ValueError(msg)
             return CredentialRef(source=self.mode, name=env_name)
         if self.mode == "workload-identity":
-            assert self.service_account_ref is not None
+            if self.service_account_ref is None:
+                msg = "workload-identity credential binding requires service_account_ref"
+                raise ValueError(msg)
             return CredentialRef(source=self.mode, name=self.service_account_ref)
         return CredentialRef(source="none", name="none")
 
@@ -569,7 +573,7 @@ class StorageDeploymentBinding(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    provider: Literal["minio"]
+    provider: NonEmptyString
     protocol: NonEmptyString = "s3-compatible"
     endpoint: StorageServiceEndpoint
     warehouse: StorageWarehouse | None = None
@@ -604,7 +608,7 @@ class CatalogDeploymentBinding(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    provider: Literal["polaris"]
+    provider: NonEmptyString
     polaris: PolarisCatalogDeploymentBinding
 
 
