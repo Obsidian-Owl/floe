@@ -650,7 +650,7 @@ def _build_storage_deployment_binding(
                 context={
                     "storage_plugin": plugins.storage.type,
                     "catalog_plugin": plugins.catalog.type,
-                    "error": str(exc),
+                    "error_type": type(exc).__name__,
                 },
             )
         ) from exc
