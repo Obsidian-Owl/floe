@@ -224,6 +224,22 @@ class CompositionResolver:
 
         storage_modes = list(storage.capabilities.identity_modes)
         provided_modes = list(identity.capabilities.identity_modes)
+        if "workload-identity" in compatible_credential_modes and not required_modes:
+            issues.append(
+                CompositionIssue(
+                    severity="error",
+                    code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+                    message=(
+                        f"catalog {requirement.plugin_name} requires workload identity "
+                        "but does not declare concrete identity modes; storage "
+                        f"{storage.plugin_name} provides {storage_modes}; identity "
+                        f"{identity.plugin_name} provides {provided_modes}"
+                    ),
+                    plugins=[storage.ref, identity.ref, requirement.ref],
+                )
+            )
+            return issues
+
         compatible_modes = [mode for mode in storage_modes if mode in set(required_modes)]
         if (
             required_modes

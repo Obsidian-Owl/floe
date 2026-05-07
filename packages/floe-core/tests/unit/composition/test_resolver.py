@@ -633,3 +633,50 @@ def test_resolver_rejects_missing_storage_secret_projection_modes() -> None:
             plugins=["storage:s3", "catalog:glue"],
         )
     ]
+
+
+def test_resolver_rejects_workload_identity_without_catalog_identity_modes() -> None:
+    """Generic workload identity requires catalog to name concrete identity modes."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="s3",
+        capabilities=CapabilitySet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="glue",
+        requirements=RequirementSet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+        ),
+    )
+    identity = PluginCapabilities(
+        plugin_type="identity",
+        plugin_name="aws",
+        capabilities=CapabilitySet(
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+            providers=["aws"],
+        ),
+    )
+
+    result = resolver.validate([storage, identity], [catalog])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+            message=(
+                "catalog glue requires workload identity but does not declare "
+                "concrete identity modes; storage s3 provides ['aws-irsa']; "
+                "identity aws provides ['aws-irsa']"
+            ),
+            plugins=["storage:s3", "identity:aws", "catalog:glue"],
+        )
+    ]
