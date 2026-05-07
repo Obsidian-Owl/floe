@@ -21,6 +21,7 @@ import yaml
 from click.testing import CliRunner
 
 from floe_core.cli.helm.generate import _storage_helm_values, generate_command
+from floe_core.compilation.errors import CompilationException
 from floe_core.helm.parsing import parse_set_values, parse_value
 from floe_core.schemas.compiled_artifacts import (
     CatalogDeploymentBinding,
@@ -53,6 +54,9 @@ def _write_minio_artifact(path: Path) -> None:
     credential_secret_name = "floe-platform-minio-credentials"  # pragma: allowlist secret
     access_key_secret_key = "root-user"  # pragma: allowlist secret
     secret_key_secret_key = "root-password"  # pragma: allowlist secret
+    legacy_credential_secret_name = "legacy-plugin-config-secret"  # pragma: allowlist secret
+    legacy_access_key_secret_key = "legacy-access-key"  # pragma: allowlist secret
+    legacy_secret_key_secret_key = "legacy-secret-key"  # pragma: allowlist secret
     artifacts = CompiledArtifacts(
         version=COMPILED_ARTIFACTS_VERSION,
         metadata=CompilationMetadata(
@@ -95,9 +99,9 @@ def _write_minio_artifact(path: Path) -> None:
                     "artifact_bucket": "legacy-plugin-config-artifacts",
                     "region": "us-east-1",
                     "path_style_access": False,
-                    "credential_secret_name": "legacy-plugin-config-secret",
-                    "access_key_secret_key": "legacy-access-key",
-                    "secret_key_secret_key": "legacy-secret-key",
+                    "credential_secret_name": legacy_credential_secret_name,
+                    "access_key_secret_key": legacy_access_key_secret_key,
+                    "secret_key_secret_key": legacy_secret_key_secret_key,
                     "raw_access_key": "legacy-inline-access-value",  # pragma: allowlist secret
                     "raw_secret_key": "legacy-inline-secret-value",  # pragma: allowlist secret
                 },
@@ -682,8 +686,50 @@ class TestGenerateCommand:
             }
         )
 
-        with pytest.raises(ValueError, match="secretAccessKey"):
+        with pytest.raises(CompilationException) as exc_info:
             _storage_helm_values(artifacts)
+
+        error = exc_info.value.error
+        assert error.code == "COMPOSITION_RENDERER_PRECONDITION_FAILED"
+        assert "secretAccessKey" in error.message
+
+    @pytest.mark.requirement("9b-FR-060")
+    def test_storage_helm_values_reject_missing_catalog_binding(self, tmp_path: Path) -> None:
+        """MinIO Helm rendering requires a catalog deployment binding."""
+        artifact_file = tmp_path / "compiled_artifacts.json"
+        _write_minio_artifact(artifact_file)
+        artifacts = CompiledArtifacts.from_json_file(artifact_file)
+        assert artifacts.deployment is not None
+        artifacts = artifacts.model_copy(
+            update={"deployment": artifacts.deployment.model_copy(update={"catalog": None})}
+        )
+
+        with pytest.raises(CompilationException) as exc_info:
+            _storage_helm_values(artifacts)
+
+        error = exc_info.value.error
+        assert error.code == "COMPOSITION_RENDERER_PRECONDITION_FAILED"
+        assert "catalog deployment binding" in error.message
+
+    @pytest.mark.requirement("9b-FR-060")
+    def test_storage_helm_values_reject_missing_bucket_requirements(self, tmp_path: Path) -> None:
+        """MinIO Helm rendering requires bucket requirements in the storage binding."""
+        artifact_file = tmp_path / "compiled_artifacts.json"
+        _write_minio_artifact(artifact_file)
+        artifacts = CompiledArtifacts.from_json_file(artifact_file)
+        assert artifacts.deployment is not None
+        assert artifacts.deployment.storage is not None
+        storage = artifacts.deployment.storage.model_copy(update={"buckets": []})
+        artifacts = artifacts.model_copy(
+            update={"deployment": artifacts.deployment.model_copy(update={"storage": storage})}
+        )
+
+        with pytest.raises(CompilationException) as exc_info:
+            _storage_helm_values(artifacts)
+
+        error = exc_info.value.error
+        assert error.code == "COMPOSITION_RENDERER_PRECONDITION_FAILED"
+        assert "bucket requirements" in error.message
 
     @pytest.mark.requirement("9b-FR-060")
     def test_helm_generate_uses_storage_binding_from_artifact(
