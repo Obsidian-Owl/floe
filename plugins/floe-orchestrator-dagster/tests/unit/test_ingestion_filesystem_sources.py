@@ -323,6 +323,45 @@ def test_build_filesystem_source_respects_binding_virtual_url_style(
     assert fake_filesystem_module.calls[0] == ("filesystem", source.parent.kwargs)
 
 
+@pytest.mark.parametrize("flag_name", ["s3_path_style_access", "path_style_access"])
+@pytest.mark.parametrize("flag_value", ["false", "no", "0", "off"])
+def test_build_filesystem_source_respects_false_path_style_strings(
+    tmp_path: Path,
+    fake_filesystem_module: FakeFilesystemModule,
+    monkeypatch: pytest.MonkeyPatch,
+    flag_name: str,
+    flag_value: str,
+) -> None:
+    """Explicit false path-style strings must suppress endpoint path-style default."""
+    from floe_orchestrator_dagster.ingestion import build_dlt_source
+
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "env-access")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "env-secret")  # pragma: allowlist secret
+
+    source = build_dlt_source(
+        _source_config(path="s3://raw/customers/", extra_source_config={"file_glob": "*.csv"}),
+        project_dir=tmp_path,
+        filesystem_config={
+            "endpoint_url": "http://minio:9000",
+            "region_name": "us-east-1",
+            flag_name: flag_value,
+        },
+    )
+
+    assert source.parent is not None
+    assert source.parent.kwargs == {
+        "bucket_url": "s3://raw/customers/",
+        "file_glob": "*.csv",
+        "credentials": {
+            "aws_access_key_id": "env-access",
+            "aws_secret_access_key": "env-secret",  # pragma: allowlist secret
+            "endpoint_url": "http://minio:9000",
+            "region_name": "us-east-1",
+        },
+    }
+    assert fake_filesystem_module.calls[0] == ("filesystem", source.parent.kwargs)
+
+
 def test_build_filesystem_source_reads_real_local_csv_file(tmp_path: Path) -> None:
     """Real dlt construction reads rows when product path points at a local file."""
     from floe_orchestrator_dagster.ingestion import build_filesystem_source

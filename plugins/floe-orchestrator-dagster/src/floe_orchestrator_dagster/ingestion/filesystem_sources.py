@@ -13,6 +13,16 @@ from urllib.parse import urlsplit
 _OBJECT_STORE_SCHEMES = {"s3", "gs", "az"}
 _SUPPORTED_FORMATS = {"csv", "jsonl", "parquet"}
 _SAFE_SOURCE_CONFIG_KEYS = {"format", "path", "include_glob", "file_glob", "reader_options"}
+_BOOL_STRING_VALUES = {
+    "false": False,
+    "no": False,
+    "0": False,
+    "off": False,
+    "true": True,
+    "yes": True,
+    "1": True,
+    "on": True,
+}
 _CONNECTION_LIKE_KEYS = {
     "endpoint",
     "access_key",
@@ -232,6 +242,8 @@ def _object_store_credentials(
         "s3_path_style_access",
         "path_style_access",
     )
+    if path_style is not None:
+        path_style = _bool_like_config_value(path_style)
     if path_style is None:
         explicit_url_style = filesystem_config.get("s3_url_style")
         path_style = (
@@ -250,6 +262,13 @@ def _first_config_value(config: Mapping[str, Any], *keys: str) -> Any | None:
         if value not in (None, ""):
             return value
     return None
+
+
+def _bool_like_config_value(value: Any) -> Any:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        return _BOOL_STRING_VALUES.get(normalized, value)
+    return value
 
 
 def _is_directory_path(raw_path: str, resolved_path: Path) -> bool:
