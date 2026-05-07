@@ -447,9 +447,50 @@ def test_missing_storage_plugin_raises_structured_compilation_error(tmp_path: Pa
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_PLUGIN_MISSING"
     assert "missing-storage" in error.message
     assert error.context == {"storage_plugin": "missing-storage"}
+
+
+def test_wrong_storage_plugin_interface_raises_composition_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A plugin loaded from storage selection must implement StoragePlugin."""
+
+    class NotStoragePlugin:
+        name = "minio"
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class WrongInterfaceRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> NotStoragePlugin:
+            return NotStoragePlugin()
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", WrongInterfaceRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_INTERFACE_INVALID"
+    assert error.context == {"storage_plugin": "minio"}
 
 
 def test_storage_plugin_binding_failure_raises_structured_compilation_error(
@@ -524,8 +565,77 @@ def test_storage_plugin_binding_failure_raises_structured_compilation_error(
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_PLUGIN_CONFIG_INVALID"
     assert "could not build deployment binding" in error.message
+    assert error.context == {"storage_plugin": "minio"}
+
+
+def test_storage_plugin_missing_deployment_binding_raises_composition_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Storage plugins without deployment bindings must produce a specific code."""
+
+    class LegacyStoragePlugin(StoragePlugin):
+        @property
+        def name(self) -> str:
+            return "minio"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def get_config_schema(self) -> None:
+            return None
+
+        def get_pyiceberg_fileio(self) -> FileIO:
+            raise NotImplementedError
+
+        def get_warehouse_uri(self, namespace: str) -> str:
+            return f"s3://unused/{namespace}"
+
+        def get_dbt_profile_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_dagster_io_manager_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_helm_values_override(self) -> dict[str, Any]:
+            return {}
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class LegacyStorageRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> LegacyStoragePlugin:
+            return LegacyStoragePlugin()
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", LegacyStorageRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_DEPLOYMENT_BINDING_MISSING"
     assert error.context == {"storage_plugin": "minio"}
 
 

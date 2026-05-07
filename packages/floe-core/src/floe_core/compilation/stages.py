@@ -271,7 +271,14 @@ def _build_storage_deployment_binding(
     if plugins.storage is None:
         return None
 
-    from floe_core.compilation.errors import CompilationError, CompilationException
+    from floe_core.compilation.errors import (
+        COMPOSITION_DEPLOYMENT_BINDING_MISSING,
+        COMPOSITION_PLUGIN_CONFIG_INVALID,
+        COMPOSITION_PLUGIN_INTERFACE_INVALID,
+        COMPOSITION_PLUGIN_MISSING,
+        CompilationError,
+        CompilationException,
+    )
     from floe_core.composition.models import (
         CapabilitySet,
         IdentityMode,
@@ -279,7 +286,11 @@ def _build_storage_deployment_binding(
         SecretProjectionMode,
     )
     from floe_core.composition.resolver import CompositionResolver
-    from floe_core.plugin_errors import PluginError
+    from floe_core.plugin_errors import (
+        PluginConfigurationError,
+        PluginError,
+        PluginNotFoundError,
+    )
     from floe_core.plugin_registry import PluginRegistry
     from floe_core.plugin_types import PluginType
     from floe_core.plugins.catalog import CatalogPlugin
@@ -298,15 +309,38 @@ def _build_storage_deployment_binding(
             storage_config,
         )
         storage_plugin = registry.get(PluginType.STORAGE, plugins.storage.type)
-    except PluginError as exc:
+    except PluginConfigurationError as exc:
         raise CompilationException(
             CompilationError(
                 stage=CompilationStage.RESOLVE,
-                code="E201",
+                code=COMPOSITION_PLUGIN_CONFIG_INVALID,
+                message=f"Storage plugin {plugins.storage.type!r} configuration is invalid",
+                suggestion="Fix plugins.storage.config in the platform manifest",
+                context={"storage_plugin": plugins.storage.type},
+            )
+        ) from exc
+    except PluginNotFoundError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_MISSING,
                 message=f"Storage plugin {plugins.storage.type!r} could not be resolved",
                 suggestion=(
                     "Install the storage plugin package and verify "
                     "plugins.storage.type in the platform manifest"
+                ),
+                context={"storage_plugin": plugins.storage.type},
+            )
+        ) from exc
+    except PluginError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_MISSING,
+                message=f"Storage plugin {plugins.storage.type!r} could not be loaded",
+                suggestion=(
+                    "Install a compatible storage plugin package and verify "
+                    "its entry point registration"
                 ),
                 context={"storage_plugin": plugins.storage.type},
             )
@@ -316,7 +350,7 @@ def _build_storage_deployment_binding(
         raise CompilationException(
             CompilationError(
                 stage=CompilationStage.RESOLVE,
-                code="E201",
+                code=COMPOSITION_PLUGIN_INTERFACE_INVALID,
                 message=f"Plugin {plugins.storage.type!r} is not a StoragePlugin",
                 suggestion="Use a plugin registered under the floe.storage entry point group",
                 context={"storage_plugin": plugins.storage.type},
@@ -325,11 +359,25 @@ def _build_storage_deployment_binding(
 
     try:
         storage_binding = storage_plugin.get_deployment_binding()
+    except NotImplementedError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_DEPLOYMENT_BINDING_MISSING,
+                message=(
+                    f"Storage plugin {plugins.storage.type!r} does not provide deployment binding"
+                ),
+                suggestion=(
+                    "Upgrade or fix the storage plugin so it implements get_deployment_binding()"
+                ),
+                context={"storage_plugin": plugins.storage.type},
+            )
+        ) from exc
     except PluginError as exc:
         raise CompilationException(
             CompilationError(
                 stage=CompilationStage.RESOLVE,
-                code="E201",
+                code=COMPOSITION_PLUGIN_CONFIG_INVALID,
                 message=(
                     f"Storage plugin {plugins.storage.type!r} could not build deployment binding"
                 ),
