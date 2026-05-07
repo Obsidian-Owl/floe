@@ -29,6 +29,12 @@ import pytest
 import yaml
 from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
 
+from testing.fixtures.credentials import (
+    get_polaris_credentials,
+    get_polaris_oauth2_server_uri,
+    get_polaris_scope,
+    get_polaris_warehouse,
+)
 from testing.fixtures.services import ServiceEndpoint
 
 
@@ -38,6 +44,8 @@ def _make_required_plugins() -> dict[str, Any]:
     Deferred to a function so ``ServiceEndpoint`` is evaluated at call time
     (inside tests/fixtures), not at import/collection time.
     """
+    polaris_url = f"{ServiceEndpoint('polaris').url}/api/catalog"
+    polaris_client_id, polaris_client_secret = get_polaris_credentials()
     return {
         "compute": {
             "type": "duckdb",
@@ -50,9 +58,16 @@ def _make_required_plugins() -> dict[str, Any]:
         "catalog": {
             "type": "polaris",
             "config": {
-                "uri": f"{ServiceEndpoint('polaris').url}/api/catalog",
-                "warehouse": "floe-test",
-                "credential": "demo-admin:demo-secret",  # pragma: allowlist secret
+                "uri": polaris_url,
+                "warehouse": get_polaris_warehouse(),
+                "oauth2": {
+                    "client_id": polaris_client_id,
+                    "client_secret": polaris_client_secret,
+                    "token_url": get_polaris_oauth2_server_uri(
+                        catalog_endpoint=polaris_url,
+                    ),
+                    "scope": get_polaris_scope(),
+                },
             },
         },
         "storage": {

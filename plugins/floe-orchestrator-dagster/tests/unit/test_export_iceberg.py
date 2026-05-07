@@ -1192,6 +1192,132 @@ class TestExportDbtToIceberg:
         recreated_table.append.assert_called_once_with(arrow_table)
 
     @pytest.mark.requirement("AC-4")
+    def test_export_repairs_null_sequence_overwrite_state_when_configured(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_with_catalog: CompiledArtifacts,
+    ) -> None:
+        """Repair mode recreates tables when PyIceberg rejects overwrite metadata."""
+        arrow_table = pa.table({"id": [1], "value": [10]})
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchall.return_value = [("main", "orders")]
+        mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
+
+        overwrite_error = ValueError("Only entries with status ADDED can have null sequence number")
+        existing_table = MagicMock()
+        existing_table.overwrite.side_effect = overwrite_error
+        mock_catalog = MagicMock()
+        mock_catalog.load_table.return_value = existing_table
+        recreated_table = MagicMock()
+        mock_catalog.create_table.return_value = recreated_table
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+        catalog_plugin.connect.return_value = mock_catalog
+        storage_plugin.get_pyiceberg_catalog_config.return_value = {
+            "s3.endpoint": "http://minio:9000"
+        }
+
+        def get_side_effect(plugin_type: object, _plugin_name: str) -> MagicMock:
+            if str(plugin_type).endswith("CATALOG"):
+                return catalog_plugin
+            return storage_plugin
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = {}
+        artifacts = artifacts_with_catalog.model_copy(
+            update={
+                "governance": ResolvedGovernance(
+                    stale_table_recovery_mode="repair",
+                )
+            }
+        )
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        existing_table.overwrite.assert_called_once_with(arrow_table)
+        catalog_plugin.drop_table.assert_called_once_with(
+            f"{SAFE_NAME}.orders",
+            purge=False,
+        )
+        mock_catalog.create_table.assert_called_once_with(
+            f"{SAFE_NAME}.orders",
+            schema=arrow_table.schema,
+        )
+        recreated_table.append.assert_called_once_with(arrow_table)
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_strict_mode_raises_null_sequence_overwrite_state(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_with_catalog: CompiledArtifacts,
+    ) -> None:
+        """Strict mode surfaces PyIceberg overwrite metadata errors unchanged."""
+        arrow_table = pa.table({"id": [1], "value": [10]})
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchall.return_value = [("main", "orders")]
+        mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
+
+        overwrite_error = ValueError("Only entries with status ADDED can have null sequence number")
+        existing_table = MagicMock()
+        existing_table.overwrite.side_effect = overwrite_error
+        mock_catalog = MagicMock()
+        mock_catalog.load_table.return_value = existing_table
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+        catalog_plugin.connect.return_value = mock_catalog
+        storage_plugin.get_pyiceberg_catalog_config.return_value = {
+            "s3.endpoint": "http://minio:9000"
+        }
+
+        def get_side_effect(plugin_type: object, _plugin_name: str) -> MagicMock:
+            if str(plugin_type).endswith("CATALOG"):
+                return catalog_plugin
+            return storage_plugin
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = {}
+        artifacts = artifacts_with_catalog.model_copy(
+            update={
+                "governance": ResolvedGovernance(
+                    stale_table_recovery_mode="strict",
+                )
+            }
+        )
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            pytest.raises(ValueError, match="null sequence number"),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        existing_table.overwrite.assert_called_once_with(arrow_table)
+        catalog_plugin.drop_table.assert_not_called()
+        mock_catalog.create_table.assert_not_called()
+
+    @pytest.mark.requirement("AC-4")
     def test_export_skips_unsafe_identifiers(
         self,
         context: MagicMock,
