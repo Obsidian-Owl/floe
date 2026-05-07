@@ -1035,26 +1035,21 @@ def _destination_config_from_binding(self, binding: Mapping[str, Any]) -> dict[s
     return dict(destination) if isinstance(destination, Mapping) else {}
 ```
 
-Update `create_pipeline()` before fallback catalog config:
+Update `create_pipeline()` to require the runtime deployment binding:
 
 ```python
 runtime_binding = self._pipeline_runtime_binding(config)
 destination_config = self._destination_config_from_binding(runtime_binding)
-catalog_config = self.catalog_fallback_helper(config)
-if destination_config:
-    from dlt.destinations import filesystem
-
-    pipeline_kwargs["destination"] = filesystem(**destination_config)
-elif self.is_configured and not catalog_config:
+if not destination_config:
     raise PipelineConfigurationError(
-        "dlt runtime binding is required for configured dlt ingestion pipelines",
+        "dlt runtime binding is required for dlt ingestion pipelines",
         source_type=config.source_type,
         destination_table=config.destination_table,
     )
-elif catalog_config:
-    from dlt.destinations import filesystem
 
-    pipeline_kwargs["destination"] = filesystem(**self.get_destination_config(catalog_config))
+from dlt.destinations import filesystem
+
+pipeline_kwargs["destination"] = filesystem(**destination_config)
 ```
 
 After pipeline creation:
@@ -1062,8 +1057,6 @@ After pipeline creation:
 ```python
 if runtime_binding:
     pipeline._floe_dlt_runtime_binding = runtime_binding
-elif catalog_config:
-    pipeline.catalog_fallback_env = catalog_config
 ```
 
 Update `run()`:
@@ -1072,12 +1065,6 @@ Update `run()`:
 runtime_binding = getattr(pipeline, "_floe_dlt_runtime_binding", None)
 if isinstance(runtime_binding, Mapping):
     with self._temporary_runtime_binding_environment(runtime_binding):
-        load_info = pipeline.run(source, **run_kwargs)
-else:
-    catalog_config = getattr(pipeline, "catalog_fallback_env", None)
-    if not isinstance(catalog_config, dict):
-        catalog_config = None
-    with self._temporary_iceberg_environment(catalog_config):
         load_info = pipeline.run(source, **run_kwargs)
 ```
 
@@ -1594,7 +1581,7 @@ If no files changed, do not create an empty commit.
 Run:
 
 ```bash
-rg -n "catalog_config|dlt destination fallback validation|pipeline catalog fallback|configured catalog fallback|pipeline catalog env fallback" \
+rg -n "catalog_config|_validate_dlt_destination_config|_pipeline_catalog_config|_configured_catalog_config|_floe_iceberg_catalog_config" \
   packages/floe-core/src packages/floe-core/tests plugins/floe-ingestion-dlt/src plugins/floe-ingestion-dlt/tests plugins/floe-orchestrator-dagster/src plugins/floe-orchestrator-dagster/tests tests/contract tests/e2e demo
 ```
 
@@ -1605,7 +1592,7 @@ Expected: output only references that this task removes or keeps for external ca
 In `packages/floe-core/src/floe_core/compilation/resolver.py`, delete:
 
 ```python
-# dlt destination fallback validation helper
+def _validate_dlt_destination_config(spec: FloeSpec, config: dict[str, object]) -> None:
     ...
 ```
 
@@ -1637,10 +1624,10 @@ class DltIngestionConfig(BaseModel):
 In `plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py`, remove these fallback helpers:
 
 ```python
-# configured catalog fallback helper
+def _configured_catalog_config(self) -> dict[str, Any]:
     ...
 
-# pipeline catalog fallback helper
+def _pipeline_catalog_config(self, config: IngestionConfig) -> dict[str, Any]:
     ...
 ```
 
@@ -1730,7 +1717,8 @@ def test_configured_create_pipeline_requires_runtime_binding() -> None:
 Run:
 
 ```bash
-rg -n "old ingestion catalog fallback identifiers" .
+rg -n "plugins\\.ingestion\\.config\\.catalog_config|_validate_dlt_destination_config|_pipeline_catalog_config|_configured_catalog_config|_floe_iceberg_catalog_config" . \
+  --glob '!docs/superpowers/plans/2026-05-07-dlt-ingestion-composition-uplift.md'
 ```
 
 Expected: no output.
@@ -1812,7 +1800,8 @@ Expected: PASS.
 Run:
 
 ```bash
-rg -n "old ingestion catalog fallback errors" .
+rg -n "plugins\\.ingestion\\.config\\.catalog_config|catalog_config is required|dlt product ingestion requires an Iceberg destination catalog_config|_floe_iceberg_catalog_config" . \
+  --glob '!docs/superpowers/plans/2026-05-07-dlt-ingestion-composition-uplift.md'
 ```
 
 Expected: no output.
