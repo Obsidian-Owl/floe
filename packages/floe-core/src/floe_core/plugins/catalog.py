@@ -362,9 +362,7 @@ class CatalogPlugin(PluginMetadata):
         override this method to describe the storage protocols and credential
         modes they can consume.
         """
-        raise NotImplementedError(
-            f"{self.name} does not declare storage composition requirements"
-        )
+        raise NotImplementedError(f"{self.name} does not declare storage composition requirements")
 
     def build_catalog_deployment(
         self,

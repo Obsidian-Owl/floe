@@ -67,9 +67,7 @@ class CompilationError(BaseModel):
         ...,
         min_length=1,
         pattern=r"^(E\d{3}|FLOE-DQ\d{3}|COMPOSITION_[A-Z0-9_]+)$",
-        description=(
-            "Error code (E001-E999, FLOE-DQ101-FLOE-DQ999, or COMPOSITION_* issue code)"
-        ),
+        description=("Error code (E001-E999, FLOE-DQ101-FLOE-DQ999, or COMPOSITION_* issue code)"),
         examples=[
             "E001",
             "E002",

@@ -125,8 +125,7 @@ def test_resolver_rejects_missing_storage_for_catalog_requirements() -> None:
             severity="error",
             code="COMPOSITION_STORAGE_MISSING",
             message=(
-                "catalog polaris requires storage capabilities but no storage plugin "
-                "was selected"
+                "catalog polaris requires storage capabilities but no storage plugin was selected"
             ),
             plugins=["catalog:polaris"],
         )

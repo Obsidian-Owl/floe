@@ -848,9 +848,7 @@ class TestStorageDeploymentBinding:
                 sts_unavailable=True,
                 credential_refs={
                     "accessKeyId": storage.credentials.as_credential_ref("accessKeyId"),
-                    "secretAccessKey": storage.credentials.as_credential_ref(
-                        "secretAccessKey"
-                    ),
+                    "secretAccessKey": storage.credentials.as_credential_ref("secretAccessKey"),
                 },
             ),
         )
@@ -874,10 +872,7 @@ class TestStorageDeploymentBinding:
         assert restored.deployment.storage is not None
         assert restored.deployment.catalog is not None
         assert restored.deployment.catalog.provider == "polaris"
-        assert (
-            restored.deployment.catalog.polaris.default_base_location
-            == "s3://floe-iceberg"
-        )
+        assert restored.deployment.catalog.polaris.default_base_location == "s3://floe-iceberg"
         assert restored.deployment.catalog.polaris.allowed_locations == ["s3://floe-iceberg"]
         assert restored.deployment.catalog.polaris.path_style_access is True
         assert restored.deployment.catalog.polaris.sts_unavailable is True

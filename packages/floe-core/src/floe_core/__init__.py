@@ -94,6 +94,7 @@ def __dir__() -> list[str]:
     """Return stable public attributes for interactive tooling."""
     return sorted(set(globals()) | set(__all__))
 
+
 # =============================================================================
 # Public API (15 symbols) + Backward Compatibility Exports
 # =============================================================================
