@@ -407,3 +407,63 @@ def test_incompatible_storage_catalog_composition_raises_structured_error(
         "storage_plugin": "minio",
         "catalog_plugin": "polaris",
     }
+
+
+def test_composition_resolver_accepts_dlt_with_minio_and_polaris() -> None:
+    from floe_core.composition.models import CapabilitySet, PluginCapabilities
+    from floe_core.composition.resolver import CompositionResolver
+
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="minio",
+        capabilities=CapabilitySet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+            path_style_access=True,
+        ),
+    )
+    catalog = PluginCapabilities(
+        plugin_type="catalog",
+        plugin_name="polaris",
+        capabilities=CapabilitySet(catalog_providers=["iceberg-rest"]),
+    )
+    ingestion = PluginRequirements(
+        plugin_type="ingestion",
+        plugin_name="dlt",
+        requirements=RequirementSet(
+            protocols=["s3-compatible", "s3"],
+            credential_modes=["kubernetes-secret", "environment", "workload-identity"],
+            catalog_providers=["iceberg-rest"],
+            table_formats=["iceberg"],
+        ),
+    )
+
+    result = CompositionResolver().validate([storage, catalog], [ingestion])
+
+    assert result.valid
+    assert result.issues == []
+
+
+def test_composition_resolver_rejects_dlt_without_catalog() -> None:
+    from floe_core.composition.models import CapabilitySet, PluginCapabilities
+    from floe_core.composition.resolver import CompositionResolver
+
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="minio",
+        capabilities=CapabilitySet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+        ),
+    )
+    ingestion = PluginRequirements(
+        plugin_type="ingestion",
+        plugin_name="dlt",
+        requirements=RequirementSet(catalog_providers=["iceberg-rest"]),
+    )
+
+    result = CompositionResolver().validate([storage], [ingestion])
+
+    assert not result.valid
+    assert result.issues[0].code == "COMPOSITION_CATALOG_MISSING"
+    assert result.issues[0].plugins == ["ingestion:dlt"]

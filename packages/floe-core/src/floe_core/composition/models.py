@@ -14,6 +14,8 @@ class CapabilitySet(BaseModel):
 
     protocols: list[str] = Field(default_factory=list)
     credential_modes: list[str] = Field(default_factory=list)
+    catalog_providers: list[str] = Field(default_factory=list)
+    table_formats: list[str] = Field(default_factory=list)
     path_style_access: bool | None = None
     sts: bool | None = None
 
@@ -25,6 +27,8 @@ class RequirementSet(BaseModel):
 
     protocols: list[str] = Field(default_factory=list)
     credential_modes: list[str] = Field(default_factory=list)
+    catalog_providers: list[str] = Field(default_factory=list)
+    table_formats: list[str] = Field(default_factory=list)
     requires_server_side_storage_access: bool | None = None
     supports_no_sts: bool | None = None
     supports_path_style_access: bool | None = None

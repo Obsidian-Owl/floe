@@ -21,29 +21,87 @@ class CompositionResolver:
         """Return compatibility issues for the selected plugin graph."""
         issues: list[CompositionIssue] = []
         storage = next((item for item in capabilities if item.plugin_type == "storage"), None)
+        catalog = next((item for item in capabilities if item.plugin_type == "catalog"), None)
 
         for requirement in requirements:
-            if requirement.plugin_type != "catalog":
-                continue
-            if storage is None:
-                issues.append(
-                    CompositionIssue(
-                        severity="error",
-                        code="COMPOSITION_STORAGE_MISSING",
-                        message=(
-                            f"catalog {requirement.plugin_name} requires storage "
-                            "capabilities but no storage plugin was selected"
-                        ),
-                        plugins=[requirement.ref],
+            if requirement.plugin_type == "catalog":
+                if storage is None:
+                    issues.append(
+                        CompositionIssue(
+                            severity="error",
+                            code="COMPOSITION_STORAGE_MISSING",
+                            message=(
+                                f"catalog {requirement.plugin_name} requires storage "
+                                "capabilities but no storage plugin was selected"
+                            ),
+                            plugins=[requirement.ref],
+                        )
                     )
-                )
+                    continue
+                issues.extend(self._validate_storage_for_catalog(storage, requirement))
                 continue
-            issues.extend(self._validate_storage_for_catalog(storage, requirement))
+
+            if requirement.plugin_type == "ingestion":
+                issues.extend(self._validate_ingestion(requirement, storage, catalog))
 
         return CompositionValidationResult(
             valid=not any(issue.severity == "error" for issue in issues),
             issues=issues,
         )
+
+    def _validate_ingestion(
+        self,
+        ingestion: PluginRequirements,
+        storage: PluginCapabilities | None,
+        catalog: PluginCapabilities | None,
+    ) -> list[CompositionIssue]:
+        """Validate ingestion requirements against selected storage and catalog."""
+        issues: list[CompositionIssue] = []
+        if storage is None:
+            issues.append(
+                CompositionIssue(
+                    severity="error",
+                    code="COMPOSITION_STORAGE_MISSING",
+                    message=(
+                        f"ingestion {ingestion.plugin_name} requires storage "
+                        "capabilities but no storage plugin was selected"
+                    ),
+                    plugins=[ingestion.ref],
+                )
+            )
+        else:
+            issues.extend(self._validate_storage_for_catalog(storage, ingestion))
+
+        required_catalogs = list(ingestion.requirements.catalog_providers)
+        if required_catalogs and catalog is None:
+            issues.append(
+                CompositionIssue(
+                    severity="error",
+                    code="COMPOSITION_CATALOG_MISSING",
+                    message=(
+                        f"ingestion {ingestion.plugin_name} requires one of catalog providers "
+                        f"{required_catalogs}; no catalog plugin was selected"
+                    ),
+                    plugins=[ingestion.ref],
+                )
+            )
+        elif required_catalogs and catalog is not None:
+            provided_catalogs = list(catalog.capabilities.catalog_providers)
+            if not set(provided_catalogs).intersection(required_catalogs):
+                issues.append(
+                    CompositionIssue(
+                        severity="error",
+                        code="COMPOSITION_CATALOG_UNSUPPORTED",
+                        message=(
+                            f"ingestion {ingestion.plugin_name} requires one of catalog providers "
+                            f"{required_catalogs}; catalog {catalog.plugin_name} provides "
+                            f"{provided_catalogs}"
+                        ),
+                        plugins=[catalog.ref, ingestion.ref],
+                    )
+                )
+
+        return issues
 
     def _validate_storage_for_catalog(
         self,
