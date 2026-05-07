@@ -25,7 +25,7 @@ import os
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -537,22 +537,26 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 "pipeline_name": pipeline_name,
                 "dataset_name": dataset_name,
             }
+            runtime_binding = self._pipeline_runtime_binding(config)
+            destination_config = self._destination_config_from_binding(runtime_binding)
             catalog_config = self._pipeline_catalog_config(config)
-            if self.is_configured and not catalog_config:
+            if self.is_configured and not destination_config and not catalog_config:
                 raise PipelineConfigurationError(
-                    "catalog_config is required for configured dlt ingestion pipelines",
+                    "dlt runtime binding is required for configured dlt ingestion pipelines",
                     source_type=config.source_type,
                     destination_table=config.destination_table,
                 )
-            if catalog_config:
+            if not destination_config and catalog_config:
+                destination_config = self.get_destination_config(catalog_config)
+            if destination_config:
                 from dlt.destinations import filesystem
 
-                pipeline_kwargs["destination"] = filesystem(
-                    **self.get_destination_config(catalog_config)
-                )
+                pipeline_kwargs["destination"] = filesystem(**destination_config)
 
             pipeline = dlt.pipeline(**pipeline_kwargs)
-            if catalog_config:
+            if runtime_binding:
+                pipeline._floe_dlt_runtime_binding = runtime_binding
+            elif catalog_config:
                 pipeline._floe_iceberg_catalog_config = catalog_config
 
             logger.info(
@@ -562,7 +566,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 source_type=config.source_type,
                 destination_table=config.destination_table,
                 write_mode=config.write_mode,
-                has_destination=bool(catalog_config),
+                has_destination=bool(destination_config),
             )
 
             return pipeline
@@ -673,11 +677,16 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     run_kwargs["primary_key"] = primary_key
 
                 # Execute the pipeline
-                catalog_config = getattr(pipeline, "_floe_iceberg_catalog_config", None)
-                if not isinstance(catalog_config, dict):
-                    catalog_config = None
-                with self._temporary_iceberg_environment(catalog_config):
-                    load_info = pipeline.run(source, **run_kwargs)
+                runtime_binding = getattr(pipeline, "_floe_dlt_runtime_binding", None)
+                if isinstance(runtime_binding, Mapping):
+                    with self._temporary_runtime_binding_environment(runtime_binding):
+                        load_info = pipeline.run(source, **run_kwargs)
+                else:
+                    catalog_config = getattr(pipeline, "_floe_iceberg_catalog_config", None)
+                    if not isinstance(catalog_config, dict):
+                        catalog_config = None
+                    with self._temporary_iceberg_environment(catalog_config):
+                        load_info = pipeline.run(source, **run_kwargs)
 
                 elapsed = time.perf_counter() - start_time
 
@@ -871,6 +880,16 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         return self._configured_catalog_config()
 
     @staticmethod
+    def _pipeline_runtime_binding(config: IngestionConfig) -> dict[str, Any]:
+        binding = config.runtime_binding
+        return dict(binding) if isinstance(binding, Mapping) else {}
+
+    @staticmethod
+    def _destination_config_from_binding(binding: Mapping[str, Any]) -> dict[str, Any]:
+        destination_filesystem = binding.get("destination_filesystem")
+        return dict(destination_filesystem) if isinstance(destination_filesystem, Mapping) else {}
+
+    @staticmethod
     def _first_config_value(catalog_config: dict[str, Any], *keys: str) -> Any | None:
         for key in keys:
             value = catalog_config.get(key)
@@ -983,6 +1002,26 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             previous = {key: os.environ.get(key) for key in plugin_env}
             try:
                 os.environ.update(plugin_env)
+                yield
+            finally:
+                for key, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+    @contextmanager
+    def _temporary_runtime_binding_environment(self, binding: Mapping[str, Any]) -> Any:
+        iceberg_catalog_env = binding.get("iceberg_catalog_env")
+        if not isinstance(iceberg_catalog_env, Mapping) or not iceberg_catalog_env:
+            yield
+            return
+
+        with self._iceberg_env_lock:
+            runtime_env = {str(key): str(value) for key, value in iceberg_catalog_env.items()}
+            previous = {key: os.environ.get(key) for key in runtime_env}
+            try:
+                os.environ.update(runtime_env)
                 yield
             finally:
                 for key, value in previous.items():

@@ -30,6 +30,34 @@ def _plugin_config(catalog_config: dict[str, Any]) -> DltIngestionConfig:
     )
 
 
+def _runtime_binding() -> dict[str, Any]:
+    return {
+        "destination": "filesystem",
+        "source": "filesystem",
+        "destination_filesystem": {
+            "bucket_url": "s3://runtime-warehouse",
+            "credentials": {
+                "endpoint_url": "http://runtime-minio:9000",
+                "region_name": "us-east-1",
+                "s3_url_style": "path",
+            },
+        },
+        "source_filesystem": {
+            "endpoint_url": "http://runtime-minio:9000",
+            "region_name": "us-east-1",
+            "s3_url_style": "path",
+        },
+        "iceberg_catalog_env": {
+            "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME": "polaris",
+            "PYICEBERG_CATALOG__POLARIS__URI": "http://runtime-polaris:8181/api/catalog",
+        },
+        "env_refs": {
+            "AWS_ACCESS_KEY_ID": "secret:floe/minio#access_key",
+            "AWS_SECRET_ACCESS_KEY": "secret:floe/minio#secret_key",  # pragma: allowlist secret
+        },
+    }
+
+
 def test_destination_config_matches_dlt_filesystem_iceberg_setup() -> None:
     """Catalog config maps to the exact kwargs used to build dlt filesystem destination."""
     plugin = DltIngestionPlugin()
@@ -154,13 +182,61 @@ def test_create_pipeline_passes_filesystem_destination_without_leaking_pyiceberg
     assert "PYICEBERG_CATALOG__POLARIS__S3__SECRET_ACCESS_KEY" not in os.environ
 
 
-def test_configured_create_pipeline_requires_catalog_config() -> None:
-    """Configured dlt ingestion cannot create a pipeline without an Iceberg destination."""
+def test_create_pipeline_prefers_runtime_binding_over_catalog_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Runtime binding destination config takes precedence over legacy catalog config."""
+    destination_calls: list[dict[str, Any]] = []
+    pipeline_calls: list[dict[str, Any]] = []
+    fake_destination = object()
+
+    def fake_filesystem(**kwargs: Any) -> object:
+        destination_calls.append(kwargs)
+        return fake_destination
+
+    def fake_pipeline(**kwargs: Any) -> SimpleNamespace:
+        pipeline_calls.append(kwargs)
+        return SimpleNamespace(pipeline_name=kwargs["pipeline_name"])
+
+    import dlt
+    import dlt.destinations
+
+    monkeypatch.setattr(dlt.destinations, "filesystem", fake_filesystem)
+    monkeypatch.setattr(dlt, "pipeline", fake_pipeline)
+
+    plugin = DltIngestionPlugin()
+    plugin.configure(_plugin_config({"bucket": "legacy-bucket"}))
+    plugin.startup()
+
+    binding = _runtime_binding()
+    pipeline = plugin.create_pipeline(
+        IngestionConfig(
+            source_type="filesystem",
+            source_config={},
+            destination_table="bronze.orders",
+            runtime_binding=binding,
+        )
+    )
+
+    assert destination_calls == [binding["destination_filesystem"]]
+    assert pipeline_calls == [
+        {
+            "pipeline_name": "ingest_orders",
+            "dataset_name": "bronze",
+            "destination": fake_destination,
+        }
+    ]
+    assert pipeline.pipeline_name == "ingest_orders"
+    assert pipeline._floe_dlt_runtime_binding == binding
+
+
+def test_configured_create_pipeline_requires_runtime_binding_or_catalog_config() -> None:
+    """Configured dlt ingestion cannot create a pipeline without destination config."""
     plugin = DltIngestionPlugin()
     plugin.configure(_plugin_config({}))
     plugin.startup()
 
-    with pytest.raises(PipelineConfigurationError, match="catalog_config is required"):
+    with pytest.raises(PipelineConfigurationError, match="dlt runtime binding is required"):
         plugin.create_pipeline(
             IngestionConfig(
                 source_type="filesystem",
@@ -236,6 +312,34 @@ def test_run_serializes_pyiceberg_env_for_concurrent_catalog_configs() -> None:
         "second": ("polaris", "http://polaris-two:8181/api/catalog"),
     }
     assert "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
+
+
+def test_run_applies_runtime_binding_catalog_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Runtime binding catalog env is applied only while dlt executes the pipeline."""
+    observations: dict[str, tuple[str | None, str | None]] = {}
+
+    class FakePipeline:
+        pipeline_name = "runtime"
+        _floe_dlt_runtime_binding = _runtime_binding()
+
+        def run(self, _source: object, **_kwargs: Any) -> object:
+            observations["during_run"] = (
+                os.environ.get("ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"),
+                os.environ.get("PYICEBERG_CATALOG__POLARIS__URI"),
+            )
+            return SimpleNamespace(metrics={})
+
+    monkeypatch.setenv("ICEBERG_CATALOG__ICEBERG_CATALOG_NAME", "caller-catalog")
+    monkeypatch.delenv("PYICEBERG_CATALOG__POLARIS__URI", raising=False)
+
+    plugin = DltIngestionPlugin()
+    plugin.startup()
+
+    plugin.run(FakePipeline(), source=object(), table_name="orders")
+
+    assert observations == {"during_run": ("polaris", "http://runtime-polaris:8181/api/catalog")}
+    assert os.environ["ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"] == "caller-catalog"
     assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
 
 
