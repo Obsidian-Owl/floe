@@ -255,8 +255,9 @@ def _configure_plugin(
     catalog_config: dict[str, Any],
 ) -> DltIngestionPlugin:
     """Configure and start a dlt ingestion plugin for one source."""
+    _ = catalog_config
     plugin = DltIngestionPlugin()
-    plugin.configure(DltIngestionConfig(sources=[source], catalog_config=catalog_config))
+    plugin.configure(DltIngestionConfig(sources=[source]))
     plugin.startup()
     return plugin
 

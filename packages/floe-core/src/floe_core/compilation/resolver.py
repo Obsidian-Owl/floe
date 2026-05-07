@@ -34,15 +34,6 @@ from floe_core.schemas.manifest import PlatformManifest
 
 # Default plugin version when not specified
 DEFAULT_PLUGIN_VERSION = "0.0.0"
-_REQUIRED_DLT_CATALOG_CONFIG_KEYS = ("uri", "warehouse")
-_DLT_CATALOG_BUCKET_KEYS = (
-    "bucket",
-    "s3_bucket",
-    "bucket_url",
-    "storage_url",
-    "base_location",
-    "default_base_location",
-)
 
 
 def _to_plugin_ref(
@@ -177,38 +168,6 @@ def resolve_ingestion_config(spec: FloeSpec, plugins: ResolvedPlugins) -> Resolv
             "ingestion": plugins.ingestion.model_copy(update={"config": existing_config}),
         }
     )
-
-
-def _validate_dlt_destination_config(spec: FloeSpec, config: dict[str, object]) -> None:
-    """Require platform-owned Iceberg destination settings for dlt ingestion."""
-    catalog_config = config.get("catalog_config")
-    if not isinstance(catalog_config, dict) or not catalog_config:
-        missing = [*_REQUIRED_DLT_CATALOG_CONFIG_KEYS, "bucket"]
-    else:
-        missing = [
-            key
-            for key in _REQUIRED_DLT_CATALOG_CONFIG_KEYS
-            if catalog_config.get(key) in (None, "")
-        ]
-        if not any(catalog_config.get(key) not in (None, "") for key in _DLT_CATALOG_BUCKET_KEYS):
-            missing.append("bucket")
-
-    if missing:
-        raise CompilationException(
-            CompilationError(
-                stage=CompilationStage.RESOLVE,
-                code="E201",
-                message="dlt product ingestion requires an Iceberg destination catalog_config",
-                suggestion=(
-                    "Add plugins.ingestion.config.catalog_config with uri, warehouse, "
-                    "and bucket or bucket_url in the platform manifest"
-                ),
-                context={
-                    "product": spec.metadata.name,
-                    "missing": sorted(missing),
-                },
-            )
-        )
 
 
 def _resolve_ingestion_source_config(source: IngestionSourceSpec) -> dict[str, object]:

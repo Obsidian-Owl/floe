@@ -12,7 +12,6 @@ Requirements Covered:
     - FR-067: DltIngestionConfig Pydantic model
     - FR-068: sources list of IngestionSourceConfig
     - FR-069: IngestionSourceConfig fields
-    - FR-070: catalog_config for Polaris connection
     - FR-071: Optional retry_config
     - FR-072: Pydantic v2 field validators
     - FR-073: SecretStr for credentials
@@ -252,7 +251,6 @@ class DltIngestionConfig(BaseModel):
 
     Args:
         sources: List of ingestion source configurations (at least one required).
-        catalog_config: Polaris catalog connection configuration.
         retry_config: Optional retry behavior configuration.
 
     Example:
@@ -264,10 +262,6 @@ class DltIngestionConfig(BaseModel):
         ...             destination_table="bronze.raw_github_events",
         ...         ),
         ...     ],
-        ...     catalog_config={
-        ...         "uri": "http://polaris:8181/api/catalog",
-        ...         "warehouse": "floe_warehouse",
-        ...     },
         ... )
     """
 
@@ -277,10 +271,6 @@ class DltIngestionConfig(BaseModel):
         ...,
         min_length=1,
         description="List of ingestion source configurations",
-    )
-    catalog_config: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Polaris catalog connection configuration",
     )
     retry_config: RetryConfig = Field(
         default_factory=RetryConfig,

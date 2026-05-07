@@ -288,7 +288,6 @@ class TestIngestionPluginRefContract:
                     type="dlt",
                     version="0.1.0",
                     config={
-                        "catalog_config": {"warehouse": "floe"},
                         "retry_config": {"max_retries": 4, "initial_delay_seconds": 1.5},
                         "sources": [
                             {

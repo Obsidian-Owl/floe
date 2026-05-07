@@ -7,7 +7,7 @@ the expected behavior for T021 and T022 implementation.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -29,6 +29,14 @@ def dlt_plugin() -> Generator[DltIngestionPlugin, None, None]:
     plugin.shutdown()
 
 
+def _runtime_binding() -> dict[str, Any]:
+    """Return minimal runtime binding required for dlt pipeline creation."""
+    return {
+        "destination": "filesystem",
+        "destination_filesystem": {"bucket_url": "file:///tmp/floe-test"},
+    }
+
+
 class TestCreatePipeline:
     """Unit tests for T018 - create_pipeline() method."""
 
@@ -44,6 +52,7 @@ class TestCreatePipeline:
             source_type="rest_api",
             source_config={"url": "https://api.example.com"},
             destination_table="bronze.raw_data",
+            runtime_binding=_runtime_binding(),
         )
 
         pipeline = dlt_plugin.create_pipeline(config)
@@ -62,6 +71,7 @@ class TestCreatePipeline:
             source_type="rest_api",
             source_config={"url": "https://api.example.com"},
             destination_table="bronze.raw_data",
+            runtime_binding=_runtime_binding(),
         )
 
         with pytest.raises(RuntimeError, match="Plugin must be started"):
@@ -112,6 +122,7 @@ class TestCreatePipeline:
             source_type="rest_api",
             source_config={"url": "https://api.example.com"},
             destination_table="bronze.raw_data",
+            runtime_binding=_runtime_binding(),
         )
 
         # Just verify create_pipeline doesn't raise - ingestion_span is tested separately
@@ -660,6 +671,7 @@ class TestOTelSpanEmission:
             source_type="rest_api",
             source_config={"url": "https://api.example.com"},
             destination_table="bronze.raw_data",
+            runtime_binding=_runtime_binding(),
         )
 
         with patch("floe_ingestion_dlt.plugin.get_tracer") as mock_get_tracer:
@@ -802,6 +814,7 @@ class TestStructuredLogging:
             source_type="rest_api",
             source_config={"url": "https://api.example.com"},
             destination_table="bronze.raw_data",
+            runtime_binding=_runtime_binding(),
         )
 
         with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:

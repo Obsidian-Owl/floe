@@ -73,6 +73,22 @@ class TestDltIngestionConfig:
         with pytest.raises(ValidationError, match="List should have at least 1 item"):
             DltIngestionConfig(sources=[])
 
+    @pytest.mark.requirement("4F-FR-067")
+    def test_catalog_config_is_rejected(self) -> None:
+        """DltIngestionConfig no longer accepts ingestion-owned catalog fallback."""
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            DltIngestionConfig(
+                sources=[
+                    IngestionSourceConfig(
+                        name="test_source",
+                        source_type="rest_api",
+                        source_config={"url": "https://api.example.com"},
+                        destination_table="bronze.raw_data",
+                    )
+                ],
+                catalog_config={"warehouse": "floe"},  # type: ignore[call-arg]
+            )
+
     @pytest.mark.requirement("4F-FR-068")
     def test_valid_config_accepts_single_source(self) -> None:
         """Test DltIngestionConfig accepts single valid source.

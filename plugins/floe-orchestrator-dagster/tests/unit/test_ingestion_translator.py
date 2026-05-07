@@ -246,11 +246,6 @@ class TestCreateIngestionAssets:
             "schema_contract": "evolve",
         }
         mock_ref.config = {
-            "catalog_config": {
-                "bucket": "floe-iceberg",
-                "s3_endpoint": "http://minio:9000",
-                "s3_region": "us-east-1",
-            },
             "sources": [
                 source_config,
             ],
@@ -263,7 +258,18 @@ class TestCreateIngestionAssets:
         ingestion_plugin.create_pipeline.return_value = pipeline
         ingestion_plugin.run.return_value = result
 
-        asset_def = create_ingestion_assets(mock_ref, project_dir=tmp_path)[0]
+        runtime_binding = {
+            "source_filesystem": {
+                "bucket": "floe-iceberg",
+                "s3_endpoint": "http://minio:9000",
+                "s3_region": "us-east-1",
+            }
+        }
+        asset_def = create_ingestion_assets(
+            mock_ref,
+            project_dir=tmp_path,
+            runtime_binding=runtime_binding,
+        )[0]
         context = build_op_context(resources={"ingestion": ingestion_plugin})
 
         output = asset_def(context)
@@ -291,7 +297,7 @@ class TestCreateIngestionAssets:
         assert output is result
 
     @pytest.mark.requirement("4F-FR-060")
-    def test_factory_prefers_empty_runtime_source_filesystem_over_catalog_config(
+    def test_factory_uses_empty_runtime_source_filesystem(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -314,13 +320,7 @@ class TestCreateIngestionAssets:
         mock_ref: MagicMock = MagicMock()
         mock_ref.type = "dlt"
         mock_ref.version = "0.1.0"
-        mock_ref.config = {
-            "catalog_config": {
-                "s3_endpoint": "http://legacy-minio:9000",
-                "s3_region": "us-east-1",
-            },
-            "sources": [source_config],
-        }
+        mock_ref.config = {"sources": [source_config]}
         ingestion_plugin = MagicMock()
         ingestion_plugin.name = "dlt"
         ingestion_plugin.version = "0.1.0"

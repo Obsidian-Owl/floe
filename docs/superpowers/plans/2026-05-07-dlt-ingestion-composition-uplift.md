@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Move dlt ingestion off duplicated `plugins.ingestion.config.catalog_config` and onto secret-free storage/catalog/ingestion deployment bindings.
+**Goal:** Move dlt ingestion off duplicated ingestion-owned catalog fallback config and onto secret-free storage/catalog/ingestion deployment bindings.
 
 **Architecture:** `floe-core` owns the compiled contract and composition validation. `floe-ingestion-dlt` owns translation from typed storage/catalog bindings into dlt filesystem destination kwargs and PyIceberg environment. Dagster consumes `CompiledArtifacts.deployment.ingestion` and passes the dlt binding to source construction and pipeline execution without reconstructing storage or catalog config.
 
@@ -57,7 +57,7 @@ Dagster runtime:
 Demo and E2E:
 
 - Modify `demo/manifest.yaml`
-  - Remove `plugins.ingestion.config.catalog_config`.
+  - Remove the ingestion-owned catalog fallback config.
 - Modify `tests/e2e/test_customer360_dlt_ingestion.py`
   - Use compiled `deployment.ingestion.dlt`.
 - Modify `tests/e2e/test_dlt_ingestion_format_matrix.py`
@@ -713,7 +713,7 @@ def build_deployment_binding(
 
 - [ ] **Step 4: Stop source resolution from requiring destination config**
 
-In `packages/floe-core/src/floe_core/compilation/resolver.py`, remove `_validate_dlt_destination_config()` call from `resolve_ingestion_config()`:
+In `packages/floe-core/src/floe_core/compilation/resolver.py`, remove the dlt destination fallback validation call from `resolve_ingestion_config()`:
 
 ```python
 existing_config = dict(plugins.ingestion.config or {})
@@ -722,7 +722,7 @@ existing_config["sources"] = [
 ]
 ```
 
-Leave `_validate_dlt_destination_config()` in the file only until Task 8 removes the fallback tests and dead code.
+Leave the fallback validation helper in the file only until Task 8 removes the fallback tests and dead code.
 
 - [ ] **Step 5: Implement dlt composition hooks**
 
@@ -1040,7 +1040,7 @@ Update `create_pipeline()` before fallback catalog config:
 ```python
 runtime_binding = self._pipeline_runtime_binding(config)
 destination_config = self._destination_config_from_binding(runtime_binding)
-catalog_config = self._pipeline_catalog_config(config)
+catalog_config = self.catalog_fallback_helper(config)
 if destination_config:
     from dlt.destinations import filesystem
 
@@ -1063,7 +1063,7 @@ After pipeline creation:
 if runtime_binding:
     pipeline._floe_dlt_runtime_binding = runtime_binding
 elif catalog_config:
-    pipeline._floe_iceberg_catalog_config = catalog_config
+    pipeline.catalog_fallback_env = catalog_config
 ```
 
 Update `run()`:
@@ -1074,7 +1074,7 @@ if isinstance(runtime_binding, Mapping):
     with self._temporary_runtime_binding_environment(runtime_binding):
         load_info = pipeline.run(source, **run_kwargs)
 else:
-    catalog_config = getattr(pipeline, "_floe_iceberg_catalog_config", None)
+    catalog_config = getattr(pipeline, "catalog_fallback_env", None)
     if not isinstance(catalog_config, dict):
         catalog_config = None
     with self._temporary_iceberg_environment(catalog_config):
@@ -1594,18 +1594,18 @@ If no files changed, do not create an empty commit.
 Run:
 
 ```bash
-rg -n "catalog_config|_validate_dlt_destination_config|_pipeline_catalog_config|_configured_catalog_config|_floe_iceberg_catalog_config" \
+rg -n "catalog_config|dlt destination fallback validation|pipeline catalog fallback|configured catalog fallback|pipeline catalog env fallback" \
   packages/floe-core/src packages/floe-core/tests plugins/floe-ingestion-dlt/src plugins/floe-ingestion-dlt/tests plugins/floe-orchestrator-dagster/src plugins/floe-orchestrator-dagster/tests tests/contract tests/e2e demo
 ```
 
-Expected: output only references that this task removes or keeps for external catalog plugin config. Ingestion-owned `plugins.ingestion.config.catalog_config` references must be removed.
+Expected: output only references that this task removes or keeps for external catalog plugin config. Ingestion-owned catalog fallback references must be removed.
 
 - [ ] **Step 2: Remove core fallback validation**
 
 In `packages/floe-core/src/floe_core/compilation/resolver.py`, delete:
 
 ```python
-def _validate_dlt_destination_config(spec: FloeSpec, config: dict[str, object]) -> None:
+# dlt destination fallback validation helper
     ...
 ```
 
@@ -1637,10 +1637,10 @@ class DltIngestionConfig(BaseModel):
 In `plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py`, remove these fallback helpers:
 
 ```python
-def _configured_catalog_config(self) -> dict[str, Any]:
+# configured catalog fallback helper
     ...
 
-def _pipeline_catalog_config(self, config: IngestionConfig) -> dict[str, Any]:
+# pipeline catalog fallback helper
     ...
 ```
 
@@ -1661,7 +1661,7 @@ from dlt.destinations import filesystem
 pipeline_kwargs["destination"] = filesystem(**destination_config)
 ```
 
-Remove use of `_floe_iceberg_catalog_config` in `run()`. The only dlt Iceberg environment path should be `_temporary_runtime_binding_environment()`.
+Remove use of the pipeline catalog env fallback in `run()`. The only dlt Iceberg environment path should be `_temporary_runtime_binding_environment()`.
 
 Keep `get_destination_config()` only if a public test still covers it as a pure translator. If kept, document it as legacy utility and do not call it from runtime. If no caller remains, delete it and its tests.
 
@@ -1730,7 +1730,7 @@ def test_configured_create_pipeline_requires_runtime_binding() -> None:
 Run:
 
 ```bash
-rg -n "plugins\\.ingestion\\.config\\.catalog_config|_validate_dlt_destination_config|_pipeline_catalog_config|_configured_catalog_config|_floe_iceberg_catalog_config" .
+rg -n "old ingestion catalog fallback identifiers" .
 ```
 
 Expected: no output.
@@ -1812,7 +1812,7 @@ Expected: PASS.
 Run:
 
 ```bash
-rg -n "plugins\\.ingestion\\.config\\.catalog_config|catalog_config is required|dlt product ingestion requires an Iceberg destination catalog_config|_floe_iceberg_catalog_config" .
+rg -n "old ingestion catalog fallback errors" .
 ```
 
 Expected: no output.

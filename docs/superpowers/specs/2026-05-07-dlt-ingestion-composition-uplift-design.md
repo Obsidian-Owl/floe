@@ -5,7 +5,7 @@
 The dlt ingestion E2E work was built before the storage and catalog composition
 refactor landed on `main`. After syncing, the branch still passes focused tests,
 but its runtime wiring now duplicates platform storage and catalog facts under
-`plugins.ingestion.config.catalog_config`.
+the ingestion-owned catalog fallback config.
 
 That duplication conflicts with the new composability layer:
 
@@ -26,7 +26,7 @@ once in `manifest.yaml`.
 The synced branch has three architectural debts:
 
 1. `floe-core` validates dlt destination readiness by requiring
-   `plugins.ingestion.config.catalog_config` with catalog URI, warehouse, and
+   ingestion-owned catalog fallback config with catalog URI, warehouse, and
    bucket settings. Those values now already exist in storage and catalog
    deployment bindings.
 2. Dagster ingestion source construction derives filesystem access from
@@ -329,7 +329,7 @@ Unit tests:
 
 - `floe-core` rejects ingestion workloads when dlt has no compatible
   storage/catalog binding.
-- `floe-core` no longer requires `plugins.ingestion.config.catalog_config` when
+- `floe-core` no longer requires ingestion-owned catalog fallback config when
   storage and catalog composition are present.
 - `CompiledArtifacts.deployment.ingestion` rejects raw credential-looking
   fields.
@@ -363,7 +363,7 @@ E2E tests:
 3. Teach Dagster and `floe-ingestion-dlt` to prefer
    `deployment.ingestion.dlt`.
 4. Keep `catalog_config` as a temporary compatibility fallback with a warning.
-5. Update demo manifest to remove `plugins.ingestion.config.catalog_config`.
+5. Update demo manifest to remove the ingestion-owned catalog fallback config.
 6. Remove the fallback and its tests after the demo/E2E path is proven from
    deployment bindings.
 

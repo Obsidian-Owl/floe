@@ -374,7 +374,6 @@ def project_dir_with_ingestion_plugin_settings_only(tmp_path: Path) -> Path:
             type="dlt",
             version="0.1.0",
             config={
-                "catalog_config": {"dataset_name": "raw"},
                 "retry_config": {"max_attempts": 3},
             },
         ),

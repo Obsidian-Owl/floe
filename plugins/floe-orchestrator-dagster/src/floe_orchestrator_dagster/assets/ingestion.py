@@ -161,7 +161,7 @@ def create_ingestion_assets(
     ingestion_type = ingestion_ref.type
     ingestion_version = ingestion_ref.version
     ingestion_config = ingestion_ref.config or {}
-    filesystem_config = _filesystem_config(ingestion_config, runtime_binding=runtime_binding)
+    filesystem_config = _filesystem_config(runtime_binding=runtime_binding)
     source_configs = _source_configs(ingestion_config)
     assets: list[AssetsDefinition] = []
     asset_names: set[str] = set()
@@ -210,7 +210,6 @@ def _source_configs(ingestion_config: Mapping[str, Any]) -> list[dict[str, Any]]
 
 
 def _filesystem_config(
-    ingestion_config: Mapping[str, Any],
     *,
     runtime_binding: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -219,8 +218,7 @@ def _filesystem_config(
         source_filesystem = runtime_binding.get("source_filesystem")
         if isinstance(source_filesystem, Mapping):
             return dict(source_filesystem)
-    catalog_config = ingestion_config.get("catalog_config")
-    return dict(catalog_config) if isinstance(catalog_config, Mapping) else {}
+    return {}
 
 
 def _validate_required_source_fields(source_config: Mapping[str, Any]) -> None:

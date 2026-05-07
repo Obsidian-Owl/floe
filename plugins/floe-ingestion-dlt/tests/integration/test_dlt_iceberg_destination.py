@@ -53,6 +53,40 @@ def _catalog_config() -> dict[str, Any]:
     }
 
 
+def _runtime_binding(catalog_config: dict[str, Any]) -> dict[str, Any]:
+    catalog_name = str(catalog_config.get("catalog_name", "polaris"))
+    env_catalog = catalog_name.upper().replace("-", "_")
+    prefix = f"PYICEBERG_CATALOG__{env_catalog}__"
+    iceberg_catalog_env = {
+        "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME": catalog_name,
+        "ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE": "rest",
+        f"{prefix}TYPE": "rest",
+        f"{prefix}URI": str(catalog_config["uri"]),
+        f"{prefix}WAREHOUSE": str(catalog_config["warehouse"]),
+        f"{prefix}S3__ENDPOINT": str(catalog_config["s3_endpoint"]),
+        f"{prefix}S3__REGION": str(catalog_config["s3_region"]),
+    }
+    if catalog_config.get("s3_path_style_access"):
+        iceberg_catalog_env[f"{prefix}S3__PATH_STYLE_ACCESS"] = "true"
+    if catalog_config.get("credential"):
+        iceberg_catalog_env[f"{prefix}CREDENTIAL"] = str(catalog_config["credential"])
+    if catalog_config.get("scope"):
+        iceberg_catalog_env[f"{prefix}SCOPE"] = str(catalog_config["scope"])
+    if catalog_config.get("oauth2_server_uri"):
+        iceberg_catalog_env[f"{prefix}OAUTH2_SERVER_URI"] = str(catalog_config["oauth2_server_uri"])
+    return {
+        "destination": "filesystem",
+        "source": "filesystem",
+        "destination_filesystem": DltIngestionPlugin().get_destination_config(catalog_config),
+        "source_filesystem": {
+            "endpoint_url": catalog_config["s3_endpoint"],
+            "region_name": catalog_config["s3_region"],
+            "s3_url_style": "path" if catalog_config["s3_path_style_access"] else "virtual",
+        },
+        "iceberg_catalog_env": iceberg_catalog_env,
+    }
+
+
 def test_dlt_writes_iceberg_table_via_polaris_and_minio(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -84,8 +118,7 @@ def test_dlt_writes_iceberg_table_via_polaris_and_minio(
                     source_config={},
                     destination_table=destination_table,
                 )
-            ],
-            catalog_config=catalog_config,
+            ]
         )
     )
     plugin.startup()
@@ -102,6 +135,7 @@ def test_dlt_writes_iceberg_table_via_polaris_and_minio(
                 source_config={},
                 destination_table=destination_table,
                 write_mode="replace",
+                runtime_binding=_runtime_binding(catalog_config),
             )
         )
 
