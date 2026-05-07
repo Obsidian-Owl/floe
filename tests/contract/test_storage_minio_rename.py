@@ -198,12 +198,22 @@ def _active_scan_files() -> list[Path]:
                 continue
             relative = candidate.relative_to(REPO_ROOT).as_posix()
             if any(
-                relative == ignored or relative.startswith(f"{ignored}/")
+                relative == ignored
+                or relative.startswith(f"{ignored}/")
+                or ignored in candidate.relative_to(REPO_ROOT).parts
                 for ignored in IGNORED_SCAN_PARTS
             ):
                 continue
             files.append(candidate)
     return files
+
+
+def test_active_scan_files_ignore_nested_generated_directories() -> None:
+    """Scans must not inspect generated environments under package roots."""
+    scanned = {path.relative_to(REPO_ROOT).as_posix() for path in _active_scan_files()}
+
+    assert not any("/.venv/" in path for path in scanned)
+    assert not any("/__pycache__/" in path for path in scanned)
 
 
 def test_active_references_do_not_use_old_s3_plugin_names() -> None:
