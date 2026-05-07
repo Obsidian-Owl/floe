@@ -748,6 +748,31 @@ class TestGenerateCommand:
         assert "catalog deployment binding" in error.message
 
     @pytest.mark.requirement("9b-FR-060")
+    def test_storage_helm_values_reject_non_polaris_catalog_provider(self, tmp_path: Path) -> None:
+        """MinIO Helm rendering requires a Polaris catalog deployment binding."""
+        artifact_file = tmp_path / "compiled_artifacts.json"
+        _write_minio_artifact(artifact_file)
+        artifacts = CompiledArtifacts.from_json_file(artifact_file)
+        assert artifacts.deployment is not None
+        assert artifacts.deployment.catalog is not None
+
+        catalog = artifacts.deployment.catalog.model_copy(update={"provider": "glue"})
+        artifacts = artifacts.model_copy(
+            update={"deployment": artifacts.deployment.model_copy(update={"catalog": catalog})}
+        )
+
+        with pytest.raises(CompilationException) as exc_info:
+            _storage_helm_values(artifacts)
+
+        error = exc_info.value.error
+        assert error.stage is CompilationStage.GENERATE
+        assert error.code == COMPOSITION_RENDERER_PRECONDITION_FAILED
+        assert "Polaris catalog deployment binding" in error.message
+        assert error.context == {"storage_provider": "minio", "catalog_provider": "glue"}
+        assert "root-password" not in error.message
+        assert "root-password" not in str(error.context)
+
+    @pytest.mark.requirement("9b-FR-060")
     def test_storage_helm_values_reject_missing_bucket_requirements(self, tmp_path: Path) -> None:
         """MinIO Helm rendering requires bucket requirements in the storage binding."""
         artifact_file = tmp_path / "compiled_artifacts.json"

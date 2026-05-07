@@ -373,7 +373,7 @@ def _build_storage_deployment_binding(
                 context={"storage_plugin": plugins.storage.type},
             )
         ) from exc
-    except PluginError as exc:
+    except (PluginError, ValueError) as exc:
         raise CompilationException(
             CompilationError(
                 stage=CompilationStage.RESOLVE,
@@ -385,7 +385,10 @@ def _build_storage_deployment_binding(
                     "Verify plugins.storage.config in the platform manifest and "
                     "ensure the storage plugin can build its deployment binding"
                 ),
-                context={"storage_plugin": plugins.storage.type},
+                context={
+                    "storage_plugin": plugins.storage.type,
+                    "error_type": type(exc).__name__,
+                },
             )
         ) from exc
 

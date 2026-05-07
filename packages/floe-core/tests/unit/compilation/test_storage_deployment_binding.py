@@ -608,7 +608,86 @@ def test_storage_plugin_binding_failure_raises_structured_compilation_error(
     assert error.stage == CompilationStage.RESOLVE
     assert error.code == "COMPOSITION_PLUGIN_CONFIG_INVALID"
     assert "could not build deployment binding" in error.message
-    assert error.context == {"storage_plugin": "minio"}
+    assert error.context == {
+        "storage_plugin": "minio",
+        "error_type": "PluginConfigurationError",
+    }
+
+
+def test_storage_plugin_binding_value_error_raises_secret_safe_config_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Provider-owned binding validation failures must not expose raw exception text."""
+
+    class ValueErrorStoragePlugin(StoragePlugin):
+        @property
+        def name(self) -> str:
+            return "minio"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def get_config_schema(self) -> None:
+            return None
+
+        def get_pyiceberg_fileio(self) -> FileIO:
+            raise NotImplementedError
+
+        def get_warehouse_uri(self, namespace: str) -> str:
+            return f"s3://unused/{namespace}"
+
+        def get_dbt_profile_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_dagster_io_manager_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_helm_values_override(self) -> dict[str, Any]:
+            return {}
+
+        def get_deployment_binding(self) -> Any:
+            raise ValueError("password=super-secret")
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class ValueErrorStorageRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> ValueErrorStoragePlugin:
+            return ValueErrorStoragePlugin()
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", ValueErrorStorageRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_CONFIG_INVALID"
+    assert "super-secret" not in error.message
+    assert "password=super-secret" not in error.message
+    assert error.context == {"storage_plugin": "minio", "error_type": "ValueError"}
+    assert "super-secret" not in str(error.context)
+    assert "password=super-secret" not in str(error.context)
 
 
 def test_storage_plugin_missing_deployment_binding_raises_composition_code(

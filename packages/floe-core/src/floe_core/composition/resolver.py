@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from floe_core.compilation.errors import (
+    COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED,
+    COMPOSITION_PROTOCOL_UNSUPPORTED,
+    COMPOSITION_STORAGE_MISSING,
+)
 from floe_core.composition.models import (
     CompositionIssue,
     CompositionValidationResult,
@@ -31,7 +36,7 @@ class CompositionResolver:
                 issues.append(
                     CompositionIssue(
                         severity="error",
-                        code="COMPOSITION_STORAGE_MISSING",
+                        code=COMPOSITION_STORAGE_MISSING,
                         message=(
                             f"catalog {requirement.plugin_name} requires storage "
                             "capabilities but no storage plugin was selected"
@@ -71,7 +76,7 @@ class CompositionResolver:
             issues.append(
                 CompositionIssue(
                     severity="error",
-                    code="COMPOSITION_PROTOCOL_UNSUPPORTED",
+                    code=COMPOSITION_PROTOCOL_UNSUPPORTED,
                     message=(
                         f"catalog {catalog.plugin_name} requires one of protocols "
                         f"{required_protocols}; storage {storage.plugin_name} "
@@ -87,7 +92,7 @@ class CompositionResolver:
             issues.append(
                 CompositionIssue(
                     severity="error",
-                    code="COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED",
+                    code=COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED,
                     message=(
                         f"catalog {catalog.plugin_name} requires one of credential modes "
                         f"{required_modes}; storage {storage.plugin_name} provides {storage_modes}"
