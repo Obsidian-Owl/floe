@@ -262,7 +262,7 @@ def test_resolver_rejects_external_secret_sync_without_secrets_plugin() -> None:
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
-        plugin_name="s3",
+        plugin_name="aws-object-storage",
         capabilities=CapabilitySet(
             protocols=["s3"],
             credential_modes=["external-secret-sync"],
@@ -300,7 +300,7 @@ def test_resolver_accepts_external_secret_sync_with_matching_secrets_plugin() ->
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
-        plugin_name="s3",
+        plugin_name="aws-object-storage",
         capabilities=CapabilitySet(
             protocols=["s3"],
             credential_modes=["external-secret-sync"],
@@ -337,7 +337,7 @@ def test_resolver_rejects_unsupported_secret_provider() -> None:
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
-        plugin_name="s3",
+        plugin_name="aws-object-storage",
         capabilities=CapabilitySet(
             protocols=["s3"],
             credential_modes=["external-secret-sync"],
@@ -432,7 +432,7 @@ def test_resolver_rejects_identity_mode_without_identity_plugin() -> None:
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
-        plugin_name="s3",
+        plugin_name="aws-object-storage",
         capabilities=CapabilitySet(
             protocols=["s3"],
             credential_modes=["workload-identity"],
@@ -471,7 +471,7 @@ def test_resolver_rejects_unsupported_identity_mode() -> None:
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
-        plugin_name="s3",
+        plugin_name="aws-object-storage",
         capabilities=CapabilitySet(
             protocols=["s3"],
             credential_modes=["workload-identity"],
@@ -520,7 +520,7 @@ def test_resolver_rejects_unsupported_identity_provider() -> None:
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
-        plugin_name="s3",
+        plugin_name="aws-object-storage",
         capabilities=CapabilitySet(
             protocols=["s3"],
             credential_modes=["workload-identity"],
@@ -598,7 +598,7 @@ def test_resolver_accepts_one_matching_identity_mode_from_alternatives() -> None
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
-        plugin_name="s3",
+        plugin_name="aws-object-storage",
         capabilities=CapabilitySet(
             protocols=["s3"],
             credential_modes=["workload-identity"],
@@ -635,7 +635,7 @@ def test_resolver_rejects_no_matching_secret_projection_alternative() -> None:
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
-        plugin_name="s3",
+        plugin_name="aws-object-storage",
         capabilities=CapabilitySet(
             protocols=["s3"],
             credential_modes=["external-secret-sync"],
@@ -670,9 +670,10 @@ def test_resolver_rejects_no_matching_secret_projection_alternative() -> None:
             code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
             message=(
                 "catalog glue requires one of secret projection modes "
-                "['kubernetes-secret']; storage s3 provides ['external-secret-sync']"
+                "['kubernetes-secret']; storage aws-object-storage provides "
+                "['external-secret-sync']"
             ),
-            plugins=["storage:s3", "catalog:glue"],
+            plugins=["storage:aws-object-storage", "catalog:glue"],
         )
     ]
 
@@ -682,7 +683,7 @@ def test_resolver_rejects_identity_mode_not_supported_by_storage() -> None:
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
-        plugin_name="s3",
+        plugin_name="aws-object-storage",
         capabilities=CapabilitySet(
             protocols=["s3"],
             credential_modes=["workload-identity"],
@@ -717,10 +718,11 @@ def test_resolver_rejects_identity_mode_not_supported_by_storage() -> None:
             code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
             message=(
                 "catalog glue requires one of identity modes "
-                "['aws-irsa', 'aws-pod-identity']; storage s3 provides ['aws-irsa']; "
+                "['aws-irsa', 'aws-pod-identity']; storage aws-object-storage provides "
+                "['aws-irsa']; "
                 "identity aws provides ['aws-pod-identity']"
             ),
-            plugins=["storage:s3", "identity:aws", "catalog:glue"],
+            plugins=["storage:aws-object-storage", "identity:aws", "catalog:glue"],
         )
     ]
 
@@ -730,7 +732,7 @@ def test_resolver_rejects_missing_storage_secret_projection_modes() -> None:
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
-        plugin_name="s3",
+        plugin_name="aws-object-storage",
         capabilities=CapabilitySet(
             protocols=["s3"],
             credential_modes=["external-secret-sync"],
@@ -764,9 +766,9 @@ def test_resolver_rejects_missing_storage_secret_projection_modes() -> None:
             code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
             message=(
                 "catalog glue requires one of secret projection modes "
-                "['external-secret-sync']; storage s3 provides []"
+                "['external-secret-sync']; storage aws-object-storage provides []"
             ),
-            plugins=["storage:s3", "catalog:glue"],
+            plugins=["storage:aws-object-storage", "catalog:glue"],
         )
     ]
 
@@ -776,7 +778,7 @@ def test_resolver_rejects_workload_identity_without_catalog_identity_modes() -> 
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
-        plugin_name="s3",
+        plugin_name="aws-object-storage",
         capabilities=CapabilitySet(
             protocols=["s3"],
             credential_modes=["workload-identity"],
@@ -810,10 +812,10 @@ def test_resolver_rejects_workload_identity_without_catalog_identity_modes() -> 
             code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
             message=(
                 "catalog glue requires workload identity but does not declare "
-                "concrete identity modes; storage s3 provides ['aws-irsa']; "
+                "concrete identity modes; storage aws-object-storage provides ['aws-irsa']; "
                 "identity aws provides ['aws-irsa']"
             ),
-            plugins=["storage:s3", "identity:aws", "catalog:glue"],
+            plugins=["storage:aws-object-storage", "identity:aws", "catalog:glue"],
         )
     ]
 

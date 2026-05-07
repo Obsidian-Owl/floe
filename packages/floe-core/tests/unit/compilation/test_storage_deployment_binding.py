@@ -122,7 +122,7 @@ class ExternalSecretStoragePlugin(StoragePlugin):
 
     @property
     def name(self) -> str:
-        return "s3"
+        return "aws-object-storage"
 
     @property
     def version(self) -> str:
@@ -329,7 +329,7 @@ def _external_secret_manifest_path(
     """Write a manifest selecting external-secret-sync fake storage/catalog plugins."""
     manifest_path = tmp_path / "manifest.yaml"
     manifest = yaml.safe_load((ROOT / "demo" / "manifest.yaml").read_text(encoding="utf-8"))
-    manifest["plugins"]["storage"] = {"type": "s3"}
+    manifest["plugins"]["storage"] = {"type": "aws-object-storage"}
     manifest["plugins"]["catalog"] = {"type": "glue"}
     if include_secrets:
         manifest["plugins"]["secrets"] = {"type": "fake-secrets"}
@@ -723,7 +723,7 @@ def test_compile_passes_selected_secret_and_identity_capabilities_to_resolver(
     class IdentityStoragePlugin(StoragePlugin):
         @property
         def name(self) -> str:
-            return "s3"
+            return "aws-object-storage"
 
         @property
         def version(self) -> str:
@@ -901,7 +901,7 @@ def test_compile_passes_selected_secret_and_identity_capabilities_to_resolver(
     monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedRegistry)
     manifest_path = tmp_path / "manifest.yaml"
     manifest = yaml.safe_load((ROOT / "demo" / "manifest.yaml").read_text(encoding="utf-8"))
-    manifest["plugins"]["storage"] = {"type": "s3"}
+    manifest["plugins"]["storage"] = {"type": "aws-object-storage"}
     manifest["plugins"]["catalog"] = {"type": "glue"}
     manifest["plugins"]["secrets"] = {"type": "fake-secrets"}
     manifest["plugins"]["identity"] = {"type": "fake-identity"}
@@ -932,7 +932,7 @@ def test_compile_validates_selected_workload_identity_mode_not_advertised_altern
     class MixedModeStoragePlugin(StoragePlugin):
         @property
         def name(self) -> str:
-            return "s3"
+            return "aws-object-storage"
 
         @property
         def version(self) -> str:
@@ -1106,7 +1106,7 @@ def test_compile_validates_selected_workload_identity_mode_not_advertised_altern
     monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedRegistry)
     manifest_path = tmp_path / "manifest.yaml"
     manifest = yaml.safe_load((ROOT / "demo" / "manifest.yaml").read_text(encoding="utf-8"))
-    manifest["plugins"]["storage"] = {"type": "s3"}
+    manifest["plugins"]["storage"] = {"type": "aws-object-storage"}
     manifest["plugins"]["catalog"] = {"type": "glue"}
     manifest["plugins"].pop("identity", None)
     manifest["plugins"].pop("secrets", None)
@@ -1187,11 +1187,11 @@ def test_compile_rejects_selected_storage_mode_not_declared_by_capabilities(
     assert error.stage == CompilationStage.RESOLVE
     assert error.code == "E201"
     assert (
-        "Storage plugin 's3' selected credential mode 'external-secret-sync' "
+        "Storage plugin 'aws-object-storage' selected credential mode 'external-secret-sync' "
         "but declares credential modes ['kubernetes-secret']"
     ) in error.message
     assert error.context == {
-        "storage_plugin": "s3",
+        "storage_plugin": "aws-object-storage",
         "selected_credential_mode": "external-secret-sync",
         "declared_credential_modes": ["kubernetes-secret"],
     }
@@ -1230,7 +1230,7 @@ def test_compile_requires_secrets_provider_for_selected_external_secret_sync(
                 "plugins": ["catalog:glue"],
             }
         ],
-        "storage_plugin": "s3",
+        "storage_plugin": "aws-object-storage",
         "catalog_plugin": "glue",
     }
 
