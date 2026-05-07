@@ -217,7 +217,7 @@ def _filesystem_config(
     """Return platform-owned filesystem connection settings for dlt sources."""
     if runtime_binding is not None:
         source_filesystem = runtime_binding.get("source_filesystem")
-        if isinstance(source_filesystem, Mapping) and source_filesystem:
+        if isinstance(source_filesystem, Mapping):
             return dict(source_filesystem)
     catalog_config = ingestion_config.get("catalog_config")
     return dict(catalog_config) if isinstance(catalog_config, Mapping) else {}

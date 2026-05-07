@@ -291,6 +291,60 @@ class TestCreateIngestionAssets:
         assert output is result
 
     @pytest.mark.requirement("4F-FR-060")
+    def test_factory_prefers_empty_runtime_source_filesystem_over_catalog_config(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Present runtime source_filesystem owns filesystem config even when empty."""
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+
+        built_source = SourceLike()
+        build_dlt_source = MagicMock(return_value=built_source)
+        monkeypatch.setattr(
+            "floe_orchestrator_dagster.assets.ingestion.build_dlt_source",
+            build_dlt_source,
+        )
+        source_config = {
+            "name": "raw-customers",
+            "source_type": "filesystem",
+            "source_config": {"format": "csv", "path": "s3://raw/customers/*.csv"},
+            "destination_table": "bronze.raw_customers",
+        }
+        mock_ref: MagicMock = MagicMock()
+        mock_ref.type = "dlt"
+        mock_ref.version = "0.1.0"
+        mock_ref.config = {
+            "catalog_config": {
+                "s3_endpoint": "http://legacy-minio:9000",
+                "s3_region": "us-east-1",
+            },
+            "sources": [source_config],
+        }
+        ingestion_plugin = MagicMock()
+        ingestion_plugin.name = "dlt"
+        ingestion_plugin.version = "0.1.0"
+        ingestion_plugin.create_pipeline.return_value = object()
+        ingestion_plugin.run.return_value = IngestionResult(success=True)
+
+        asset_def = create_ingestion_assets(
+            mock_ref,
+            project_dir=tmp_path,
+            runtime_binding={"source_filesystem": {}},
+        )[0]
+        context = build_op_context(resources={"ingestion": ingestion_plugin})
+
+        asset_def(context)
+
+        build_dlt_source.assert_called_once_with(
+            source_config,
+            project_dir=tmp_path,
+            filesystem_config={},
+        )
+        config = ingestion_plugin.create_pipeline.call_args.args[0]
+        assert config.runtime_binding == {"source_filesystem": {}}
+
+    @pytest.mark.requirement("4F-FR-060")
     def test_factory_rejects_empty_sources_list(self, tmp_path: Path) -> None:
         """Configured ingestion must contain at least one source."""
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
