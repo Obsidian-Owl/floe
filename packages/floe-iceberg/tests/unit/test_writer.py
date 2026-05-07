@@ -7,6 +7,7 @@ from typing import Any
 import pyarrow as pa
 import pytest
 
+from floe_iceberg.errors import StaleTableMetadataError
 from floe_iceberg.models import IcebergTableManagerConfig, StaleTableRecoveryMode
 from floe_iceberg.writer import (
     DefaultIcebergTableWriter,
@@ -247,9 +248,7 @@ def test_write_tables_rejects_invalid_mode_before_catalog_mutation() -> None:
     assert catalog.created_tables == []
 
 
-def test_stale_metadata_not_found_repairs_before_missing_table_create(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_write_table_repairs_stale_metadata_in_repair_mode() -> None:
     stale_catalog = _StaleMetadataCatalog()
     repaired_catalog = _WriteCapableCatalog()
     plugin = _ReconnectCatalogPlugin(stale_catalog, repaired_catalog)
@@ -263,11 +262,6 @@ def test_stale_metadata_not_found_repairs_before_missing_table_create(
         ),
     )
 
-    monkeypatch.setattr(
-        "floe_iceberg.writer.is_stale_table_metadata_error",
-        lambda exc: True,
-    )
-
     writer.write_table("customer_360.customers", arrow_table)
 
     assert stale_catalog.created_tables == []
@@ -275,6 +269,41 @@ def test_stale_metadata_not_found_repairs_before_missing_table_create(
     assert len(plugin.connect_configs) == 2
     assert repaired_catalog.created_tables == [("customer_360.customers", arrow_table.schema)]
     assert repaired_catalog.tables["customer_360.customers"].appended == [arrow_table]
+
+
+def test_write_table_raises_stale_metadata_error_in_strict_mode() -> None:
+    class _StaleOverwriteTable(_FakeTable):
+        def overwrite(self, data: Any) -> None:
+            raise RuntimeError(
+                "metadata file "
+                "s3://warehouse/customer_360/customers/metadata/v1.metadata.json not found"
+            )
+
+    catalog = _WriteCapableCatalog()
+    catalog.tables["customer_360.customers"] = _StaleOverwriteTable(
+        "customer_360.customers",
+    )
+    plugin = _CatalogPlugin(catalog)
+    writer = DefaultIcebergTableWriter(
+        catalog_plugin=plugin,
+        storage_plugin=object(),
+        catalog_connection_config={"uri": "http://catalog.example"},
+        config=IcebergTableManagerConfig(
+            stale_table_recovery_mode=StaleTableRecoveryMode.STRICT,
+        ),
+    )
+
+    with pytest.raises(StaleTableMetadataError) as exc_info:
+        writer.write_table("customer_360.customers", _arrow_table(), mode="overwrite")
+
+    stale_error = exc_info.value
+    assert stale_error.table_identifier == "customer_360.customers"
+    assert stale_error.recovery_mode is StaleTableRecoveryMode.STRICT
+    assert (
+        stale_error.metadata_location
+        == "s3://warehouse/customer_360/customers/metadata/v1.metadata.json"
+    )
+    assert stale_error.details["recovery_mode"] == "strict"
 
 
 def test_endpoint_preserving_loader_on_catalog_plugin_is_used_when_available() -> None:
