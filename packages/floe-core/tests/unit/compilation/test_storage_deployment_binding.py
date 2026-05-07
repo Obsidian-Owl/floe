@@ -491,6 +491,10 @@ def test_demo_compile_emits_dlt_ingestion_deployment_binding() -> None:
     )
     assert dlt.iceberg_catalog_env["ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE"] == "rest"
     assert dlt.iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__WAREHOUSE"] == "floe-demo"
+    assert dlt.env_refs == {
+        "accessKeyId": "AWS_ACCESS_KEY_ID",
+        "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+    }
     assert artifacts.deployment.catalog is not None
     assert artifacts.deployment.catalog.polaris.warehouse == "floe-demo"
     assert artifacts.plugins.ingestion is not None
@@ -553,8 +557,11 @@ def test_dlt_ingestion_deployment_binding_ignores_host_secret_env(
     for name, value in secret_env.items():
         assert name not in dlt.iceberg_catalog_env
         assert value not in dlt.iceberg_catalog_env.values()
-        assert name not in payload
         assert value not in payload
+    assert dlt.env_refs == {
+        "accessKeyId": "AWS_ACCESS_KEY_ID",
+        "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+    }
     assert all("CREDENTIAL" not in key for key in dlt.iceberg_catalog_env)
     assert all("ACCESS_KEY" not in key for key in dlt.iceberg_catalog_env)
 

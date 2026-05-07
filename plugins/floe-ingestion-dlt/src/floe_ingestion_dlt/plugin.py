@@ -248,6 +248,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 source_filesystem=source_filesystem,
                 destination_filesystem=destination_filesystem,
                 iceberg_catalog_env=iceberg_catalog_env,
+                env_refs=dict(storage.runtime.env_refs),
             ),
         )
 
