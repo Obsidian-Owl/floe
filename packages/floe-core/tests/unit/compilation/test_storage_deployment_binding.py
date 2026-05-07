@@ -117,6 +117,228 @@ class FakeIdentityPlugin(IdentityPlugin):
         )
 
 
+class ExternalSecretStoragePlugin(StoragePlugin):
+    """Storage fake that selects external-secret-sync credentials."""
+
+    @property
+    def name(self) -> str:
+        return "s3"
+
+    @property
+    def version(self) -> str:
+        return "0.1.0"
+
+    @property
+    def floe_api_version(self) -> str:
+        return "1.0"
+
+    def get_config_schema(self) -> None:
+        return None
+
+    def get_pyiceberg_fileio(self) -> FileIO:
+        raise NotImplementedError
+
+    def get_warehouse_uri(self, namespace: str) -> str:
+        return f"s3://warehouse/{namespace}"
+
+    def get_dbt_profile_config(self) -> dict[str, Any]:
+        return {}
+
+    def get_dagster_io_manager_config(self) -> dict[str, Any]:
+        return {}
+
+    def get_helm_values_override(self) -> dict[str, Any]:
+        return {}
+
+    def get_deployment_binding(self) -> StorageDeploymentBinding:
+        return StorageDeploymentBinding.model_construct(
+            provider="s3",
+            protocol="s3",
+            endpoint=StorageServiceEndpoint(
+                internal_url="https://s3.us-east-1.amazonaws.com",
+                external_url="https://s3.us-east-1.amazonaws.com",
+                region="us-east-1",
+                warehouse_path="s3://warehouse",
+                path_style_access=False,
+            ),
+            warehouse=StorageWarehouse(uri="s3://warehouse", bucket="warehouse"),
+            credentials=StorageCredentialBinding.model_construct(
+                mode="external-secret-sync",
+                secret_ref=KubernetesSecretRef(
+                    name="s3-credentials",
+                    namespace="floe-system",
+                    keys={
+                        "accessKeyId": "access-key-id",
+                        "secretAccessKey": "secret-access-key",  # pragma: allowlist secret
+                    },
+                ),
+            ),
+            capabilities=StorageCapabilities(
+                protocols=["s3"],
+                credential_modes=["external-secret-sync"],
+                path_style_access=False,
+            ),
+            dbt=DbtStorageBinding(
+                profile_name="floe",
+                target_name="dev",
+                schema_name="analytics",
+            ),
+            dagster=DagsterStorageBinding(
+                resource_key="s3_storage",
+                asset_io_manager_key="iceberg_io_manager",
+            ),
+        )
+
+
+class ExternalSecretCatalogPlugin(CatalogPlugin):
+    """Catalog fake requiring external-secret-sync projection."""
+
+    @property
+    def name(self) -> str:
+        return "glue"
+
+    @property
+    def version(self) -> str:
+        return "0.1.0"
+
+    @property
+    def floe_api_version(self) -> str:
+        return "1.0"
+
+    def get_config_schema(self) -> None:
+        return None
+
+    def connect(self, config: dict[str, Any]) -> Any:
+        raise NotImplementedError
+
+    def create_namespace(
+        self,
+        namespace: str,
+        properties: dict[str, str] | None = None,
+    ) -> None:
+        return None
+
+    def vend_credentials(self, table_path: str, operations: list[str]) -> dict[str, Any]:
+        return {}
+
+    def list_namespaces(self, parent: str | None = None) -> list[str]:
+        return []
+
+    def delete_namespace(self, namespace: str) -> None:
+        return None
+
+    def create_table(
+        self,
+        identifier: str,
+        schema: dict[str, Any],
+        location: str | None = None,
+        properties: dict[str, str] | None = None,
+    ) -> None:
+        return None
+
+    def list_tables(self, namespace: str) -> list[str]:
+        return []
+
+    def drop_table(self, identifier: str, purge: bool = False) -> None:
+        return None
+
+    def get_storage_requirements(self) -> PluginRequirements:
+        return PluginRequirements(
+            plugin_type="catalog",
+            plugin_name="glue",
+            requirements=RequirementSet(
+                protocols=["s3"],
+                credential_modes=["external-secret-sync"],
+                secret_projection_modes=["external-secret-sync"],
+                providers=["infisical"],
+            ),
+        )
+
+    def build_catalog_deployment(
+        self,
+        storage: StorageDeploymentBinding,
+    ) -> CatalogDeploymentBinding:
+        return CatalogDeploymentBinding(
+            provider="polaris",
+            polaris=PolarisCatalogDeploymentBinding(
+                storage_type="S3",
+                default_base_location="s3://warehouse",
+                allowed_locations=["s3://warehouse"],
+                endpoint=storage.endpoint.external_url,
+                endpoint_internal=storage.endpoint.internal_url,
+                path_style_access=False,
+                sts_unavailable=True,
+                credential_refs={
+                    "accessKeyId": CredentialRef(
+                        source="kubernetes-secret",
+                        name="s3-credentials",
+                        key="access-key-id",
+                    ),
+                    "secretAccessKey": CredentialRef(
+                        source="kubernetes-secret",
+                        name="s3-credentials",
+                        key="secret-access-key",
+                    ),
+                },
+            ),
+        )
+
+
+def _install_external_secret_registry(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    include_secrets: bool,
+) -> None:
+    """Install a compiler registry with external-secret-sync storage/catalog fakes."""
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class IsolatedRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            if plugin_type == PluginType.STORAGE:
+                return ExternalSecretStoragePlugin()
+            if plugin_type == PluginType.CATALOG:
+                return ExternalSecretCatalogPlugin()
+            if include_secrets and plugin_type == PluginType.SECRETS:
+                return FakeSecretsPlugin()
+            if plugin_type == PluginType.COMPUTE:
+                from floe_compute_duckdb.plugin import DuckDBComputePlugin
+
+                return DuckDBComputePlugin()
+            raise AssertionError(f"unexpected plugin lookup: {plugin_type} {name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedRegistry)
+
+
+def _external_secret_manifest_path(
+    tmp_path: Path,
+    *,
+    include_secrets: bool,
+) -> Path:
+    """Write a manifest selecting external-secret-sync fake storage/catalog plugins."""
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest = yaml.safe_load((ROOT / "demo" / "manifest.yaml").read_text(encoding="utf-8"))
+    manifest["plugins"]["storage"] = {"type": "s3"}
+    manifest["plugins"]["catalog"] = {"type": "glue"}
+    if include_secrets:
+        manifest["plugins"]["secrets"] = {"type": "fake-secrets"}
+    else:
+        manifest["plugins"].pop("secrets", None)
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+    return manifest_path
+
+
 @pytest.fixture(autouse=True)
 def _disable_plugin_instrumentation_audit(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep storage compilation tests focused on deployment binding behavior."""
@@ -902,6 +1124,65 @@ def test_compile_validates_selected_workload_identity_mode_not_advertised_altern
     assert error.code == "COMPOSITION_IDENTITY_PROVIDER_MISSING"
     assert "identity mode aws-irsa" in error.message
     assert "no identity plugin was selected" in error.message
+
+
+def test_compile_requires_secrets_provider_for_selected_external_secret_sync(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """External-secret-sync selected mode must require a capable secrets provider."""
+    _install_external_secret_registry(monkeypatch, include_secrets=False)
+    manifest_path = _external_secret_manifest_path(tmp_path, include_secrets=False)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_SECRET_PROVIDER_MISSING"
+    assert "secret projection mode external-secret-sync" in error.message
+    assert "no secrets plugin was selected" in error.message
+    assert error.context == {
+        "composition_issues": [
+            {
+                "severity": "error",
+                "code": "COMPOSITION_SECRET_PROVIDER_MISSING",
+                "message": (
+                    "catalog glue requires secret projection mode external-secret-sync "
+                    "but no secrets plugin was selected"
+                ),
+                "plugins": ["catalog:glue"],
+            }
+        ],
+        "storage_plugin": "s3",
+        "catalog_plugin": "glue",
+    }
+
+
+def test_compile_accepts_selected_external_secret_sync_with_capable_secrets_provider(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """External-secret-sync selected mode compiles with matching secrets capabilities."""
+    _install_external_secret_registry(monkeypatch, include_secrets=True)
+    manifest_path = _external_secret_manifest_path(tmp_path, include_secrets=True)
+
+    artifacts = compile_pipeline(
+        ROOT / "demo" / "customer-360" / "floe.yaml",
+        manifest_path,
+        emit_lineage=False,
+    )
+
+    assert artifacts.plugins is not None
+    assert artifacts.plugins.secrets is not None
+    assert artifacts.plugins.secrets.type == "fake-secrets"
+    assert artifacts.deployment is not None
+    assert artifacts.deployment.storage is not None
+    assert artifacts.deployment.storage.credentials.mode == "external-secret-sync"
 
 
 def test_storage_only_compile_validates_selected_identity_plugin_type(
