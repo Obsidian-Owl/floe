@@ -183,6 +183,16 @@ class CompilationException(Exception):
 # E4xx: COMPILE stage errors
 # E5xx: GENERATE stage errors
 
+# COMPOSITION_*: plugin resolution, compatibility, deployment binding, and renderer errors
+COMPOSITION_PLUGIN_MISSING = "COMPOSITION_PLUGIN_MISSING"
+COMPOSITION_PLUGIN_INTERFACE_INVALID = "COMPOSITION_PLUGIN_INTERFACE_INVALID"
+COMPOSITION_PLUGIN_CONFIG_INVALID = "COMPOSITION_PLUGIN_CONFIG_INVALID"
+COMPOSITION_STORAGE_MISSING = "COMPOSITION_STORAGE_MISSING"
+COMPOSITION_PROTOCOL_UNSUPPORTED = "COMPOSITION_PROTOCOL_UNSUPPORTED"
+COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED = "COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED"
+COMPOSITION_DEPLOYMENT_BINDING_MISSING = "COMPOSITION_DEPLOYMENT_BINDING_MISSING"
+COMPOSITION_RENDERER_PRECONDITION_FAILED = "COMPOSITION_RENDERER_PRECONDITION_FAILED"
+
 ERROR_CODES = {
     # LOAD errors
     "E001": "File not found",
@@ -212,10 +222,35 @@ ERROR_CODES = {
     # GENERATE errors
     "E501": "Failed to write output file",
     "E502": "Output directory does not exist",
+    # COMPOSITION errors
+    COMPOSITION_PLUGIN_MISSING: "Selected plugin could not be found or loaded",
+    COMPOSITION_PLUGIN_INTERFACE_INVALID: (
+        "Selected plugin does not implement the required interface"
+    ),
+    COMPOSITION_PLUGIN_CONFIG_INVALID: (
+        "Selected plugin configuration or provider-owned binding is invalid"
+    ),
+    COMPOSITION_STORAGE_MISSING: "Storage-dependent plugin selected without storage plugin",
+    COMPOSITION_PROTOCOL_UNSUPPORTED: "Selected plugins do not share a required protocol",
+    COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED: (
+        "Selected plugins do not share a required credential mode"
+    ),
+    COMPOSITION_DEPLOYMENT_BINDING_MISSING: (
+        "Selected plugin does not provide the required deployment binding"
+    ),
+    COMPOSITION_RENDERER_PRECONDITION_FAILED: "Renderer cannot render the compiled artifact shape",
 }
 
 
 __all__ = [
+    "COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED",
+    "COMPOSITION_DEPLOYMENT_BINDING_MISSING",
+    "COMPOSITION_PLUGIN_CONFIG_INVALID",
+    "COMPOSITION_PLUGIN_INTERFACE_INVALID",
+    "COMPOSITION_PLUGIN_MISSING",
+    "COMPOSITION_PROTOCOL_UNSUPPORTED",
+    "COMPOSITION_RENDERER_PRECONDITION_FAILED",
+    "COMPOSITION_STORAGE_MISSING",
     "CompilationError",
     "CompilationException",
     "ERROR_CODES",

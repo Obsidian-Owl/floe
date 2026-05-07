@@ -39,6 +39,24 @@ ROOT = Path(__file__).resolve().parents[5]
 pytestmark = pytest.mark.requirement("AC-4")
 
 
+def test_composition_error_codes_are_documented() -> None:
+    """Public composition failures must be listed for stable operator diagnostics."""
+    from floe_core.compilation.errors import ERROR_CODES
+
+    expected_codes = {
+        "COMPOSITION_PLUGIN_MISSING",
+        "COMPOSITION_PLUGIN_INTERFACE_INVALID",
+        "COMPOSITION_PLUGIN_CONFIG_INVALID",
+        "COMPOSITION_STORAGE_MISSING",
+        "COMPOSITION_PROTOCOL_UNSUPPORTED",
+        "COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED",
+        "COMPOSITION_DEPLOYMENT_BINDING_MISSING",
+        "COMPOSITION_RENDERER_PRECONDITION_FAILED",
+    }
+
+    assert expected_codes.issubset(ERROR_CODES)
+
+
 class FakeSecretsPlugin(SecretsPlugin):
     """Secrets plugin used to prove compiler composition wiring."""
 
