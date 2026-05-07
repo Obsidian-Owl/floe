@@ -407,17 +407,18 @@ def _build_storage_deployment_binding(
             )
         ) from exc
 
-    credential_modes = cast(
-        "list[CredentialMode]",
-        list(storage_binding.capabilities.credential_modes),
-    )
-    secret_projection_modes = cast(
-        "list[SecretProjectionMode]",
-        [
-            mode
-            for mode in credential_modes
-            if mode in {"kubernetes-secret", "external-secret-sync", "environment"}
-        ],
+    selected_credential_mode = cast("CredentialMode", storage_binding.credentials.mode)
+    credential_modes = [selected_credential_mode]
+    secret_projection_modes = (
+        cast("list[SecretProjectionMode]", [selected_credential_mode])
+        if selected_credential_mode
+        in {
+            "kubernetes-secret",
+            "external-secret-sync",
+            "csi-secret-volume",
+            "environment",
+        }
+        else []
     )
     identity_modes = cast(
         "list[IdentityMode]",
