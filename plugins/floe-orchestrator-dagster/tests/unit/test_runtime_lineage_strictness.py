@@ -66,7 +66,7 @@ def _with_required_capabilities(artifacts_dict: dict[str, Any]) -> CompiledArtif
     data["plugins"] = {
         **data["plugins"],
         "catalog": {"type": "polaris", "version": "0.1.0", "config": {}},
-        "storage": {"type": "s3", "version": "1.0.0", "config": {}},
+        "storage": {"type": "minio", "version": "1.0.0", "config": {}},
         "lineage_backend": {
             "type": "marquez",
             "version": "0.1.0",

@@ -125,6 +125,19 @@ dagster:
         # ephemeral run pods — too many write paths to enumerate with subPath.
         runK8sConfig:
           containerConfig:
+            env:
+              - name: AWS_ACCESS_KEY_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: floe-platform-minio
+                    key: root-user
+              - name: AWS_SECRET_ACCESS_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: floe-platform-minio
+                    key: root-password
+              - name: AWS_REGION
+                value: us-east-1
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: false
@@ -175,8 +188,9 @@ polaris:
       endpoint: "http://floe-platform-minio:9000"
       region: "us-east-1"
       pathStyleAccess: true
-      accessKey: "minioadmin"  # pragma: allowlist secret
-      secretKey: "minioadmin123"  # pragma: allowlist secret
+      credentialSecretName: "floe-platform-minio"  # pragma: allowlist secret
+      accessKeySecretKey: "root-user"  # pragma: allowlist secret
+      secretKeySecretKey: "root-password"  # pragma: allowlist secret
   bootstrap:
     enabled: true
     # Keep the test platform aligned with demo/manifest.yaml so the deployed

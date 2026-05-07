@@ -46,6 +46,14 @@ from floe_core.schemas.versions import (
 from pydantic import ValidationError
 
 
+@pytest.fixture(autouse=True)
+def _disable_plugin_instrumentation_audit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep compilation contract tests focused on artifact contracts."""
+    import floe_core.compilation.stages as stages
+
+    monkeypatch.setattr(stages, "_discover_plugins_for_audit", lambda: [])
+
+
 class TestCompilation:
     """Contract tests for the compilation pipeline.
 
@@ -104,14 +112,28 @@ class TestCompilation:
             f"Expected dagster orchestrator, got {artifacts.plugins.orchestrator.type}"
         )
 
-        # Storage config flows from manifest (AC-10.3: STORAGE is config-only,
-        # not discovered via entry points — validated here at contract tier)
+        # Storage plugin config flows from the manifest into the plugin-backed
+        # deployment binding contract.
         assert artifacts.plugins.storage is not None, (
-            "Storage config must be resolved from manifest.storage section. "
-            "STORAGE is a config-only plugin type configured at infrastructure level."
+            "Storage config must be resolved from the manifest plugins.storage section."
         )
-        assert artifacts.plugins.storage.type == "s3", (
-            f"Expected s3 storage from demo manifest, got '{artifacts.plugins.storage.type}'"
+        assert artifacts.plugins.storage.type == "minio", (
+            f"Expected minio storage from demo manifest, got '{artifacts.plugins.storage.type}'"
+        )
+        assert artifacts.deployment is not None
+        assert artifacts.deployment.storage is not None
+        assert artifacts.deployment.storage.provider == "minio"
+        assert artifacts.deployment.storage.endpoint.warehouse_path == "s3://floe-iceberg"
+        assert artifacts.deployment.storage.warehouse is not None
+        assert artifacts.deployment.catalog is not None
+        assert artifacts.deployment.catalog.provider == "polaris"
+        assert (
+            artifacts.deployment.catalog.polaris.endpoint_internal
+            == artifacts.deployment.storage.endpoint.internal_url
+        )
+        assert (
+            artifacts.deployment.catalog.polaris.default_base_location
+            == artifacts.deployment.storage.warehouse.uri
         )
 
         # Observability assertions

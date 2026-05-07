@@ -10,10 +10,10 @@ are responsible for:
 
 Example:
     >>> from floe_core.plugins.storage import StoragePlugin
-    >>> class S3Plugin(StoragePlugin):
+    >>> class MinIOStoragePlugin(StoragePlugin):
     ...     @property
     ...     def name(self) -> str:
-    ...         return "s3"
+    ...         return "minio"
     ...     # ... implement other abstract methods
 """
 
@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from floe_core.plugin_metadata import PluginMetadata
 
 if TYPE_CHECKING:
-    pass
+    from floe_core.schemas.compiled_artifacts import StorageDeploymentBinding
 
 
 @runtime_checkable
@@ -57,8 +57,8 @@ class StoragePlugin(PluginMetadata):
     """Abstract base class for object storage plugins.
 
     StoragePlugin extends PluginMetadata with storage-specific methods
-    for managing object storage backends. Implementations include S3,
-    GCS, Azure Blob Storage, and MinIO.
+    for managing object storage backends. Implementations include MinIO,
+    GCS, and Azure Blob Storage.
 
     Concrete plugins must implement:
         - All abstract properties from PluginMetadata (name, version, floe_api_version)
@@ -67,15 +67,16 @@ class StoragePlugin(PluginMetadata):
         - get_dbt_profile_config() method
         - get_dagster_io_manager_config() method
         - get_helm_values_override() method
+        - Optionally get_deployment_binding() for deployable/self-hosted storage
 
     Concrete plugins may override:
         - get_pyiceberg_catalog_config() method
 
     Example:
-        >>> class S3Plugin(StoragePlugin):
+        >>> class MinIOStoragePlugin(StoragePlugin):
         ...     @property
         ...     def name(self) -> str:
-        ...         return "s3"
+        ...         return "minio"
         ...
         ...     @property
         ...     def version(self) -> str:
@@ -218,3 +219,13 @@ class StoragePlugin(PluginMetadata):
             {}
         """
         ...
+
+    def get_deployment_binding(self) -> StorageDeploymentBinding:
+        """Return secret-free storage deployment intent and consumer projections.
+
+        Deployable storage plugins override this to describe desired storage
+        state and consumer wiring using references to credentials, not
+        credential values.
+        """
+        msg = f"Storage plugin {self.name!r} does not provide a deployment binding"
+        raise NotImplementedError(msg)

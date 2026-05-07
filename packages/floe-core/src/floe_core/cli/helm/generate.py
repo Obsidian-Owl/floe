@@ -29,9 +29,119 @@ from floe_core.helm import (
     HelmValuesGenerator,
 )
 from floe_core.helm.parsing import parse_set_values
+from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
+    CompiledArtifacts,
+    CredentialRef,
+    StorageDeploymentBinding,
+)
 
 # Type alias for Helm values
 HelmValues = dict[str, Any]
+
+
+def _load_compiled_artifacts(artifact_path: Path) -> CompiledArtifacts:
+    """Load compiled artifacts from JSON or YAML."""
+    if artifact_path.suffix.lower() in (".yaml", ".yml"):
+        return CompiledArtifacts.from_yaml_file(artifact_path)
+    return CompiledArtifacts.from_json_file(artifact_path)
+
+
+def _storage_helm_values(artifacts: CompiledArtifacts) -> dict[str, Any]:
+    """Derive Helm storage values from compiled storage deployment binding."""
+    if artifacts.deployment is None or artifacts.deployment.storage is None:
+        return {}
+
+    storage = artifacts.deployment.storage
+    if storage.provider != "minio":
+        return {}
+
+    catalog = artifacts.deployment.catalog
+    if catalog is None:
+        msg = "MinIO Helm values require catalog deployment binding"
+        raise ValueError(msg)
+    if catalog.provider != "polaris":
+        msg = "MinIO Helm values require Polaris catalog deployment binding"
+        raise ValueError(msg)
+
+    return _minio_storage_helm_values(storage, catalog)
+
+
+def _require_kubernetes_secret_ref(ref: CredentialRef | None, logical_key: str) -> CredentialRef:
+    """Return a Kubernetes Secret credential ref or raise a Helm-specific error."""
+    if ref is not None and ref.source == "kubernetes-secret" and ref.key is not None:
+        return ref
+    msg = f"MinIO Helm values require Kubernetes Secret credential reference for {logical_key}"
+    raise ValueError(msg)
+
+
+def _minio_storage_helm_values(
+    storage: StorageDeploymentBinding,
+    catalog: CatalogDeploymentBinding,
+) -> dict[str, Any]:
+    """Derive MinIO and Polaris values from typed deployment bindings."""
+    bucket_names = []
+    for bucket in storage.buckets:
+        if bucket.name not in bucket_names:
+            bucket_names.append(bucket.name)
+    if not bucket_names:
+        msg = "MinIO Helm values require storage bucket requirements"
+        raise ValueError(msg)
+
+    access_key_ref = storage.credentials.as_credential_ref("accessKeyId")
+    secret_key_ref = storage.credentials.as_credential_ref("secretAccessKey")
+    if (
+        access_key_ref.source != "kubernetes-secret"
+        or secret_key_ref.source != "kubernetes-secret"
+        or access_key_ref.key is None
+        or secret_key_ref.key is None
+    ):
+        msg = "MinIO Helm values require Kubernetes Secret credential references"
+        raise ValueError(msg)
+    if access_key_ref.name != secret_key_ref.name:
+        msg = "MinIO Helm values require access and secret keys in the same Kubernetes Secret"
+        raise ValueError(msg)
+
+    polaris = catalog.polaris
+    polaris_access_ref = _require_kubernetes_secret_ref(
+        polaris.credential_refs.get("accessKeyId"),
+        "accessKeyId",
+    )
+    polaris_secret_ref = _require_kubernetes_secret_ref(
+        polaris.credential_refs.get("secretAccessKey"),
+        "secretAccessKey",
+    )
+    if polaris_access_ref.name != polaris_secret_ref.name:
+        msg = "Polaris Helm values require access and secret keys in the same Kubernetes Secret"
+        raise ValueError(msg)
+
+    return {
+        "minio": {
+            "enabled": True,
+            "fullnameOverride": "floe-platform-minio",
+            "auth": {"existingSecret": access_key_ref.name},
+            "defaultBuckets": ",".join(bucket_names),
+            "provisioning": {"enabled": False, "fallbackJob": True},
+        },
+        "polaris": {
+            "storage": {
+                "s3": {
+                    "enabled": True,
+                    "endpoint": polaris.endpoint_internal,
+                    "region": storage.endpoint.region,
+                    "pathStyleAccess": polaris.path_style_access,
+                    "stsEnabled": not polaris.sts_unavailable,
+                    "credentialSecretName": polaris_access_ref.name,
+                    "accessKeySecretKey": polaris_access_ref.key,
+                    "secretKeySecretKey": polaris_secret_ref.key,
+                }
+            },
+            "bootstrap": {
+                "defaultBaseLocation": polaris.default_base_location,
+                "allowedLocations": polaris.allowed_locations,
+            },
+        },
+    }
 
 
 @click.command(
@@ -167,7 +277,14 @@ def generate_command(
                     exit_code=ExitCode.FILE_NOT_FOUND,
                 )
             info(f"Loading artifact: {artifact_path}")
-            # Future: Extract plugin values from CompiledArtifacts
+            try:
+                artifacts = _load_compiled_artifacts(artifact_path)
+                base_values = _storage_helm_values(artifacts)
+            except Exception as e:
+                error_exit(
+                    f"Failed to load artifact: {artifact_path}: {e}",
+                    exit_code=ExitCode.GENERAL_ERROR,
+                )
 
     # Create generator with configuration
     config = HelmValuesConfig.with_defaults(environment=environments[0])
@@ -210,7 +327,7 @@ def generate_command(
         else:
             # Single environment (guaranteed non-empty by default=("dev",))
             env = environments[0] if environments else "dev"
-            if output and output.suffix in (".yaml", ".yml"):
+            if output and output.suffix.lower() in (".yaml", ".yml"):
                 target_file = output
             else:
                 target_file = (output or Path("target/helm")) / f"values-{env}.yaml"

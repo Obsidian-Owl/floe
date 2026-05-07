@@ -21,6 +21,7 @@ from floe_iceberg.errors import (
 from floe_iceberg.models import IcebergTableManagerConfig, StaleTableRecoveryMode
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+_NULL_SEQUENCE_OVERWRITE_ERROR = "only entries with status added can have null sequence number"
 
 
 @runtime_checkable
@@ -102,6 +103,11 @@ def _load_table_for_overwrite(
         endpoint_preserving_loader = cast(EndpointPreservingTableLoader, catalog_plugin)
         return endpoint_preserving_loader.load_table_with_client_endpoint(identifier)
     return catalog.load_table(identifier)
+
+
+def _is_repairable_overwrite_state_error(exc: BaseException) -> bool:
+    """Return true for known Iceberg table states repaired by recreation."""
+    return _NULL_SEQUENCE_OVERWRITE_ERROR in str(exc).lower()
 
 
 def _duckdb_profile_path(raw_path: str, project_dir: Path, product_name: str) -> str:
@@ -188,6 +194,23 @@ def _resolve_duckdb_path_from_profiles(
     )
 
 
+def _apply_compiled_storage_endpoint(
+    catalog_config: dict[str, Any],
+    artifacts: CompiledArtifacts,
+) -> dict[str, Any]:
+    """Apply compiled storage endpoint projection to PyIceberg catalog config."""
+    deployment = artifacts.deployment
+    if deployment is None or deployment.storage is None:
+        return catalog_config
+
+    storage = deployment.storage
+    return {
+        **catalog_config,
+        "s3.endpoint": storage.endpoint.internal_url,
+        "s3.region": storage.endpoint.region,
+    }
+
+
 def export_dbt_to_iceberg(
     context: Any,
     product_name: str,
@@ -250,7 +273,10 @@ def export_dbt_to_iceberg(
     import duckdb
     from pyiceberg.exceptions import NoSuchTableError
 
-    catalog_connection_config = storage_plugin.get_pyiceberg_catalog_config()
+    catalog_connection_config = _apply_compiled_storage_endpoint(
+        storage_plugin.get_pyiceberg_catalog_config(),
+        artifacts,
+    )
     iceberg_config = IcebergTableManagerConfig.from_governance(artifacts.governance)
     catalog = _require_write_capable_catalog(
         catalog_plugin.connect(config=catalog_connection_config),
@@ -309,22 +335,39 @@ def export_dbt_to_iceberg(
                 )
                 iceberg_table.append(arrow_table)
             except Exception as exc:
-                if not is_stale_table_metadata_error(exc):
+                is_stale_metadata = is_stale_table_metadata_error(exc)
+                is_repairable_overwrite_state = _is_repairable_overwrite_state_error(exc)
+                if not is_stale_metadata and not is_repairable_overwrite_state:
                     raise
 
-                stale_error = stale_table_metadata_error_from_exception(
-                    table_identifier=iceberg_id,
-                    recovery_mode=iceberg_config.stale_table_recovery_mode,
-                    original_error=exc,
-                )
                 if iceberg_config.stale_table_recovery_mode is StaleTableRecoveryMode.STRICT:
-                    raise stale_error from exc
+                    if is_stale_metadata:
+                        stale_error = stale_table_metadata_error_from_exception(
+                            table_identifier=iceberg_id,
+                            recovery_mode=iceberg_config.stale_table_recovery_mode,
+                            original_error=exc,
+                        )
+                        raise stale_error from exc
+                    raise
 
-                context.log.warning(
-                    "Repairing stale Iceberg table registration for %s: %s",
-                    iceberg_id,
-                    stale_error.metadata_location or "unknown metadata location",
-                )
+                if is_stale_metadata:
+                    stale_error = stale_table_metadata_error_from_exception(
+                        table_identifier=iceberg_id,
+                        recovery_mode=iceberg_config.stale_table_recovery_mode,
+                        original_error=exc,
+                    )
+                    context.log.warning(
+                        "Repairing stale Iceberg table registration for %s: %s",
+                        iceberg_id,
+                        stale_error.metadata_location or "unknown metadata location",
+                    )
+                else:
+                    context.log.warning(
+                        "Repairing Iceberg table overwrite state for %s after %s: %s",
+                        iceberg_id,
+                        type(exc).__name__,
+                        exc,
+                    )
                 catalog_plugin.drop_table(iceberg_id, purge=False)
                 catalog = _require_write_capable_catalog(
                     catalog_plugin.connect(config=catalog_connection_config),

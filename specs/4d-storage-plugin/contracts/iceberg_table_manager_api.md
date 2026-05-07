@@ -44,7 +44,7 @@ class IcebergTableManager:
         >>> from floe_iceberg import IcebergTableManager
         >>> manager = IcebergTableManager(
         ...     catalog_plugin=polaris_plugin,
-        ...     storage_plugin=s3_plugin,
+        ...     storage_plugin=minio_plugin,
         ... )
         >>> table = manager.create_table(table_config)
         >>> manager.write_data(table, data, WriteConfig(mode=WriteMode.APPEND))

@@ -263,7 +263,7 @@ defs = Definitions(
         "iceberg": IcebergIOManager(
             table_manager=IcebergTableManager(
                 catalog_plugin=polaris_plugin,
-                storage_plugin=s3_plugin,
+                storage_plugin=minio_plugin,
             ),
             config=IcebergIOManagerConfig(
                 namespace="silver",

@@ -66,7 +66,7 @@ floe/
 │   ├── floe-orchestrator-airflow/
 │   ├── floe-catalog-polaris/           # Catalog plugins
 │   ├── floe-catalog-glue/
-│   ├── floe-storage-s3/                # S3-compatible storage, including MinIO endpoints
+│   ├── floe-storage-minio/             # MinIO storage with S3-compatible protocol support
 │   ├── floe-telemetry-jaeger/          # Telemetry backend plugins (ADR-0035)
 │   ├── floe-telemetry-datadog/
 │   ├── floe-lineage-marquez/           # Lineage backend plugins (ADR-0035)

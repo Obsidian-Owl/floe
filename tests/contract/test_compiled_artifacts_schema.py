@@ -407,6 +407,24 @@ class TestCompiledArtifactsSchemaContract:
         assert "observability" in schema["properties"]
 
     @pytest.mark.requirement("2B-FR-004")
+    def test_deployment_field_is_optional_in_json_schema(
+        self,
+        minimal_compiled_artifacts: CompiledArtifacts,
+    ) -> None:
+        """Contract: deployment is an optional CompiledArtifacts extension."""
+        schema = CompiledArtifacts.model_json_schema()
+
+        assert "deployment" in schema["properties"]
+        assert "deployment" not in set(schema.get("required", []))
+        assert minimal_compiled_artifacts.deployment is None
+        assert (
+            CompiledArtifacts.model_validate(
+                minimal_compiled_artifacts.model_dump(mode="json", exclude={"deployment"})
+            ).deployment
+            is None
+        )
+
+    @pytest.mark.requirement("2B-FR-004")
     def test_serialization_round_trip(self, minimal_compiled_artifacts: CompiledArtifacts) -> None:
         """Contract: CompiledArtifacts can serialize to JSON and back.
 

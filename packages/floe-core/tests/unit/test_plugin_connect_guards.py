@@ -1,6 +1,6 @@
 """Tests for connect() guards against unconfigured state (AC-4).
 
-Verifies that Polaris connect() and S3 get_pyiceberg_fileio() raise
+Verifies that Polaris connect() and MinIO get_pyiceberg_fileio() raise
 PluginConfigurationError when self._config is None.
 """
 
@@ -54,14 +54,14 @@ def test_polaris_connect_error_includes_plugin_name() -> None:
 
 
 @pytest.mark.requirement("ARC-001")
-def test_s3_get_pyiceberg_fileio_raises_when_unconfigured() -> None:
-    """S3 get_pyiceberg_fileio() must raise PluginConfigurationError when unconfigured.
+def test_minio_get_pyiceberg_fileio_raises_when_unconfigured() -> None:
+    """MinIO get_pyiceberg_fileio() must raise PluginConfigurationError when unconfigured.
 
     AC-4 condition 2: get_pyiceberg_fileio() raises PluginConfigurationError.
     """
-    from floe_storage_s3.plugin import S3StoragePlugin
+    from floe_storage_minio.plugin import MinIOStoragePlugin
 
-    plugin = S3StoragePlugin(config=None)
+    plugin = MinIOStoragePlugin(config=None)
     assert plugin.is_configured is False
 
     with pytest.raises(PluginConfigurationError, match="not configured"):
@@ -69,19 +69,19 @@ def test_s3_get_pyiceberg_fileio_raises_when_unconfigured() -> None:
 
 
 @pytest.mark.requirement("ARC-001")
-def test_s3_error_includes_plugin_name() -> None:
-    """S3 error message must include plugin name.
+def test_minio_error_includes_plugin_name() -> None:
+    """MinIO error message must include plugin name.
 
     AC-4 condition 3: Error message includes plugin name and 'not configured'.
     """
-    from floe_storage_s3.plugin import S3StoragePlugin
+    from floe_storage_minio.plugin import MinIOStoragePlugin
 
-    plugin = S3StoragePlugin(config=None)
+    plugin = MinIOStoragePlugin(config=None)
 
     with pytest.raises(PluginConfigurationError) as exc_info:
         plugin.get_pyiceberg_fileio()
 
-    assert "s3" in str(exc_info.value).lower()
+    assert "minio" in str(exc_info.value).lower()
 
 
 @pytest.mark.requirement("ARC-001")
@@ -108,18 +108,18 @@ def test_polaris_connect_after_configure_none_raises() -> None:
 
 
 @pytest.mark.requirement("ARC-001")
-def test_s3_fileio_after_configure_none_raises() -> None:
+def test_minio_fileio_after_configure_none_raises() -> None:
     """Calling get_pyiceberg_fileio() after configure(None) raises.
 
     AC-6 condition 6: config reset edge case.
     """
     from unittest.mock import MagicMock
 
-    from floe_storage_s3.config import S3StorageConfig
-    from floe_storage_s3.plugin import S3StoragePlugin
+    from floe_storage_minio.config import MinIOStorageConfig
+    from floe_storage_minio.plugin import MinIOStoragePlugin
 
-    config = MagicMock(spec=S3StorageConfig)
-    plugin = S3StoragePlugin(config=config)
+    config = MagicMock(spec=MinIOStorageConfig)
+    plugin = MinIOStoragePlugin(config=config)
     assert plugin.is_configured is True
 
     # Reset config

@@ -29,7 +29,7 @@ from floe_iceberg import IcebergTableManager, IcebergTableManagerConfig
 # Get plugins from registry
 registry = PluginRegistry()
 catalog_plugin = registry.get(PluginType.CATALOG, "polaris")
-storage_plugin = registry.get(PluginType.STORAGE, "s3")
+storage_plugin = registry.get(PluginType.STORAGE, "minio")
 
 # Initialize manager
 manager = IcebergTableManager(

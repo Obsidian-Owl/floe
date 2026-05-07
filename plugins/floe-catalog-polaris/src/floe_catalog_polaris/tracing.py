@@ -21,8 +21,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
-from floe_core.telemetry.sanitization import sanitize_error_message
-from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
@@ -57,6 +55,8 @@ def get_tracer() -> trace.Tracer:
         >>> with tracer.start_as_current_span("my_operation"):
         ...     pass
     """
+    from floe_core.telemetry.tracer_factory import get_tracer as _factory_get_tracer
+
     return _factory_get_tracer(TRACER_NAME)
 
 
@@ -130,6 +130,8 @@ def catalog_span(
             span.set_status(Status(StatusCode.OK))
         except Exception as e:
             # Record exception but DO NOT include sensitive details
+            from floe_core.telemetry.sanitization import sanitize_error_message
+
             span.set_status(Status(StatusCode.ERROR, str(type(e).__name__)))
             sanitized = sanitize_error_message(str(e))
             span.set_attribute("exception.type", type(e).__name__)
@@ -192,6 +194,7 @@ def set_error_attributes(
     """
     span.set_attribute("error.type", type(error).__name__)
     if include_message:
-        # Truncate message to avoid large payloads
-        message = str(error)[:500]
+        from floe_core.telemetry.sanitization import sanitize_error_message
+
+        message = sanitize_error_message(str(error))
         span.set_attribute("error.message", message)

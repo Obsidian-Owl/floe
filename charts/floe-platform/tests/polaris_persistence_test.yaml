@@ -18,6 +18,7 @@ tests:
       polaris.persistence.type: relational-jdbc
       polaris.storage.s3.enabled: true
       polaris.storage.s3.endpoint: "http://minio:9000"
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
     template: templates/configmap-polaris.yaml
     asserts:
       - isKind:
@@ -35,6 +36,7 @@ tests:
       polaris.enabled: true
       polaris.storage.s3.enabled: true
       polaris.storage.s3.endpoint: "http://minio:9000"
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
     template: templates/configmap-polaris.yaml
     asserts:
       - isKind:
@@ -52,6 +54,7 @@ tests:
       polaris.persistence.type: in-memory
       polaris.storage.s3.enabled: true
       polaris.storage.s3.endpoint: "http://minio:9000"
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
     template: templates/configmap-polaris.yaml
     asserts:
       - isKind:
@@ -75,6 +78,7 @@ tests:
       polaris.persistence.jdbc.password: "polaris-test-pw"  # pragma: allowlist secret
       polaris.storage.s3.enabled: true
       polaris.storage.s3.endpoint: "http://minio:9000"
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
     template: templates/configmap-polaris.yaml
     asserts:
       - isKind:
@@ -111,6 +115,7 @@ tests:
       polaris.persistence.jdbc.url: "jdbc:postgresql://pg:5432/polaris"
       polaris.storage.s3.enabled: true
       polaris.storage.s3.endpoint: "http://minio:9000"
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
     template: templates/configmap-polaris.yaml
     asserts:
       - matchRegex:

@@ -378,7 +378,7 @@ table = pyiceberg_catalog.load_table("bronze.customers")
 
 ```python
 # IcebergTableManager gets FileIO from StoragePlugin
-storage_plugin = plugin_registry.get(PluginType.STORAGE, "s3")
+storage_plugin = plugin_registry.get(PluginType.STORAGE, "minio")
 fileio = storage_plugin.get_pyiceberg_fileio()
 warehouse_uri = storage_plugin.get_warehouse_uri("bronze")
 ```
@@ -463,11 +463,11 @@ These findings emerged during integration analysis after the initial research wa
 
 **Resolution**: Phase 14 (Wiring & Integration) added to tasks.md with tasks T108-T118. A reusable `create_iceberg_resources()` factory function will be created to extract catalog/storage config from CompiledArtifacts, load plugins via PluginRegistry, and return the resource dict.
 
-### Finding 4: No Concrete StoragePlugin Exists
+### Finding 4: Limited Concrete StoragePlugin Coverage
 
-**Issue**: The `floe.storage` entry point group has zero registrations. IcebergTableManager requires a StoragePlugin for FileIO configuration, but no implementation (e.g., floe-storage-s3) has been built.
+**Issue**: `floe-storage-minio` is the current concrete `floe.storage` implementation. IcebergTableManager requires a StoragePlugin for FileIO configuration, but provider coverage beyond MinIO remains future work.
 
-**Resolution**: A MockStoragePlugin test fixture (T114) is created for testing. The wiring code will gracefully degrade when no StoragePlugin is configured (T117 negative test). A concrete implementation is out of scope for Epic 4D but documented as a dependency.
+**Resolution**: A MockStoragePlugin test fixture (T114) is created for provider-neutral testing. The wiring code will gracefully degrade when no StoragePlugin is configured (T117 negative test). Additional provider implementations are out of scope for Epic 4D.
 
 ### Finding 5: DriftDetector Circular Dependency
 

@@ -14,7 +14,7 @@ Example:
     >>> from floe_orchestrator_dagster.resources import create_iceberg_resources
     >>> resources = create_iceberg_resources(
     ...     catalog_ref=PluginRef(type="polaris", version="0.1.0", config={...}),
-    ...     storage_ref=PluginRef(type="s3", version="1.0.0", config={...}),
+    ...     storage_ref=PluginRef(type="minio", version="1.0.0", config={...}),
     ... )
     >>> # resources == {"iceberg": IcebergIOManager(...)}
 
@@ -33,10 +33,15 @@ See Also:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedGovernance, ResolvedPlugins
+    from floe_core.schemas.compiled_artifacts import (
+        DagsterStorageBinding,
+        PluginRef,
+        ResolvedGovernance,
+        ResolvedPlugins,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +49,37 @@ logger = logging.getLogger(__name__)
 _DEFAULT_NAMESPACE = "default"
 
 
+def _catalog_connection_config_from_binding(
+    storage_binding: DagsterStorageBinding | None,
+) -> dict[str, Any]:
+    """Return PyIceberg catalog connection config from compiled Dagster storage binding."""
+    if storage_binding is None:
+        return {}
+
+    resource_config = storage_binding.resources
+    connection_config: dict[str, str] = {}
+
+    endpoint_url = resource_config.get("endpoint_url")
+    if isinstance(endpoint_url, str) and endpoint_url:
+        connection_config["s3.endpoint"] = endpoint_url
+
+    region_name = resource_config.get("region_name")
+    if isinstance(region_name, str) and region_name:
+        connection_config["s3.region"] = region_name
+
+    path_style_access = resource_config.get("path_style_access")
+    if isinstance(path_style_access, bool):
+        connection_config["s3.path-style-access"] = str(path_style_access).lower()
+
+    return connection_config
+
+
 def create_iceberg_resources(
     catalog_ref: PluginRef,
     storage_ref: PluginRef,
     default_namespace: str = _DEFAULT_NAMESPACE,
     governance: ResolvedGovernance | None = None,
+    storage_binding: DagsterStorageBinding | None = None,
 ) -> dict[str, Any]:
     """Create Dagster resources dict with IcebergIOManager.
 
@@ -60,6 +91,8 @@ def create_iceberg_resources(
         catalog_ref: Resolved catalog plugin reference (type, version, config).
         storage_ref: Resolved storage plugin reference (type, version, config).
         default_namespace: Default Iceberg namespace for tables.
+        governance: Resolved governance config for table lifecycle behavior.
+        storage_binding: Optional compiled Dagster storage projection.
 
     Returns:
         Dictionary with "iceberg" key mapped to IcebergIOManager instance.
@@ -73,7 +106,7 @@ def create_iceberg_resources(
         >>> from floe_core.schemas.compiled_artifacts import PluginRef
         >>> resources = create_iceberg_resources(
         ...     catalog_ref=PluginRef(type="polaris", version="0.1.0", config={...}),
-        ...     storage_ref=PluginRef(type="s3", version="1.0.0", config={...}),
+        ...     storage_ref=PluginRef(type="minio", version="1.0.0", config={...}),
         ... )
         >>> definitions = Definitions(assets=assets, resources=resources)
 
@@ -85,6 +118,7 @@ def create_iceberg_resources(
     """
     from floe_core.plugin_registry import get_registry
     from floe_core.plugin_types import PluginType
+    from floe_core.plugins.storage import StoragePlugin
     from floe_iceberg import IcebergTableManager
 
     from floe_orchestrator_dagster.io_manager import create_iceberg_io_manager
@@ -112,7 +146,7 @@ def create_iceberg_resources(
         "Loading storage plugin",
         extra={"storage_type": storage_ref.type},
     )
-    storage_plugin = registry.get(PluginType.STORAGE, storage_ref.type)
+    storage_plugin = cast(StoragePlugin, registry.get(PluginType.STORAGE, storage_ref.type))
 
     # Configure storage plugin even when config is omitted so cached plugin state cannot leak.
     validated_storage_config = registry.configure(
@@ -133,17 +167,32 @@ def create_iceberg_resources(
     )
     from floe_iceberg.models import IcebergTableManagerConfig
 
+    catalog_connection_config = {
+        **storage_plugin.get_pyiceberg_catalog_config(),
+        **_catalog_connection_config_from_binding(storage_binding),
+    }
+
     config = IcebergTableManagerConfig.from_governance(governance)
-    table_manager = IcebergTableManager(
+    if catalog_connection_config:
+        config = config.model_copy(
+            update={"catalog_connection_config": catalog_connection_config},
+        )
+    table_manager_cls = cast(Any, IcebergTableManager)
+    table_manager = table_manager_cls(
         catalog_plugin=catalog_plugin,
         storage_plugin=storage_plugin,
         config=config,
     )
 
+    resource_config = storage_binding.resources if storage_binding is not None else {}
+    namespace = resource_config.get("namespace", default_namespace)
+    if not isinstance(namespace, str) or not namespace:
+        namespace = default_namespace
+
     # T111: Create IcebergIOManager
     io_manager = create_iceberg_io_manager(
         table_manager=table_manager,
-        namespace=default_namespace,
+        namespace=namespace,
     )
 
     logger.info(
@@ -151,7 +200,7 @@ def create_iceberg_resources(
         extra={
             "catalog_type": catalog_ref.type,
             "storage_type": storage_ref.type,
-            "namespace": default_namespace,
+            "namespace": namespace,
         },
     )
 
@@ -161,6 +210,7 @@ def create_iceberg_resources(
 def try_create_iceberg_resources(
     plugins: ResolvedPlugins | None,
     governance: ResolvedGovernance | None = None,
+    storage_binding: DagsterStorageBinding | None = None,
 ) -> dict[str, Any]:
     """Attempt to create Iceberg resources for the runtime builder.
 
@@ -175,6 +225,7 @@ def try_create_iceberg_resources(
             May be None if no plugins are configured.
         governance: Resolved governance config from CompiledArtifacts.
             Used to derive Iceberg table lifecycle properties (TTL, snapshot retention).
+        storage_binding: Optional compiled Dagster storage projection.
 
     Returns:
         Dictionary with "iceberg" key if successful, empty dict only when
@@ -203,6 +254,7 @@ def try_create_iceberg_resources(
             catalog_ref=plugins.catalog,
             storage_ref=plugins.storage,
             governance=governance,
+            storage_binding=storage_binding,
         )
     except Exception:
         logger.exception("iceberg_creation_failed")

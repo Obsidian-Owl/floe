@@ -1,6 +1,7 @@
 {{- $provisioning := .Values.minio.provisioning | default dict }}
 {{- if and .Values.minio.enabled (get $provisioning "fallbackJob" | default false) }}
 {{- $bucketName := trimPrefix "s3://" .Values.polaris.bootstrap.defaultBaseLocation | splitList "/" | first }}
+{{- $defaultBuckets := .Values.minio.defaultBuckets | default $bucketName }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -57,7 +58,12 @@ spec:
             - |
               set -eu
               mc alias set local "http://${MINIO_HOST}:9000" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
-              mc mb --ignore-existing "local/{{ $bucketName }}"
+              {{- range $bucket := splitList "," $defaultBuckets }}
+              {{- $trimmedBucket := trim $bucket }}
+              {{- if $trimmedBucket }}
+              mc mb --ignore-existing "local/{{ $trimmedBucket }}"
+              {{- end }}
+              {{- end }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp

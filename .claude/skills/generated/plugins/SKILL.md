@@ -25,7 +25,7 @@ description: "Skill for the Plugins area of floe. 61 symbols across 47 files."
 | `plugins/floe-dbt-core/src/floe_dbt_core/errors.py` | __init__, __init__ |
 | `plugins/floe-telemetry-jaeger/src/floe_telemetry_jaeger/plugin.py` | JaegerTelemetryPlugin |
 | `plugins/floe-telemetry-console/src/floe_telemetry_console/plugin.py` | ConsoleTelemetryPlugin |
-| `plugins/floe-storage-s3/src/floe_storage_s3/plugin.py` | S3StoragePlugin |
+| `plugins/floe-storage-minio/src/floe_storage_minio/plugin.py` | MinIOStoragePlugin |
 | `plugins/floe-semantic-cube/src/floe_semantic_cube/plugin.py` | CubeSemanticPlugin |
 
 ## Entry Points
@@ -44,7 +44,7 @@ Start here when exploring this area:
 |--------|------|------|------|
 | `JaegerTelemetryPlugin` | Class | `plugins/floe-telemetry-jaeger/src/floe_telemetry_jaeger/plugin.py` | 25 |
 | `ConsoleTelemetryPlugin` | Class | `plugins/floe-telemetry-console/src/floe_telemetry_console/plugin.py` | 22 |
-| `S3StoragePlugin` | Class | `plugins/floe-storage-s3/src/floe_storage_s3/plugin.py` | 38 |
+| `MinIOStoragePlugin` | Class | `plugins/floe-storage-minio/src/floe_storage_minio/plugin.py` | 38 |
 | `CubeSemanticPlugin` | Class | `plugins/floe-semantic-cube/src/floe_semantic_cube/plugin.py` | 50 |
 | `K8sSecretsPlugin` | Class | `plugins/floe-secrets-k8s/src/floe_secrets_k8s/plugin.py` | 41 |
 | `InfisicalSecretsPlugin` | Class | `plugins/floe-secrets-infisical/src/floe_secrets_infisical/plugin.py` | 88 |

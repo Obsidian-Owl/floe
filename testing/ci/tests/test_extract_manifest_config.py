@@ -67,7 +67,7 @@ DEMO_MANIFEST_YAML = textwrap.dedent("""\
             client_secret: demo-secret
             token_url: http://floe-platform-polaris:8181/api/catalog/v1/oauth/tokens
       storage:
-        type: s3
+        type: minio
         config:
           endpoint: http://floe-platform-minio:9000
           bucket: floe-iceberg
@@ -107,7 +107,7 @@ def manifest_no_catalog(tmp_path: Path) -> Path:
     content = textwrap.dedent("""\
         plugins:
           storage:
-            type: s3
+            type: minio
             config:
               bucket: floe-iceberg
               region: us-east-1
@@ -147,7 +147,7 @@ def manifest_injection(tmp_path: Path) -> Path:
                 client_id: "$(whoami)"
                 token_url: http://example.com/tokens
           storage:
-            type: s3
+            type: minio
             config:
               bucket: "test`id`bucket"
               region: "us-east-1"
@@ -523,7 +523,7 @@ class TestEdgeCases:
                     client_id: custom-client
                     token_url: http://example.com/tokens
               storage:
-                type: s3
+                type: minio
                 config:
                   bucket: my-custom-bucket
                   region: eu-west-1
@@ -560,7 +560,7 @@ class TestEdgeCases:
                     client_id: c
                     token_url: http://example.com
               storage:
-                type: s3
+                type: minio
                 config:
                   bucket: b
                   region: r
@@ -590,7 +590,7 @@ class TestEdgeCases:
                     client_id: c
                     token_url: http://example.com
               storage:
-                type: s3
+                type: minio
                 config:
                   bucket: b
                   region: r
@@ -671,7 +671,7 @@ def test_extract_config_parameterized(
                 client_id: {client_id}
                 token_url: http://example.com/tokens
           storage:
-            type: s3
+            type: minio
             config:
               bucket: {bucket}
               region: {region}

@@ -15,12 +15,26 @@ tests:
       polaris.persistence.jdbc.username: floe
       polaris.storage.s3.enabled: true
       polaris.storage.s3.endpoint: http://floe-platform-minio:9000
+      polaris.storage.s3.region: eu-west-1
+      polaris.storage.s3.pathStyleAccess: false
     asserts:
       - isKind:
           of: ConfigMap
       - notMatchRegex:
           path: data["application.properties"]
           pattern: auto-bootstrap-types
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: quarkus\.s3\.aws\.credentials\.type=static
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: quarkus\.s3\.endpoint-override=http://floe-platform-minio:9000
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: quarkus\.s3\.path-style-access=false
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: quarkus\.s3\.aws\.region=eu-west-1
 
   # RAC-1 defense-in-depth: in-memory mode still must not render the stale flag.
   - it: should omit auto-bootstrap-types when persistence.type is in-memory
@@ -36,6 +50,9 @@ tests:
       - notMatchRegex:
           path: data["application.properties"]
           pattern: auto-bootstrap-types
+      - matchRegex:
+          path: data["application.properties"]
+          pattern: quarkus\.s3\.aws\.credentials\.type=static
 
   # RAC-4: Secret output must stay in the parser-accepted realm,clientId,clientSecret form.
   - it: should render bootstrap-credentials in the expected Polaris root credential format
@@ -43,7 +60,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.auth.bootstrapCredentials.clientId: demo-admin
-      polaris.auth.bootstrapCredentials.clientSecret: demo-secret
+      polaris.auth.bootstrapCredentials.clientSecret: demo-secret  # pragma: allowlist secret
     asserts:
       - isKind:
           of: Secret

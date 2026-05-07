@@ -12,12 +12,14 @@ Requirements Covered:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, get_type_hints
 
 import pytest
 
 from floe_core import CatalogPlugin, HealthState, HealthStatus
+from floe_core.composition.models import PluginRequirements
 from floe_core.plugins.catalog import Catalog
+from floe_core.schemas.compiled_artifacts import CatalogDeploymentBinding, StorageDeploymentBinding
 
 
 class TestCatalogPluginABCInstantiation:
@@ -248,6 +250,84 @@ class TestCatalogPluginDefaultImplementations:
         health = plugin.health_check()
         assert health.details is not None
         assert health.details.get("timeout") is None
+
+    @pytest.mark.requirement("FR-001")
+    def test_storage_composition_defaults_raise_not_implemented(self) -> None:
+        """Verify composition hooks are opt-in for existing catalog plugins."""
+
+        class MinimalCatalogPlugin(CatalogPlugin):
+            """Plugin with only required methods."""
+
+            @property
+            def name(self) -> str:
+                return "minimal"
+
+            @property
+            def version(self) -> str:
+                return "1.0.0"
+
+            @property
+            def floe_api_version(self) -> str:
+                return "1.0"
+
+            def connect(self, config: dict[str, Any]) -> Catalog:
+                _ = config
+                return _create_mock_catalog()
+
+            def create_namespace(
+                self,
+                namespace: str,
+                properties: dict[str, str] | None = None,
+            ) -> None:
+                _ = namespace, properties
+
+            def list_namespaces(self, parent: str | None = None) -> list[str]:
+                _ = parent
+                return []
+
+            def delete_namespace(self, namespace: str) -> None:
+                _ = namespace
+
+            def create_table(
+                self,
+                identifier: str,
+                schema: dict[str, Any],
+                location: str | None = None,
+                properties: dict[str, str] | None = None,
+            ) -> None:
+                _ = identifier, schema, location, properties
+
+            def list_tables(self, namespace: str) -> list[str]:
+                _ = namespace
+                return []
+
+            def drop_table(self, identifier: str, purge: bool = False) -> None:
+                _ = identifier, purge
+
+            def vend_credentials(
+                self,
+                table_path: str,
+                operations: list[str],
+            ) -> dict[str, Any]:
+                _ = table_path, operations
+                return {}
+
+        plugin = MinimalCatalogPlugin()
+
+        with pytest.raises(NotImplementedError, match="storage composition"):
+            plugin.get_storage_requirements()
+        with pytest.raises(NotImplementedError, match="catalog deployment binding"):
+            plugin.build_catalog_deployment(None)  # type: ignore[arg-type]
+
+    @pytest.mark.requirement("FR-001")
+    def test_storage_composition_type_hints_are_runtime_resolvable(self) -> None:
+        """Verify public composition hook annotations resolve at runtime."""
+        requirements_hints = get_type_hints(CatalogPlugin.get_storage_requirements)
+        deployment_hints = get_type_hints(CatalogPlugin.build_catalog_deployment)
+
+        assert requirements_hints["return"] is PluginRequirements
+        assert deployment_hints["storage"] is StorageDeploymentBinding
+        assert deployment_hints["return"] is CatalogDeploymentBinding
 
 
 class TestCatalogPluginInheritance:

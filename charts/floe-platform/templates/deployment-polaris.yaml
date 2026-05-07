@@ -210,21 +210,27 @@ spec:
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
-                  key: aws-access-key-id
+                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
+                  key: {{ include "floe-platform.polaris.s3AccessKeySecretKey" . | quote }}
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "floe-platform.polaris.credentialSecretName" . }}
-                  key: aws-secret-access-key
+                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
+                  key: {{ include "floe-platform.polaris.s3SecretKeySecretKey" . | quote }}
+            - name: QUARKUS_S3_AWS_CREDENTIALS_STATIC_PROVIDER_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
+                  key: {{ include "floe-platform.polaris.s3AccessKeySecretKey" . | quote }}
+            - name: QUARKUS_S3_AWS_CREDENTIALS_STATIC_PROVIDER_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "floe-platform.polaris.s3CredentialSecretName" . | quote }}
+                  key: {{ include "floe-platform.polaris.s3SecretKeySecretKey" . | quote }}
             - name: AWS_REGION
               value: {{ .Values.polaris.storage.s3.region | quote }}
             - name: AWS_ENDPOINT_URL_S3
               value: {{ .Values.polaris.storage.s3.endpoint | quote }}
-            {{- if .Values.polaris.storage.s3.stsEndpoint }}
-            - name: AWS_ENDPOINT_URL_STS
-              value: {{ .Values.polaris.storage.s3.stsEndpoint | quote }}
-            {{- end }}
             {{- end }}
             {{- with .Values.polaris.env }}
             {{- toYaml . | nindent 12 }}

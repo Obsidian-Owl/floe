@@ -38,11 +38,11 @@ def _make_polaris_config() -> Any:
     return mock
 
 
-def _make_s3_config() -> Any:
-    """Create a minimal S3StorageConfig mock."""
-    from floe_storage_s3.config import S3StorageConfig
+def _make_minio_config() -> Any:
+    """Create a minimal MinIOStorageConfig mock."""
+    from floe_storage_minio.config import MinIOStorageConfig
 
-    mock = MagicMock(spec=S3StorageConfig)
+    mock = MagicMock(spec=MinIOStorageConfig)
     mock.endpoint = "http://minio:9000"
     mock.bucket = "test-bucket"
     return mock
@@ -243,12 +243,12 @@ def test_polaris_direct_instantiation_is_configured() -> None:
 
 
 @pytest.mark.requirement("ARC-001")
-def test_s3_direct_instantiation_is_configured() -> None:
-    """S3StoragePlugin(config=cfg) must yield is_configured == True."""
-    from floe_storage_s3.plugin import S3StoragePlugin
+def test_minio_direct_instantiation_is_configured() -> None:
+    """MinIOStoragePlugin(config=cfg) must yield is_configured == True."""
+    from floe_storage_minio.plugin import MinIOStoragePlugin
 
-    config = _make_s3_config()
-    plugin = S3StoragePlugin(config=config)
+    config = _make_minio_config()
+    plugin = MinIOStoragePlugin(config=config)
     assert plugin.is_configured is True
     assert plugin._config is config
 
@@ -339,14 +339,14 @@ def test_polaris_registry_path_configure_wins() -> None:
 
 
 @pytest.mark.requirement("ARC-001")
-def test_s3_registry_path_configure_wins() -> None:
-    """Registry path: S3 configure() overwrites __init__ config."""
-    from floe_storage_s3.plugin import S3StoragePlugin
+def test_minio_registry_path_configure_wins() -> None:
+    """Registry path: MinIO configure() overwrites __init__ config."""
+    from floe_storage_minio.plugin import MinIOStoragePlugin
 
-    init_config = _make_s3_config()
-    registry_config = _make_s3_config()
+    init_config = _make_minio_config()
+    registry_config = _make_minio_config()
 
-    plugin = S3StoragePlugin(config=init_config)
+    plugin = MinIOStoragePlugin(config=init_config)
     plugin.configure(registry_config)
     assert plugin._config is registry_config
 
@@ -486,17 +486,17 @@ def test_dlt_configure_sets_is_configured() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Group 6: S3 and K8s with config=None (optional config param)
+# Group 6: MinIO and K8s with config=None (optional config param)
 # Even with None, _config must exist from super().__init__().
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.requirement("ARC-001")
-def test_s3_none_config_has_config_attr() -> None:
-    """S3StoragePlugin(config=None) must still have _config from ABC."""
-    from floe_storage_s3.plugin import S3StoragePlugin
+def test_minio_none_config_has_config_attr() -> None:
+    """MinIOStoragePlugin(config=None) must still have _config from ABC."""
+    from floe_storage_minio.plugin import MinIOStoragePlugin
 
-    plugin = S3StoragePlugin(config=None)
+    plugin = MinIOStoragePlugin(config=None)
     assert hasattr(plugin, "_config")
     # _config should be None (ABC sets None, then plugin sets None)
     assert plugin.is_configured is False
@@ -564,15 +564,15 @@ def test_polaris_calls_super_init(
 
 
 @pytest.mark.requirement("ARC-001")
-def test_s3_calls_super_init(
+def test_minio_calls_super_init(
     _track_super_init: list[bool],
 ) -> None:
-    """S3StoragePlugin.__init__ must call super().__init__()."""
-    from floe_storage_s3.plugin import S3StoragePlugin
+    """MinIOStoragePlugin.__init__ must call super().__init__()."""
+    from floe_storage_minio.plugin import MinIOStoragePlugin
 
     _track_super_init.clear()
-    S3StoragePlugin(config=_make_s3_config())
-    assert len(_track_super_init) == 1, "S3StoragePlugin did not call super().__init__()"
+    MinIOStoragePlugin(config=_make_minio_config())
+    assert len(_track_super_init) == 1, "MinIOStoragePlugin did not call super().__init__()"
 
 
 @pytest.mark.requirement("ARC-001")

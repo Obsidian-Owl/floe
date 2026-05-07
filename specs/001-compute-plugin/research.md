@@ -40,7 +40,7 @@ floe_project:
         threads: 4
       # Secrets for catalog authentication
       secrets:
-        - type: s3
+        - type: minio
           region: us-east-1
           key_id: "{{ env_var('AWS_ACCESS_KEY_ID') }}"
           secret: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"

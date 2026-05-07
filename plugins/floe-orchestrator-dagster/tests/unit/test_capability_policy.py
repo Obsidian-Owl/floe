@@ -55,7 +55,7 @@ def test_alpha_profile_accepts_all_required_plugins() -> None:
         compute=PluginRef(type="duckdb", version="0.9.0"),
         orchestrator=PluginRef(type="dagster", version="1.5.0"),
         catalog=PluginRef(type="polaris", version="0.1.0", config={}),
-        storage=PluginRef(type="s3", version="1.0.0", config={}),
+        storage=PluginRef(type="minio", version="1.0.0", config={}),
         lineage_backend=PluginRef(
             type="marquez",
             version="0.1.0",

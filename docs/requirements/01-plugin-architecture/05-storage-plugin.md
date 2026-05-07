@@ -6,7 +6,11 @@
 
 ## Overview
 
-StoragePlugin wraps PyIceberg FileIO pattern for pluggable object storage backends (S3, GCS, Azure Blob, MinIO). This enables multi-cloud support while maintaining a single unified interface for data pipeline execution.
+StoragePlugin emits a neutral, secret-free storage deployment binding for
+pluggable object storage backends (S3, GCS, Azure Blob, MinIO). It may also
+wrap the PyIceberg FileIO pattern for direct runtime access. Catalog, compute,
+orchestrator, and deployment renderers consume the typed binding through their
+own translators instead of receiving storage-owned per-consumer projections.
 
 **Key ADR**: ADR-0036 (Storage Plugin Interface)
 
@@ -14,13 +18,19 @@ StoragePlugin wraps PyIceberg FileIO pattern for pluggable object storage backen
 
 ### REQ-041: StoragePlugin ABC Definition **[New]**
 
-**Requirement**: StoragePlugin MUST define abstract methods: get_pyiceberg_fileio(), get_warehouse_uri(), get_dbt_profile_config(), get_dagster_io_manager_config(), get_helm_values_override().
+**Requirement**: StoragePlugin MUST define typed provider methods for neutral
+storage composition: `get_deployment_binding()` and, where direct PyIceberg use
+is supported, `get_pyiceberg_fileio()`.
 
-**Rationale**: Enforces consistent interface for PyIceberg FileIO pattern across storage implementations.
+**Rationale**: Enforces a composable interface where storage owns provider facts
+and `floe-core` validates compatibility before catalogs, runtimes, and Helm
+renderers consume the resolved deployment bindings.
 
 **Acceptance Criteria**:
-- [ ] ABC defined in `floe-core/src/floe_core/plugin_interfaces.py`
-- [ ] All 5 abstract methods defined with type hints
+- [ ] ABC defined in `packages/floe-core/src/floe_core/plugins/storage.py`
+- [ ] `get_deployment_binding()` defined with type hints and returns `StorageDeploymentBinding`
+- [ ] Direct FileIO support, when provided, returns a PyIceberg-compatible `FileIO`
+- [ ] Legacy helper methods are marked compatibility surface until removed by plugin uplift
 - [ ] Docstrings explain purpose, parameters, return values
 - [ ] mypy --strict passes on interface definition
 
@@ -49,55 +59,66 @@ StoragePlugin wraps PyIceberg FileIO pattern for pluggable object storage backen
 
 ---
 
-### REQ-043: StoragePlugin Warehouse URI **[New]**
+### REQ-043: StoragePlugin Deployment Binding **[New]**
 
-**Requirement**: StoragePlugin.get_warehouse_uri() MUST return a valid warehouse URI for the storage backend with namespace scoping.
+**Requirement**: `StoragePlugin.get_deployment_binding()` MUST return a
+secret-free `StorageDeploymentBinding` for the storage backend.
 
-**Rationale**: Enables Iceberg catalog to locate table data files on storage.
+**Rationale**: Gives `floe-core`, catalog plugins, compute plugins,
+orchestrators, and deployment renderers one typed storage contract without
+coupling storage plugins to every consumer.
 
 **Acceptance Criteria**:
-- [ ] Returns URI matching storage backend (s3://, gs://, abfss://)
-- [ ] Includes namespace path for bronze/silver/gold separation
-- [ ] URI is valid for Iceberg catalog warehouse location
-- [ ] Supports path-style addressing for MinIO
+- [ ] Includes protocol and endpoint roles
+- [ ] Includes warehouse location and allowed locations
+- [ ] Includes bucket requirements with purpose and create policy
+- [ ] Includes credential references, never raw credential values
+- [ ] Includes capabilities such as credential modes, path-style support, and STS support
+- [ ] Includes provisioning intent for self-hosted storage such as MinIO
 
-**Enforcement**: URI validation tests, catalog attachment tests
-**Example**: S3 returns `s3://bucket/warehouse/bronze`; GCS returns `gs://bucket/warehouse/bronze`
-**Test Coverage**: `tests/unit/test_storage_warehouse_uri.py`
+**Enforcement**: schema tests, composition resolver tests, catalog attachment tests
+**Example**: MinIO returns an S3-compatible binding with bucket requirements and Kubernetes Secret refs.
+**Test Coverage**: `plugins/floe-storage-minio/tests/unit/test_plugin.py`, `packages/floe-core/tests/unit/schemas/test_compiled_artifacts.py`
 **Traceability**: ADR-0036
 
 ---
 
-### REQ-044: StoragePlugin dbt Profile Config **[New]**
+### REQ-044: Storage Runtime Fragments **[New]**
 
-**Requirement**: StoragePlugin.get_dbt_profile_config() MUST return filesystem configuration for dbt-duckdb to access storage.
+**Requirement**: StoragePlugin runtime fragments MUST expose neutral,
+secret-free storage facts and environment references for dbt and other runtimes.
 
-**Rationale**: Enables dbt to query Iceberg tables via DuckDB's filesystem plugins.
+**Rationale**: Enables dbt and compute runtimes to access Iceberg table files
+without making storage plugins own dbt profile shape or SQL execution details.
 
 **Acceptance Criteria**:
-- [ ] Returns dict with filesystems configuration
-- [ ] Includes credentials references (${env:VAR} syntax)
-- [ ] Supports S3, GCS, Azure filesystems
-- [ ] Configuration integrates with dbt profiles.yml
+- [ ] Runtime fragments are JSON-compatible and schema validated
+- [ ] Runtime fragments contain no raw credential material
+- [ ] Credential use is represented by environment or Kubernetes Secret refs
+- [ ] dbt-specific profile rendering is owned by the dbt/compute integration that consumes the binding
+- [ ] Supports S3-compatible, GCS, and Azure-style runtime facts through typed capabilities
 
 **Enforcement**: dbt profile generation tests, dbt debug tests
-**Example**: `{"filesystems": {"s3": {"key_id": "${env:AWS_ACCESS_KEY_ID}", ...}}}`
+**Example**: `StorageRuntimeBinding.pyiceberg_properties` plus `env_refs`
 **Test Coverage**: `tests/integration/test_storage_dbt_config.py`
 **Traceability**: ADR-0036
 
 ---
 
-### REQ-045: StoragePlugin Dagster IOManager Config **[New]**
+### REQ-045: Orchestrator Storage Consumption **[New]**
 
-**Requirement**: StoragePlugin.get_dagster_io_manager_config() MUST return configuration for Dagster's IcebergIOManager.
+**Requirement**: Orchestrator integrations MUST consume storage deployment
+bindings or neutral runtime fragments instead of invoking storage-owned
+orchestrator projection methods.
 
-**Rationale**: Enables Dagster to store and retrieve asset data on any storage backend.
+**Rationale**: Keeps Dagster, Airflow, and future orchestrators independently
+composable with storage plugins.
 
 **Acceptance Criteria**:
-- [ ] Returns dict with storage_options configuration
-- [ ] Includes credentials references (${env:VAR} syntax)
-- [ ] Compatible with dagster-iceberg IOManager API
-- [ ] Supports cloud provider auth mechanisms
+- [ ] Dagster storage resources derive from `CompiledArtifacts.deployment.storage`
+- [ ] Runtime credentials use Secret/env refs, never compiled raw values
+- [ ] Orchestrator-specific resource keys remain owned by the orchestrator integration
+- [ ] Storage plugins do not import or construct Dagster resources
 
 **Enforcement**: IOManager instantiation tests, asset I/O tests
 **Test Coverage**: `tests/integration/test_storage_dagster_config.py`
@@ -105,20 +126,23 @@ StoragePlugin wraps PyIceberg FileIO pattern for pluggable object storage backen
 
 ---
 
-### REQ-046: StoragePlugin Helm Values **[New]**
+### REQ-046: Storage Deployment Rendering **[New]**
 
-**Requirement**: StoragePlugin.get_helm_values_override() MUST return Helm chart values for deploying storage services or empty dict for cloud storage.
+**Requirement**: Helm values MUST be rendered from resolved deployment bindings,
+not from storage plugin Helm override methods or raw chart credential values.
 
-**Rationale**: Enables declarative deployment of self-hosted storage (MinIO) via Helm.
+**Rationale**: Keeps deployment rendering declarative and prevents storage
+plugins from knowing catalog-specific or chart-specific bootstrap formats.
 
 **Acceptance Criteria**:
-- [ ] For self-hosted (MinIO): returns valid Helm values
-- [ ] For cloud storage (S3, GCS, Azure): returns empty dict
-- [ ] Helm values include persistence configuration
+- [ ] For self-hosted MinIO, `deployment.storage.buckets` drives bucket creation values
+- [ ] Catalog-specific storage fields come from `deployment.catalog`, not storage plugin config
+- [ ] S3 credentials are Kubernetes Secret refs with key names
+- [ ] Raw S3 access keys are not valid generated chart values
 - [ ] Values validate against chart schema
 
 **Enforcement**: Helm validation tests, Helm dry-run tests
-**Test Coverage**: `tests/unit/test_storage_helm_values.py`
+**Test Coverage**: `packages/floe-core/tests/unit/helm/test_generate_cli.py`, `charts/floe-platform/tests/`
 **Traceability**: ADR-0036
 
 ---
@@ -133,7 +157,7 @@ StoragePlugin wraps PyIceberg FileIO pattern for pluggable object storage backen
 - [ ] Credentials never logged or printed
 - [ ] Uses environment variables or K8s Secrets
 - [ ] Supports multiple auth mechanisms per backend
-- [ ] validate_credentials() method checks presence
+- [ ] Compile-time artifacts carry credential references, not credential values
 - [ ] Error messages never expose credential values
 
 **Enforcement**: Credential security tests, secret scanning tests
@@ -152,7 +176,7 @@ StoragePlugin wraps PyIceberg FileIO pattern for pluggable object storage backen
 - [ ] S3Plugin: AWS S3 with IAM or access keys
 - [ ] GCSPlugin: Google Cloud Storage with service account
 - [ ] AzurePlugin: Azure Blob Storage with SAS tokens
-- [ ] MinIOPlugin: S3-compatible local/on-prem storage
+- [ ] MinIOStoragePlugin: S3-compatible local/on-prem storage
 - [ ] All backends pass compliance test suite
 
 **Enforcement**: Multi-backend integration tests, portability tests
@@ -161,14 +185,20 @@ StoragePlugin wraps PyIceberg FileIO pattern for pluggable object storage backen
 
 ---
 
-### REQ-049: StoragePlugin Connection Validation **[New]**
+### REQ-049: Storage Reachability Validation **[New]**
 
-**Requirement**: StoragePlugin.validate_credentials() MUST verify that storage credentials are valid and accessible.
+**Requirement**: Storage reachability validation MUST verify that configured
+credential references and object storage endpoints are usable before production
+deployment.
 
-**Rationale**: Pre-deployment validation ensures storage is reachable.
+**Rationale**: Pre-deployment validation ensures storage is reachable without
+making live infrastructure checks part of the compile-time StoragePlugin
+contract.
 
 **Acceptance Criteria**:
-- [ ] Tests credential validity (e.g., list buckets)
+- [ ] Validation runs in an explicit integration/deployment lane, not during compile
+- [ ] Uses credential references resolved by the runtime environment
+- [ ] Tests credential validity where safe (e.g., list buckets)
 - [ ] Returns boolean success/failure
 - [ ] Error messages actionable (not stack traces)
 - [ ] Validates without exposing credentials
@@ -187,10 +217,10 @@ StoragePlugin wraps PyIceberg FileIO pattern for pluggable object storage backen
 
 **Acceptance Criteria**:
 - [ ] BaseStoragePluginTests in testing/base_classes/
-- [ ] Tests all ABC methods
+- [ ] Tests the typed storage deployment binding contract
 - [ ] Tests FileIO instantiation
-- [ ] Tests warehouse URI generation
-- [ ] Tests credential validation
+- [ ] Tests warehouse, bucket, capability, and credential-reference fields
+- [ ] Tests compatibility resolver interaction with catalog requirements
 - [ ] Tests error handling
 
 **Enforcement**: Plugin compliance tests must pass for all storage backends
@@ -203,7 +233,7 @@ StoragePlugin wraps PyIceberg FileIO pattern for pluggable object storage backen
 
 **Requirement**: System MUST provide test fixtures for StoragePlugin implementations that extend the Epic 9C testing framework.
 
-**Rationale**: Integration tests for storage adapters require object storage connectivity fixtures to validate FileIO operations, warehouse URI generation, and credential management.
+**Rationale**: Integration tests for storage adapters require object storage connectivity fixtures to validate FileIO operations, deployment bindings, and credential-reference management.
 
 **Acceptance Criteria**:
 - [ ] Fixture module: `testing/fixtures/storage.py` (extends 9C patterns)
@@ -220,7 +250,7 @@ StoragePlugin wraps PyIceberg FileIO pattern for pluggable object storage backen
 - MUST follow fixture pattern from `testing/fixtures/__init__.py`
 - MUST use Pydantic v2 `ConfigDict(frozen=True)` for config
 - MUST NOT duplicate MinIO fixture from Epic 9C (reference implementation)
-- MUST support credential injection via environment variables
+- MUST support credential injection via environment variables or Kubernetes Secret refs
 
 **Test Coverage**: `testing/tests/unit/test_storage_fixtures.py`
 
@@ -240,6 +270,8 @@ StoragePlugin Standards (REQ-041 to REQ-051) complete when:
 - [ ] At least 4 reference implementations (S3, GCS, MinIO, Azure)
 - [ ] Contract tests pass for all implementations
 - [ ] Integration tests validate file I/O operations
+- [ ] Composition resolver validates storage/catalog compatibility
+- [ ] Helm renders deployment bindings without literal storage secrets
 - [ ] Documentation backreferences all requirements
 
 ## Epic Mapping
