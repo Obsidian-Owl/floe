@@ -252,11 +252,20 @@ def _build_lineage_config(manifest: PlatformManifest) -> dict[str, Any] | None:
     return config
 
 
-def _build_storage_deployment_binding(
+def _has_active_ingestion(plugins: ResolvedPlugins) -> bool:
+    """Return whether product ingestion sources were resolved for deployment."""
+    if plugins.ingestion is None or plugins.ingestion.config is None:
+        return False
+    sources = plugins.ingestion.config.get("sources")
+    return isinstance(sources, list) and len(sources) > 0
+
+
+def _build_deployment_bindings(
     plugins: ResolvedPlugins,
 ) -> DeploymentConfig | None:
-    """Build deployment bindings from resolved storage plugin configuration."""
-    if plugins.storage is None and plugins.ingestion is None:
+    """Build deployment bindings from resolved plugin configuration."""
+    active_ingestion = _has_active_ingestion(plugins)
+    if plugins.storage is None and not active_ingestion:
         return None
 
     from floe_core.compilation.errors import CompilationError, CompilationException
@@ -266,6 +275,7 @@ def _build_storage_deployment_binding(
     from floe_core.plugin_registry import PluginRegistry
     from floe_core.plugin_types import PluginType
     from floe_core.plugins.catalog import CatalogPlugin
+    from floe_core.plugins.ingestion import IngestionPlugin
     from floe_core.plugins.storage import StoragePlugin
     from floe_core.schemas.compiled_artifacts import DeploymentConfig
 
@@ -338,7 +348,7 @@ def _build_storage_deployment_binding(
             ),
         )
 
-    if plugins.catalog is None and plugins.ingestion is None and storage_binding is not None:
+    if plugins.catalog is None and not active_ingestion and storage_binding is not None:
         return DeploymentConfig(storage=storage_binding)
 
     catalog_plugin = None
@@ -473,7 +483,10 @@ def _build_storage_deployment_binding(
         )
 
     ingestion_binding = None
-    if plugins.ingestion is not None:
+    if active_ingestion:
+        if plugins.ingestion is None:
+            msg = "active ingestion requires an ingestion plugin"
+            raise AssertionError(msg)
         try:
             registry.configure(
                 PluginType.INGESTION,
@@ -493,6 +506,17 @@ def _build_storage_deployment_binding(
                     context={"ingestion_plugin": plugins.ingestion.type},
                 )
             ) from exc
+
+        if not isinstance(ingestion_plugin, IngestionPlugin):
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code="E201",
+                    message=f"Plugin {plugins.ingestion.type!r} is not an IngestionPlugin",
+                    suggestion="Use a plugin registered under the floe.ingestion entry point group",
+                    context={"ingestion_plugin": plugins.ingestion.type},
+                )
+            )
 
         requirements = getattr(ingestion_plugin, "get_composition_requirements", lambda: None)()
         if requirements is not None:
@@ -829,7 +853,7 @@ def compile_pipeline(
                 attributes={"compile.stage": CompilationStage.COMPILE.value},
             ) as compile_span:
                 log.info("compilation_stage_start", stage=CompilationStage.COMPILE.value)
-                deployment = _build_storage_deployment_binding(plugins)
+                deployment = _build_deployment_bindings(plugins)
                 storage_dbt_binding = None
                 if deployment is not None and deployment.storage is not None:
                     storage_dbt_binding = deployment.storage.dbt

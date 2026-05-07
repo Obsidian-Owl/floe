@@ -498,6 +498,35 @@ def test_demo_compile_emits_dlt_ingestion_deployment_binding() -> None:
     assert "catalog_config" not in artifacts.plugins.ingestion.config
 
 
+def test_transform_only_compile_skips_manifest_selected_dlt_binding(tmp_path: Path) -> None:
+    """A selected ingestion plugin is inactive unless product sources were resolved."""
+    spec_path = tmp_path / "floe.yaml"
+    spec_path.write_text(
+        """
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: transform-only
+  version: 1.0.0
+transforms:
+  - name: orders
+"""
+    )
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest = yaml.safe_load((ROOT / "demo" / "manifest.yaml").read_text(encoding="utf-8"))
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    artifacts = compile_pipeline(spec_path, manifest_path, emit_lineage=False)
+
+    assert artifacts.deployment is not None
+    assert artifacts.deployment.storage is not None
+    assert artifacts.deployment.catalog is not None
+    assert artifacts.deployment.ingestion is None
+    assert artifacts.plugins.ingestion is not None
+    assert artifacts.plugins.ingestion.config is not None
+    assert "sources" not in artifacts.plugins.ingestion.config
+
+
 def test_dlt_ingestion_deployment_binding_ignores_host_secret_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -568,6 +597,57 @@ def test_ingestion_plugin_binding_failure_raises_structured_compilation_error(
         "storage_plugin": "minio",
         "catalog_plugin": "polaris",
     }
+
+
+def test_non_ingestion_plugin_registered_for_ingestion_raises_structured_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compile validates the ingestion plugin type before invoking hooks."""
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    original_registry = plugin_registry.PluginRegistry
+
+    class NotIngestionPlugin:
+        pass
+
+    class RegistryWithWrongIngestionPlugin:
+        def __init__(self) -> None:
+            self._delegate = original_registry()
+
+        def discover_all(self) -> None:
+            self._delegate.discover_all()
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            if plugin_type == PluginType.INGESTION:
+                return None
+            self._delegate.configure(plugin_type, name, config)
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            if plugin_type == PluginType.INGESTION:
+                return NotIngestionPlugin()
+            return self._delegate.get(plugin_type, name)
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", RegistryWithWrongIngestionPlugin)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "E201"
+    assert error.message == "Plugin 'dlt' is not an IngestionPlugin"
+    assert error.context == {"ingestion_plugin": "dlt"}
 
 
 def test_dlt_ingestion_without_storage_raises_composition_error(tmp_path: Path) -> None:
