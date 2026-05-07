@@ -346,8 +346,21 @@ def build_product_definitions(
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
         from floe_orchestrator_dagster.resources.ingestion import create_ingestion_resources
 
+        ingestion_runtime_binding = None
+        deployment = getattr(artifacts, "deployment", None)
+        ingestion_deployment = getattr(deployment, "ingestion", None) if deployment else None
+        dlt_binding = getattr(ingestion_deployment, "dlt", None)
+        if dlt_binding is not None:
+            ingestion_runtime_binding = dlt_binding.model_dump(mode="python")
+
         resources.update(create_ingestion_resources(plugins.ingestion))
-        assets.extend(create_ingestion_assets(plugins.ingestion, project_dir=project_dir))
+        assets.extend(
+            create_ingestion_assets(
+                plugins.ingestion,
+                project_dir=project_dir,
+                runtime_binding=ingestion_runtime_binding,
+            )
+        )
 
     if plugins and plugins.semantic:
         semantic_resources = _create_semantic_resources(plugins)

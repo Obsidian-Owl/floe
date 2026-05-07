@@ -27,10 +27,13 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from dagster import AssetKey, Definitions, ResourceDefinition, build_op_context
+from dagster import AssetKey, Definitions, ResourceDefinition, asset, build_op_context
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
+    DeploymentConfig,
+    DltIngestionBinding,
+    IngestionDeploymentBinding,
     ObservabilityConfig,
     PluginRef,
     ResolvedModel,
@@ -267,6 +270,51 @@ def project_dir_with_ingestion(tmp_path: Path) -> Path:
                 ]
             },
         ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_binding(tmp_path: Path) -> Path:
+    """Temporary project dir with dlt ingestion and compiled runtime binding."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "sources": [
+                    {
+                        "name": "raw_customers",
+                        "source_type": "filesystem",
+                        "source_config": {
+                            "format": "csv",
+                            "path": "s3://raw/customers/*.csv",
+                        },
+                        "destination_table": "bronze.raw_customers",
+                    }
+                ]
+            },
+        ),
+    ).model_copy(
+        update={
+            "deployment": DeploymentConfig(
+                ingestion=IngestionDeploymentBinding(
+                    provider="dlt",
+                    dlt=DltIngestionBinding(
+                        plugin_name="dlt",
+                        destination="filesystem",
+                        table_format="iceberg",
+                        source_filesystem={
+                            "endpoint_url": "http://minio:9000",
+                            "region_name": "us-east-1",
+                            "s3_url_style": "path",
+                        },
+                    ),
+                )
+            )
+        }
     )
     _write_artifacts_and_manifest(pdir, artifacts)
     return pdir
@@ -1267,6 +1315,36 @@ def test_runtime_wires_ingestion_when_configured(
     resources = result.resources or {}
     assert "ingestion" in resources
     assert "run_ingestion_raw_customers" in _asset_names(result)
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_passes_dlt_ingestion_binding_to_asset_factory(
+    project_dir_with_ingestion_binding: Path,
+) -> None:
+    """Compiled dlt deployment binding must reach Dagster ingestion assets."""
+
+    @asset
+    def expected_ingestion_asset() -> None:
+        return None
+
+    expected_asset = expected_ingestion_asset
+
+    with patch(
+        "floe_orchestrator_dagster.assets.ingestion.create_ingestion_assets",
+        return_value=[expected_asset],
+    ) as create_assets:
+        result = load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_binding)
+
+    assert expected_asset in list(result.assets or [])
+    create_assets.assert_called_once()
+    call = create_assets.call_args
+    assert call is not None
+    assert call.kwargs["project_dir"] == project_dir_with_ingestion_binding
+    assert call.kwargs["runtime_binding"]["source_filesystem"] == {
+        "endpoint_url": "http://minio:9000",
+        "region_name": "us-east-1",
+        "s3_url_style": "path",
+    }
 
 
 @pytest.mark.requirement("AC-5")

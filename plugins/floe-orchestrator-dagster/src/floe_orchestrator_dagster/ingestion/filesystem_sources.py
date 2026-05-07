@@ -212,6 +212,7 @@ def _object_store_credentials(
 
     endpoint_url = _first_config_value(
         filesystem_config,
+        "endpoint_url",
         "s3_endpoint",
         "endpoint",
         "minio_endpoint",
@@ -220,15 +221,19 @@ def _object_store_credentials(
         credentials["endpoint_url"] = str(endpoint_url)
     region_name = os.environ.get("AWS_REGION") or _first_config_value(
         filesystem_config,
+        "region_name",
         "s3_region",
         "region",
     )
     if region_name is not None:
         credentials["region_name"] = str(region_name)
-    path_style = filesystem_config.get(
+    path_style = _first_config_value(
+        filesystem_config,
         "s3_path_style_access",
-        filesystem_config.get("path_style_access", endpoint_url is not None),
+        "path_style_access",
     )
+    if path_style is None:
+        path_style = filesystem_config.get("s3_url_style") == "path" or endpoint_url is not None
     if path_style:
         credentials["s3_url_style"] = "path"
     return credentials
