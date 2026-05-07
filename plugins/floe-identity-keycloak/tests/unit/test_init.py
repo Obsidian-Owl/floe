@@ -98,6 +98,7 @@ class TestLazyImports:
 
         assert capabilities.plugin_type == "identity"
         assert capabilities.plugin_name == "keycloak"
+        assert capabilities.capabilities.credential_modes == ["workload-identity"]
         assert capabilities.capabilities.identity_modes == ["oidc-federation"]
         assert capabilities.capabilities.providers == ["oidc"]
 

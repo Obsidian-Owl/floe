@@ -88,6 +88,7 @@ class TestK8sSecretsPluginMetadata:
 
         assert capabilities.plugin_type == "secrets"
         assert capabilities.plugin_name == "k8s"
+        assert capabilities.capabilities.credential_modes == ["kubernetes-secret"]
         assert capabilities.capabilities.secret_projection_modes == ["kubernetes-secret"]
         assert capabilities.capabilities.providers == ["kubernetes"]
 

@@ -111,13 +111,21 @@ class TestInfisicalSecretsPluginMetadata:
     @pytest.mark.requirement("PCU-005")
     def test_secret_capabilities(
         self,
-        plugin: InfisicalSecretsPlugin,
+        mock_infisical_config: InfisicalSecretsConfig,
     ) -> None:
-        """Infisical plugin should declare external secret sync support."""
+        """Infisical plugin should declare external secret sync support without startup."""
+        plugin = InfisicalSecretsPlugin(config=mock_infisical_config)
+
         capabilities = plugin.get_secret_capabilities()
 
+        assert plugin._client is None
+        assert plugin._authenticated is False
         assert capabilities.plugin_type == "secrets"
         assert capabilities.plugin_name == "infisical"
+        assert capabilities.capabilities.credential_modes == [
+            "external-secret-sync",
+            "kubernetes-secret",
+        ]
         assert capabilities.capabilities.secret_projection_modes == [
             "external-secret-sync",
             "kubernetes-secret",
