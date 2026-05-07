@@ -50,14 +50,7 @@ def _plugins_with_ingestion_config() -> ResolvedPlugins:
         ingestion=PluginRef(
             type="dlt",
             version="0.1.0",
-            config={
-                "catalog_config": {
-                    "uri": "http://polaris:8181/api/catalog",
-                    "warehouse": "floe",
-                    "bucket": "floe-iceberg",
-                },
-                "retry_config": {"max_retries": 5, "initial_delay_seconds": 2.0},
-            },
+            config={"retry_config": {"max_retries": 5, "initial_delay_seconds": 2.0}},
         ),
     )
 
@@ -87,19 +80,15 @@ def test_resolve_ingestion_config_merges_product_sources() -> None:
     assert "path" not in resolved.ingestion.config["sources"][0]
 
 
-def test_resolve_ingestion_config_preserves_manifest_config() -> None:
-    """Existing manifest-level ingestion config survives source resolution."""
+def test_resolve_ingestion_config_preserves_retry_config_without_catalog_config() -> None:
+    """Product sources merge without requiring duplicated dlt catalog config."""
     from floe_core.compilation.resolver import resolve_ingestion_config
 
     resolved = resolve_ingestion_config(_spec_with_ingestion(), _plugins_with_ingestion_config())
 
     assert resolved.ingestion is not None
     assert resolved.ingestion.config is not None
-    assert resolved.ingestion.config["catalog_config"] == {
-        "uri": "http://polaris:8181/api/catalog",
-        "warehouse": "floe",
-        "bucket": "floe-iceberg",
-    }
+    assert "catalog_config" not in resolved.ingestion.config
     assert resolved.ingestion.config["retry_config"] == {
         "max_retries": 5,
         "initial_delay_seconds": 2.0,
@@ -148,32 +137,22 @@ def test_resolve_ingestion_config_fails_for_non_dlt_ingestion_plugin() -> None:
     }
 
 
-def test_resolve_ingestion_config_fails_without_dlt_destination_catalog_config() -> None:
-    """Product dlt ingestion requires platform-owned Iceberg destination settings."""
-    from floe_core.compilation.errors import CompilationException
+def test_resolve_ingestion_config_does_not_validate_destination_catalog_config() -> None:
+    """Destination compatibility is handled by deployment composition."""
     from floe_core.compilation.resolver import resolve_ingestion_config
 
     plugins = ResolvedPlugins(
         compute=PluginRef(type="duckdb", version="0.9.0", config={}),
         orchestrator=PluginRef(type="dagster", version="1.5.0", config={}),
-        ingestion=PluginRef(
-            type="dlt",
-            version="0.1.0",
-            config={"catalog_config": {"uri": "http://polaris:8181/api/catalog"}},
-        ),
+        ingestion=PluginRef(type="dlt", version="0.1.0", config={}),
     )
 
-    with pytest.raises(CompilationException) as exc_info:
-        resolve_ingestion_config(_spec_with_ingestion(), plugins)
+    resolved = resolve_ingestion_config(_spec_with_ingestion(), plugins)
 
-    assert exc_info.value.error.code == "E201"
-    assert exc_info.value.error.message == (
-        "dlt product ingestion requires an Iceberg destination catalog_config"
-    )
-    assert exc_info.value.error.context == {
-        "product": "orders-product",
-        "missing": ["bucket", "warehouse"],
-    }
+    assert resolved.ingestion is not None
+    assert resolved.ingestion.config is not None
+    assert resolved.ingestion.config["sources"][0]["source_type"] == "filesystem"
+    assert "catalog_config" not in resolved.ingestion.config
 
 
 def test_compile_pipeline_merges_product_ingestion_sources(
@@ -237,11 +216,7 @@ plugins:
 
     assert artifacts.plugins.ingestion is not None
     assert artifacts.plugins.ingestion.config is not None
-    assert artifacts.plugins.ingestion.config["catalog_config"] == {
-        "uri": "http://polaris:8181/api/catalog",
-        "warehouse": "floe",
-        "bucket": "floe-iceberg",
-    }
+    assert "catalog_config" not in artifacts.plugins.ingestion.config
     assert artifacts.plugins.ingestion.config["sources"] == [
         {
             "name": "orders_csv",
@@ -353,9 +328,5 @@ def test_manifest_selected_dlt_receives_product_ingestion_sources() -> None:
 
     assert resolved.ingestion is not None
     assert resolved.ingestion.config is not None
-    assert resolved.ingestion.config["catalog_config"] == {
-        "uri": "http://polaris:8181/api/catalog",
-        "warehouse": "floe",
-        "bucket": "floe-iceberg",
-    }
+    assert "catalog_config" not in resolved.ingestion.config
     assert resolved.ingestion.config["sources"][0]["source_type"] == "filesystem"

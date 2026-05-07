@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any
 import fsspec
 import httpx
 import structlog
+from floe_core.composition.models import PluginRequirements, RequirementSet
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.ingestion import (
     IngestionConfig,
@@ -40,6 +41,12 @@ from floe_core.plugins.ingestion import (
     IngestionResult,
 )
 from floe_core.plugins.sink import EgressResult, SinkConfig, SinkConnector
+from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
+    DltIngestionBinding,
+    IngestionDeploymentBinding,
+    StorageDeploymentBinding,
+)
 from floe_core.telemetry.sanitization import sanitize_error_message
 
 from floe_ingestion_dlt.config import (
@@ -179,6 +186,73 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         from floe_ingestion_dlt.config import DltIngestionConfig
 
         return DltIngestionConfig
+
+    def get_composition_requirements(self) -> PluginRequirements:
+        """Return storage and catalog requirements for dlt Iceberg ingestion."""
+        return PluginRequirements(
+            plugin_type="ingestion",
+            plugin_name=self.name,
+            requirements=RequirementSet(
+                protocols=["s3-compatible", "s3"],
+                credential_modes=["kubernetes-secret", "environment", "workload-identity"],
+                catalog_providers=["iceberg-rest"],
+                table_formats=["iceberg"],
+            ),
+        )
+
+    def build_deployment_binding(
+        self,
+        *,
+        storage: StorageDeploymentBinding,
+        catalog: CatalogDeploymentBinding,
+    ) -> IngestionDeploymentBinding:
+        """Translate composed storage/catalog bindings into dlt runtime config."""
+        if storage.warehouse is None:
+            raise PipelineConfigurationError("dlt ingestion requires storage warehouse binding")
+        if catalog.provider != "polaris":
+            raise PipelineConfigurationError(
+                "dlt ingestion currently supports polaris catalog bindings, "
+                f"got {catalog.provider!r}"
+            )
+
+        source_filesystem = {
+            "endpoint_url": storage.endpoint.internal_url,
+            "region_name": storage.endpoint.region,
+            "s3_url_style": "path" if storage.endpoint.path_style_access else "virtual",
+        }
+        destination_filesystem = {
+            "bucket_url": storage.warehouse.uri,
+            "credentials": {
+                "endpoint_url": storage.endpoint.internal_url,
+                "region_name": storage.endpoint.region,
+            },
+        }
+        if storage.endpoint.path_style_access:
+            destination_filesystem["credentials"]["s3_url_style"] = "path"
+
+        iceberg_catalog_env = self._iceberg_environment(
+            {
+                "catalog_name": "polaris",
+                "uri": catalog.polaris.endpoint_internal,
+                "warehouse": catalog.polaris.warehouse,
+                "s3_endpoint": storage.endpoint.internal_url,
+                "s3_region": storage.endpoint.region,
+                "s3_path_style_access": storage.endpoint.path_style_access,
+            }
+        )
+
+        return IngestionDeploymentBinding(
+            provider="dlt",
+            dlt=DltIngestionBinding(
+                plugin_name=self.name,
+                destination="filesystem",
+                table_format="iceberg",
+                source_filesystem=source_filesystem,
+                destination_filesystem=destination_filesystem,
+                iceberg_catalog_env=iceberg_catalog_env,
+                env_refs=dict(storage.runtime.env_refs),
+            ),
+        )
 
     def startup(self) -> None:
         """Initialize the plugin (FR-008, FR-009).

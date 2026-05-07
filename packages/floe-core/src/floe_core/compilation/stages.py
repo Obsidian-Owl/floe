@@ -415,7 +415,74 @@ def _build_storage_deployment_binding(
             )
         ) from exc
 
-    return DeploymentConfig(storage=storage_binding, catalog=catalog_binding)
+    catalog_capabilities = PluginCapabilities(
+        plugin_type="catalog",
+        plugin_name=catalog_plugin.name,
+        capabilities=CapabilitySet(
+            catalog_providers=["iceberg-rest"] if catalog_plugin.name == "polaris" else [],
+            table_formats=["iceberg"],
+        ),
+    )
+
+    ingestion_binding = None
+    if plugins.ingestion is not None:
+        try:
+            registry.configure(
+                PluginType.INGESTION,
+                plugins.ingestion.type,
+                plugins.ingestion.config or {},
+            )
+            ingestion_plugin = registry.get(PluginType.INGESTION, plugins.ingestion.type)
+        except PluginError as exc:
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code="E201",
+                    message=f"Ingestion plugin {plugins.ingestion.type!r} could not be resolved",
+                    suggestion=(
+                        "Install the ingestion plugin package and verify plugins.ingestion.type"
+                    ),
+                    context={"ingestion_plugin": plugins.ingestion.type},
+                )
+            ) from exc
+
+        requirements = getattr(ingestion_plugin, "get_composition_requirements", lambda: None)()
+        if requirements is not None:
+            composition = CompositionResolver().validate(
+                [storage_capabilities, catalog_capabilities],
+                [requirements],
+            )
+            if not composition.valid:
+                issues = [issue.model_dump(mode="json") for issue in composition.issues]
+                first_issue = composition.issues[0]
+                raise CompilationException(
+                    CompilationError(
+                        stage=CompilationStage.RESOLVE,
+                        code=first_issue.code,
+                        message=first_issue.message,
+                        suggestion=(
+                            "Choose compatible storage, catalog, and ingestion plugins, "
+                            "or update their configuration so ingestion requirements are satisfied."
+                        ),
+                        context={
+                            "composition_issues": issues,
+                            "storage_plugin": plugins.storage.type,
+                            "catalog_plugin": plugins.catalog.type,
+                            "ingestion_plugin": plugins.ingestion.type,
+                        },
+                    )
+                )
+        if catalog_binding is not None:
+            ingestion_binding = ingestion_plugin.build_deployment_binding(
+                storage=storage_binding,
+                catalog=catalog_binding,
+            )
+
+    return DeploymentConfig(
+        storage=storage_binding,
+        catalog=catalog_binding,
+        ingestion=ingestion_binding,
+    )
 
 
 def compile_pipeline(

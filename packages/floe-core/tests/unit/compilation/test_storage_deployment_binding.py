@@ -470,3 +470,29 @@ def test_composition_resolver_rejects_dlt_without_catalog() -> None:
     assert not result.valid
     assert result.issues[0].code == "COMPOSITION_CATALOG_MISSING"
     assert result.issues[0].plugins == ["ingestion:dlt"]
+
+
+def test_demo_compile_emits_dlt_ingestion_deployment_binding() -> None:
+    """Demo compilation derives dlt binding from storage/catalog composition."""
+    artifacts = compile_pipeline(
+        ROOT / "demo" / "customer-360" / "floe.yaml",
+        ROOT / "demo" / "manifest.yaml",
+        emit_lineage=False,
+    )
+
+    assert artifacts.deployment is not None
+    assert artifacts.deployment.ingestion is not None
+    dlt = artifacts.deployment.ingestion.dlt
+    assert dlt.destination == "filesystem"
+    assert dlt.table_format == "iceberg"
+    assert dlt.destination_filesystem["bucket_url"] == "s3://floe-iceberg"
+    assert dlt.destination_filesystem["credentials"]["endpoint_url"] == (
+        "http://floe-platform-minio:9000"
+    )
+    assert dlt.iceberg_catalog_env["ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE"] == "rest"
+    assert dlt.iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__WAREHOUSE"] == "floe-demo"
+    assert artifacts.deployment.catalog is not None
+    assert artifacts.deployment.catalog.polaris.warehouse == "floe-demo"
+    assert artifacts.plugins.ingestion is not None
+    assert artifacts.plugins.ingestion.config is not None
+    assert "catalog_config" not in artifacts.plugins.ingestion.config

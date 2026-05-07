@@ -167,7 +167,7 @@ def resolve_ingestion_config(spec: FloeSpec, plugins: ResolvedPlugins) -> Resolv
         )
 
     existing_config = dict(plugins.ingestion.config or {})
-    _validate_dlt_destination_config(spec, existing_config)
+    existing_config.pop("catalog_config", None)
     existing_config["sources"] = [
         _resolve_ingestion_source_config(source) for source in spec.ingestion.sources
     ]

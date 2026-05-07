@@ -19,6 +19,7 @@ Example:
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -50,6 +51,7 @@ class IngestionConfig:
     destination_table: str = ""
     write_mode: str = "append"
     schema_contract: str = "evolve"
+    runtime_binding: Mapping[str, Any] | None = None
 
 
 @dataclass
@@ -187,6 +189,21 @@ class IngestionPlugin(PluginMetadata):
             10000
         """
         ...
+
+    def get_composition_requirements(self) -> Any:
+        """Return peer plugin requirements for deployment composition."""
+        return None
+
+    def build_deployment_binding(
+        self,
+        *,
+        storage: Any,
+        catalog: Any,
+    ) -> Any:
+        """Build secret-free ingestion deployment binding from composed plugins."""
+        raise NotImplementedError(
+            f"{self.name} does not implement ingestion deployment binding generation"
+        )
 
     @abstractmethod
     def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
