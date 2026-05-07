@@ -21,6 +21,8 @@ class CompositionResolver:
         """Return compatibility issues for the selected plugin graph."""
         issues: list[CompositionIssue] = []
         storage = next((item for item in capabilities if item.plugin_type == "storage"), None)
+        secrets = next((item for item in capabilities if item.plugin_type == "secrets"), None)
+        identity = next((item for item in capabilities if item.plugin_type == "identity"), None)
 
         for requirement in requirements:
             if requirement.plugin_type != "catalog":
@@ -39,6 +41,9 @@ class CompositionResolver:
                 )
                 continue
             issues.extend(self._validate_storage_for_catalog(storage, requirement))
+            issues.extend(self._validate_secret_projection(secrets, requirement))
+            if self._requires_identity_validation(storage, requirement):
+                issues.extend(self._validate_identity(identity, requirement))
 
         return CompositionValidationResult(
             valid=not any(issue.severity == "error" for issue in issues),
@@ -83,4 +88,101 @@ class CompositionResolver:
                 )
             )
 
+        return issues
+
+    def _requires_identity_validation(
+        self,
+        storage: PluginCapabilities,
+        requirement: PluginRequirements,
+    ) -> bool:
+        """Return whether selected storage/catalog modes require identity validation."""
+        storage_modes = set(storage.capabilities.credential_modes)
+        required_modes = set(requirement.requirements.credential_modes)
+        workload_identity_selected = "workload-identity" in storage_modes.intersection(
+            required_modes
+        )
+        return workload_identity_selected or bool(requirement.requirements.identity_modes)
+
+    def _validate_secret_projection(
+        self,
+        secrets: PluginCapabilities | None,
+        requirement: PluginRequirements,
+    ) -> list[CompositionIssue]:
+        """Validate required secret projection modes against secrets provider."""
+        issues: list[CompositionIssue] = []
+        for mode in requirement.requirements.secret_projection_modes:
+            if mode in ("kubernetes-secret", "environment"):
+                if secrets is None:
+                    continue
+            if secrets is None:
+                issues.append(
+                    CompositionIssue(
+                        severity="error",
+                        code="COMPOSITION_SECRET_PROVIDER_MISSING",
+                        message=(
+                            f"catalog {requirement.plugin_name} requires secret projection "
+                            f"mode {mode} but no secrets plugin was selected"
+                        ),
+                        plugins=[requirement.ref],
+                    )
+                )
+                continue
+            provided_modes = list(secrets.capabilities.secret_projection_modes)
+            if mode not in provided_modes:
+                issues.append(
+                    CompositionIssue(
+                        severity="error",
+                        code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
+                        message=(
+                            f"catalog {requirement.plugin_name} requires secret projection "
+                            f"mode {mode}; secrets {secrets.plugin_name} provides {provided_modes}"
+                        ),
+                        plugins=[secrets.ref, requirement.ref],
+                    )
+                )
+        return issues
+
+    def _validate_identity(
+        self,
+        identity: PluginCapabilities | None,
+        requirement: PluginRequirements,
+    ) -> list[CompositionIssue]:
+        """Validate required workload identity modes against identity provider."""
+        issues: list[CompositionIssue] = []
+        requires_workload_identity = (
+            "workload-identity" in requirement.requirements.credential_modes
+        )
+        required_modes = list(requirement.requirements.identity_modes)
+        if not requires_workload_identity and not required_modes:
+            return issues
+
+        if identity is None:
+            mode = required_modes[0] if required_modes else "workload-identity"
+            issues.append(
+                CompositionIssue(
+                    severity="error",
+                    code="COMPOSITION_IDENTITY_PROVIDER_MISSING",
+                    message=(
+                        f"catalog {requirement.plugin_name} requires identity mode {mode} "
+                        "but no identity plugin was selected"
+                    ),
+                    plugins=[requirement.ref],
+                )
+            )
+            return issues
+
+        provided_modes = list(identity.capabilities.identity_modes)
+        for mode in required_modes:
+            if mode not in provided_modes:
+                issues.append(
+                    CompositionIssue(
+                        severity="error",
+                        code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+                        message=(
+                            f"catalog {requirement.plugin_name} requires identity mode {mode}; "
+                            f"identity {identity.plugin_name} provides {provided_modes}"
+                        ),
+                        plugins=[identity.ref, requirement.ref],
+                    )
+                )
         return issues

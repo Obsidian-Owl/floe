@@ -187,3 +187,241 @@ def test_requirement_set_accepts_security_composition_modes() -> None:
     assert requirements.secret_projection_modes == ["external-secret-sync"]
     assert requirements.identity_modes == ["gcp-workload-identity"]
     assert requirements.providers == ["gcp"]
+
+
+def test_resolver_accepts_kubernetes_secret_with_implicit_baseline() -> None:
+    """Existing MinIO and Polaris path must stay valid without secrets plugin."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="minio",
+        capabilities=CapabilitySet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+            secret_projection_modes=["kubernetes-secret"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="polaris",
+        requirements=RequirementSet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+            secret_projection_modes=["kubernetes-secret"],
+        ),
+    )
+
+    result = resolver.validate([storage], [catalog])
+
+    assert result.valid is True
+    assert result.issues == []
+
+
+def test_resolver_rejects_external_secret_sync_without_secrets_plugin() -> None:
+    """External secret sync requires an explicit secrets provider."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="s3",
+        capabilities=CapabilitySet(
+            protocols=["s3"],
+            credential_modes=["external-secret-sync"],
+            secret_projection_modes=["external-secret-sync"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="glue",
+        requirements=RequirementSet(
+            protocols=["s3"],
+            credential_modes=["external-secret-sync"],
+            secret_projection_modes=["external-secret-sync"],
+        ),
+    )
+
+    result = resolver.validate([storage], [catalog])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_SECRET_PROVIDER_MISSING",
+            message=(
+                "catalog glue requires secret projection mode external-secret-sync "
+                "but no secrets plugin was selected"
+            ),
+            plugins=["catalog:glue"],
+        )
+    ]
+
+
+def test_resolver_accepts_external_secret_sync_with_matching_secrets_plugin() -> None:
+    """External secret sync succeeds when selected secrets plugin supports it."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="s3",
+        capabilities=CapabilitySet(
+            protocols=["s3"],
+            credential_modes=["external-secret-sync"],
+            secret_projection_modes=["external-secret-sync"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="glue",
+        requirements=RequirementSet(
+            protocols=["s3"],
+            credential_modes=["external-secret-sync"],
+            secret_projection_modes=["external-secret-sync"],
+        ),
+    )
+    secrets = PluginCapabilities(
+        plugin_type="secrets",
+        plugin_name="infisical",
+        capabilities=CapabilitySet(
+            credential_modes=["external-secret-sync"],
+            secret_projection_modes=["external-secret-sync"],
+            providers=["infisical"],
+        ),
+    )
+
+    result = resolver.validate([storage, secrets], [catalog])
+
+    assert result.valid is True
+    assert result.issues == []
+
+
+def test_resolver_rejects_unsupported_secret_projection_mode() -> None:
+    """Selected secrets provider must support the requested projection mode."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="azure-blob",
+        capabilities=CapabilitySet(
+            protocols=["azure-blob"],
+            credential_modes=["csi-secret-volume"],
+            secret_projection_modes=["csi-secret-volume"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="rest",
+        requirements=RequirementSet(
+            protocols=["azure-blob"],
+            credential_modes=["csi-secret-volume"],
+            secret_projection_modes=["csi-secret-volume"],
+        ),
+    )
+    secrets = PluginCapabilities(
+        plugin_type="secrets",
+        plugin_name="infisical",
+        capabilities=CapabilitySet(
+            credential_modes=["external-secret-sync"],
+            secret_projection_modes=["external-secret-sync"],
+            providers=["infisical"],
+        ),
+    )
+
+    result = resolver.validate([storage, secrets], [catalog])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
+            message=(
+                "catalog rest requires secret projection mode csi-secret-volume; "
+                "secrets infisical provides ['external-secret-sync']"
+            ),
+            plugins=["secrets:infisical", "catalog:rest"],
+        )
+    ]
+
+
+def test_resolver_rejects_identity_mode_without_identity_plugin() -> None:
+    """Workload identity requires an explicit identity provider."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="s3",
+        capabilities=CapabilitySet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+            providers=["aws"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="glue",
+        requirements=RequirementSet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+            providers=["aws"],
+        ),
+    )
+
+    result = resolver.validate([storage], [catalog])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_IDENTITY_PROVIDER_MISSING",
+            message=(
+                "catalog glue requires identity mode aws-irsa but no identity plugin was selected"
+            ),
+            plugins=["catalog:glue"],
+        )
+    ]
+
+
+def test_resolver_rejects_unsupported_identity_mode() -> None:
+    """Selected identity provider must support the requested identity mode."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="s3",
+        capabilities=CapabilitySet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+            providers=["aws"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="glue",
+        requirements=RequirementSet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+            providers=["aws"],
+        ),
+    )
+    identity = PluginCapabilities(
+        plugin_type="identity",
+        plugin_name="keycloak",
+        capabilities=CapabilitySet(
+            credential_modes=["workload-identity"],
+            identity_modes=["oidc-federation"],
+            providers=["oidc"],
+        ),
+    )
+
+    result = resolver.validate([storage, identity], [catalog])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+            message=(
+                "catalog glue requires identity mode aws-irsa; "
+                "identity keycloak provides ['oidc-federation']"
+            ),
+            plugins=["identity:keycloak", "catalog:glue"],
+        )
+    ]
