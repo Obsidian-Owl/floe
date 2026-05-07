@@ -539,15 +539,38 @@ def _build_storage_deployment_binding(
             catalog_config,
         )
         catalog_plugin = registry.get(PluginType.CATALOG, plugins.catalog.type)
-    except PluginError as exc:
+    except PluginConfigurationError as exc:
         raise CompilationException(
             CompilationError(
                 stage=CompilationStage.RESOLVE,
-                code="E201",
+                code=COMPOSITION_PLUGIN_CONFIG_INVALID,
+                message=f"Catalog plugin {plugins.catalog.type!r} configuration is invalid",
+                suggestion="Fix plugins.catalog.config in the platform manifest",
+                context={"catalog_plugin": plugins.catalog.type},
+            )
+        ) from exc
+    except PluginNotFoundError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_MISSING,
                 message=f"Catalog plugin {plugins.catalog.type!r} could not be resolved",
                 suggestion=(
                     "Install the catalog plugin package and verify "
                     "plugins.catalog.type in the platform manifest"
+                ),
+                context={"catalog_plugin": plugins.catalog.type},
+            )
+        ) from exc
+    except PluginError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_MISSING,
+                message=f"Catalog plugin {plugins.catalog.type!r} could not be loaded",
+                suggestion=(
+                    "Install a compatible catalog plugin package and verify "
+                    "its entry point registration"
                 ),
                 context={"catalog_plugin": plugins.catalog.type},
             )
@@ -557,7 +580,7 @@ def _build_storage_deployment_binding(
         raise CompilationException(
             CompilationError(
                 stage=CompilationStage.RESOLVE,
-                code="E201",
+                code=COMPOSITION_PLUGIN_INTERFACE_INVALID,
                 message=f"Plugin {plugins.catalog.type!r} is not a CatalogPlugin",
                 suggestion="Use a plugin registered under the floe.catalogs entry point group",
                 context={"catalog_plugin": plugins.catalog.type},
@@ -594,11 +617,29 @@ def _build_storage_deployment_binding(
         catalog_binding = catalog_plugin.build_catalog_deployment(storage_binding)
     except CompilationException:
         raise
-    except (PluginError, NotImplementedError, ValueError) as exc:
+    except NotImplementedError as exc:
         raise CompilationException(
             CompilationError(
                 stage=CompilationStage.RESOLVE,
-                code="E201",
+                code=COMPOSITION_DEPLOYMENT_BINDING_MISSING,
+                message=(
+                    f"Catalog plugin {plugins.catalog.type!r} does not provide deployment binding"
+                ),
+                suggestion=(
+                    "Upgrade or fix the catalog plugin so it implements "
+                    "get_storage_requirements() and build_catalog_deployment()"
+                ),
+                context={
+                    "storage_plugin": plugins.storage.type,
+                    "catalog_plugin": plugins.catalog.type,
+                },
+            )
+        ) from exc
+    except (PluginError, ValueError) as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_CONFIG_INVALID,
                 message=(
                     f"Catalog plugin {plugins.catalog.type!r} could not build deployment binding"
                 ),
