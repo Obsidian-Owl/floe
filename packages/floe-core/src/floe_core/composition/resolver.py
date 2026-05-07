@@ -151,7 +151,9 @@ class CompositionResolver:
         if not compatible_modes:
             return issues
 
-        if any(mode in ("kubernetes-secret", "environment") for mode in compatible_modes):
+        if secrets is None and any(
+            mode in ("kubernetes-secret", "environment") for mode in compatible_modes
+        ):
             return issues
 
         mode = compatible_modes[0]

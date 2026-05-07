@@ -680,3 +680,50 @@ def test_resolver_rejects_workload_identity_without_catalog_identity_modes() -> 
             plugins=["storage:s3", "identity:aws", "catalog:glue"],
         )
     ]
+
+
+def test_resolver_rejects_explicit_secrets_plugin_without_kubernetes_secret_support() -> None:
+    """Explicit secrets plugin must support Kubernetes Secret projection when selected."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="minio",
+        capabilities=CapabilitySet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+            secret_projection_modes=["kubernetes-secret"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="polaris",
+        requirements=RequirementSet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+            secret_projection_modes=["kubernetes-secret"],
+        ),
+    )
+    secrets = PluginCapabilities(
+        plugin_type="secrets",
+        plugin_name="infisical",
+        capabilities=CapabilitySet(
+            credential_modes=["external-secret-sync"],
+            secret_projection_modes=["external-secret-sync"],
+            providers=["infisical"],
+        ),
+    )
+
+    result = resolver.validate([storage, secrets], [catalog])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
+            message=(
+                "catalog polaris requires secret projection mode kubernetes-secret; "
+                "secrets infisical provides ['external-secret-sync']"
+            ),
+            plugins=["secrets:infisical", "catalog:polaris"],
+        )
+    ]
