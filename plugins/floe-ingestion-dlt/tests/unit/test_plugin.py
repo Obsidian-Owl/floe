@@ -7,6 +7,7 @@ the expected behavior for T021 and T022 implementation.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
@@ -35,6 +36,13 @@ def _runtime_binding() -> dict[str, Any]:
         "destination": "filesystem",
         "destination_filesystem": {"bucket_url": "file:///tmp/floe-test"},
     }
+
+
+def _bound_mock_pipeline() -> MagicMock:
+    """Return a mock dlt pipeline carrying the required floe runtime binding."""
+    pipeline = MagicMock()
+    pipeline._floe_dlt_runtime_binding = _runtime_binding()
+    return pipeline
 
 
 class TestCreatePipeline:
@@ -140,7 +148,7 @@ class TestRunPipeline:
         Given a mock pipeline object, when run(pipeline) is called, it
         returns an IngestionResult with success=True.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         result = dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
@@ -154,7 +162,7 @@ class TestRunPipeline:
         Given a successful run, the IngestionResult has rows_loaded >= 0,
         bytes_written >= 0, duration_seconds >= 0.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         result = dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
@@ -169,7 +177,7 @@ class TestRunPipeline:
         Given a pipeline that fails (mock), run returns
         IngestionResult(success=False, errors=[...]).
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         # Configure mock to raise exception during execution
         mock_pipeline.run.side_effect = Exception("Pipeline execution failed")
 
@@ -178,10 +186,45 @@ class TestRunPipeline:
         assert len(result.errors) > 0
         assert "Pipeline execution failed" in result.errors[0]
 
+    @pytest.mark.requirement("4F-FR-015")
+    def test_run_missing_runtime_binding_returns_failure(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Manual pipelines without floe runtime binding fail before dlt execution."""
+        run_calls = 0
+
+        def run(_source: object, **_kwargs: Any) -> object:
+            nonlocal run_calls
+            run_calls += 1
+            return SimpleNamespace(metrics={})
+
+        pipeline = SimpleNamespace(pipeline_name="manual", run=run)
+
+        result = dlt_plugin.run(pipeline, source=[], write_disposition="append")
+
+        assert result.success is False
+        assert any("dlt runtime binding is required" in error for error in result.errors)
+        assert run_calls == 0
+
+    @pytest.mark.requirement("4F-FR-015")
+    def test_run_empty_runtime_binding_returns_failure(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Pipelines carrying an empty runtime binding fail before dlt execution."""
+        pipeline = _bound_mock_pipeline()
+        pipeline._floe_dlt_runtime_binding = {}
+        pipeline.run.return_value = MagicMock(metrics={})
+
+        result = dlt_plugin.run(pipeline, source=[], write_disposition="append")
+
+        assert result.success is False
+        assert any("dlt runtime binding is required" in error for error in result.errors)
+        pipeline.run.assert_not_called()
+
     @pytest.mark.requirement("4F-FR-049")
     def test_run_failure_sanitizes_source_context(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Source error context must not leak credential-bearing source paths."""
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.side_effect = Exception(
             "extract failed: password=exception-secret-token"  # pragma: allowlist secret
         )
@@ -214,7 +257,7 @@ class TestRunPipeline:
         Given a pipeline with empty source data, run returns
         IngestionResult(success=True, rows_loaded=0).
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         # Configure mock to return empty result
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
@@ -230,7 +273,7 @@ class TestRunPipeline:
         startup is required.
         """
         plugin = DltIngestionPlugin()
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
 
         with pytest.raises(RuntimeError, match="Plugin must be started"):
             plugin.run(mock_pipeline)
@@ -242,7 +285,7 @@ class TestRunPipeline:
         Verify OTel span is emitted with name 'run_pipeline' and includes
         result attributes like rows_loaded, bytes_written, success.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         # Just verify run doesn't raise and returns result - ingestion_span is tested separately
@@ -256,7 +299,7 @@ class TestRunPipeline:
         Given write_disposition="append" kwarg, when run() is called,
         then pipeline.run() is invoked with write_disposition="append".
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
@@ -273,7 +316,7 @@ class TestRunPipeline:
         Given write_disposition="replace" kwarg, when run() is called,
         then pipeline.run() is invoked with write_disposition="replace".
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(mock_pipeline, source=[], write_disposition="replace")
@@ -290,7 +333,7 @@ class TestRunPipeline:
         Given write_disposition="merge" kwarg, when run() is called,
         then pipeline.run() is invoked with write_disposition="merge".
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(mock_pipeline, source=[], write_disposition="merge")
@@ -307,7 +350,7 @@ class TestRunPipeline:
         Given table_name kwarg with write_disposition="merge", when run()
         is called, then both parameters are passed to pipeline.run().
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(
@@ -331,7 +374,7 @@ class TestRunPipeline:
         pipeline.run() is invoked with schema_contract dict with all fields
         set to "evolve".
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(
@@ -359,7 +402,7 @@ class TestRunPipeline:
         pipeline.run() is invoked with schema_contract dict with all fields
         set to "freeze".
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(
@@ -387,7 +430,7 @@ class TestRunPipeline:
         pipeline.run() is invoked with schema_contract dict with columns and
         data_type set to "discard_value", tables set to "evolve".
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(
@@ -415,7 +458,7 @@ class TestRunPipeline:
         in message, when run() is called, then it returns
         IngestionResult(success=False) with SchemaContractViolation info in errors.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         # Configure mock to raise schema contract violation
         mock_pipeline.run.side_effect = Exception(
             "Schema contract violation: column 'new_field' not allowed"
@@ -440,7 +483,7 @@ class TestRunPipeline:
         Given no schema_contract kwarg, when run() is called, then
         pipeline.run() is invoked with schema_contract dict set to "evolve" mode.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         # Call run() without schema_contract kwarg
@@ -576,7 +619,7 @@ class TestIncrementalLoading:
         Given cursor_field kwarg is passed, when run() is called, then it
         accepts the parameter without error and returns IngestionResult.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         result = dlt_plugin.run(
@@ -597,7 +640,7 @@ class TestIncrementalLoading:
         Given primary_key and write_disposition="merge" kwargs, when run()
         is called, then primary_key is passed to pipeline.run().
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(
@@ -620,7 +663,7 @@ class TestIncrementalLoading:
         Given no cursor_field kwarg (non-incremental mode), when run() is
         called, then it proceeds normally and returns IngestionResult.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         result = dlt_plugin.run(
@@ -640,7 +683,7 @@ class TestIncrementalLoading:
         Given pipeline.run() returns metrics, when run() is called, then
         IngestionResult.rows_loaded reflects the metrics extraction logic.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         result = dlt_plugin.run(
@@ -700,7 +743,7 @@ class TestOTelSpanEmission:
         """
         from unittest.mock import patch
 
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         with patch("floe_ingestion_dlt.plugin.get_tracer") as mock_get_tracer:
@@ -728,7 +771,7 @@ class TestOTelSpanEmission:
         """
         from unittest.mock import patch
 
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         with patch("floe_ingestion_dlt.plugin.record_ingestion_result") as mock_record:
@@ -750,7 +793,7 @@ class TestOTelSpanEmission:
         """
         from unittest.mock import patch
 
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.side_effect = Exception("Pipeline execution failed")
 
         with patch("floe_ingestion_dlt.plugin.record_ingestion_error") as mock_record:
@@ -843,7 +886,7 @@ class TestStructuredLogging:
         """
         from unittest.mock import patch
 
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.pipeline_name = "test_pipeline"
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
@@ -869,7 +912,7 @@ class TestStructuredLogging:
         """
         from unittest.mock import patch
 
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.pipeline_name = "test_pipeline"
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
@@ -897,7 +940,7 @@ class TestStructuredLogging:
         """
         from unittest.mock import patch
 
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.pipeline_name = "test_pipeline"
         mock_pipeline.run.side_effect = Exception("Pipeline execution failed")
 

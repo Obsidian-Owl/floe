@@ -1,33 +1,16 @@
 """Integration tests for DltIngestionPlugin health check.
 
 These tests validate that the DltIngestionPlugin health_check() method
-correctly reports plugin health and meets all health check requirements.
+correctly reports import-only runtime health without probing catalog or
+object-storage services.
 
 Requirements Covered:
 - 4F-FR-007: Plugin health_check() method
 - CR-002: Plugin health_check contract
 - SC-007: Health checks respond within 1 second
 
-NOTE: The current DltIngestionPlugin.health_check() implementation does NOT
-yet support the timeout parameter, response_time_ms, or checked_at fields.
-These will be implemented in T017 (Phase 4).
-
-The following tests from BaseHealthCheckTests are expected to FAIL:
-- test_health_check_includes_response_time
-- test_health_check_includes_checked_at_timestamp
-- test_health_check_accepts_timeout_parameter
-- test_health_check_rejects_invalid_timeout_low
-- test_health_check_rejects_invalid_timeout_high
-- test_health_check_accepts_boundary_timeout_min
-- test_health_check_accepts_boundary_timeout_max
-
-The following tests SHOULD PASS with current implementation:
-- test_health_check_exists
-- test_health_check_returns_health_status
-- test_health_check_reports_healthy_when_connected
-- test_health_check_reports_unhealthy_when_not_connected
-- test_health_check_does_not_raise_when_unhealthy
-- test_health_check_includes_message
+The plugin-level health check intentionally avoids network reachability probes;
+configured service checks are covered by targeted helpers and tests.
 """
 
 from __future__ import annotations
@@ -52,9 +35,9 @@ class TestDltIngestionHealthCheck(BaseHealthCheckTests):
     These tests validate:
     - HealthStatus return type
     - Healthy/unhealthy state reporting
-    - Response time capture (T017)
-    - Timeout handling (T017)
-    - Timestamp inclusion (T017)
+    - Response time capture
+    - Timeout handling
+    - Timestamp inclusion
     - Unconnected state handling
     """
 

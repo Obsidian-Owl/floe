@@ -12,7 +12,7 @@ Requirements Covered:
     - FR-004: Plugin metadata (name, version, floe_api_version)
     - FR-005: is_external=False
     - FR-006: get_config_schema returns DltIngestionConfig
-    - FR-007: health_check() with dlt import + catalog check
+    - FR-007: health_check() import-only, non-network runtime health
     - FR-008: startup() and shutdown() lifecycle
     - FR-009: Source package validation at startup
     - FR-010: Plugin capabilities metadata
@@ -630,6 +630,10 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 runtime_binding = self._normalize_runtime_binding(
                     getattr(pipeline, "_floe_dlt_runtime_binding", None)
                 )
+                if not runtime_binding:
+                    raise PipelineConfigurationError(
+                        "dlt runtime binding is required before pipeline execution"
+                    )
                 with self._temporary_runtime_binding_environment(runtime_binding):
                     load_info = pipeline.run(source, **run_kwargs)
 
