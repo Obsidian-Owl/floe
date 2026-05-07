@@ -118,12 +118,37 @@ def _runtime_binding(catalog_config: dict[str, Any]) -> dict[str, Any]:
             "region_name": catalog_config["s3_region"],
             "s3_url_style": "path" if catalog_config["s3_path_style_access"] else "virtual",
         },
-        "iceberg_catalog_env": DltIngestionPlugin()._iceberg_environment(catalog_config),
+        "iceberg_catalog_env": _iceberg_catalog_env(catalog_config),
         "env_refs": {
             "accessKeyId": "AWS_ACCESS_KEY_ID",
             "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
         },
     }
+
+
+def _iceberg_catalog_env(catalog_config: dict[str, Any]) -> dict[str, str]:
+    """Build host-reachable PyIceberg env using compiled dlt binding key shape."""
+    catalog_name = str(catalog_config.get("catalog_name", "polaris"))
+    env_catalog = catalog_name.upper().replace("-", "_")
+    prefix = f"PYICEBERG_CATALOG__{env_catalog}__"
+    env = {
+        "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME": catalog_name,
+        "ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE": "rest",
+        f"{prefix}TYPE": "rest",
+        f"{prefix}URI": str(catalog_config["uri"]),
+        f"{prefix}WAREHOUSE": str(catalog_config["warehouse"]),
+        f"{prefix}S3__ENDPOINT": str(catalog_config["s3_endpoint"]),
+        f"{prefix}S3__REGION": str(catalog_config["s3_region"]),
+    }
+    if catalog_config.get("s3_path_style_access"):
+        env[f"{prefix}S3__PATH_STYLE_ACCESS"] = "true"
+    if catalog_config.get("credential"):
+        env[f"{prefix}CREDENTIAL"] = str(catalog_config["credential"])
+    if catalog_config.get("scope"):
+        env[f"{prefix}SCOPE"] = str(catalog_config["scope"])
+    if catalog_config.get("oauth2_server_uri"):
+        env[f"{prefix}OAUTH2_SERVER_URI"] = str(catalog_config["oauth2_server_uri"])
+    return env
 
 
 def _configure_s3_environment(

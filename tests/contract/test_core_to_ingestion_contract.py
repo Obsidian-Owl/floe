@@ -346,9 +346,11 @@ class TestIngestionPluginRefContract:
 
         reconstructed = CompiledArtifacts.model_validate(dumped)
 
-        assert reconstructed.plugins.ingestion is not None
-        assert reconstructed.plugins.ingestion.config is not None
-        assert reconstructed.plugins.ingestion.config["sources"] == sources
+        assert reconstructed.plugins is not None
+        reconstructed_ingestion = reconstructed.plugins.ingestion
+        assert reconstructed_ingestion is not None
+        assert reconstructed_ingestion.config is not None
+        assert reconstructed_ingestion.config["sources"] == sources
 
     @pytest.mark.requirement("4F-FR-001")
     def test_customer_360_demo_declares_csv_dlt_ingestion_sources(self) -> None:
@@ -418,14 +420,14 @@ class TestIngestionPluginRefContract:
         assert set(resolved_sources) == set(expected_sources)
         for name, (path, destination_table) in expected_sources.items():
             source = resolved_sources[name]
-            expected_source = {
+            expected_resolved_source: dict[str, object] = {
                 "source_type": "filesystem",
                 "destination_table": destination_table,
                 "write_mode": "replace",
                 "schema_contract": "evolve",
                 "source_config": {"format": "csv", "path": path},
             }
-            assert expected_source.items() <= source.items()
+            assert expected_resolved_source.items() <= source.items()
 
 
 def test_compiled_artifacts_contract_includes_ingestion_deployment_binding() -> None:
@@ -445,7 +447,10 @@ def test_compiled_artifacts_contract_includes_ingestion_deployment_binding() -> 
                 source_filesystem={"endpoint_url": "http://minio:9000"},
                 destination_filesystem={"bucket_url": "s3://warehouse"},
                 iceberg_catalog_env={"PYICEBERG_CATALOG__POLARIS__TYPE": "rest"},
-                env_refs={"AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID"},
+                env_refs={
+                    "accessKeyId": "AWS_ACCESS_KEY_ID",
+                    "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+                },
             ),
         )
     )
@@ -466,8 +471,10 @@ def test_demo_compile_has_no_ingestion_catalog_config_duplication() -> None:
         emit_lineage=False,
     )
 
-    assert artifacts.plugins.ingestion is not None
-    assert artifacts.plugins.ingestion.config is not None
-    assert "catalog_config" not in artifacts.plugins.ingestion.config
+    assert artifacts.plugins is not None
+    ingestion = artifacts.plugins.ingestion
+    assert ingestion is not None
+    assert ingestion.config is not None
+    assert "catalog_config" not in ingestion.config
     assert artifacts.deployment is not None
     assert artifacts.deployment.ingestion is not None
