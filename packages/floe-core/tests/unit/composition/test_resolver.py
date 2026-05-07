@@ -425,3 +425,70 @@ def test_resolver_rejects_unsupported_identity_mode() -> None:
             plugins=["identity:keycloak", "catalog:glue"],
         )
     ]
+
+
+def test_resolver_treats_security_modes_as_alternatives_for_kubernetes_secret_path() -> None:
+    """Kubernetes Secret path should satisfy mixed-mode requirements without identity."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="minio",
+        capabilities=CapabilitySet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret", "workload-identity"],
+            secret_projection_modes=["kubernetes-secret", "external-secret-sync"],
+            identity_modes=["oidc-federation"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="polaris",
+        requirements=RequirementSet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret", "workload-identity"],
+            secret_projection_modes=["kubernetes-secret", "external-secret-sync"],
+            identity_modes=["oidc-federation"],
+        ),
+    )
+
+    result = resolver.validate([storage], [catalog])
+
+    assert result.valid is True
+    assert result.issues == []
+
+
+def test_resolver_accepts_one_matching_identity_mode_from_alternatives() -> None:
+    """One matching identity mode should satisfy an alternative mode list."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="s3",
+        capabilities=CapabilitySet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa", "aws-pod-identity"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="glue",
+        requirements=RequirementSet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa", "aws-pod-identity"],
+        ),
+    )
+    identity = PluginCapabilities(
+        plugin_type="identity",
+        plugin_name="aws",
+        capabilities=CapabilitySet(
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-pod-identity"],
+            providers=["aws"],
+        ),
+    )
+
+    result = resolver.validate([storage, identity], [catalog])
+
+    assert result.valid is True
+    assert result.issues == []
