@@ -379,16 +379,23 @@ class CredentialRef(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    source: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
+    source: Literal[
+        "kubernetes-secret",
+        "environment",
+        "workload-identity",
+        "external-secret-sync",
+        "csi-secret-volume",
+        "none",
+    ]
     name: NonEmptyString
     key: NonEmptyString | None = None
 
     @model_validator(mode="after")
     def validate_key_for_source(self) -> CredentialRef:
-        """Ensure only Kubernetes Secret credential refs carry key names."""
-        if self.source == "kubernetes-secret":
+        """Ensure only secret-backed credential refs carry key names."""
+        if self.source in {"kubernetes-secret", "external-secret-sync", "csi-secret-volume"}:
             if self.key is None:
-                msg = "kubernetes-secret credential ref requires key"
+                msg = f"{self.source} credential ref requires key"
                 raise ValueError(msg)
             return self
         if self.key is not None:
@@ -402,7 +409,14 @@ class StorageCredentialBinding(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    mode: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
+    mode: Literal[
+        "kubernetes-secret",
+        "environment",
+        "workload-identity",
+        "external-secret-sync",
+        "csi-secret-volume",
+        "none",
+    ]
     secret_ref: KubernetesSecretRef | None = None
     env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
     service_account_ref: NonEmptyString | None = None
@@ -410,12 +424,12 @@ class StorageCredentialBinding(BaseModel):
     @model_validator(mode="after")
     def validate_mode_sources(self) -> StorageCredentialBinding:
         """Ensure credential source fields match the selected mode."""
-        if self.mode == "kubernetes-secret":
+        if self.mode in {"kubernetes-secret", "external-secret-sync", "csi-secret-volume"}:
             if self.secret_ref is None:
-                msg = "kubernetes-secret credential binding requires secret_ref"
+                msg = f"{self.mode} credential binding requires secret_ref"
                 raise ValueError(msg)
             if self.env_refs or self.service_account_ref is not None:
-                msg = "kubernetes-secret credential binding only accepts secret_ref"
+                msg = f"{self.mode} credential binding only accepts secret_ref"
                 raise ValueError(msg)
             return self
         if self.mode == "environment":
@@ -441,9 +455,9 @@ class StorageCredentialBinding(BaseModel):
 
     def as_credential_ref(self, logical_key: str) -> CredentialRef:
         """Return a consumer credential reference for a logical key."""
-        if self.mode == "kubernetes-secret":
+        if self.mode in {"kubernetes-secret", "external-secret-sync", "csi-secret-volume"}:
             if self.secret_ref is None:
-                msg = "kubernetes-secret credential binding requires secret_ref"
+                msg = f"{self.mode} credential binding requires secret_ref"
                 raise ValueError(msg)
             secret_key = self.secret_ref.keys.get(logical_key)
             if secret_key is None:

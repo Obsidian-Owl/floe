@@ -982,6 +982,8 @@ class TestStorageCredentialBinding:
         "binding_kwargs",
         [
             {"mode": "kubernetes-secret"},
+            {"mode": "external-secret-sync"},
+            {"mode": "csi-secret-volume"},
             {"mode": "environment"},
             {"mode": "environment", "env_refs": {}},
             {"mode": "workload-identity"},
@@ -1036,6 +1038,38 @@ class TestStorageCredentialBinding:
                 "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
                 "service_account_ref": "storage-service-account",
             },
+            {
+                "mode": "external-secret-sync",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
+            },
+            {
+                "mode": "external-secret-sync",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+                "service_account_ref": "storage-service-account",
+            },
+            {
+                "mode": "csi-secret-volume",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
+            },
+            {
+                "mode": "csi-secret-volume",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+                "service_account_ref": "storage-service-account",
+            },
         ],
     )
     def test_mode_inconsistent_credential_bindings_are_rejected(
@@ -1081,6 +1115,8 @@ class TestStorageCredentialBinding:
                 name="storage-service-account",
                 key="accessKeyId",
             ),
+            lambda: CredentialRef(source="external-secret-sync", name="storage-credentials"),
+            lambda: CredentialRef(source="csi-secret-volume", name="storage-credentials"),
             lambda: CredentialRef(source="none", name="none", key="accessKeyId"),
         ],
     )
@@ -1102,6 +1138,26 @@ class TestStorageCredentialBinding:
         assert ref.source == "environment"
         assert ref.name == "AWS_ACCESS_KEY_ID"
         assert ref.key is None
+
+    @pytest.mark.parametrize("mode", ["external-secret-sync", "csi-secret-volume"])
+    def test_secret_projection_credential_ref_uses_configured_secret_key(
+        self,
+        mode: str,
+    ) -> None:
+        binding = StorageCredentialBinding(
+            mode=mode,
+            secret_ref=KubernetesSecretRef(
+                name="storage-credentials",
+                namespace="floe-system",
+                keys={"accessKeyId": "root-user"},
+            ),
+        )
+
+        ref = binding.as_credential_ref("accessKeyId")
+
+        assert ref.source == mode
+        assert ref.name == "storage-credentials"
+        assert ref.key == "root-user"
 
     def test_environment_credential_ref_raises_for_missing_logical_key(self) -> None:
         binding = StorageCredentialBinding(
@@ -1716,40 +1772,40 @@ class TestGovernanceLifecycleFields:
 
 
 class TestCompiledArtifactsVersionBump:
-    """Tests for AC-6: version bump to 0.12.0 with history entry."""
+    """Tests for AC-6: version bump to 0.13.0 with history entry."""
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_version_is_0_12_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.12.0'."""
-        assert COMPILED_ARTIFACTS_VERSION == "0.12.0", (
-            f"Expected version '0.12.0', got '{COMPILED_ARTIFACTS_VERSION}'"
+    def test_compiled_artifacts_version_is_0_13_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.13.0'."""
+        assert COMPILED_ARTIFACTS_VERSION == "0.13.0", (
+            f"Expected version '0.13.0', got '{COMPILED_ARTIFACTS_VERSION}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_contains_0_12_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.12.0' entry."""
-        assert "0.12.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
-            f"Version '0.12.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
+    def test_version_history_contains_0_13_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.13.0' entry."""
+        assert "0.13.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
+            f"Version '0.13.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_0_12_0_references_storage_identity_modes(self) -> None:
-        """Test that the 0.12.0 history entry mentions contract additions."""
-        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.12.0", "")
+    def test_version_history_0_13_0_references_secret_projection_modes(self) -> None:
+        """Test that the 0.13.0 history entry mentions contract additions."""
+        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.13.0", "")
         entry_lower = entry.lower()
-        assert "identity_modes" in entry_lower, (
-            f"Version 0.12.0 history entry does not reference identity_modes: '{entry}'"
+        assert "secret projection" in entry_lower, (
+            f"Version 0.13.0 history entry does not reference secret projection: '{entry}'"
         )
-        assert "storagecapabilities" in entry_lower, (
-            f"Version 0.12.0 history entry does not reference StorageCapabilities: '{entry}'"
+        assert "credential binding" in entry_lower, (
+            f"Version 0.13.0 history entry does not reference credential binding: '{entry}'"
         )
-        assert "workload identity" in entry_lower, (
-            f"Version 0.12.0 history entry does not reference workload identity: '{entry}'"
+        assert "modes" in entry_lower, (
+            f"Version 0.13.0 history entry does not reference modes: '{entry}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_default_version_is_0_12_0(self) -> None:
-        """Test that CompiledArtifacts().version defaults to '0.12.0'."""
+    def test_compiled_artifacts_default_version_is_0_13_0(self) -> None:
+        """Test that CompiledArtifacts().version defaults to '0.13.0'."""
         artifacts = CompiledArtifacts(
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
@@ -1778,7 +1834,7 @@ class TestCompiledArtifactsVersionBump:
                 lineage_namespace="test",
             ),
         )
-        assert artifacts.version == "0.12.0"
+        assert artifacts.version == "0.13.0"
 
 
 class TestGovernanceBackwardCompatibility:

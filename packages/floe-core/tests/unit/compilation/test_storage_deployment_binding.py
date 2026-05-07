@@ -151,7 +151,7 @@ class ExternalSecretStoragePlugin(StoragePlugin):
         return {}
 
     def get_deployment_binding(self) -> StorageDeploymentBinding:
-        return StorageDeploymentBinding.model_construct(
+        return StorageDeploymentBinding(
             provider="s3",
             protocol="s3",
             endpoint=StorageServiceEndpoint(
@@ -162,7 +162,7 @@ class ExternalSecretStoragePlugin(StoragePlugin):
                 path_style_access=False,
             ),
             warehouse=StorageWarehouse(uri="s3://warehouse", bucket="warehouse"),
-            credentials=StorageCredentialBinding.model_construct(
+            credentials=StorageCredentialBinding(
                 mode="external-secret-sync",
                 secret_ref=KubernetesSecretRef(
                     name="s3-credentials",
