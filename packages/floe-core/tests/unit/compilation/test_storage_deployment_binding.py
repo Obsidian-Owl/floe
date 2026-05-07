@@ -496,3 +496,74 @@ def test_demo_compile_emits_dlt_ingestion_deployment_binding() -> None:
     assert artifacts.plugins.ingestion is not None
     assert artifacts.plugins.ingestion.config is not None
     assert "catalog_config" not in artifacts.plugins.ingestion.config
+
+
+def test_dlt_ingestion_deployment_binding_ignores_host_secret_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compile-time dlt deployment binding must not read host credential env."""
+    secret_env = {
+        "POLARIS_CREDENTIAL": "compile-host-polaris-credential",
+        "AWS_ACCESS_KEY_ID": "compile-host-access-key",
+        "AWS_SECRET_ACCESS_KEY": "compile-host-secret-key",  # pragma: allowlist secret
+    }
+    for name, value in secret_env.items():
+        monkeypatch.setenv(name, value)
+
+    artifacts = compile_pipeline(
+        ROOT / "demo" / "customer-360" / "floe.yaml",
+        ROOT / "demo" / "manifest.yaml",
+        emit_lineage=False,
+    )
+
+    assert artifacts.deployment is not None
+    assert artifacts.deployment.ingestion is not None
+    dlt = artifacts.deployment.ingestion.dlt
+    payload = artifacts.deployment.ingestion.model_dump_json()
+
+    for name, value in secret_env.items():
+        assert name not in dlt.iceberg_catalog_env
+        assert value not in dlt.iceberg_catalog_env.values()
+        assert name not in payload
+        assert value not in payload
+    assert all("CREDENTIAL" not in key for key in dlt.iceberg_catalog_env)
+    assert all("ACCESS_KEY" not in key for key in dlt.iceberg_catalog_env)
+
+
+def test_ingestion_plugin_binding_failure_raises_structured_compilation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Post-resolution IngestionPlugin failures must use the compilation error model."""
+    from floe_ingestion_dlt.plugin import DltIngestionPlugin
+
+    def fail_build_deployment_binding(
+        self: DltIngestionPlugin,
+        *,
+        storage: StorageDeploymentBinding,
+        catalog: CatalogDeploymentBinding,
+    ) -> None:
+        _ = (self, storage, catalog)
+        raise ValueError("post-resolution ingestion failure")
+
+    monkeypatch.setattr(
+        DltIngestionPlugin,
+        "build_deployment_binding",
+        fail_build_deployment_binding,
+    )
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "E201"
+    assert error.message == "Ingestion plugin 'dlt' could not build deployment binding"
+    assert error.context == {
+        "ingestion_plugin": "dlt",
+        "storage_plugin": "minio",
+        "catalog_plugin": "polaris",
+    }

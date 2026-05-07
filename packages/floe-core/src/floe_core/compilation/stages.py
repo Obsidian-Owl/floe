@@ -473,10 +473,31 @@ def _build_storage_deployment_binding(
                     )
                 )
         if catalog_binding is not None:
-            ingestion_binding = ingestion_plugin.build_deployment_binding(
-                storage=storage_binding,
-                catalog=catalog_binding,
-            )
+            try:
+                ingestion_binding = ingestion_plugin.build_deployment_binding(
+                    storage=storage_binding,
+                    catalog=catalog_binding,
+                )
+            except (PluginError, NotImplementedError, ValueError, TypeError) as exc:
+                raise CompilationException(
+                    CompilationError(
+                        stage=CompilationStage.RESOLVE,
+                        code="E201",
+                        message=(
+                            f"Ingestion plugin {plugins.ingestion.type!r} "
+                            "could not build deployment binding"
+                        ),
+                        suggestion=(
+                            "Verify plugins.ingestion.config and ensure the ingestion "
+                            "plugin can translate the selected storage and catalog bindings"
+                        ),
+                        context={
+                            "ingestion_plugin": plugins.ingestion.type,
+                            "storage_plugin": plugins.storage.type,
+                            "catalog_plugin": plugins.catalog.type,
+                        },
+                    )
+                ) from exc
 
     return DeploymentConfig(
         storage=storage_binding,

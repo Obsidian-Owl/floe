@@ -230,15 +230,13 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         if storage.endpoint.path_style_access:
             destination_filesystem["credentials"]["s3_url_style"] = "path"
 
-        iceberg_catalog_env = self._iceberg_environment(
-            {
-                "catalog_name": "polaris",
-                "uri": catalog.polaris.endpoint_internal,
-                "warehouse": catalog.polaris.warehouse,
-                "s3_endpoint": storage.endpoint.internal_url,
-                "s3_region": storage.endpoint.region,
-                "s3_path_style_access": storage.endpoint.path_style_access,
-            }
+        iceberg_catalog_env = self._compile_safe_iceberg_environment(
+            catalog_name="polaris",
+            uri=catalog.polaris.endpoint_internal,
+            warehouse=catalog.polaris.warehouse,
+            s3_endpoint=storage.endpoint.internal_url,
+            s3_region=storage.endpoint.region,
+            s3_path_style_access=storage.endpoint.path_style_access,
         )
 
         return IngestionDeploymentBinding(
@@ -250,9 +248,35 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 source_filesystem=source_filesystem,
                 destination_filesystem=destination_filesystem,
                 iceberg_catalog_env=iceberg_catalog_env,
-                env_refs=dict(storage.runtime.env_refs),
             ),
         )
+
+    @staticmethod
+    def _compile_safe_iceberg_environment(
+        *,
+        catalog_name: str,
+        uri: str,
+        warehouse: str | None,
+        s3_endpoint: str,
+        s3_region: str,
+        s3_path_style_access: bool,
+    ) -> dict[str, str]:
+        """Build secret-free PyIceberg env from explicit deployment bindings only."""
+        env_catalog = catalog_name.upper().replace("-", "_")
+        prefix = f"PYICEBERG_CATALOG__{env_catalog}__"
+        env = {
+            "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME": catalog_name,
+            "ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE": "rest",
+            f"{prefix}TYPE": "rest",
+            f"{prefix}URI": uri,
+            f"{prefix}S3__ENDPOINT": s3_endpoint,
+            f"{prefix}S3__REGION": s3_region,
+        }
+        if warehouse is not None:
+            env[f"{prefix}WAREHOUSE"] = warehouse
+        if s3_path_style_access:
+            env[f"{prefix}S3__PATH_STYLE_ACCESS"] = "true"
+        return env
 
     def startup(self) -> None:
         """Initialize the plugin (FR-008, FR-009).
