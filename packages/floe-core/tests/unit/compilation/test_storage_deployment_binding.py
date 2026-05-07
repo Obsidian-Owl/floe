@@ -547,7 +547,7 @@ def test_compile_passes_selected_secret_and_identity_capabilities_to_resolver(
                 ),
                 capabilities=StorageCapabilities(
                     protocols=["s3"],
-                    credential_modes=["workload-identity"],
+                    credential_modes=["workload-identity", "external-secret-sync"],
                     identity_modes=["aws-irsa"],
                     sts_supported=True,
                     path_style_access=False,
@@ -621,6 +621,7 @@ def test_compile_passes_selected_secret_and_identity_capabilities_to_resolver(
                     protocols=["s3"],
                     credential_modes=["workload-identity"],
                     identity_modes=["aws-irsa"],
+                    secret_projection_modes=["external-secret-sync"],
                     providers=["aws"],
                 ),
             )
