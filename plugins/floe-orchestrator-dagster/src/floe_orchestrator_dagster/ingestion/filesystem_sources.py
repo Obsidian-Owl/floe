@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -96,7 +96,7 @@ def build_filesystem_source(
 
     from dlt.sources.filesystem import filesystem, read_csv, read_jsonl, read_parquet
 
-    readers = {
+    readers: dict[str, Callable[..., Any]] = {
         "csv": read_csv,
         "jsonl": read_jsonl,
         "parquet": read_parquet,
