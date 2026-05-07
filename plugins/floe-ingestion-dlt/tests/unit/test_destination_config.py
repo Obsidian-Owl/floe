@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from floe_core.plugin_metadata import HealthState
 from floe_core.plugins.ingestion import IngestionConfig
+from floe_core.schemas.compiled_artifacts import DltIngestionBinding
 
 import floe_ingestion_dlt.plugin as plugin_module
 from floe_ingestion_dlt.config import DltIngestionConfig, IngestionSourceConfig
@@ -56,6 +57,19 @@ def _runtime_binding() -> dict[str, Any]:
             "AWS_SECRET_ACCESS_KEY": "secret:floe/minio#secret_key",  # pragma: allowlist secret
         },
     }
+
+
+def _runtime_binding_model() -> DltIngestionBinding:
+    binding = _runtime_binding()
+    return DltIngestionBinding(
+        plugin_name="dlt",
+        destination="filesystem",
+        table_format="iceberg",
+        source_filesystem=binding["source_filesystem"],
+        destination_filesystem=binding["destination_filesystem"],
+        iceberg_catalog_env=binding["iceberg_catalog_env"],
+        env_refs=binding["env_refs"],
+    )
 
 
 def test_destination_config_matches_dlt_filesystem_iceberg_setup() -> None:
@@ -230,6 +244,43 @@ def test_create_pipeline_prefers_runtime_binding_over_catalog_config(
     assert pipeline._floe_dlt_runtime_binding == binding
 
 
+def test_create_pipeline_normalizes_pydantic_runtime_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compiled DltIngestionBinding models are normalized before pipeline creation."""
+    destination_calls: list[dict[str, Any]] = []
+    fake_destination = object()
+
+    def fake_filesystem(**kwargs: Any) -> object:
+        destination_calls.append(kwargs)
+        return fake_destination
+
+    import dlt
+    import dlt.destinations
+
+    monkeypatch.setattr(dlt.destinations, "filesystem", fake_filesystem)
+    monkeypatch.setattr(dlt, "pipeline", lambda **kwargs: SimpleNamespace(**kwargs))
+
+    plugin = DltIngestionPlugin()
+    plugin.configure(_plugin_config({"bucket": "legacy-bucket"}))
+    plugin.startup()
+
+    binding = _runtime_binding_model()
+    pipeline = plugin.create_pipeline(
+        IngestionConfig(
+            source_type="filesystem",
+            source_config={},
+            destination_table="bronze.orders",
+            runtime_binding=binding,
+        )
+    )
+
+    expected_binding = binding.model_dump(mode="python")
+    assert destination_calls == [expected_binding["destination_filesystem"]]
+    assert pipeline.destination is fake_destination
+    assert pipeline._floe_dlt_runtime_binding == expected_binding
+
+
 def test_configured_create_pipeline_requires_runtime_binding_or_catalog_config() -> None:
     """Configured dlt ingestion cannot create a pipeline without destination config."""
     plugin = DltIngestionPlugin()
@@ -322,6 +373,36 @@ def test_run_applies_runtime_binding_catalog_env(monkeypatch: pytest.MonkeyPatch
     class FakePipeline:
         pipeline_name = "runtime"
         _floe_dlt_runtime_binding = _runtime_binding()
+
+        def run(self, _source: object, **_kwargs: Any) -> object:
+            observations["during_run"] = (
+                os.environ.get("ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"),
+                os.environ.get("PYICEBERG_CATALOG__POLARIS__URI"),
+            )
+            return SimpleNamespace(metrics={})
+
+    monkeypatch.setenv("ICEBERG_CATALOG__ICEBERG_CATALOG_NAME", "caller-catalog")
+    monkeypatch.delenv("PYICEBERG_CATALOG__POLARIS__URI", raising=False)
+
+    plugin = DltIngestionPlugin()
+    plugin.startup()
+
+    plugin.run(FakePipeline(), source=object(), table_name="orders")
+
+    assert observations == {"during_run": ("polaris", "http://runtime-polaris:8181/api/catalog")}
+    assert os.environ["ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"] == "caller-catalog"
+    assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
+
+
+def test_run_normalizes_pydantic_runtime_binding_catalog_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compiled DltIngestionBinding models apply catalog env during pipeline execution."""
+    observations: dict[str, tuple[str | None, str | None]] = {}
+
+    class FakePipeline:
+        pipeline_name = "runtime-model"
+        _floe_dlt_runtime_binding = _runtime_binding_model()
 
         def run(self, _source: object, **_kwargs: Any) -> object:
             observations["during_run"] = (

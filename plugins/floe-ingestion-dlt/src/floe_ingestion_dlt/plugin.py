@@ -677,8 +677,10 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     run_kwargs["primary_key"] = primary_key
 
                 # Execute the pipeline
-                runtime_binding = getattr(pipeline, "_floe_dlt_runtime_binding", None)
-                if isinstance(runtime_binding, Mapping):
+                runtime_binding = self._normalize_runtime_binding(
+                    getattr(pipeline, "_floe_dlt_runtime_binding", None)
+                )
+                if runtime_binding:
                     with self._temporary_runtime_binding_environment(runtime_binding):
                         load_info = pipeline.run(source, **run_kwargs)
                 else:
@@ -881,8 +883,18 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
 
     @staticmethod
     def _pipeline_runtime_binding(config: IngestionConfig) -> dict[str, Any]:
-        binding = config.runtime_binding
-        return dict(binding) if isinstance(binding, Mapping) else {}
+        return DltIngestionPlugin._normalize_runtime_binding(config.runtime_binding)
+
+    @staticmethod
+    def _normalize_runtime_binding(binding: Any) -> dict[str, Any]:
+        if isinstance(binding, Mapping):
+            return dict(binding)
+        model_dump = getattr(binding, "model_dump", None)
+        if callable(model_dump):
+            normalized = model_dump(mode="python")
+            if isinstance(normalized, Mapping):
+                return dict(normalized)
+        return {}
 
     @staticmethod
     def _destination_config_from_binding(binding: Mapping[str, Any]) -> dict[str, Any]:
