@@ -7,6 +7,29 @@
 
 SecretsPlugin abstracts credential storage and retrieval, supporting Kubernetes Secrets, External Secrets Operator (ESO), HashiCorp Vault, and other secret management solutions.
 
+## Composition Capabilities
+
+Secrets plugins declare their credential projection surface with
+`get_secret_capabilities(self) -> PluginCapabilities`. The composition resolver
+uses this secret-free declaration to validate storage and catalog requirements
+before deployment bindings are rendered.
+
+Supported `secret_projection_modes` are:
+
+- `kubernetes-secret` - Credentials are available through a Kubernetes Secret
+  reference.
+- `external-secret-sync` - Credentials are synchronized by an external secrets
+  controller and referenced without embedding secret values.
+- `csi-secret-volume` - Credentials are projected through a CSI secret volume.
+- `environment` - Credentials are projected as environment variables from a
+  managed secret source.
+
+Capabilities must not contain raw secret values. Provider-specific fields, such
+as Infisical project IDs, Vault paths, or cloud secret manager identifiers,
+remain in provider-owned plugin config or provider-owned deployment bindings.
+`floe-core` validates named modes and provider labels; the secrets plugin owns
+translation into its runtime or controller-specific resources.
+
 ## Interface Definition
 
 ```python

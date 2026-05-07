@@ -31,6 +31,14 @@ capability, provisioning intent, runtime fragments, and credential-ref facts.
 Polaris translates those facts into `storageConfigInfo`; MinIO does not know
 Polaris bootstrap JSON.
 
+Storage credential capabilities use the shared composition vocabulary.
+`credential_modes` may include `kubernetes-secret`, `external-secret-sync`,
+`csi-secret-volume`, `environment`, `workload-identity`, and `none`.
+`secret_projection_modes` and `identity_modes` describe how the selected
+credential mode is realized through secrets or workload identity plugins. The
+selected deployment credential mode must be one of the storage plugin's
+declared modes before deployment bindings are rendered.
+
 ## Interface Definition
 
 The snippet below shows the target semantic contract. The current migration-era

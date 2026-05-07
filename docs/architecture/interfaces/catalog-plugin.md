@@ -30,6 +30,14 @@ binding and emits Polaris-owned `storageConfigInfo` inputs, endpoint/internal
 endpoint, path-style access, STS unavailable/enabled semantics, allowed
 locations, and storage Secret references.
 
+Through `get_storage_requirements()`, catalog requirements may name
+`credential_modes`, `secret_projection_modes`, `identity_modes`, and provider
+labels. The composition resolver validates those requirements against the
+selected storage, secrets, and identity plugins before deployment bindings are
+rendered. Catalog plugins still own catalog-specific translation, such as
+Polaris bootstrap payloads or Glue IAM assumptions; `floe-core` only validates
+the shared composition vocabulary.
+
 ## Interface Definition
 
 ```python
