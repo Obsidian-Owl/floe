@@ -233,7 +233,12 @@ def _object_store_credentials(
         "path_style_access",
     )
     if path_style is None:
-        path_style = filesystem_config.get("s3_url_style") == "path" or endpoint_url is not None
+        explicit_url_style = filesystem_config.get("s3_url_style")
+        path_style = (
+            explicit_url_style == "path"
+            if explicit_url_style is not None
+            else (endpoint_url is not None)
+        )
     if path_style:
         credentials["s3_url_style"] = "path"
     return credentials
