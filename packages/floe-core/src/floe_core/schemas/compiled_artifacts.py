@@ -495,6 +495,7 @@ class StorageCapabilities(BaseModel):
 
     protocols: list[NonEmptyString] = Field(default_factory=list)
     credential_modes: list[NonEmptyString] = Field(default_factory=list)
+    identity_modes: list[NonEmptyString] = Field(default_factory=list)
     sts_supported: bool = False
     path_style_access: bool = False
 

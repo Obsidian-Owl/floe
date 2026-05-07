@@ -755,6 +755,7 @@ class TestStorageDeploymentBinding:
         assert payload["capabilities"] == {
             "protocols": ["s3-compatible"],
             "credential_modes": ["kubernetes-secret"],
+            "identity_modes": [],
             "sts_supported": False,
             "path_style_access": True,
         }
@@ -766,6 +767,16 @@ class TestStorageDeploymentBinding:
         assert payload["runtime"]["pyiceberg_properties"] == {
             "s3.endpoint": "http://floe-platform-minio:9000"
         }
+
+    def test_storage_capabilities_accept_identity_modes(self) -> None:
+        """StorageCapabilities should expose concrete workload identity modes."""
+        capabilities = StorageCapabilities(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+        )
+
+        assert capabilities.identity_modes == ["aws-irsa"]
 
     @pytest.mark.parametrize(
         ("field_name", "fragment"),

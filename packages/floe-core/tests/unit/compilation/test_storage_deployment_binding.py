@@ -548,6 +548,7 @@ def test_compile_passes_selected_secret_and_identity_capabilities_to_resolver(
                 capabilities=StorageCapabilities(
                     protocols=["s3"],
                     credential_modes=["workload-identity"],
+                    identity_modes=["aws-irsa"],
                     sts_supported=True,
                     path_style_access=False,
                 ),
@@ -698,3 +699,154 @@ def test_compile_passes_selected_secret_and_identity_capabilities_to_resolver(
     assert artifacts.deployment is not None
     assert artifacts.deployment.storage is not None
     assert artifacts.deployment.storage.credentials.mode == "workload-identity"
+
+
+def test_storage_only_compile_validates_selected_identity_plugin_type(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configured identity plugin should be ABC-validated even without catalog."""
+
+    class StorageOnlyPlugin(StoragePlugin):
+        @property
+        def name(self) -> str:
+            return "minio"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def get_config_schema(self) -> None:
+            return None
+
+        def get_pyiceberg_fileio(self) -> FileIO:
+            raise NotImplementedError
+
+        def get_warehouse_uri(self, namespace: str) -> str:
+            return f"s3://warehouse/{namespace}"
+
+        def get_dbt_profile_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_dagster_io_manager_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_helm_values_override(self) -> dict[str, Any]:
+            return {}
+
+        def get_deployment_binding(self) -> StorageDeploymentBinding:
+            return StorageDeploymentBinding(
+                provider="minio",
+                protocol="s3-compatible",
+                endpoint=StorageServiceEndpoint(
+                    internal_url="http://minio:9000",
+                    external_url="http://minio:9000",
+                    region="us-east-1",
+                    warehouse_path="s3://warehouse",
+                    path_style_access=True,
+                ),
+                warehouse=StorageWarehouse(uri="s3://warehouse", bucket="warehouse"),
+                credentials=StorageCredentialBinding(
+                    mode="kubernetes-secret",
+                    secret_ref=KubernetesSecretRef(
+                        name="minio-credentials",
+                        namespace="floe-system",
+                        keys={
+                            "accessKeyId": "root-user",
+                            "secretAccessKey": "root-password",  # pragma: allowlist secret
+                        },
+                    ),
+                ),
+                capabilities=StorageCapabilities(
+                    protocols=["s3-compatible"],
+                    credential_modes=["kubernetes-secret"],
+                    path_style_access=True,
+                ),
+                dbt=DbtStorageBinding(
+                    profile_name="floe",
+                    target_name="dev",
+                    schema_name="analytics",
+                ),
+                dagster=DagsterStorageBinding(
+                    resource_key="minio_storage",
+                    asset_io_manager_key="iceberg_io_manager",
+                ),
+            )
+
+    class NotIdentityPlugin(StoragePlugin):
+        @property
+        def name(self) -> str:
+            return "fake-identity"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def get_config_schema(self) -> None:
+            return None
+
+        def get_pyiceberg_fileio(self) -> FileIO:
+            raise NotImplementedError
+
+        def get_warehouse_uri(self, namespace: str) -> str:
+            return "s3://unused"
+
+        def get_dbt_profile_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_dagster_io_manager_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_helm_values_override(self) -> dict[str, Any]:
+            return {}
+
+    class IsolatedRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            if plugin_type == PluginType.STORAGE:
+                return StorageOnlyPlugin()
+            if plugin_type == PluginType.IDENTITY:
+                return NotIdentityPlugin()
+            raise AssertionError(f"unexpected plugin lookup: {plugin_type} {name}")
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedRegistry)
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest = yaml.safe_load((ROOT / "demo" / "manifest.yaml").read_text(encoding="utf-8"))
+    manifest["plugins"].pop("catalog", None)
+    manifest["plugins"]["storage"] = {"type": "minio"}
+    manifest["plugins"]["identity"] = {"type": "fake-identity"}
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "E201"
+    assert "is not an IdentityPlugin" in error.message
+    assert error.context == {"identity_plugin": "fake-identity"}
