@@ -21,9 +21,20 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, Protocol
 
 from floe_core.plugin_metadata import PluginMetadata
+
+
+class SupportsRuntimeBindingModelDump(Protocol):
+    """Protocol for Pydantic-like runtime binding models."""
+
+    def model_dump(self, *, mode: Literal["json", "python"] | str = "python") -> Mapping[str, Any]:
+        """Return a Python mapping representation of the runtime binding."""
+        ...
+
+
+RuntimeBinding = Mapping[str, Any] | SupportsRuntimeBindingModelDump
 
 
 @dataclass
@@ -51,7 +62,7 @@ class IngestionConfig:
     destination_table: str = ""
     write_mode: str = "append"
     schema_contract: str = "evolve"
-    runtime_binding: Mapping[str, Any] | None = None
+    runtime_binding: RuntimeBinding | None = None
 
 
 @dataclass

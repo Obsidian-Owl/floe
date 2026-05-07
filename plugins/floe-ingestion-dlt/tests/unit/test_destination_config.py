@@ -72,6 +72,16 @@ def _runtime_binding_model() -> DltIngestionBinding:
     )
 
 
+def _partial_runtime_binding_model() -> DltIngestionBinding:
+    binding = _runtime_binding()
+    return DltIngestionBinding(
+        plugin_name="dlt",
+        destination="filesystem",
+        table_format="iceberg",
+        source_filesystem=binding["source_filesystem"],
+    )
+
+
 def test_destination_config_matches_dlt_filesystem_iceberg_setup() -> None:
     """Catalog config maps to the exact kwargs used to build dlt filesystem destination."""
     plugin = DltIngestionPlugin()
@@ -421,6 +431,55 @@ def test_run_normalizes_pydantic_runtime_binding_catalog_env(
 
     assert observations == {"during_run": ("polaris", "http://runtime-polaris:8181/api/catalog")}
     assert os.environ["ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"] == "caller-catalog"
+    assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
+
+
+def test_partial_runtime_binding_uses_legacy_catalog_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Partial runtime bindings must not suppress legacy catalog env fallback."""
+    observations: dict[str, tuple[str | None, str | None]] = {}
+
+    class FakePipeline:
+        def __init__(self, **kwargs: Any) -> None:
+            self.pipeline_name = kwargs["pipeline_name"]
+
+        def run(self, _source: object, **_kwargs: Any) -> object:
+            observations["during_run"] = (
+                os.environ.get("ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"),
+                os.environ.get("PYICEBERG_CATALOG__POLARIS__URI"),
+            )
+            return SimpleNamespace(metrics={})
+
+    import dlt
+    import dlt.destinations
+
+    monkeypatch.setattr(dlt.destinations, "filesystem", lambda **_kwargs: object())
+    monkeypatch.setattr(dlt, "pipeline", FakePipeline)
+
+    plugin = DltIngestionPlugin()
+    plugin.configure(
+        _plugin_config(
+            {
+                "uri": "http://legacy-polaris:8181/api/catalog",
+                "bucket": "legacy-bucket",
+            }
+        )
+    )
+    plugin.startup()
+
+    pipeline = plugin.create_pipeline(
+        IngestionConfig(
+            source_type="filesystem",
+            source_config={},
+            destination_table="bronze.orders",
+            runtime_binding=_partial_runtime_binding_model(),
+        )
+    )
+    plugin.run(pipeline, source=object(), table_name="orders")
+
+    assert observations == {"during_run": ("polaris", "http://legacy-polaris:8181/api/catalog")}
+    assert "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME" not in os.environ
     assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
 
 

@@ -538,7 +538,8 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 "dataset_name": dataset_name,
             }
             runtime_binding = self._pipeline_runtime_binding(config)
-            destination_config = self._destination_config_from_binding(runtime_binding)
+            runtime_destination_config = self._destination_config_from_binding(runtime_binding)
+            destination_config = runtime_destination_config
             catalog_config = self._pipeline_catalog_config(config)
             if self.is_configured and not destination_config and not catalog_config:
                 raise PipelineConfigurationError(
@@ -556,7 +557,10 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             pipeline = dlt.pipeline(**pipeline_kwargs)
             if runtime_binding:
                 pipeline._floe_dlt_runtime_binding = runtime_binding
-            elif catalog_config:
+            if catalog_config and (
+                not runtime_destination_config
+                or not self._runtime_binding_has_catalog_env(runtime_binding)
+            ):
                 pipeline._floe_iceberg_catalog_config = catalog_config
 
             logger.info(
@@ -680,7 +684,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 runtime_binding = self._normalize_runtime_binding(
                     getattr(pipeline, "_floe_dlt_runtime_binding", None)
                 )
-                if runtime_binding:
+                if self._runtime_binding_has_catalog_env(runtime_binding):
                     with self._temporary_runtime_binding_environment(runtime_binding):
                         load_info = pipeline.run(source, **run_kwargs)
                 else:
@@ -900,6 +904,11 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
     def _destination_config_from_binding(binding: Mapping[str, Any]) -> dict[str, Any]:
         destination_filesystem = binding.get("destination_filesystem")
         return dict(destination_filesystem) if isinstance(destination_filesystem, Mapping) else {}
+
+    @staticmethod
+    def _runtime_binding_has_catalog_env(binding: Mapping[str, Any]) -> bool:
+        iceberg_catalog_env = binding.get("iceberg_catalog_env")
+        return isinstance(iceberg_catalog_env, Mapping) and bool(iceberg_catalog_env)
 
     @staticmethod
     def _first_config_value(catalog_config: dict[str, Any], *keys: str) -> Any | None:
