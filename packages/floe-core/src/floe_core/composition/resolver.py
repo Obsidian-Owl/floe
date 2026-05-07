@@ -47,6 +47,7 @@ class CompositionResolver:
                 issues.extend(
                     self._validate_identity(
                         identity,
+                        storage,
                         requirement,
                         compatible_credential_modes,
                     )
@@ -129,7 +130,24 @@ class CompositionResolver:
     ) -> list[CompositionIssue]:
         """Validate required secret projection modes against secrets provider."""
         issues: list[CompositionIssue] = []
+        storage_modes = list(storage.capabilities.secret_projection_modes)
+        required_modes = list(requirement.requirements.secret_projection_modes)
         compatible_modes = self._compatible_secret_projection_modes(storage, requirement)
+        if required_modes and storage_modes and not compatible_modes:
+            issues.append(
+                CompositionIssue(
+                    severity="error",
+                    code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
+                    message=(
+                        f"catalog {requirement.plugin_name} requires one of secret "
+                        f"projection modes {required_modes}; storage {storage.plugin_name} "
+                        f"provides {storage_modes}"
+                    ),
+                    plugins=[storage.ref, requirement.ref],
+                )
+            )
+            return issues
+
         if not compatible_modes:
             return issues
 
@@ -179,6 +197,7 @@ class CompositionResolver:
     def _validate_identity(
         self,
         identity: PluginCapabilities | None,
+        storage: PluginCapabilities,
         requirement: PluginRequirements,
         compatible_credential_modes: list[str],
     ) -> list[CompositionIssue]:
@@ -203,8 +222,17 @@ class CompositionResolver:
             )
             return issues
 
+        storage_modes = list(storage.capabilities.identity_modes)
         provided_modes = list(identity.capabilities.identity_modes)
-        if required_modes and not set(provided_modes).intersection(required_modes):
+        compatible_modes = [mode for mode in storage_modes if mode in set(required_modes)]
+        if (
+            required_modes
+            and compatible_modes
+            and set(provided_modes).intersection(compatible_modes)
+        ):
+            return issues
+
+        if required_modes and len(required_modes) == 1 and compatible_modes:
             mode = required_modes[0]
             issues.append(
                 CompositionIssue(
@@ -215,6 +243,22 @@ class CompositionResolver:
                         f"identity {identity.plugin_name} provides {provided_modes}"
                     ),
                     plugins=[identity.ref, requirement.ref],
+                )
+            )
+            return issues
+
+        if required_modes:
+            issues.append(
+                CompositionIssue(
+                    severity="error",
+                    code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+                    message=(
+                        f"catalog {requirement.plugin_name} requires one of identity "
+                        f"modes {required_modes}; storage {storage.plugin_name} "
+                        f"provides {storage_modes}; identity {identity.plugin_name} "
+                        f"provides {provided_modes}"
+                    ),
+                    plugins=[storage.ref, identity.ref, requirement.ref],
                 )
             )
         return issues

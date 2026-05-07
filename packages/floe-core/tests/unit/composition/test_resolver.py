@@ -492,3 +492,98 @@ def test_resolver_accepts_one_matching_identity_mode_from_alternatives() -> None
 
     assert result.valid is True
     assert result.issues == []
+
+
+def test_resolver_rejects_no_matching_secret_projection_alternative() -> None:
+    """Secret projection alternatives must have a storage/catalog match."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="s3",
+        capabilities=CapabilitySet(
+            protocols=["s3"],
+            credential_modes=["external-secret-sync"],
+            secret_projection_modes=["external-secret-sync"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="glue",
+        requirements=RequirementSet(
+            protocols=["s3"],
+            credential_modes=["external-secret-sync"],
+            secret_projection_modes=["kubernetes-secret"],
+        ),
+    )
+    secrets = PluginCapabilities(
+        plugin_type="secrets",
+        plugin_name="k8s",
+        capabilities=CapabilitySet(
+            credential_modes=["kubernetes-secret"],
+            secret_projection_modes=["kubernetes-secret"],
+            providers=["kubernetes"],
+        ),
+    )
+
+    result = resolver.validate([storage, secrets], [catalog])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
+            message=(
+                "catalog glue requires one of secret projection modes "
+                "['kubernetes-secret']; storage s3 provides ['external-secret-sync']"
+            ),
+            plugins=["storage:s3", "catalog:glue"],
+        )
+    ]
+
+
+def test_resolver_rejects_identity_mode_not_supported_by_storage() -> None:
+    """Identity modes must be compatible across storage, catalog, and identity."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="s3",
+        capabilities=CapabilitySet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="glue",
+        requirements=RequirementSet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa", "aws-pod-identity"],
+        ),
+    )
+    identity = PluginCapabilities(
+        plugin_type="identity",
+        plugin_name="aws",
+        capabilities=CapabilitySet(
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-pod-identity"],
+            providers=["aws"],
+        ),
+    )
+
+    result = resolver.validate([storage, identity], [catalog])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+            message=(
+                "catalog glue requires one of identity modes "
+                "['aws-irsa', 'aws-pod-identity']; storage s3 provides ['aws-irsa']; "
+                "identity aws provides ['aws-pod-identity']"
+            ),
+            plugins=["storage:s3", "identity:aws", "catalog:glue"],
+        )
+    ]
