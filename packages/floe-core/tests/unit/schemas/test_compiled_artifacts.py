@@ -848,6 +848,7 @@ class TestStorageDeploymentBinding:
             provider="polaris",
             polaris=PolarisCatalogDeploymentBinding(
                 storage_type="S3",
+                warehouse="floe-demo",
                 default_base_location="s3://floe-iceberg",
                 allowed_locations=["s3://floe-iceberg"],
                 endpoint="http://localhost:9000",
@@ -913,6 +914,99 @@ class TestStorageDeploymentBinding:
     ) -> None:
         with pytest.raises(ValidationError):
             factory()
+
+
+class TestIngestionDeploymentBinding:
+    """Contract tests for secret-free dlt ingestion deployment bindings."""
+
+    def test_dlt_binding_accepts_secret_free_runtime_fragments(self) -> None:
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            CredentialRef,
+            DeploymentConfig,
+            DltIngestionBinding,
+            IngestionDeploymentBinding,
+            PolarisCatalogDeploymentBinding,
+        )
+
+        catalog = CatalogDeploymentBinding(
+            provider="polaris",
+            polaris=PolarisCatalogDeploymentBinding(
+                storage_type="S3",
+                warehouse="floe-demo",
+                default_base_location="s3://floe-iceberg",
+                allowed_locations=["s3://floe-iceberg"],
+                endpoint="http://localhost:8181/api/catalog",
+                endpoint_internal="http://polaris:8181/api/catalog",
+                path_style_access=True,
+                sts_unavailable=True,
+                credential_refs={
+                    "accessKeyId": CredentialRef(source="none", name="none"),
+                    "secretAccessKey": CredentialRef(source="none", name="none"),
+                },
+            ),
+        )
+        binding = DltIngestionBinding(
+            plugin_name="dlt",
+            destination="filesystem",
+            table_format="iceberg",
+            source_filesystem={
+                "endpoint_url": "http://floe-platform-minio:9000",
+                "region_name": "us-east-1",
+                "s3_url_style": "path",
+            },
+            destination_filesystem={
+                "bucket_url": "s3://floe-iceberg",
+                "credentials": {
+                    "endpoint_url": "http://floe-platform-minio:9000",
+                    "region_name": "us-east-1",
+                    "s3_url_style": "path",
+                },
+            },
+            iceberg_catalog_env={
+                "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME": "polaris",
+                "ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE": "rest",
+                "PYICEBERG_CATALOG__POLARIS__TYPE": "rest",
+                "PYICEBERG_CATALOG__POLARIS__URI": "http://polaris:8181/api/catalog",
+                "PYICEBERG_CATALOG__POLARIS__WAREHOUSE": "floe-demo",
+            },
+            env_refs={
+                "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+                "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+            },
+        )
+
+        deployment = DeploymentConfig(
+            catalog=catalog,
+            ingestion=IngestionDeploymentBinding(provider="dlt", dlt=binding),
+        )
+
+        assert deployment.catalog is not None
+        assert deployment.catalog.polaris.warehouse == "floe-demo"
+        assert deployment.ingestion is not None
+        assert deployment.ingestion.dlt.destination == "filesystem"
+        assert deployment.ingestion.dlt.table_format == "iceberg"
+        assert deployment.ingestion.dlt.destination_filesystem["bucket_url"] == "s3://floe-iceberg"
+
+    def test_dlt_binding_rejects_raw_secret_material(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import DltIngestionBinding
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            DltIngestionBinding(
+                plugin_name="dlt",
+                destination="filesystem",
+                table_format="iceberg",
+                source_filesystem={},
+                destination_filesystem={
+                    "credentials": {
+                        "aws_secret_access_key": "raw-secret-value",  # pragma: allowlist secret
+                    }
+                },
+                iceberg_catalog_env={},
+                env_refs={},
+            )
 
 
 class TestStorageCredentialBinding:

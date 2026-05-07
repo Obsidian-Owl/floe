@@ -108,6 +108,9 @@ def _assert_no_secret_material(value: Any, path: str) -> None:
         for key, child in value.items():
             key_text = str(key).lower()
             child_path = f"{path}.{key}"
+            if key_text == "credentials" and isinstance(child, dict):
+                _assert_no_secret_material(child, child_path)
+                continue
             if any(marker in key_text for marker in _SECRET_FIELD_MARKERS):
                 msg = (
                     f"{child_path} looks like raw credential material; use env_refs "
@@ -594,6 +597,7 @@ class PolarisCatalogDeploymentBinding(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     storage_type: Literal["S3"]
+    warehouse: NonEmptyString
     default_base_location: NonEmptyString
     allowed_locations: list[NonEmptyString]
     endpoint: NonEmptyString
@@ -612,6 +616,43 @@ class CatalogDeploymentBinding(BaseModel):
     polaris: PolarisCatalogDeploymentBinding
 
 
+class DltIngestionBinding(BaseModel):
+    """Secret-free dlt runtime binding derived from composed platform plugins."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    plugin_name: NonEmptyString
+    destination: Literal["filesystem"]
+    table_format: Literal["iceberg"]
+    source_filesystem: dict[str, Any] = Field(default_factory=dict)
+    destination_filesystem: dict[str, Any] = Field(default_factory=dict)
+    iceberg_catalog_env: dict[str, str] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+
+    @field_validator("source_filesystem", "destination_filesystem")
+    @classmethod
+    def validate_secret_free_runtime_maps(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure dlt runtime maps carry config only, not credential values."""
+        _assert_no_secret_material(value, "ingestion.dlt.runtime")
+        return value
+
+    @field_validator("iceberg_catalog_env")
+    @classmethod
+    def validate_secret_free_catalog_env(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure dlt catalog env carries only non-secret PyIceberg properties."""
+        _assert_no_secret_material(value, "ingestion.dlt.iceberg_catalog_env")
+        return value
+
+
+class IngestionDeploymentBinding(BaseModel):
+    """Secret-free ingestion deployment binding."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provider: Literal["dlt"]
+    dlt: DltIngestionBinding
+
+
 class DeploymentConfig(BaseModel):
     """Deployment bindings derived during compilation."""
 
@@ -619,6 +660,7 @@ class DeploymentConfig(BaseModel):
 
     storage: StorageDeploymentBinding | None = None
     catalog: CatalogDeploymentBinding | None = None
+    ingestion: IngestionDeploymentBinding | None = None
 
 
 class ResolvedModel(BaseModel):
@@ -1316,6 +1358,8 @@ __all__ = [
     "CredentialRef",
     "DeploymentConfig",
     "DeploymentMode",
+    "DltIngestionBinding",
+    "IngestionDeploymentBinding",
     "KubernetesSecretRef",
     "ManifestRef",
     "ObservabilityConfig",

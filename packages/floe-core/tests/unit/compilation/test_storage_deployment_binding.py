@@ -342,6 +342,7 @@ def test_incompatible_storage_catalog_composition_raises_structured_error(
                 provider="polaris",
                 polaris=PolarisCatalogDeploymentBinding(
                     storage_type="S3",
+                    warehouse="floe-demo",
                     default_base_location="s3://unused",
                     allowed_locations=[],
                     endpoint="http://unused",

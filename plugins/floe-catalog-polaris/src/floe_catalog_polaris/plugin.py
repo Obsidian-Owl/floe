@@ -413,10 +413,12 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
         access_ref = storage.credentials.as_credential_ref("accessKeyId")
         secret_ref = storage.credentials.as_credential_ref("secretAccessKey")
+        config = self._require_config()
         return CatalogDeploymentBinding(
             provider="polaris",
             polaris=PolarisCatalogDeploymentBinding(
                 storage_type="S3",
+                warehouse=config.warehouse,
                 default_base_location=storage.warehouse.uri,
                 allowed_locations=storage.allowed_locations,
                 endpoint=storage.endpoint.external_url,

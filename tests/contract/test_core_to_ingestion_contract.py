@@ -440,3 +440,31 @@ class TestIngestionPluginRefContract:
                 "source_config": {"format": "csv", "path": path},
             }
             assert expected_source.items() <= source.items()
+
+
+def test_compiled_artifacts_contract_includes_ingestion_deployment_binding() -> None:
+    from floe_core.schemas.compiled_artifacts import (
+        DeploymentConfig,
+        DltIngestionBinding,
+        IngestionDeploymentBinding,
+    )
+
+    deployment = DeploymentConfig(
+        ingestion=IngestionDeploymentBinding(
+            provider="dlt",
+            dlt=DltIngestionBinding(
+                plugin_name="dlt",
+                destination="filesystem",
+                table_format="iceberg",
+                source_filesystem={"endpoint_url": "http://minio:9000"},
+                destination_filesystem={"bucket_url": "s3://warehouse"},
+                iceberg_catalog_env={"PYICEBERG_CATALOG__POLARIS__TYPE": "rest"},
+                env_refs={"AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID"},
+            ),
+        )
+    )
+
+    payload = deployment.model_dump(mode="json")
+    assert payload["ingestion"]["provider"] == "dlt"
+    assert payload["ingestion"]["dlt"]["destination"] == "filesystem"
+    assert payload["ingestion"]["dlt"]["table_format"] == "iceberg"

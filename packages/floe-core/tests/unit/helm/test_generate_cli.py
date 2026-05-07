@@ -95,9 +95,10 @@ def _write_minio_artifact(path: Path) -> None:
                     "artifact_bucket": "legacy-plugin-config-artifacts",
                     "region": "us-east-1",
                     "path_style_access": False,
+                    # pragma: allowlist nextline secret
                     "credential_secret_name": "legacy-plugin-config-secret",
-                    "access_key_secret_key": "legacy-access-key",
-                    "secret_key_secret_key": "legacy-secret-key",
+                    "access_key_secret_key": "legacy-access-key",  # pragma: allowlist secret
+                    "secret_key_secret_key": "legacy-secret-key",  # pragma: allowlist secret
                     "raw_access_key": "legacy-inline-access-value",  # pragma: allowlist secret
                     "raw_secret_key": "legacy-inline-secret-value",  # pragma: allowlist secret
                 },
@@ -158,6 +159,7 @@ def _write_minio_artifact(path: Path) -> None:
                 provider="polaris",
                 polaris=PolarisCatalogDeploymentBinding(
                     storage_type="S3",
+                    warehouse="floe-demo",
                     default_base_location="s3://floe-iceberg",
                     allowed_locations=["s3://floe-iceberg"],
                     endpoint="http://localhost:9000",
