@@ -266,6 +266,8 @@ def _build_storage_deployment_binding(
     from floe_core.plugin_registry import PluginRegistry
     from floe_core.plugin_types import PluginType
     from floe_core.plugins.catalog import CatalogPlugin
+    from floe_core.plugins.identity import IdentityPlugin
+    from floe_core.plugins.secrets import SecretsPlugin
     from floe_core.plugins.storage import StoragePlugin
     from floe_core.schemas.compiled_artifacts import DeploymentConfig
 
@@ -357,19 +359,83 @@ def _build_storage_deployment_binding(
         )
 
     try:
+        catalog_requirements = catalog_plugin.get_storage_requirements()
+        composition_capabilities: list[PluginCapabilities] = []
+
+        if plugins.secrets is not None:
+            registry.configure(
+                PluginType.SECRETS,
+                plugins.secrets.type,
+                plugins.secrets.config or {},
+            )
+            secrets_plugin = registry.get(PluginType.SECRETS, plugins.secrets.type)
+            if not isinstance(secrets_plugin, SecretsPlugin):
+                raise CompilationException(
+                    CompilationError(
+                        stage=CompilationStage.RESOLVE,
+                        code="E201",
+                        message=f"Plugin {plugins.secrets.type!r} is not a SecretsPlugin",
+                        suggestion=(
+                            "Use a plugin registered under the floe.secrets entry point group"
+                        ),
+                        context={"secrets_plugin": plugins.secrets.type},
+                    )
+                )
+            composition_capabilities.append(secrets_plugin.get_secret_capabilities())
+
+        identity_capabilities: PluginCapabilities | None = None
+        if plugins.identity is not None:
+            registry.configure(
+                PluginType.IDENTITY,
+                plugins.identity.type,
+                plugins.identity.config or {},
+            )
+            identity_plugin = registry.get(PluginType.IDENTITY, plugins.identity.type)
+            if not isinstance(identity_plugin, IdentityPlugin):
+                raise CompilationException(
+                    CompilationError(
+                        stage=CompilationStage.RESOLVE,
+                        code="E201",
+                        message=f"Plugin {plugins.identity.type!r} is not an IdentityPlugin",
+                        suggestion=(
+                            "Use a plugin registered under the floe.identity entry point group"
+                        ),
+                        context={"identity_plugin": plugins.identity.type},
+                    )
+                )
+            identity_capabilities = identity_plugin.get_identity_capabilities()
+            composition_capabilities.append(identity_capabilities)
+
+        credential_modes = list(storage_binding.capabilities.credential_modes)
+        secret_projection_modes = [
+            mode
+            for mode in credential_modes
+            if mode in {"kubernetes-secret", "external-secret-sync", "environment"}
+        ]
+        identity_modes = list(getattr(storage_binding.capabilities, "identity_modes", []))
+        if (
+            not identity_modes
+            and "workload-identity" in credential_modes
+            and identity_capabilities is not None
+        ):
+            identity_modes = list(identity_capabilities.capabilities.identity_modes)
+
         storage_capabilities = PluginCapabilities(
             plugin_type="storage",
             plugin_name=storage_plugin.name,
             capabilities=CapabilitySet(
                 protocols=storage_binding.capabilities.protocols,
-                credential_modes=storage_binding.capabilities.credential_modes,
+                credential_modes=credential_modes,
+                secret_projection_modes=secret_projection_modes,
+                identity_modes=identity_modes,
                 path_style_access=storage_binding.capabilities.path_style_access,
                 sts=storage_binding.capabilities.sts_supported,
             ),
         )
-        catalog_requirements = catalog_plugin.get_storage_requirements()
+        composition_capabilities.insert(0, storage_capabilities)
+
         composition = CompositionResolver().validate(
-            [storage_capabilities],
+            composition_capabilities,
             [catalog_requirements],
         )
         if not composition.valid:
