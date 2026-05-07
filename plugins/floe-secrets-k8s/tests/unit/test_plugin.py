@@ -79,6 +79,18 @@ class TestK8sSecretsPluginMetadata:
         plugin = K8sSecretsPlugin()
         assert plugin.get_config_schema() is K8sSecretsConfig
 
+    @pytest.mark.requirement("PCU-005")
+    def test_secret_capabilities(self) -> None:
+        """K8s secrets plugin should declare Kubernetes Secret projection."""
+        plugin = K8sSecretsPlugin()
+
+        capabilities = plugin.get_secret_capabilities()
+
+        assert capabilities.plugin_type == "secrets"
+        assert capabilities.plugin_name == "k8s"
+        assert capabilities.capabilities.secret_projection_modes == ["kubernetes-secret"]
+        assert capabilities.capabilities.providers == ["kubernetes"]
+
 
 class TestK8sSecretsPluginLifecycle:
     """Test plugin lifecycle methods."""
