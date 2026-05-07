@@ -25,6 +25,7 @@ from typing import Any
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
+    DeploymentConfig,
     EnforcementResultSummary,
     ObservabilityConfig,
     ProductIdentity,
@@ -54,6 +55,7 @@ def build_artifacts(
     enforcement_result: EnforcementResultSummary | None = None,
     quality_config: QualityConfig | None = None,
     governance: ResolvedGovernance | None = None,
+    deployment: DeploymentConfig | None = None,
 ) -> CompiledArtifacts:
     """Build CompiledArtifacts from resolved configuration.
 
@@ -81,6 +83,7 @@ def build_artifacts(
         enforcement_result: Optional enforcement result summary (v0.3.0+).
         quality_config: Optional quality configuration (v0.4.0+).
         governance: Optional governance configuration (v0.5.0+).
+        deployment: Optional deployment bindings derived from plugin config.
 
     Returns:
         Complete CompiledArtifacts ready for output.
@@ -155,6 +158,7 @@ def build_artifacts(
         inheritance_chain=[],
         observability=observability,
         plugins=plugins,
+        deployment=deployment,
         transforms=transforms,
         dbt_profiles=dbt_profiles,
         enforcement_result=enforcement_result,

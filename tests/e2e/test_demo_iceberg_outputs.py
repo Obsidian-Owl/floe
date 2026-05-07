@@ -27,9 +27,11 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from pathlib import Path
 from typing import Any
 
 import pytest
+from floe_core.compilation.stages import compile_pipeline
 
 _DEFAULT_NAMESPACE = "floe-test"
 _DEFAULT_DAGSTER_SELECTOR = "app.kubernetes.io/name=dagster,component=dagster-webserver"
@@ -37,6 +39,7 @@ _DEFAULT_ARTIFACTS_PATH = "/app/demo/customer_360/compiled_artifacts.json"
 _DEFAULT_EXPECTED_TABLES = "mart_customer_360"
 _DEFAULT_RECOVERY_MODE = "strict"
 _KUBECTL_TIMEOUT_SECONDS = 30
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _run_kubectl(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -50,13 +53,37 @@ def _run_kubectl(args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+@pytest.mark.developer_workflow
+@pytest.mark.requirement("STORAGE-MINIO-SECURITY")
+def test_demo_compiled_storage_binding_is_minio_endpoint_source() -> None:
+    """Demo runtime storage expectations must come from the compiled binding."""
+    artifacts = compile_pipeline(
+        _REPO_ROOT / "demo" / "customer-360" / "floe.yaml",
+        _REPO_ROOT / "demo" / "manifest.yaml",
+        emit_lineage=False,
+    )
+
+    assert artifacts.plugins is not None
+    assert artifacts.plugins.storage is not None
+    assert artifacts.plugins.storage.type == "minio"
+    assert artifacts.deployment is not None
+    assert artifacts.deployment.storage is not None
+    storage = artifacts.deployment.storage
+
+    assert storage.provider == "minio"
+    assert storage.endpoint.internal_url == "http://floe-platform-minio:9000"
+    assert storage.dbt.profile_fragment["s3_endpoint"] == storage.endpoint.internal_url
+    assert storage.dagster.resources["endpoint_url"] == storage.endpoint.internal_url
+
+
 def _parse_validation_stdout(stdout: str) -> dict[str, Any]:
     """Parse the helper's last JSON stdout line, tolerating preceding logs."""
     for line in reversed(stdout.splitlines()):
         stripped = line.strip()
         if not stripped:
             continue
-        return json.loads(stripped)
+        parsed: dict[str, Any] = json.loads(stripped)
+        return parsed
     raise AssertionError("Validation helper produced no JSON output")
 
 

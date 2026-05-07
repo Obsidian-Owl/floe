@@ -40,7 +40,9 @@ if TYPE_CHECKING:
     from floe_core.enforcement.result import EnforcementResult
     from floe_core.schemas.compiled_artifacts import (
         CompiledArtifacts,
+        DeploymentConfig,
         ResolvedGovernance,
+        ResolvedPlugins,
     )
     from floe_core.schemas.manifest import GovernanceConfig, PlatformManifest
 
@@ -248,6 +250,172 @@ def _build_lineage_config(manifest: PlatformManifest) -> dict[str, Any] | None:
     if url is not None:
         config["url"] = url
     return config
+
+
+def _build_storage_deployment_binding(
+    plugins: ResolvedPlugins,
+) -> DeploymentConfig | None:
+    """Build deployment bindings from resolved storage plugin configuration."""
+    if plugins.storage is None:
+        return None
+
+    from floe_core.compilation.errors import CompilationError, CompilationException
+    from floe_core.composition.models import CapabilitySet, PluginCapabilities
+    from floe_core.composition.resolver import CompositionResolver
+    from floe_core.plugin_errors import PluginError
+    from floe_core.plugin_registry import PluginRegistry
+    from floe_core.plugin_types import PluginType
+    from floe_core.plugins.catalog import CatalogPlugin
+    from floe_core.plugins.storage import StoragePlugin
+    from floe_core.schemas.compiled_artifacts import DeploymentConfig
+
+    registry = PluginRegistry()
+    registry.discover_all()
+    try:
+        registry.configure(
+            PluginType.STORAGE,
+            plugins.storage.type,
+            plugins.storage.config or {},
+        )
+        storage_plugin = registry.get(PluginType.STORAGE, plugins.storage.type)
+    except PluginError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=f"Storage plugin {plugins.storage.type!r} could not be resolved",
+                suggestion=(
+                    "Install the storage plugin package and verify "
+                    "plugins.storage.type in the platform manifest"
+                ),
+                context={"storage_plugin": plugins.storage.type},
+            )
+        ) from exc
+
+    if not isinstance(storage_plugin, StoragePlugin):
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=f"Plugin {plugins.storage.type!r} is not a StoragePlugin",
+                suggestion="Use a plugin registered under the floe.storage entry point group",
+                context={"storage_plugin": plugins.storage.type},
+            )
+        )
+
+    try:
+        storage_binding = storage_plugin.get_deployment_binding()
+    except PluginError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=(
+                    f"Storage plugin {plugins.storage.type!r} could not build deployment binding"
+                ),
+                suggestion=(
+                    "Verify plugins.storage.config in the platform manifest and "
+                    "ensure the storage plugin can build its deployment binding"
+                ),
+                context={"storage_plugin": plugins.storage.type},
+            )
+        ) from exc
+
+    if plugins.catalog is None:
+        return DeploymentConfig(storage=storage_binding)
+
+    try:
+        registry.configure(
+            PluginType.CATALOG,
+            plugins.catalog.type,
+            plugins.catalog.config or {},
+        )
+        catalog_plugin = registry.get(PluginType.CATALOG, plugins.catalog.type)
+    except PluginError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=f"Catalog plugin {plugins.catalog.type!r} could not be resolved",
+                suggestion=(
+                    "Install the catalog plugin package and verify "
+                    "plugins.catalog.type in the platform manifest"
+                ),
+                context={"catalog_plugin": plugins.catalog.type},
+            )
+        ) from exc
+
+    if not isinstance(catalog_plugin, CatalogPlugin):
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=f"Plugin {plugins.catalog.type!r} is not a CatalogPlugin",
+                suggestion="Use a plugin registered under the floe.catalogs entry point group",
+                context={"catalog_plugin": plugins.catalog.type},
+            )
+        )
+
+    try:
+        storage_capabilities = PluginCapabilities(
+            plugin_type="storage",
+            plugin_name=storage_plugin.name,
+            capabilities=CapabilitySet(
+                protocols=storage_binding.capabilities.protocols,
+                credential_modes=storage_binding.capabilities.credential_modes,
+                path_style_access=storage_binding.capabilities.path_style_access,
+                sts=storage_binding.capabilities.sts_supported,
+            ),
+        )
+        catalog_requirements = catalog_plugin.get_storage_requirements()
+        composition = CompositionResolver().validate(
+            [storage_capabilities],
+            [catalog_requirements],
+        )
+        if not composition.valid:
+            issues = [issue.model_dump(mode="json") for issue in composition.issues]
+            first_issue = composition.issues[0]
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code=first_issue.code,
+                    message=first_issue.message,
+                    suggestion=(
+                        "Choose compatible storage and catalog plugins, or update their "
+                        "configuration so catalog requirements are satisfied."
+                    ),
+                    context={
+                        "composition_issues": issues,
+                        "storage_plugin": plugins.storage.type,
+                        "catalog_plugin": plugins.catalog.type,
+                    },
+                )
+            )
+
+        catalog_binding = catalog_plugin.build_catalog_deployment(storage_binding)
+    except CompilationException:
+        raise
+    except (PluginError, NotImplementedError, ValueError) as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=(
+                    f"Catalog plugin {plugins.catalog.type!r} could not build deployment binding"
+                ),
+                suggestion=(
+                    "Verify plugins.catalog.config and ensure the catalog plugin can "
+                    "translate the selected storage deployment binding"
+                ),
+                context={
+                    "storage_plugin": plugins.storage.type,
+                    "catalog_plugin": plugins.catalog.type,
+                    "error": str(exc),
+                },
+            )
+        ) from exc
+
+    return DeploymentConfig(storage=storage_binding, catalog=catalog_binding)
 
 
 def compile_pipeline(
@@ -536,10 +704,16 @@ def compile_pipeline(
                 attributes={"compile.stage": CompilationStage.COMPILE.value},
             ) as compile_span:
                 log.info("compilation_stage_start", stage=CompilationStage.COMPILE.value)
+                deployment = _build_storage_deployment_binding(plugins)
+                storage_dbt_binding = None
+                if deployment is not None and deployment.storage is not None:
+                    storage_dbt_binding = deployment.storage.dbt
+
                 # Generate dbt profiles using compute plugin
                 dbt_profiles = generate_dbt_profiles(
                     plugins=plugins,
                     product_name=spec.metadata.name,
+                    storage_binding=storage_dbt_binding,
                 )
                 compile_span.set_attribute("compile.profile_name", spec.metadata.name)
                 duration_ms = (time.perf_counter() - stage_start) * 1000
@@ -554,16 +728,16 @@ def compile_pipeline(
             # Only runs when governance config is present in the manifest
             if manifest.governance is not None:
                 synthetic_dbt_manifest: dict[str, Any] = {"nodes": {}}
-                dbt_project_name = _dbt_project_name(spec.metadata.name)
+                dbt_project_id = _dbt_project_name(spec.metadata.name)
                 for model in transforms.models:
-                    node_key = f"model.{dbt_project_name}.{model.name}"
+                    node_key = f"model.{dbt_project_id}.{model.name}"
                     synthetic_dbt_manifest["nodes"][node_key] = {
                         "name": model.name,
                         "resource_type": "model",
                         "tags": list(model.tags) if model.tags else [],
                         "depends_on": {
                             "nodes": [
-                                f"model.{dbt_project_name}.{d}" for d in (model.depends_on or [])
+                                f"model.{dbt_project_id}.{d}" for d in (model.depends_on or [])
                             ]
                         },
                         "description": "",
@@ -597,10 +771,10 @@ def compile_pipeline(
             # Per-model lineage emission (non-blocking).
             # Records model presence in lineage graph during compilation;
             # execution-time events are emitted by Dagster at runtime.
-            dbt_project_name = _dbt_project_name(spec.metadata.name)
+            dbt_project_id = _dbt_project_name(spec.metadata.name)
             if lineage_available:
                 for model in transforms.models:
-                    model_job_name = f"model.{dbt_project_name}.{model.name}"
+                    model_job_name = f"model.{dbt_project_id}.{model.name}"
                     model_run_id: UUID | None = None
                     try:
                         model_run_id = emitter.emit_start(job_name=model_job_name)
@@ -640,6 +814,7 @@ def compile_pipeline(
                     enforcement_result=enforcement_result,
                     quality_config=quality_config,
                     governance=resolved_governance,
+                    deployment=deployment,
                 )
                 generate_span.set_attribute("compile.artifacts_version", artifacts.version)
                 duration_ms = (time.perf_counter() - stage_start) * 1000

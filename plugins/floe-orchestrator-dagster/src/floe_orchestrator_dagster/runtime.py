@@ -369,11 +369,16 @@ def build_product_definitions(
             )
 
     if _has_iceberg_config(artifacts):
+        storage_binding = None
+        deployment = getattr(artifacts, "deployment", None)
+        if deployment is not None and getattr(deployment, "storage", None) is not None:
+            storage_binding = deployment.storage.dagster
 
         def _iceberg_resource_fn(_init_context: Any) -> Any:
             result = try_create_iceberg_resources(
                 plugins,
                 governance=getattr(artifacts, "governance", None),
+                storage_binding=storage_binding,
             )
             return result.get("iceberg")
 

@@ -378,7 +378,6 @@ test('collectSourceDocsErrors rejects stale plugin default wording in published 
       'docs/architecture/adr/0032-cube-compute-integration.md: labels DuckDB-first behavior as a current default',
       'docs/architecture/adr/0032-cube-compute-integration.md: labels an open-source stack as a current default',
       'docs/architecture/adr/0035-observability-plugin-interface.md: uses default plugin bundle wording',
-      'docs/architecture/adr/0036-storage-plugin-interface.md: references non-existent package floe-storage-minio',
       'docs/architecture/adr/0036-storage-plugin-interface.md: uses default plugin bundle wording',
       'docs/architecture/adr/0036-storage-plugin-interface.md: labels MinIO as a current default storage integration',
       'docs/architecture/ARCHITECTURE-SUMMARY.md: uses default plugin bundle wording',

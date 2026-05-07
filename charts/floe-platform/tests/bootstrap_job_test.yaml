@@ -10,7 +10,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
     asserts:
       - equal:
           path: metadata.annotations["helm.sh/hook"]
@@ -20,7 +20,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
     asserts:
       - equal:
           path: metadata.annotations["helm.sh/hook-weight"]
@@ -30,7 +30,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
     asserts:
       - equal:
           path: metadata.annotations["helm.sh/hook-delete-policy"]
@@ -41,7 +41,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
       minio.enabled: false
     asserts:
       - contains:
@@ -54,7 +54,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
       minio.enabled: true
     asserts:
       - contains:
@@ -72,7 +72,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
       minio.enabled: false
     asserts:
       - notContains:
@@ -86,7 +86,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
       minio.enabled: true
     asserts:
       - equal:
@@ -101,10 +101,11 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
       polaris.storage.s3.enabled: true
       polaris.storage.s3.endpoint: "http://minio:9000"
       polaris.storage.s3.region: "us-east-1"
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
       polaris.bootstrap.defaultBaseLocation: "s3://warehouse/data"
       polaris.bootstrap.allowedLocations:
         - "s3://warehouse"
@@ -120,11 +121,41 @@ tests:
             name: S3_SECRET_KEY
           any: true
 
+  - it: should source S3 credentials from configured storage secret keys
+    set:
+      polaris.enabled: true
+      polaris.bootstrap.enabled: true
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
+      polaris.storage.s3.enabled: true
+      polaris.storage.s3.endpoint: "http://minio:9000"
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
+      polaris.storage.s3.accessKeySecretKey: "root-user"  # pragma: allowlist secret
+      polaris.storage.s3.secretKeySecretKey: "root-password"  # pragma: allowlist secret
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[3].name
+          value: S3_ACCESS_KEY
+      - equal:
+          path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.name
+          value: floe-platform-minio-credentials
+      - equal:
+          path: spec.template.spec.containers[0].env[3].valueFrom.secretKeyRef.key
+          value: root-user
+      - equal:
+          path: spec.template.spec.containers[0].env[4].name
+          value: S3_SECRET_KEY
+      - equal:
+          path: spec.template.spec.containers[0].env[4].valueFrom.secretKeyRef.name
+          value: floe-platform-minio-credentials
+      - equal:
+          path: spec.template.spec.containers[0].env[4].valueFrom.secretKeyRef.key
+          value: root-password
+
   - it: should not inject S3 env vars when polaris.storage.s3.enabled=false
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
       polaris.storage.s3.enabled: false
     asserts:
       - notContains:
@@ -138,10 +169,11 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
       polaris.storage.s3.enabled: true
       polaris.storage.s3.endpoint: "http://minio:9000"
       polaris.storage.s3.region: "us-east-1"
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
       polaris.bootstrap.defaultBaseLocation: "s3://warehouse/data"
       polaris.bootstrap.allowedLocations:
         - "s3://warehouse"
@@ -150,28 +182,59 @@ tests:
           path: spec.template.spec.containers[0].command[2]
           pattern: "table-default\\.s3\\.endpoint"
 
-  - it: should set catalog-level s3.endpoint in catalog properties
+  - it: should render generated Polaris storage binding fields in catalog JSON
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
       polaris.storage.s3.enabled: true
-      polaris.storage.s3.endpoint: "http://minio:9000"
-      polaris.storage.s3.region: "us-east-1"
-      polaris.bootstrap.defaultBaseLocation: "s3://warehouse/data"
+      polaris.storage.s3.endpoint: "http://floe-platform-minio:9000"
+      polaris.storage.s3.region: "eu-west-1"
+      polaris.storage.s3.pathStyleAccess: false
+      polaris.storage.s3.stsEnabled: true
+      polaris.storage.s3.credentialSecretName: "floe-platform-minio-credentials"  # pragma: allowlist secret
+      polaris.bootstrap.defaultBaseLocation: "s3://warehouse"
       polaris.bootstrap.allowedLocations:
         - "s3://warehouse"
+        - "s3://warehouse/silver"
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].command[2]
-          pattern: '"s3\.endpoint":\s*"http://minio:9000"'
+          pattern: '"default-base-location":\s*"s3://warehouse"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"s3\.endpoint":\s*"http://floe-platform-minio:9000"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"s3\.path-style-access":\s*"false"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"s3\.region":\s*"eu-west-1"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"allowedLocations":\s*\["s3://warehouse","s3://warehouse/silver"\]'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"endpoint":\s*"http://floe-platform-minio:9000"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"endpointInternal":\s*"http://floe-platform-minio:9000"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"pathStyleAccess":\s*false'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"region":\s*"eu-west-1"'
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: '"stsUnavailable":\s*false'
 
   # --- Job spec ---
   - it: should have restartPolicy Never
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
     asserts:
       - equal:
           path: spec.template.spec.restartPolicy
@@ -181,7 +244,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
     asserts:
       - equal:
           path: spec.backoffLimit
@@ -191,7 +254,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
     asserts:
       - equal:
           path: spec.activeDeadlineSeconds
@@ -201,7 +264,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
       polaris.bootstrap.backoffLimit: 3
     asserts:
       - equal:
@@ -212,7 +275,7 @@ tests:
     set:
       polaris.enabled: true
       polaris.bootstrap.enabled: true
-      polaris.auth.bootstrapCredentials.clientSecret: test-secret
+      polaris.auth.bootstrapCredentials.clientSecret: test-secret  # pragma: allowlist secret
       polaris.bootstrap.activeDeadlineSeconds: 900
     asserts:
       - equal:

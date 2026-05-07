@@ -57,6 +57,15 @@ def _load_packaged_chart_yaml(package_path: Path, member_name: str) -> dict[str,
         return yaml.safe_load(member.read().decode("utf-8"))
 
 
+def _load_packaged_chart_text(package_path: Path, member_name: str) -> str:
+    """Load a text member from a packaged Helm chart."""
+    assert package_path.exists(), f"Packaged chart not found: {package_path}"
+    with tarfile.open(package_path, "r:gz") as archive:
+        member = archive.extractfile(member_name)
+        assert member is not None, f"Packaged chart is missing {member_name}"
+        return member.read().decode("utf-8")
+
+
 # ---------------------------------------------------------------------------
 # AC-1: Flux version constant in common.sh
 # ---------------------------------------------------------------------------
@@ -241,6 +250,22 @@ def test_packaged_platform_chart_vendors_minio_dependency() -> None:
     assert "floe-platform/charts/minio/Chart.yaml" in members, (
         "The packaged chart must vendor the MinIO dependency so Flux does not "
         "attempt OCI-backed dependency resolution during GitRepository packaging."
+    )
+
+
+@pytest.mark.requirement("AC-2")
+def test_packaged_platform_chart_polaris_secret_matches_source_template() -> None:
+    """Packaged chart uses the current Polaris Secret template."""
+    source_template = (_PLATFORM_CHART_DIR / "templates" / "secret-polaris.yaml").read_text()
+    packaged_template = _load_packaged_chart_text(
+        _PACKAGED_PLATFORM_CHART,
+        "floe-platform/templates/secret-polaris.yaml",
+    )
+
+    assert packaged_template == source_template, (
+        "The committed Flux chart package must be refreshed when "
+        "templates/secret-polaris.yaml changes; Flux deploys the packaged chart, "
+        "not the source chart directory."
     )
 
 

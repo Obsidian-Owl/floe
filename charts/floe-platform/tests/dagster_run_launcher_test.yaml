@@ -48,3 +48,25 @@ tests:
       - notMatchRegex:
           path: data["dagster.yaml"]
           pattern: 'hostname: ""'
+
+  - it: should inject MinIO credentials into test run pods
+    values:
+      - ../values-test.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "name: AWS_ACCESS_KEY_ID"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "name: floe-platform-minio"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "key: root-user"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "name: AWS_SECRET_ACCESS_KEY"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "key: root-password"

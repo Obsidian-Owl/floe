@@ -186,7 +186,7 @@ dagster:
   global:
     serviceAccountName: ""
     # PostgreSQL secret name for Dagster components
-    postgresqlSecretName: "dagster-postgresql-secret"
+    postgresqlSecretName: "dagster-postgresql-secret"  # pragma: allowlist secret
 
   # Dagster webserver configuration
   dagsterWebserver:
@@ -271,8 +271,8 @@ dagster:
   postgresqlDatabase: dagster
   postgresqlUsername: floe
   # Secret for PostgreSQL password
-  postgresqlSecretName: "dagster-postgresql-secret"
-  postgresqlPasswordSecretKey: postgresql-password
+  postgresqlSecretName: "dagster-postgresql-secret"  # pragma: allowlist secret
+  postgresqlPasswordSecretKey: postgresql-password  # pragma: allowlist secret
 
   # Run launcher configuration
   runLauncher:
@@ -388,8 +388,9 @@ polaris:
       endpoint: ""
       region: "us-east-1"
       pathStyleAccess: true
-      accessKey: ""
-      secretKey: ""
+      credentialSecretName: ""
+      accessKeySecretKey: ""
+      secretKeySecretKey: ""
 
   # Catalog bootstrap configuration
   bootstrap:
@@ -538,7 +539,7 @@ postgresql:
     password: ""
     # Existing secret with password
     existingSecret: ""
-    existingSecretKey: password
+    existingSecretKey: password  # pragma: allowlist secret
 
   # Persistence
   persistence:
@@ -782,7 +783,7 @@ marquez:
     username: floe
     password: ""  # Use existingSecret in production
     existingSecret: ""
-    existingSecretKey: password
+    existingSecretKey: password  # pragma: allowlist secret
 
 # =============================================================================
 # RBAC Configuration
@@ -965,7 +966,7 @@ externalSecrets:
     remoteRef:
       key: ""  # e.g., floe/prod/minio
       userProperty: username
-      passwordProperty: password
+      passwordProperty: password  # pragma: allowlist secret
 
   # Custom secret mappings
   secrets: []

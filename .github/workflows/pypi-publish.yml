@@ -102,7 +102,7 @@ jobs:
             plugins/floe-secrets-infisical
             plugins/floe-secrets-k8s
             plugins/floe-semantic-cube
-            plugins/floe-storage-s3
+            plugins/floe-storage-minio
             plugins/floe-telemetry-console
             plugins/floe-telemetry-jaeger
           )

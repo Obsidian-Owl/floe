@@ -743,46 +743,48 @@ class TestWaitForServicesUvRun:
 
 
 # ---------------------------------------------------------------------------
-# AC-4: Bootstrap job documents curl limitation
+# AC-4: Bootstrap job delegates bucket ownership to storage/catalog bindings
 # ---------------------------------------------------------------------------
 
 BOOTSTRAP_JOB = REPO_ROOT / "charts" / "floe-platform" / "templates" / "job-polaris-bootstrap.yaml"
 
 
 class TestBootstrapJobCurlDocumentation:
-    """AC-4: Bootstrap job must document the anonymous curl limitation."""
+    """AC-4: Bootstrap job must not own bucket existence checks."""
 
     @pytest.mark.requirement("AC-4")
-    def test_bootstrap_job_documents_403_behavior(self) -> None:
-        """The bootstrap job template must document the 403-for-both-states behavior.
+    def test_bootstrap_job_does_not_document_removed_anonymous_bucket_check(self) -> None:
+        """The bootstrap job should not retain anonymous curl bucket-check guidance.
 
-        Anonymous curl to MinIO returns HTTP 403 for both existing and
-        non-existing buckets. The comment block near the curl check must
-        explain this limitation so future maintainers don't misinterpret
-        the check as a bucket existence verification.
+        Bucket provisioning now belongs to the storage layer and catalog
+        bootstrap receives a typed storage projection. The Polaris bootstrap
+        job may wait for MinIO readiness, but it must not document or depend
+        on the removed anonymous bucket existence check.
         """
         assert BOOTSTRAP_JOB.exists(), f"Bootstrap job template not found at {BOOTSTRAP_JOB}."
         content = BOOTSTRAP_JOB.read_text()
-        assert "403" in content, (
-            "Bootstrap job template does not mention HTTP 403 anywhere. "
-            "The anonymous curl bucket check returns 403 for both existing "
-            "and non-existing buckets — this must be documented."
+        assert "403" not in content, (
+            "Bootstrap job template still documents HTTP 403 anonymous bucket "
+            "checks. The redesigned bootstrap job must not own bucket existence "
+            "verification."
+        )
+        assert "defaultBuckets" not in content, (
+            "Bootstrap job template still references MinIO defaultBuckets. "
+            "Bucket provisioning is storage-layer state, not catalog bootstrap "
+            "state."
         )
 
     @pytest.mark.requirement("AC-4")
-    def test_bootstrap_job_documents_default_buckets_guarantee(self) -> None:
-        """The bootstrap job template must reference the ``defaultBuckets`` guarantee.
+    def test_bootstrap_job_uses_storage_config_info_from_values(self) -> None:
+        """The bootstrap job should create Polaris from generated storage values.
 
-        Since ``defaultBuckets`` creates the bucket at MinIO startup
-        (before the bootstrap job runs), the curl check is a health
-        check, not a bucket existence check. The comment must explain
-        this relationship.
+        Polaris owns the catalog-specific JSON projection. The chart receives
+        generated values for storageConfigInfo and Secret refs instead of
+        discovering bucket state at runtime.
         """
         assert BOOTSTRAP_JOB.exists(), f"Bootstrap job template not found at {BOOTSTRAP_JOB}."
         content = BOOTSTRAP_JOB.read_text()
-        assert "defaultBuckets" in content, (
-            "Bootstrap job template does not mention 'defaultBuckets'. "
-            "The comment block must explain that defaultBuckets guarantees "
-            "the bucket exists at MinIO startup, making this curl check "
-            "a health verification rather than a bucket existence check."
-        )
+        assert "storageConfigInfo" in content
+        assert ".Values.polaris.bootstrap.allowedLocations" in content
+        assert ".Values.polaris.bootstrap.defaultBaseLocation" in content
+        assert ".Values.polaris.storage.s3.endpoint" in content

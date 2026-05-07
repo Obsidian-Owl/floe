@@ -23,21 +23,36 @@ import pytest
 from pydantic import ValidationError
 
 from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
     CompilationMetadata,
     CompiledArtifacts,
+    CredentialRef,
+    DagsterStorageBinding,
+    DbtStorageBinding,
+    DeploymentConfig,
+    KubernetesSecretRef,
     ObservabilityConfig,
     PluginRef,
+    PolarisCatalogDeploymentBinding,
     ProductIdentity,
     ResolvedGovernance,
     ResolvedModel,
     ResolvedPlugins,
     ResolvedTransforms,
+    StorageBucketRequirement,
+    StorageCapabilities,
+    StorageCredentialBinding,
+    StorageDeploymentBinding,
+    StorageProvisioningIntent,
+    StorageRuntimeBinding,
+    StorageServiceEndpoint,
+    StorageWarehouse,
 )
+from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
 from floe_core.schemas.versions import (
     COMPILED_ARTIFACTS_VERSION,
     COMPILED_ARTIFACTS_VERSION_HISTORY,
 )
-from floe_core.telemetry.config import ResourceAttributes, TelemetryConfig
 
 
 @pytest.fixture
@@ -188,7 +203,7 @@ class TestResolvedPlugins:
             compute=PluginRef(type="duckdb", version="0.9.0"),
             orchestrator=PluginRef(type="dagster", version="1.5.0"),
             catalog=PluginRef(type="polaris", version="0.1.0"),
-            storage=PluginRef(type="s3", version="1.0.0"),
+            storage=PluginRef(type="minio", version="1.0.0"),
             ingestion=PluginRef(type="dlt", version="0.4.0"),
             semantic=PluginRef(type="cube", version="0.35.0"),
         )
@@ -573,6 +588,527 @@ class TestCompiledArtifactsExtensions:
         assert artifacts.transforms is not None
         assert artifacts.dbt_profiles is not None
         assert artifacts.governance is not None
+
+
+class TestStorageDeploymentBinding:
+    """Tests for compiled storage deployment bindings."""
+
+    def _rich_binding(self) -> StorageDeploymentBinding:
+        credentials = StorageCredentialBinding(
+            mode="kubernetes-secret",
+            secret_ref=KubernetesSecretRef(
+                name="floe-platform-minio-credentials",
+                namespace="floe-system",
+                keys={
+                    "accessKeyId": "access-key-id",
+                    "secretAccessKey": "secret-access-key",  # pragma: allowlist secret
+                },
+            ),
+        )
+        return StorageDeploymentBinding(
+            provider="minio",
+            protocol="s3-compatible",
+            endpoint=StorageServiceEndpoint(
+                internal_url="http://floe-platform-minio:9000",
+                external_url="http://localhost:9000",
+                region="us-east-1",
+                warehouse_path="s3://floe-iceberg",
+                path_style_access=True,
+            ),
+            warehouse=StorageWarehouse(uri="s3://floe-iceberg", bucket="floe-iceberg"),
+            allowed_locations=["s3://floe-iceberg"],
+            buckets=[
+                StorageBucketRequirement(
+                    name="floe-iceberg",
+                    uri="s3://floe-iceberg",
+                    purpose="warehouse",
+                    create_policy="create-if-missing",
+                )
+            ],
+            credentials=credentials,
+            capabilities=StorageCapabilities(
+                protocols=["s3-compatible"],
+                credential_modes=["kubernetes-secret"],
+                sts_supported=False,
+                path_style_access=True,
+            ),
+            provisioning=StorageProvisioningIntent(
+                enabled=True,
+                mode="helm-job",
+                default_create_policy="create-if-missing",
+            ),
+            runtime=StorageRuntimeBinding(
+                pyiceberg_properties={"s3.endpoint": "http://floe-platform-minio:9000"},
+            ),
+            dbt=DbtStorageBinding(
+                profile_name="floe",
+                target_name="dev",
+                schema_name="analytics",
+                env_refs={
+                    "s3_access_key_id": "AWS_ACCESS_KEY_ID",
+                    "s3_secret_access_key": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+                },
+            ),
+            dagster=DagsterStorageBinding(
+                resource_key="minio_storage",
+                asset_io_manager_key="iceberg_io_manager",
+                env_refs={
+                    "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+                    # pragma: allowlist nextline secret
+                    "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",
+                },
+            ),
+            notes=["Local MinIO storage deployment binding."],
+        )
+
+    def _binding(self) -> StorageDeploymentBinding:
+        endpoint = StorageServiceEndpoint(
+            internal_url="http://floe-platform-minio:9000",
+            external_url="http://localhost:9000",
+            region="us-east-1",
+            warehouse_path="s3://floe-iceberg",
+        )
+        credentials = StorageCredentialBinding(
+            mode="kubernetes-secret",
+            secret_ref=KubernetesSecretRef(
+                name="floe-platform-minio-credentials",
+                namespace="floe-system",
+                keys={
+                    "accessKeyId": "root-user",
+                    "secretAccessKey": "root-password",  # pragma: allowlist secret
+                },
+            ),
+        )
+        return StorageDeploymentBinding(
+            provider="minio",
+            endpoint=endpoint,
+            credentials=credentials,
+            dbt=DbtStorageBinding(
+                profile_name="floe",
+                target_name="dev",
+                schema_name="analytics",
+                env_refs={
+                    "s3_access_key_id": "AWS_ACCESS_KEY_ID",
+                    "s3_secret_access_key": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+                },
+            ),
+            dagster=DagsterStorageBinding(
+                resource_key="minio_storage",
+                asset_io_manager_key="iceberg_io_manager",
+                env_refs={
+                    "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+                    # pragma: allowlist nextline secret
+                    "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",
+                },
+            ),
+            notes=["Local MinIO storage deployment binding."],
+        )
+
+    def test_storage_deployment_binding_serializes_without_secret_values(self) -> None:
+        binding = self._binding()
+        payload = binding.model_dump_json()
+
+        assert "minio" + "admin" not in payload
+        assert "rootPassword" not in payload
+        assert "secretKey" not in payload
+        assert "floe-platform-minio-credentials" in payload
+
+    def test_rich_storage_deployment_binding_serializes_desired_state(self) -> None:
+        binding = self._rich_binding()
+        payload = binding.model_dump(mode="json")
+
+        assert payload["provider"] == "minio"
+        assert payload["protocol"] == "s3-compatible"
+        assert payload["endpoint"]["path_style_access"] is True
+        assert payload["warehouse"] == {
+            "uri": "s3://floe-iceberg",
+            "bucket": "floe-iceberg",
+            "prefix": "",
+        }
+        assert payload["allowed_locations"] == ["s3://floe-iceberg"]
+        assert payload["buckets"][0]["create_policy"] == "create-if-missing"
+        assert payload["capabilities"] == {
+            "protocols": ["s3-compatible"],
+            "credential_modes": ["kubernetes-secret"],
+            "sts_supported": False,
+            "path_style_access": True,
+        }
+        assert payload["provisioning"] == {
+            "enabled": True,
+            "mode": "helm-job",
+            "default_create_policy": "create-if-missing",
+        }
+        assert payload["runtime"]["pyiceberg_properties"] == {
+            "s3.endpoint": "http://floe-platform-minio:9000"
+        }
+
+    @pytest.mark.parametrize(
+        ("field_name", "fragment"),
+        [
+            (
+                "pyiceberg_properties",
+                {"s3.secret-access-key": "raw-secret-value"},  # pragma: allowlist secret
+            ),
+            (
+                "dbt_profile_fragment",
+                {"outputs": {"dev": {"password": "raw-secret-value"}}},  # pragma: allowlist secret
+            ),
+            ("dagster_resources", {"storage": {"token": "raw-secret-value"}}),
+            ("dbt_profile_fragment", {"settings": {"raw-secret-value"}}),
+            ("dbt_profile_fragment", {"settings": {"storage-admin"}}),
+            ("dbt_profile_fragment", {"settings": {"uri": "s3://storage-admin@localhost:9000"}}),
+            ("dagster_resources", {"settings": frozenset({"raw-secret-value"})}),
+        ],
+    )
+    def test_storage_runtime_binding_rejects_raw_secret_fragments(
+        self,
+        field_name: str,
+        fragment: dict[str, Any],
+    ) -> None:
+        with pytest.raises(ValidationError, match="raw credential material"):
+            StorageRuntimeBinding(**{field_name: fragment})
+
+    @pytest.mark.parametrize(
+        "fragment",
+        [
+            {"password": "raw-secret-value"},  # pragma: allowlist secret
+            {"settings": {"value": "raw-secret-value"}},
+            {"settings": {"raw-secret-value"}},
+        ],
+    )
+    def test_dbt_storage_binding_rejects_raw_secret_profile_fragment(
+        self,
+        fragment: dict[str, Any],
+    ) -> None:
+        with pytest.raises(ValidationError, match="raw credential material"):
+            DbtStorageBinding(
+                profile_name="floe",
+                target_name="dev",
+                schema_name="analytics",
+                profile_fragment=fragment,
+            )
+
+    @pytest.mark.parametrize(
+        "resources",
+        [
+            {"storage": {"token": "raw-secret-value"}},
+            {"storage": {"value": "raw-secret-value"}},
+            {"storage": frozenset({"raw-secret-value"})},
+        ],
+    )
+    def test_dagster_storage_binding_rejects_raw_secret_resources(
+        self,
+        resources: dict[str, Any],
+    ) -> None:
+        with pytest.raises(ValidationError, match="raw credential material"):
+            DagsterStorageBinding(
+                resource_key="minio_storage",
+                asset_io_manager_key="iceberg_io_manager",
+                resources=resources,
+            )
+
+    def test_compiled_artifacts_accept_deployment_storage_binding(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        artifacts = CompiledArtifacts(
+            metadata=sample_compilation_metadata,
+            identity=sample_product_identity,
+            observability=sample_observability_config,
+            plugins=ResolvedPlugins(
+                compute=PluginRef(type="duckdb", version="0.1.0"),
+                orchestrator=PluginRef(type="dagster", version="0.1.0"),
+                catalog=PluginRef(type="polaris", version="0.1.0"),
+                storage=PluginRef(type="minio", version="0.1.0"),
+            ),
+            deployment=DeploymentConfig(storage=self._binding()),
+        )
+
+        restored = CompiledArtifacts.model_validate(artifacts.model_dump(mode="json"))
+
+        assert restored.deployment is not None
+        assert restored.deployment.storage is not None
+        assert restored.deployment.storage.provider == "minio"
+        assert (
+            restored.deployment.storage.endpoint.internal_url == "http://floe-platform-minio:9000"
+        )
+        assert restored.deployment.storage.dbt.profile_name == "floe"
+        assert restored.deployment.storage.dagster.resource_key == "minio_storage"
+
+    def test_compiled_artifacts_accept_storage_and_catalog_deployment_bindings(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        storage = self._rich_binding()
+        catalog = CatalogDeploymentBinding(
+            provider="polaris",
+            polaris=PolarisCatalogDeploymentBinding(
+                storage_type="S3",
+                default_base_location="s3://floe-iceberg",
+                allowed_locations=["s3://floe-iceberg"],
+                endpoint="http://localhost:9000",
+                endpoint_internal="http://floe-platform-minio:9000",
+                path_style_access=True,
+                sts_unavailable=True,
+                credential_refs={
+                    "accessKeyId": storage.credentials.as_credential_ref("accessKeyId"),
+                    "secretAccessKey": storage.credentials.as_credential_ref("secretAccessKey"),
+                },
+            ),
+        )
+        artifacts = CompiledArtifacts(
+            metadata=sample_compilation_metadata,
+            identity=sample_product_identity,
+            observability=sample_observability_config,
+            plugins=ResolvedPlugins(
+                compute=PluginRef(type="duckdb", version="0.1.0"),
+                orchestrator=PluginRef(type="dagster", version="0.1.0"),
+                catalog=PluginRef(type="polaris", version="0.1.0"),
+                storage=PluginRef(type="minio", version="0.1.0"),
+            ),
+            deployment=DeploymentConfig(storage=storage, catalog=catalog),
+        )
+
+        restored = CompiledArtifacts.model_validate(artifacts.model_dump(mode="json"))
+        serialized = restored.model_dump_json()
+
+        assert restored.deployment is not None
+        assert restored.deployment.storage is not None
+        assert restored.deployment.catalog is not None
+        assert restored.deployment.catalog.provider == "polaris"
+        assert restored.deployment.catalog.polaris.default_base_location == "s3://floe-iceberg"
+        assert restored.deployment.catalog.polaris.allowed_locations == ["s3://floe-iceberg"]
+        assert restored.deployment.catalog.polaris.path_style_access is True
+        assert restored.deployment.catalog.polaris.sts_unavailable is True
+        assert (
+            restored.deployment.catalog.polaris.credential_refs["secretAccessKey"].key
+            == "secret-access-key"
+        )
+        assert "minio-secret-value" not in serialized
+        assert "raw-secret-value" not in serialized
+
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            lambda: DbtStorageBinding(
+                profile_name="floe",
+                target_name="dev",
+                schema_name="analytics",
+                env_refs={"s3_access_key_id": ""},
+            ),
+            lambda: DagsterStorageBinding(
+                resource_key="minio_storage",
+                asset_io_manager_key="iceberg_io_manager",
+                env_refs={"AWS_ACCESS_KEY_ID": ""},
+            ),
+        ],
+    )
+    def test_consumer_env_ref_values_reject_empty_strings(
+        self,
+        factory: Any,
+    ) -> None:
+        with pytest.raises(ValidationError):
+            factory()
+
+
+class TestStorageCredentialBinding:
+    """Tests for storage credential binding validation."""
+
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            lambda: KubernetesSecretRef(name="Bad_Name", namespace="floe-system"),
+            lambda: KubernetesSecretRef(name="storage-credentials", namespace="Bad_Namespace"),
+        ],
+    )
+    def test_kubernetes_secret_ref_rejects_invalid_identifiers(
+        self,
+        factory: Any,
+    ) -> None:
+        with pytest.raises(ValidationError):
+            factory()
+
+    def test_kubernetes_secret_ref_accepts_dns_label_identifiers(self) -> None:
+        ref = KubernetesSecretRef(
+            name="storage-credentials",
+            namespace="floe-system",
+            keys={"accessKeyId": "root-user"},
+        )
+
+        assert ref.name == "storage-credentials"
+        assert ref.namespace == "floe-system"
+
+    @pytest.mark.parametrize(
+        "binding_kwargs",
+        [
+            {"mode": "kubernetes-secret"},
+            {"mode": "environment"},
+            {"mode": "environment", "env_refs": {}},
+            {"mode": "workload-identity"},
+            {
+                "mode": "none",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+            },
+            {"mode": "none", "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"}},
+            {"mode": "none", "service_account_ref": "storage-service-account"},
+            {
+                "mode": "kubernetes-secret",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
+            },
+            {
+                "mode": "kubernetes-secret",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+                "service_account_ref": "storage-service-account",
+            },
+            {
+                "mode": "environment",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
+            },
+            {
+                "mode": "environment",
+                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
+                "service_account_ref": "storage-service-account",
+            },
+            {
+                "mode": "workload-identity",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+                "service_account_ref": "storage-service-account",
+            },
+            {
+                "mode": "workload-identity",
+                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
+                "service_account_ref": "storage-service-account",
+            },
+        ],
+    )
+    def test_mode_inconsistent_credential_bindings_are_rejected(
+        self,
+        binding_kwargs: dict[str, Any],
+    ) -> None:
+        with pytest.raises(ValidationError):
+            StorageCredentialBinding(**binding_kwargs)
+
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            lambda: KubernetesSecretRef(
+                name="storage-credentials",
+                namespace="floe-system",
+                keys={"accessKeyId": ""},
+            ),
+            lambda: KubernetesSecretRef(name="storage-credentials"),
+            lambda: CredentialRef(source="environment", name=""),
+            lambda: CredentialRef(source="kubernetes-secret", name="storage-credentials", key=""),
+            lambda: StorageCredentialBinding(mode="environment", env_refs={"accessKeyId": ""}),
+            lambda: StorageCredentialBinding(mode="workload-identity", service_account_ref=""),
+        ],
+    )
+    def test_empty_credential_reference_values_are_rejected(
+        self,
+        factory: Any,
+    ) -> None:
+        with pytest.raises(ValidationError):
+            factory()
+
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            lambda: CredentialRef(source="kubernetes-secret", name="storage-credentials"),
+            lambda: CredentialRef(
+                source="environment",
+                name="AWS_ACCESS_KEY_ID",
+                key="accessKeyId",
+            ),
+            lambda: CredentialRef(
+                source="workload-identity",
+                name="storage-service-account",
+                key="accessKeyId",
+            ),
+            lambda: CredentialRef(source="none", name="none", key="accessKeyId"),
+        ],
+    )
+    def test_credential_ref_key_matches_source(
+        self,
+        factory: Any,
+    ) -> None:
+        with pytest.raises(ValidationError):
+            factory()
+
+    def test_environment_credential_ref_uses_configured_env_name(self) -> None:
+        binding = StorageCredentialBinding(
+            mode="environment",
+            env_refs={"accessKeyId": "AWS_ACCESS_KEY_ID"},
+        )
+
+        ref = binding.as_credential_ref("accessKeyId")
+
+        assert ref.source == "environment"
+        assert ref.name == "AWS_ACCESS_KEY_ID"
+        assert ref.key is None
+
+    def test_environment_credential_ref_raises_for_missing_logical_key(self) -> None:
+        binding = StorageCredentialBinding(
+            mode="environment",
+            env_refs={"accessKeyId": "AWS_ACCESS_KEY_ID"},
+        )
+
+        with pytest.raises(ValueError, match="not present in env_refs"):
+            binding.as_credential_ref("secretAccessKey")
+
+    def test_kubernetes_secret_credential_ref_raises_for_missing_logical_key(self) -> None:
+        binding = StorageCredentialBinding(
+            mode="kubernetes-secret",
+            secret_ref=KubernetesSecretRef(
+                name="storage-credentials",
+                namespace="floe-system",
+                keys={"accessKeyId": "root-user"},
+            ),
+        )
+
+        with pytest.raises(ValueError, match="not present in secret_ref.keys"):
+            binding.as_credential_ref("secretAccessKey")
+
+    def test_workload_identity_credential_ref_uses_service_account(self) -> None:
+        binding = StorageCredentialBinding(
+            mode="workload-identity",
+            service_account_ref="storage-service-account",
+        )
+
+        ref = binding.as_credential_ref("accessKeyId")
+
+        assert ref.source == "workload-identity"
+        assert ref.name == "storage-service-account"
+        assert ref.key is None
+
+    def test_none_credential_ref_is_stable(self) -> None:
+        binding = StorageCredentialBinding(mode="none")
+
+        ref = binding.as_credential_ref("accessKeyId")
+
+        assert ref.source == "none"
+        assert ref.name == "none"
+        assert ref.key is None
 
 
 class TestYamlSerialization:
@@ -1162,11 +1698,14 @@ class TestCompiledArtifactsVersionBump:
 
     @pytest.mark.requirement("T1-AC-6")
     def test_version_history_0_10_0_references_stale_table_recovery(self) -> None:
-        """Test that the 0.10.0 history entry mentions stale table recovery."""
+        """Test that the 0.10.0 history entry mentions contract additions."""
         entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.10.0", "")
         entry_lower = entry.lower()
         assert "stale" in entry_lower and "recovery" in entry_lower, (
             f"Version 0.10.0 history entry does not reference stale table recovery: '{entry}'"
+        )
+        assert "deployment" in entry_lower, (
+            f"Version 0.10.0 history entry does not reference deployment bindings: '{entry}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")

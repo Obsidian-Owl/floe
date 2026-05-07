@@ -199,7 +199,7 @@ def project_dir_with_iceberg(tmp_path: Path) -> Path:
     pdir = tmp_path / "dbt_project"
     artifacts = _make_artifacts(
         catalog=PluginRef(type="polaris", version="0.1.0", config={}),
-        storage=PluginRef(type="s3", version="1.0.0", config={}),
+        storage=PluginRef(type="minio", version="1.0.0", config={}),
     )
     _write_artifacts_and_manifest(pdir, artifacts)
     return pdir
@@ -211,7 +211,7 @@ def project_dir_with_alpha_capabilities(tmp_path: Path) -> Path:
     pdir = tmp_path / "dbt_project"
     artifacts = _make_artifacts(
         catalog=PluginRef(type="polaris", version="0.1.0", config={}),
-        storage=PluginRef(type="s3", version="1.0.0", config={}),
+        storage=PluginRef(type="minio", version="1.0.0", config={}),
         lineage_backend=PluginRef(
             type="marquez",
             version="0.1.0",

@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from floe_core.compute_config import ComputeConfig
-from floe_core.schemas.compiled_artifacts import PluginRef, ResolvedPlugins
+from floe_core.schemas.compiled_artifacts import DbtStorageBinding, PluginRef, ResolvedPlugins
 
 
 class TestGenerateDBTProfiles:
@@ -149,6 +149,48 @@ class TestGenerateDBTProfiles:
         # Target should use env_var for dynamic selection
         target = profiles["test_product"]["target"]
         assert "{{ env_var('FLOE_ENV'" in target or target == "dev"
+
+    @pytest.mark.requirement("FR-005")
+    def test_generate_dbt_profiles_merges_storage_binding_fragment(
+        self,
+        mock_compute_plugin: MagicMock,
+        resolved_plugins: ResolvedPlugins,
+    ) -> None:
+        """Test that compiled storage projection augments dbt profile outputs."""
+        from floe_core.compilation.dbt_profiles import generate_dbt_profiles
+
+        storage_binding = DbtStorageBinding(
+            profile_name="floe",
+            target_name="dev",
+            schema_name="analytics",
+            profile_fragment={
+                "s3_endpoint": "http://floe-platform-minio:9000",
+                "s3_region": "us-east-1",
+                "s3_path_style_access": True,
+            },
+            env_refs={
+                "s3_access_key_id": "AWS_ACCESS_KEY_ID",
+                # pragma: allowlist nextline secret
+                "s3_secret_access_key": "AWS_SECRET_ACCESS_KEY",
+            },
+        )
+
+        with patch(
+            "floe_core.compilation.dbt_profiles.get_compute_plugin",
+            return_value=mock_compute_plugin,
+        ):
+            profiles = generate_dbt_profiles(
+                plugins=resolved_plugins,
+                product_name="customer_360",
+                storage_binding=storage_binding,
+            )
+
+        dev_output = profiles["customer_360"]["outputs"]["dev"]
+        assert dev_output["s3_endpoint"] == "http://floe-platform-minio:9000"
+        assert dev_output["s3_region"] == "us-east-1"
+        assert dev_output["s3_path_style_access"] is True
+        assert dev_output["s3_access_key_id"] == "{{ env_var('AWS_ACCESS_KEY_ID') }}"
+        assert dev_output["s3_secret_access_key"] == "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
 
 
 class TestCredentialPlaceholders:

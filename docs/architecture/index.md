@@ -14,6 +14,7 @@ This directory contains the architectural documentation for floe.
 | [Platform Enforcement](platform-enforcement.md) | How platform constraints are enforced at compile time |
 | [Platform Services](platform-services.md) | Layer 3 long-lived services (Dagster, Polaris, Cube, etc.) |
 | [Plugin Architecture](plugin-system/index.md) | Plugin system design and entry point registration |
+| [Plugin Composition Uplift Tracker](plugin-composition-uplift-tracker.md) | Adoption tracker for composition resolver and typed adapter contracts |
 | [Opinionation Boundaries](opinionation-boundaries.md) | What's enforced vs pluggable |
 | [Interfaces](interfaces/index.md) | Abstract Base Classes for all plugin types |
 | [Platform Artifacts](platform-artifacts.md) | OCI registry storage for platform configurations |

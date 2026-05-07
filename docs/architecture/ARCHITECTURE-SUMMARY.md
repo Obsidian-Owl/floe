@@ -33,6 +33,7 @@ floe is built on **composability** as a core architectural principle (ADR-0037):
 
 - **Plugin Architecture > Configuration Switches**: Extensibility via entry points (`floe.computes`, `floe.orchestrators`, etc.), not if/else config
 - **Interface > Implementation**: Define ABCs (ComputePlugin, TelemetryBackendPlugin, LineageBackendPlugin), not concrete classes
+- **Composition Contracts > Cross-Plugin Coupling**: Plugins declare capabilities and requirements; `floe-core` validates compatibility and passes typed bindings between plugins
 - **Progressive Disclosure**: Point to detailed docs, don't duplicate content
 - **Opt-in Complexity**: Start simple (2-tier), with architecture direction toward Data Mesh-compatible (3-tier) governance. See [Capability Status](capability-status.md) for the current alpha-validated state.
 
@@ -43,6 +44,11 @@ floe is built on **composability** as a core architectural principle (ADR-0037):
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins.
 
 **See**: [ADR-0037: Composability Principle](adr/0037-composability-principle.md)
+
+Storage-side plugin composition is tracked in
+[Plugin Composition Uplift Tracker](plugin-composition-uplift-tracker.md). The
+immediate target is storage/catalog/compute/orchestrator/deployment composition
+for the Iceberg runtime path; broader plugin uplift is staged after that PR.
 
 ### Four-Layer Architecture
 
@@ -127,6 +133,7 @@ destination raw table, write mode, and schema contract in `floe.yaml`.
 | `platform-enforcement.md` | How platform constraints are enforced |
 | `platform-services.md` | Layer 3 services (orchestrator, catalog, etc.) |
 | `plugin-system/` | Plugin structure and discovery |
+| `plugin-composition-uplift-tracker.md` | Composition resolver and typed adapter adoption plan |
 | `interfaces/` | Abstract Base Classes for all plugins |
 | `opinionation-boundaries.md` | What's enforced vs pluggable |
 | `platform-artifacts.md` | OCI registry storage model |
@@ -202,14 +209,21 @@ class LineageBackendPlugin(ABC):
 
 ### Example: StoragePlugin
 
+Target semantic surface:
+
 ```python
 class StoragePlugin(ABC):
+    def get_deployment_binding(self) -> StorageDeploymentBinding
     def get_pyiceberg_fileio(self) -> FileIO
-    def get_warehouse_uri(self, namespace: str) -> str
-    def get_dbt_profile_config(self) -> dict[str, Any]
-    def get_dagster_io_manager_config(self) -> dict[str, Any]
-    def get_helm_values_override(self) -> dict[str, Any]
 ```
+
+Storage plugins emit neutral, secret-free storage bindings. `floe-core`
+validates compatibility; catalog, compute, orchestrator, and Helm renderers
+translate the typed deployment bindings they own.
+
+During migration, the live ABC may still require legacy helper methods for
+existing plugins. Those methods are compatibility surface, not the composition
+contract.
 
 ## Repository Structure
 
@@ -228,7 +242,7 @@ floe/
 │   ├── floe-orchestrator-airflow/
 │   ├── floe-catalog-polaris/
 │   ├── floe-catalog-glue/
-│   ├── floe-storage-s3/         # S3-compatible storage, including MinIO endpoints
+│   ├── floe-storage-minio/      # MinIO storage with S3-compatible protocol support
 │   ├── floe-observability-jaeger/
 │   ├── floe-observability-datadog/
 │   ├── floe-semantic-cube/

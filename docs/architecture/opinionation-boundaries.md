@@ -104,6 +104,11 @@ Platform Team selects these once in `manifest.yaml`:
 - Multi-cloud strategies (S3 + GCS for disaster recovery)
 - Cost optimization (MinIO vs cloud object storage)
 - All storage via PyIceberg FileIO (enforced)
+- Storage/catalog compatibility is validated by `floe-core` composition
+  contracts. Storage plugins emit neutral storage bindings; catalog plugins
+  translate those bindings into catalog-owned deployment config; Helm renders
+  the generated bindings without rediscovering storage semantics from chart
+  credentials.
 
 **Telemetry Backend**
 - Existing telemetry investments (Datadog APM, Grafana Cloud)
@@ -165,7 +170,7 @@ plugins:
   compute: duckdb                 # Alpha-supported reference path
   orchestrator: dagster           # Alpha-supported reference path
   catalog: polaris                # Alpha-supported reference path
-  storage: s3                     # S3-compatible storage plugin; demo uses MinIO
+  storage: minio                  # MinIO storage plugin; uses S3-compatible protocol fields
   telemetry_backend: jaeger       # Alpha-supported telemetry backend
   lineage_backend: marquez        # Alpha-supported lineage backend
   semantic_layer: cube            # Reference implementation

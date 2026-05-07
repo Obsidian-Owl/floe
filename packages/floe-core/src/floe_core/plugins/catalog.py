@@ -20,12 +20,14 @@ Example:
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
+from floe_core.composition.models import PluginRequirements
 from floe_core.plugin_metadata import HealthState, HealthStatus, PluginMetadata
-
-if TYPE_CHECKING:
-    pass
+from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
+    StorageDeploymentBinding,
+)
 
 
 @runtime_checkable
@@ -352,6 +354,27 @@ class CatalogPlugin(PluginMetadata):
             >>> plugin.drop_table("staging.old_data", purge=True)  # Also delete files
         """
         ...
+
+    def get_storage_requirements(self) -> PluginRequirements:
+        """Return storage requirements for composition validation.
+
+        Catalog plugins that participate in deployment composition should
+        override this method to describe the storage protocols and credential
+        modes they can consume.
+        """
+        raise NotImplementedError(f"{self.name} does not declare storage composition requirements")
+
+    def build_catalog_deployment(
+        self,
+        storage: StorageDeploymentBinding,
+    ) -> CatalogDeploymentBinding:
+        """Translate neutral storage binding into catalog-owned deployment config.
+
+        Catalog plugins that require server-side storage configuration should
+        override this method and emit their catalog-specific deployment
+        binding from the neutral storage binding.
+        """
+        raise NotImplementedError(f"{self.name} does not support catalog deployment binding")
 
     def health_check(self, timeout: float | None = None) -> HealthStatus:
         """Check catalog connectivity and health.

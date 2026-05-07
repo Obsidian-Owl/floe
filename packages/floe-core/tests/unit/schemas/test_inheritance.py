@@ -291,7 +291,7 @@ class TestParentChildMerge:
             plugins={
                 "compute": {"type": "snowflake", "config": {"warehouse": "LARGE"}},
                 "catalog": {"type": "polaris"},
-                "storage": {"type": "s3"},
+                "storage": {"type": "minio"},
             },
         )
 
@@ -328,7 +328,7 @@ class TestParentChildMerge:
 
         # Parent's storage is INHERITED
         assert resolved.plugins.storage is not None
-        assert resolved.plugins.storage.type == "s3"
+        assert resolved.plugins.storage.type == "minio"
 
         # Child's metadata takes precedence (OVERRIDE strategy)
         assert resolved.metadata.name == "domain"

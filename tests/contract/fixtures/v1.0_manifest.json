@@ -24,7 +24,7 @@
       "connection_secret_ref": "polaris-credentials"
     },
     "storage": {
-      "type": "s3"
+      "type": "minio"
     }
   },
   "governance": {

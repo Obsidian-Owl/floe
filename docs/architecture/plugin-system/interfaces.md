@@ -161,6 +161,19 @@ class CatalogPlugin(ABC):
         pass
 
     @abstractmethod
+    def get_storage_requirements(self) -> PluginRequirements:
+        """Return storage requirements for composition validation."""
+        pass
+
+    @abstractmethod
+    def build_catalog_deployment(
+        self,
+        storage: StorageDeploymentBinding,
+    ) -> CatalogDeploymentBinding:
+        """Translate neutral storage state into catalog-owned deployment config."""
+        pass
+
+    @abstractmethod
     def create_namespace(self, namespace: str, properties: dict | None = None):
         """Create namespace."""
         pass
@@ -666,77 +679,49 @@ openmetadata = "floe_lineage_openmetadata:OpenMetadataPlugin"
 
 ## StoragePlugin
 
-Per ADR-0036, storage backends (S3, GCS, Azure, MinIO) are pluggable via the PyIceberg FileIO pattern:
+Per ADR-0036, storage backends (S3, GCS, Azure, MinIO) are pluggable through a
+neutral storage deployment binding backed by the PyIceberg FileIO pattern. This
+is the target semantic interface; the live migration-era ABC may still require
+legacy helper methods until plugin uplift removes that compatibility surface.
 
 ```python
 class StoragePlugin(ABC):
     """Interface for storage backend plugins.
 
-    Wraps PyIceberg FileIO pattern to provide:
-    - PyIceberg-compatible FileIO instance
-    - Credential management
-    - Helm values for deploying storage services (if self-hosted)
+    Emits secret-free storage desired state:
+    - protocol and endpoint roles
+    - warehouse and bucket requirements
+    - credential references
+    - capabilities and provisioning intent
+    - runtime FileIO facts
     """
 
-    name: str  # e.g., "s3", "gcs", "azure", "minio"
+    name: str  # e.g., "minio", "gcs", "azure-blob"
     version: str
     floe_api_version: str
 
     @abstractmethod
+    def get_deployment_binding(self) -> StorageDeploymentBinding:
+        """Return neutral storage desired state for composition and rendering."""
+        pass
+
+    @abstractmethod
     def get_pyiceberg_fileio(self) -> FileIO:
-        """Create PyIceberg FileIO instance for this storage backend.
-
-        Returns:
-            FileIO instance (S3FileIO, GCSFileIO, AzureFileIO, etc.)
-        """
-        pass
-
-    @abstractmethod
-    def get_warehouse_uri(self, namespace: str) -> str:
-        """Generate warehouse URI for Iceberg catalog.
-
-        Args:
-            namespace: Catalog namespace (e.g., "bronze", "silver")
-
-        Returns:
-            Storage URI (e.g., "s3://bucket/warehouse/bronze")
-        """
-        pass
-
-    @abstractmethod
-    def get_dbt_profile_config(self) -> dict[str, Any]:
-        """Generate dbt profile configuration for this storage backend.
-
-        Returns:
-            Dictionary with storage-specific config for dbt profiles.yml
-        """
-        pass
-
-    @abstractmethod
-    def get_dagster_io_manager_config(self) -> dict[str, Any]:
-        """Generate Dagster IOManager configuration.
-
-        Returns:
-            Dictionary with storage config for Dagster IOManager
-        """
-        pass
-
-    @abstractmethod
-    def get_helm_values_override(self) -> dict[str, Any]:
-        """Generate Helm values for deploying storage services.
-
-        Returns:
-            Helm values dictionary for storage chart.
-            Empty dict if storage is external (cloud).
-        """
+        """Create PyIceberg FileIO instance for direct runtime use."""
         pass
 ```
+
+`floe-core` validates storage/catalog compatibility and carries the typed
+deployment bindings in `CompiledArtifacts`. Catalog, compute, orchestrator, and
+deployment plugins translate the neutral storage binding into their own config.
+Storage plugins must not emit catalog-specific bootstrap JSON or Helm values as
+the semantic contract, and renderers must not reconstruct storage facts from
+legacy chart values.
 
 **Entry points:**
 ```toml
 [project.entry-points."floe.storage"]
-s3 = "floe_storage_s3:S3Plugin"
-minio = "floe_storage_minio:MinIOPlugin"
+minio = "floe_storage_minio.plugin:MinIOStoragePlugin"
 gcs = "floe_storage_gcs:GCSPlugin"
 ```
 

@@ -38,7 +38,7 @@ _FACTORIES: list[dict[str, Any]] = [
             compute=PluginRef(type="duckdb", version="1.0.0", config=None),
             orchestrator=PluginRef(type="dagster", version="1.0.0", config=None),
             catalog=PluginRef(type="polaris", version="0.1.0", config={"uri": "http://p"}),
-            storage=PluginRef(type="s3", version="1.0.0", config={"bucket": "b"}),
+            storage=PluginRef(type="minio", version="1.0.0", config={"bucket": "b"}),
             ingestion=None,
             semantic=None,
         ),

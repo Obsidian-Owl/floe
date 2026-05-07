@@ -42,7 +42,7 @@ COMPILED_ARTIFACTS_VERSION_HISTORY: dict[str, str] = {
     "0.7.0": "Add rbac_principal, secrets_scanned to EnforcementResultSummary (Epic 3E)",
     "0.8.0": "Add lineage_endpoint, lineage_transport to ObservabilityConfig",
     "0.9.0": "Add default_ttl_hours, snapshot_keep_last to ResolvedGovernance (Issue #165)",
-    "0.10.0": "Add stale_table_recovery_mode to ResolvedGovernance",
+    "0.10.0": "Add stale_table_recovery_mode to ResolvedGovernance and deployment bindings",
 }
 
 

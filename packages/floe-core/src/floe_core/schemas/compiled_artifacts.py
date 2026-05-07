@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from floe_core.schemas.data_contract import DataContract
 from floe_core.schemas.quality_config import QualityConfig
@@ -38,6 +39,23 @@ _K8S_NAMESPACE_PATTERN = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 PRODUCT_NAME_PATTERN = r"^[a-zA-Z][a-zA-Z0-9_-]*$"
 _MAX_K8S_NAME_LENGTH = 253
 _MAX_K8S_NAMESPACE_LENGTH = 63
+NonEmptyString = Annotated[str, Field(min_length=1)]
+_SECRET_FIELD_MARKERS = (
+    "access-key",
+    "access_key",
+    "accesskey",
+    "credential",
+    "password",
+    "secret",
+    "token",
+)
+_SECRET_VALUE_MARKERS = (
+    "password",
+    "raw-secret-value",
+    "secret-value",
+    "token",
+)
+_DEFAULT_ADMIN_CREDENTIAL_PATTERN = re.compile(r"(?<![a-z0-9])[a-z0-9_-]*admin[0-9]*(?![a-z0-9])")
 
 
 def _validate_configmap_name(name: str) -> str:
@@ -62,6 +80,66 @@ def _validate_configmap_namespace(namespace: str) -> str:
     if not _K8S_NAMESPACE_PATTERN.fullmatch(namespace):
         raise ValueError(f"Invalid namespace: {namespace!r} must match Kubernetes namespace rules")
     return namespace
+
+
+def _validate_kubernetes_secret_name(name: str) -> str:
+    """Validate Secret metadata.name as a Kubernetes DNS subdomain."""
+    if len(name) > _MAX_K8S_NAME_LENGTH:
+        raise ValueError(f"Invalid Secret name: {name!r} exceeds {_MAX_K8S_NAME_LENGTH} characters")
+    if not _K8S_DNS_SUBDOMAIN_PATTERN.fullmatch(name):
+        raise ValueError(f"Invalid Secret name: {name!r} must match Kubernetes DNS subdomain rules")
+    return name
+
+
+def _validate_kubernetes_namespace(namespace: str) -> str:
+    """Validate Kubernetes metadata.namespace as a namespace name."""
+    if len(namespace) > _MAX_K8S_NAMESPACE_LENGTH:
+        raise ValueError(
+            f"Invalid namespace: {namespace!r} exceeds {_MAX_K8S_NAMESPACE_LENGTH} characters"
+        )
+    if not _K8S_NAMESPACE_PATTERN.fullmatch(namespace):
+        raise ValueError(f"Invalid namespace: {namespace!r} must match Kubernetes namespace rules")
+    return namespace
+
+
+def _assert_no_secret_material(value: Any, path: str) -> None:
+    """Reject raw credential-looking fields in serialized artifact fragments."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key).lower()
+            child_path = f"{path}.{key}"
+            if any(marker in key_text for marker in _SECRET_FIELD_MARKERS):
+                msg = (
+                    f"{child_path} looks like raw credential material; use env_refs "
+                    "or CredentialRef fields instead"
+                )
+                raise ValueError(msg)
+            _assert_no_secret_material(child, child_path)
+        return
+
+    if isinstance(value, list | tuple | set | frozenset):
+        for index, child in enumerate(value):
+            _assert_no_secret_material(child, f"{path}[{index}]")
+        return
+
+    if isinstance(value, str):
+        value_text = value.lower()
+        if any(marker in value_text for marker in _SECRET_VALUE_MARKERS) or (
+            _DEFAULT_ADMIN_CREDENTIAL_PATTERN.search(value_text) is not None
+        ):
+            msg = (
+                f"{path} looks like raw credential material; use env_refs "
+                "or CredentialRef fields instead"
+            )
+            raise ValueError(msg)
+        return
+
+    if isinstance(value, Iterable):
+        msg = (
+            f"{path} contains unsupported runtime fragment type {type(value).__name__}; "
+            "use JSON-compatible dict, list, string, number, boolean, or null values"
+        )
+        raise ValueError(msg)
 
 
 class CompilationMetadata(BaseModel):
@@ -262,6 +340,285 @@ class ResolvedPlugins(BaseModel):
         default=None,
         description="Resolved lineage backend plugin (optional, v0.5.0+)",
     )
+
+
+class KubernetesSecretRef(BaseModel):
+    """Reference to keys in a Kubernetes Secret."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: NonEmptyString
+    namespace: NonEmptyString
+    keys: dict[str, NonEmptyString] = Field(default_factory=dict)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, name: str) -> str:
+        """Validate the referenced Secret name."""
+        return _validate_kubernetes_secret_name(name)
+
+    @field_validator("namespace")
+    @classmethod
+    def validate_namespace(cls, namespace: str) -> str:
+        """Validate the referenced Secret namespace."""
+        return _validate_kubernetes_namespace(namespace)
+
+
+class CredentialRef(BaseModel):
+    """Secret-free credential reference used by consumer projections."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
+    name: NonEmptyString
+    key: NonEmptyString | None = None
+
+    @model_validator(mode="after")
+    def validate_key_for_source(self) -> CredentialRef:
+        """Ensure only Kubernetes Secret credential refs carry key names."""
+        if self.source == "kubernetes-secret":
+            if self.key is None:
+                msg = "kubernetes-secret credential ref requires key"
+                raise ValueError(msg)
+            return self
+        if self.key is not None:
+            msg = f"{self.source} credential ref does not accept key"
+            raise ValueError(msg)
+        return self
+
+
+class StorageCredentialBinding(BaseModel):
+    """Secret-free storage credential source."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    mode: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
+    secret_ref: KubernetesSecretRef | None = None
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+    service_account_ref: NonEmptyString | None = None
+
+    @model_validator(mode="after")
+    def validate_mode_sources(self) -> StorageCredentialBinding:
+        """Ensure credential source fields match the selected mode."""
+        if self.mode == "kubernetes-secret":
+            if self.secret_ref is None:
+                msg = "kubernetes-secret credential binding requires secret_ref"
+                raise ValueError(msg)
+            if self.env_refs or self.service_account_ref is not None:
+                msg = "kubernetes-secret credential binding only accepts secret_ref"
+                raise ValueError(msg)
+            return self
+        if self.mode == "environment":
+            if not self.env_refs:
+                msg = "environment credential binding requires env_refs"
+                raise ValueError(msg)
+            if self.secret_ref is not None or self.service_account_ref is not None:
+                msg = "environment credential binding only accepts env_refs"
+                raise ValueError(msg)
+            return self
+        if self.mode == "workload-identity":
+            if self.service_account_ref is None:
+                msg = "workload-identity credential binding requires service_account_ref"
+                raise ValueError(msg)
+            if self.secret_ref is not None or self.env_refs:
+                msg = "workload-identity credential binding only accepts service_account_ref"
+                raise ValueError(msg)
+            return self
+        if self.secret_ref is not None or self.env_refs or self.service_account_ref is not None:
+            msg = "none credential binding does not accept credential source fields"
+            raise ValueError(msg)
+        return self
+
+    def as_credential_ref(self, logical_key: str) -> CredentialRef:
+        """Return a consumer credential reference for a logical key."""
+        if self.mode == "kubernetes-secret":
+            if self.secret_ref is None:
+                msg = "kubernetes-secret credential binding requires secret_ref"
+                raise ValueError(msg)
+            secret_key = self.secret_ref.keys.get(logical_key)
+            if secret_key is None:
+                msg = f"credential key {logical_key!r} not present in secret_ref.keys"
+                raise ValueError(msg)
+            return CredentialRef(source=self.mode, name=self.secret_ref.name, key=secret_key)
+        if self.mode == "environment":
+            env_name = self.env_refs.get(logical_key)
+            if env_name is None:
+                msg = f"credential key {logical_key!r} not present in env_refs"
+                raise ValueError(msg)
+            return CredentialRef(source=self.mode, name=env_name)
+        if self.mode == "workload-identity":
+            if self.service_account_ref is None:
+                msg = "workload-identity credential binding requires service_account_ref"
+                raise ValueError(msg)
+            return CredentialRef(source=self.mode, name=self.service_account_ref)
+        return CredentialRef(source="none", name="none")
+
+
+class StorageWarehouse(BaseModel):
+    """Resolved warehouse location owned by a storage deployment binding."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    uri: NonEmptyString
+    bucket: NonEmptyString
+    prefix: str = ""
+
+
+class StorageBucketRequirement(BaseModel):
+    """Desired storage bucket state emitted by storage plugins."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: NonEmptyString
+    uri: NonEmptyString
+    purpose: Literal["warehouse", "artifacts", "landing", "quarantine", "checkpoints", "exports"]
+    create_policy: Literal["create-if-missing", "must-exist", "never-create"]
+    prefixes: list[str] = Field(default_factory=list)
+    features: dict[str, str] = Field(default_factory=dict)
+    tags: dict[str, str] = Field(default_factory=dict)
+
+
+class StorageCapabilities(BaseModel):
+    """Storage protocol and credential capabilities available to consumers."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    protocols: list[NonEmptyString] = Field(default_factory=list)
+    credential_modes: list[NonEmptyString] = Field(default_factory=list)
+    sts_supported: bool = False
+    path_style_access: bool = False
+
+
+class StorageProvisioningIntent(BaseModel):
+    """Storage provisioning desired state without performing side effects."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    enabled: bool = False
+    mode: Literal["helm-job", "external", "manual", "future-plugin-runtime"] = "manual"
+    default_create_policy: Literal["create-if-missing", "must-exist", "never-create"] = (
+        "never-create"
+    )
+
+
+class StorageRuntimeBinding(BaseModel):
+    """Runtime-specific storage fragments derived from neutral storage state."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    pyiceberg_properties: dict[str, str] = Field(default_factory=dict)
+    dbt_profile_fragment: dict[str, Any] = Field(default_factory=dict)
+    dagster_resources: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+
+    @field_validator("pyiceberg_properties", "dbt_profile_fragment", "dagster_resources")
+    @classmethod
+    def validate_secret_free_fragments(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure runtime fragments carry config only, not credential values."""
+        _assert_no_secret_material(value, "runtime")
+        return value
+
+
+class StorageServiceEndpoint(BaseModel):
+    """Resolved storage service endpoint for deployment consumers."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    internal_url: NonEmptyString
+    external_url: NonEmptyString
+    region: NonEmptyString
+    warehouse_path: NonEmptyString
+    path_style_access: bool = False
+
+
+class DbtStorageBinding(BaseModel):
+    """dbt profile storage projection."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    profile_name: NonEmptyString
+    target_name: NonEmptyString
+    schema_name: NonEmptyString
+    profile_fragment: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+
+    @field_validator("profile_fragment")
+    @classmethod
+    def validate_secret_free_profile_fragment(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure dbt profile fragments do not inline credential values."""
+        _assert_no_secret_material(value, "dbt.profile_fragment")
+        return value
+
+
+class DagsterStorageBinding(BaseModel):
+    """Dagster resource storage projection."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    resource_key: NonEmptyString
+    asset_io_manager_key: NonEmptyString
+    resources: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+
+    @field_validator("resources")
+    @classmethod
+    def validate_secret_free_resources(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure Dagster resource fragments do not inline credential values."""
+        _assert_no_secret_material(value, "dagster.resources")
+        return value
+
+
+class StorageDeploymentBinding(BaseModel):
+    """Secret-free storage deployment binding."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provider: NonEmptyString
+    protocol: NonEmptyString = "s3-compatible"
+    endpoint: StorageServiceEndpoint
+    warehouse: StorageWarehouse | None = None
+    allowed_locations: list[NonEmptyString] = Field(default_factory=list)
+    buckets: list[StorageBucketRequirement] = Field(default_factory=list)
+    credentials: StorageCredentialBinding
+    capabilities: StorageCapabilities = Field(default_factory=StorageCapabilities)
+    provisioning: StorageProvisioningIntent = Field(default_factory=StorageProvisioningIntent)
+    runtime: StorageRuntimeBinding = Field(default_factory=StorageRuntimeBinding)
+    dbt: DbtStorageBinding
+    dagster: DagsterStorageBinding
+    notes: list[str] = Field(default_factory=list)
+
+
+class PolarisCatalogDeploymentBinding(BaseModel):
+    """Polaris catalog-owned storage configuration for deployment renderers."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    storage_type: Literal["S3"]
+    default_base_location: NonEmptyString
+    allowed_locations: list[NonEmptyString]
+    endpoint: NonEmptyString
+    endpoint_internal: NonEmptyString
+    path_style_access: bool
+    sts_unavailable: bool
+    credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+
+
+class CatalogDeploymentBinding(BaseModel):
+    """Secret-free catalog deployment binding."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provider: NonEmptyString
+    polaris: PolarisCatalogDeploymentBinding
+
+
+class DeploymentConfig(BaseModel):
+    """Deployment bindings derived during compilation."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    storage: StorageDeploymentBinding | None = None
+    catalog: CatalogDeploymentBinding | None = None
 
 
 class ResolvedModel(BaseModel):
@@ -698,6 +1055,11 @@ class CompiledArtifacts(BaseModel):
         description="Resolved plugin selections (v0.2.0+, optional for backward compat)",
     )
 
+    deployment: DeploymentConfig | None = Field(
+        default=None,
+        description="Deployment bindings derived from resolved plugin configuration",
+    )
+
     transforms: ResolvedTransforms | None = Field(
         default=None,
         description="Compiled transform configuration (v0.2.0+, optional for backward compat)",
@@ -948,9 +1310,13 @@ class CompiledArtifacts(BaseModel):
 
 __all__ = [
     # Core artifacts
+    "CatalogDeploymentBinding",
     "CompiledArtifacts",
     "CompilationMetadata",
+    "CredentialRef",
+    "DeploymentConfig",
     "DeploymentMode",
+    "KubernetesSecretRef",
     "ManifestRef",
     "ObservabilityConfig",
     "ProductIdentity",
@@ -964,4 +1330,16 @@ __all__ = [
     "ResolvedGovernance",
     # Enforcement summary (v0.3.0 - Epic 3B)
     "EnforcementResultSummary",
+    # Deployment bindings
+    "DagsterStorageBinding",
+    "DbtStorageBinding",
+    "PolarisCatalogDeploymentBinding",
+    "StorageBucketRequirement",
+    "StorageCapabilities",
+    "StorageCredentialBinding",
+    "StorageDeploymentBinding",
+    "StorageProvisioningIntent",
+    "StorageRuntimeBinding",
+    "StorageServiceEndpoint",
+    "StorageWarehouse",
 ]

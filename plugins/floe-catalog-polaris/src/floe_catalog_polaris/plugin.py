@@ -34,9 +34,15 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 from floe_core import HealthState, HealthStatus
+from floe_core.composition.models import PluginRequirements, RequirementSet
 from floe_core.plugin_errors import CatalogUnavailableError, NotSupportedError
 from floe_core.plugins import CatalogPlugin
 from floe_core.plugins.catalog import Catalog
+from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
+    PolarisCatalogDeploymentBinding,
+    StorageDeploymentBinding,
+)
 from pyiceberg.catalog import load_catalog
 from pyiceberg.schema import Schema as IcebergSchema
 
@@ -381,6 +387,48 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 )
 
         return table
+
+    def get_storage_requirements(self) -> PluginRequirements:
+        """Return storage requirements Polaris can compose with."""
+        return PluginRequirements(
+            plugin_type="catalog",
+            plugin_name="polaris",
+            requirements=RequirementSet(
+                protocols=["s3-compatible", "s3"],
+                credential_modes=["kubernetes-secret", "workload-identity"],
+                requires_server_side_storage_access=True,
+                supports_no_sts=True,
+                supports_path_style_access=True,
+            ),
+        )
+
+    def build_catalog_deployment(
+        self,
+        storage: StorageDeploymentBinding,
+    ) -> CatalogDeploymentBinding:
+        """Translate neutral storage state into Polaris deployment config."""
+        if storage.warehouse is None:
+            msg = "Polaris catalog deployment requires storage warehouse binding"
+            raise ValueError(msg)
+
+        access_ref = storage.credentials.as_credential_ref("accessKeyId")
+        secret_ref = storage.credentials.as_credential_ref("secretAccessKey")
+        return CatalogDeploymentBinding(
+            provider="polaris",
+            polaris=PolarisCatalogDeploymentBinding(
+                storage_type="S3",
+                default_base_location=storage.warehouse.uri,
+                allowed_locations=storage.allowed_locations,
+                endpoint=storage.endpoint.external_url,
+                endpoint_internal=storage.endpoint.internal_url,
+                path_style_access=storage.endpoint.path_style_access,
+                sts_unavailable=not storage.capabilities.sts_supported,
+                credential_refs={
+                    "accessKeyId": access_ref,
+                    "secretAccessKey": secret_ref,
+                },
+            ),
+        )
 
     def create_namespace(
         self,

@@ -63,7 +63,7 @@ def _make_valid_manifest(tmp_path: Path) -> Path:
                 },
             },
             "storage": {
-                "type": "s3",
+                "type": "minio",
                 "config": {
                     "endpoint": "http://floe-platform-minio:9000",
                     "bucket": "floe-iceberg",

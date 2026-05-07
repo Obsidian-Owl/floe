@@ -28,7 +28,7 @@ from floe_core.plugin_types import PluginType
 
 if TYPE_CHECKING:
     from floe_core.plugins.compute import ComputePlugin
-    from floe_core.schemas.compiled_artifacts import ResolvedPlugins
+    from floe_core.schemas.compiled_artifacts import DbtStorageBinding, ResolvedPlugins
 
 logger = structlog.get_logger(__name__)
 
@@ -169,6 +169,7 @@ def generate_dbt_profiles(
     plugins: ResolvedPlugins,
     product_name: str,
     environments: list[str] | None = None,
+    storage_binding: DbtStorageBinding | None = None,
 ) -> dict[str, Any]:
     """Generate dbt profiles.yml configuration from resolved plugins.
 
@@ -180,6 +181,7 @@ def generate_dbt_profiles(
         plugins: ResolvedPlugins with compute plugin configuration.
         product_name: Data product name (used as profile name in dbt).
         environments: List of environment names to generate (default: ["dev"]).
+        storage_binding: Optional compiled storage projection for dbt profile outputs.
 
     Returns:
         Dictionary matching dbt profiles.yml structure:
@@ -230,6 +232,16 @@ def generate_dbt_profiles(
     for env in environments:
         try:
             profile_output = plugin.generate_dbt_profile(compute_config)
+            if storage_binding is not None:
+                profile_output = {
+                    **profile_output,
+                    **storage_binding.profile_fragment,
+                }
+                for profile_key, env_name in storage_binding.env_refs.items():
+                    profile_output.setdefault(
+                        profile_key,
+                        format_env_var_placeholder(env_name),
+                    )
             outputs[env] = profile_output
         except Exception as e:
             logger.error(

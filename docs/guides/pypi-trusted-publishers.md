@@ -92,7 +92,7 @@ uses short-lived OIDC tokens.
 
 ### Storage plugins (1)
 
-- [ ] `floe-storage-s3` — S3-compatible object storage plugin
+- [ ] `floe-storage-minio` — MinIO object storage plugin
 
 ### Telemetry plugins (2)
 

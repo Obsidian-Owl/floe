@@ -46,6 +46,36 @@ def test_floe_core_imports_without_rbac_plugin() -> None:
 
 
 @pytest.mark.requirement("FR-001")
+def test_floe_core_lazy_exports_do_not_eagerly_import_plugins() -> None:
+    """Test lazy public exports without loading plugin registry dependencies."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import sys
+import floe_core
+
+assert "structlog" not in sys.modules
+from floe_core import HealthState, schemas
+assert HealthState.HEALTHY.value == "healthy"
+assert hasattr(schemas, "__all__")
+assert "structlog" not in sys.modules
+print("success")
+""",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, (
+        f"floe_core lazy export test failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    )
+    assert "success" in result.stdout
+
+
+@pytest.mark.requirement("FR-001")
 def test_no_direct_k8s_rbac_plugin_import_in_generator() -> None:
     """Test that rbac/generator.py uses only the RBACPlugin ABC.
 

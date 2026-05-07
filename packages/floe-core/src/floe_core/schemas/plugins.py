@@ -26,7 +26,7 @@ PLUGIN_REGISTRY: dict[str, list[str]] = {
     "compute": ["duckdb", "snowflake", "spark", "bigquery", "databricks"],
     "orchestrator": ["dagster", "airflow", "prefect"],
     "catalog": ["polaris", "glue", "hive"],
-    "storage": ["s3", "gcs", "azure-blob", "minio"],
+    "storage": ["minio", "gcs", "azure-blob"],
     "semantic_layer": ["cube", "dbt-semantic-layer"],
     "ingestion": ["dlt", "airbyte"],
     "secrets": ["k8s-secrets", "eso", "vault"],
@@ -244,7 +244,7 @@ class PluginsConfig(BaseModel):
         compute: Compute engine (DuckDB, Snowflake, Spark, BigQuery, Databricks)
         orchestrator: Workflow orchestration (Dagster, Airflow 3.x, Prefect)
         catalog: Data catalog (Polaris, AWS Glue, Hive)
-        storage: Object storage (S3, GCS, Azure Blob, MinIO)
+        storage: Object storage (MinIO, GCS, Azure Blob)
         semantic_layer: Semantic layer (Cube, dbt Semantic Layer)
         ingestion: Data ingestion (dlt, Airbyte)
         secrets: Secret management (K8s Secrets, ESO, Vault)
@@ -299,7 +299,7 @@ class PluginsConfig(BaseModel):
     )
     storage: PluginSelection | None = Field(
         default=None,
-        description="Object storage (s3, gcs, azure-blob, minio)",
+        description="Object storage (minio, gcs, azure-blob)",
     )
 
     # Analytics and consumption

@@ -1381,7 +1381,7 @@ class TestDemoPluginResolver:
         assert "floe-orchestrator-dagster" in packages
         assert "floe-catalog-polaris" in packages
         assert "floe-compute-duckdb" in packages
-        assert "floe-storage-s3" in packages
+        assert "floe-storage-minio" in packages
         assert "floe-dbt-core" in packages
         assert "floe-iceberg" in packages
         assert packages == sorted(set(packages)), (
@@ -2057,23 +2057,28 @@ class TestHelmValuesImageOverride:
         )
 
     @pytest.mark.requirement("WU11-AC3")
-    def test_values_demo_minio_credentials_match_polaris_storage(self) -> None:
-        """Verify demo MinIO credentials match the Polaris S3 storage config.
+    def test_values_profiles_polaris_storage_use_minio_secret_ref(self) -> None:
+        """Verify demo and E2E Polaris storage read the MinIO Secret.
 
-        `make demo` layers values-dev before values-demo. The demo file must
-        override MinIO auth explicitly so Polaris does not sign S3 requests with
-        credentials that differ from the deployed MinIO root credentials.
+        `make demo` layers values-dev before values-demo. The demo and test
+        profiles must wire Polaris to the MinIO root credential Secret instead
+        of duplicating raw access keys under Polaris S3 storage values.
         """
-        values = _load_values_yaml(VALUES_DEMO)
-        polaris_s3 = values.get("polaris", {}).get("storage", {}).get("s3", {})
-        minio_auth = values.get("minio", {}).get("auth", {})
+        for values_path in (VALUES_DEMO, VALUES_TEST):
+            values = _load_values_yaml(values_path)
+            polaris_s3 = values.get("polaris", {}).get("storage", {}).get("s3", {})
 
-        assert minio_auth.get("rootUser") == polaris_s3.get("accessKey"), (
-            "values-demo.yaml minio.auth.rootUser must match polaris.storage.s3.accessKey."
-        )
-        assert minio_auth.get("rootPassword") == polaris_s3.get("secretKey"), (
-            "values-demo.yaml minio.auth.rootPassword must match polaris.storage.s3.secretKey."
-        )
+            assert "accessKey" not in polaris_s3
+            assert "secretKey" not in polaris_s3
+            assert polaris_s3.get("credentialSecretName") == "floe-platform-minio", (
+                f"{values_path.name} Polaris S3 storage must read the MinIO credential Secret."
+            )
+            assert polaris_s3.get("accessKeySecretKey") == "root-user", (
+                f"{values_path.name} Polaris S3 storage must use the MinIO access key field."
+            )
+            assert polaris_s3.get("secretKeySecretKey") == "root-password", (
+                f"{values_path.name} Polaris S3 storage must use the MinIO secret key field."
+            )
 
     @pytest.mark.requirement("WU11-AC3")
     def test_values_demo_minio_provisions_polaris_warehouse_bucket(self) -> None:
@@ -2704,7 +2709,7 @@ class TestGeneratedDefinitions:
 
 ORCHESTRATOR_PYPROJECT = REPO_ROOT / "plugins" / "floe-orchestrator-dagster" / "pyproject.toml"
 ROOT_PYPROJECT = REPO_ROOT / "pyproject.toml"
-STORAGE_S3_PYPROJECT = REPO_ROOT / "plugins" / "floe-storage-s3" / "pyproject.toml"
+STORAGE_MINIO_PYPROJECT = REPO_ROOT / "plugins" / "floe-storage-minio" / "pyproject.toml"
 
 # Required packages in the [project.optional-dependencies] docker group
 REQUIRED_DOCKER_EXTRAS: list[str] = [
@@ -2790,12 +2795,12 @@ class TestDemoImageLockedRuntimeDependencies:
         )
 
     @pytest.mark.requirement("WU12-AC3")
-    def test_s3_storage_declares_pyiceberg_s3_fileio_dependency(self) -> None:
+    def test_minio_storage_declares_pyiceberg_s3_fileio_dependency(self) -> None:
         """S3 FileIO support must be a plugin dependency, not a Dockerfile install."""
-        data: dict[str, Any] = tomllib.loads(STORAGE_S3_PYPROJECT.read_text())
+        data: dict[str, Any] = tomllib.loads(STORAGE_MINIO_PYPROJECT.read_text())
         dependencies: list[str] = data["project"]["dependencies"]
 
         assert any(dep.startswith("pyiceberg[s3fs]") for dep in dependencies), (
-            "floe-storage-s3 uses pyiceberg.io.fsspec.FsspecFileIO and must declare "
+            "floe-storage-minio uses pyiceberg.io.fsspec.FsspecFileIO and must declare "
             "the pyiceberg[s3fs] extra so Docker and non-Docker installs get S3 FileIO."
         )

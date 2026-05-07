@@ -250,7 +250,7 @@ catalogs:
 
 storage:
   bronze:
-    type: s3
+    type: minio
     endpoint: "http://floe-infra-localstack:4566"
     region: us-east-1
     bucket: iceberg-bronze
