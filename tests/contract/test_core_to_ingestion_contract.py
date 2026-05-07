@@ -357,7 +357,6 @@ class TestIngestionPluginRefContract:
         from floe_core.schemas.floe_spec import FloeSpec
         from floe_core.schemas.manifest import PlatformManifest
         from floe_ingestion_dlt.config import DltIngestionConfig
-        from floe_ingestion_dlt.plugin import DltIngestionPlugin
 
         root = Path(__file__).parent.parent.parent
         manifest_path = root / "demo" / "manifest.yaml"
@@ -368,24 +367,10 @@ class TestIngestionPluginRefContract:
 
         ingestion_plugin = manifest["plugins"]["ingestion"]
         assert ingestion_plugin["type"] == "dlt"
-        expected_catalog_config = {
-            "uri": "http://floe-platform-polaris:8181/api/catalog",
-            "warehouse": "floe-demo",
-            "bucket": "floe-iceberg",
-            "s3_endpoint": "http://floe-platform-minio:9000",
-            "s3_region": "us-east-1",
-            "s3_path_style_access": True,
-        }
-        catalog_config = ingestion_plugin["config"]["catalog_config"]
-        assert expected_catalog_config.items() <= catalog_config.items()
-        destination_config = DltIngestionPlugin().get_destination_config(catalog_config)
-        assert destination_config == {
-            "bucket_url": "s3://floe-iceberg",
-            "credentials": {
-                "endpoint_url": "http://floe-platform-minio:9000",
-                "region_name": "us-east-1",
-                "s3_url_style": "path",
-            },
+        assert "catalog_config" not in ingestion_plugin["config"]
+        assert ingestion_plugin["config"]["retry_config"] == {
+            "max_retries": 3,
+            "initial_delay_seconds": 1.0,
         }
 
         spec_sources = spec["ingestion"]["sources"]
@@ -424,6 +409,7 @@ class TestIngestionPluginRefContract:
         assert plugins.ingestion is not None
         assert plugins.ingestion.type == "dlt"
         assert plugins.ingestion.config is not None
+        assert "catalog_config" not in plugins.ingestion.config
         DltIngestionConfig.model_validate(plugins.ingestion.config)
 
         resolved_sources = {
@@ -468,3 +454,20 @@ def test_compiled_artifacts_contract_includes_ingestion_deployment_binding() -> 
     assert payload["ingestion"]["provider"] == "dlt"
     assert payload["ingestion"]["dlt"]["destination"] == "filesystem"
     assert payload["ingestion"]["dlt"]["table_format"] == "iceberg"
+
+
+def test_demo_compile_has_no_ingestion_catalog_config_duplication() -> None:
+    from floe_core.compilation.stages import compile_pipeline
+
+    root = Path(__file__).resolve().parents[2]
+    artifacts = compile_pipeline(
+        root / "demo" / "customer-360" / "floe.yaml",
+        root / "demo" / "manifest.yaml",
+        emit_lineage=False,
+    )
+
+    assert artifacts.plugins.ingestion is not None
+    assert artifacts.plugins.ingestion.config is not None
+    assert "catalog_config" not in artifacts.plugins.ingestion.config
+    assert artifacts.deployment is not None
+    assert artifacts.deployment.ingestion is not None

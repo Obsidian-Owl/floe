@@ -26,7 +26,6 @@ from testing.fixtures.credentials import (
     get_polaris_credentials,
     get_polaris_oauth2_server_uri,
     get_polaris_scope,
-    get_polaris_warehouse,
 )
 from testing.fixtures.minio import MinIOConfig, ensure_bucket, minio_client_context
 from testing.fixtures.polaris import rewrite_table_io_for_host_access
@@ -91,25 +90,47 @@ def _host_minio_endpoint_for_client() -> str:
     return parsed.netloc if parsed.scheme else minio_url
 
 
-def _host_catalog_config(base_config: dict[str, Any]) -> dict[str, Any]:
-    """Rewrite compiled catalog config to host-reachable Polaris and MinIO."""
+def _dlt_runtime_binding(artifacts: CompiledArtifacts) -> dict[str, Any]:
+    """Return compiled dlt deployment binding with clear test failures."""
+    assert artifacts.deployment is not None, "Customer 360 artifacts should include deployment"
+    assert artifacts.deployment.ingestion is not None, (
+        "Customer 360 artifacts should include ingestion deployment"
+    )
+    return artifacts.deployment.ingestion.dlt.model_dump(mode="python")
+
+
+def _host_dlt_runtime_binding(artifacts: CompiledArtifacts) -> dict[str, Any]:
+    """Rewrite compiled dlt binding to host-reachable Polaris and MinIO."""
+    runtime_binding = _dlt_runtime_binding(artifacts)
     polaris_catalog_url = f"{ServiceEndpoint('polaris').url}/api/catalog"
     minio_url = ServiceEndpoint("minio").url
     polaris_client_id, polaris_client_secret = get_polaris_credentials(DEMO_MANIFEST)
+    source_filesystem = dict(runtime_binding["source_filesystem"])
+    destination_filesystem = dict(runtime_binding["destination_filesystem"])
+    destination_credentials = dict(destination_filesystem["credentials"])
+    iceberg_catalog_env = dict(runtime_binding["iceberg_catalog_env"])
 
-    return {
-        **base_config,
-        "uri": polaris_catalog_url,
-        "warehouse": get_polaris_warehouse(DEMO_MANIFEST),
-        "credential": f"{polaris_client_id}:{polaris_client_secret}",  # pragma: allowlist secret
-        "scope": get_polaris_scope(DEMO_MANIFEST),
-        "oauth2_server_uri": get_polaris_oauth2_server_uri(
+    source_filesystem["endpoint_url"] = minio_url
+    destination_credentials["endpoint_url"] = minio_url
+    destination_filesystem["credentials"] = destination_credentials
+    iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__URI"] = polaris_catalog_url
+    iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__S3__ENDPOINT"] = minio_url
+    iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__CREDENTIAL"] = (
+        f"{polaris_client_id}:{polaris_client_secret}"  # pragma: allowlist secret
+    )
+    iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__SCOPE"] = get_polaris_scope(DEMO_MANIFEST)
+    iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__OAUTH2_SERVER_URI"] = (
+        get_polaris_oauth2_server_uri(
             DEMO_MANIFEST,
             catalog_endpoint=polaris_catalog_url,
-        ),
-        "s3_endpoint": minio_url,
-        "s3_region": base_config.get("s3_region", "us-east-1"),
-        "s3_path_style_access": True,
+        )
+    )
+
+    return {
+        **runtime_binding,
+        "source_filesystem": source_filesystem,
+        "destination_filesystem": destination_filesystem,
+        "iceberg_catalog_env": iceberg_catalog_env,
     }
 
 
@@ -123,7 +144,6 @@ def _isolated_ingestion_config(
     assert ingestion_ref.config is not None, "dlt ingestion config should be resolved"
 
     config = dict(ingestion_ref.config)
-    config["catalog_config"] = _host_catalog_config(dict(config.get("catalog_config") or {}))
     config["sources"] = [
         {
             **dict(source),
@@ -136,6 +156,18 @@ def _isolated_ingestion_config(
         for source in config["sources"]
     ]
     return DltIngestionConfig.model_validate(config)
+
+
+def _storage_warehouse_bucket(artifacts: CompiledArtifacts) -> str:
+    """Return the compiled storage warehouse bucket for MinIO cleanup."""
+    assert artifacts.deployment is not None, "Customer 360 artifacts should include deployment"
+    assert artifacts.deployment.storage is not None, (
+        "Customer 360 artifacts should include storage deployment"
+    )
+    assert artifacts.deployment.storage.warehouse is not None, (
+        "Customer 360 artifacts should include storage warehouse"
+    )
+    return str(artifacts.deployment.storage.warehouse.bucket)
 
 
 def _ingestion_ref(artifacts: CompiledArtifacts) -> PluginRef:
@@ -303,6 +335,7 @@ def _expected_row_counts_by_table(ingestion_config: DltIngestionConfig) -> dict[
 def _ingest_sources(
     plugin: DltIngestionPlugin,
     ingestion_config: DltIngestionConfig,
+    runtime_binding: dict[str, Any],
 ) -> None:
     """Execute each Customer 360 source through the dlt ingestion plugin."""
     for source in ingestion_config.sources:
@@ -313,8 +346,13 @@ def _ingest_sources(
             destination_table=source.destination_table,
             write_mode=source.write_mode,
             schema_contract=source.schema_contract,
+            runtime_binding=runtime_binding,
         )
-        dlt_source = build_dlt_source(source_config, project_dir=CUSTOMER_360_DIR)
+        dlt_source = build_dlt_source(
+            source_config,
+            project_dir=CUSTOMER_360_DIR,
+            filesystem_config=runtime_binding["source_filesystem"],
+        )
         pipeline = plugin.create_pipeline(pipeline_config)
 
         result = plugin.run(
@@ -351,13 +389,18 @@ class TestCustomer360DltIngestion(IntegrationTestBase):
         namespace = _isolated_bronze_namespace(e2e_namespace)
         artifacts = _load_customer360_artifacts(tmp_path)
         ingestion_config = _isolated_ingestion_config(artifacts, namespace=namespace)
+        runtime_binding = _host_dlt_runtime_binding(artifacts)
         expected_counts = _expected_row_counts_by_table(ingestion_config)
-        bucket = str(ingestion_config.catalog_config["bucket"])
+        bucket = _storage_warehouse_bucket(artifacts)
 
         minio_access_key, minio_secret_key = get_minio_credentials()
         monkeypatch.setenv("AWS_ACCESS_KEY_ID", minio_access_key)
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", minio_secret_key)
-        monkeypatch.setenv("AWS_REGION", str(ingestion_config.catalog_config["s3_region"]))
+        monkeypatch.setenv("AWS_REGION", str(runtime_binding["source_filesystem"]["region_name"]))
+        monkeypatch.setenv(
+            "AWS_ENDPOINT_URL",
+            str(runtime_binding["source_filesystem"]["endpoint_url"]),
+        )
 
         with minio_client_context(MinIOConfig(endpoint=_host_minio_endpoint_for_client())) as minio:
             ensure_bucket(minio, bucket)
@@ -372,7 +415,7 @@ class TestCustomer360DltIngestion(IntegrationTestBase):
                 plugin.configure(ingestion_config)
                 plugin.startup()
                 plugin_started = True
-                _ingest_sources(plugin, ingestion_config)
+                _ingest_sources(plugin, ingestion_config, runtime_binding)
 
                 available_tables = _table_names(polaris_with_write_grants, namespace)
                 for logical_table in LOGICAL_RAW_TABLES:

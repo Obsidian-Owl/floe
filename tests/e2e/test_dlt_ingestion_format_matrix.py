@@ -106,6 +106,26 @@ def _catalog_config() -> dict[str, Any]:
     }
 
 
+def _runtime_binding(catalog_config: dict[str, Any]) -> dict[str, Any]:
+    """Build binding-shaped runtime config from legacy E2E catalog config."""
+    return {
+        "plugin_name": "dlt",
+        "destination": "filesystem",
+        "table_format": "iceberg",
+        "destination_filesystem": DltIngestionPlugin().get_destination_config(catalog_config),
+        "source_filesystem": {
+            "endpoint_url": catalog_config["s3_endpoint"],
+            "region_name": catalog_config["s3_region"],
+            "s3_url_style": "path" if catalog_config["s3_path_style_access"] else "virtual",
+        },
+        "iceberg_catalog_env": DltIngestionPlugin()._iceberg_environment(catalog_config),
+        "env_refs": {
+            "accessKeyId": "AWS_ACCESS_KEY_ID",
+            "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+        },
+    }
+
+
 def _configure_s3_environment(
     monkeypatch: pytest.MonkeyPatch,
     catalog_config: dict[str, Any],
@@ -220,7 +240,7 @@ def _run_source(
     plugin: DltIngestionPlugin,
     source: IngestionSourceConfig,
     *,
-    catalog_config: dict[str, Any],
+    runtime_binding: dict[str, Any],
 ) -> IngestionResult:
     """Run one filesystem source through Dagster source construction and dlt."""
     source_dict = source.model_dump(mode="python")
@@ -231,12 +251,13 @@ def _run_source(
             destination_table=source.destination_table,
             write_mode=source.write_mode,
             schema_contract=source.schema_contract,
+            runtime_binding=runtime_binding,
         )
     )
     dlt_source = build_dlt_source(
         source_dict,
         project_dir=PROJECT_ROOT,
-        filesystem_config=catalog_config,
+        filesystem_config=runtime_binding["source_filesystem"],
     )
     return plugin.run(
         pipeline,
@@ -401,6 +422,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
         self.check_infrastructure("minio")
 
         catalog_config = _catalog_config()
+        runtime_binding = _runtime_binding(catalog_config)
         _configure_s3_environment(monkeypatch, catalog_config)
         bucket = str(catalog_config["bucket"])
         namespace = _safe_namespace(e2e_namespace, case.file_format)
@@ -430,7 +452,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                 )
 
                 plugin = _configure_plugin(source, catalog_config)
-                result = _run_source(plugin, source, catalog_config=catalog_config)
+                result = _run_source(plugin, source, runtime_binding=runtime_binding)
                 assert result.success, result.errors
 
                 assert _table_name(table_identifier) in _table_names(
@@ -465,6 +487,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
         self.check_infrastructure("minio")
 
         catalog_config = _catalog_config()
+        runtime_binding = _runtime_binding(catalog_config)
         _configure_s3_environment(monkeypatch, catalog_config)
         bucket = str(catalog_config["bucket"])
         namespace = _safe_namespace(e2e_namespace, "missing")
@@ -488,7 +511,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                 polaris_with_write_grants.create_namespace(namespace)
 
                 plugin = _configure_plugin(source, catalog_config)
-                result = _run_source(plugin, source, catalog_config=catalog_config)
+                result = _run_source(plugin, source, runtime_binding=runtime_binding)
 
                 _assert_failed_with(result, "missing_object_source", f"s3://{bucket}/{prefix}/")
                 _assert_no_table_or_rows(polaris_with_write_grants, namespace, table_identifier)
@@ -510,6 +533,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
         self.check_infrastructure("minio")
 
         catalog_config = _catalog_config()
+        runtime_binding = _runtime_binding(catalog_config)
         _configure_s3_environment(monkeypatch, catalog_config)
         bucket = str(catalog_config["bucket"])
         namespace = _safe_namespace(e2e_namespace, "bad_jsonl")
@@ -540,7 +564,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                 )
 
                 plugin = _configure_plugin(source, catalog_config)
-                result = _run_source(plugin, source, catalog_config=catalog_config)
+                result = _run_source(plugin, source, runtime_binding=runtime_binding)
 
                 _assert_failed_with(
                     result,
@@ -566,6 +590,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
         self.check_infrastructure("minio")
 
         catalog_config = _catalog_config()
+        runtime_binding = _runtime_binding(catalog_config)
         _configure_s3_environment(monkeypatch, catalog_config)
         bucket = str(catalog_config["bucket"])
         namespace = _safe_namespace(e2e_namespace, "freeze")
@@ -602,7 +627,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                 )
 
                 plugin = _configure_plugin(source, catalog_config)
-                first_result = _run_source(plugin, source, catalog_config=catalog_config)
+                first_result = _run_source(plugin, source, runtime_binding=runtime_binding)
                 assert first_result.success, first_result.errors
 
                 _put_object(
@@ -615,7 +640,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                         ]
                     ),
                 )
-                second_result = _run_source(plugin, source, catalog_config=catalog_config)
+                second_result = _run_source(plugin, source, runtime_binding=runtime_binding)
 
                 _assert_failed_with(second_result, "schema", "contract", "new_column")
             finally:
@@ -636,6 +661,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
         self.check_infrastructure("minio")
 
         catalog_config = _catalog_config()
+        runtime_binding = _runtime_binding(catalog_config)
         _configure_s3_environment(monkeypatch, catalog_config)
         bucket = str(catalog_config["bucket"])
         namespace = _safe_namespace(e2e_namespace, "unsupported")
@@ -668,7 +694,11 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                 )
 
                 with pytest.raises(ValueError, match="Unsupported filesystem format.*xml"):
-                    build_dlt_source(source_dict, project_dir=PROJECT_ROOT)
+                    build_dlt_source(
+                        source_dict,
+                        project_dir=PROJECT_ROOT,
+                        filesystem_config=runtime_binding["source_filesystem"],
+                    )
 
                 assert _table_names(polaris_with_write_grants, namespace) == set()
             finally:
