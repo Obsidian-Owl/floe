@@ -155,3 +155,148 @@ def test_resolver_rejects_malformed_capability_payload() -> None:
             plugin_name="minio",
             capabilities={"protocols": "s3-compatible"},  # type: ignore[arg-type]
         )
+
+
+def test_resolver_rejects_ingestion_unsupported_catalog_provider() -> None:
+    """Resolver must reject ingestion catalog provider needs the catalog lacks."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="minio",
+        capabilities=CapabilitySet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+        ),
+    )
+    catalog = PluginCapabilities(
+        plugin_type="catalog",
+        plugin_name="glue",
+        capabilities=CapabilitySet(catalog_providers=["glue"]),
+    )
+    ingestion = PluginRequirements(
+        plugin_type="ingestion",
+        plugin_name="dlt",
+        requirements=RequirementSet(catalog_providers=["iceberg-rest"]),
+    )
+
+    result = resolver.validate([storage, catalog], [ingestion])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_CATALOG_UNSUPPORTED",
+            message=(
+                "ingestion dlt requires one of catalog providers ['iceberg-rest']; "
+                "catalog glue provides ['glue']"
+            ),
+            plugins=["catalog:glue", "ingestion:dlt"],
+        )
+    ]
+
+
+def test_resolver_rejects_ingestion_unsupported_table_format() -> None:
+    """Resolver must reject ingestion table formats the catalog lacks."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="minio",
+        capabilities=CapabilitySet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+        ),
+    )
+    catalog = PluginCapabilities(
+        plugin_type="catalog",
+        plugin_name="polaris",
+        capabilities=CapabilitySet(
+            catalog_providers=["iceberg-rest"],
+            table_formats=["delta"],
+        ),
+    )
+    ingestion = PluginRequirements(
+        plugin_type="ingestion",
+        plugin_name="dlt",
+        requirements=RequirementSet(table_formats=["iceberg"]),
+    )
+
+    result = resolver.validate([storage, catalog], [ingestion])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_TABLE_FORMAT_UNSUPPORTED",
+            message=(
+                "ingestion dlt requires one of table formats ['iceberg']; "
+                "catalog polaris provides ['delta']"
+            ),
+            plugins=["catalog:polaris", "ingestion:dlt"],
+        )
+    ]
+
+
+def test_resolver_ingestion_protocol_error_names_ingestion_plugin() -> None:
+    """Ingestion storage protocol diagnostics must identify ingestion as requester."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="minio",
+        capabilities=CapabilitySet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+        ),
+    )
+    ingestion = PluginRequirements(
+        plugin_type="ingestion",
+        plugin_name="dlt",
+        requirements=RequirementSet(protocols=["s3"]),
+    )
+
+    result = resolver.validate([storage], [ingestion])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_PROTOCOL_UNSUPPORTED",
+            message=(
+                "ingestion dlt requires one of protocols ['s3']; "
+                "storage minio provides ['s3-compatible']"
+            ),
+            plugins=["storage:minio", "ingestion:dlt"],
+        )
+    ]
+
+
+def test_resolver_ingestion_credential_error_names_ingestion_plugin() -> None:
+    """Ingestion storage credential diagnostics must identify ingestion as requester."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="minio",
+        capabilities=CapabilitySet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+        ),
+    )
+    ingestion = PluginRequirements(
+        plugin_type="ingestion",
+        plugin_name="dlt",
+        requirements=RequirementSet(credential_modes=["workload-identity"]),
+    )
+
+    result = resolver.validate([storage], [ingestion])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED",
+            message=(
+                "ingestion dlt requires one of credential modes ['workload-identity']; "
+                "storage minio provides ['kubernetes-secret']"
+            ),
+            plugins=["storage:minio", "ingestion:dlt"],
+        )
+    ]

@@ -425,7 +425,10 @@ def test_composition_resolver_accepts_dlt_with_minio_and_polaris() -> None:
     catalog = PluginCapabilities(
         plugin_type="catalog",
         plugin_name="polaris",
-        capabilities=CapabilitySet(catalog_providers=["iceberg-rest"]),
+        capabilities=CapabilitySet(
+            catalog_providers=["iceberg-rest"],
+            table_formats=["iceberg"],
+        ),
     )
     ingestion = PluginRequirements(
         plugin_type="ingestion",
