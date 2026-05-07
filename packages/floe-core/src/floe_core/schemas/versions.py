@@ -57,7 +57,7 @@ def get_compiled_artifacts_version() -> str:
         >>> from floe_core.schemas.versions import get_compiled_artifacts_version
         >>> version = get_compiled_artifacts_version()
         >>> version
-        '0.4.0'
+        '0.11.0'
     """
     return COMPILED_ARTIFACTS_VERSION
 
