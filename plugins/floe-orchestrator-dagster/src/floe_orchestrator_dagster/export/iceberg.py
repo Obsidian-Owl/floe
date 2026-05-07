@@ -3,50 +3,23 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
 from dataclasses import dataclass
-from inspect import getattr_static
 from pathlib import Path
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import Any, cast
 
 import floe_core.plugin_registry as _plugin_registry_module
 from floe_core.plugin_types import PluginType
 from floe_core.plugins.catalog import CatalogPlugin
 from floe_core.plugins.storage import StoragePlugin
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
-from floe_iceberg.errors import (
-    is_stale_table_metadata_error,
-    stale_table_metadata_error_from_exception,
+from floe_iceberg.models import IcebergTableManagerConfig
+from floe_iceberg.writer import (
+    DefaultIcebergTableWriter,
+    IcebergTableWrite,
+    IcebergWriterResult,
 )
-from floe_iceberg.models import IcebergTableManagerConfig, StaleTableRecoveryMode
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
-_NULL_SEQUENCE_OVERWRITE_ERROR = "only entries with status added can have null sequence number"
-
-
-@runtime_checkable
-class WriteCapableIcebergCatalog(Protocol):
-    """Iceberg catalog operations required by configured dbt export."""
-
-    def create_namespace(self, namespace: str) -> None:
-        """Create an Iceberg namespace."""
-        ...
-
-    def load_table(self, identifier: str) -> Any:
-        """Load an Iceberg table."""
-        ...
-
-    def create_table(self, identifier: str, schema: Any) -> Any:
-        """Create an Iceberg table."""
-        ...
-
-
-class EndpointPreservingTableLoader(Protocol):
-    """Optional catalog plugin hook for endpoint-preserving table loads."""
-
-    def load_table_with_client_endpoint(self, identifier: str) -> Any:
-        """Load an Iceberg table while preserving client-side storage endpoint config."""
-        ...
 
 
 @dataclass
@@ -67,47 +40,6 @@ def _is_safe_identifier(name: str) -> bool:
         True if the identifier is safe for use in SQL.
     """
     return bool(_SAFE_IDENTIFIER_RE.match(name))
-
-
-def _require_write_capable_catalog(
-    catalog: object,
-    catalog_type: str,
-) -> WriteCapableIcebergCatalog:
-    """Return catalog when it supports write operations required for export."""
-    required_methods: Sequence[str] = ("create_namespace", "load_table", "create_table")
-    missing_methods = [
-        method for method in required_methods if not callable(getattr(catalog, method, None))
-    ]
-    if missing_methods:
-        missing = ", ".join(missing_methods)
-        raise RuntimeError(
-            f"Catalog plugin {catalog_type} did not return a write-capable Iceberg catalog; "
-            f"missing method(s): {missing}"
-        )
-    return cast(WriteCapableIcebergCatalog, catalog)
-
-
-def _load_table_for_overwrite(
-    catalog_plugin: object,
-    catalog: WriteCapableIcebergCatalog,
-    identifier: str,
-) -> Any:
-    """Load a table for overwrite using endpoint-preserving plugin hook when available."""
-    method_marker = getattr_static(
-        catalog_plugin,
-        "load_table_with_client_endpoint",
-        None,
-    )
-    method = getattr(catalog_plugin, "load_table_with_client_endpoint", None)
-    if method_marker is not None and callable(method):
-        endpoint_preserving_loader = cast(EndpointPreservingTableLoader, catalog_plugin)
-        return endpoint_preserving_loader.load_table_with_client_endpoint(identifier)
-    return catalog.load_table(identifier)
-
-
-def _is_repairable_overwrite_state_error(exc: BaseException) -> bool:
-    """Return true for known Iceberg table states repaired by recreation."""
-    return _NULL_SEQUENCE_OVERWRITE_ERROR in str(exc).lower()
 
 
 def _duckdb_profile_path(raw_path: str, project_dir: Path, product_name: str) -> str:
@@ -271,33 +203,24 @@ def export_dbt_to_iceberg(
         )
 
     import duckdb
-    from pyiceberg.exceptions import NoSuchTableError
 
     catalog_connection_config = _apply_compiled_storage_endpoint(
         storage_plugin.get_pyiceberg_catalog_config(),
         artifacts,
     )
     iceberg_config = IcebergTableManagerConfig.from_governance(artifacts.governance)
-    catalog = _require_write_capable_catalog(
-        catalog_plugin.connect(config=catalog_connection_config),
-        catalog_type,
+    writer = DefaultIcebergTableWriter(
+        catalog_plugin=catalog_plugin,
+        storage_plugin=storage_plugin,
+        catalog_connection_config=catalog_connection_config,
+        config=iceberg_config,
     )
 
     product_namespace = safe_name
 
-    try:
-        catalog.create_namespace(product_namespace)
-        context.log.info("Created Iceberg namespace: %s", product_namespace)
-    except Exception as exc:
-        exc_name = type(exc).__name__
-        if "AlreadyExists" in exc_name or "already exists" in str(exc).lower():
-            context.log.debug("Namespace %s already exists", product_namespace)
-        else:
-            raise
-
     conn = duckdb.connect(duckdb_path, read_only=True)
     try:
-        table_names: list[str] = []
+        writes: list[IcebergTableWrite] = []
         tables_df = conn.execute(
             "SELECT table_schema, table_name FROM information_schema.tables "
             "WHERE table_schema NOT IN ('information_schema', 'pg_catalog')"
@@ -321,77 +244,31 @@ def export_dbt_to_iceberg(
                 continue
 
             iceberg_id = f"{product_namespace}.{table_name}"
-            try:
-                iceberg_table = _load_table_for_overwrite(
-                    catalog_plugin,
-                    catalog,
-                    iceberg_id,
+            writes.append(
+                IcebergTableWrite(
+                    identifier=iceberg_id,
+                    arrow_table=arrow_table,
+                    mode="overwrite",
                 )
-                iceberg_table.overwrite(arrow_table)
-            except NoSuchTableError:
-                iceberg_table = catalog.create_table(
-                    iceberg_id,
-                    schema=arrow_table.schema,
-                )
-                iceberg_table.append(arrow_table)
-            except Exception as exc:
-                is_stale_metadata = is_stale_table_metadata_error(exc)
-                is_repairable_overwrite_state = _is_repairable_overwrite_state_error(exc)
-                if not is_stale_metadata and not is_repairable_overwrite_state:
-                    raise
-
-                if iceberg_config.stale_table_recovery_mode is StaleTableRecoveryMode.STRICT:
-                    if is_stale_metadata:
-                        stale_error = stale_table_metadata_error_from_exception(
-                            table_identifier=iceberg_id,
-                            recovery_mode=iceberg_config.stale_table_recovery_mode,
-                            original_error=exc,
-                        )
-                        raise stale_error from exc
-                    raise
-
-                if is_stale_metadata:
-                    stale_error = stale_table_metadata_error_from_exception(
-                        table_identifier=iceberg_id,
-                        recovery_mode=iceberg_config.stale_table_recovery_mode,
-                        original_error=exc,
-                    )
-                    context.log.warning(
-                        "Repairing stale Iceberg table registration for %s: %s",
-                        iceberg_id,
-                        stale_error.metadata_location or "unknown metadata location",
-                    )
-                else:
-                    context.log.warning(
-                        "Repairing Iceberg table overwrite state for %s after %s: %s",
-                        iceberg_id,
-                        type(exc).__name__,
-                        exc,
-                    )
-                catalog_plugin.drop_table(iceberg_id, purge=False)
-                catalog = _require_write_capable_catalog(
-                    catalog_plugin.connect(config=catalog_connection_config),
-                    catalog_type,
-                )
-                iceberg_table = catalog.create_table(
-                    iceberg_id,
-                    schema=arrow_table.schema,
-                )
-                iceberg_table.append(arrow_table)
-            table_names.append(iceberg_id)
-            context.log.info(
-                "Exported %s to Iceberg (%d rows)",
-                table_name,
-                arrow_table.num_rows,
             )
 
-        if not table_names:
+        if not writes:
             raise RuntimeError(
                 f"Configured Iceberg export wrote no tables for product {product_name}"
             )
+        writer_result: IcebergWriterResult = writer.write_tables(
+            namespace=product_namespace,
+            writes=writes,
+        )
+        for write in writes:
+            context.log.info(
+                "Exported %s to Iceberg (%d rows)",
+                write.identifier,
+                write.arrow_table.num_rows,
+            )
         return IcebergExportResult(
-            tables_written=len(table_names),
-            table_names=table_names,
+            tables_written=writer_result.tables_written,
+            table_names=list(writer_result.table_names),
         )
     finally:
         conn.close()
