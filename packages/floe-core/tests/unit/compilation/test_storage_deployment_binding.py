@@ -610,6 +610,40 @@ def test_ingestion_plugin_binding_failure_raises_structured_compilation_error(
     }
 
 
+def test_ingestion_plugin_requirements_failure_raises_structured_compilation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """IngestionPlugin requirement hook failures must use the compilation error model."""
+    from floe_ingestion_dlt.plugin import DltIngestionPlugin
+
+    def fail_get_composition_requirements(self: DltIngestionPlugin) -> None:
+        _ = self
+        raise ValueError("requirements unavailable")
+
+    monkeypatch.setattr(
+        DltIngestionPlugin,
+        "get_composition_requirements",
+        fail_get_composition_requirements,
+    )
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "E201"
+    assert error.message == "Ingestion plugin 'dlt' could not resolve composition requirements"
+    assert error.context == {
+        "ingestion_plugin": "dlt",
+        "storage_plugin": "minio",
+        "catalog_plugin": "polaris",
+    }
+
+
 def test_non_ingestion_plugin_registered_for_ingestion_raises_structured_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -220,15 +220,16 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             "region_name": storage.endpoint.region,
             "s3_url_style": "path" if storage.endpoint.path_style_access else "virtual",
         }
-        destination_filesystem = {
-            "bucket_url": storage.warehouse.uri,
-            "credentials": {
-                "endpoint_url": storage.endpoint.internal_url,
-                "region_name": storage.endpoint.region,
-            },
+        destination_credentials: dict[str, str] = {
+            "endpoint_url": storage.endpoint.internal_url,
+            "region_name": storage.endpoint.region,
         }
         if storage.endpoint.path_style_access:
-            destination_filesystem["credentials"]["s3_url_style"] = "path"
+            destination_credentials["s3_url_style"] = "path"
+        destination_filesystem: dict[str, Any] = {
+            "bucket_url": storage.warehouse.uri,
+            "credentials": destination_credentials,
+        }
 
         iceberg_catalog_env = self._compile_safe_iceberg_environment(
             catalog_name="polaris",

@@ -518,7 +518,34 @@ def _build_deployment_bindings(
                 )
             )
 
-        requirements = getattr(ingestion_plugin, "get_composition_requirements", lambda: None)()
+        try:
+            requirements = ingestion_plugin.get_composition_requirements()
+        except CompilationException:
+            raise
+        except Exception as exc:
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code="E201",
+                    message=(
+                        f"Ingestion plugin {plugins.ingestion.type!r} "
+                        "could not resolve composition requirements"
+                    ),
+                    suggestion=(
+                        "Verify plugins.ingestion.config and ensure the ingestion "
+                        "plugin can declare compatible storage and catalog requirements"
+                    ),
+                    context={
+                        "ingestion_plugin": plugins.ingestion.type,
+                        "storage_plugin": plugins.storage.type
+                        if plugins.storage is not None
+                        else None,
+                        "catalog_plugin": plugins.catalog.type
+                        if plugins.catalog is not None
+                        else None,
+                    },
+                )
+            ) from exc
         if requirements is not None:
             composition = CompositionResolver().validate(capabilities, [requirements])
             if not composition.valid:
