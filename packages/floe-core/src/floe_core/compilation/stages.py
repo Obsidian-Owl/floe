@@ -262,7 +262,6 @@ def _build_storage_deployment_binding(
     from floe_core.compilation.errors import CompilationError, CompilationException
     from floe_core.composition.models import (
         CapabilitySet,
-        CredentialMode,
         IdentityMode,
         PluginCapabilities,
         SecretProjectionMode,
@@ -407,7 +406,7 @@ def _build_storage_deployment_binding(
             )
         ) from exc
 
-    selected_credential_mode = cast("CredentialMode", storage_binding.credentials.mode)
+    selected_credential_mode = storage_binding.credentials.mode
     declared_credential_modes = list(storage_binding.capabilities.credential_modes)
     if selected_credential_mode not in declared_credential_modes:
         raise CompilationException(
