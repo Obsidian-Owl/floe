@@ -1705,37 +1705,40 @@ class TestGovernanceLifecycleFields:
 
 
 class TestCompiledArtifactsVersionBump:
-    """Tests for AC-6: version bump to 0.10.0 with history entry."""
+    """Tests for AC-6: version bump to 0.11.0 with history entry."""
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_version_is_0_10_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.10.0'."""
-        assert COMPILED_ARTIFACTS_VERSION == "0.10.0", (
-            f"Expected version '0.10.0', got '{COMPILED_ARTIFACTS_VERSION}'"
+    def test_compiled_artifacts_version_is_0_11_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.11.0'."""
+        assert COMPILED_ARTIFACTS_VERSION == "0.11.0", (
+            f"Expected version '0.11.0', got '{COMPILED_ARTIFACTS_VERSION}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_contains_0_10_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.10.0' entry."""
-        assert "0.10.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
-            f"Version '0.10.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
+    def test_version_history_contains_0_11_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.11.0' entry."""
+        assert "0.11.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
+            f"Version '0.11.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_0_10_0_references_stale_table_recovery(self) -> None:
-        """Test that the 0.10.0 history entry mentions contract additions."""
-        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.10.0", "")
+    def test_version_history_0_11_0_references_security_plugin_refs(self) -> None:
+        """Test that the 0.11.0 history entry mentions contract additions."""
+        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.11.0", "")
         entry_lower = entry.lower()
-        assert "stale" in entry_lower and "recovery" in entry_lower, (
-            f"Version 0.10.0 history entry does not reference stale table recovery: '{entry}'"
+        assert "secrets" in entry_lower, (
+            f"Version 0.11.0 history entry does not reference secrets: '{entry}'"
         )
-        assert "deployment" in entry_lower, (
-            f"Version 0.10.0 history entry does not reference deployment bindings: '{entry}'"
+        assert "identity" in entry_lower, (
+            f"Version 0.11.0 history entry does not reference identity: '{entry}'"
+        )
+        assert "resolvedplugins" in entry_lower, (
+            f"Version 0.11.0 history entry does not reference ResolvedPlugins: '{entry}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_default_version_is_0_10_0(self) -> None:
-        """Test that CompiledArtifacts().version defaults to '0.10.0'."""
+    def test_compiled_artifacts_default_version_is_0_11_0(self) -> None:
+        """Test that CompiledArtifacts().version defaults to '0.11.0'."""
         artifacts = CompiledArtifacts(
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
@@ -1764,7 +1767,7 @@ class TestCompiledArtifactsVersionBump:
                 lineage_namespace="test",
             ),
         )
-        assert artifacts.version == "0.10.0"
+        assert artifacts.version == "0.11.0"
 
 
 class TestGovernanceBackwardCompatibility:
