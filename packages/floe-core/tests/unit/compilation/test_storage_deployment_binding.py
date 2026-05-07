@@ -1126,6 +1126,77 @@ def test_compile_validates_selected_workload_identity_mode_not_advertised_altern
     assert "no identity plugin was selected" in error.message
 
 
+def test_compile_rejects_selected_storage_mode_not_declared_by_capabilities(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compiler must reject selected storage credential modes not in capabilities."""
+
+    class MismatchedExternalSecretStoragePlugin(ExternalSecretStoragePlugin):
+        def get_deployment_binding(self) -> StorageDeploymentBinding:
+            binding = super().get_deployment_binding()
+            return binding.model_copy(
+                update={
+                    "capabilities": StorageCapabilities(
+                        protocols=["s3"],
+                        credential_modes=["kubernetes-secret"],
+                        path_style_access=False,
+                    )
+                }
+            )
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class IsolatedRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            if plugin_type == PluginType.STORAGE:
+                return MismatchedExternalSecretStoragePlugin()
+            if plugin_type == PluginType.CATALOG:
+                return ExternalSecretCatalogPlugin()
+            if plugin_type == PluginType.SECRETS:
+                return FakeSecretsPlugin()
+            if plugin_type == PluginType.COMPUTE:
+                from floe_compute_duckdb.plugin import DuckDBComputePlugin
+
+                return DuckDBComputePlugin()
+            raise AssertionError(f"unexpected plugin lookup: {plugin_type} {name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedRegistry)
+    manifest_path = _external_secret_manifest_path(tmp_path, include_secrets=True)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "E201"
+    assert (
+        "Storage plugin 's3' selected credential mode 'external-secret-sync' "
+        "but declares credential modes ['kubernetes-secret']"
+    ) in error.message
+    assert error.context == {
+        "storage_plugin": "s3",
+        "selected_credential_mode": "external-secret-sync",
+        "declared_credential_modes": ["kubernetes-secret"],
+    }
+
+
 def test_compile_requires_secrets_provider_for_selected_external_secret_sync(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1152,8 +1223,9 @@ def test_compile_requires_secrets_provider_for_selected_external_secret_sync(
                 "severity": "error",
                 "code": "COMPOSITION_SECRET_PROVIDER_MISSING",
                 "message": (
-                    "catalog glue requires secret projection mode external-secret-sync "
-                    "but no secrets plugin was selected"
+                    "catalog glue requires one of secret providers ['infisical'] "
+                    "for secret projection mode external-secret-sync but no secrets "
+                    "plugin was selected"
                 ),
                 "plugins": ["catalog:glue"],
             }

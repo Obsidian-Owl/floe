@@ -151,21 +151,31 @@ class CompositionResolver:
         if not compatible_modes:
             return issues
 
-        if secrets is None and any(
-            mode in ("kubernetes-secret", "environment") for mode in compatible_modes
+        required_providers = list(requirement.requirements.providers)
+        if (
+            secrets is None
+            and any(mode in ("kubernetes-secret", "environment") for mode in compatible_modes)
+            and not required_providers
         ):
             return issues
 
         mode = compatible_modes[0]
         if secrets is None:
+            message = (
+                f"catalog {requirement.plugin_name} requires secret projection "
+                f"mode {mode} but no secrets plugin was selected"
+            )
+            if required_providers:
+                message = (
+                    f"catalog {requirement.plugin_name} requires one of secret "
+                    f"providers {required_providers} for secret projection mode {mode} "
+                    "but no secrets plugin was selected"
+                )
             issues.append(
                 CompositionIssue(
                     severity="error",
                     code="COMPOSITION_SECRET_PROVIDER_MISSING",
-                    message=(
-                        f"catalog {requirement.plugin_name} requires secret projection "
-                        f"mode {mode} but no secrets plugin was selected"
-                    ),
+                    message=message,
                     plugins=[requirement.ref],
                 )
             )
@@ -180,6 +190,22 @@ class CompositionResolver:
                     message=(
                         f"catalog {requirement.plugin_name} requires secret projection "
                         f"mode {mode}; secrets {secrets.plugin_name} provides {provided_modes}"
+                    ),
+                    plugins=[secrets.ref, requirement.ref],
+                )
+            )
+            return issues
+
+        provided_providers = list(secrets.capabilities.providers)
+        if required_providers and not set(required_providers).intersection(provided_providers):
+            issues.append(
+                CompositionIssue(
+                    severity="error",
+                    code="COMPOSITION_SECRET_PROVIDER_UNSUPPORTED",
+                    message=(
+                        f"catalog {requirement.plugin_name} requires one of secret "
+                        f"providers {required_providers}; secrets {secrets.plugin_name} "
+                        f"provides {provided_providers}"
                     ),
                     plugins=[secrets.ref, requirement.ref],
                 )
@@ -248,6 +274,21 @@ class CompositionResolver:
             and compatible_modes
             and set(provided_modes).intersection(compatible_modes)
         ):
+            required_providers = list(requirement.requirements.providers)
+            provided_providers = list(identity.capabilities.providers)
+            if required_providers and not set(required_providers).intersection(provided_providers):
+                issues.append(
+                    CompositionIssue(
+                        severity="error",
+                        code="COMPOSITION_IDENTITY_PROVIDER_UNSUPPORTED",
+                        message=(
+                            f"catalog {requirement.plugin_name} requires one of identity "
+                            f"providers {required_providers}; identity "
+                            f"{identity.plugin_name} provides {provided_providers}"
+                        ),
+                        plugins=[identity.ref, requirement.ref],
+                    )
+                )
             return issues
 
         if required_modes and len(required_modes) == 1 and compatible_modes:

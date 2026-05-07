@@ -408,6 +408,28 @@ def _build_storage_deployment_binding(
         ) from exc
 
     selected_credential_mode = cast("CredentialMode", storage_binding.credentials.mode)
+    declared_credential_modes = list(storage_binding.capabilities.credential_modes)
+    if selected_credential_mode not in declared_credential_modes:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=(
+                    f"Storage plugin {storage_plugin.name!r} selected credential mode "
+                    f"{selected_credential_mode!r} but declares credential modes "
+                    f"{declared_credential_modes}"
+                ),
+                suggestion=(
+                    "Update the storage plugin deployment binding so the selected "
+                    "credential mode is included in StorageCapabilities.credential_modes."
+                ),
+                context={
+                    "storage_plugin": storage_plugin.name,
+                    "selected_credential_mode": selected_credential_mode,
+                    "declared_credential_modes": declared_credential_modes,
+                },
+            )
+        )
     credential_modes = [selected_credential_mode]
     secret_projection_modes = (
         cast("list[SecretProjectionMode]", [selected_credential_mode])
