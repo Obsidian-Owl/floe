@@ -108,6 +108,20 @@ def _require_kubernetes_secret_ref(
     raise _renderer_precondition_failed(msg, context=context)
 
 
+def _storage_credential_ref(
+    storage: StorageDeploymentBinding,
+    logical_key: str,
+    *,
+    context: dict[str, Any] | None = None,
+) -> CredentialRef:
+    """Return a storage credential ref or raise a structured renderer precondition."""
+    try:
+        return storage.credentials.as_credential_ref(logical_key)
+    except ValueError:
+        msg = f"MinIO Helm values require Kubernetes Secret credential reference for {logical_key}"
+        raise _renderer_precondition_failed(msg, context=context) from None
+
+
 def _minio_storage_helm_values(
     storage: StorageDeploymentBinding,
     catalog: CatalogDeploymentBinding,
@@ -122,8 +136,16 @@ def _minio_storage_helm_values(
         msg = "MinIO Helm values require storage bucket requirements"
         raise _renderer_precondition_failed(msg, context=provider_context)
 
-    access_key_ref = storage.credentials.as_credential_ref("accessKeyId")
-    secret_key_ref = storage.credentials.as_credential_ref("secretAccessKey")
+    access_key_ref = _storage_credential_ref(
+        storage,
+        "accessKeyId",
+        context=provider_context,
+    )
+    secret_key_ref = _storage_credential_ref(
+        storage,
+        "secretAccessKey",
+        context=provider_context,
+    )
     if (
         access_key_ref.source != "kubernetes-secret"
         or secret_key_ref.source != "kubernetes-secret"

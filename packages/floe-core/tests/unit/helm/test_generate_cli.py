@@ -21,7 +21,11 @@ import yaml
 from click.testing import CliRunner
 
 from floe_core.cli.helm.generate import _storage_helm_values, generate_command
-from floe_core.compilation.errors import CompilationException
+from floe_core.compilation.errors import (
+    COMPOSITION_RENDERER_PRECONDITION_FAILED,
+    CompilationException,
+)
+from floe_core.compilation.stages import CompilationStage
 from floe_core.helm.parsing import parse_set_values, parse_value
 from floe_core.schemas.compiled_artifacts import (
     CatalogDeploymentBinding,
@@ -690,7 +694,38 @@ class TestGenerateCommand:
             _storage_helm_values(artifacts)
 
         error = exc_info.value.error
-        assert error.code == "COMPOSITION_RENDERER_PRECONDITION_FAILED"
+        assert error.stage is CompilationStage.GENERATE
+        assert error.code == COMPOSITION_RENDERER_PRECONDITION_FAILED
+        assert "secretAccessKey" in error.message
+
+    @pytest.mark.requirement("9b-FR-060")
+    def test_storage_helm_values_reject_missing_storage_credential_key(
+        self, tmp_path: Path
+    ) -> None:
+        """Missing MinIO credential keys must fail with structured renderer errors."""
+        artifact_file = tmp_path / "compiled_artifacts.json"
+        _write_minio_artifact(artifact_file)
+        artifacts = CompiledArtifacts.from_json_file(artifact_file)
+        assert artifacts.deployment is not None
+        assert artifacts.deployment.storage is not None
+        credentials = artifacts.deployment.storage.credentials
+        assert credentials.secret_ref is not None
+        secret_ref = credentials.secret_ref.model_copy(
+            update={"keys": {"accessKeyId": credentials.secret_ref.keys["accessKeyId"]}}
+        )
+        storage = artifacts.deployment.storage.model_copy(
+            update={"credentials": credentials.model_copy(update={"secret_ref": secret_ref})}
+        )
+        artifacts = artifacts.model_copy(
+            update={"deployment": artifacts.deployment.model_copy(update={"storage": storage})}
+        )
+
+        with pytest.raises(CompilationException) as exc_info:
+            _storage_helm_values(artifacts)
+
+        error = exc_info.value.error
+        assert error.stage is CompilationStage.GENERATE
+        assert error.code == COMPOSITION_RENDERER_PRECONDITION_FAILED
         assert "secretAccessKey" in error.message
 
     @pytest.mark.requirement("9b-FR-060")
@@ -708,7 +743,8 @@ class TestGenerateCommand:
             _storage_helm_values(artifacts)
 
         error = exc_info.value.error
-        assert error.code == "COMPOSITION_RENDERER_PRECONDITION_FAILED"
+        assert error.stage is CompilationStage.GENERATE
+        assert error.code == COMPOSITION_RENDERER_PRECONDITION_FAILED
         assert "catalog deployment binding" in error.message
 
     @pytest.mark.requirement("9b-FR-060")
@@ -728,7 +764,8 @@ class TestGenerateCommand:
             _storage_helm_values(artifacts)
 
         error = exc_info.value.error
-        assert error.code == "COMPOSITION_RENDERER_PRECONDITION_FAILED"
+        assert error.stage is CompilationStage.GENERATE
+        assert error.code == COMPOSITION_RENDERER_PRECONDITION_FAILED
         assert "bucket requirements" in error.message
 
     @pytest.mark.requirement("9b-FR-060")
