@@ -232,7 +232,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
 
         iceberg_catalog_env = self._compile_safe_iceberg_environment(
             catalog_name="polaris",
-            uri=catalog.polaris.endpoint_internal,
+            uri=catalog.polaris.catalog_uri or catalog.polaris.endpoint_internal,
             warehouse=catalog.polaris.warehouse,
             s3_endpoint=storage.endpoint.internal_url,
             s3_region=storage.endpoint.region,

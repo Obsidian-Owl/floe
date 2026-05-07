@@ -423,6 +423,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 allowed_locations=storage.allowed_locations,
                 endpoint=storage.endpoint.external_url,
                 endpoint_internal=storage.endpoint.internal_url,
+                catalog_uri=config.uri,
                 path_style_access=storage.endpoint.path_style_access,
                 sts_unavailable=not storage.capabilities.sts_supported,
                 credential_refs={

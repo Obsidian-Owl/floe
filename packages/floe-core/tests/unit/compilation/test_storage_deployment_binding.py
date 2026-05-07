@@ -490,6 +490,10 @@ def test_demo_compile_emits_dlt_ingestion_deployment_binding() -> None:
         "http://floe-platform-minio:9000"
     )
     assert dlt.iceberg_catalog_env["ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE"] == "rest"
+    assert (
+        dlt.iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__URI"]
+        == "http://floe-platform-polaris:8181/api/catalog"
+    )
     assert dlt.iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__WAREHOUSE"] == "floe-demo"
     assert dlt.env_refs == {
         "accessKeyId": "AWS_ACCESS_KEY_ID",

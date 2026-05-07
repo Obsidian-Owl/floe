@@ -666,6 +666,7 @@ class PolarisCatalogDeploymentBinding(BaseModel):
     allowed_locations: list[NonEmptyString]
     endpoint: NonEmptyString
     endpoint_internal: NonEmptyString
+    catalog_uri: NonEmptyString | None = None
     path_style_access: bool
     sts_unavailable: bool
     credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)

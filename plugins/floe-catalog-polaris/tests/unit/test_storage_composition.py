@@ -86,6 +86,7 @@ def test_build_catalog_deployment_translates_storage_binding_to_polaris_binding(
     assert binding.polaris.warehouse == "floe"
     assert binding.polaris.endpoint == "http://localhost:9000"
     assert binding.polaris.endpoint_internal == "http://floe-platform-minio:9000"
+    assert binding.polaris.catalog_uri == "http://polaris:8181/api/catalog"
     assert binding.polaris.default_base_location == "s3://floe-warehouse"
     assert binding.polaris.path_style_access is True
     assert binding.polaris.sts_unavailable is True
