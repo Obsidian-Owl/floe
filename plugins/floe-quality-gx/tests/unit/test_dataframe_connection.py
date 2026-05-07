@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from floe_quality_gx import GreatExpectationsPlugin
 
 
+@pytest.mark.requirement("W3-QUALITY-GX")
 def test_create_dataframe_from_connection_accepts_pandas_dataframe() -> None:
     """DataFrame connection configs return equivalent data as a defensive copy."""
     from floe_quality_gx.executor import create_dataframe_from_connection
@@ -44,6 +45,7 @@ def test_create_dataframe_from_connection_accepts_pandas_dataframe() -> None:
         {"dataframe": None},
     ],
 )
+@pytest.mark.requirement("W3-QUALITY-GX")
 def test_create_dataframe_from_connection_rejects_non_dataframe_values(
     connection_config: dict[str, Any],
 ) -> None:
@@ -57,6 +59,7 @@ def test_create_dataframe_from_connection_rejects_non_dataframe_values(
         create_dataframe_from_connection(connection_config, table_name="customers")
 
 
+@pytest.mark.requirement("W3-QUALITY-GX")
 def test_run_suite_validates_supplied_dataframe(
     gx_plugin: GreatExpectationsPlugin,
 ) -> None:

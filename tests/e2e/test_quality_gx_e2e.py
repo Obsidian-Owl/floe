@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, ClassVar
 
+import pandas as pd
 import pytest
 from floe_core.schemas.quality_config import Dimension, SeverityLevel
 from floe_core.schemas.quality_score import QualityCheck, QualitySuite
@@ -21,7 +22,7 @@ class TestGreatExpectationsIcebergE2E(IntegrationTestBase):
 
     required_services: ClassVar[list[str]] = ["polaris", "minio"]
 
-    def _load_customer_360_dataframe(self, polaris_client: Any) -> Any:
+    def _load_customer_360_dataframe(self, polaris_client: Any) -> pd.DataFrame:
         """Load the Customer 360 mart table from Iceberg as a pandas DataFrame."""
         namespace = "customer_360"
         table_name = "mart_customer_360"

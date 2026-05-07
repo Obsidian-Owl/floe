@@ -285,6 +285,8 @@ def create_dataframe_from_connection(
 
     This is a placeholder that should be enhanced to support
     various connection types (DuckDB, PostgreSQL, Snowflake).
+    When ``connection_config`` includes a ``dataframe`` key, the supplied
+    DataFrame takes precedence over the configured dialect.
 
     Args:
         connection_config: Database connection configuration.
