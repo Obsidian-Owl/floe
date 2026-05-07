@@ -493,6 +493,47 @@ def test_wrong_storage_plugin_interface_raises_composition_code(
     assert error.context == {"storage_plugin": "minio"}
 
 
+def test_storage_plugin_configure_failure_raises_composition_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configure-time storage plugin validation must use the config-invalid code."""
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class ConfigFailingRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            raise PluginConfigurationError(
+                name,
+                [{"field": "endpoint", "message": "required"}],
+            )
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            raise AssertionError("get() must not be reached after configure failure")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", ConfigFailingRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_CONFIG_INVALID"
+    assert error.context == {"storage_plugin": "minio"}
+
+
 def test_storage_plugin_binding_failure_raises_structured_compilation_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
