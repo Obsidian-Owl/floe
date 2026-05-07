@@ -534,6 +534,7 @@ def test_ingestion_plugin_binding_failure_raises_structured_compilation_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Post-resolution IngestionPlugin failures must use the compilation error model."""
+    from floe_ingestion_dlt.errors import PipelineConfigurationError
     from floe_ingestion_dlt.plugin import DltIngestionPlugin
 
     def fail_build_deployment_binding(
@@ -543,7 +544,7 @@ def test_ingestion_plugin_binding_failure_raises_structured_compilation_error(
         catalog: CatalogDeploymentBinding,
     ) -> None:
         _ = (self, storage, catalog)
-        raise ValueError("post-resolution ingestion failure")
+        raise PipelineConfigurationError("post-resolution ingestion failure")
 
     monkeypatch.setattr(
         DltIngestionPlugin,
@@ -567,3 +568,49 @@ def test_ingestion_plugin_binding_failure_raises_structured_compilation_error(
         "storage_plugin": "minio",
         "catalog_plugin": "polaris",
     }
+
+
+def test_dlt_ingestion_without_storage_raises_composition_error(tmp_path: Path) -> None:
+    """dlt ingestion requires storage composition even when storage is omitted."""
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest = yaml.safe_load((ROOT / "demo" / "manifest.yaml").read_text(encoding="utf-8"))
+    manifest["plugins"].pop("storage")
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_STORAGE_MISSING"
+    assert error.context["storage_plugin"] is None
+    assert error.context["catalog_plugin"] == "polaris"
+    assert error.context["ingestion_plugin"] == "dlt"
+    assert error.context["composition_issues"][0]["code"] == "COMPOSITION_STORAGE_MISSING"
+
+
+def test_dlt_ingestion_without_catalog_raises_composition_error(tmp_path: Path) -> None:
+    """dlt ingestion requires catalog composition even when catalog is omitted."""
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest = yaml.safe_load((ROOT / "demo" / "manifest.yaml").read_text(encoding="utf-8"))
+    manifest["plugins"].pop("catalog")
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_CATALOG_MISSING"
+    assert error.context["storage_plugin"] == "minio"
+    assert error.context["catalog_plugin"] is None
+    assert error.context["ingestion_plugin"] == "dlt"
+    assert error.context["composition_issues"][0]["code"] == "COMPOSITION_CATALOG_MISSING"

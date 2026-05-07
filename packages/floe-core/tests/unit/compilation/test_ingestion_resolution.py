@@ -199,6 +199,16 @@ plugins:
     type: duckdb
   orchestrator:
     type: dagster
+  catalog:
+    type: polaris
+    config:
+      uri: http://floe-platform-polaris:8181/api/catalog
+      warehouse: floe
+      oauth2:
+        client_id: demo-admin
+        client_secret: demo-secret  # pragma: allowlist secret
+        scope: PRINCIPAL_ROLE:ALL
+        token_url: http://floe-platform-polaris:8181/api/catalog/v1/oauth/tokens
   ingestion:
     type: dlt
     config:
@@ -209,6 +219,15 @@ plugins:
       retry_config:
         max_retries: 5
         initial_delay_seconds: 2.0
+  storage:
+    type: minio
+    config:
+      endpoint: http://floe-platform-minio:9000
+      bucket: floe-iceberg
+      region: us-east-1
+      path_style_access: true
+      credential_secret_name: floe-platform-minio-credentials  # pragma: allowlist secret
+      credential_secret_namespace: floe-system  # pragma: allowlist secret
 """
     )
 
