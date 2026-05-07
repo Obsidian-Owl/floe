@@ -120,8 +120,11 @@ def _runtime_binding(catalog_config: dict[str, Any]) -> dict[str, Any]:
         },
         "iceberg_catalog_env": _iceberg_catalog_env(catalog_config),
         "env_refs": {
-            "accessKeyId": "AWS_ACCESS_KEY_ID",
-            "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+            "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+            "PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL",
+            "PYICEBERG_CATALOG__POLARIS__SCOPE": "POLARIS_SCOPE",
+            "PYICEBERG_CATALOG__POLARIS__OAUTH2_SERVER_URI": ("POLARIS_OAUTH2_SERVER_URI"),
         },
     }
 
@@ -142,12 +145,6 @@ def _iceberg_catalog_env(catalog_config: dict[str, Any]) -> dict[str, str]:
     }
     if catalog_config.get("s3_path_style_access"):
         env[f"{prefix}S3__PATH_STYLE_ACCESS"] = "true"
-    if catalog_config.get("credential"):
-        env[f"{prefix}CREDENTIAL"] = str(catalog_config["credential"])
-    if catalog_config.get("scope"):
-        env[f"{prefix}SCOPE"] = str(catalog_config["scope"])
-    if catalog_config.get("oauth2_server_uri"):
-        env[f"{prefix}OAUTH2_SERVER_URI"] = str(catalog_config["oauth2_server_uri"])
     return env
 
 
@@ -164,6 +161,9 @@ def _configure_s3_environment(
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", secret_key)
     monkeypatch.setenv("AWS_REGION", region)
     monkeypatch.setenv("AWS_ENDPOINT_URL", endpoint)
+    monkeypatch.setenv("POLARIS_CREDENTIAL", str(catalog_config["credential"]))
+    monkeypatch.setenv("POLARIS_SCOPE", str(catalog_config["scope"]))
+    monkeypatch.setenv("POLARIS_OAUTH2_SERVER_URI", str(catalog_config["oauth2_server_uri"]))
 
 
 def _put_object(minio: Any, *, bucket: str, object_name: str, payload: bytes) -> None:

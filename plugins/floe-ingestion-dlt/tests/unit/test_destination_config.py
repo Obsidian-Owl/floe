@@ -54,8 +54,11 @@ def _runtime_binding() -> dict[str, Any]:
             "PYICEBERG_CATALOG__POLARIS__URI": "http://runtime-polaris:8181/api/catalog",
         },
         "env_refs": {
-            "AWS_ACCESS_KEY_ID": "secret:floe/minio#access_key",
-            "AWS_SECRET_ACCESS_KEY": "secret:floe/minio#secret_key",  # pragma: allowlist secret
+            "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+            "PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL",
+            "PYICEBERG_CATALOG__POLARIS__SCOPE": "POLARIS_SCOPE",
+            "PYICEBERG_CATALOG__POLARIS__OAUTH2_SERVER_URI": ("POLARIS_OAUTH2_SERVER_URI"),
         },
     }
 
@@ -376,6 +379,49 @@ def test_run_applies_runtime_binding_catalog_env(monkeypatch: pytest.MonkeyPatch
     assert observations == {"during_run": ("polaris", "http://runtime-polaris:8181/api/catalog")}
     assert os.environ["ICEBERG_CATALOG__ICEBERG_CATALOG_NAME"] == "caller-catalog"
     assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
+
+
+def test_run_resolves_runtime_binding_env_refs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Runtime env refs map source process env vars into dlt PyIceberg env names."""
+    observations: dict[str, tuple[str | None, str | None, str | None]] = {}
+
+    class FakePipeline:
+        pipeline_name = "runtime-env-refs"
+        _floe_dlt_runtime_binding = _runtime_binding()
+
+        def run(self, _source: object, **_kwargs: Any) -> object:
+            observations["during_run"] = (
+                os.environ.get("PYICEBERG_CATALOG__POLARIS__CREDENTIAL"),
+                os.environ.get("PYICEBERG_CATALOG__POLARIS__SCOPE"),
+                os.environ.get("PYICEBERG_CATALOG__POLARIS__OAUTH2_SERVER_URI"),
+            )
+            return SimpleNamespace(metrics={})
+
+    monkeypatch.setenv("POLARIS_CREDENTIAL", "runtime-client:runtime-secret")
+    monkeypatch.setenv("POLARIS_SCOPE", "PRINCIPAL_ROLE:ALL")
+    monkeypatch.setenv(
+        "POLARIS_OAUTH2_SERVER_URI",
+        "http://runtime-polaris:8181/api/catalog/v1/oauth/tokens",
+    )
+    monkeypatch.delenv("PYICEBERG_CATALOG__POLARIS__CREDENTIAL", raising=False)
+    monkeypatch.delenv("PYICEBERG_CATALOG__POLARIS__SCOPE", raising=False)
+    monkeypatch.delenv("PYICEBERG_CATALOG__POLARIS__OAUTH2_SERVER_URI", raising=False)
+
+    plugin = DltIngestionPlugin()
+    plugin.startup()
+
+    plugin.run(FakePipeline(), source=object(), table_name="orders")
+
+    assert observations == {
+        "during_run": (
+            "runtime-client:runtime-secret",
+            "PRINCIPAL_ROLE:ALL",
+            "http://runtime-polaris:8181/api/catalog/v1/oauth/tokens",
+        )
+    }
+    assert "PYICEBERG_CATALOG__POLARIS__CREDENTIAL" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__SCOPE" not in os.environ
+    assert "PYICEBERG_CATALOG__POLARIS__OAUTH2_SERVER_URI" not in os.environ
 
 
 def test_run_normalizes_pydantic_runtime_binding_catalog_env(

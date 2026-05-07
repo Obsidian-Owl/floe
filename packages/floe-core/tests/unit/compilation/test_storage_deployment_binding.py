@@ -496,8 +496,11 @@ def test_demo_compile_emits_dlt_ingestion_deployment_binding() -> None:
     )
     assert dlt.iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__WAREHOUSE"] == "floe-demo"
     assert dlt.env_refs == {
-        "accessKeyId": "AWS_ACCESS_KEY_ID",
-        "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+        "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+        "PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL",
+        "PYICEBERG_CATALOG__POLARIS__OAUTH2_SERVER_URI": "POLARIS_OAUTH2_SERVER_URI",
+        "PYICEBERG_CATALOG__POLARIS__SCOPE": "POLARIS_SCOPE",
     }
     assert artifacts.deployment.catalog is not None
     assert artifacts.deployment.catalog.polaris.warehouse == "floe-demo"
@@ -563,8 +566,11 @@ def test_dlt_ingestion_deployment_binding_ignores_host_secret_env(
         assert value not in dlt.iceberg_catalog_env.values()
         assert value not in payload
     assert dlt.env_refs == {
-        "accessKeyId": "AWS_ACCESS_KEY_ID",
-        "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+        "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+        "PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL",
+        "PYICEBERG_CATALOG__POLARIS__OAUTH2_SERVER_URI": "POLARIS_OAUTH2_SERVER_URI",
+        "PYICEBERG_CATALOG__POLARIS__SCOPE": "POLARIS_SCOPE",
     }
     assert all("CREDENTIAL" not in key for key in dlt.iceberg_catalog_env)
     assert all("ACCESS_KEY" not in key for key in dlt.iceberg_catalog_env)

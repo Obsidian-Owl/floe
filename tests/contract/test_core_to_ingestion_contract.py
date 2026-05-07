@@ -447,8 +447,9 @@ def test_compiled_artifacts_contract_includes_ingestion_deployment_binding() -> 
                 destination_filesystem={"bucket_url": "s3://warehouse"},
                 iceberg_catalog_env={"PYICEBERG_CATALOG__POLARIS__TYPE": "rest"},
                 env_refs={
-                    "accessKeyId": "AWS_ACCESS_KEY_ID",
-                    "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+                    "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+                    "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+                    "PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL",
                 },
             ),
         )

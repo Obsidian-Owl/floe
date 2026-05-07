@@ -975,6 +975,7 @@ class TestIngestionDeploymentBinding:
             env_refs={
                 "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
                 "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+                "PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL",
             },
         )
 

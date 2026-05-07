@@ -239,6 +239,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             s3_region=storage.endpoint.region,
             s3_path_style_access=storage.endpoint.path_style_access,
         )
+        env_refs = self._compile_runtime_env_refs(storage.runtime.env_refs)
 
         return IngestionDeploymentBinding(
             provider="dlt",
@@ -249,9 +250,29 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 source_filesystem=source_filesystem,
                 destination_filesystem=destination_filesystem,
                 iceberg_catalog_env=iceberg_catalog_env,
-                env_refs=dict(storage.runtime.env_refs),
+                env_refs=env_refs,
             ),
         )
+
+    @staticmethod
+    def _compile_runtime_env_refs(storage_env_refs: Mapping[str, str]) -> dict[str, str]:
+        """Return target runtime env names and their source process env vars."""
+        env_refs: dict[str, str] = {
+            "PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL",
+            "PYICEBERG_CATALOG__POLARIS__SCOPE": "POLARIS_SCOPE",
+            "PYICEBERG_CATALOG__POLARIS__OAUTH2_SERVER_URI": "POLARIS_OAUTH2_SERVER_URI",
+        }
+        access_key_env = storage_env_refs.get("accessKeyId") or storage_env_refs.get(
+            "AWS_ACCESS_KEY_ID"
+        )
+        if access_key_env:
+            env_refs["AWS_ACCESS_KEY_ID"] = str(access_key_env)
+        secret_key_env = storage_env_refs.get("secretAccessKey") or storage_env_refs.get(
+            "AWS_SECRET_ACCESS_KEY"
+        )
+        if secret_key_env:
+            env_refs["AWS_SECRET_ACCESS_KEY"] = str(secret_key_env)
+        return env_refs
 
     @staticmethod
     def _compile_safe_iceberg_environment(
@@ -867,12 +888,25 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
     @contextmanager
     def _temporary_runtime_binding_environment(self, binding: Mapping[str, Any]) -> Any:
         iceberg_catalog_env = binding.get("iceberg_catalog_env")
-        if not isinstance(iceberg_catalog_env, Mapping) or not iceberg_catalog_env:
+        env_refs = binding.get("env_refs")
+        if not isinstance(iceberg_catalog_env, Mapping) and not isinstance(env_refs, Mapping):
             yield
             return
 
         with self._iceberg_env_lock:
-            runtime_env = {str(key): str(value) for key, value in iceberg_catalog_env.items()}
+            runtime_env: dict[str, str] = {}
+            if isinstance(iceberg_catalog_env, Mapping):
+                runtime_env.update(
+                    {str(key): str(value) for key, value in iceberg_catalog_env.items()}
+                )
+            if isinstance(env_refs, Mapping):
+                for target_name, source_name in env_refs.items():
+                    source_value = os.environ.get(str(source_name))
+                    if source_value is not None:
+                        runtime_env[str(target_name)] = source_value
+            if not runtime_env:
+                yield
+                return
             previous = {key: os.environ.get(key) for key in runtime_env}
             try:
                 os.environ.update(runtime_env)

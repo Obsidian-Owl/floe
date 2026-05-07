@@ -104,7 +104,6 @@ def _host_dlt_runtime_binding(artifacts: CompiledArtifacts) -> dict[str, Any]:
     runtime_binding = _dlt_runtime_binding(artifacts)
     polaris_catalog_url = f"{ServiceEndpoint('polaris').url}/api/catalog"
     minio_url = ServiceEndpoint("minio").url
-    polaris_client_id, polaris_client_secret = get_polaris_credentials(DEMO_MANIFEST)
     source_filesystem = dict(runtime_binding["source_filesystem"])
     destination_filesystem = dict(runtime_binding["destination_filesystem"])
     destination_credentials = dict(destination_filesystem["credentials"])
@@ -115,16 +114,6 @@ def _host_dlt_runtime_binding(artifacts: CompiledArtifacts) -> dict[str, Any]:
     destination_filesystem["credentials"] = destination_credentials
     iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__URI"] = polaris_catalog_url
     iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__S3__ENDPOINT"] = minio_url
-    iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__CREDENTIAL"] = (
-        f"{polaris_client_id}:{polaris_client_secret}"  # pragma: allowlist secret
-    )
-    iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__SCOPE"] = get_polaris_scope(DEMO_MANIFEST)
-    iceberg_catalog_env["PYICEBERG_CATALOG__POLARIS__OAUTH2_SERVER_URI"] = (
-        get_polaris_oauth2_server_uri(
-            DEMO_MANIFEST,
-            catalog_endpoint=polaris_catalog_url,
-        )
-    )
 
     return {
         **runtime_binding,
@@ -394,12 +383,26 @@ class TestCustomer360DltIngestion(IntegrationTestBase):
         bucket = _storage_warehouse_bucket(artifacts)
 
         minio_access_key, minio_secret_key = get_minio_credentials()
+        polaris_client_id, polaris_client_secret = get_polaris_credentials(DEMO_MANIFEST)
+        polaris_catalog_url = f"{ServiceEndpoint('polaris').url}/api/catalog"
         monkeypatch.setenv("AWS_ACCESS_KEY_ID", minio_access_key)
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", minio_secret_key)
         monkeypatch.setenv("AWS_REGION", str(runtime_binding["source_filesystem"]["region_name"]))
         monkeypatch.setenv(
             "AWS_ENDPOINT_URL",
             str(runtime_binding["source_filesystem"]["endpoint_url"]),
+        )
+        monkeypatch.setenv(
+            "POLARIS_CREDENTIAL",
+            f"{polaris_client_id}:{polaris_client_secret}",  # pragma: allowlist secret
+        )
+        monkeypatch.setenv("POLARIS_SCOPE", get_polaris_scope(DEMO_MANIFEST))
+        monkeypatch.setenv(
+            "POLARIS_OAUTH2_SERVER_URI",
+            get_polaris_oauth2_server_uri(
+                DEMO_MANIFEST,
+                catalog_endpoint=polaris_catalog_url,
+            ),
         )
 
         with minio_client_context(MinIOConfig(endpoint=_host_minio_endpoint_for_client())) as minio:
