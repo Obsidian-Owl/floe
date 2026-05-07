@@ -155,3 +155,35 @@ def test_resolver_rejects_malformed_capability_payload() -> None:
             plugin_name="minio",
             capabilities={"protocols": "s3-compatible"},  # type: ignore[arg-type]
         )
+
+
+def test_capability_set_accepts_security_composition_modes() -> None:
+    """CapabilitySet should carry secret projection and identity capabilities."""
+    capabilities = CapabilitySet(
+        credential_modes=["kubernetes-secret", "workload-identity"],
+        secret_projection_modes=["kubernetes-secret", "external-secret-sync"],
+        identity_modes=["aws-irsa", "oidc-federation"],
+        providers=["kubernetes", "aws", "oidc"],
+    )
+
+    assert capabilities.secret_projection_modes == [
+        "kubernetes-secret",
+        "external-secret-sync",
+    ]
+    assert capabilities.identity_modes == ["aws-irsa", "oidc-federation"]
+    assert capabilities.providers == ["kubernetes", "aws", "oidc"]
+
+
+def test_requirement_set_accepts_security_composition_modes() -> None:
+    """RequirementSet should describe required secret and identity modes."""
+    requirements = RequirementSet(
+        credential_modes=["external-secret-sync"],
+        secret_projection_modes=["external-secret-sync"],
+        identity_modes=["gcp-workload-identity"],
+        providers=["gcp"],
+    )
+
+    assert requirements.credential_modes == ["external-secret-sync"]
+    assert requirements.secret_projection_modes == ["external-secret-sync"]
+    assert requirements.identity_modes == ["gcp-workload-identity"]
+    assert requirements.providers == ["gcp"]
