@@ -296,6 +296,8 @@ class ResolvedPlugins(BaseModel):
         storage: Resolved storage plugin (optional)
         ingestion: Resolved ingestion plugin (optional)
         semantic: Resolved semantic layer plugin (optional)
+        secrets: Resolved secrets plugin (optional)
+        identity: Resolved identity plugin (optional)
 
     Example:
         >>> plugins = ResolvedPlugins(
@@ -339,6 +341,14 @@ class ResolvedPlugins(BaseModel):
     lineage_backend: PluginRef | None = Field(
         default=None,
         description="Resolved lineage backend plugin (optional, v0.5.0+)",
+    )
+    secrets: PluginRef | None = Field(
+        default=None,
+        description="Resolved secrets plugin (optional)",
+    )
+    identity: PluginRef | None = Field(
+        default=None,
+        description="Resolved identity plugin (optional)",
     )
 
 

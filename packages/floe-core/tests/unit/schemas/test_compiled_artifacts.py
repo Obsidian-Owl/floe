@@ -211,6 +211,31 @@ class TestResolvedPlugins:
         assert plugins.catalog is not None
         assert plugins.catalog.type == "polaris"
 
+    @pytest.mark.requirement("PCU-005")
+    def test_valid_resolved_plugins_includes_secrets_and_identity(self) -> None:
+        """ResolvedPlugins should expose selected security providers."""
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            secrets=PluginRef(
+                type="k8s",
+                version="0.1.0",
+                config={"namespace": "floe-system"},
+            ),
+            identity=PluginRef(
+                type="keycloak",
+                version="0.1.0",
+                config={"realm": "floe"},
+            ),
+        )
+
+        assert plugins.secrets is not None
+        assert plugins.secrets.type == "k8s"
+        assert plugins.secrets.config == {"namespace": "floe-system"}
+        assert plugins.identity is not None
+        assert plugins.identity.type == "keycloak"
+        assert plugins.identity.config == {"realm": "floe"}
+
     @pytest.mark.requirement("2B-FR-007")
     def test_missing_compute_rejected(self) -> None:
         """Test that missing required compute plugin is rejected."""

@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import pytest
 
+from floe_core.compilation.resolver import resolve_plugins
 from floe_core.schemas.floe_spec import FloeMetadata, FloeSpec, TransformSpec
 from floe_core.schemas.manifest import PlatformManifest
+from floe_core.schemas.metadata import ManifestMetadata
+from floe_core.schemas.plugins import PluginsConfig, PluginSelection
 
 
 @pytest.fixture
@@ -78,6 +81,38 @@ def floe_spec_with_compute_override() -> FloeSpec:
             TransformSpec(name="fct_orders", compute="snowflake"),  # Override
         ],
     )
+
+
+def test_resolve_plugins_preserves_secrets_and_identity_selections() -> None:
+    """Compilation should expose selected security providers in artifacts."""
+    manifest = PlatformManifest(
+        api_version="floe.dev/v1",
+        kind="Manifest",
+        metadata=ManifestMetadata(name="platform", version="1.0.0", owner="test@example.com"),
+        plugins=PluginsConfig(
+            compute=PluginSelection(type="duckdb", version="0.9.0"),
+            orchestrator=PluginSelection(type="dagster", version="1.5.0"),
+            secrets=PluginSelection(
+                type="k8s",
+                version="0.1.0",
+                config={"namespace": "floe-system"},
+            ),
+            identity=PluginSelection(
+                type="keycloak",
+                version="0.1.0",
+                config={"realm": "floe"},
+            ),
+        ),
+    )
+
+    resolved = resolve_plugins(manifest)
+
+    assert resolved.secrets is not None
+    assert resolved.secrets.type == "k8s"
+    assert resolved.secrets.config == {"namespace": "floe-system"}
+    assert resolved.identity is not None
+    assert resolved.identity.type == "keycloak"
+    assert resolved.identity.config == {"realm": "floe"}
 
 
 class TestResolvePlugins:

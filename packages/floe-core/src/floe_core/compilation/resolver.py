@@ -109,6 +109,8 @@ def resolve_plugins(manifest: PlatformManifest) -> ResolvedPlugins:
         ingestion=_to_plugin_ref(plugins.ingestion),
         semantic=_to_plugin_ref(plugins.semantic_layer),
         lineage_backend=_to_plugin_ref(plugins.lineage_backend),
+        secrets=_to_plugin_ref(plugins.secrets),
+        identity=_to_plugin_ref(plugins.identity),
     )
 
 
