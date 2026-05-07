@@ -626,7 +626,7 @@ class PolarisCatalogDeploymentBinding(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     storage_type: Literal["S3"]
-    warehouse: NonEmptyString
+    warehouse: NonEmptyString | None = None
     default_base_location: NonEmptyString
     allowed_locations: list[NonEmptyString]
     endpoint: NonEmptyString

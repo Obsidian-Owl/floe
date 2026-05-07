@@ -1009,6 +1009,26 @@ class TestIngestionDeploymentBinding:
                 env_refs={},
             )
 
+    def test_dlt_binding_rejects_secret_values_in_allowed_credential_keys(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import DltIngestionBinding
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            DltIngestionBinding(
+                plugin_name="dlt",
+                destination="filesystem",
+                table_format="iceberg",
+                source_filesystem={},
+                destination_filesystem={
+                    "credentials": {
+                        "endpoint_url": "raw-secret-value",  # pragma: allowlist secret
+                    }
+                },
+                iceberg_catalog_env={},
+                env_refs={},
+            )
+
 
 class TestStorageCredentialBinding:
     """Tests for storage credential binding validation."""
