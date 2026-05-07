@@ -55,6 +55,13 @@ _SECRET_VALUE_MARKERS = (
     "secret-value",
     "token",
 )
+_DLT_FILESYSTEM_CREDENTIAL_KEYS = frozenset(
+    {
+        "endpoint_url",
+        "region_name",
+        "s3_url_style",
+    }
+)
 _DEFAULT_ADMIN_CREDENTIAL_PATTERN = re.compile(r"(?<![a-z0-9])[a-z0-9_-]*admin[0-9]*(?![a-z0-9])")
 
 
@@ -108,9 +115,6 @@ def _assert_no_secret_material(value: Any, path: str) -> None:
         for key, child in value.items():
             key_text = str(key).lower()
             child_path = f"{path}.{key}"
-            if key_text == "credentials" and isinstance(child, dict):
-                _assert_no_secret_material(child, child_path)
-                continue
             if any(marker in key_text for marker in _SECRET_FIELD_MARKERS):
                 msg = (
                     f"{child_path} looks like raw credential material; use env_refs "
@@ -143,6 +147,31 @@ def _assert_no_secret_material(value: Any, path: str) -> None:
             "use JSON-compatible dict, list, string, number, boolean, or null values"
         )
         raise ValueError(msg)
+
+
+def _assert_dlt_filesystem_fragment_secret_free(value: Any, path: str) -> None:
+    """Reject secrets while allowing dlt filesystem credential config containers."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if str(key) == "credentials" and isinstance(child, dict):
+                unknown_keys = set(child) - _DLT_FILESYSTEM_CREDENTIAL_KEYS
+                if unknown_keys:
+                    unknown_key = sorted(unknown_keys)[0]
+                    _assert_no_secret_material({unknown_key: child[unknown_key]}, child_path)
+                    msg = (
+                        f"{child_path}.{unknown_key} is not an allowed dlt filesystem "
+                        "credential config key"
+                    )
+                    raise ValueError(msg)
+                for credential_key, credential_value in child.items():
+                    _assert_no_secret_material(credential_value, f"{child_path}.{credential_key}")
+                continue
+
+            _assert_no_secret_material({key: child}, path)
+        return
+
+    _assert_no_secret_material(value, path)
 
 
 class CompilationMetadata(BaseModel):
@@ -633,7 +662,7 @@ class DltIngestionBinding(BaseModel):
     @classmethod
     def validate_secret_free_runtime_maps(cls, value: dict[str, Any]) -> dict[str, Any]:
         """Ensure dlt runtime maps carry config only, not credential values."""
-        _assert_no_secret_material(value, "ingestion.dlt.runtime")
+        _assert_dlt_filesystem_fragment_secret_free(value, "ingestion.dlt.runtime")
         return value
 
     @field_validator("iceberg_catalog_env")

@@ -794,6 +794,7 @@ class TestStorageDeploymentBinding:
             {"storage": {"token": "raw-secret-value"}},
             {"storage": {"value": "raw-secret-value"}},
             {"storage": frozenset({"raw-secret-value"})},
+            {"storage": {"credentials": {"endpoint_url": "http://minio:9000"}}},
         ],
     )
     def test_dagster_storage_binding_rejects_raw_secret_resources(
