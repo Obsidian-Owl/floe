@@ -133,7 +133,7 @@ class CompositionResolver:
         storage_modes = list(storage.capabilities.secret_projection_modes)
         required_modes = list(requirement.requirements.secret_projection_modes)
         compatible_modes = self._compatible_secret_projection_modes(storage, requirement)
-        if required_modes and storage_modes and not compatible_modes:
+        if required_modes and not compatible_modes:
             issues.append(
                 CompositionIssue(
                     severity="error",

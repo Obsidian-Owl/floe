@@ -587,3 +587,49 @@ def test_resolver_rejects_identity_mode_not_supported_by_storage() -> None:
             plugins=["storage:s3", "identity:aws", "catalog:glue"],
         )
     ]
+
+
+def test_resolver_rejects_missing_storage_secret_projection_modes() -> None:
+    """Required secret projection modes need matching storage capabilities."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="s3",
+        capabilities=CapabilitySet(
+            protocols=["s3"],
+            credential_modes=["external-secret-sync"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="glue",
+        requirements=RequirementSet(
+            protocols=["s3"],
+            credential_modes=["external-secret-sync"],
+            secret_projection_modes=["external-secret-sync"],
+        ),
+    )
+    secrets = PluginCapabilities(
+        plugin_type="secrets",
+        plugin_name="infisical",
+        capabilities=CapabilitySet(
+            credential_modes=["external-secret-sync"],
+            secret_projection_modes=["external-secret-sync"],
+            providers=["infisical"],
+        ),
+    )
+
+    result = resolver.validate([storage, secrets], [catalog])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
+            message=(
+                "catalog glue requires one of secret projection modes "
+                "['external-secret-sync']; storage s3 provides []"
+            ),
+            plugins=["storage:s3", "catalog:glue"],
+        )
+    ]
