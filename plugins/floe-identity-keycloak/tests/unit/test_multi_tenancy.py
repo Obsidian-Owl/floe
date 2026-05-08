@@ -6,6 +6,7 @@ Requirements: 7A-FR-032 (Realm-based multi-tenancy for Data Mesh domain isolatio
 
 from __future__ import annotations
 
+from typing import get_type_hints
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -323,7 +324,7 @@ class TestAuthenticateForRealm:
                     {},
                     realm="sales-domain",
                     client_id="sales-client",
-                    client_secret="sales-secret",
+                    client_secret=SecretStr("sales-secret"),
                 )
 
                 # Verify custom client credentials were used
@@ -334,6 +335,53 @@ class TestAuthenticateForRealm:
                 assert token == "custom-token"
         finally:
             plugin.shutdown()
+
+    @pytest.mark.requirement("7A-FR-032")
+    def test_authenticate_for_realm_accepts_legacy_string_secret(self) -> None:
+        """Untyped callers passing string client secrets remain runtime-compatible."""
+        from floe_identity_keycloak import (
+            KeycloakIdentityConfig,
+            KeycloakIdentityPlugin,
+        )
+
+        config = KeycloakIdentityConfig(
+            server_url="https://keycloak.example.com",
+            realm="floe",
+            client_id="default-client",
+            client_secret=SecretStr("default-secret"),
+        )
+
+        plugin = KeycloakIdentityPlugin(config=config)
+        plugin.startup()
+
+        try:
+            with patch.object(plugin._client, "post") as mock_post:
+                mock_response = MagicMock()
+                mock_response.status_code = 200
+                mock_response.json.return_value = {"access_token": "legacy-token"}
+                mock_post.return_value = mock_response
+
+                token = plugin.authenticate_for_realm(
+                    {},
+                    realm="sales-domain",
+                    client_id="sales-client",
+                    client_secret="legacy-secret",  # type: ignore[arg-type]  # pragma: allowlist secret
+                )
+
+                data = mock_post.call_args[1]["data"]
+                assert data["client_secret"] == "legacy-secret"  # pragma: allowlist secret
+                assert token == "legacy-token"
+        finally:
+            plugin.shutdown()
+
+    @pytest.mark.requirement("7A-FR-032")
+    def test_authenticate_for_realm_requires_secretstr_for_custom_secret(self) -> None:
+        """Custom realm client secrets must use SecretStr at the API boundary."""
+        from floe_identity_keycloak import KeycloakIdentityPlugin
+
+        hints = get_type_hints(KeycloakIdentityPlugin.authenticate_for_realm)
+
+        assert hints["client_secret"] == SecretStr | None
 
 
 class TestShutdownClearsRealmValidators:

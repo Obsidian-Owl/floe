@@ -633,6 +633,8 @@ class TestCompiledArtifactsExtensions:
 class TestStorageDeploymentBinding:
     """Tests for compiled storage deployment bindings."""
 
+    pytestmark = pytest.mark.requirement("PCU-005")
+
     def _rich_binding(self) -> StorageDeploymentBinding:
         credentials = StorageCredentialBinding(
             mode="kubernetes-secret",
@@ -942,6 +944,163 @@ class TestStorageDeploymentBinding:
         assert "minio-secret-value" not in serialized
         assert "raw-secret-value" not in serialized
 
+    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
+    def test_compiled_artifacts_accept_env_var_dbt_profile_secrets(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        """dbt profile secret fields may reference environment variables."""
+        artifacts = CompiledArtifacts(
+            metadata=sample_compilation_metadata,
+            identity=sample_product_identity,
+            observability=sample_observability_config,
+            dbt_profiles={
+                "floe": {
+                    "target": "dev",
+                    "outputs": {
+                        "dev": {
+                            "type": "duckdb",
+                            "auth-mode": "oauth2",
+                            "oauth2-server-uri": "http://polaris:8181/api/catalog/v1/oauth/tokens",
+                            "password": "{{ env_var('DB_PASSWORD') }}",  # pragma: allowlist secret
+                            "secret": "{{ env_var('db_password') }}",  # pragma: allowlist secret
+                            "token": "{{ env_var('DB_TOKEN', '') }}",  # pragma: allowlist secret
+                        }
+                    },
+                }
+            },
+        )
+
+        assert (
+            artifacts.dbt_profiles["floe"]["outputs"]["dev"]["password"]
+            == "{{ env_var('DB_PASSWORD') }}"
+        )
+        assert (
+            artifacts.dbt_profiles["floe"]["outputs"]["dev"]["token"]
+            == "{{ env_var('DB_TOKEN', '') }}"
+        )
+        assert (
+            artifacts.dbt_profiles["floe"]["outputs"]["dev"]["secret"]
+            == "{{ env_var('db_password') }}"
+        )
+        assert (
+            artifacts.dbt_profiles["floe"]["outputs"]["dev"]["oauth2-server-uri"]
+            == "http://polaris:8181/api/catalog/v1/oauth/tokens"
+        )
+        assert artifacts.dbt_profiles["floe"]["outputs"]["dev"]["auth-mode"] == "oauth2"
+
+    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
+    def test_compiled_artifacts_reject_raw_secret_dbt_profiles(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        """Top-level generated dbt profiles must reject raw credential material."""
+        with pytest.raises(ValidationError, match="raw credential material"):
+            CompiledArtifacts(
+                metadata=sample_compilation_metadata,
+                identity=sample_product_identity,
+                observability=sample_observability_config,
+                dbt_profiles={
+                    "floe": {
+                        "target": "dev",
+                        "outputs": {
+                            "dev": {
+                                "type": "duckdb",
+                                "password": "raw-secret-value",  # pragma: allowlist secret
+                            }
+                        },
+                    }
+                },
+            )
+
+    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
+    def test_compiled_artifacts_reject_credential_query_dbt_profile_urls(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        """dbt profile URLs with credential query params are not safe endpoint refs."""
+        credential_url = "https://x.test/oauth?client-secret=leaked"  # pragma: allowlist secret
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            CompiledArtifacts(
+                metadata=sample_compilation_metadata,
+                identity=sample_product_identity,
+                observability=sample_observability_config,
+                dbt_profiles={
+                    "floe": {
+                        "target": "dev",
+                        "outputs": {
+                            "dev": {
+                                "type": "duckdb",
+                                "password": credential_url,
+                            }
+                        },
+                    }
+                },
+            )
+
+    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
+    def test_compiled_artifacts_reject_fragment_token_dbt_profile_urls(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        """dbt profile URLs with credential fragments are not safe endpoint refs."""
+        credential_url = "https://idp.example/callback#access_token=leaked"
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            CompiledArtifacts(
+                metadata=sample_compilation_metadata,
+                identity=sample_product_identity,
+                observability=sample_observability_config,
+                dbt_profiles={
+                    "floe": {
+                        "target": "dev",
+                        "outputs": {
+                            "dev": {
+                                "type": "duckdb",
+                                "token": credential_url,
+                            }
+                        },
+                    }
+                },
+            )
+
+    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
+    def test_compiled_artifacts_reject_encoded_credential_query_keys(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        """dbt profile URL credential query keys are decoded before matching."""
+        credential_url = "https://x.test/oauth?client%2Dsecret=leaked"  # pragma: allowlist secret
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            CompiledArtifacts(
+                metadata=sample_compilation_metadata,
+                identity=sample_product_identity,
+                observability=sample_observability_config,
+                dbt_profiles={
+                    "floe": {
+                        "target": "dev",
+                        "outputs": {
+                            "dev": {
+                                "type": "duckdb",
+                                "password": credential_url,
+                            }
+                        },
+                    }
+                },
+            )
+
     @pytest.mark.parametrize(
         "factory",
         [
@@ -968,6 +1127,8 @@ class TestStorageDeploymentBinding:
 
 class TestStorageCredentialBinding:
     """Tests for storage credential binding validation."""
+
+    pytestmark = pytest.mark.requirement("PCU-005")
 
     @pytest.mark.parametrize(
         "factory",

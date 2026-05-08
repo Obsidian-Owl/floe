@@ -20,6 +20,7 @@ from pydantic import SecretStr
 from floe_secrets_infisical.config import InfisicalSecretsConfig
 from floe_secrets_infisical.errors import (
     InfisicalAccessDeniedError,
+    InfisicalAuthError,
     InfisicalBackendUnavailableError,
 )
 from floe_secrets_infisical.plugin import InfisicalSecretsPlugin
@@ -437,6 +438,31 @@ class TestInfisicalSecretsPluginAuthentication:
             mock_infisical_client_module.UniversalAuthMethod.assert_called_once()
             call_kwargs = mock_infisical_client_module.UniversalAuthMethod.call_args
             assert call_kwargs is not None
+
+    @pytest.mark.requirement("7A-FR-021")
+    def test_authentication_failure_logs_without_stack_trace(
+        self,
+        mock_infisical_config: InfisicalSecretsConfig,
+        mock_infisical_client_module: MagicMock,
+    ) -> None:
+        """Authentication failures must not log exception tracebacks with credentials."""
+        mock_infisical_client_module.UniversalAuthMethod.side_effect = Exception(
+            "401 Unauthorized client_secret=leaked"
+        )
+
+        with (
+            patch.dict(sys.modules, {"infisical_client": mock_infisical_client_module}),
+            patch("floe_secrets_infisical.plugin.logger.exception") as mock_exception,
+            patch("floe_secrets_infisical.plugin.logger.error") as mock_error,
+            pytest.raises(InfisicalAuthError) as exc_info,
+        ):
+            InfisicalSecretsPlugin(config=mock_infisical_config).startup()
+
+        mock_exception.assert_not_called()
+        mock_error.assert_called_once()
+        assert mock_error.call_args.kwargs["extra"] == {"error_type": "Exception"}
+        assert exc_info.value.reason == "authentication failed (401)"
+        assert "client_secret" not in str(exc_info.value)
 
 
 class TestInfisicalSecretsPluginPathOrganization:

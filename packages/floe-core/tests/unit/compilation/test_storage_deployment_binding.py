@@ -1715,6 +1715,67 @@ def test_compile_passes_selected_secret_and_identity_capabilities_to_resolver(
     assert artifacts.deployment.storage.credentials.mode == "workload-identity"
 
 
+def test_compile_rejects_invalid_storage_identity_modes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compilation must reject misspelled storage identity modes."""
+
+    class InvalidIdentityStoragePlugin(ExternalSecretStoragePlugin):
+        def get_deployment_binding(self) -> StorageDeploymentBinding:
+            binding = super().get_deployment_binding()
+            return binding.model_copy(
+                update={
+                    "capabilities": binding.capabilities.model_copy(
+                        update={"identity_modes": ["aws-irsa-typo"]}
+                    )
+                }
+            )
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class IsolatedRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            if plugin_type == PluginType.STORAGE:
+                return InvalidIdentityStoragePlugin()
+            if plugin_type == PluginType.CATALOG:
+                return ExternalSecretCatalogPlugin()
+            if plugin_type == PluginType.SECRETS:
+                return FakeSecretsPlugin()
+            if plugin_type == PluginType.COMPUTE:
+                from floe_compute_duckdb.plugin import DuckDBComputePlugin
+
+                return DuckDBComputePlugin()
+            raise AssertionError(f"unexpected plugin lookup: {plugin_type} {name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedRegistry)
+    manifest_path = _external_secret_manifest_path(tmp_path, include_secrets=True)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_IDENTITY_MODE_UNSUPPORTED"
+    assert error.context["invalid_identity_modes"] == ["aws-irsa-typo"]
+
+
 def test_compile_validates_selected_workload_identity_mode_not_advertised_alternatives(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

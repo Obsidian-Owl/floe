@@ -25,6 +25,7 @@ from floe_core.plugins.identity import (
     TokenValidationResult,
     UserInfo,
 )
+from pydantic import SecretStr
 
 from .config import KeycloakIdentityConfig
 from .token_validator import TokenValidator
@@ -442,7 +443,7 @@ class KeycloakIdentityPlugin(IdentityPlugin):
         credentials: dict[str, Any],
         realm: str,
         client_id: str | None = None,
-        client_secret: str | None = None,
+        client_secret: SecretStr | None = None,
     ) -> str | None:
         """Authenticate against a specific realm.
 
@@ -469,18 +470,19 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             ...     {"username": "user", "password": "pass"},
             ...     realm="domain-sales",
             ...     client_id="sales-client",
-            ...     client_secret="sales-secret",
+            ...     client_secret=SecretStr("sales-secret"),
             ... )
         """
         if not self._started or not self._client:
             raise RuntimeError(_NOT_STARTED_ERROR)
 
         effective_client_id = client_id or self._config.client_id
-        effective_client_secret = (
-            client_secret
-            if client_secret is not None
-            else self._config.client_secret.get_secret_value()
-        )
+        if client_secret is None:
+            effective_client_secret = self._config.client_secret.get_secret_value()
+        elif isinstance(client_secret, SecretStr):
+            effective_client_secret = client_secret.get_secret_value()
+        else:
+            effective_client_secret = str(client_secret)
 
         token_url = f"{self._config.server_url}/realms/{realm}/protocol/openid-connect/token"
 

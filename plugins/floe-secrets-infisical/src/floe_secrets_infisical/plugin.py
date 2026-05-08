@@ -87,6 +87,15 @@ def _classify_error(error: Exception) -> str:
     return _ErrorType.UNKNOWN
 
 
+def _safe_error_reason(error: Exception, fallback: str) -> str:
+    """Return a non-sensitive reason string for surfaced plugin exceptions."""
+    error_str = str(error).lower()
+    for status_code in ("400", "401", "403", "404", "408", "429", "500", "502", "503", "504"):
+        if status_code in error_str:
+            return f"{fallback} ({status_code})"
+    return fallback
+
+
 class InfisicalSecretsPlugin(SecretsPlugin):
     """Infisical secrets backend plugin.
 
@@ -232,7 +241,10 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             self._authenticated = True
 
         except ImportError as e:
-            logger.exception("infisical-python-sdk not installed")
+            logger.error(
+                "infisical-python-sdk not installed",
+                extra={"error_type": type(e).__name__},
+            )
             raise InfisicalBackendUnavailableError(
                 site_url=self._config.site_url,
                 reason="infisical-python-sdk not installed. Install with: pip install",
@@ -240,16 +252,27 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         except Exception as e:
             error_str = str(e).lower()
             if "unauthorized" in error_str or "401" in error_str or "auth" in error_str:
-                logger.exception("Infisical authentication failed")
-                raise InfisicalAuthError(reason=str(e)) from e
+                logger.error(
+                    "Infisical authentication failed",
+                    extra={"error_type": type(e).__name__},
+                )
+                raise InfisicalAuthError(
+                    reason=_safe_error_reason(e, "authentication failed")
+                ) from e
             if "connection" in error_str or "timeout" in error_str:
-                logger.exception("Failed to connect to Infisical")
+                logger.error(
+                    "Failed to connect to Infisical",
+                    extra={"error_type": type(e).__name__},
+                )
                 raise InfisicalBackendUnavailableError(
                     site_url=self._config.site_url,
-                    reason=str(e),
+                    reason=_safe_error_reason(e, "connection failed"),
                 ) from e
-            logger.exception("Infisical authentication error")
-            raise InfisicalAuthError(reason=str(e)) from e
+            logger.error(
+                "Infisical authentication error",
+                extra={"error_type": type(e).__name__},
+            )
+            raise InfisicalAuthError(reason=_safe_error_reason(e, "authentication failed")) from e
 
     def shutdown(self) -> None:
         """Clean up resources."""
