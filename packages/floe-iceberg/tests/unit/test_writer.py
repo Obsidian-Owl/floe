@@ -45,6 +45,14 @@ class _FakeTable:
         self.refreshed += 1
 
 
+class _RefreshFailingTable(_FakeTable):
+    """Fake table whose metadata refresh fails after successful writes."""
+
+    def refresh(self) -> None:
+        self.refreshed += 1
+        raise RuntimeError("temporary catalog refresh failure")
+
+
 class _WriteCapableCatalog:
     """Write-capable catalog test double."""
 
@@ -361,6 +369,41 @@ def test_write_tables_rejects_invalid_mode_before_catalog_mutation() -> None:
     assert catalog.create_namespace_calls == []
     assert catalog.load_table_calls == []
     assert catalog.created_tables == []
+
+
+@pytest.mark.requirement("AC-318")
+def test_write_tables_rejects_first_generator_invalid_mode_before_namespace() -> None:
+    """Verify generator writes validate the first mode before namespace mutation."""
+    catalog = _WriteCapableCatalog()
+    writer = _writer(catalog)
+
+    def writes() -> Iterable[IcebergTableWrite]:
+        yield IcebergTableWrite(
+            identifier="customer_360.customers",
+            arrow_table=_arrow_table(),
+            mode="replace",  # type: ignore[arg-type]
+        )
+
+    with pytest.raises(ValueError, match="Unsupported Iceberg write mode"):
+        writer.write_tables("customer_360", writes())
+
+    assert catalog.create_namespace_calls == []
+    assert catalog.load_table_calls == []
+    assert catalog.created_tables == []
+
+
+@pytest.mark.requirement("AC-318")
+def test_write_table_does_not_fail_when_post_write_refresh_fails() -> None:
+    """Verify refresh failures do not turn successful writes into write failures."""
+    catalog = _WriteCapableCatalog()
+    arrow_table = _arrow_table()
+    table = _RefreshFailingTable("customer_360.customers")
+    catalog.tables["customer_360.customers"] = table
+
+    _writer(catalog).write_table("customer_360.customers", arrow_table, mode="append")
+
+    assert table.appended == [arrow_table]
+    assert table.refreshed == 1
 
 
 @pytest.mark.requirement("AC-318")

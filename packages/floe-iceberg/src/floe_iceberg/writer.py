@@ -175,8 +175,7 @@ class DefaultIcebergTableWriter:
                 except Exception as exc:
                     table = self._repair_and_recreate(identifier, arrow_table, exc)
 
-        if hasattr(table, "refresh"):
-            table.refresh()
+        _refresh_table_best_effort(table)
 
     def write_tables(
         self,
@@ -189,9 +188,19 @@ class DefaultIcebergTableWriter:
                 _validate_write_mode(write.mode)
             return self._write_validated_tables(namespace, writes)
 
+        iterator = iter(writes)
+        try:
+            first_write = next(iterator)
+        except StopIteration:
+            self.ensure_namespace(namespace)
+            return IcebergWriterResult(tables_written=0, table_names=())
+
+        _validate_write_mode(first_write.mode)
         self.ensure_namespace(namespace)
         table_names: list[str] = []
-        for write in writes:
+        self.write_table(first_write.identifier, first_write.arrow_table, mode=first_write.mode)
+        table_names.append(first_write.identifier)
+        for write in iterator:
             _validate_write_mode(write.mode)
             self.write_table(write.identifier, write.arrow_table, mode=write.mode)
             table_names.append(write.identifier)
@@ -338,6 +347,16 @@ def _validate_write_mode(mode: str) -> None:
         return
     msg = f"Unsupported Iceberg write mode: {mode}"
     raise ValueError(msg)
+
+
+def _refresh_table_best_effort(table: Any) -> None:
+    refresh = getattr(table, "refresh", None)
+    if not callable(refresh):
+        return
+    try:
+        refresh()
+    except Exception:
+        return
 
 
 def _is_existing_namespace_error(exc: Exception) -> bool:
