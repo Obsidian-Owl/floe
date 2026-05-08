@@ -29,7 +29,7 @@ FLOE_VERSION: str = "0.3.0"
 # Increment MAJOR for breaking changes (remove fields, change types)
 # Increment MINOR for backward-compatible additions (new optional fields)
 # Increment PATCH for documentation/metadata only changes
-COMPILED_ARTIFACTS_VERSION: str = "0.10.0"
+COMPILED_ARTIFACTS_VERSION: str = "0.11.0"
 
 # Version history (for documentation and compatibility checks)
 COMPILED_ARTIFACTS_VERSION_HISTORY: dict[str, str] = {
@@ -43,6 +43,7 @@ COMPILED_ARTIFACTS_VERSION_HISTORY: dict[str, str] = {
     "0.8.0": "Add lineage_endpoint, lineage_transport to ObservabilityConfig",
     "0.9.0": "Add default_ttl_hours, snapshot_keep_last to ResolvedGovernance (Issue #165)",
     "0.10.0": "Add stale_table_recovery_mode to ResolvedGovernance and deployment bindings",
+    "0.11.0": "Add ingestion_outputs to CompiledArtifacts",
 }
 
 

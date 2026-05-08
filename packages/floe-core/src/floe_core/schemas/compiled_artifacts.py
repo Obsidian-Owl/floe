@@ -24,6 +24,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -57,12 +58,19 @@ _SECRET_VALUE_MARKERS = (
     "token",
 )
 _INGESTION_OUTPUT_SOURCE_PATH_SECRET_MARKERS = (
+    "credential",
+    "credentials",
     "access_key",
     "secret_key",
+    "api_key",
     "password",
     "token",
     "signature",
+    "awsaccesskeyid",
+    "aws_access_key_id",
+    "aws_secret_access_key",
 )
+_INGESTION_OUTPUT_TABLE_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _DLT_FILESYSTEM_CREDENTIAL_KEYS = frozenset(
     {
         "endpoint_url",
@@ -752,19 +760,38 @@ class IngestionOutputTable(BaseModel):
         if len(parts) != 2 or any(part.strip() != part or not part for part in parts):
             msg = "table identifier must be exactly namespace.table with non-empty parts"
             raise ValueError(msg)
+        if any(_INGESTION_OUTPUT_TABLE_IDENTIFIER.fullmatch(part) is None for part in parts):
+            msg = "table identifier parts must use safe identifier characters"
+            raise ValueError(msg)
         return value
 
     @field_validator("source_path")
     @classmethod
     def validate_source_path_secret_free(cls, value: str) -> str:
-        """Reject embedded credential material in source paths."""
-        lower_value = value.lower()
-        if "@" in value or any(
-            marker in lower_value for marker in _INGESTION_OUTPUT_SOURCE_PATH_SECRET_MARKERS
-        ):
+        """Reject embedded credential material in source path URI components."""
+        parsed = urlsplit(value)
+        if _contains_ingestion_output_credential_path_part(
+            parsed.query
+        ) or _contains_ingestion_output_credential_path_part(parsed.fragment):
+            msg = "source_path must not contain embedded credential material"
+            raise ValueError(msg)
+        if parsed.scheme and (parsed.username or parsed.password or "@" in parsed.netloc):
             msg = "source_path must not contain embedded credential material"
             raise ValueError(msg)
         return value
+
+
+def _contains_ingestion_output_credential_path_part(value: str) -> bool:
+    """Return True when a URI query or fragment contains credential-like terms."""
+    if not value:
+        return False
+
+    lowered = value.lower()
+    normalized = re.sub(r"[^a-z0-9]+", "", lowered)
+    return any(
+        term in lowered or re.sub(r"[^a-z0-9]+", "", term) in normalized
+        for term in _INGESTION_OUTPUT_SOURCE_PATH_SECRET_MARKERS
+    )
 
 
 class DeploymentConfig(BaseModel):
