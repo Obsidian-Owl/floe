@@ -122,10 +122,8 @@ def test_get_storage_requirements_declares_polaris_storage_needs() -> None:
     assert requirements.plugin_type == "catalog"
     assert requirements.plugin_name == "polaris"
     assert requirements.requirements.protocols == ["s3-compatible", "s3"]
-    assert requirements.requirements.credential_modes == [
-        "kubernetes-secret",
-        "workload-identity",
-    ]
+    assert requirements.requirements.credential_modes == ["kubernetes-secret"]
+    assert requirements.requirements.identity_modes == []
     assert requirements.requirements.requires_server_side_storage_access is True
     assert requirements.requirements.supports_no_sts is True
     assert requirements.requirements.supports_path_style_access is True
