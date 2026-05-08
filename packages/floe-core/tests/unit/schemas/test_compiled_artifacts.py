@@ -159,6 +159,21 @@ class TestPluginRef:
         assert ref.version == "0.9.0"
         assert ref.config == {"threads": 4, "memory_limit": "8GB"}
 
+    @pytest.mark.requirement("PCU-005")
+    def test_plugin_ref_rejects_raw_secret_config_fields(self) -> None:
+        """Plugin refs must not serialize raw credential-bearing config fields."""
+        sensitive_key = "client_" + "secret"
+
+        with pytest.raises(ValidationError, match="plugins.keycloak.config.client_secret"):
+            PluginRef(
+                type="keycloak",
+                version="0.1.0",
+                config={
+                    "realm": "floe",
+                    sensitive_key: "provided-at-runtime",
+                },
+            )
+
     @pytest.mark.requirement("2B-FR-007")
     def test_invalid_version_not_semver(self) -> None:
         """Test that non-semver version is rejected."""
@@ -210,6 +225,31 @@ class TestResolvedPlugins:
         assert plugins.compute.type == "duckdb"
         assert plugins.catalog is not None
         assert plugins.catalog.type == "polaris"
+
+    @pytest.mark.requirement("PCU-005")
+    def test_valid_resolved_plugins_includes_secrets_and_identity(self) -> None:
+        """ResolvedPlugins should expose selected security providers."""
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            secrets=PluginRef(
+                type="k8s",
+                version="0.1.0",
+                config={"namespace": "floe-system"},
+            ),
+            identity=PluginRef(
+                type="keycloak",
+                version="0.1.0",
+                config={"realm": "floe"},
+            ),
+        )
+
+        assert plugins.secrets is not None
+        assert plugins.secrets.type == "k8s"
+        assert plugins.secrets.config == {"namespace": "floe-system"}
+        assert plugins.identity is not None
+        assert plugins.identity.type == "keycloak"
+        assert plugins.identity.config == {"realm": "floe"}
 
     @pytest.mark.requirement("2B-FR-007")
     def test_missing_compute_rejected(self) -> None:
@@ -730,6 +770,7 @@ class TestStorageDeploymentBinding:
         assert payload["capabilities"] == {
             "protocols": ["s3-compatible"],
             "credential_modes": ["kubernetes-secret"],
+            "identity_modes": [],
             "sts_supported": False,
             "path_style_access": True,
         }
@@ -741,6 +782,16 @@ class TestStorageDeploymentBinding:
         assert payload["runtime"]["pyiceberg_properties"] == {
             "s3.endpoint": "http://floe-platform-minio:9000"
         }
+
+    def test_storage_capabilities_accept_identity_modes(self) -> None:
+        """StorageCapabilities should expose concrete workload identity modes."""
+        capabilities = StorageCapabilities(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+        )
+
+        assert capabilities.identity_modes == ["aws-irsa"]
 
     @pytest.mark.parametrize(
         ("field_name", "fragment"),
@@ -946,6 +997,8 @@ class TestStorageCredentialBinding:
         "binding_kwargs",
         [
             {"mode": "kubernetes-secret"},
+            {"mode": "external-secret-sync"},
+            {"mode": "csi-secret-volume"},
             {"mode": "environment"},
             {"mode": "environment", "env_refs": {}},
             {"mode": "workload-identity"},
@@ -1000,6 +1053,38 @@ class TestStorageCredentialBinding:
                 "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
                 "service_account_ref": "storage-service-account",
             },
+            {
+                "mode": "external-secret-sync",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
+            },
+            {
+                "mode": "external-secret-sync",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+                "service_account_ref": "storage-service-account",
+            },
+            {
+                "mode": "csi-secret-volume",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
+            },
+            {
+                "mode": "csi-secret-volume",
+                "secret_ref": KubernetesSecretRef(
+                    name="storage-credentials",
+                    namespace="floe-system",
+                ),
+                "service_account_ref": "storage-service-account",
+            },
         ],
     )
     def test_mode_inconsistent_credential_bindings_are_rejected(
@@ -1045,6 +1130,8 @@ class TestStorageCredentialBinding:
                 name="storage-service-account",
                 key="accessKeyId",
             ),
+            lambda: CredentialRef(source="external-secret-sync", name="storage-credentials"),
+            lambda: CredentialRef(source="csi-secret-volume", name="storage-credentials"),
             lambda: CredentialRef(source="none", name="none", key="accessKeyId"),
         ],
     )
@@ -1066,6 +1153,26 @@ class TestStorageCredentialBinding:
         assert ref.source == "environment"
         assert ref.name == "AWS_ACCESS_KEY_ID"
         assert ref.key is None
+
+    @pytest.mark.parametrize("mode", ["external-secret-sync", "csi-secret-volume"])
+    def test_secret_projection_credential_ref_uses_configured_secret_key(
+        self,
+        mode: str,
+    ) -> None:
+        binding = StorageCredentialBinding(
+            mode=mode,
+            secret_ref=KubernetesSecretRef(
+                name="storage-credentials",
+                namespace="floe-system",
+                keys={"accessKeyId": "root-user"},
+            ),
+        )
+
+        ref = binding.as_credential_ref("accessKeyId")
+
+        assert ref.source == mode
+        assert ref.name == "storage-credentials"
+        assert ref.key == "root-user"
 
     def test_environment_credential_ref_raises_for_missing_logical_key(self) -> None:
         binding = StorageCredentialBinding(
@@ -1680,37 +1787,40 @@ class TestGovernanceLifecycleFields:
 
 
 class TestCompiledArtifactsVersionBump:
-    """Tests for AC-6: version bump to 0.10.0 with history entry."""
+    """Tests for AC-6: version bump to 0.13.0 with history entry."""
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_version_is_0_10_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.10.0'."""
-        assert COMPILED_ARTIFACTS_VERSION == "0.10.0", (
-            f"Expected version '0.10.0', got '{COMPILED_ARTIFACTS_VERSION}'"
+    def test_compiled_artifacts_version_is_0_13_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.13.0'."""
+        assert COMPILED_ARTIFACTS_VERSION == "0.13.0", (
+            f"Expected version '0.13.0', got '{COMPILED_ARTIFACTS_VERSION}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_contains_0_10_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.10.0' entry."""
-        assert "0.10.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
-            f"Version '0.10.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
+    def test_version_history_contains_0_13_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.13.0' entry."""
+        assert "0.13.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
+            f"Version '0.13.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_0_10_0_references_stale_table_recovery(self) -> None:
-        """Test that the 0.10.0 history entry mentions contract additions."""
-        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.10.0", "")
+    def test_version_history_0_13_0_references_secret_projection_modes(self) -> None:
+        """Test that the 0.13.0 history entry mentions contract additions."""
+        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.13.0", "")
         entry_lower = entry.lower()
-        assert "stale" in entry_lower and "recovery" in entry_lower, (
-            f"Version 0.10.0 history entry does not reference stale table recovery: '{entry}'"
+        assert "secret projection" in entry_lower, (
+            f"Version 0.13.0 history entry does not reference secret projection: '{entry}'"
         )
-        assert "deployment" in entry_lower, (
-            f"Version 0.10.0 history entry does not reference deployment bindings: '{entry}'"
+        assert "credential binding" in entry_lower, (
+            f"Version 0.13.0 history entry does not reference credential binding: '{entry}'"
+        )
+        assert "modes" in entry_lower, (
+            f"Version 0.13.0 history entry does not reference modes: '{entry}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_default_version_is_0_10_0(self) -> None:
-        """Test that CompiledArtifacts().version defaults to '0.10.0'."""
+    def test_compiled_artifacts_default_version_is_0_13_0(self) -> None:
+        """Test that CompiledArtifacts().version defaults to '0.13.0'."""
         artifacts = CompiledArtifacts(
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
@@ -1739,7 +1849,7 @@ class TestCompiledArtifactsVersionBump:
                 lineage_namespace="test",
             ),
         )
-        assert artifacts.version == "0.10.0"
+        assert artifacts.version == "0.13.0"
 
 
 class TestGovernanceBackwardCompatibility:

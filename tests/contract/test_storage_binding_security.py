@@ -44,6 +44,12 @@ def test_compiled_demo_storage_binding_does_not_contain_secret_values() -> None:
 def test_compiled_artifact_does_not_contain_minio_secret_values() -> None:
     """Full compiled artifact must not contain raw MinIO credential values."""
     artifacts = _compile_demo_artifacts()
+
+    assert artifacts.plugins is not None
+    assert artifacts.plugins.storage is not None
+    assert artifacts.plugins.storage.config is not None
+    assert "credential_secret_name" in artifacts.plugins.storage.config
+
     payload = artifacts.model_dump_json()
 
     for forbidden in FORBIDDEN_STORAGE_SECRET_VALUES:

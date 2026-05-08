@@ -108,6 +108,30 @@ class TestInfisicalSecretsPluginMetadata:
         assert plugin.floe_api_version is not None
         assert plugin.floe_api_version == "1.0"
 
+    @pytest.mark.requirement("PCU-005")
+    def test_secret_capabilities(
+        self,
+        mock_infisical_config: InfisicalSecretsConfig,
+    ) -> None:
+        """Infisical plugin should declare external secret sync support without startup."""
+        plugin = InfisicalSecretsPlugin(config=mock_infisical_config)
+
+        capabilities = plugin.get_secret_capabilities()
+
+        assert plugin._client is None
+        assert plugin._authenticated is False
+        assert capabilities.plugin_type == "secrets"
+        assert capabilities.plugin_name == "infisical"
+        assert capabilities.capabilities.credential_modes == [
+            "external-secret-sync",
+            "kubernetes-secret",
+        ]
+        assert capabilities.capabilities.secret_projection_modes == [
+            "external-secret-sync",
+            "kubernetes-secret",
+        ]
+        assert capabilities.capabilities.providers == ["infisical", "kubernetes"]
+
 
 class TestInfisicalSecretsPluginGetSecret:
     """Test InfisicalSecretsPlugin.get_secret() method."""

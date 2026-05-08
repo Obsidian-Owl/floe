@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+from floe_core.composition.models import CapabilitySet, PluginCapabilities
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.identity import (
     IdentityPlugin,
@@ -86,6 +87,18 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             Tracer name string following OTel naming conventions.
         """
         return TRACER_NAME
+
+    def get_identity_capabilities(self) -> PluginCapabilities:
+        """Return OIDC federation capabilities for workload identity checks."""
+        return PluginCapabilities(
+            plugin_type="identity",
+            plugin_name=self.name,
+            capabilities=CapabilitySet(
+                credential_modes=["workload-identity"],
+                identity_modes=["oidc-federation"],
+                providers=["oidc"],
+            ),
+        )
 
     def __init__(self, config: KeycloakIdentityConfig) -> None:
         """Initialize KeycloakIdentityPlugin.

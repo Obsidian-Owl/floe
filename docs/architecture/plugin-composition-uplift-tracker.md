@@ -34,7 +34,7 @@ clear target state.
 | Compute / dbt | 3 | In storage composition PR for DuckDB/dbt profile path | Runtime storage binding consumption, profile generation, endpoint/credential consistency |
 | Orchestrator / Dagster | 3 | In storage composition PR for Dagster runtime path | Run pod env/Secret refs, Iceberg resource binding, endpoint consistency |
 | Helm / deployment renderer | 3 | In storage composition PR | Render resolved deployment bindings; no semantic storage decisions in templates |
-| Secrets / identity | 1 | Minimal in storage composition PR | Credential modes and Secret refs; broader identity provider uplift later |
+| Secrets / identity | 2 | PCU-005 implemented | Credential projection and workload identity modes are typed capabilities validated by the resolver |
 
 ## Follow-On Plugin Families
 
@@ -85,6 +85,6 @@ clear target state.
 | PCU-002 | Catalog | Add Glue catalog design | Glue rejects incompatible S3-compatible storage and accepts native S3 |
 | PCU-003 | Catalog | Add Nessie catalog design | Nessie integration documents server-side vs client-side storage access |
 | PCU-004 | Ingestion | Add landing/quarantine/checkpoint bucket requirements | Ingestion consumes storage bucket requirements |
-| PCU-005 | Security | Connect credential binding to identity/secrets plugins | Workload identity and external secret modes are resolver-validated |
+| PCU-005 | Security | Connect credential binding to identity/secrets plugins | Implemented: workload identity and external secret modes are resolver-validated |
 | PCU-006 | Network | Generate network policies from deployment bindings | Policies use plugin endpoints rather than static chart service assumptions |
 | PCU-007 | Iceberg runtime | Extract writer contract from orchestrator export paths | Dagster and future orchestrators delegate Iceberg table mutation to `floe-iceberg` |

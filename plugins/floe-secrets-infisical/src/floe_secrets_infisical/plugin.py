@@ -30,6 +30,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from floe_core.audit import AuditLogger, AuditOperation
+from floe_core.composition.models import CapabilitySet, PluginCapabilities
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.secrets import SecretsPlugin
 
@@ -149,6 +150,18 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             InfisicalSecretsConfig Pydantic model class.
         """
         return InfisicalSecretsConfig
+
+    def get_secret_capabilities(self) -> PluginCapabilities:
+        """Return Infisical external secret sync capabilities."""
+        return PluginCapabilities(
+            plugin_type="secrets",
+            plugin_name=self.name,
+            capabilities=CapabilitySet(
+                credential_modes=["external-secret-sync", "kubernetes-secret"],
+                secret_projection_modes=["external-secret-sync", "kubernetes-secret"],
+                providers=["infisical", "kubernetes"],
+            ),
+        )
 
     # =========================================================================
     # Lifecycle Methods

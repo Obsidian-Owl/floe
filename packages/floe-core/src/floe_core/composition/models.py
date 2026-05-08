@@ -2,9 +2,32 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
+
+CredentialMode: TypeAlias = Literal[
+    "kubernetes-secret",
+    "external-secret-sync",
+    "csi-secret-volume",
+    "environment",
+    "workload-identity",
+    "none",
+]
+SecretProjectionMode: TypeAlias = Literal[
+    "kubernetes-secret",
+    "external-secret-sync",
+    "csi-secret-volume",
+    "environment",
+]
+IdentityMode: TypeAlias = Literal[
+    "aws-irsa",
+    "aws-pod-identity",
+    "gcp-workload-identity",
+    "azure-workload-identity",
+    "azure-managed-identity",
+    "oidc-federation",
+]
 
 
 class CapabilitySet(BaseModel):
@@ -13,7 +36,10 @@ class CapabilitySet(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     protocols: list[str] = Field(default_factory=list)
-    credential_modes: list[str] = Field(default_factory=list)
+    credential_modes: list[CredentialMode] = Field(default_factory=list)
+    secret_projection_modes: list[SecretProjectionMode] = Field(default_factory=list)
+    identity_modes: list[IdentityMode] = Field(default_factory=list)
+    providers: list[str] = Field(default_factory=list)
     path_style_access: bool | None = None
     sts: bool | None = None
 
@@ -24,7 +50,10 @@ class RequirementSet(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     protocols: list[str] = Field(default_factory=list)
-    credential_modes: list[str] = Field(default_factory=list)
+    credential_modes: list[CredentialMode] = Field(default_factory=list)
+    secret_projection_modes: list[SecretProjectionMode] = Field(default_factory=list)
+    identity_modes: list[IdentityMode] = Field(default_factory=list)
+    providers: list[str] = Field(default_factory=list)
     requires_server_side_storage_access: bool | None = None
     supports_no_sts: bool | None = None
     supports_path_style_access: bool | None = None

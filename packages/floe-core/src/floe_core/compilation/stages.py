@@ -26,7 +26,7 @@ import time
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import UUID
 
 import structlog
@@ -45,6 +45,7 @@ if TYPE_CHECKING:
         ResolvedPlugins,
     )
     from floe_core.schemas.manifest import GovernanceConfig, PlatformManifest
+    from floe_core.schemas.plugins import PluginsConfig, PluginSelection
 
 logger = structlog.get_logger(__name__)
 
@@ -252,30 +253,49 @@ def _build_lineage_config(manifest: PlatformManifest) -> dict[str, Any] | None:
     return config
 
 
+def _runtime_plugin_config(
+    selection: PluginSelection | None,
+    fallback: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Return manifest config for runtime plugin setup, falling back to artifact config."""
+    if selection is not None and selection.config is not None:
+        return selection.config
+    return fallback or {}
+
+
 def _build_storage_deployment_binding(
     plugins: ResolvedPlugins,
+    manifest_plugins: PluginsConfig,
 ) -> DeploymentConfig | None:
     """Build deployment bindings from resolved storage plugin configuration."""
     if plugins.storage is None:
         return None
 
     from floe_core.compilation.errors import CompilationError, CompilationException
-    from floe_core.composition.models import CapabilitySet, PluginCapabilities
+    from floe_core.composition.models import (
+        CapabilitySet,
+        IdentityMode,
+        PluginCapabilities,
+        SecretProjectionMode,
+    )
     from floe_core.composition.resolver import CompositionResolver
     from floe_core.plugin_errors import PluginError
     from floe_core.plugin_registry import PluginRegistry
     from floe_core.plugin_types import PluginType
     from floe_core.plugins.catalog import CatalogPlugin
+    from floe_core.plugins.identity import IdentityPlugin
+    from floe_core.plugins.secrets import SecretsPlugin
     from floe_core.plugins.storage import StoragePlugin
     from floe_core.schemas.compiled_artifacts import DeploymentConfig
 
     registry = PluginRegistry()
     registry.discover_all()
+    storage_config = _runtime_plugin_config(manifest_plugins.storage, plugins.storage.config)
     try:
         registry.configure(
             PluginType.STORAGE,
             plugins.storage.type,
-            plugins.storage.config or {},
+            storage_config,
         )
         storage_plugin = registry.get(PluginType.STORAGE, plugins.storage.type)
     except PluginError as exc:
@@ -321,14 +341,154 @@ def _build_storage_deployment_binding(
             )
         ) from exc
 
+    composition_capabilities: list[PluginCapabilities] = []
+
+    try:
+        if plugins.secrets is not None:
+            secrets_config = _runtime_plugin_config(
+                manifest_plugins.secrets,
+                plugins.secrets.config,
+            )
+            registry.configure(
+                PluginType.SECRETS,
+                plugins.secrets.type,
+                secrets_config,
+            )
+            secrets_plugin = registry.get(PluginType.SECRETS, plugins.secrets.type)
+            if not isinstance(secrets_plugin, SecretsPlugin):
+                raise CompilationException(
+                    CompilationError(
+                        stage=CompilationStage.RESOLVE,
+                        code="E201",
+                        message=f"Plugin {plugins.secrets.type!r} is not a SecretsPlugin",
+                        suggestion=(
+                            "Use a plugin registered under the floe.secrets entry point group"
+                        ),
+                        context={"secrets_plugin": plugins.secrets.type},
+                    )
+                )
+            composition_capabilities.append(secrets_plugin.get_secret_capabilities())
+    except CompilationException:
+        raise
+    except PluginError as exc:
+        plugin_name = plugins.secrets.type if plugins.secrets is not None else "<unknown>"
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=f"Secrets plugin {plugin_name!r} could not be resolved",
+                suggestion=(
+                    "Install the secrets plugin package and verify "
+                    "plugins.secrets.type in the platform manifest"
+                ),
+                context={"secrets_plugin": plugin_name},
+            )
+        ) from exc
+
+    try:
+        if plugins.identity is not None:
+            identity_config = _runtime_plugin_config(
+                manifest_plugins.identity,
+                plugins.identity.config,
+            )
+            registry.configure(
+                PluginType.IDENTITY,
+                plugins.identity.type,
+                identity_config,
+            )
+            identity_plugin = registry.get(PluginType.IDENTITY, plugins.identity.type)
+            if not isinstance(identity_plugin, IdentityPlugin):
+                raise CompilationException(
+                    CompilationError(
+                        stage=CompilationStage.RESOLVE,
+                        code="E201",
+                        message=f"Plugin {plugins.identity.type!r} is not an IdentityPlugin",
+                        suggestion=(
+                            "Use a plugin registered under the floe.identity entry point group"
+                        ),
+                        context={"identity_plugin": plugins.identity.type},
+                    )
+                )
+            composition_capabilities.append(identity_plugin.get_identity_capabilities())
+    except CompilationException:
+        raise
+    except PluginError as exc:
+        plugin_name = plugins.identity.type if plugins.identity is not None else "<unknown>"
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=f"Identity plugin {plugin_name!r} could not be resolved",
+                suggestion=(
+                    "Install the identity plugin package and verify "
+                    "plugins.identity.type in the platform manifest"
+                ),
+                context={"identity_plugin": plugin_name},
+            )
+        ) from exc
+
+    selected_credential_mode = storage_binding.credentials.mode
+    declared_credential_modes = list(storage_binding.capabilities.credential_modes)
+    if selected_credential_mode not in declared_credential_modes:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=(
+                    f"Storage plugin {storage_plugin.name!r} selected credential mode "
+                    f"{selected_credential_mode!r} but declares credential modes "
+                    f"{declared_credential_modes}"
+                ),
+                suggestion=(
+                    "Update the storage plugin deployment binding so the selected "
+                    "credential mode is included in StorageCapabilities.credential_modes."
+                ),
+                context={
+                    "storage_plugin": storage_plugin.name,
+                    "selected_credential_mode": selected_credential_mode,
+                    "declared_credential_modes": declared_credential_modes,
+                },
+            )
+        )
+    credential_modes = [selected_credential_mode]
+    secret_projection_modes = (
+        cast("list[SecretProjectionMode]", [selected_credential_mode])
+        if selected_credential_mode
+        in {
+            "kubernetes-secret",
+            "external-secret-sync",
+            "csi-secret-volume",
+            "environment",
+        }
+        else []
+    )
+    identity_modes = cast(
+        "list[IdentityMode]",
+        list(storage_binding.capabilities.identity_modes),
+    )
+    storage_capabilities = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name=storage_plugin.name,
+        capabilities=CapabilitySet(
+            protocols=storage_binding.capabilities.protocols,
+            credential_modes=credential_modes,
+            secret_projection_modes=secret_projection_modes,
+            identity_modes=identity_modes,
+            path_style_access=storage_binding.capabilities.path_style_access,
+            sts=storage_binding.capabilities.sts_supported,
+        ),
+    )
+    composition_capabilities.insert(0, storage_capabilities)
+
     if plugins.catalog is None:
         return DeploymentConfig(storage=storage_binding)
 
+    catalog_config = _runtime_plugin_config(manifest_plugins.catalog, plugins.catalog.config)
     try:
         registry.configure(
             PluginType.CATALOG,
             plugins.catalog.type,
-            plugins.catalog.config or {},
+            catalog_config,
         )
         catalog_plugin = registry.get(PluginType.CATALOG, plugins.catalog.type)
     except PluginError as exc:
@@ -357,19 +517,10 @@ def _build_storage_deployment_binding(
         )
 
     try:
-        storage_capabilities = PluginCapabilities(
-            plugin_type="storage",
-            plugin_name=storage_plugin.name,
-            capabilities=CapabilitySet(
-                protocols=storage_binding.capabilities.protocols,
-                credential_modes=storage_binding.capabilities.credential_modes,
-                path_style_access=storage_binding.capabilities.path_style_access,
-                sts=storage_binding.capabilities.sts_supported,
-            ),
-        )
         catalog_requirements = catalog_plugin.get_storage_requirements()
+
         composition = CompositionResolver().validate(
-            [storage_capabilities],
+            composition_capabilities,
             [catalog_requirements],
         )
         if not composition.valid:
@@ -690,7 +841,7 @@ def compile_pipeline(
                 attributes={"compile.stage": CompilationStage.COMPILE.value},
             ) as compile_span:
                 log.info("compilation_stage_start", stage=CompilationStage.COMPILE.value)
-                deployment = _build_storage_deployment_binding(plugins)
+                deployment = _build_storage_deployment_binding(plugins, resolved_manifest.plugins)
                 storage_dbt_binding = None
                 if deployment is not None and deployment.storage is not None:
                     storage_dbt_binding = deployment.storage.dbt

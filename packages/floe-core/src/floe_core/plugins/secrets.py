@@ -21,6 +21,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any
 
+from floe_core.composition.models import CapabilitySet, PluginCapabilities
 from floe_core.plugin_metadata import PluginMetadata
 
 
@@ -156,6 +157,18 @@ class SecretsPlugin(PluginMetadata):
             {'envFrom': [{'secretRef': {'name': 'db-creds'}}]}
         """
         return {"envFrom": [{"secretRef": {"name": secret_name}}]}
+
+    def get_secret_capabilities(self) -> PluginCapabilities:
+        """Return secret projection capabilities for composition validation.
+
+        The default is intentionally empty so existing secrets plugins remain
+        discoverable until they adopt composition explicitly.
+        """
+        return PluginCapabilities(
+            plugin_type="secrets",
+            plugin_name=self.name,
+            capabilities=CapabilitySet(),
+        )
 
     def get_multi_key_secret(self, name: str) -> dict[str, str]:
         """Retrieve all key-value pairs from a multi-key secret.
