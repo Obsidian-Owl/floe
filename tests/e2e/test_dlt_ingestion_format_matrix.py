@@ -308,6 +308,7 @@ def _run_source(
         schema_contract=source.schema_contract,
         source_name=source.name,
         source_path=str(source.source_config["path"]),
+        source_type=source.source_type,
     )
 
 
@@ -370,7 +371,7 @@ def _assert_representative_row(
 
 
 def _purge_namespace(catalog: Any, namespace: str) -> None:
-    """Purge all tables in a namespace and drop the namespace if it exists."""
+    """Drop namespace table metadata without requiring Polaris purge support."""
     try:
         table_identifiers = list(catalog.list_tables(namespace))
     except Exception as exc:  # noqa: BLE001
@@ -381,9 +382,9 @@ def _purge_namespace(catalog: Any, namespace: str) -> None:
     for identifier in table_identifiers:
         fqn = _table_identifier(identifier)
         try:
-            catalog.purge_table(fqn)
-        except AttributeError:
-            catalog.drop_table(fqn, purge_requested=True)
+            catalog.drop_table(fqn, purge_requested=False)
+        except TypeError:
+            catalog.drop_table(fqn)
         except Exception as exc:  # noqa: BLE001
             if exc.__class__.__name__ != "NoSuchTableError":
                 raise
@@ -438,7 +439,9 @@ def _assert_failed_with(result: IngestionResult, *expected_fragments: str) -> No
     assert not result.success, "Expected ingestion to fail"
     error_text = "\n".join(result.errors or [])
     for fragment in expected_fragments:
-        assert fragment in error_text, f"Expected {fragment!r} in ingestion errors: {error_text}"
+        assert fragment.lower() in error_text.lower(), (
+            f"Expected {fragment!r} in ingestion errors: {error_text}"
+        )
 
 
 class TestDltIngestionFormatMatrix(IntegrationTestBase):

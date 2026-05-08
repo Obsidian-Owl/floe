@@ -267,6 +267,54 @@ class TestRunPipeline:
         assert result.rows_loaded == 0
 
     @pytest.mark.requirement("4F-FR-015")
+    def test_run_filesystem_empty_source_returns_failure(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Filesystem batch sources fail when dlt reports no loaded data."""
+        mock_pipeline = _bound_mock_pipeline()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        result = dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+            source_type="filesystem",
+            source_name="missing_object_source",
+            source_path="s3://raw/landing/missing/",
+        )
+
+        assert result.success is False
+        assert result.rows_loaded == 0
+        assert result.errors is not None
+        assert "missing_object_source" in result.errors[0]
+        assert "s3://raw/landing/missing/" in result.errors[0]
+        assert "matched no rows" in result.errors[0]
+
+    @pytest.mark.requirement("4F-FR-015")
+    def test_run_filesystem_zero_rows_with_written_bytes_succeeds(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Filesystem result validation does not fail when dlt wrote files."""
+        mock_pipeline = _bound_mock_pipeline()
+        table_metric = SimpleNamespace(items_count=0, file_size=128)
+        job_metric = SimpleNamespace(table_metrics={"raw": table_metric})
+        package_metrics = SimpleNamespace(started_at=True, job_metrics={"job": job_metric})
+        mock_pipeline.run.return_value = SimpleNamespace(metrics={"load": [package_metrics]})
+
+        result = dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+            source_type="filesystem",
+            source_name="empty_file_source",
+            source_path="s3://raw/landing/empty.csv",
+        )
+
+        assert result.success is True
+        assert result.rows_loaded == 0
+        assert result.bytes_written == 128
+
+    @pytest.mark.requirement("4F-FR-015")
     def test_run_not_started_raises(self) -> None:
         """Test run raises RuntimeError when plugin not started.
 

@@ -564,6 +564,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 - schema_contract: Schema contract mode (evolve, freeze, discard_value)
                 - cursor_field: Field name for incremental loading (optional)
                 - primary_key: Primary key field(s) for merge operations (optional)
+                - source_type: Floe source type, used for source-specific result validation
 
         Returns:
             IngestionResult with execution metrics.
@@ -587,6 +588,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         primary_key = kwargs.get("primary_key")
         source_name = kwargs.get("source_name")
         source_path = kwargs.get("source_path")
+        source_type = kwargs.get("source_type")
 
         # Map schema_contract string to dlt's expected format
         if schema_contract_mode == "evolve":
@@ -685,6 +687,31 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                                         for table_metric in job.table_metrics.values():
                                             rows_loaded += getattr(table_metric, "items_count", 0)
                                             bytes_written += getattr(table_metric, "file_size", 0)
+
+                if source_type == "filesystem" and rows_loaded == 0 and bytes_written == 0:
+                    empty_source_error = RuntimeError("filesystem source matched no rows")
+                    error_msg = self._with_source_error_context(
+                        str(empty_source_error),
+                        source_name=source_name,
+                        source_path=source_path,
+                    )
+                    record_ingestion_error(span, empty_source_error, category="permanent")
+                    logger.error(
+                        "pipeline_run_empty_filesystem_source",
+                        pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
+                        source_name=source_name,
+                        source_path=source_path,
+                        error=error_msg,
+                        error_category="permanent",
+                        duration_seconds=elapsed,
+                    )
+                    return IngestionResult(
+                        success=False,
+                        rows_loaded=0,
+                        bytes_written=bytes_written,
+                        duration_seconds=elapsed,
+                        errors=[error_msg],
+                    )
 
                 result = IngestionResult(
                     success=True,

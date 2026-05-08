@@ -70,3 +70,19 @@ tests:
       - matchRegex:
           path: data["dagster.yaml"]
           pattern: "key: root-password"
+
+  - it: should size test run pods for dbt and dlt workloads
+    values:
+      - ../values-test.yaml
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "resources:"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "memory: 2Gi"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "memory: 512Mi"

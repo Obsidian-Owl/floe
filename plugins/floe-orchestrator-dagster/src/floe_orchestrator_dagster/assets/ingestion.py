@@ -273,7 +273,7 @@ def _create_ingestion_asset(
 ) -> AssetsDefinition:
     source_name = str(source_config["name"])
 
-    @asset(
+    @asset(  # type: ignore[untyped-decorator]
         name=asset_name,
         required_resource_keys=frozenset({"ingestion"}),
         description=(
@@ -288,7 +288,7 @@ def _create_ingestion_asset(
             "destination_table": source_config.get("destination_table", ""),
         },
     )
-    def _run_ingestion_source(context) -> Any:  # noqa: ANN001
+    def _run_ingestion_source(context) -> Any:  # type: ignore[no-untyped-def]  # noqa: ANN001
         """Execute one configured ingestion source via the ingestion plugin resource."""
         ingestion_plugin = context.resources.ingestion
         context.log.info(
@@ -316,6 +316,7 @@ def _create_ingestion_asset(
             "schema_contract": config.schema_contract,
             "cursor_field": source_config.get("cursor_field"),
             "primary_key": source_config.get("primary_key"),
+            "source_type": config.source_type,
             "source_name": source_name,
             "source_path": _source_path(source_config.get("source_config") or {}),
             "source": dlt_source,

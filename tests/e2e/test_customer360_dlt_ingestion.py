@@ -211,7 +211,7 @@ def _table_names(catalog: Any, namespace: str) -> set[str]:
 
 
 def _purge_namespace(catalog: Any, namespace: str) -> None:
-    """Purge all tables in a namespace and drop the namespace if it exists."""
+    """Drop namespace table metadata without requiring Polaris purge support."""
     try:
         table_identifiers = list(catalog.list_tables(namespace))
     except Exception as exc:  # noqa: BLE001
@@ -222,9 +222,9 @@ def _purge_namespace(catalog: Any, namespace: str) -> None:
     for identifier in table_identifiers:
         fqn = _table_identifier(identifier)
         try:
-            catalog.purge_table(fqn)
-        except AttributeError:
-            catalog.drop_table(fqn, purge_requested=True)
+            catalog.drop_table(fqn, purge_requested=False)
+        except TypeError:
+            catalog.drop_table(fqn)
         except Exception as exc:  # noqa: BLE001
             if exc.__class__.__name__ != "NoSuchTableError":
                 raise
@@ -352,6 +352,9 @@ def _ingest_sources(
             schema_contract=source.schema_contract,
             cursor_field=source.cursor_field,
             primary_key=source.primary_key,
+            source_type=source.source_type,
+            source_name=source.name,
+            source_path=str(source.source_config.get("path", "")),
         )
 
         assert result.success, (
