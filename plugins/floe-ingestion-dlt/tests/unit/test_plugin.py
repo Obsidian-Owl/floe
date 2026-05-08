@@ -399,8 +399,8 @@ class TestRunPipeline:
         """Test run passes schema_contract dict to pipeline.run() for freeze.
 
         Given schema_contract="freeze" kwarg, when run() is called, then
-        pipeline.run() is invoked with schema_contract dict with all fields
-        set to "freeze".
+        pipeline.run() is invoked with schema_contract dict that allows the
+        initial table and freezes column/type drift.
         """
         mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
@@ -418,7 +418,7 @@ class TestRunPipeline:
         assert "schema_contract" in call_kwargs
         assert call_kwargs["schema_contract"] == {
             "columns": "freeze",
-            "tables": "freeze",
+            "tables": "evolve",
             "data_type": "freeze",
         }
 

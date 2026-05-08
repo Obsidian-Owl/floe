@@ -588,7 +588,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         elif schema_contract_mode == "freeze":
             schema_contract = {
                 "columns": "freeze",
-                "tables": "freeze",
+                "tables": "evolve",
                 "data_type": "freeze",
             }
         elif schema_contract_mode == "discard_value":
