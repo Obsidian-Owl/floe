@@ -1,8 +1,8 @@
-"""Structural tests: pytest-html and pytest-json-report in workspace deps.
+"""Structural tests: E2E test-runner packages in workspace deps.
 
-Validates that the workspace ``pyproject.toml`` includes ``pytest-html`` and
-``pytest-json-report`` as dependencies so that the test runner Dockerfile
-(which runs ``uv sync --frozen``) installs them automatically.
+Validates that the workspace ``pyproject.toml`` includes packages required by
+the in-cluster test runner so the Dockerfile's ``uv sync --frozen`` installs
+them automatically.
 
 These are source-parsing tests: they read the actual TOML file and assert
 on the dependency list.  They run in <1s with no infrastructure.
@@ -28,6 +28,7 @@ _WORKSPACE_TOML = _REPO_ROOT / "pyproject.toml"
 # Package names we expect in the dependency list (case-insensitive per PEP 503)
 _PYTEST_HTML = "pytest-html"
 _PYTEST_JSON_REPORT = "pytest-json-report"
+_MINIO = "minio"
 
 # Pattern to match a single dependency entry like:
 #   "pytest-html>=4.0",
@@ -222,6 +223,37 @@ class TestDependencyPlacement:
             f"'{_PYTEST_JSON_REPORT}' must be in [project].dependencies "
             f"(not only in [project.optional-dependencies]) so that "
             f"'uv sync --frozen' installs it in the Dockerfile."
+        )
+
+
+class TestMinioDependency:
+    """Verify the MinIO Python client is installed in the E2E test runner."""
+
+    @pytest.mark.requirement("AC-1")
+    def test_minio_client_in_dependencies(self) -> None:
+        """pyproject.toml dependencies array MUST include minio.
+
+        The DLT ingestion E2E fixtures seed S3-compatible test data through the
+        MinIO Python client. Without this dependency, the in-cluster test runner
+        fails before it exercises the ingestion path.
+        """
+        content = _WORKSPACE_TOML.read_text()
+        dep_names = _parse_dependency_names(content)
+
+        assert _MINIO in dep_names, (
+            f"'{_MINIO}' is not listed in the workspace pyproject.toml "
+            "dependencies. Add it to the dependencies array so the test runner "
+            "Dockerfile installs it with 'uv sync --frozen'."
+        )
+
+    @pytest.mark.requirement("AC-1")
+    def test_minio_client_has_version_constraint(self) -> None:
+        """minio dependency MUST have a minimum version constraint."""
+        content = _WORKSPACE_TOML.read_text()
+        version_pattern = re.compile(r'"minio\s*[><=!~]', re.IGNORECASE)
+        assert version_pattern.search(content), (
+            "minio dependency must have a version constraint "
+            "(e.g., 'minio>=7.2'). A bare package name is not acceptable."
         )
 
 

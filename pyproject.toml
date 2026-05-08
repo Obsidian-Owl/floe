@@ -17,6 +17,7 @@ dependencies = [
     "pytest-rerunfailures>=16.1",  # Retry infrastructure flakiness in E2E tests
     "pytest-html>=4.0",  # HTML test reports for E2E observability
     "pytest-json-report>=1.5",  # JSON test reports for programmatic analysis
+    "minio>=7.2.15",  # MinIO client for in-cluster E2E data fixtures
     "mypy>=1.8",
     "ruff>=0.3",
     "pre-commit>=3.0",

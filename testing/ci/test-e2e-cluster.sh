@@ -16,7 +16,7 @@
 #   STARTUP_ONLY        Exit after proving pod startup boundary (default: false)
 #   TEST_SUITE          Validation suite to run: e2e (platform blackbox) |
 #                       e2e-destructive (default: e2e)
-#   LOG_TAIL_LINES      Lines to capture per pod on failure (default: 100)
+#   LOG_TAIL_LINES      Lines to capture per pod on failure (default: -1/all)
 #   DEVPOD_REMOTE_WORKDIR Remote repo root inside the DevPod workspace
 #
 # Identifiers (release name, namespace, Kind cluster, chart dir, values file)
@@ -40,7 +40,7 @@ STARTUP_ONLY="${STARTUP_ONLY:-false}"
 TEST_SUITE="${TEST_SUITE:-e2e}"
 IMAGE_NAME="floe-test-runner:latest"
 ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts"
-LOG_TAIL_LINES="${LOG_TAIL_LINES:-100}"
+LOG_TAIL_LINES="${LOG_TAIL_LINES:--1}"
 
 # --- Utility functions (must be defined before first use) ---
 
@@ -137,7 +137,7 @@ extract_pod_logs() {
         error "Warning: neither 'timeout' nor 'gtimeout' found; pod log extraction will run without per-pod timeout"
     fi
 
-    # Collect logs from all pods in the test namespace
+    # Collect complete logs from all containers in all pods in the test namespace.
     local pod_names
     pod_names=$(kubectl get pods -n "${TEST_NAMESPACE}" \
         --no-headers -o custom-columns=":metadata.name" 2>/dev/null || true)
@@ -145,6 +145,7 @@ extract_pod_logs() {
     local collected=0
     for pod in ${pod_names}; do
         if ${timeout_bin} kubectl logs "${pod}" -n "${TEST_NAMESPACE}" \
+            --all-containers=true \
             --tail="${LOG_TAIL_LINES}" \
             > "${ARTIFACTS_DIR}/pod-logs/${pod}.log" 2>/dev/null; then
             collected=$((collected + 1))

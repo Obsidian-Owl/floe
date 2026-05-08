@@ -79,6 +79,10 @@ def _make_required_plugins() -> dict[str, Any]:
                 "path_style_access": True,
             },
         },
+        "ingestion": {
+            "type": "dlt",
+            "config": {},
+        },
     }
 
 
