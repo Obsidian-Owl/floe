@@ -418,6 +418,19 @@ class TestResolvedGovernance:
 
 
 class TestIngestionOutputTable:
+    @staticmethod
+    def _make_table(source_path: str) -> IngestionOutputTable:
+        return IngestionOutputTable(
+            source_name="raw-transactions",
+            source_type="filesystem",
+            logical_table="bronze.raw_transactions",
+            physical_table="bronze.raw_transactions",
+            file_format="csv",
+            source_path=source_path,
+            write_mode="replace",
+            schema_contract="evolve",
+        )
+
     def test_ingestion_output_table_serializes_secret_free_state(self) -> None:
         table = IngestionOutputTable(
             source_name="raw-transactions",
@@ -442,17 +455,30 @@ class TestIngestionOutputTable:
 
     def test_ingestion_output_table_rejects_secret_like_path(self) -> None:
         with pytest.raises(ValidationError, match="source_path"):
-            IngestionOutputTable(
-                source_name="raw-transactions",
-                source_type="filesystem",
-                table_format="iceberg",
-                logical_table="bronze.raw_transactions",
-                physical_table="bronze.raw_transactions",
-                file_format="csv",
-                source_path="s3://example/raw.csv?signature=example",
-                write_mode="replace",
-                schema_contract="evolve",
-            )
+            self._make_table("s3://example/raw.csv?signature=example")
+
+    @pytest.mark.parametrize(
+        "source_path",
+        [
+            " ./seeds/raw_transactions.csv",
+            "./seeds/raw_transactions.csv ",
+        ],
+    )
+    def test_ingestion_output_table_rejects_whitespace_padded_path(self, source_path: str) -> None:
+        with pytest.raises(ValidationError, match="source_path"):
+            self._make_table(source_path)
+
+    def test_ingestion_output_table_rejects_absolute_local_path(self) -> None:
+        with pytest.raises(ValidationError, match="source_path"):
+            self._make_table("/var/data/raw_transactions.csv")
+
+    def test_ingestion_output_table_rejects_unsupported_uri_scheme(self) -> None:
+        with pytest.raises(ValidationError, match="source_path"):
+            self._make_table("https://example.com/raw_transactions.csv")
+
+    def test_ingestion_output_table_rejects_object_store_uri_without_bucket(self) -> None:
+        with pytest.raises(ValidationError, match="source_path"):
+            self._make_table("s3:///raw_transactions.csv")
 
     def test_ingestion_output_table_accepts_tokenized_filename(self) -> None:
         table = IngestionOutputTable(
@@ -470,16 +496,7 @@ class TestIngestionOutputTable:
 
     def test_ingestion_output_table_rejects_credential_query_path(self) -> None:
         with pytest.raises(ValidationError, match="source_path"):
-            IngestionOutputTable(
-                source_name="raw-transactions",
-                source_type="filesystem",
-                logical_table="bronze.raw_transactions",
-                physical_table="bronze.raw_transactions",
-                file_format="csv",
-                source_path="s3://bucket/raw.csv?X-Amz-Credential=value",
-                write_mode="replace",
-                schema_contract="evolve",
-            )
+            self._make_table("s3://bucket/raw.csv?X-Amz-Credential=value")
 
     @pytest.mark.parametrize(
         "table_name",

@@ -780,6 +780,17 @@
             }
           ],
           "default": null
+        },
+        "ingestion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IngestionDeploymentBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "title": "DeploymentConfig",
@@ -912,6 +923,59 @@
       "title": "DimensionWeights",
       "type": "object"
     },
+    "DltIngestionBinding": {
+      "additionalProperties": false,
+      "description": "Secret-free dlt runtime binding derived from composed platform plugins.",
+      "properties": {
+        "plugin_name": {
+          "minLength": 1,
+          "title": "Plugin Name",
+          "type": "string"
+        },
+        "destination": {
+          "const": "filesystem",
+          "title": "Destination",
+          "type": "string"
+        },
+        "table_format": {
+          "const": "iceberg",
+          "title": "Table Format",
+          "type": "string"
+        },
+        "source_filesystem": {
+          "additionalProperties": true,
+          "title": "Source Filesystem",
+          "type": "object"
+        },
+        "destination_filesystem": {
+          "additionalProperties": true,
+          "title": "Destination Filesystem",
+          "type": "object"
+        },
+        "iceberg_catalog_env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Iceberg Catalog Env",
+          "type": "object"
+        },
+        "env_refs": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Env Refs",
+          "type": "object"
+        }
+      },
+      "required": [
+        "plugin_name",
+        "destination",
+        "table_format"
+      ],
+      "title": "DltIngestionBinding",
+      "type": "object"
+    },
     "EnforcementResultSummary": {
       "additionalProperties": false,
       "description": "Lightweight summary of enforcement result for inclusion in CompiledArtifacts.\n\nThis summary contains only the essential metrics for downstream consumption.\nFull violation details are exported separately (SARIF/JSON/HTML).\n\nContract Version: 0.7.0 (Epic 3E additions)\n\nAttributes:\n    passed: Overall pass/fail status.\n    error_count: Number of error-severity violations.\n    warning_count: Number of warning-severity violations.\n    policy_types_checked: List of policy types that were enforced.\n    models_validated: Number of models that were validated.\n    enforcement_level: Applied enforcement level (off, warn, strict).\n    rbac_principal: Authenticated principal name from RBAC validation (Epic 3E).\n    secrets_scanned: Count of secret scanning violations found (Epic 3E).\n\nExample:\n    >>> summary = EnforcementResultSummary(\n    ...     passed=False,\n    ...     error_count=3,\n    ...     warning_count=5,\n    ...     policy_types_checked=[\"naming\", \"coverage\", \"documentation\"],\n    ...     models_validated=50,\n    ...     enforcement_level=\"strict\",\n    ... )\n    >>> summary.passed\n    False\n\nSee Also:\n    - data-model.md: EnforcementResultSummary entity specification\n    - EnforcementResult: Full result in enforcement module",
@@ -1021,6 +1085,157 @@
         }
       },
       "title": "GateTier",
+      "type": "object"
+    },
+    "IngestionDeploymentBinding": {
+      "additionalProperties": false,
+      "description": "Secret-free ingestion deployment binding.",
+      "properties": {
+        "provider": {
+          "const": "dlt",
+          "title": "Provider",
+          "type": "string"
+        },
+        "dlt": {
+          "$ref": "#/$defs/DltIngestionBinding"
+        }
+      },
+      "required": [
+        "provider",
+        "dlt"
+      ],
+      "title": "IngestionDeploymentBinding",
+      "type": "object"
+    },
+    "IngestionOutputTable": {
+      "additionalProperties": false,
+      "description": "Platform-visible Iceberg table state created by ingestion sources.",
+      "properties": {
+        "source_name": {
+          "minLength": 1,
+          "title": "Source Name",
+          "type": "string"
+        },
+        "source_type": {
+          "const": "filesystem",
+          "title": "Source Type",
+          "type": "string"
+        },
+        "table_format": {
+          "const": "iceberg",
+          "default": "iceberg",
+          "title": "Table Format",
+          "type": "string"
+        },
+        "logical_table": {
+          "minLength": 1,
+          "title": "Logical Table",
+          "type": "string"
+        },
+        "physical_table": {
+          "minLength": 1,
+          "title": "Physical Table",
+          "type": "string"
+        },
+        "file_format": {
+          "enum": [
+            "csv",
+            "jsonl",
+            "parquet"
+          ],
+          "title": "File Format",
+          "type": "string"
+        },
+        "source_path": {
+          "minLength": 1,
+          "title": "Source Path",
+          "type": "string"
+        },
+        "write_mode": {
+          "enum": [
+            "append",
+            "replace",
+            "merge"
+          ],
+          "title": "Write Mode",
+          "type": "string"
+        },
+        "schema_contract": {
+          "enum": [
+            "evolve",
+            "freeze"
+          ],
+          "title": "Schema Contract",
+          "type": "string"
+        },
+        "freshness_field": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Freshness Field"
+        },
+        "primary_key": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Primary Key"
+        },
+        "cursor_field": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cursor Field"
+        },
+        "quality_tier": {
+          "default": "bronze",
+          "enum": [
+            "bronze",
+            "silver",
+            "gold"
+          ],
+          "title": "Quality Tier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_name",
+        "source_type",
+        "logical_table",
+        "physical_table",
+        "file_format",
+        "source_path",
+        "write_mode",
+        "schema_contract"
+      ],
+      "title": "IngestionOutputTable",
       "type": "object"
     },
     "KubernetesSecretRef": {
@@ -1530,6 +1745,19 @@
           "title": "Storage Type",
           "type": "string"
         },
+        "warehouse": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Warehouse"
+        },
         "default_base_location": {
           "minLength": 1,
           "title": "Default Base Location",
@@ -1552,6 +1780,19 @@
           "minLength": 1,
           "title": "Endpoint Internal",
           "type": "string"
+        },
+        "catalog_uri": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog Uri"
         },
         "path_style_access": {
           "title": "Path Style Access",
@@ -4388,6 +4629,14 @@
       ],
       "default": null,
       "description": "Deployment bindings derived from resolved plugin configuration"
+    },
+    "ingestion_outputs": {
+      "description": "Platform-visible Iceberg tables created by ingestion sources",
+      "items": {
+        "$ref": "#/$defs/IngestionOutputTable"
+      },
+      "title": "Ingestion Outputs",
+      "type": "array"
     },
     "transforms": {
       "anyOf": [

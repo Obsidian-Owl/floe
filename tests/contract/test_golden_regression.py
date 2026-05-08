@@ -123,6 +123,32 @@ class TestCompiledArtifactsContract:
                 f"Schema missing '{prop}' property. This is a breaking change."
             )
 
+    @pytest.mark.requirement("CONTRACT-001")
+    def test_compiled_artifacts_ingestion_outputs_schema_is_current(self) -> None:
+        """Test that golden schema includes ingestion output contract additions."""
+        golden = load_golden("compiled_artifacts_v2_schema.json")
+
+        assert "properties" in golden, (
+            "Schema missing 'properties' section. "
+            "Regenerate with ./scripts/generate-contract-golden --force"
+        )
+        assert "$defs" in golden, (
+            "Schema missing '$defs' section. "
+            "Regenerate with ./scripts/generate-contract-golden --force"
+        )
+
+        properties = golden["properties"]
+        definitions = golden["$defs"]
+
+        assert "ingestion_outputs" in properties, (
+            "Schema missing 'ingestion_outputs' property. "
+            "Regenerate with ./scripts/generate-contract-golden --force"
+        )
+        assert "IngestionOutputTable" in definitions, (
+            "Schema missing 'IngestionOutputTable' definition. "
+            "Regenerate with ./scripts/generate-contract-golden --force"
+        )
+
 
 class TestPluginInterfaceContract:
     """Test plugin interface stability."""

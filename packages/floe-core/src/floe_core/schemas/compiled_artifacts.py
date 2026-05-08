@@ -767,16 +767,40 @@ class IngestionOutputTable(BaseModel):
 
     @field_validator("source_path")
     @classmethod
-    def validate_source_path_secret_free(cls, value: str) -> str:
-        """Reject embedded credential material in source path URI components."""
+    def validate_source_path(cls, value: str) -> str:
+        """Validate source path using FloeSpec ingestion source path semantics."""
+        path = value.strip()
+        if not path:
+            msg = "source_path must not be empty"
+            raise ValueError(msg)
+        if path != value:
+            msg = "source_path must not contain leading or trailing whitespace"
+            raise ValueError(msg)
+
         parsed = urlsplit(value)
         if _contains_ingestion_output_credential_path_part(
             parsed.query
         ) or _contains_ingestion_output_credential_path_part(parsed.fragment):
             msg = "source_path must not contain embedded credential material"
             raise ValueError(msg)
-        if parsed.scheme and (parsed.username or parsed.password or "@" in parsed.netloc):
-            msg = "source_path must not contain embedded credential material"
+
+        if parsed.scheme:
+            if parsed.scheme not in {"s3", "gs", "az"}:
+                msg = "source_path URI scheme must be one of s3://, gs://, or az://"
+                raise ValueError(msg)
+            if parsed.username or parsed.password or "@" in parsed.netloc:
+                msg = "source_path must not contain embedded credential material"
+                raise ValueError(msg)
+            if not parsed.netloc:
+                msg = "object-store source_path must include a bucket or container"
+                raise ValueError(msg)
+            return value
+
+        if value.startswith("/"):
+            msg = "local source_path must be relative"
+            raise ValueError(msg)
+        if "://" in value:
+            msg = "source_path URI scheme must be one of s3://, gs://, or az://"
             raise ValueError(msg)
         return value
 
