@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from inspect import getattr_static
-from typing import Any, Literal, Protocol, cast, runtime_checkable
+from typing import Any, Literal, Protocol, cast
 
 from floe_iceberg.errors import (
     is_stale_table_metadata_error,
@@ -33,7 +33,6 @@ IcebergWriteMode = Literal["append", "overwrite"]
 _NULL_SEQUENCE_OVERWRITE_ERROR = "only entries with status added can have null sequence number"
 
 
-@runtime_checkable
 class WriteCapableIcebergCatalog(Protocol):
     """Catalog operations required by Iceberg table writes."""
 
@@ -200,7 +199,7 @@ class DefaultIcebergTableWriter:
         )
 
     def _load_or_create_table(self, identifier: str, arrow_table: Any) -> tuple[Any, bool]:
-        catalog = self._connect_catalog()
+        self._connect_catalog()
         try:
             return self._load_table(identifier), False
         except Exception as exc:
@@ -208,6 +207,7 @@ class DefaultIcebergTableWriter:
                 return self._repair_and_recreate(identifier, arrow_table, exc), True
             if not _is_missing_table_error(exc):
                 raise
+        catalog = self._connect_catalog()
         table = _create_table(catalog, identifier, arrow_table)
         # A newly created table is empty, so append is equivalent to overwrite.
         table.append(arrow_table)

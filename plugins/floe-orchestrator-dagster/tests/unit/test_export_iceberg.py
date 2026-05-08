@@ -36,7 +36,6 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedTransforms,
 )
 from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
-from floe_iceberg.writer import IcebergWriterResult
 
 from floe_orchestrator_dagster.export.iceberg import export_dbt_to_iceberg
 
@@ -140,14 +139,18 @@ def _configure_mock_duckdb_table(
     mock_conn.execute.return_value.fetch_arrow_table.return_value = pa.table({"id": [1]})
 
 
-def _make_writer_mock(table_names: tuple[str, ...] = (f"{SAFE_NAME}.customers",)) -> MagicMock:
-    """Create a writer mock returning a successful IcebergWriterResult."""
+def _make_writer_mock(_table_names: tuple[str, ...] = (f"{SAFE_NAME}.customers",)) -> MagicMock:
+    """Create a writer mock for streaming Iceberg table writes."""
     writer = MagicMock()
-    writer.write_tables.return_value = IcebergWriterResult(
-        tables_written=len(table_names),
-        table_names=table_names,
-    )
     return writer
+
+
+def _written_table_calls(writer: MagicMock) -> list[tuple[str, object, str]]:
+    """Return identifier, payload, and mode for delegated writer.write_table calls."""
+    return [
+        (call.args[0], call.args[1], call.kwargs["mode"])
+        for call in writer.write_table.call_args_list
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -249,11 +252,7 @@ class TestExportDbtToIceberg:
         registry.get.side_effect = get_side_effect
         registry.configure.return_value = {}
 
-        writer = MagicMock()
-        writer.write_tables.return_value = IcebergWriterResult(
-            tables_written=1,
-            table_names=(f"{SAFE_NAME}.customers",),
-        )
+        writer = _make_writer_mock()
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -278,13 +277,12 @@ class TestExportDbtToIceberg:
         assert writer_cls_kwargs["catalog_plugin"] is catalog_plugin
         assert writer_cls_kwargs["storage_plugin"] is storage_plugin
         assert writer_cls_kwargs["catalog_connection_config"] == catalog_connection_config
-        writer.write_tables.assert_called_once()
-        assert writer.write_tables.call_args.kwargs["namespace"] == SAFE_NAME
-        writes = tuple(writer.write_tables.call_args.kwargs["writes"])
-        assert len(writes) == 1
-        assert writes[0].identifier == f"{SAFE_NAME}.customers"
-        assert writes[0].arrow_table is arrow_table
-        assert writes[0].mode == "overwrite"
+        writer.ensure_namespace.assert_called_once_with(SAFE_NAME)
+        writer.write_table.assert_called_once_with(
+            f"{SAFE_NAME}.customers",
+            arrow_table,
+            mode="overwrite",
+        )
         assert result.tables_written == 1
         assert result.table_names == [f"{SAFE_NAME}.customers"]
 
@@ -641,10 +639,10 @@ class TestExportDbtToIceberg:
             )
 
         # Assert namespace was delegated with the correctly derived name
-        writer.write_tables.assert_called_once()
-        ns_arg = writer.write_tables.call_args.kwargs["namespace"]
-        assert ns_arg == expected_namespace, (
-            f"Expected namespace '{expected_namespace}', got '{ns_arg}'. "
+        writer.ensure_namespace.assert_called_once()
+        namespace_arg = writer.ensure_namespace.call_args.args[0]
+        assert namespace_arg == expected_namespace, (
+            f"Expected namespace '{expected_namespace}', got '{namespace_arg}'. "
             "Namespace must be derived from product_name, not hardcoded."
         )
 
@@ -919,8 +917,7 @@ class TestExportDbtToIceberg:
             )
 
         mock_plugin.assert_not_called()
-        writer.write_tables.assert_called_once()
-        assert writer.write_tables.call_args.kwargs["namespace"] == SAFE_NAME
+        writer.ensure_namespace.assert_called_once_with(SAFE_NAME)
 
     @pytest.mark.requirement("AC-4")
     def test_export_fails_when_catalog_lacks_write_methods(
@@ -980,7 +977,7 @@ class TestExportDbtToIceberg:
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
         writer = _make_writer_mock()
-        writer.write_tables.side_effect = RuntimeError("permission denied")
+        writer.write_table.side_effect = RuntimeError("permission denied")
 
         with (
             patch("duckdb.connect", return_value=mock_conn) as mock_duckdb_connect,
@@ -999,7 +996,7 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        writer.write_tables.assert_called_once()
+        writer.write_table.assert_called_once()
         mock_duckdb_connect.assert_called_once()
 
     @pytest.mark.requirement("AC-4")
@@ -1045,12 +1042,79 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        writer.write_tables.assert_called_once()
-        writes = tuple(writer.write_tables.call_args.kwargs["writes"])
-        assert len(writes) == 1
-        assert writes[0].identifier == f"{SAFE_NAME}.customers"
-        assert writes[0].arrow_table is arrow_table
-        assert writes[0].mode == "overwrite"
+        assert _written_table_calls(writer) == [
+            (f"{SAFE_NAME}.customers", arrow_table, "overwrite")
+        ]
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_streams_each_arrow_table_to_writer(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_with_catalog: CompiledArtifacts,
+    ) -> None:
+        """Exporter MUST write each Arrow table before fetching the next table."""
+        events: list[str] = []
+        tables_result = MagicMock()
+        tables_result.fetchall.return_value = [("main", "customers"), ("main", "orders")]
+        arrow_tables = {
+            "customers": pa.table({"id": [1]}),
+            "orders": pa.table({"order_id": [10]}),
+        }
+
+        def execute_side_effect(query: str) -> MagicMock:
+            if "information_schema.tables" in query:
+                events.append("list")
+                return tables_result
+            table_name = "customers" if "customers" in query else "orders"
+            result = MagicMock()
+
+            def fetch_arrow_table() -> pa.Table:
+                events.append(f"fetch:{table_name}")
+                return arrow_tables[table_name]
+
+            result.fetch_arrow_table.side_effect = fetch_arrow_table
+            return result
+
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = execute_side_effect
+
+        registry = MagicMock()
+        mock_plugin = MagicMock()
+        registry.get.return_value = mock_plugin
+        registry.configure.return_value = {}
+        writer = _make_writer_mock()
+
+        def write_side_effect(identifier: str, _arrow_table: pa.Table, *, mode: str) -> None:
+            events.append(f"write:{identifier}:{mode}")
+
+        writer.write_table.side_effect = write_side_effect
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+            ),
+        ):
+            result = export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts_with_catalog,
+            )
+
+        writer.ensure_namespace.assert_called_once_with(SAFE_NAME)
+        assert result.table_names == [f"{SAFE_NAME}.customers", f"{SAFE_NAME}.orders"]
+        assert events == [
+            "list",
+            "fetch:customers",
+            f"write:{SAFE_NAME}.customers:overwrite",
+            "fetch:orders",
+            f"write:{SAFE_NAME}.orders:overwrite",
+        ]
 
     @pytest.mark.requirement("AC-4")
     def test_export_returns_written_table_count(
@@ -1132,11 +1196,7 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        writes = tuple(writer.write_tables.call_args.kwargs["writes"])
-        assert len(writes) == 1
-        assert writes[0].identifier == f"{SAFE_NAME}.orders"
-        assert writes[0].arrow_table is arrow_table
-        assert writes[0].mode == "overwrite"
+        assert _written_table_calls(writer) == [(f"{SAFE_NAME}.orders", arrow_table, "overwrite")]
 
     @pytest.mark.requirement("AC-4")
     def test_export_overwrite_uses_endpoint_preserving_catalog_plugin_loader(
@@ -1192,9 +1252,7 @@ class TestExportDbtToIceberg:
         catalog_plugin.connect.assert_not_called()
         catalog_plugin.load_table_with_client_endpoint.assert_not_called()
         assert writer_cls.call_args.kwargs["catalog_plugin"] is catalog_plugin
-        writes = tuple(writer.write_tables.call_args.kwargs["writes"])
-        assert writes[0].identifier == f"{SAFE_NAME}.orders"
-        assert writes[0].arrow_table is arrow_table
+        assert _written_table_calls(writer) == [(f"{SAFE_NAME}.orders", arrow_table, "overwrite")]
 
     @pytest.mark.requirement("AC-4")
     def test_export_repairs_stale_iceberg_registration_when_configured(
@@ -1251,8 +1309,7 @@ class TestExportDbtToIceberg:
         catalog_plugin.connect.assert_not_called()
         config = writer_cls.call_args.kwargs["config"]
         assert config.stale_table_recovery_mode == "repair"
-        writes = tuple(writer.write_tables.call_args.kwargs["writes"])
-        assert writes[0].identifier == f"{SAFE_NAME}.orders"
+        assert _written_table_calls(writer) == [(f"{SAFE_NAME}.orders", arrow_table, "overwrite")]
 
     @pytest.mark.requirement("AC-4")
     def test_export_repairs_null_sequence_overwrite_state_when_configured(
@@ -1309,8 +1366,7 @@ class TestExportDbtToIceberg:
         catalog_plugin.connect.assert_not_called()
         config = writer_cls.call_args.kwargs["config"]
         assert config.stale_table_recovery_mode == "repair"
-        writes = tuple(writer.write_tables.call_args.kwargs["writes"])
-        assert writes[0].mode == "overwrite"
+        assert _written_table_calls(writer) == [(f"{SAFE_NAME}.orders", arrow_table, "overwrite")]
 
     @pytest.mark.requirement("AC-4")
     def test_export_strict_mode_raises_null_sequence_overwrite_state(
@@ -1349,7 +1405,7 @@ class TestExportDbtToIceberg:
             }
         )
         writer = _make_writer_mock((f"{SAFE_NAME}.orders",))
-        writer.write_tables.side_effect = overwrite_error
+        writer.write_table.side_effect = overwrite_error
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -1371,7 +1427,7 @@ class TestExportDbtToIceberg:
         catalog_plugin.connect.assert_not_called()
         config = writer_cls.call_args.kwargs["config"]
         assert config.stale_table_recovery_mode == "strict"
-        writer.write_tables.assert_called_once()
+        writer.write_table.assert_called_once()
 
     @pytest.mark.requirement("AC-4")
     def test_export_skips_unsafe_identifiers(
@@ -1419,9 +1475,9 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        writes = tuple(writer.write_tables.call_args.kwargs["writes"])
+        writes = _written_table_calls(writer)
         assert len(writes) == 1
-        assert writes[0].identifier == f"{SAFE_NAME}.safe_table"
+        assert writes[0][0] == f"{SAFE_NAME}.safe_table"
 
         # Warning should have been logged for unsafe identifiers
         assert context.log.warning.call_count >= 3, (
@@ -1470,7 +1526,8 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        writer.write_tables.assert_not_called()
+        writer.ensure_namespace.assert_not_called()
+        writer.write_table.assert_not_called()
 
     @pytest.mark.requirement("AC-4")
     def test_export_uses_catalog_config_from_artifacts_not_from_disk(

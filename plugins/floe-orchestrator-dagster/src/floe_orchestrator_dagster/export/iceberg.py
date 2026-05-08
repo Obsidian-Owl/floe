@@ -15,8 +15,6 @@ from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 from floe_iceberg.models import IcebergTableManagerConfig
 from floe_iceberg.writer import (
     DefaultIcebergTableWriter,
-    IcebergTableWrite,
-    IcebergWriterResult,
 )
 
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -220,7 +218,8 @@ def export_dbt_to_iceberg(
 
     conn = duckdb.connect(duckdb_path, read_only=True)
     try:
-        writes: list[IcebergTableWrite] = []
+        namespace_ensured = False
+        table_names: list[str] = []
         tables_df = conn.execute(
             "SELECT table_schema, table_name FROM information_schema.tables "
             "WHERE table_schema NOT IN ('information_schema', 'pg_catalog')"
@@ -244,31 +243,24 @@ def export_dbt_to_iceberg(
                 continue
 
             iceberg_id = f"{product_namespace}.{table_name}"
-            writes.append(
-                IcebergTableWrite(
-                    identifier=iceberg_id,
-                    arrow_table=arrow_table,
-                    mode="overwrite",
-                )
+            if not namespace_ensured:
+                writer.ensure_namespace(product_namespace)
+                namespace_ensured = True
+            writer.write_table(iceberg_id, arrow_table, mode="overwrite")
+            table_names.append(iceberg_id)
+            context.log.info(
+                "Exported %s to Iceberg (%d rows)",
+                iceberg_id,
+                arrow_table.num_rows,
             )
 
-        if not writes:
+        if not table_names:
             raise RuntimeError(
                 f"Configured Iceberg export wrote no tables for product {product_name}"
             )
-        writer_result: IcebergWriterResult = writer.write_tables(
-            namespace=product_namespace,
-            writes=writes,
-        )
-        for write in writes:
-            context.log.info(
-                "Exported %s to Iceberg (%d rows)",
-                write.identifier,
-                write.arrow_table.num_rows,
-            )
         return IcebergExportResult(
-            tables_written=writer_result.tables_written,
-            table_names=list(writer_result.table_names),
+            tables_written=len(table_names),
+            table_names=table_names,
         )
     finally:
         conn.close()

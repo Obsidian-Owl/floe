@@ -173,6 +173,30 @@ def test_write_tables_creates_namespace_and_returns_written_result() -> None:
 
 
 @pytest.mark.requirement("AC-318")
+def test_write_tables_writes_multiple_tables_in_one_batch() -> None:
+    """Verify batch writes preserve all table names and write each payload."""
+    catalog = _WriteCapableCatalog()
+    customers = _arrow_table()
+    orders = pa.table({"order_id": [10], "total": [42.0]})
+
+    result = _writer(catalog).write_tables(
+        "customer_360",
+        [
+            IcebergTableWrite("customer_360.customers", customers),
+            IcebergTableWrite("customer_360.orders", orders),
+        ],
+    )
+
+    assert result == IcebergWriterResult(
+        tables_written=2,
+        table_names=("customer_360.customers", "customer_360.orders"),
+    )
+    assert catalog.create_namespace_calls == [("customer_360", None)]
+    assert catalog.tables["customer_360.customers"].appended == [customers]
+    assert catalog.tables["customer_360.orders"].appended == [orders]
+
+
+@pytest.mark.requirement("AC-318")
 def test_existing_namespace_exception_is_success() -> None:
     """Verify existing namespaces are treated as idempotent writer success."""
     catalog = _WriteCapableCatalog()
@@ -256,6 +280,20 @@ def test_write_table_defaults_to_overwrite_existing_table() -> None:
 
     assert table.overwritten == [arrow_table]
     assert table.appended == []
+
+
+@pytest.mark.requirement("AC-318")
+def test_write_table_appends_existing_table_in_append_mode() -> None:
+    """Verify append mode writes to an already-loaded Iceberg table."""
+    catalog = _WriteCapableCatalog()
+    arrow_table = _arrow_table()
+    table = _FakeTable("customer_360.customers")
+    catalog.tables["customer_360.customers"] = table
+
+    _writer(catalog).write_table("customer_360.customers", arrow_table, mode="append")
+
+    assert table.appended == [arrow_table]
+    assert table.overwritten == []
 
 
 @pytest.mark.requirement("AC-318")
@@ -405,3 +443,27 @@ def test_catalog_without_write_methods_is_rejected() -> None:
                 )
             ],
         )
+
+
+@pytest.mark.requirement("AC-318")
+def test_catalog_config_uses_storage_plugin_fallback() -> None:
+    """Verify writer uses StoragePlugin PyIceberg config without explicit config."""
+
+    class StoragePlugin:
+        def __init__(self) -> None:
+            self.config = {"uri": "http://catalog.example"}
+
+        def get_pyiceberg_catalog_config(self) -> dict[str, str]:
+            return self.config
+
+    catalog = _WriteCapableCatalog()
+    catalog_plugin = _CatalogPlugin(catalog)
+    storage_plugin = StoragePlugin()
+    writer = DefaultIcebergTableWriter(
+        catalog_plugin=catalog_plugin,
+        storage_plugin=storage_plugin,
+    )
+
+    writer.ensure_namespace("customer_360")
+
+    assert catalog_plugin.connect_configs == [storage_plugin.config]
