@@ -687,13 +687,58 @@ class PolarisCatalogDeploymentBinding(BaseModel):
     credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
 
 
+class IcebergRestCatalogBinding(BaseModel):
+    """Secret-free Iceberg REST catalog projection for runtime consumers."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    catalog_name: NonEmptyString = "iceberg"
+    uri: NonEmptyString
+    warehouse: NonEmptyString
+    properties: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("properties")
+    @classmethod
+    def validate_secret_free_properties(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure catalog properties do not inline credential values."""
+        _assert_no_secret_material(value, "catalog.iceberg_rest.properties")
+        return value
+
+
+class DbtCatalogBinding(BaseModel):
+    """dbt profile catalog projection derived from catalog-owned deployment state."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    profile_fragment: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+    iceberg_rest: IcebergRestCatalogBinding | None = None
+
+    @field_validator("profile_fragment")
+    @classmethod
+    def validate_secret_free_profile_fragment(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure catalog profile fragments do not inline credential values."""
+        _assert_no_secret_material(value, "dbt.catalog.profile_fragment")
+        return value
+
+
 class CatalogDeploymentBinding(BaseModel):
     """Secret-free catalog deployment binding."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     provider: NonEmptyString
-    polaris: PolarisCatalogDeploymentBinding
+    polaris: PolarisCatalogDeploymentBinding | None = None
+    iceberg_rest: IcebergRestCatalogBinding | None = None
+    dbt: DbtCatalogBinding | None = None
+
+    @model_validator(mode="after")
+    def validate_provider_binding(self) -> CatalogDeploymentBinding:
+        """Ensure provider-specific catalog binding is present when required."""
+        if self.provider == "polaris" and self.polaris is None:
+            msg = "polaris catalog deployment binding requires polaris details"
+            raise ValueError(msg)
+        return self
 
 
 class DltIngestionBinding(BaseModel):
@@ -1160,10 +1205,10 @@ class CompiledArtifacts(BaseModel):
     - OTLP Collector endpoint (Layer 2 - ENFORCED)
     - Backend plugin selection (Layer 3 - PLUGGABLE)
 
-    Contract Version: 0.5.0 (see docstring header for version history)
+    Contract Version: See COMPILED_ARTIFACTS_VERSION in versions.py
 
     Attributes:
-        version: Schema version (semver) - default 0.5.0
+        version: Schema version (semver)
         metadata: Compilation metadata
         identity: Product identity from catalog
         mode: Deployment mode (simple, centralized, mesh)
@@ -1175,12 +1220,15 @@ class CompiledArtifacts(BaseModel):
         governance: Resolved governance settings (v0.2.0+, optional)
         enforcement_result: Enforcement result summary (v0.3.0+, optional)
         data_contracts: Validated data contracts (v0.3.0+, Epic 3C)
+        deployment: Secret-free deployment bindings for composed platform services
+        ingestion_outputs: Platform-visible Iceberg tables created by ingestion sources
 
     Examples:
         >>> from datetime import datetime
+        >>> from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
         >>> from floe_core.schemas.telemetry import TelemetryConfig, ResourceAttributes
         >>> artifacts = CompiledArtifacts(
-        ...     version="0.2.0",
+        ...     version=COMPILED_ARTIFACTS_VERSION,
         ...     metadata=CompilationMetadata(
         ...         compiled_at=datetime.now(),
         ...         floe_version="0.2.0",
@@ -1526,9 +1574,11 @@ __all__ = [
     "CompiledArtifacts",
     "CompilationMetadata",
     "CredentialRef",
+    "DbtCatalogBinding",
     "DeploymentConfig",
     "DeploymentMode",
     "DltIngestionBinding",
+    "IcebergRestCatalogBinding",
     "IngestionDeploymentBinding",
     "IngestionOutputTable",
     "KubernetesSecretRef",

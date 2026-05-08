@@ -145,12 +145,41 @@
           "type": "string"
         },
         "polaris": {
-          "$ref": "#/$defs/PolarisCatalogDeploymentBinding"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PolarisCatalogDeploymentBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "iceberg_rest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IcebergRestCatalogBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dbt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DbtCatalogBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
-        "provider",
-        "polaris"
+        "provider"
       ],
       "title": "CatalogDeploymentBinding",
       "type": "object"
@@ -714,6 +743,38 @@
       "title": "DataQuality",
       "type": "object"
     },
+    "DbtCatalogBinding": {
+      "additionalProperties": false,
+      "description": "dbt profile catalog projection derived from catalog-owned deployment state.",
+      "properties": {
+        "profile_fragment": {
+          "additionalProperties": true,
+          "title": "Profile Fragment",
+          "type": "object"
+        },
+        "env_refs": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Env Refs",
+          "type": "object"
+        },
+        "iceberg_rest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IcebergRestCatalogBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "DbtCatalogBinding",
+      "type": "object"
+    },
     "DbtStorageBinding": {
       "additionalProperties": false,
       "description": "dbt profile storage projection.",
@@ -1085,6 +1146,41 @@
         }
       },
       "title": "GateTier",
+      "type": "object"
+    },
+    "IcebergRestCatalogBinding": {
+      "additionalProperties": false,
+      "description": "Secret-free Iceberg REST catalog projection for runtime consumers.",
+      "properties": {
+        "catalog_name": {
+          "default": "iceberg",
+          "minLength": 1,
+          "title": "Catalog Name",
+          "type": "string"
+        },
+        "uri": {
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        },
+        "warehouse": {
+          "minLength": 1,
+          "title": "Warehouse",
+          "type": "string"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Properties"
+        }
+      },
+      "required": [
+        "uri",
+        "warehouse"
+      ],
+      "title": "IcebergRestCatalogBinding",
       "type": "object"
     },
     "IngestionDeploymentBinding": {
@@ -4566,10 +4662,10 @@
     }
   },
   "additionalProperties": false,
-  "description": "Output of floe compile - unified for all deployment modes.\n\nCompiledArtifacts is the single source of truth for pipeline execution.\nIt contains resolved, validated configuration after manifest inheritance.\n\nThe observability field contains TelemetryConfig which provides:\n- OpenTelemetry SDK configuration (Layer 1 - ENFORCED)\n- OTLP Collector endpoint (Layer 2 - ENFORCED)\n- Backend plugin selection (Layer 3 - PLUGGABLE)\n\nContract Version: 0.5.0 (see docstring header for version history)\n\nAttributes:\n    version: Schema version (semver) - default 0.5.0\n    metadata: Compilation metadata\n    identity: Product identity from catalog\n    mode: Deployment mode (simple, centralized, mesh)\n    inheritance_chain: Manifest inheritance lineage\n    observability: Observability configuration with TelemetryConfig\n    plugins: Resolved plugin selections (v0.2.0+)\n    transforms: Compiled transform configuration (v0.2.0+)\n    dbt_profiles: Generated profiles.yml content (v0.2.0+)\n    governance: Resolved governance settings (v0.2.0+, optional)\n    enforcement_result: Enforcement result summary (v0.3.0+, optional)\n    data_contracts: Validated data contracts (v0.3.0+, Epic 3C)\n\nExamples:\n    >>> from datetime import datetime\n    >>> from floe_core.schemas.telemetry import TelemetryConfig, ResourceAttributes\n    >>> artifacts = CompiledArtifacts(\n    ...     version=\"0.2.0\",\n    ...     metadata=CompilationMetadata(\n    ...         compiled_at=datetime.now(),\n    ...         floe_version=\"0.2.0\",\n    ...         source_hash=\"sha256:abc123\",\n    ...         product_name=\"my-pipeline\",\n    ...         product_version=\"1.0.0\",\n    ...     ),\n    ...     identity=ProductIdentity(\n    ...         product_id=\"default.my_pipeline\",\n    ...         domain=\"default\",\n    ...         repository=\"github.com/acme/my-pipeline\",\n    ...     ),\n    ...     mode=\"simple\",\n    ...     observability=ObservabilityConfig(\n    ...         telemetry=TelemetryConfig(\n    ...             resource_attributes=ResourceAttributes(...),\n    ...         ),\n    ...         lineage_namespace=\"my-pipeline\",\n    ...     ),\n    ...     plugins=ResolvedPlugins(\n    ...         compute=PluginRef(type=\"duckdb\", version=\"0.9.0\"),\n    ...         orchestrator=PluginRef(type=\"dagster\", version=\"1.5.0\"),\n    ...     ),\n    ...     transforms=ResolvedTransforms(\n    ...         models=[ResolvedModel(name=\"stg_customers\", compute=\"duckdb\")],\n    ...         default_compute=\"duckdb\",\n    ...     ),\n    ...     dbt_profiles={\"default\": {\"target\": \"dev\", \"outputs\": {...}}},\n    ... )\n\nSee Also:\n    - docs/contracts/compiled-artifacts.md: Full specification\n    - ADR-0012: CompiledArtifacts contract design\n    - TelemetryConfig: OpenTelemetry configuration",
+  "description": "Output of floe compile - unified for all deployment modes.\n\nCompiledArtifacts is the single source of truth for pipeline execution.\nIt contains resolved, validated configuration after manifest inheritance.\n\nThe observability field contains TelemetryConfig which provides:\n- OpenTelemetry SDK configuration (Layer 1 - ENFORCED)\n- OTLP Collector endpoint (Layer 2 - ENFORCED)\n- Backend plugin selection (Layer 3 - PLUGGABLE)\n\nContract Version: See COMPILED_ARTIFACTS_VERSION in versions.py\n\nAttributes:\n    version: Schema version (semver)\n    metadata: Compilation metadata\n    identity: Product identity from catalog\n    mode: Deployment mode (simple, centralized, mesh)\n    inheritance_chain: Manifest inheritance lineage\n    observability: Observability configuration with TelemetryConfig\n    plugins: Resolved plugin selections (v0.2.0+)\n    transforms: Compiled transform configuration (v0.2.0+)\n    dbt_profiles: Generated profiles.yml content (v0.2.0+)\n    governance: Resolved governance settings (v0.2.0+, optional)\n    enforcement_result: Enforcement result summary (v0.3.0+, optional)\n    data_contracts: Validated data contracts (v0.3.0+, Epic 3C)\n    deployment: Secret-free deployment bindings for composed platform services\n    ingestion_outputs: Platform-visible Iceberg tables created by ingestion sources\n\nExamples:\n    >>> from datetime import datetime\n    >>> from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION\n    >>> from floe_core.schemas.telemetry import TelemetryConfig, ResourceAttributes\n    >>> artifacts = CompiledArtifacts(\n    ...     version=COMPILED_ARTIFACTS_VERSION,\n    ...     metadata=CompilationMetadata(\n    ...         compiled_at=datetime.now(),\n    ...         floe_version=\"0.2.0\",\n    ...         source_hash=\"sha256:abc123\",\n    ...         product_name=\"my-pipeline\",\n    ...         product_version=\"1.0.0\",\n    ...     ),\n    ...     identity=ProductIdentity(\n    ...         product_id=\"default.my_pipeline\",\n    ...         domain=\"default\",\n    ...         repository=\"github.com/acme/my-pipeline\",\n    ...     ),\n    ...     mode=\"simple\",\n    ...     observability=ObservabilityConfig(\n    ...         telemetry=TelemetryConfig(\n    ...             resource_attributes=ResourceAttributes(...),\n    ...         ),\n    ...         lineage_namespace=\"my-pipeline\",\n    ...     ),\n    ...     plugins=ResolvedPlugins(\n    ...         compute=PluginRef(type=\"duckdb\", version=\"0.9.0\"),\n    ...         orchestrator=PluginRef(type=\"dagster\", version=\"1.5.0\"),\n    ...     ),\n    ...     transforms=ResolvedTransforms(\n    ...         models=[ResolvedModel(name=\"stg_customers\", compute=\"duckdb\")],\n    ...         default_compute=\"duckdb\",\n    ...     ),\n    ...     dbt_profiles={\"default\": {\"target\": \"dev\", \"outputs\": {...}}},\n    ... )\n\nSee Also:\n    - docs/contracts/compiled-artifacts.md: Full specification\n    - ADR-0012: CompiledArtifacts contract design\n    - TelemetryConfig: OpenTelemetry configuration",
   "properties": {
     "version": {
-      "default": "0.11.0",
+      "default": "0.12.0",
       "description": "Schema version (semver)",
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
       "title": "Version",

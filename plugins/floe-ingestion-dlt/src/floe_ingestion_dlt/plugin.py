@@ -208,10 +208,10 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         """Translate composed storage/catalog bindings into dlt runtime config."""
         if storage.warehouse is None:
             raise PipelineConfigurationError("dlt ingestion requires storage warehouse binding")
-        if catalog.provider != "polaris":
+        iceberg_rest = catalog.iceberg_rest
+        if iceberg_rest is None:
             raise PipelineConfigurationError(
-                "dlt ingestion currently supports polaris catalog bindings, "
-                f"got {catalog.provider!r}"
+                "dlt ingestion requires an Iceberg REST catalog deployment binding"
             )
 
         source_filesystem = {
@@ -231,14 +231,17 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         }
 
         iceberg_catalog_env = self._compile_safe_iceberg_environment(
-            catalog_name="polaris",
-            uri=catalog.polaris.catalog_uri or catalog.polaris.endpoint_internal,
-            warehouse=catalog.polaris.warehouse,
+            catalog_name=iceberg_rest.catalog_name,
+            uri=iceberg_rest.uri,
+            warehouse=iceberg_rest.warehouse,
             s3_endpoint=storage.endpoint.internal_url,
             s3_region=storage.endpoint.region,
             s3_path_style_access=storage.endpoint.path_style_access,
         )
-        env_refs = self._compile_runtime_env_refs(storage.runtime.env_refs)
+        env_refs = self._compile_runtime_env_refs(
+            storage.runtime.env_refs,
+            catalog_name=iceberg_rest.catalog_name,
+        )
 
         return IngestionDeploymentBinding(
             provider="dlt",
@@ -254,12 +257,18 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         )
 
     @staticmethod
-    def _compile_runtime_env_refs(storage_env_refs: Mapping[str, str]) -> dict[str, str]:
+    def _compile_runtime_env_refs(
+        storage_env_refs: Mapping[str, str],
+        *,
+        catalog_name: str,
+    ) -> dict[str, str]:
         """Return target runtime env names and their source process env vars."""
+        env_catalog = catalog_name.upper().replace("-", "_")
+        prefix = f"PYICEBERG_CATALOG__{env_catalog}__"
         env_refs: dict[str, str] = {
-            "PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL",
-            "PYICEBERG_CATALOG__POLARIS__SCOPE": "POLARIS_SCOPE",
-            "PYICEBERG_CATALOG__POLARIS__OAUTH2_SERVER_URI": "POLARIS_OAUTH2_SERVER_URI",
+            f"{prefix}CREDENTIAL": f"{env_catalog}_CREDENTIAL",
+            f"{prefix}SCOPE": f"{env_catalog}_SCOPE",
+            f"{prefix}OAUTH2_SERVER_URI": f"{env_catalog}_OAUTH2_SERVER_URI",
         }
         access_key_env = storage_env_refs.get("accessKeyId") or storage_env_refs.get(
             "AWS_ACCESS_KEY_ID"

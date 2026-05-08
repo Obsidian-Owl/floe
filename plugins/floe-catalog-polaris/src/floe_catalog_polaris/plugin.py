@@ -40,6 +40,8 @@ from floe_core.plugins import CatalogPlugin
 from floe_core.plugins.catalog import Catalog
 from floe_core.schemas.compiled_artifacts import (
     CatalogDeploymentBinding,
+    DbtCatalogBinding,
+    IcebergRestCatalogBinding,
     PolarisCatalogDeploymentBinding,
     StorageDeploymentBinding,
 )
@@ -414,6 +416,16 @@ class PolarisCatalogPlugin(CatalogPlugin):
         access_ref = storage.credentials.as_credential_ref("accessKeyId")
         secret_ref = storage.credentials.as_credential_ref("secretAccessKey")
         config = self._require_config()
+        runtime_iceberg_rest = IcebergRestCatalogBinding(
+            catalog_name="polaris",
+            uri=config.uri,
+            warehouse=config.warehouse,
+        )
+        dbt_iceberg_rest = IcebergRestCatalogBinding(
+            catalog_name="iceberg",
+            uri=config.uri,
+            warehouse=config.warehouse,
+        )
         return CatalogDeploymentBinding(
             provider="polaris",
             polaris=PolarisCatalogDeploymentBinding(
@@ -431,6 +443,8 @@ class PolarisCatalogPlugin(CatalogPlugin):
                     "secretAccessKey": secret_ref,
                 },
             ),
+            iceberg_rest=runtime_iceberg_rest,
+            dbt=DbtCatalogBinding(iceberg_rest=dbt_iceberg_rest),
         )
 
     def create_namespace(

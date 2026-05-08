@@ -39,6 +39,10 @@ from floe_core.plugins import ComputePlugin
 from floe_compute_duckdb.tracing import TRACER_NAME, compute_span, get_tracer
 
 if TYPE_CHECKING:
+    from floe_core.schemas.compiled_artifacts import (
+        DeploymentConfig,
+        IcebergRestCatalogBinding,
+    )
     from pydantic import BaseModel
 
 # Regex pattern for valid SQL identifiers (alphanumeric + underscores only)
@@ -64,6 +68,33 @@ _ALLOWED_ATTACH_OPTION_KEYS = frozenset(
         "type",
     }
 )
+
+
+def _merge_unique_list(existing: Any, additions: list[str]) -> list[Any]:
+    """Return a list preserving existing order and adding missing values once."""
+    if isinstance(existing, list):
+        merged = list(existing)
+    elif existing is None:
+        merged = []
+    else:
+        merged = [existing]
+
+    for addition in additions:
+        if addition not in merged:
+            merged.append(addition)
+    return merged
+
+
+def _iceberg_rest_attach_entry(binding: IcebergRestCatalogBinding) -> dict[str, Any]:
+    """Translate a neutral Iceberg REST catalog binding into dbt-duckdb attach config."""
+    options: dict[str, str] = {"endpoint": binding.uri}
+    options.update(binding.properties)
+    return {
+        "path": binding.warehouse,
+        "alias": binding.catalog_name,
+        "type": "iceberg",
+        "options": options,
+    }
 
 
 def _validate_sql_identifier(value: str, field_name: str) -> None:
@@ -442,6 +473,45 @@ class DuckDBComputePlugin(ComputePlugin):
             ['dbt-duckdb>=1.7.0', 'duckdb>=1.4.0']
         """
         return ["dbt-duckdb>=1.7.0", "duckdb>=1.4.0"]
+
+    def augment_dbt_profile(
+        self,
+        profile: dict[str, Any],
+        deployment: DeploymentConfig | None = None,
+    ) -> dict[str, Any]:
+        """Add DuckDB-specific profile fragments from compiled deployment bindings."""
+        if profile.get("type") != "duckdb":
+            return profile
+        if deployment is None or deployment.catalog is None:
+            return profile
+
+        catalog = deployment.catalog
+        iceberg_rest = catalog.dbt.iceberg_rest if catalog.dbt is not None else None
+        if iceberg_rest is None:
+            iceberg_rest = catalog.iceberg_rest
+        if iceberg_rest is None:
+            return profile
+
+        attach_entry = _iceberg_rest_attach_entry(iceberg_rest)
+        updated = dict(profile)
+        updated["extensions"] = _merge_unique_list(updated.get("extensions"), ["httpfs", "iceberg"])
+
+        existing_attach = updated.get("attach")
+        if existing_attach is None:
+            attach = []
+        elif isinstance(existing_attach, list):
+            attach = list(existing_attach)
+        else:
+            msg = (
+                "DuckDB profile existing 'attach' value must be a list before "
+                "adding the Iceberg catalog attachment."
+            )
+            raise ValueError(msg)
+
+        if attach_entry not in attach:
+            attach.append(attach_entry)
+        updated["attach"] = attach
+        return updated
 
     def validate_connection(self, config: ComputeConfig) -> ConnectionResult:
         """Test connection to DuckDB using native driver.

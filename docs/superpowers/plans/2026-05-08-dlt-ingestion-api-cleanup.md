@@ -762,167 +762,38 @@ Expected: commit succeeds.
 - Modify: `packages/floe-core/tests/unit/compilation/test_storage_deployment_binding.py`
 - Modify: `tests/contract/test_core_to_ingestion_contract.py`
 
-- [ ] **Step 1: Write failing profile test**
+- [ ] **Step 1: Write failing abstraction tests**
 
-Add to `packages/floe-core/tests/unit/compilation/test_dbt_profiles.py`:
+Add tests covering the contract boundaries:
 
-```python
-def test_generate_dbt_profiles_adds_iceberg_attach_from_deployment(
-    mock_compute_plugin: MagicMock,
-    resolved_plugins: ResolvedPlugins,
-) -> None:
-    """Generated dbt profiles can attach the dlt-written Iceberg catalog."""
-    from floe_core.compilation.dbt_profiles import generate_dbt_profiles
-    from floe_core.schemas.compiled_artifacts import (
-        CatalogDeploymentBinding,
-        DagsterStorageBinding,
-        DbtStorageBinding,
-        DeploymentConfig,
-        KubernetesSecretRef,
-        PolarisCatalogDeploymentBinding,
-        StorageCredentialBinding,
-        StorageDeploymentBinding,
-        StorageServiceEndpoint,
-        StorageWarehouse,
-    )
-
-    storage = StorageDeploymentBinding(
-        provider="minio",
-        protocol="s3-compatible",
-        endpoint=StorageServiceEndpoint(
-            internal_url="http://floe-platform-minio:9000",
-            external_url="http://localhost:9000",
-            region="us-east-1",
-            warehouse_path="s3://floe-iceberg",
-            path_style_access=True,
-        ),
-        warehouse=StorageWarehouse(uri="s3://floe-iceberg", bucket="floe-iceberg"),
-        credentials=StorageCredentialBinding(
-            mode="kubernetes-secret",
-            secret_ref=KubernetesSecretRef(
-                name="floe-platform-minio-credentials",
-                namespace="floe-system",
-                keys={
-                    "accessKeyId": "root-user",
-                    "secretAccessKey": "root-password",  # pragma: allowlist secret
-                },
-            ),
-        ),
-        dbt=DbtStorageBinding(
-            profile_name="customer-360",
-            target_name="dev",
-            schema_name="bronze",
-            profile_fragment={
-                "s3_endpoint": "http://floe-platform-minio:9000",
-                "s3_region": "us-east-1",
-                "s3_path_style_access": True,
-            },
-            env_refs={
-                "s3_access_key_id": "AWS_ACCESS_KEY_ID",
-                # pragma: allowlist nextline secret
-                "s3_secret_access_key": "AWS_SECRET_ACCESS_KEY",
-            },
-        ),
-        dagster=DagsterStorageBinding(
-            resource_key="minio_storage",
-            asset_io_manager_key="iceberg_io_manager",
-        ),
-    )
-    catalog = CatalogDeploymentBinding(
-        provider="polaris",
-        polaris=PolarisCatalogDeploymentBinding(
-            storage_type="S3",
-            warehouse="floe-demo",
-            default_base_location="s3://floe-iceberg",
-            allowed_locations=["s3://floe-iceberg"],
-            endpoint="http://localhost:8181/api/catalog",
-            endpoint_internal="http://floe-platform-polaris:8181/api/catalog",
-            catalog_uri="http://floe-platform-polaris:8181/api/catalog",
-            path_style_access=True,
-            sts_unavailable=True,
-        ),
-    )
-
-    with patch(
-        "floe_core.compilation.dbt_profiles.get_compute_plugin",
-        return_value=mock_compute_plugin,
-    ):
-        profiles = generate_dbt_profiles(
-            plugins=resolved_plugins,
-            product_name="customer-360",
-            storage_binding=storage.dbt,
-            deployment=DeploymentConfig(storage=storage, catalog=catalog),
-        )
-
-    dev_output = profiles["customer-360"]["outputs"]["dev"]
-    assert "iceberg" in dev_output["extensions"]
-    assert {
-        "path": "floe-demo",
-        "alias": "iceberg",
-        "type": "iceberg",
-        "options": {
-            "endpoint": "http://floe-platform-polaris:8181/api/catalog",
-        },
-    } in dev_output["attach"]
-```
+- `floe-core` delegates deployment profile augmentation to `ComputePlugin.augment_dbt_profile`.
+- `floe-catalog-polaris` emits a neutral `IcebergRestCatalogBinding` using Polaris `config.uri`, not storage endpoints.
+- `floe-compute-duckdb` translates that neutral binding into dbt-duckdb `attach` entries.
+- `floe-ingestion-dlt` consumes `CatalogDeploymentBinding.iceberg_rest`, not Polaris internals.
 
 - [ ] **Step 2: Run test and confirm failure**
 
 Run:
 
 ```bash
-uv run pytest packages/floe-core/tests/unit/compilation/test_dbt_profiles.py::test_generate_dbt_profiles_adds_iceberg_attach_from_deployment -q
+uv run pytest \
+  packages/floe-core/tests/unit/compilation/test_dbt_profiles.py::TestGenerateDBTProfiles::test_generate_dbt_profiles_delegates_deployment_profile_augmentation \
+  plugins/floe-compute-duckdb/tests/unit/test_plugin.py::TestAugmentDBTProfile::test_augment_dbt_profile_can_use_generic_catalog_projection \
+  plugins/floe-ingestion-dlt/tests/unit/test_destination_config.py::test_build_deployment_binding_uses_catalog_iceberg_rest_projection \
+  -q
 ```
 
-Expected: FAIL because `generate_dbt_profiles()` has no `deployment` argument and does not add an Iceberg attach.
+Expected: FAIL before the abstraction is wired.
 
-- [ ] **Step 3: Add profile merge helper**
+- [ ] **Step 3: Add catalog projection and compute-owned profile augmentation**
 
-In `packages/floe-core/src/floe_core/compilation/dbt_profiles.py`, import `DeploymentConfig` for typing and add:
+Do not translate Polaris deployment internals in `floe-core`. Catalog plugins expose an
+`IcebergRestCatalogBinding` on `CatalogDeploymentBinding`; compute plugins translate that
+neutral projection into adapter-specific profile fragments.
 
-```python
-def _merge_unique_list(existing: Any, additions: list[str]) -> list[Any]:
-    """Return existing list values plus additions without duplicates."""
-    values = list(existing) if isinstance(existing, list) else []
-    for item in additions:
-        if item not in values:
-            values.append(item)
-    return values
-
-
-def _apply_iceberg_attach(
-    profile_output: dict[str, Any],
-    deployment: DeploymentConfig | None,
-) -> dict[str, Any]:
-    """Add DuckDB Iceberg REST catalog attach config from deployment bindings."""
-    if deployment is None or deployment.catalog is None:
-        return profile_output
-    catalog = deployment.catalog
-    if catalog.provider != "polaris":
-        return profile_output
-
-    polaris = catalog.polaris
-    if not polaris.warehouse:
-        return profile_output
-    endpoint = polaris.catalog_uri or polaris.endpoint_internal
-
-    output = dict(profile_output)
-    output["extensions"] = _merge_unique_list(output.get("extensions"), ["httpfs", "iceberg"])
-
-    attach_entry = {
-        "path": polaris.warehouse,
-        "alias": "iceberg",
-        "type": "iceberg",
-        "options": {
-            "endpoint": endpoint,
-        },
-    }
-    attach = list(output.get("attach", [])) if isinstance(output.get("attach"), list) else []
-    if attach_entry not in attach:
-        attach.append(attach_entry)
-    output["attach"] = attach
-    return output
-```
+Add `ComputePlugin.augment_dbt_profile(profile, deployment)` as the extension point, have
+`generate_dbt_profiles()` call it after applying storage fragments, and implement the
+DuckDB-specific Iceberg `attach` shape in `floe-compute-duckdb`.
 
 Change the `generate_dbt_profiles()` signature to:
 
@@ -936,10 +807,10 @@ def generate_dbt_profiles(
 ) -> dict[str, Any]:
 ```
 
-After storage binding merge, add:
+After storage binding merge, delegate to the compute plugin:
 
 ```python
-profile_output = _apply_iceberg_attach(profile_output, deployment)
+profile_output = plugin.augment_dbt_profile(profile_output, deployment)
 ```
 
 - [ ] **Step 4: Pass deployment from compilation**
@@ -979,9 +850,9 @@ Run:
 
 ```bash
 uv run pytest \
-  packages/floe-core/tests/unit/compilation/test_dbt_profiles.py::test_generate_dbt_profiles_adds_iceberg_attach_from_deployment \
+  packages/floe-core/tests/unit/compilation/test_dbt_profiles.py \
   packages/floe-core/tests/unit/compilation/test_storage_deployment_binding.py \
-  plugins/floe-compute-duckdb/tests/unit/test_plugin.py::TestDuckDBComputePluginProfileGeneration \
+  plugins/floe-compute-duckdb/tests/unit/test_plugin.py::TestAugmentDBTProfile \
   -q
 ```
 

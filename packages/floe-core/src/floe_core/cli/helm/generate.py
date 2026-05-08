@@ -103,6 +103,9 @@ def _minio_storage_helm_values(
         raise ValueError(msg)
 
     polaris = catalog.polaris
+    if polaris is None:
+        msg = "Floe platform Helm values require Polaris catalog deployment details"
+        raise ValueError(msg)
     polaris_access_ref = _require_kubernetes_secret_ref(
         polaris.credential_refs.get("accessKeyId"),
         "accessKeyId",

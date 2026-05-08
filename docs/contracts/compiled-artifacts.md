@@ -53,15 +53,17 @@ CompiledArtifacts is the **single source of truth** for pipeline execution. It c
 ## Schema Definition
 
 ```python
-from pydantic import BaseModel
-from typing import Literal
 from datetime import datetime
+from typing import Any, Literal
+
+from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
+from pydantic import BaseModel
 
 class CompiledArtifacts(BaseModel):
     """Output of the compilation pipeline - unified for all deployment modes."""
 
     # Schema version
-    version: str = "0.1.0"
+    version: str = COMPILED_ARTIFACTS_VERSION  # currently "0.12.0"
 
     # Compilation metadata
     metadata: CompilationMetadata
@@ -96,6 +98,9 @@ class CompiledArtifacts(BaseModel):
 
     # Deployment bindings (secret-free, renderer consumed)
     deployment: DeploymentConfig | None = None
+
+    # Platform-visible raw Iceberg outputs created by ingestion sources
+    ingestion_outputs: list[IngestionOutputTable] = []
 
 
 class CompilationMetadata(BaseModel):
@@ -139,12 +144,49 @@ composition and deployment renderers.
 class DeploymentConfig(BaseModel):
     storage: StorageDeploymentBinding | None = None
     catalog: CatalogDeploymentBinding | None = None
+    ingestion: IngestionDeploymentBinding | None = None
 ```
 
 Storage plugins emit neutral storage desired state. `floe-core` validates
 storage/catalog compatibility and records typed deployment bindings. Catalog
 plugins translate storage state into catalog-owned deployment config after
 compatibility passes.
+
+Catalog bindings have two layers:
+
+- Provider-specific details such as `CatalogDeploymentBinding.polaris` are for
+  renderers that deploy that provider.
+- Neutral projections such as `CatalogDeploymentBinding.iceberg_rest` and
+  `CatalogDeploymentBinding.dbt` are for runtime consumers. dlt and future
+  ingestion plugins consume `iceberg_rest`; compute plugins consume `dbt` or
+  the generic projection and translate it into their adapter-specific profile
+  shape.
+
+```python
+class IcebergRestCatalogBinding(BaseModel):
+    catalog_name: str = "iceberg"
+    uri: str
+    warehouse: str
+    properties: dict[str, str] = {}
+
+
+class DbtCatalogBinding(BaseModel):
+    profile_fragment: dict[str, Any] = {}
+    env_refs: dict[str, str] = {}
+    iceberg_rest: IcebergRestCatalogBinding | None = None
+
+
+class CatalogDeploymentBinding(BaseModel):
+    provider: str
+    polaris: PolarisCatalogDeploymentBinding | None = None
+    iceberg_rest: IcebergRestCatalogBinding | None = None
+    dbt: DbtCatalogBinding | None = None
+
+
+class IngestionDeploymentBinding(BaseModel):
+    provider: str
+    dlt: DltIngestionBinding
+```
 
 Rules:
 
@@ -158,6 +200,9 @@ Rules:
   create buckets or call live infrastructure.
 - A new catalog plugin should add storage requirements and a catalog deployment
   translator without changing existing storage plugins.
+- Consumers must not infer catalog runtime endpoints from provider-specific
+  storage fields. Use `iceberg_rest.uri` so DuckDB, dlt, and future plugins
+  point at the catalog service rather than the object-store endpoint.
 
 ## Plugin Configuration
 
@@ -436,10 +481,10 @@ class ContractMonitoringConfig(BaseModel):
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.12.0",
   "metadata": {
     "compiled_at": "2026-01-03T10:00:00Z",
-    "floe_version": "0.1.0",
+    "floe_version": "0.3.0",
     "source_hash": "sha256:abc123...",
     "product_name": "my-pipeline",
     "product_version": "1.0.0"
@@ -518,10 +563,10 @@ class ContractMonitoringConfig(BaseModel):
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.12.0",
   "metadata": {
     "compiled_at": "2026-01-03T10:00:00Z",
-    "floe_version": "0.1.0",
+    "floe_version": "0.3.0",
     "source_hash": "sha256:def456...",
     "product_name": "customer-analytics",
     "product_version": "1.0.0"
@@ -577,10 +622,10 @@ class ContractMonitoringConfig(BaseModel):
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.12.0",
   "metadata": {
     "compiled_at": "2026-01-03T10:00:00Z",
-    "floe_version": "0.1.0",
+    "floe_version": "0.3.0",
     "source_hash": "sha256:ghi789...",
     "product_name": "customer-360",
     "product_version": "3.2.1"

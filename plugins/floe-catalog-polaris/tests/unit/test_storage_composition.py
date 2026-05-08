@@ -104,6 +104,17 @@ def test_build_catalog_deployment_translates_storage_binding_to_polaris_binding(
         "floe-platform-minio-credentials"
     )
     assert binding.polaris.credential_refs["secretAccessKey"].key == "secret-access-key"
+    assert binding.iceberg_rest is not None
+    assert binding.iceberg_rest.catalog_name == "polaris"
+    assert binding.iceberg_rest.uri == "http://polaris:8181/api/catalog"
+    assert binding.iceberg_rest.uri != binding.polaris.endpoint_internal
+    assert binding.iceberg_rest.warehouse == "floe"
+    assert binding.dbt is not None
+    assert binding.dbt.iceberg_rest is not None
+    assert binding.dbt.iceberg_rest.catalog_name == "iceberg"
+    assert binding.dbt.iceberg_rest.uri == "http://polaris:8181/api/catalog"
+    assert binding.dbt.iceberg_rest.uri != binding.polaris.endpoint_internal
+    assert binding.dbt.iceberg_rest.warehouse == "floe"
 
     payload = binding.model_dump_json()
     assert "raw-secret-value" not in payload

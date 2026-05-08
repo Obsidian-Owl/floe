@@ -68,14 +68,14 @@ class TestCompilation:
     def test_compile_customer_360(self, tmp_path: Path, compiled_artifacts: Any) -> None:
         """Test compilation of customer-360 demo pipeline.
 
-        Validates that demo/customer-360/floe.yaml compiles to valid CompiledArtifacts v0.5.0.
+        Validates that demo/customer-360/floe.yaml compiles to valid CompiledArtifacts.
 
         Args:
             tmp_path: Temporary directory fixture.
             compiled_artifacts: Compilation factory fixture from conftest.
 
         Validates:
-            - CompiledArtifacts version is 0.5.0
+            - CompiledArtifacts version matches COMPILED_ARTIFACTS_VERSION
             - Metadata contains product name "customer-360"
             - Plugins resolved (compute, orchestrator)
             - Observability config present with telemetry

@@ -23,11 +23,12 @@ from floe_core.compute_config import ComputeConfig
 from floe_core.schemas.compiled_artifacts import (
     CatalogDeploymentBinding,
     DagsterStorageBinding,
+    DbtCatalogBinding,
     DbtStorageBinding,
     DeploymentConfig,
+    IcebergRestCatalogBinding,
     KubernetesSecretRef,
     PluginRef,
-    PolarisCatalogDeploymentBinding,
     ResolvedPlugins,
     StorageCredentialBinding,
     StorageDeploymentBinding,
@@ -48,6 +49,7 @@ class TestGenerateDBTProfiles:
             "path": ":memory:",
             "threads": 4,
         }
+        plugin.augment_dbt_profile.side_effect = lambda profile, deployment=None: profile
         return plugin
 
     @pytest.fixture
@@ -205,20 +207,72 @@ class TestGenerateDBTProfiles:
         assert dev_output["s3_secret_access_key"] == "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
 
     @pytest.mark.requirement("FR-005")
-    def test_generate_dbt_profiles_adds_iceberg_attach_from_deployment(
+    def test_generate_dbt_profiles_merges_catalog_binding_fragment(
         self,
         mock_compute_plugin: MagicMock,
         resolved_plugins: ResolvedPlugins,
     ) -> None:
-        """Test that compiled catalog deployment state augments DuckDB profiles."""
+        """Test that catalog dbt projections augment profile outputs."""
         from floe_core.compilation.dbt_profiles import generate_dbt_profiles
 
-        mock_compute_plugin.generate_dbt_profile.return_value = {
+        deployment = DeploymentConfig(
+            catalog=CatalogDeploymentBinding(
+                provider="future-catalog",
+                dbt=DbtCatalogBinding(
+                    profile_fragment={"catalog_endpoint": "http://catalog:8181/api/catalog"},
+                    env_refs={"catalog_token": "CATALOG_TOKEN"},
+                ),
+            )
+        )
+
+        with patch(
+            "floe_core.compilation.dbt_profiles.get_compute_plugin",
+            return_value=mock_compute_plugin,
+        ):
+            profiles = generate_dbt_profiles(
+                plugins=resolved_plugins,
+                product_name="customer_360",
+                deployment=deployment,
+            )
+
+        dev_output = profiles["customer_360"]["outputs"]["dev"]
+        assert dev_output["catalog_endpoint"] == "http://catalog:8181/api/catalog"
+        assert dev_output["catalog_token"] == "{{ env_var('CATALOG_TOKEN') }}"
+
+    @pytest.mark.requirement("FR-005")
+    def test_generate_dbt_profiles_delegates_deployment_profile_augmentation(
+        self,
+        mock_compute_plugin: MagicMock,
+        resolved_plugins: ResolvedPlugins,
+    ) -> None:
+        """Core passes compiled deployment state to the compute plugin."""
+        from floe_core.compilation.dbt_profiles import generate_dbt_profiles
+
+        base_profile = {
             "type": "duckdb",
             "path": ":memory:",
             "threads": 4,
             "extensions": ["httpfs"],
         }
+        mock_compute_plugin.generate_dbt_profile.return_value = base_profile
+        attach_entry = {
+            "path": "floe-demo",
+            "alias": "iceberg",
+            "type": "iceberg",
+            "options": {"endpoint": "http://floe-platform-polaris:8181/api/catalog"},
+        }
+
+        def augment_profile(
+            profile: dict[str, object],
+            deployment: DeploymentConfig | None,
+        ) -> dict[str, object]:
+            assert deployment is deployment_config
+            return {
+                **profile,
+                "extensions": ["httpfs", "iceberg"],
+                "attach": [attach_entry],
+            }
+
         deployment = DeploymentConfig(
             storage=StorageDeploymentBinding(
                 provider="minio",
@@ -252,20 +306,18 @@ class TestGenerateDBTProfiles:
                 ),
             ),
             catalog=CatalogDeploymentBinding(
-                provider="polaris",
-                polaris=PolarisCatalogDeploymentBinding(
-                    storage_type="S3",
-                    warehouse="floe-demo",
-                    default_base_location="s3://floe-iceberg",
-                    allowed_locations=["s3://floe-iceberg"],
-                    endpoint="http://localhost:8181/api/catalog",
-                    endpoint_internal="http://floe-platform-polaris:8181/api/catalog",
-                    catalog_uri="http://floe-platform-polaris:8181/api/catalog",
-                    path_style_access=True,
-                    sts_unavailable=True,
+                provider="future-catalog",
+                dbt=DbtCatalogBinding(
+                    iceberg_rest=IcebergRestCatalogBinding(
+                        catalog_name="iceberg",
+                        uri="http://future-catalog:8181/api/catalog",
+                        warehouse="floe-demo",
+                    )
                 ),
             ),
         )
+        deployment_config = deployment
+        mock_compute_plugin.augment_dbt_profile.side_effect = augment_profile
 
         with patch(
             "floe_core.compilation.dbt_profiles.get_compute_plugin",
@@ -279,146 +331,8 @@ class TestGenerateDBTProfiles:
 
         dev_output = profiles["customer_360"]["outputs"]["dev"]
         assert "iceberg" in dev_output["extensions"]
-        assert {
-            "path": "floe-demo",
-            "alias": "iceberg",
-            "type": "iceberg",
-            "options": {"endpoint": "http://floe-platform-polaris:8181/api/catalog"},
-        } in dev_output["attach"]
-
-    def test_apply_iceberg_attach_requires_catalog_uri(self) -> None:
-        """Do not fall back to endpoint_internal, which may point at storage."""
-        from floe_core.compilation.dbt_profiles import _apply_iceberg_attach
-
-        deployment = DeploymentConfig(
-            catalog=CatalogDeploymentBinding(
-                provider="polaris",
-                polaris=PolarisCatalogDeploymentBinding(
-                    storage_type="S3",
-                    warehouse="floe-demo",
-                    default_base_location="s3://floe-iceberg",
-                    allowed_locations=["s3://floe-iceberg"],
-                    endpoint="http://localhost:8181/api/catalog",
-                    endpoint_internal="http://floe-platform-minio:9000",
-                    catalog_uri=None,
-                    path_style_access=True,
-                    sts_unavailable=True,
-                ),
-            ),
-        )
-
-        profile = _apply_iceberg_attach(
-            {"type": "duckdb", "path": ":memory:", "threads": 4},
-            deployment,
-        )
-
-        assert "attach" not in profile
-        assert "extensions" not in profile
-
-    @pytest.mark.parametrize(
-        ("deployment", "expected_profile"),
-        [
-            (None, {"type": "duckdb", "path": ":memory:"}),
-            (DeploymentConfig(), {"type": "duckdb", "path": ":memory:"}),
-            (
-                DeploymentConfig(
-                    catalog=CatalogDeploymentBinding(
-                        provider="polaris",
-                        polaris=PolarisCatalogDeploymentBinding(
-                            storage_type="S3",
-                            warehouse=None,
-                            default_base_location="s3://floe-iceberg",
-                            allowed_locations=["s3://floe-iceberg"],
-                            endpoint="http://localhost:8181/api/catalog",
-                            endpoint_internal="http://floe-platform-polaris:8181/api/catalog",
-                            catalog_uri="http://floe-platform-polaris:8181/api/catalog",
-                            path_style_access=True,
-                            sts_unavailable=True,
-                        ),
-                    ),
-                ),
-                {"type": "duckdb", "path": ":memory:"},
-            ),
-        ],
-    )
-    def test_apply_iceberg_attach_skips_missing_deployment_catalog_or_warehouse(
-        self,
-        deployment: DeploymentConfig | None,
-        expected_profile: dict[str, object],
-    ) -> None:
-        """Missing deployment/catalog/warehouse leaves the profile unchanged."""
-        from floe_core.compilation.dbt_profiles import _apply_iceberg_attach
-
-        assert _apply_iceberg_attach({"type": "duckdb", "path": ":memory:"}, deployment) == (
-            expected_profile
-        )
-
-    def test_apply_iceberg_attach_rejects_non_list_attach(self) -> None:
-        """Existing non-list attach config is invalid instead of silently dropped."""
-        from floe_core.compilation.dbt_profiles import _apply_iceberg_attach
-
-        deployment = DeploymentConfig(
-            catalog=CatalogDeploymentBinding(
-                provider="polaris",
-                polaris=PolarisCatalogDeploymentBinding(
-                    storage_type="S3",
-                    warehouse="floe-demo",
-                    default_base_location="s3://floe-iceberg",
-                    allowed_locations=["s3://floe-iceberg"],
-                    endpoint="http://localhost:8181/api/catalog",
-                    endpoint_internal="http://floe-platform-polaris:8181/api/catalog",
-                    catalog_uri="http://floe-platform-polaris:8181/api/catalog",
-                    path_style_access=True,
-                    sts_unavailable=True,
-                ),
-            ),
-        )
-
-        with pytest.raises(ValueError, match="existing 'attach' value must be a list"):
-            _apply_iceberg_attach(
-                {"type": "duckdb", "path": ":memory:", "attach": {"path": "bad"}},
-                deployment,
-            )
-
-    def test_apply_iceberg_attach_preserves_existing_entries_without_duplicates(self) -> None:
-        """Existing extensions and attach entries stay first and are not duplicated."""
-        from floe_core.compilation.dbt_profiles import _apply_iceberg_attach
-
-        deployment = DeploymentConfig(
-            catalog=CatalogDeploymentBinding(
-                provider="polaris",
-                polaris=PolarisCatalogDeploymentBinding(
-                    storage_type="S3",
-                    warehouse="floe-demo",
-                    default_base_location="s3://floe-iceberg",
-                    allowed_locations=["s3://floe-iceberg"],
-                    endpoint="http://localhost:8181/api/catalog",
-                    endpoint_internal="http://floe-platform-polaris:8181/api/catalog",
-                    catalog_uri="http://floe-platform-polaris:8181/api/catalog",
-                    path_style_access=True,
-                    sts_unavailable=True,
-                ),
-            ),
-        )
-        attach_entry = {
-            "path": "floe-demo",
-            "alias": "iceberg",
-            "type": "iceberg",
-            "options": {"endpoint": "http://floe-platform-polaris:8181/api/catalog"},
-        }
-
-        profile = _apply_iceberg_attach(
-            {
-                "type": "duckdb",
-                "path": ":memory:",
-                "extensions": ["iceberg", "httpfs"],
-                "attach": [attach_entry],
-            },
-            deployment,
-        )
-
-        assert profile["extensions"] == ["iceberg", "httpfs"]
-        assert profile["attach"] == [attach_entry]
+        assert attach_entry in dev_output["attach"]
+        mock_compute_plugin.augment_dbt_profile.assert_called_once_with(base_profile, deployment)
 
 
 class TestCredentialPlaceholders:
@@ -457,6 +371,7 @@ class TestCredentialPlaceholders:
             "password": format_env_var_placeholder("SNOWFLAKE_PASSWORD"),
             "warehouse": "COMPUTE_WH",
         }
+        mock_plugin.augment_dbt_profile.side_effect = lambda profile, deployment=None: profile
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="snowflake", version="0.1.0", config=None),
@@ -499,6 +414,7 @@ class TestMultipleEnvironments:
             "path": ":memory:",
             "threads": 4,
         }
+        plugin.augment_dbt_profile.side_effect = lambda profile, deployment=None: profile
         return plugin
 
     @pytest.fixture
@@ -570,6 +486,7 @@ class TestPluginIntegration:
         mock_plugin = MagicMock()
         mock_plugin.name = "duckdb"
         mock_plugin.generate_dbt_profile.return_value = {"type": "duckdb"}
+        mock_plugin.augment_dbt_profile.side_effect = lambda profile, deployment=None: profile
 
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.1.0", config=None),
@@ -597,6 +514,7 @@ class TestPluginIntegration:
         mock_plugin = MagicMock()
         mock_plugin.name = "duckdb"
         mock_plugin.generate_dbt_profile.return_value = {"type": "duckdb"}
+        mock_plugin.augment_dbt_profile.side_effect = lambda profile, deployment=None: profile
 
         plugins = ResolvedPlugins(
             compute=PluginRef(
@@ -631,6 +549,7 @@ class TestPluginIntegration:
         mock_plugin = MagicMock()
         mock_plugin.name = "duckdb"
         mock_plugin.generate_dbt_profile.return_value = {"type": "duckdb"}
+        mock_plugin.augment_dbt_profile.side_effect = lambda profile, deployment=None: profile
 
         plugins = ResolvedPlugins(
             compute=PluginRef(

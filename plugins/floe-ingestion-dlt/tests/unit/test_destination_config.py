@@ -10,7 +10,19 @@ from typing import Any
 import pytest
 from floe_core.plugin_metadata import HealthState
 from floe_core.plugins.ingestion import IngestionConfig
-from floe_core.schemas.compiled_artifacts import DltIngestionBinding
+from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
+    DagsterStorageBinding,
+    DbtStorageBinding,
+    DltIngestionBinding,
+    IcebergRestCatalogBinding,
+    KubernetesSecretRef,
+    StorageCredentialBinding,
+    StorageDeploymentBinding,
+    StorageRuntimeBinding,
+    StorageServiceEndpoint,
+    StorageWarehouse,
+)
 
 import floe_ingestion_dlt.plugin as plugin_module
 from floe_ingestion_dlt.config import DltIngestionConfig, IngestionSourceConfig
@@ -83,6 +95,85 @@ def _partial_runtime_binding_model() -> DltIngestionBinding:
         destination="filesystem",
         table_format="iceberg",
         source_filesystem=binding["source_filesystem"],
+    )
+
+
+def _storage_deployment_binding() -> StorageDeploymentBinding:
+    return StorageDeploymentBinding(
+        provider="minio",
+        protocol="s3-compatible",
+        endpoint=StorageServiceEndpoint(
+            internal_url="http://runtime-minio:9000",
+            external_url="http://localhost:9000",
+            region="us-east-1",
+            warehouse_path="s3://runtime-warehouse",
+            path_style_access=True,
+        ),
+        warehouse=StorageWarehouse(uri="s3://runtime-warehouse", bucket="runtime-warehouse"),
+        credentials=StorageCredentialBinding(
+            mode="kubernetes-secret",
+            secret_ref=KubernetesSecretRef(
+                name="minio-credentials",
+                namespace="floe-system",
+                keys={
+                    "accessKeyId": "access-key-id",
+                    "secretAccessKey": "secret-access-key",  # pragma: allowlist secret
+                },
+            ),
+        ),
+        runtime=StorageRuntimeBinding(
+            env_refs={
+                "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+                "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+            }
+        ),
+        dbt=DbtStorageBinding(
+            profile_name="floe",
+            target_name="dev",
+            schema_name="analytics",
+        ),
+        dagster=DagsterStorageBinding(
+            resource_key="storage",
+            asset_io_manager_key="io_manager",
+        ),
+    )
+
+
+def test_build_deployment_binding_uses_catalog_iceberg_rest_projection() -> None:
+    """dlt consumes the neutral catalog endpoint, not provider internals."""
+    plugin = DltIngestionPlugin()
+    catalog = CatalogDeploymentBinding(
+        provider="future-catalog",
+        iceberg_rest=IcebergRestCatalogBinding(
+            catalog_name="future_catalog",
+            uri="http://future-catalog:8181/api/catalog",
+            warehouse="floe",
+        ),
+    )
+
+    binding = plugin.build_deployment_binding(
+        storage=_storage_deployment_binding(),
+        catalog=catalog,
+    )
+
+    assert binding.dlt.iceberg_catalog_env == {
+        "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME": "future_catalog",
+        "ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE": "rest",
+        "PYICEBERG_CATALOG__FUTURE_CATALOG__TYPE": "rest",
+        "PYICEBERG_CATALOG__FUTURE_CATALOG__URI": "http://future-catalog:8181/api/catalog",
+        "PYICEBERG_CATALOG__FUTURE_CATALOG__S3__ENDPOINT": "http://runtime-minio:9000",
+        "PYICEBERG_CATALOG__FUTURE_CATALOG__S3__REGION": "us-east-1",
+        "PYICEBERG_CATALOG__FUTURE_CATALOG__WAREHOUSE": "floe",
+        "PYICEBERG_CATALOG__FUTURE_CATALOG__S3__PATH_STYLE_ACCESS": "true",
+    }
+    assert binding.dlt.env_refs["PYICEBERG_CATALOG__FUTURE_CATALOG__CREDENTIAL"] == (
+        "FUTURE_CATALOG_CREDENTIAL"
+    )
+    assert binding.dlt.env_refs["PYICEBERG_CATALOG__FUTURE_CATALOG__SCOPE"] == (
+        "FUTURE_CATALOG_SCOPE"
+    )
+    assert binding.dlt.env_refs["PYICEBERG_CATALOG__FUTURE_CATALOG__OAUTH2_SERVER_URI"] == (
+        "FUTURE_CATALOG_OAUTH2_SERVER_URI"
     )
 
 

@@ -169,61 +169,23 @@ def _expand_product_placeholders(value: Any, product_name: str) -> Any:
     return value
 
 
-def _merge_unique_list(existing: Any, additions: list[str]) -> list[Any]:
-    """Return a list preserving existing order and adding missing values once."""
-    if isinstance(existing, list):
-        merged = list(existing)
-    elif existing is None:
-        merged = []
-    else:
-        merged = [existing]
-
-    for addition in additions:
-        if addition not in merged:
-            merged.append(addition)
-    return merged
-
-
-def _apply_iceberg_attach(
+def _apply_profile_fragment(
     profile_output: dict[str, Any],
-    deployment: DeploymentConfig | None,
+    profile_fragment: dict[str, Any],
+    env_refs: dict[str, str],
 ) -> dict[str, Any]:
-    """Add DuckDB Iceberg REST catalog attachment from compiled deployment state."""
-    if deployment is None or deployment.catalog is None:
-        return profile_output
-    if profile_output.get("type") != "duckdb":
-        return profile_output
-
-    polaris = deployment.catalog.polaris
-    if polaris.warehouse is None or polaris.catalog_uri is None:
-        return profile_output
-
-    attach_entry = {
-        "path": polaris.warehouse,
-        "alias": "iceberg",
-        "type": "iceberg",
-        "options": {"endpoint": polaris.catalog_uri},
-    }
-
-    updated = dict(profile_output)
-    updated["extensions"] = _merge_unique_list(updated.get("extensions"), ["httpfs", "iceberg"])
-
-    existing_attach = updated.get("attach")
-    if existing_attach is None:
-        attach = []
-    elif isinstance(existing_attach, list):
-        attach = list(existing_attach)
-    else:
-        msg = (
-            "DuckDB profile existing 'attach' value must be a list before "
-            "adding the Iceberg catalog attachment."
+    """Apply a neutral dbt profile fragment and env references."""
+    if profile_fragment:
+        profile_output = {
+            **profile_output,
+            **profile_fragment,
+        }
+    for profile_key, env_name in env_refs.items():
+        profile_output.setdefault(
+            profile_key,
+            format_env_var_placeholder(env_name),
         )
-        raise ValueError(msg)
-
-    if attach_entry not in attach:
-        attach.append(attach_entry)
-    updated["attach"] = attach
-    return updated
+    return profile_output
 
 
 def generate_dbt_profiles(
@@ -296,16 +258,22 @@ def generate_dbt_profiles(
         try:
             profile_output = plugin.generate_dbt_profile(compute_config)
             if storage_binding is not None:
-                profile_output = {
-                    **profile_output,
-                    **storage_binding.profile_fragment,
-                }
-                for profile_key, env_name in storage_binding.env_refs.items():
-                    profile_output.setdefault(
-                        profile_key,
-                        format_env_var_placeholder(env_name),
-                    )
-            profile_output = _apply_iceberg_attach(profile_output, deployment)
+                profile_output = _apply_profile_fragment(
+                    profile_output,
+                    storage_binding.profile_fragment,
+                    storage_binding.env_refs,
+                )
+            if (
+                deployment is not None
+                and deployment.catalog is not None
+                and deployment.catalog.dbt is not None
+            ):
+                profile_output = _apply_profile_fragment(
+                    profile_output,
+                    deployment.catalog.dbt.profile_fragment,
+                    deployment.catalog.dbt.env_refs,
+                )
+            profile_output = plugin.augment_dbt_profile(profile_output, deployment)
             outputs[env] = profile_output
         except Exception as e:
             logger.error(
