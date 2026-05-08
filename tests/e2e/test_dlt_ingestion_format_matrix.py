@@ -269,10 +269,8 @@ def _source_config(
 
 def _configure_plugin(
     source: IngestionSourceConfig,
-    catalog_config: dict[str, Any],
 ) -> DltIngestionPlugin:
     """Configure and start a dlt ingestion plugin for one source."""
-    _ = catalog_config
     plugin = DltIngestionPlugin()
     plugin.configure(DltIngestionConfig(sources=[source]))
     plugin.startup()
@@ -494,7 +492,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                     payload=_seed_payload(case),
                 )
 
-                plugin = _configure_plugin(source, catalog_config)
+                plugin = _configure_plugin(source)
                 result = _run_source(plugin, source, runtime_binding=runtime_binding)
                 assert result.success, result.errors
 
@@ -553,7 +551,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                 _purge_namespace(polaris_with_write_grants, namespace)
                 polaris_with_write_grants.create_namespace(namespace)
 
-                plugin = _configure_plugin(source, catalog_config)
+                plugin = _configure_plugin(source)
                 result = _run_source(plugin, source, runtime_binding=runtime_binding)
 
                 _assert_failed_with(result, "missing_object_source", f"s3://{bucket}/{prefix}/")
@@ -606,7 +604,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                     payload=b'{"event_id": "E001"}\n{"event_id": ',
                 )
 
-                plugin = _configure_plugin(source, catalog_config)
+                plugin = _configure_plugin(source)
                 result = _run_source(plugin, source, runtime_binding=runtime_binding)
 
                 _assert_failed_with(
@@ -669,7 +667,7 @@ class TestDltIngestionFormatMatrix(IntegrationTestBase):
                     ),
                 )
 
-                plugin = _configure_plugin(source, catalog_config)
+                plugin = _configure_plugin(source)
                 first_result = _run_source(plugin, source, runtime_binding=runtime_binding)
                 assert first_result.success, first_result.errors
 
