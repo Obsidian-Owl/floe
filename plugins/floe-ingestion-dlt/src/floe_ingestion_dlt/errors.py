@@ -155,11 +155,12 @@ class SourceConnectionError(IngestionError):
 
 
 class DestinationWriteError(IngestionError):
-    """Error writing data to the Iceberg destination.
+    """Error writing data through dlt's filesystem destination.
 
-    Raised when the dlt pipeline fails to write data to Iceberg tables.
-    The plugin catches the failure and wraps it in this error; Iceberg/dlt
-    handle transaction rollback via snapshot isolation (FR-057).
+    Raised when the dlt pipeline fails to write Iceberg-formatted tables
+    through the filesystem destination and catalog runtime binding. The plugin
+    catches the failure and wraps it in this error; Iceberg/dlt handle
+    transaction rollback via snapshot isolation (FR-057).
 
     Args:
         message: Human-readable error description.

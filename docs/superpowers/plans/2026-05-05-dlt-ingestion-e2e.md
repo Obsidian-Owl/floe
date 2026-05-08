@@ -1,6 +1,13 @@
 # dlt Ingestion E2E Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> Superseded cleanup note (2026-05-08): this historical plan predated the dlt
+> ingestion API cleanup. Do not use this document to reintroduce
+> ingestion-owned catalog config, destination config APIs, or direct native
+> Iceberg shortcut paths. Current implementation uses deployment runtime
+> bindings plus dlt's filesystem destination with Iceberg table format/catalog
+> settings.
 
 **Goal:** Make dlt ingestion a real compiled, orchestrated, and E2E-tested path for Customer 360 and common landed-file ingestion formats.
 
@@ -112,7 +119,7 @@ Expected: all new schema tests pass.
 Add tests proving:
 - A manifest-selected `plugins.ingestion.type: dlt` receives product `ingestion.sources`.
 - Compilation fails when `floe.yaml` declares ingestion sources but the manifest does not select an ingestion plugin.
-- Existing manifest-level ingestion config keys such as `catalog_config` and `retry_config` are preserved.
+- Existing manifest-level ingestion config keys such as `retry_config` are preserved, while stale ingestion-owned catalog config is rejected.
 - Serialized `CompiledArtifacts.plugins.ingestion.config.sources` is plain JSON and uses snake_case keys expected by `DltIngestionConfig`.
 
 Run:
@@ -376,9 +383,14 @@ Expected: all tests pass.
 - Add: `plugins/floe-ingestion-dlt/tests/unit/test_destination_config.py`
 - Add or modify: `plugins/floe-ingestion-dlt/tests/integration/test_dlt_iceberg_destination.py`
 
-- [ ] **Step 1: Write focused destination tests**
+- [ ] **Step 1: Write focused runtime-binding destination tests**
 
-Add unit tests for `get_destination_config()` that prove it returns the exact keys passed to `dlt.pipeline()` or dlt destination setup. The expected shape must reflect dlt's current Iceberg destination behavior: Iceberg support is backed by PyIceberg catalog configuration and object storage, not a product-level secret block.
+Superseded: do not add public destination config API tests. Add unit tests that
+prove dlt pipeline creation consumes deployment runtime bindings and passes the
+expected filesystem destination settings to dlt. The expected shape must reflect
+dlt's current filesystem destination behavior: Iceberg support is backed by
+PyIceberg catalog runtime binding and object storage, not a product-level secret
+block.
 
 Add an integration test that:
 - starts `DltIngestionPlugin`
@@ -461,9 +473,6 @@ plugins:
     type: dlt
     version: 0.1.0
     config:
-      catalog_config:
-        uri: http://polaris:8181/api/catalog
-        warehouse: floe
       retry_config:
         max_retries: 3
         initial_delay_seconds: 1.0

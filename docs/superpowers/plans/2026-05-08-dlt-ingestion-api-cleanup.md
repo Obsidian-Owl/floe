@@ -6,7 +6,7 @@
 
 **Architecture:** `floe.yaml` ingestion sources compile into explicit `IngestionOutputTable` state plus a secret-free `CompiledArtifacts.deployment.ingestion.dlt` runtime binding. dlt writes raw Iceberg tables through that binding; downstream platform consumers read the compiled ingestion table state instead of rediscovering dlt configuration. Storage and catalog remain the owners of infrastructure facts, while compute/dbt, validation, lineage, and observability translate those facts for their own domains.
 
-**Tech Stack:** Python 3.10+, Pydantic v2, dlt filesystem + Iceberg destination, PyIceberg, DuckDB/dbt-duckdb, Dagster, OpenTelemetry, OpenLineage, Polaris, MinIO/S3.
+**Tech Stack:** Python 3.10+, Pydantic v2, dlt filesystem + Iceberg-formatted filesystem destination, PyIceberg, DuckDB/dbt-duckdb, Dagster, OpenTelemetry, OpenLineage, Polaris, MinIO/S3.
 
 ---
 
@@ -1382,7 +1382,7 @@ Expected: commit succeeds.
 Run:
 
 ```bash
-rg -n "get_destination_config|plugins\\.ingestion\\.config\\.catalog_config|_bucket_url|dlt product ingestion requires an Iceberg destination catalog_config" \
+rg -n "get_destination_config|plugins\\.ingestion\\.config\\.catalog_config|_bucket_url|dlt product ingestion requires an Iceberg-formatted filesystem destination catalog_config" \
   packages/floe-core/src \
   packages/floe-core/tests \
   plugins/floe-ingestion-dlt/src \

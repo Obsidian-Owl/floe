@@ -1,5 +1,11 @@
 # dlt Ingestion E2E Design
 
+> Superseded cleanup note (2026-05-08): this historical design predated the
+> dlt ingestion API cleanup. Do not reintroduce ingestion-owned catalog config,
+> destination config APIs, or direct native Iceberg shortcut paths from
+> this document. Current implementation uses deployment runtime bindings plus
+> dlt's filesystem destination with Iceberg table format/catalog settings.
+
 ## Context
 
 Customer 360 currently proves the transform path through dbt seed data, but the
@@ -98,10 +104,10 @@ The source-construction layer should support:
 - write mode and schema contract forwarding to dlt.
 
 Before broad implementation, add a focused spike or executable guard for the
-actual dlt Iceberg destination configuration against Polaris. dlt's current
+actual dlt filesystem destination configuration against Polaris. dlt's current
 documentation describes Iceberg through the filesystem destination and
-PyIceberg catalog configuration, so implementation should not assume a generic
-`destination="iceberg"` shortcut.
+PyIceberg catalog runtime binding, so implementation should not assume a generic
+native Iceberg shortcut.
 
 ## Customer 360 Demo E2E
 

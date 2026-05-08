@@ -1,5 +1,11 @@
 # dlt Ingestion Composition Uplift Design
 
+> Superseded cleanup note (2026-05-08): this historical design captured the
+> transition away from duplicated ingestion-owned catalog fallback config. Do
+> not use any compatibility fallback option below as current implementation
+> guidance. The current contract rejects stale ingestion-owned catalog config
+> and uses deployment runtime bindings.
+
 ## Context
 
 The dlt ingestion E2E work was built before the storage and catalog composition

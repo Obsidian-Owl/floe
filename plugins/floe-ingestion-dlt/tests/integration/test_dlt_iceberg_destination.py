@@ -1,4 +1,4 @@
-"""dlt Iceberg destination integration tests."""
+"""dlt filesystem destination tests with Iceberg catalog runtime binding."""
 
 from __future__ import annotations
 

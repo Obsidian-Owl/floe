@@ -1,6 +1,12 @@
 # dlt Ingestion Composition Uplift Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> Superseded cleanup note (2026-05-08): this historical plan included
+> temporary compatibility fallback steps during the runtime-binding migration.
+> Do not use those fallback steps as current implementation guidance. The
+> current contract rejects stale ingestion-owned catalog config and keeps dlt
+> destination setup behind deployment runtime bindings.
 
 **Goal:** Move dlt ingestion off duplicated ingestion-owned catalog fallback config and onto secret-free storage/catalog/ingestion deployment bindings.
 

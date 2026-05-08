@@ -2,7 +2,8 @@
 
 This module implements the IngestionPlugin ABC using dlt (data load tool)
 as the ingestion framework. dlt supports REST APIs, SQL databases, and
-filesystem sources with Iceberg as the destination.
+filesystem sources that write through dlt's filesystem destination while
+Floe binds Iceberg table format and catalog runtime settings.
 
 The plugin runs in-process (is_external=False) and delegates data loading
 to dlt's pipeline execution engine.
@@ -97,7 +98,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
 
     Features:
         - REST API, SQL database, and filesystem source support
-        - Iceberg destination via Polaris REST catalog
+        - Filesystem destination with Iceberg table format and Polaris binding
         - Schema contract enforcement (evolve, freeze, discard_value)
         - Write modes: append, replace, merge
         - OTel tracing and structured logging

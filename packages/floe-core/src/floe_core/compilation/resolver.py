@@ -158,7 +158,23 @@ def resolve_ingestion_config(spec: FloeSpec, plugins: ResolvedPlugins) -> Resolv
         )
 
     existing_config = dict(plugins.ingestion.config or {})
-    existing_config.pop("catalog_config", None)
+    if "catalog_config" in existing_config:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=(
+                    "dlt ingestion config no longer accepts catalog_config; "
+                    "catalog and storage settings are supplied through deployment bindings"
+                ),
+                suggestion=("Remove plugins.ingestion.config.catalog_config from the manifest"),
+                context={
+                    "product": spec.metadata.name,
+                    "ingestion_plugin": plugins.ingestion.type,
+                    "config_key": "catalog_config",
+                },
+            )
+        )
     existing_config["sources"] = [
         _resolve_ingestion_source_config(source) for source in spec.ingestion.sources
     ]

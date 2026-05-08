@@ -137,22 +137,37 @@ def test_resolve_ingestion_config_fails_for_non_dlt_ingestion_plugin() -> None:
     }
 
 
-def test_resolve_ingestion_config_does_not_validate_destination_catalog_config() -> None:
-    """Destination compatibility is handled by deployment composition."""
+def test_resolve_ingestion_config_rejects_stale_catalog_config() -> None:
+    """Stale ingestion catalog config is rejected instead of silently stripped."""
+    from floe_core.compilation.errors import CompilationException
     from floe_core.compilation.resolver import resolve_ingestion_config
 
     plugins = ResolvedPlugins(
         compute=PluginRef(type="duckdb", version="0.9.0", config={}),
         orchestrator=PluginRef(type="dagster", version="1.5.0", config={}),
-        ingestion=PluginRef(type="dlt", version="0.1.0", config={}),
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "catalog_config": {
+                    "uri": "http://polaris:8181/api/catalog",
+                    "warehouse": "floe",
+                    "bucket": "floe-iceberg",
+                }
+            },
+        ),
     )
 
-    resolved = resolve_ingestion_config(_spec_with_ingestion(), plugins)
+    with pytest.raises(CompilationException) as exc_info:
+        resolve_ingestion_config(_spec_with_ingestion(), plugins)
 
-    assert resolved.ingestion is not None
-    assert resolved.ingestion.config is not None
-    assert resolved.ingestion.config["sources"][0]["source_type"] == "filesystem"
-    assert "catalog_config" not in resolved.ingestion.config
+    assert exc_info.value.error.code == "E201"
+    assert "catalog_config" in exc_info.value.error.message
+    assert exc_info.value.error.context == {
+        "product": "orders-product",
+        "ingestion_plugin": "dlt",
+        "config_key": "catalog_config",
+    }
 
 
 def test_compile_pipeline_merges_product_ingestion_sources(
@@ -212,10 +227,6 @@ plugins:
   ingestion:
     type: dlt
     config:
-      catalog_config:
-        uri: http://polaris:8181/api/catalog
-        warehouse: floe
-        bucket: floe-iceberg
       retry_config:
         max_retries: 5
         initial_delay_seconds: 2.0
@@ -332,13 +343,7 @@ def test_manifest_selected_dlt_receives_product_ingestion_sources() -> None:
             "ingestion": {
                 "type": "dlt",
                 "version": "0.1.0",
-                "config": {
-                    "catalog_config": {
-                        "uri": "http://polaris:8181/api/catalog",
-                        "warehouse": "floe",
-                        "bucket": "floe-iceberg",
-                    }
-                },
+                "config": {"retry_config": {"max_retries": 3}},
             },
         },
     )
@@ -348,4 +353,66 @@ def test_manifest_selected_dlt_receives_product_ingestion_sources() -> None:
     assert resolved.ingestion is not None
     assert resolved.ingestion.config is not None
     assert "catalog_config" not in resolved.ingestion.config
+    assert resolved.ingestion.config["retry_config"] == {"max_retries": 3}
     assert resolved.ingestion.config["sources"][0]["source_type"] == "filesystem"
+
+
+def test_compile_pipeline_rejects_stale_ingestion_catalog_config(
+    tmp_path: Path,
+    patch_version_compat: Any,
+    mock_compute_plugin: Any,
+) -> None:
+    """Compilation rejects stale dlt catalog config in manifest ingestion config."""
+    _ = (patch_version_compat, mock_compute_plugin)
+
+    from floe_core.compilation.errors import CompilationException
+    from floe_core.compilation.stages import compile_pipeline
+
+    spec_path = tmp_path / "floe.yaml"
+    spec_path.write_text(
+        """
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: orders-product
+  version: 1.0.0
+transforms:
+  - name: orders
+ingestion:
+  sources:
+    - name: orders_csv
+      sourceType: filesystem
+      format: csv
+      path: data/orders.csv
+      destinationTable: bronze.orders
+"""
+    )
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text(
+        """
+apiVersion: floe.dev/v1
+kind: Manifest
+metadata:
+  name: test-platform
+  version: 1.0.0
+  owner: test@example.com
+plugins:
+  compute:
+    type: duckdb
+  orchestrator:
+    type: dagster
+  ingestion:
+    type: dlt
+    config:
+      catalog_config:
+        uri: http://polaris:8181/api/catalog
+        warehouse: floe
+        bucket: floe-iceberg
+"""
+    )
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(spec_path, manifest_path, emit_lineage=False)
+
+    assert exc_info.value.error.code == "E201"
+    assert "catalog_config" in exc_info.value.error.message
