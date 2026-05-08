@@ -149,16 +149,18 @@ def test_main_reset_only_drops_without_validating_and_prints_diagnostics(
         *,
         artifacts: CompiledArtifacts,
         expected_tables: list[str] | None,
+        include_ingestion: bool,
     ) -> list[str]:
-        calls.append(("reset", (artifacts, expected_tables)))
+        calls.append(("reset", (artifacts, expected_tables, include_ingestion)))
         return ["customer_360.mart_customer_360"]
 
     def validate_outputs(
         *,
         artifacts: CompiledArtifacts,
         expected_tables: list[str] | None,
+        include_ingestion: bool,
     ) -> iceberg_outputs.IcebergOutputValidationResult:
-        calls.append(("validate", (artifacts, expected_tables)))
+        calls.append(("validate", (artifacts, expected_tables, include_ingestion)))
         return iceberg_outputs.IcebergOutputValidationResult(
             expected_table_names=["customer_360.mart_customer_360"],
             table_names=["customer_360.mart_customer_360"],
@@ -187,6 +189,7 @@ def test_main_reset_only_drops_without_validating_and_prints_diagnostics(
 
     payload = json.loads(capsys.readouterr().out)
     assert [name for name, _value in calls] == ["load", "reset"]
+    assert calls[1][1] == (artifacts, ["mart_customer_360"], False)
     assert payload["action"] == "reset"
     assert payload["recovery_mode"] == "reset"
     assert payload["dropped_tables"] == ["customer_360.mart_customer_360"]

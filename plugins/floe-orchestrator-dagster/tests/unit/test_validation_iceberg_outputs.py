@@ -17,6 +17,7 @@ from floe_core.schemas.compiled_artifacts import (
     DagsterStorageBinding,
     DbtStorageBinding,
     DeploymentConfig,
+    IngestionOutputTable,
     KubernetesSecretRef,
     ObservabilityConfig,
     PluginRef,
@@ -125,6 +126,29 @@ def test_expected_iceberg_tables_fails_when_transforms_missing() -> None:
 
     with pytest.raises(RuntimeError, match="CompiledArtifacts has no transforms"):
         expected_iceberg_tables(artifacts)
+
+
+@pytest.mark.requirement("ALPHA-ICEBERG")
+def test_expected_iceberg_tables_includes_ingestion_outputs_when_requested() -> None:
+    """Callers can opt into validating compiled ingestion output tables."""
+    artifacts = _make_artifacts(transforms=None).model_copy(
+        update={
+            "ingestion_outputs": [
+                IngestionOutputTable(
+                    source_name="raw-transactions",
+                    source_type="filesystem",
+                    logical_table="bronze.raw_transactions",
+                    physical_table="bronze.raw_transactions",
+                    file_format="csv",
+                    source_path="./seeds/raw_transactions.csv",
+                    write_mode="replace",
+                    schema_contract="evolve",
+                )
+            ]
+        }
+    )
+
+    assert expected_iceberg_tables(artifacts, include_ingestion=True) == ["bronze.raw_transactions"]
 
 
 @pytest.mark.requirement("ALPHA-ICEBERG")
