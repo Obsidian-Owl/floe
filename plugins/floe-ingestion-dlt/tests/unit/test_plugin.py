@@ -270,13 +270,16 @@ class TestRunPipeline:
     def test_run_filesystem_empty_source_returns_failure(
         self, dlt_plugin: DltIngestionPlugin
     ) -> None:
-        """Filesystem batch sources fail when dlt reports no loaded data."""
+        """Filesystem batch sources fail when source preflight found no files."""
         mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
+        missing_source = SimpleNamespace(
+            _floe_filesystem_source_probe=SimpleNamespace(matched=False)
+        )
 
         result = dlt_plugin.run(
             mock_pipeline,
-            source=[],
+            source=missing_source,
             write_disposition="append",
             source_type="filesystem",
             source_name="missing_object_source",
@@ -288,7 +291,29 @@ class TestRunPipeline:
         assert result.errors is not None
         assert "missing_object_source" in result.errors[0]
         assert "s3://raw/landing/missing/" in result.errors[0]
-        assert "matched no rows" in result.errors[0]
+        assert "matched no files" in result.errors[0]
+        mock_pipeline.run.assert_not_called()
+
+    @pytest.mark.requirement("4F-FR-015")
+    def test_run_filesystem_zero_metrics_without_probe_succeeds(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Filesystem metrics absence alone must not be treated as missing input."""
+        mock_pipeline = _bound_mock_pipeline()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        result = dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+            source_type="filesystem",
+            source_name="empty_metrics_source",
+            source_path="s3://raw/landing/customers.csv",
+        )
+
+        assert result.success is True
+        assert result.rows_loaded == 0
+        assert not result.errors
 
     @pytest.mark.requirement("4F-FR-015")
     def test_run_filesystem_zero_rows_with_written_bytes_succeeds(

@@ -138,6 +138,15 @@ dagster:
                     key: root-password
               - name: AWS_REGION
                 value: us-east-1
+              - name: POLARIS_CREDENTIAL
+                valueFrom:
+                  secretKeyRef:
+                    name: floe-platform-polaris-credentials
+                    key: POLARIS_CREDENTIAL
+              - name: POLARIS_SCOPE
+                value: PRINCIPAL_ROLE:ALL
+              - name: POLARIS_OAUTH2_SERVER_URI
+                value: http://floe-platform-polaris:8181/api/catalog/v1/oauth/tokens
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: false

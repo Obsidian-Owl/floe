@@ -49,7 +49,7 @@ tests:
           path: data["dagster.yaml"]
           pattern: 'hostname: ""'
 
-  - it: should inject MinIO credentials into test run pods
+  - it: should inject storage and catalog credentials into test run pods
     values:
       - ../values-test.yaml
     asserts:
@@ -70,6 +70,21 @@ tests:
       - matchRegex:
           path: data["dagster.yaml"]
           pattern: "key: root-password"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "name: POLARIS_CREDENTIAL"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "name: floe-platform-polaris-credentials"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "key: POLARIS_CREDENTIAL"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "name: POLARIS_OAUTH2_SERVER_URI"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "name: POLARIS_SCOPE"
 
   - it: should size test run pods for dbt and dlt workloads
     values:

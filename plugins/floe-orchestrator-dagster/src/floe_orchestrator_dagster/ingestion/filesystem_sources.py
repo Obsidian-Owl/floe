@@ -72,6 +72,13 @@ class _FilesystemTarget:
     file_glob: str
 
 
+@dataclass(frozen=True)
+class _FilesystemSourceProbe:
+    bucket_url: str
+    file_glob: str
+    matched: bool | None
+
+
 def build_filesystem_source(
     source_config: Mapping[str, Any],
     *,
@@ -109,11 +116,17 @@ def build_filesystem_source(
         target.bucket_url,
         filesystem_config=filesystem_config or {},
     )
+    source_probe = _filesystem_source_probe(
+        target,
+        credentials=credentials,
+    )
     if credentials:
         filesystem_kwargs["credentials"] = credentials
     filesystem_resource = filesystem(**filesystem_kwargs)
     dlt_resource = filesystem_resource | readers[file_format](**reader_options)
-    return dlt_resource.with_name(table_name).apply_hints(table_name=table_name)
+    dlt_resource = dlt_resource.with_name(table_name).apply_hints(table_name=table_name)
+    _attach_filesystem_source_probe(dlt_resource, source_probe)
+    return dlt_resource
 
 
 def _source_name(source_config: Mapping[str, Any]) -> str:
@@ -254,6 +267,96 @@ def _object_store_credentials(
     if path_style:
         credentials["s3_url_style"] = "path"
     return credentials
+
+
+def _filesystem_source_probe(
+    target: _FilesystemTarget,
+    *,
+    credentials: Mapping[str, str],
+) -> _FilesystemSourceProbe:
+    """Probe whether the configured filesystem target matches at least one file."""
+    matched = _local_filesystem_match(target)
+    if matched is None:
+        matched = _object_store_match(target, credentials=credentials)
+    return _FilesystemSourceProbe(
+        bucket_url=target.bucket_url,
+        file_glob=target.file_glob,
+        matched=matched,
+    )
+
+
+def _local_filesystem_match(target: _FilesystemTarget) -> bool | None:
+    if urlsplit(target.bucket_url).scheme:
+        return None
+    bucket_path = Path(target.bucket_url)
+    return any(path.is_file() for path in bucket_path.glob(target.file_glob))
+
+
+def _object_store_match(
+    target: _FilesystemTarget,
+    *,
+    credentials: Mapping[str, str],
+) -> bool | None:
+    if urlsplit(target.bucket_url).scheme != "s3":
+        return None
+
+    try:
+        from fsspec.core import url_to_fs
+    except ImportError:
+        return None
+
+    storage_options = _fsspec_s3_storage_options(credentials)
+    try:
+        fs, glob_path = url_to_fs(
+            _join_filesystem_glob(target.bucket_url, target.file_glob),
+            **storage_options,
+        )
+        return any(not fs.isdir(path) for path in fs.glob(glob_path))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _fsspec_s3_storage_options(credentials: Mapping[str, str]) -> dict[str, Any]:
+    storage_options: dict[str, Any] = {}
+    access_key = credentials.get("aws_access_key_id")
+    if access_key:
+        storage_options["key"] = access_key
+    secret_key = credentials.get("aws_secret_access_key")
+    if secret_key:
+        storage_options["secret"] = secret_key
+    session_token = credentials.get("aws_session_token")
+    if session_token:
+        storage_options["token"] = session_token
+
+    client_kwargs: dict[str, str] = {}
+    endpoint_url = credentials.get("endpoint_url")
+    if endpoint_url:
+        client_kwargs["endpoint_url"] = endpoint_url
+    region_name = credentials.get("region_name")
+    if region_name:
+        client_kwargs["region_name"] = region_name
+    if client_kwargs:
+        storage_options["client_kwargs"] = client_kwargs
+    config_kwargs: dict[str, Any] = {
+        "connect_timeout": 1,
+        "read_timeout": 1,
+        "retries": {"max_attempts": 1},
+    }
+    if credentials.get("s3_url_style") == "path":
+        config_kwargs["s3"] = {"addressing_style": "path"}
+    storage_options["config_kwargs"] = config_kwargs
+    return storage_options
+
+
+def _join_filesystem_glob(bucket_url: str, file_glob: str) -> str:
+    return f"{bucket_url.rstrip('/')}/{file_glob.lstrip('/')}"
+
+
+def _attach_filesystem_source_probe(dlt_resource: Any, probe: _FilesystemSourceProbe) -> None:
+    try:
+        dlt_resource._floe_filesystem_source_probe = probe
+    except Exception:  # noqa: BLE001
+        return
 
 
 def _first_config_value(config: Mapping[str, Any], *keys: str) -> Any | None:

@@ -647,6 +647,32 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             write_mode=write_disposition,
         ) as span:
             try:
+                if source_type == "filesystem" and self._filesystem_source_matched(source) is False:
+                    elapsed = time.perf_counter() - start_time
+                    empty_source_error = RuntimeError("filesystem source matched no files")
+                    error_msg = self._with_source_error_context(
+                        str(empty_source_error),
+                        source_name=source_name,
+                        source_path=source_path,
+                    )
+                    record_ingestion_error(span, empty_source_error, category="permanent")
+                    logger.error(
+                        "pipeline_run_empty_filesystem_source",
+                        pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
+                        source_name=source_name,
+                        source_path=source_path,
+                        error=error_msg,
+                        error_category="permanent",
+                        duration_seconds=elapsed,
+                    )
+                    return IngestionResult(
+                        success=False,
+                        rows_loaded=0,
+                        bytes_written=0,
+                        duration_seconds=elapsed,
+                        errors=[error_msg],
+                    )
+
                 # Prepare pipeline.run() kwargs
                 run_kwargs = {
                     "write_disposition": write_disposition,
@@ -687,31 +713,6 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                                         for table_metric in job.table_metrics.values():
                                             rows_loaded += getattr(table_metric, "items_count", 0)
                                             bytes_written += getattr(table_metric, "file_size", 0)
-
-                if source_type == "filesystem" and rows_loaded == 0 and bytes_written == 0:
-                    empty_source_error = RuntimeError("filesystem source matched no rows")
-                    error_msg = self._with_source_error_context(
-                        str(empty_source_error),
-                        source_name=source_name,
-                        source_path=source_path,
-                    )
-                    record_ingestion_error(span, empty_source_error, category="permanent")
-                    logger.error(
-                        "pipeline_run_empty_filesystem_source",
-                        pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
-                        source_name=source_name,
-                        source_path=source_path,
-                        error=error_msg,
-                        error_category="permanent",
-                        duration_seconds=elapsed,
-                    )
-                    return IngestionResult(
-                        success=False,
-                        rows_loaded=0,
-                        bytes_written=bytes_written,
-                        duration_seconds=elapsed,
-                        errors=[error_msg],
-                    )
 
                 result = IngestionResult(
                     success=True,
@@ -811,6 +812,12 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         if not context:
             return sanitize_error_message(error_msg, max_length=max_length)
         return sanitize_error_message(f"{', '.join(context)}: {error_msg}", max_length=max_length)
+
+    @staticmethod
+    def _filesystem_source_matched(source: Any) -> bool | None:
+        probe = getattr(source, "_floe_filesystem_source_probe", None)
+        matched = getattr(probe, "matched", None)
+        return matched if isinstance(matched, bool) else None
 
     @staticmethod
     def _pipeline_runtime_binding(config: IngestionConfig) -> dict[str, Any]:

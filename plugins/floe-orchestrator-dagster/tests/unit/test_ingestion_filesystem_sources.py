@@ -153,6 +153,10 @@ def test_build_filesystem_source_normalizes_local_paths_relative_to_project_dir(
     """Relative local source paths are resolved below the supplied project dir."""
     from floe_orchestrator_dagster.ingestion import build_filesystem_source
 
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "customers.csv").write_text("id,name\n1,Ada\n", encoding="utf-8")
+
     source = build_filesystem_source(
         _source_config(path="data/customers.csv"),
         project_dir=tmp_path,
@@ -161,7 +165,24 @@ def test_build_filesystem_source_normalizes_local_paths_relative_to_project_dir(
     assert source.parent is not None
     assert source.parent.kwargs["bucket_url"] == str(tmp_path / "data")
     assert source.parent.kwargs["file_glob"] == "customers.csv"
+    assert source._floe_filesystem_source_probe.matched is True
     assert fake_filesystem_module.calls[0][0] == "filesystem"
+
+
+def test_build_filesystem_source_marks_missing_local_files(
+    tmp_path: Path,
+    fake_filesystem_module: FakeFilesystemModule,
+) -> None:
+    """Missing source files are attached to the dlt resource as probe metadata."""
+    from floe_orchestrator_dagster.ingestion import build_filesystem_source
+
+    source = build_filesystem_source(
+        _source_config(path="data/missing.csv"),
+        project_dir=tmp_path,
+    )
+
+    assert source._floe_filesystem_source_probe.matched is False
+    assert source._floe_filesystem_source_probe.file_glob == "missing.csv"
 
 
 def test_build_filesystem_source_uses_directory_path_as_bucket_url(
@@ -250,6 +271,64 @@ def test_build_filesystem_source_wires_s3_config_from_platform_and_env(
         },
     }
     assert fake_filesystem_module.calls[0] == ("filesystem", source.parent.kwargs)
+
+
+def test_build_filesystem_source_attaches_false_probe_for_empty_s3_glob(
+    tmp_path: Path,
+    fake_filesystem_module: FakeFilesystemModule,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Object-store preflight records when no landed files match the source glob."""
+    from floe_orchestrator_dagster.ingestion import build_dlt_source
+
+    class EmptyFilesystem:
+        def glob(self, _path: str) -> list[str]:
+            return []
+
+        def isdir(self, _path: str) -> bool:
+            return False
+
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_url_to_fs(url: str, **storage_options: Any) -> tuple[EmptyFilesystem, str]:
+        calls.append((url, storage_options))
+        return EmptyFilesystem(), "raw/customers/*.csv"
+
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "env-access")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "env-secret")  # pragma: allowlist secret
+    monkeypatch.setattr("fsspec.core.url_to_fs", fake_url_to_fs)
+
+    source = build_dlt_source(
+        _source_config(path="s3://raw/customers/", extra_source_config={"file_glob": "*.csv"}),
+        project_dir=tmp_path,
+        filesystem_config={
+            "endpoint_url": "http://minio:9000",
+            "region_name": "us-east-1",
+            "s3_url_style": "path",
+        },
+    )
+
+    assert source._floe_filesystem_source_probe.matched is False
+    assert calls == [
+        (
+            "s3://raw/customers/*.csv",
+            {
+                "key": "env-access",
+                "secret": "env-secret",  # pragma: allowlist secret
+                "client_kwargs": {
+                    "endpoint_url": "http://minio:9000",
+                    "region_name": "us-east-1",
+                },
+                "config_kwargs": {
+                    "connect_timeout": 1,
+                    "read_timeout": 1,
+                    "retries": {"max_attempts": 1},
+                    "s3": {"addressing_style": "path"},
+                },
+            },
+        )
+    ]
+    assert fake_filesystem_module.calls[0][0] == "filesystem"
 
 
 def test_build_filesystem_source_uses_binding_source_filesystem_config(
