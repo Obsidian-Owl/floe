@@ -469,16 +469,35 @@ class TestResolvedPluginsContract:
 
     @pytest.mark.requirement("2B-FR-004")
     def test_optional_plugins_contract(self) -> None:
-        """Contract: catalog, storage, ingestion, semantic are optional."""
+        """Contract: non-required plugins are optional."""
         plugins = ResolvedPlugins(
             compute=PluginRef(type="duckdb", version="0.9.0"),
             orchestrator=PluginRef(type="dagster", version="1.5.0"),
-            # catalog, storage, ingestion, semantic not provided
+            # Optional plugin refs not provided
         )
         assert plugins.catalog is None
         assert plugins.storage is None
         assert plugins.ingestion is None
         assert plugins.semantic is None
+        assert plugins.secrets is None
+        assert plugins.identity is None
+
+    @pytest.mark.requirement("2B-FR-004")
+    def test_security_plugin_refs_contract(self) -> None:
+        """Contract: secrets and identity refs use the standard PluginRef shape."""
+        plugins = ResolvedPlugins(
+            compute=PluginRef(type="duckdb", version="0.9.0"),
+            orchestrator=PluginRef(type="dagster", version="1.5.0"),
+            secrets=PluginRef(type="k8s", version="0.1.0", config={"namespace": "floe-system"}),
+            identity=PluginRef(type="keycloak", version="0.1.0", config={"realm": "floe"}),
+        )
+
+        assert plugins.secrets is not None
+        assert plugins.secrets.type == "k8s"
+        assert plugins.secrets.config == {"namespace": "floe-system"}
+        assert plugins.identity is not None
+        assert plugins.identity.type == "keycloak"
+        assert plugins.identity.config == {"realm": "floe"}
 
 
 class TestPluginRefContract:

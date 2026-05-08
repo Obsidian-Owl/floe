@@ -24,9 +24,9 @@ from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 from floe_core.schemas.data_contract import DataContract
 from floe_core.schemas.quality_config import QualityConfig
@@ -46,17 +46,59 @@ _SECRET_FIELD_MARKERS = (
     "access-key",
     "access_key",
     "accesskey",
+    "bearer",
     "credential",
     "password",
+    "private-key",
+    "private_key",
+    "privatekey",
     "secret",
     "token",
 )
 _SECRET_VALUE_MARKERS = (
+    "bearer",
     "password",
+    "private-key",
+    "private_key",
+    "privatekey",
     "raw-secret-value",
     "secret-value",
     "token",
 )
+_PLUGIN_CONFIG_SECRET_FIELDS = frozenset(
+    {
+        "accesskey",
+        "apikey",
+        "apitoken",
+        "bearertoken",
+        "clientsecret",
+        "clienttoken",
+        "password",
+        "privatekey",
+        "refreshtoken",
+        "secret",
+        "secretaccesskey",
+        "secretkey",
+        "token",
+    }
+)
+_DEFAULT_ADMIN_CREDENTIAL_PATTERN = re.compile(r"(?<![a-z0-9])[a-z0-9_-]*admin[0-9]*(?![a-z0-9])")
+_DBT_ENV_VAR_REFERENCE_PATTERN = re.compile(
+    r"\{\{\s*env_var\(\s*['\"][A-Za-z_][A-Za-z0-9_]*['\"]"
+    r"(?:\s*,\s*['\"][^'\"]*['\"])?\s*\)\s*\}\}"
+)
+_URL_CREDENTIAL_QUERY_KEYS = frozenset(
+    {
+        "accesskey",
+        "accesstoken",
+        "apikey",
+        "clientsecret",
+        "password",
+        "secret",
+        "token",
+    }
+)
+_OMIT_PLUGIN_CONFIG_VALUE = object()
 _INGESTION_OUTPUT_SOURCE_PATH_SECRET_MARKERS = (
     "credential",
     "credentials",
@@ -78,7 +120,6 @@ _DLT_FILESYSTEM_CREDENTIAL_KEYS = frozenset(
         "s3_url_style",
     }
 )
-_DEFAULT_ADMIN_CREDENTIAL_PATTERN = re.compile(r"(?<![a-z0-9])[a-z0-9_-]*admin[0-9]*(?![a-z0-9])")
 
 
 def _validate_configmap_name(name: str) -> str:
@@ -126,7 +167,11 @@ def _validate_kubernetes_namespace(namespace: str) -> str:
 
 
 def _assert_no_secret_material(value: Any, path: str) -> None:
-    """Reject raw credential-looking fields in serialized artifact fragments."""
+    """Reject raw credential-looking fields in serialized artifact fragments.
+
+    Key names are the primary guard. String value checks are best-effort coverage
+    for obvious fixture and default credential values.
+    """
     if isinstance(value, dict):
         for key, child in value.items():
             key_text = str(key).lower()
@@ -163,6 +208,148 @@ def _assert_no_secret_material(value: Any, path: str) -> None:
             "use JSON-compatible dict, list, string, number, boolean, or null values"
         )
         raise ValueError(msg)
+
+
+def _is_dbt_env_var_reference(value: Any) -> bool:
+    """Return True when a dbt profile value is an env_var reference."""
+    return (
+        isinstance(value, str)
+        and _DBT_ENV_VAR_REFERENCE_PATTERN.fullmatch(value.strip()) is not None
+    )
+
+
+def _is_non_secret_endpoint_url(value: str) -> bool:
+    """Return True for endpoint URLs whose structure does not embed credentials."""
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False
+    if parsed.username or parsed.password:
+        return False
+    if parsed.fragment:
+        return False
+
+    query_params = parse_qsl(parsed.query, keep_blank_values=True)
+    query_keys = {re.sub(r"[^a-z0-9]", "", key.lower()) for key, _ in query_params}
+    if query_keys & _URL_CREDENTIAL_QUERY_KEYS:
+        return False
+
+    for _, query_value in query_params:
+        value_text = query_value.lower()
+        if any(marker in value_text for marker in _SECRET_VALUE_MARKERS) or (
+            _DEFAULT_ADMIN_CREDENTIAL_PATTERN.search(value_text) is not None
+        ):
+            return False
+    return True
+
+
+def _assert_no_dbt_profile_secret_material(value: Any, path: str) -> None:
+    """Reject raw dbt profile credentials while allowing env_var references."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key).lower()
+            child_path = f"{path}.{key}"
+            if key_text == "secrets" and isinstance(child, list):
+                for index, secret_entry in enumerate(child):
+                    _assert_no_dbt_profile_secret_material(secret_entry, f"{child_path}[{index}]")
+                continue
+            if key_text == "secret" and isinstance(child, str):
+                child_text = child.lower()
+                if not any(marker in child_text for marker in _SECRET_VALUE_MARKERS) and (
+                    _DEFAULT_ADMIN_CREDENTIAL_PATTERN.search(child_text) is None
+                ):
+                    continue
+            if any(marker in key_text for marker in _SECRET_FIELD_MARKERS):
+                if _is_dbt_env_var_reference(child) or (
+                    isinstance(child, str) and _is_non_secret_endpoint_url(child)
+                ):
+                    continue
+                msg = (
+                    f"{child_path} looks like raw credential material; use dbt env_var() "
+                    "references instead"
+                )
+                raise ValueError(msg)
+            _assert_no_dbt_profile_secret_material(child, child_path)
+        return
+
+    if isinstance(value, list | tuple | set | frozenset):
+        for index, child in enumerate(value):
+            _assert_no_dbt_profile_secret_material(child, f"{path}[{index}]")
+        return
+
+    if _is_dbt_env_var_reference(value):
+        return
+    if isinstance(value, str) and _is_non_secret_endpoint_url(value):
+        return
+
+    _assert_no_secret_material(value, path)
+
+
+def _normalize_plugin_config_key(key: object) -> str:
+    """Normalize a plugin config key for credential-field detection."""
+    return re.sub(r"[^a-z0-9]", "", str(key).lower())
+
+
+def _assert_no_plugin_ref_secret_material(value: Any, path: str) -> None:
+    """Reject raw credential fields while allowing secret reference names."""
+    if isinstance(value, SecretStr):
+        msg = (
+            f"{path} looks like raw credential material; use connection_secret_ref "
+            "or provider-owned secret references instead"
+        )
+        raise ValueError(msg)
+
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if _normalize_plugin_config_key(key) in _PLUGIN_CONFIG_SECRET_FIELDS:
+                msg = (
+                    f"{child_path} looks like raw credential material; use connection_secret_ref "
+                    "or provider-owned secret references instead"
+                )
+                raise ValueError(msg)
+            _assert_no_plugin_ref_secret_material(child, child_path)
+        return
+
+    if isinstance(value, list | tuple | set | frozenset):
+        for index, child in enumerate(value):
+            _assert_no_plugin_ref_secret_material(child, f"{path}[{index}]")
+        return
+
+    if isinstance(value, str | int | float | bool | type(None)):
+        return
+
+    if isinstance(value, Iterable):
+        msg = (
+            f"{path} contains unsupported plugin config type {type(value).__name__}; "
+            "use JSON-compatible dict, list, string, number, boolean, or null values"
+        )
+        raise ValueError(msg)
+
+
+def sanitize_plugin_config_for_artifact(value: Any) -> Any:
+    """Return a JSON-compatible plugin config projection without raw credentials."""
+    if isinstance(value, SecretStr):
+        return _OMIT_PLUGIN_CONFIG_VALUE
+
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, child in value.items():
+            if _normalize_plugin_config_key(key) in _PLUGIN_CONFIG_SECRET_FIELDS:
+                continue
+            sanitized_child = sanitize_plugin_config_for_artifact(child)
+            if sanitized_child is not _OMIT_PLUGIN_CONFIG_VALUE:
+                sanitized[str(key)] = sanitized_child
+        return sanitized
+
+    if isinstance(value, list | tuple | set | frozenset):
+        sanitized_items = []
+        for child in value:
+            sanitized_child = sanitize_plugin_config_for_artifact(child)
+            if sanitized_child is not _OMIT_PLUGIN_CONFIG_VALUE:
+                sanitized_items.append(sanitized_child)
+        return sanitized_items
+
+    return value
 
 
 def _assert_json_compatible_fragment(value: Any, path: str) -> None:
@@ -363,6 +550,13 @@ class PluginRef(BaseModel):
         examples=[{"threads": 4, "memory_limit": "8GB"}],
     )
 
+    @model_validator(mode="after")
+    def validate_secret_free_config(self) -> PluginRef:
+        """Ensure resolved plugin refs do not serialize raw credential material."""
+        if self.config is not None:
+            _assert_no_plugin_ref_secret_material(self.config, f"plugins.{self.type}.config")
+        return self
+
 
 class ResolvedPlugins(BaseModel):
     """Resolved plugin selections after inheritance.
@@ -378,6 +572,8 @@ class ResolvedPlugins(BaseModel):
         storage: Resolved storage plugin (optional)
         ingestion: Resolved ingestion plugin (optional)
         semantic: Resolved semantic layer plugin (optional)
+        secrets: Resolved secrets plugin (optional)
+        identity: Resolved identity plugin (optional)
 
     Example:
         >>> plugins = ResolvedPlugins(
@@ -422,6 +618,14 @@ class ResolvedPlugins(BaseModel):
         default=None,
         description="Resolved lineage backend plugin (optional, v0.5.0+)",
     )
+    secrets: PluginRef | None = Field(
+        default=None,
+        description="Resolved secrets plugin (optional)",
+    )
+    identity: PluginRef | None = Field(
+        default=None,
+        description="Resolved identity plugin (optional)",
+    )
 
 
 class KubernetesSecretRef(BaseModel):
@@ -451,16 +655,23 @@ class CredentialRef(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    source: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
+    source: Literal[
+        "kubernetes-secret",
+        "environment",
+        "workload-identity",
+        "external-secret-sync",
+        "csi-secret-volume",
+        "none",
+    ]
     name: NonEmptyString
     key: NonEmptyString | None = None
 
     @model_validator(mode="after")
     def validate_key_for_source(self) -> CredentialRef:
-        """Ensure only Kubernetes Secret credential refs carry key names."""
-        if self.source == "kubernetes-secret":
+        """Ensure only secret-backed credential refs carry key names."""
+        if self.source in {"kubernetes-secret", "external-secret-sync", "csi-secret-volume"}:
             if self.key is None:
-                msg = "kubernetes-secret credential ref requires key"
+                msg = f"{self.source} credential ref requires key"
                 raise ValueError(msg)
             return self
         if self.key is not None:
@@ -474,7 +685,14 @@ class StorageCredentialBinding(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    mode: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
+    mode: Literal[
+        "kubernetes-secret",
+        "environment",
+        "workload-identity",
+        "external-secret-sync",
+        "csi-secret-volume",
+        "none",
+    ]
     secret_ref: KubernetesSecretRef | None = None
     env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
     service_account_ref: NonEmptyString | None = None
@@ -482,12 +700,12 @@ class StorageCredentialBinding(BaseModel):
     @model_validator(mode="after")
     def validate_mode_sources(self) -> StorageCredentialBinding:
         """Ensure credential source fields match the selected mode."""
-        if self.mode == "kubernetes-secret":
+        if self.mode in {"kubernetes-secret", "external-secret-sync", "csi-secret-volume"}:
             if self.secret_ref is None:
-                msg = "kubernetes-secret credential binding requires secret_ref"
+                msg = f"{self.mode} credential binding requires secret_ref"
                 raise ValueError(msg)
             if self.env_refs or self.service_account_ref is not None:
-                msg = "kubernetes-secret credential binding only accepts secret_ref"
+                msg = f"{self.mode} credential binding only accepts secret_ref"
                 raise ValueError(msg)
             return self
         if self.mode == "environment":
@@ -513,9 +731,9 @@ class StorageCredentialBinding(BaseModel):
 
     def as_credential_ref(self, logical_key: str) -> CredentialRef:
         """Return a consumer credential reference for a logical key."""
-        if self.mode == "kubernetes-secret":
+        if self.mode in {"kubernetes-secret", "external-secret-sync", "csi-secret-volume"}:
             if self.secret_ref is None:
-                msg = "kubernetes-secret credential binding requires secret_ref"
+                msg = f"{self.mode} credential binding requires secret_ref"
                 raise ValueError(msg)
             secret_key = self.secret_ref.keys.get(logical_key)
             if secret_key is None:
@@ -567,6 +785,7 @@ class StorageCapabilities(BaseModel):
 
     protocols: list[NonEmptyString] = Field(default_factory=list)
     credential_modes: list[NonEmptyString] = Field(default_factory=list)
+    identity_modes: list[NonEmptyString] = Field(default_factory=list)
     sts_supported: bool = False
     path_style_access: bool = False
 
@@ -792,6 +1011,16 @@ class IngestionDeploymentBinding(BaseModel):
     dlt: DltIngestionBinding
 
 
+class DeploymentConfig(BaseModel):
+    """Deployment bindings derived during compilation."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    storage: StorageDeploymentBinding | None = None
+    catalog: CatalogDeploymentBinding | None = None
+    ingestion: IngestionDeploymentBinding | None = None
+
+
 class IngestionOutputTable(BaseModel):
     """Platform-visible Iceberg table state created by ingestion sources."""
 
@@ -875,16 +1104,6 @@ def _contains_ingestion_output_credential_path_part(value: str) -> bool:
         term in lowered or re.sub(r"[^a-z0-9]+", "", term) in normalized
         for term in _INGESTION_OUTPUT_SOURCE_PATH_SECRET_MARKERS
     )
-
-
-class DeploymentConfig(BaseModel):
-    """Deployment bindings derived during compilation."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    storage: StorageDeploymentBinding | None = None
-    catalog: CatalogDeploymentBinding | None = None
-    ingestion: IngestionDeploymentBinding | None = None
 
 
 class ResolvedModel(BaseModel):
@@ -1219,10 +1438,10 @@ class CompiledArtifacts(BaseModel):
     - OTLP Collector endpoint (Layer 2 - ENFORCED)
     - Backend plugin selection (Layer 3 - PLUGGABLE)
 
-    Contract Version: See COMPILED_ARTIFACTS_VERSION in versions.py
+    Contract Version: 0.5.0 (see docstring header for version history)
 
     Attributes:
-        version: Schema version (semver)
+        version: Schema version (semver) - default 0.5.0
         metadata: Compilation metadata
         identity: Product identity from catalog
         mode: Deployment mode (simple, centralized, mesh)
@@ -1234,15 +1453,12 @@ class CompiledArtifacts(BaseModel):
         governance: Resolved governance settings (v0.2.0+, optional)
         enforcement_result: Enforcement result summary (v0.3.0+, optional)
         data_contracts: Validated data contracts (v0.3.0+, Epic 3C)
-        deployment: Secret-free deployment bindings for composed platform services
-        ingestion_outputs: Platform-visible Iceberg tables created by ingestion sources
 
     Examples:
         >>> from datetime import datetime
-        >>> from floe_core.schemas.versions import COMPILED_ARTIFACTS_VERSION
         >>> from floe_core.schemas.telemetry import TelemetryConfig, ResourceAttributes
         >>> artifacts = CompiledArtifacts(
-        ...     version=COMPILED_ARTIFACTS_VERSION,
+        ...     version="0.2.0",
         ...     metadata=CompilationMetadata(
         ...         compiled_at=datetime.now(),
         ...         floe_version="0.2.0",
@@ -1365,6 +1581,17 @@ class CompiledArtifacts(BaseModel):
         default=None,
         description="Resolved quality configuration",
     )
+
+    @field_validator("dbt_profiles")
+    @classmethod
+    def validate_secret_free_dbt_profiles(
+        cls,
+        value: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        """Ensure generated dbt profiles do not inline credential material."""
+        if value is not None:
+            _assert_no_dbt_profile_secret_material(value, "dbt_profiles")
+        return value
 
     def _to_serializable_dict(self) -> dict[str, Any]:
         """Return the shared JSON-safe artifact payload."""
@@ -1589,11 +1816,11 @@ __all__ = [
     "CompilationMetadata",
     "CredentialRef",
     "DbtCatalogBinding",
-    "IcebergRestOAuth2Binding",
     "DeploymentConfig",
     "DeploymentMode",
     "DltIngestionBinding",
     "IcebergRestCatalogBinding",
+    "IcebergRestOAuth2Binding",
     "IngestionDeploymentBinding",
     "IngestionOutputTable",
     "KubernetesSecretRef",

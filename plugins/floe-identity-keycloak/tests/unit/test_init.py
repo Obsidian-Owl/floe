@@ -78,6 +78,30 @@ class TestLazyImports:
 
         assert "NonExistentAttribute" in str(exc_info.value)
 
+    @pytest.mark.requirement("PCU-005")
+    def test_keycloak_identity_capabilities(self) -> None:
+        """Keycloak plugin should declare OIDC federation support."""
+        from pydantic import SecretStr
+
+        from floe_identity_keycloak import KeycloakIdentityConfig, KeycloakIdentityPlugin
+
+        plugin = KeycloakIdentityPlugin(
+            KeycloakIdentityConfig(
+                server_url="https://keycloak.example.com",
+                realm="floe",
+                client_id="floe-client",
+                client_secret=SecretStr("not-a-real-secret"),
+            )
+        )
+
+        capabilities = plugin.get_identity_capabilities()
+
+        assert capabilities.plugin_type == "identity"
+        assert capabilities.plugin_name == "keycloak"
+        assert capabilities.capabilities.credential_modes == ["workload-identity"]
+        assert capabilities.capabilities.identity_modes == ["oidc-federation"]
+        assert capabilities.capabilities.providers == ["oidc"]
+
 
 class TestModuleAttributes:
     """Tests for module-level attributes."""

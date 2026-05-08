@@ -26,7 +26,7 @@ import time
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, get_args
 from uuid import UUID
 
 import structlog
@@ -45,6 +45,7 @@ if TYPE_CHECKING:
         ResolvedPlugins,
     )
     from floe_core.schemas.manifest import GovernanceConfig, PlatformManifest
+    from floe_core.schemas.plugins import PluginsConfig, PluginSelection
 
 logger = structlog.get_logger(__name__)
 
@@ -252,6 +253,17 @@ def _build_lineage_config(manifest: PlatformManifest) -> dict[str, Any] | None:
     return config
 
 
+def _runtime_plugin_config(
+    selection: PluginSelection | None,
+    fallback: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Return runtime plugin config with manifest values plus resolved additions."""
+    config = dict(fallback or {})
+    if selection is not None and selection.config is not None:
+        config.update(selection.config)
+    return config
+
+
 def _has_active_ingestion(plugins: ResolvedPlugins) -> bool:
     """Return whether product ingestion sources were resolved for deployment."""
     if plugins.ingestion is None or plugins.ingestion.config is None:
@@ -260,203 +272,485 @@ def _has_active_ingestion(plugins: ResolvedPlugins) -> bool:
     return isinstance(sources, list) and len(sources) > 0
 
 
-def _build_deployment_bindings(
+def _build_storage_deployment_binding(
     plugins: ResolvedPlugins,
+    manifest_plugins: PluginsConfig,
 ) -> DeploymentConfig | None:
-    """Build deployment bindings from resolved plugin configuration."""
+    """Build deployment bindings from resolved storage plugin configuration."""
     active_ingestion = _has_active_ingestion(plugins)
     if plugins.storage is None and not active_ingestion:
         return None
 
-    from floe_core.compilation.errors import CompilationError, CompilationException
-    from floe_core.composition.models import CapabilitySet, PluginCapabilities
+    from floe_core.compilation.errors import (
+        COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED,
+        COMPOSITION_DEPLOYMENT_BINDING_MISSING,
+        COMPOSITION_IDENTITY_MODE_UNSUPPORTED,
+        COMPOSITION_PLUGIN_CONFIG_INVALID,
+        COMPOSITION_PLUGIN_INTERFACE_INVALID,
+        COMPOSITION_PLUGIN_MISSING,
+        COMPOSITION_STORAGE_MISSING,
+        CompilationError,
+        CompilationException,
+    )
+    from floe_core.composition.models import (
+        CapabilitySet,
+        IdentityMode,
+        PluginCapabilities,
+        SecretProjectionMode,
+    )
     from floe_core.composition.resolver import CompositionResolver
-    from floe_core.plugin_errors import PluginError
+    from floe_core.plugin_errors import (
+        PluginConfigurationError,
+        PluginError,
+        PluginNotFoundError,
+    )
     from floe_core.plugin_registry import PluginRegistry
     from floe_core.plugin_types import PluginType
     from floe_core.plugins.catalog import CatalogPlugin
+    from floe_core.plugins.identity import IdentityPlugin
     from floe_core.plugins.ingestion import IngestionPlugin
+    from floe_core.plugins.secrets import SecretsPlugin
     from floe_core.plugins.storage import StoragePlugin
     from floe_core.schemas.compiled_artifacts import DeploymentConfig
 
     registry = PluginRegistry()
     registry.discover_all()
-    storage_plugin = None
-    storage_binding = None
-    storage_capabilities = None
-
-    if plugins.storage is not None:
-        try:
-            registry.configure(
-                PluginType.STORAGE,
-                plugins.storage.type,
-                plugins.storage.config or {},
+    if plugins.storage is None:
+        composition_issues = [
+            {
+                "code": COMPOSITION_STORAGE_MISSING,
+                "message": "Active ingestion sources require a storage plugin",
+                "plugins": [
+                    f"ingestion:{plugins.ingestion.type}"
+                    if plugins.ingestion is not None
+                    else "ingestion:unknown"
+                ],
+            }
+        ]
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_STORAGE_MISSING,
+                message="Active ingestion sources require a storage plugin",
+                suggestion="Select a storage plugin in the platform manifest",
+                context={
+                    "composition_issues": composition_issues,
+                    "storage_plugin": None,
+                    "catalog_plugin": plugins.catalog.type if plugins.catalog is not None else None,
+                    "ingestion_plugin": plugins.ingestion.type
+                    if plugins.ingestion is not None
+                    else None,
+                },
             )
-            storage_plugin = registry.get(PluginType.STORAGE, plugins.storage.type)
-        except PluginError as exc:
-            raise CompilationException(
-                CompilationError(
-                    stage=CompilationStage.RESOLVE,
-                    code="E201",
-                    message=f"Storage plugin {plugins.storage.type!r} could not be resolved",
-                    suggestion=(
-                        "Install the storage plugin package and verify "
-                        "plugins.storage.type in the platform manifest"
-                    ),
-                    context={"storage_plugin": plugins.storage.type},
-                )
-            ) from exc
-
-        if not isinstance(storage_plugin, StoragePlugin):
-            raise CompilationException(
-                CompilationError(
-                    stage=CompilationStage.RESOLVE,
-                    code="E201",
-                    message=f"Plugin {plugins.storage.type!r} is not a StoragePlugin",
-                    suggestion="Use a plugin registered under the floe.storage entry point group",
-                    context={"storage_plugin": plugins.storage.type},
-                )
-            )
-
-        try:
-            storage_binding = storage_plugin.get_deployment_binding()
-        except PluginError as exc:
-            raise CompilationException(
-                CompilationError(
-                    stage=CompilationStage.RESOLVE,
-                    code="E201",
-                    message=(
-                        f"Storage plugin {plugins.storage.type!r} "
-                        "could not build deployment binding"
-                    ),
-                    suggestion=(
-                        "Verify plugins.storage.config in the platform manifest and "
-                        "ensure the storage plugin can build its deployment binding"
-                    ),
-                    context={"storage_plugin": plugins.storage.type},
-                )
-            ) from exc
-
-        storage_capabilities = PluginCapabilities(
-            plugin_type="storage",
-            plugin_name=storage_plugin.name,
-            capabilities=CapabilitySet(
-                protocols=storage_binding.capabilities.protocols,
-                credential_modes=storage_binding.capabilities.credential_modes,
-                path_style_access=storage_binding.capabilities.path_style_access,
-                sts=storage_binding.capabilities.sts_supported,
-            ),
         )
 
-    if plugins.catalog is None and not active_ingestion and storage_binding is not None:
-        return DeploymentConfig(storage=storage_binding)
-
-    catalog_plugin = None
-    catalog_binding = None
-    catalog_capabilities = None
-
-    if plugins.catalog is not None:
-        try:
-            registry.configure(
-                PluginType.CATALOG,
-                plugins.catalog.type,
-                plugins.catalog.config or {},
+    storage_config = _runtime_plugin_config(manifest_plugins.storage, plugins.storage.config)
+    try:
+        registry.configure(
+            PluginType.STORAGE,
+            plugins.storage.type,
+            storage_config,
+        )
+        storage_plugin = registry.get(PluginType.STORAGE, plugins.storage.type)
+    except PluginConfigurationError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_CONFIG_INVALID,
+                message=f"Storage plugin {plugins.storage.type!r} configuration is invalid",
+                suggestion="Fix plugins.storage.config in the platform manifest",
+                context={"storage_plugin": plugins.storage.type},
             )
-            catalog_plugin = registry.get(PluginType.CATALOG, plugins.catalog.type)
-        except PluginError as exc:
-            raise CompilationException(
-                CompilationError(
-                    stage=CompilationStage.RESOLVE,
-                    code="E201",
-                    message=f"Catalog plugin {plugins.catalog.type!r} could not be resolved",
-                    suggestion=(
-                        "Install the catalog plugin package and verify "
-                        "plugins.catalog.type in the platform manifest"
-                    ),
-                    context={"catalog_plugin": plugins.catalog.type},
-                )
-            ) from exc
-
-        if not isinstance(catalog_plugin, CatalogPlugin):
-            raise CompilationException(
-                CompilationError(
-                    stage=CompilationStage.RESOLVE,
-                    code="E201",
-                    message=f"Plugin {plugins.catalog.type!r} is not a CatalogPlugin",
-                    suggestion="Use a plugin registered under the floe.catalogs entry point group",
-                    context={"catalog_plugin": plugins.catalog.type},
-                )
+        ) from exc
+    except PluginNotFoundError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_MISSING,
+                message=f"Storage plugin {plugins.storage.type!r} could not be resolved",
+                suggestion=(
+                    "Install the storage plugin package and verify "
+                    "plugins.storage.type in the platform manifest"
+                ),
+                context={"storage_plugin": plugins.storage.type},
             )
+        ) from exc
+    except PluginError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_MISSING,
+                message=f"Storage plugin {plugins.storage.type!r} could not be loaded",
+                suggestion=(
+                    "Install a compatible storage plugin package and verify "
+                    "its entry point registration"
+                ),
+                context={"storage_plugin": plugins.storage.type},
+            )
+        ) from exc
 
-        catalog_capabilities = PluginCapabilities(
-            plugin_type="catalog",
-            plugin_name=catalog_plugin.name,
-            capabilities=CapabilitySet(
-                catalog_providers=["iceberg-rest"] if catalog_plugin.name == "polaris" else [],
-                table_formats=["iceberg"],
-            ),
+    if not isinstance(storage_plugin, StoragePlugin):
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_INTERFACE_INVALID,
+                message=f"Plugin {plugins.storage.type!r} is not a StoragePlugin",
+                suggestion="Use a plugin registered under the floe.storage entry point group",
+                context={"storage_plugin": plugins.storage.type},
+            )
         )
 
-        if storage_capabilities is not None and storage_binding is not None:
-            try:
-                catalog_requirements = catalog_plugin.get_storage_requirements()
-                composition = CompositionResolver().validate(
-                    [storage_capabilities],
-                    [catalog_requirements],
-                )
-                if not composition.valid:
-                    issues = [issue.model_dump(mode="json") for issue in composition.issues]
-                    first_issue = composition.issues[0]
-                    raise CompilationException(
-                        CompilationError(
-                            stage=CompilationStage.RESOLVE,
-                            code=first_issue.code,
-                            message=first_issue.message,
-                            suggestion=(
-                                "Choose compatible storage and catalog plugins, or update their "
-                                "configuration so catalog requirements are satisfied."
-                            ),
-                            context={
-                                "composition_issues": issues,
-                                "storage_plugin": plugins.storage.type
-                                if plugins.storage is not None
-                                else None,
-                                "catalog_plugin": plugins.catalog.type,
-                            },
-                        )
-                    )
+    try:
+        storage_binding = storage_plugin.get_deployment_binding()
+    except NotImplementedError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_DEPLOYMENT_BINDING_MISSING,
+                message=(
+                    f"Storage plugin {plugins.storage.type!r} does not provide deployment binding"
+                ),
+                suggestion=(
+                    "Upgrade or fix the storage plugin so it implements get_deployment_binding()"
+                ),
+                context={"storage_plugin": plugins.storage.type},
+            )
+        ) from exc
+    except (PluginError, ValueError) as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_CONFIG_INVALID,
+                message=(
+                    f"Storage plugin {plugins.storage.type!r} could not build deployment binding"
+                ),
+                suggestion=(
+                    "Verify plugins.storage.config in the platform manifest and "
+                    "ensure the storage plugin can build its deployment binding"
+                ),
+                context={
+                    "storage_plugin": plugins.storage.type,
+                    "error_type": type(exc).__name__,
+                },
+            )
+        ) from exc
 
-                catalog_binding = catalog_plugin.build_catalog_deployment(storage_binding)
-            except CompilationException:
-                raise
-            except (PluginError, NotImplementedError, ValueError) as exc:
+    composition_capabilities: list[PluginCapabilities] = []
+
+    try:
+        if plugins.secrets is not None:
+            secrets_config = _runtime_plugin_config(
+                manifest_plugins.secrets,
+                plugins.secrets.config,
+            )
+            registry.configure(
+                PluginType.SECRETS,
+                plugins.secrets.type,
+                secrets_config,
+            )
+            secrets_plugin = registry.get(PluginType.SECRETS, plugins.secrets.type)
+            if not isinstance(secrets_plugin, SecretsPlugin):
                 raise CompilationException(
                     CompilationError(
                         stage=CompilationStage.RESOLVE,
-                        code="E201",
-                        message=(
-                            f"Catalog plugin {plugins.catalog.type!r} "
-                            "could not build deployment binding"
-                        ),
+                        code=COMPOSITION_PLUGIN_INTERFACE_INVALID,
+                        message=f"Plugin {plugins.secrets.type!r} is not a SecretsPlugin",
                         suggestion=(
-                            "Verify plugins.catalog.config and ensure the catalog plugin can "
-                            "translate the selected storage deployment binding"
+                            "Use a plugin registered under the floe.secrets entry point group"
                         ),
-                        context={
-                            "storage_plugin": plugins.storage.type
-                            if plugins.storage is not None
-                            else None,
-                            "catalog_plugin": plugins.catalog.type,
-                            "error": str(exc),
-                        },
+                        context={"secrets_plugin": plugins.secrets.type},
                     )
-                ) from exc
+                )
+            composition_capabilities.append(secrets_plugin.get_secret_capabilities())
+    except CompilationException:
+        raise
+    except PluginError as exc:
+        plugin_name = plugins.secrets.type if plugins.secrets is not None else "<unknown>"
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_MISSING,
+                message=f"Secrets plugin {plugin_name!r} could not be resolved",
+                suggestion=(
+                    "Install the secrets plugin package and verify "
+                    "plugins.secrets.type in the platform manifest"
+                ),
+                context={"secrets_plugin": plugin_name},
+            )
+        ) from exc
 
-    capabilities = [
-        capability
-        for capability in (storage_capabilities, catalog_capabilities)
-        if capability is not None
+    try:
+        if plugins.identity is not None:
+            identity_config = _runtime_plugin_config(
+                manifest_plugins.identity,
+                plugins.identity.config,
+            )
+            registry.configure(
+                PluginType.IDENTITY,
+                plugins.identity.type,
+                identity_config,
+            )
+            identity_plugin = registry.get(PluginType.IDENTITY, plugins.identity.type)
+            if not isinstance(identity_plugin, IdentityPlugin):
+                raise CompilationException(
+                    CompilationError(
+                        stage=CompilationStage.RESOLVE,
+                        code=COMPOSITION_PLUGIN_INTERFACE_INVALID,
+                        message=f"Plugin {plugins.identity.type!r} is not an IdentityPlugin",
+                        suggestion=(
+                            "Use a plugin registered under the floe.identity entry point group"
+                        ),
+                        context={"identity_plugin": plugins.identity.type},
+                    )
+                )
+            composition_capabilities.append(identity_plugin.get_identity_capabilities())
+    except CompilationException:
+        raise
+    except PluginError as exc:
+        plugin_name = plugins.identity.type if plugins.identity is not None else "<unknown>"
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_MISSING,
+                message=f"Identity plugin {plugin_name!r} could not be resolved",
+                suggestion=(
+                    "Install the identity plugin package and verify "
+                    "plugins.identity.type in the platform manifest"
+                ),
+                context={"identity_plugin": plugin_name},
+            )
+        ) from exc
+
+    selected_credential_mode = storage_binding.credentials.mode
+    declared_credential_modes = list(storage_binding.capabilities.credential_modes)
+    if selected_credential_mode not in declared_credential_modes:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED,
+                message=(
+                    f"Storage plugin {storage_plugin.name!r} selected credential mode "
+                    f"{selected_credential_mode!r} but declares credential modes "
+                    f"{declared_credential_modes}"
+                ),
+                suggestion=(
+                    "Update the storage plugin deployment binding so the selected "
+                    "credential mode is included in StorageCapabilities.credential_modes."
+                ),
+                context={
+                    "storage_plugin": storage_plugin.name,
+                    "selected_credential_mode": selected_credential_mode,
+                    "declared_credential_modes": declared_credential_modes,
+                },
+            )
+        )
+    credential_modes = [selected_credential_mode]
+    valid_secret_projection_modes = get_args(SecretProjectionMode)
+    secret_projection_modes = [
+        mode for mode in valid_secret_projection_modes if mode == selected_credential_mode
     ]
+    valid_identity_modes = get_args(IdentityMode)
+    declared_identity_modes = set(storage_binding.capabilities.identity_modes)
+    invalid_identity_modes = sorted(declared_identity_modes - set(valid_identity_modes))
+    if invalid_identity_modes:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_IDENTITY_MODE_UNSUPPORTED,
+                message=(
+                    f"Storage plugin {storage_plugin.name!r} declares unsupported identity modes "
+                    f"{invalid_identity_modes}"
+                ),
+                suggestion=(
+                    "Update StorageCapabilities.identity_modes to use supported "
+                    "IdentityMode values."
+                ),
+                context={
+                    "storage_plugin": storage_plugin.name,
+                    "invalid_identity_modes": invalid_identity_modes,
+                    "valid_identity_modes": list(valid_identity_modes),
+                },
+            )
+        )
+    identity_modes = [mode for mode in valid_identity_modes if mode in declared_identity_modes]
+    storage_capabilities = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name=storage_plugin.name,
+        capabilities=CapabilitySet(
+            protocols=storage_binding.capabilities.protocols,
+            credential_modes=credential_modes,
+            secret_projection_modes=secret_projection_modes,
+            identity_modes=identity_modes,
+            path_style_access=storage_binding.capabilities.path_style_access,
+            sts=storage_binding.capabilities.sts_supported,
+        ),
+    )
+    composition_capabilities.insert(0, storage_capabilities)
+
+    if plugins.catalog is None and not active_ingestion:
+        return DeploymentConfig(storage=storage_binding)
+    if plugins.catalog is None:
+        composition_issues = [
+            {
+                "code": "COMPOSITION_CATALOG_MISSING",
+                "message": "Active ingestion sources require a catalog plugin",
+                "plugins": [
+                    f"ingestion:{plugins.ingestion.type}"
+                    if plugins.ingestion is not None
+                    else "ingestion:unknown"
+                ],
+            }
+        ]
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="COMPOSITION_CATALOG_MISSING",
+                message="Active ingestion sources require a catalog plugin",
+                suggestion="Select a catalog plugin in the platform manifest",
+                context={
+                    "composition_issues": composition_issues,
+                    "storage_plugin": plugins.storage.type,
+                    "catalog_plugin": None,
+                    "ingestion_plugin": plugins.ingestion.type
+                    if plugins.ingestion is not None
+                    else None,
+                },
+            )
+        )
+
+    catalog_config = _runtime_plugin_config(manifest_plugins.catalog, plugins.catalog.config)
+    try:
+        registry.configure(
+            PluginType.CATALOG,
+            plugins.catalog.type,
+            catalog_config,
+        )
+        catalog_plugin = registry.get(PluginType.CATALOG, plugins.catalog.type)
+    except PluginConfigurationError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_CONFIG_INVALID,
+                message=f"Catalog plugin {plugins.catalog.type!r} configuration is invalid",
+                suggestion="Fix plugins.catalog.config in the platform manifest",
+                context={"catalog_plugin": plugins.catalog.type},
+            )
+        ) from exc
+    except PluginNotFoundError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_MISSING,
+                message=f"Catalog plugin {plugins.catalog.type!r} could not be resolved",
+                suggestion=(
+                    "Install the catalog plugin package and verify "
+                    "plugins.catalog.type in the platform manifest"
+                ),
+                context={"catalog_plugin": plugins.catalog.type},
+            )
+        ) from exc
+    except PluginError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_MISSING,
+                message=f"Catalog plugin {plugins.catalog.type!r} could not be loaded",
+                suggestion=(
+                    "Install a compatible catalog plugin package and verify "
+                    "its entry point registration"
+                ),
+                context={"catalog_plugin": plugins.catalog.type},
+            )
+        ) from exc
+
+    if not isinstance(catalog_plugin, CatalogPlugin):
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_INTERFACE_INVALID,
+                message=f"Plugin {plugins.catalog.type!r} is not a CatalogPlugin",
+                suggestion="Use a plugin registered under the floe.catalogs entry point group",
+                context={"catalog_plugin": plugins.catalog.type},
+            )
+        )
+
+    try:
+        catalog_requirements = catalog_plugin.get_storage_requirements()
+
+        composition = CompositionResolver().validate(
+            composition_capabilities,
+            [catalog_requirements],
+        )
+        if not composition.valid:
+            issues = [issue.model_dump(mode="json") for issue in composition.issues]
+            first_issue = composition.issues[0]
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code=first_issue.code,
+                    message=first_issue.message,
+                    suggestion=(
+                        "Choose compatible storage and catalog plugins, or update their "
+                        "configuration so catalog requirements are satisfied."
+                    ),
+                    context={
+                        "composition_issues": issues,
+                        "storage_plugin": plugins.storage.type,
+                        "catalog_plugin": plugins.catalog.type,
+                    },
+                )
+            )
+
+        catalog_binding = catalog_plugin.build_catalog_deployment(storage_binding)
+        composition_capabilities.append(
+            PluginCapabilities(
+                plugin_type="catalog",
+                plugin_name=catalog_plugin.name,
+                capabilities=CapabilitySet(
+                    catalog_providers=["iceberg-rest"] if catalog_plugin.name == "polaris" else [],
+                    table_formats=["iceberg"],
+                ),
+            )
+        )
+    except CompilationException:
+        raise
+    except NotImplementedError as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_DEPLOYMENT_BINDING_MISSING,
+                message=(
+                    f"Catalog plugin {plugins.catalog.type!r} does not provide deployment binding"
+                ),
+                suggestion=(
+                    "Upgrade or fix the catalog plugin so it implements "
+                    "get_storage_requirements() and build_catalog_deployment()"
+                ),
+                context={
+                    "storage_plugin": plugins.storage.type,
+                    "catalog_plugin": plugins.catalog.type,
+                },
+            )
+        ) from exc
+    except (PluginError, ValueError) as exc:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_PLUGIN_CONFIG_INVALID,
+                message=(
+                    f"Catalog plugin {plugins.catalog.type!r} could not build deployment binding"
+                ),
+                suggestion=(
+                    "Verify plugins.catalog.config and ensure the catalog plugin can "
+                    "translate the selected storage deployment binding"
+                ),
+                context={
+                    "storage_plugin": plugins.storage.type,
+                    "catalog_plugin": plugins.catalog.type if plugins.catalog is not None else None,
+                    "error_type": type(exc).__name__,
+                },
+            )
+        ) from exc
 
     def _raise_ingestion_composition_error(
         issues: list[Any],
@@ -487,21 +781,48 @@ def _build_deployment_bindings(
         if plugins.ingestion is None:
             msg = "active ingestion requires an ingestion plugin"
             raise AssertionError(msg)
+        ingestion_config = _runtime_plugin_config(
+            manifest_plugins.ingestion,
+            plugins.ingestion.config,
+        )
         try:
             registry.configure(
                 PluginType.INGESTION,
                 plugins.ingestion.type,
-                plugins.ingestion.config or {},
+                ingestion_config,
             )
             ingestion_plugin = registry.get(PluginType.INGESTION, plugins.ingestion.type)
+        except PluginConfigurationError as exc:
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code=COMPOSITION_PLUGIN_CONFIG_INVALID,
+                    message=f"Ingestion plugin {plugins.ingestion.type!r} configuration is invalid",
+                    suggestion="Fix plugins.ingestion.config in the platform manifest",
+                    context={"ingestion_plugin": plugins.ingestion.type},
+                )
+            ) from exc
+        except PluginNotFoundError as exc:
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code=COMPOSITION_PLUGIN_MISSING,
+                    message=f"Ingestion plugin {plugins.ingestion.type!r} could not be resolved",
+                    suggestion=(
+                        "Install the ingestion plugin package and verify plugins.ingestion.type"
+                    ),
+                    context={"ingestion_plugin": plugins.ingestion.type},
+                )
+            ) from exc
         except PluginError as exc:
             raise CompilationException(
                 CompilationError(
                     stage=CompilationStage.RESOLVE,
-                    code="E201",
-                    message=f"Ingestion plugin {plugins.ingestion.type!r} could not be resolved",
+                    code=COMPOSITION_PLUGIN_MISSING,
+                    message=f"Ingestion plugin {plugins.ingestion.type!r} could not be loaded",
                     suggestion=(
-                        "Install the ingestion plugin package and verify plugins.ingestion.type"
+                        "Install a compatible ingestion plugin package and verify "
+                        "its entry point registration"
                     ),
                     context={"ingestion_plugin": plugins.ingestion.type},
                 )
@@ -511,7 +832,7 @@ def _build_deployment_bindings(
             raise CompilationException(
                 CompilationError(
                     stage=CompilationStage.RESOLVE,
-                    code="E201",
+                    code=COMPOSITION_PLUGIN_INTERFACE_INVALID,
                     message=f"Plugin {plugins.ingestion.type!r} is not an IngestionPlugin",
                     suggestion="Use a plugin registered under the floe.ingestion entry point group",
                     context={"ingestion_plugin": plugins.ingestion.type},
@@ -526,7 +847,7 @@ def _build_deployment_bindings(
             raise CompilationException(
                 CompilationError(
                     stage=CompilationStage.RESOLVE,
-                    code="E201",
+                    code=COMPOSITION_PLUGIN_CONFIG_INVALID,
                     message=(
                         f"Ingestion plugin {plugins.ingestion.type!r} "
                         "could not resolve composition requirements"
@@ -537,55 +858,47 @@ def _build_deployment_bindings(
                     ),
                     context={
                         "ingestion_plugin": plugins.ingestion.type,
-                        "storage_plugin": plugins.storage.type
-                        if plugins.storage is not None
-                        else None,
-                        "catalog_plugin": plugins.catalog.type
-                        if plugins.catalog is not None
-                        else None,
+                        "storage_plugin": plugins.storage.type,
+                        "catalog_plugin": plugins.catalog.type,
                     },
                 )
             ) from exc
         if requirements is not None:
-            composition = CompositionResolver().validate(capabilities, [requirements])
+            composition = CompositionResolver().validate(composition_capabilities, [requirements])
             if not composition.valid:
                 _raise_ingestion_composition_error(
                     composition.issues,
                     plugins.ingestion.type,
                 )
 
-        if catalog_binding is not None and storage_binding is not None:
-            try:
-                ingestion_binding = ingestion_plugin.build_deployment_binding(
-                    storage=storage_binding,
-                    catalog=catalog_binding,
+        try:
+            ingestion_binding = ingestion_plugin.build_deployment_binding(
+                storage=storage_binding,
+                catalog=catalog_binding,
+            )
+        except CompilationException:
+            raise
+        except Exception as exc:
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code=COMPOSITION_PLUGIN_CONFIG_INVALID,
+                    message=(
+                        f"Ingestion plugin {plugins.ingestion.type!r} "
+                        "could not build deployment binding"
+                    ),
+                    suggestion=(
+                        "Verify plugins.ingestion.config and ensure the ingestion "
+                        "plugin can translate the selected storage and catalog bindings"
+                    ),
+                    context={
+                        "ingestion_plugin": plugins.ingestion.type,
+                        "storage_plugin": plugins.storage.type,
+                        "catalog_plugin": plugins.catalog.type,
+                        "error_type": type(exc).__name__,
+                    },
                 )
-            except CompilationException:
-                raise
-            except Exception as exc:
-                raise CompilationException(
-                    CompilationError(
-                        stage=CompilationStage.RESOLVE,
-                        code="E201",
-                        message=(
-                            f"Ingestion plugin {plugins.ingestion.type!r} "
-                            "could not build deployment binding"
-                        ),
-                        suggestion=(
-                            "Verify plugins.ingestion.config and ensure the ingestion "
-                            "plugin can translate the selected storage and catalog bindings"
-                        ),
-                        context={
-                            "ingestion_plugin": plugins.ingestion.type,
-                            "storage_plugin": plugins.storage.type
-                            if plugins.storage is not None
-                            else None,
-                            "catalog_plugin": plugins.catalog.type
-                            if plugins.catalog is not None
-                            else None,
-                        },
-                    )
-                ) from exc
+            ) from exc
 
     return DeploymentConfig(
         storage=storage_binding,
@@ -880,7 +1193,7 @@ def compile_pipeline(
                 attributes={"compile.stage": CompilationStage.COMPILE.value},
             ) as compile_span:
                 log.info("compilation_stage_start", stage=CompilationStage.COMPILE.value)
-                deployment = _build_deployment_bindings(plugins)
+                deployment = _build_storage_deployment_binding(plugins, resolved_manifest.plugins)
                 storage_dbt_binding = None
                 if deployment is not None and deployment.storage is not None:
                     storage_dbt_binding = deployment.storage.dbt
@@ -1098,7 +1411,7 @@ def run_enforce_stage(
             raise ValueError("token must be non-empty when provided")
         if len(token) > 2_048:
             raise ValueError("token exceeds maximum length")
-        if not re.match(r"^[A-Za-z0-9._\-]+$", token):
+        if not re.match(r"^[A-Za-z0-9._=\-]+$", token):
             raise ValueError("token contains invalid characters")
     if principal is not None:
         if not principal.strip():

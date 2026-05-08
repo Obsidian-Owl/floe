@@ -398,7 +398,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
             plugin_name="polaris",
             requirements=RequirementSet(
                 protocols=["s3-compatible", "s3"],
-                credential_modes=["kubernetes-secret", "workload-identity"],
+                credential_modes=["kubernetes-secret"],
                 requires_server_side_storage_access=True,
                 supports_no_sts=True,
                 supports_path_style_access=True,

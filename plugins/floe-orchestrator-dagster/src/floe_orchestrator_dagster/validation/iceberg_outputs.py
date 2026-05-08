@@ -15,6 +15,8 @@ from floe_core.plugins.catalog import Catalog, CatalogPlugin
 from floe_core.plugins.storage import StoragePlugin
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
 
+from floe_orchestrator_dagster.runtime_catalog_config import runtime_catalog_config
+
 
 @dataclass
 class IcebergOutputValidationResult:
@@ -105,7 +107,7 @@ def connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> Catalog:
     validated_catalog_config = registry.configure(
         PluginType.CATALOG,
         catalog_ref.type,
-        catalog_ref.config or {},
+        runtime_catalog_config(catalog_ref.type, catalog_ref.config),
     )
     if validated_catalog_config is None:
         raise RuntimeError(f"Catalog plugin config for {catalog_ref.type} could not be validated")

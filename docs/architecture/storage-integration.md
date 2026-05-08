@@ -31,6 +31,27 @@ floe enforces Apache Iceberg as the table format. Iceberg tables are stored on o
 └─────────────────────┘      └───────────────────────┘
 ```
 
+## Iceberg Writer Ownership
+
+Iceberg table mutation is owned by `floe-iceberg`, not by orchestrator plugins.
+
+Runtime orchestrators such as Dagster or Airflow coordinate execution, collect
+runtime outputs, and call the `floe_iceberg.writer` contract with Arrow tables
+and Iceberg identifiers. The writer owns the runtime write flow and Iceberg
+mutation semantics, including append/overwrite behavior and stale metadata
+repair. It coordinates namespace and table load/create operations through the
+catalog plugin rather than implementing catalog APIs directly.
+
+Catalog and storage plugins remain injected dependencies. They provide catalog
+connections, FileIO support, endpoint configuration, and credential references,
+but they do not depend on Dagster, Airflow, or any orchestrator-specific API.
+The catalog plugin remains the owner and provider of catalog namespace and table
+APIs.
+
+`CompiledArtifacts` remains secret-free. Runtime credential material flows
+through resolved deployment bindings and plugin-owned connection logic rather
+than through writer results or orchestrator logs.
+
 ## Object Storage Options
 
 | Storage | Use Case | Authentication |

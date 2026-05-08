@@ -7,13 +7,12 @@ Tests verify that export_dbt_to_iceberg():
 - Does NOT re-read compiled_artifacts.json from disk
 - Raises for missing DuckDB output when catalog+storage export is configured
 - Handles missing catalog plugin gracefully
-- Creates namespace in Iceberg catalog
-- Writes non-empty DuckDB tables to Iceberg
+- Delegates Iceberg namespace/table mutations to the writer contract
 - Skips unsafe SQL identifiers
 - Skips empty tables
 
 Test type rationale: Unit test -- pure function behavior with external
-dependencies (duckdb, pyiceberg, plugin_registry) mocked. No boundary
+dependencies (duckdb, floe_iceberg writer, plugin_registry) mocked. No boundary
 crossing; all assertions verify behavioral outcomes.
 """
 
@@ -22,7 +21,7 @@ from __future__ import annotations
 import builtins
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pyarrow as pa
 import pytest
@@ -37,6 +36,11 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedTransforms,
 )
 from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
+from testing.fixtures.credentials import (
+    get_polaris_credentials,
+    get_polaris_oauth2_server_uri,
+    get_polaris_warehouse,
+)
 
 from floe_orchestrator_dagster.export.iceberg import export_dbt_to_iceberg
 
@@ -47,6 +51,10 @@ from floe_orchestrator_dagster.export.iceberg import export_dbt_to_iceberg
 PRODUCT_NAME = "customer-360"
 SAFE_NAME = "customer_360"
 EXPECTED_DUCKDB_PATH = f"/tmp/{SAFE_NAME}.duckdb"
+POLARIS_ENDPOINT = "http://polaris:8181/api/catalog"
+POLARIS_CLIENT_ID, POLARIS_CLIENT_SECRET = get_polaris_credentials()
+POLARIS_TOKEN_URL = get_polaris_oauth2_server_uri(catalog_endpoint=POLARIS_ENDPOINT)
+POLARIS_WAREHOUSE = get_polaris_warehouse()
 
 
 def _make_artifacts(
@@ -140,6 +148,20 @@ def _configure_mock_duckdb_table(
     mock_conn.execute.return_value.fetch_arrow_table.return_value = pa.table({"id": [1]})
 
 
+def _make_writer_mock(_table_names: tuple[str, ...] = (f"{SAFE_NAME}.customers",)) -> MagicMock:
+    """Create a writer mock for streaming Iceberg table writes."""
+    writer = MagicMock()
+    return writer
+
+
+def _written_table_calls(writer: MagicMock) -> list[tuple[str, object, str]]:
+    """Return identifier, payload, and mode for delegated writer.write_table calls."""
+    return [
+        (call.args[0], call.args[1], call.kwargs["mode"])
+        for call in writer.write_table.call_args_list
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -209,6 +231,154 @@ def artifacts_catalog_only() -> CompiledArtifacts:
 
 class TestExportDbtToIceberg:
     """Tests for export_dbt_to_iceberg function (AC-4)."""
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_delegates_table_writes_to_iceberg_writer(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_with_catalog: CompiledArtifacts,
+    ) -> None:
+        """Exporter must delegate Iceberg mutations to the writer contract."""
+        from floe_core.plugin_types import PluginType
+
+        arrow_table = pa.table({"id": [1, 2, 3]})
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchall.return_value = [("main", "customers")]
+        mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+        catalog_connection_config = {"s3.endpoint": "http://minio:9000"}
+        storage_plugin.get_pyiceberg_catalog_config.return_value = catalog_connection_config
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
+            if plugin_type is PluginType.CATALOG:
+                return catalog_plugin
+            return storage_plugin
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = {}
+
+        writer = _make_writer_mock()
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+                create=True,
+            ) as writer_cls,
+        ):
+            result = export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts_with_catalog,
+            )
+
+        catalog_plugin.connect.assert_not_called()
+        writer_cls.assert_called_once()
+        writer_cls_kwargs = writer_cls.call_args.kwargs
+        assert writer_cls_kwargs["catalog_plugin"] is catalog_plugin
+        assert writer_cls_kwargs["storage_plugin"] is storage_plugin
+        assert writer_cls_kwargs["catalog_connection_config"] == catalog_connection_config
+        writer.ensure_namespace.assert_called_once_with(SAFE_NAME)
+        writer.write_table.assert_called_once_with(
+            f"{SAFE_NAME}.customers",
+            arrow_table,
+            mode="overwrite",
+        )
+        assert result.tables_written == 1
+        assert result.table_names == [f"{SAFE_NAME}.customers"]
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_completes_secret_free_polaris_config_from_env(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+    ) -> None:
+        """Export must hydrate Polaris credentials from runtime env, not artifacts."""
+        from floe_core.plugin_types import PluginType
+
+        artifacts = _make_artifacts(
+            catalog=PluginRef(
+                type="polaris",
+                version="0.1.0",
+                config={
+                    "uri": POLARIS_ENDPOINT,
+                    "warehouse": POLARIS_WAREHOUSE,
+                    "oauth2": {
+                        "client_id": POLARIS_CLIENT_ID,
+                        "token_url": POLARIS_TOKEN_URL,
+                    },
+                },
+            ),
+            storage=PluginRef(
+                type="minio",
+                version="1.0.0",
+                config={"endpoint": "http://minio:9000", "bucket": "floe-iceberg"},
+            ),
+        )
+        mock_conn = MagicMock()
+        _configure_mock_duckdb_table(mock_conn)
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+        storage_plugin.get_pyiceberg_catalog_config.return_value = {}
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
+            if plugin_type is PluginType.CATALOG:
+                return catalog_plugin
+            return storage_plugin
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = MagicMock()
+        writer = _make_writer_mock()
+
+        with (
+            patch.dict(
+                "os.environ",
+                {"POLARIS_CLIENT_SECRET": POLARIS_CLIENT_SECRET},
+                clear=True,
+            ),
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+                create=True,
+            ),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        registry.configure.assert_has_calls(
+            [
+                call(
+                    PluginType.CATALOG,
+                    "polaris",
+                    {
+                        "uri": POLARIS_ENDPOINT,
+                        "warehouse": POLARIS_WAREHOUSE,
+                        "oauth2": {
+                            "client_id": POLARIS_CLIENT_ID,
+                            "client_secret": POLARIS_CLIENT_SECRET,
+                            "token_url": POLARIS_TOKEN_URL,
+                        },
+                    },
+                )
+            ],
+            any_order=True,
+        )
 
     @pytest.mark.requirement("AC-4")
     def test_export_resolves_duckdb_path_from_compiled_dbt_profile(
@@ -536,13 +706,12 @@ class TestExportDbtToIceberg:
 
         mock_conn = MagicMock()
         _configure_mock_duckdb_table(mock_conn)
-        mock_catalog = MagicMock()
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
+        writer = _make_writer_mock((f"{expected_namespace}.customers",))
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -550,6 +719,10 @@ class TestExportDbtToIceberg:
             patch(
                 "floe_core.plugin_registry.get_registry",
                 return_value=registry,
+            ),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
             ),
         ):
             export_dbt_to_iceberg(
@@ -559,11 +732,11 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts,
             )
 
-        # Assert namespace was created with the correctly derived name
-        mock_catalog.create_namespace.assert_called()
-        ns_arg = mock_catalog.create_namespace.call_args[0][0]
-        assert ns_arg == expected_namespace, (
-            f"Expected namespace '{expected_namespace}', got '{ns_arg}'. "
+        # Assert namespace was delegated with the correctly derived name
+        writer.ensure_namespace.assert_called_once()
+        namespace_arg = writer.ensure_namespace.call_args.args[0]
+        assert namespace_arg == expected_namespace, (
+            f"Expected namespace '{expected_namespace}', got '{namespace_arg}'. "
             "Namespace must be derived from product_name, not hardcoded."
         )
 
@@ -808,16 +981,15 @@ class TestExportDbtToIceberg:
         project_dir: Path,
         artifacts_with_catalog: CompiledArtifacts,
     ) -> None:
-        """Function MUST call create_namespace with the derived safe_name."""
+        """Function MUST pass the derived safe_name as the writer namespace."""
         mock_conn = MagicMock()
         _configure_mock_duckdb_table(mock_conn)
-        mock_catalog = MagicMock()
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
+        writer = _make_writer_mock()
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -825,6 +997,10 @@ class TestExportDbtToIceberg:
             patch(
                 "floe_core.plugin_registry.get_registry",
                 return_value=registry,
+            ),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
             ),
         ):
             export_dbt_to_iceberg(
@@ -835,7 +1011,7 @@ class TestExportDbtToIceberg:
             )
 
         mock_plugin.assert_not_called()
-        mock_catalog.create_namespace.assert_called_once_with(SAFE_NAME)
+        writer.ensure_namespace.assert_called_once_with(SAFE_NAME)
 
     @pytest.mark.requirement("AC-4")
     def test_export_fails_when_catalog_lacks_write_methods(
@@ -857,6 +1033,7 @@ class TestExportDbtToIceberg:
                 return object()
 
         mock_conn = MagicMock()
+        _configure_mock_duckdb_table(mock_conn)
         registry = MagicMock()
         mock_plugin = MagicMock()
         mock_plugin.connect.return_value = ReadOnlyCatalog()
@@ -876,7 +1053,7 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        mock_duckdb_connect.assert_not_called()
+        mock_duckdb_connect.assert_called_once()
 
     @pytest.mark.requirement("AC-4")
     def test_export_namespace_non_idempotent_error_raises(
@@ -887,19 +1064,23 @@ class TestExportDbtToIceberg:
     ) -> None:
         """Non-idempotent namespace creation errors must fail configured export."""
         mock_conn = MagicMock()
-        mock_catalog = MagicMock()
-        mock_catalog.create_namespace.side_effect = RuntimeError("permission denied")
+        _configure_mock_duckdb_table(mock_conn)
 
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
+        writer = _make_writer_mock()
+        writer.write_table.side_effect = RuntimeError("permission denied")
 
         with (
             patch("duckdb.connect", return_value=mock_conn) as mock_duckdb_connect,
             patch.object(Path, "exists", return_value=True),
             patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+            ),
             pytest.raises(RuntimeError, match="permission denied"),
         ):
             export_dbt_to_iceberg(
@@ -909,8 +1090,8 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        mock_catalog.create_namespace.assert_called_once_with(SAFE_NAME)
-        mock_duckdb_connect.assert_not_called()
+        writer.write_table.assert_called_once()
+        mock_duckdb_connect.assert_called_once()
 
     @pytest.mark.requirement("AC-4")
     def test_export_writes_to_iceberg(
@@ -919,13 +1100,7 @@ class TestExportDbtToIceberg:
         project_dir: Path,
         artifacts_with_catalog: CompiledArtifacts,
     ) -> None:
-        """Function MUST write non-empty DuckDB tables to Iceberg.
-
-        For existing tables: overwrite.
-        For new tables: create_table + append.
-        We test both paths.
-        """
-        from pyiceberg.exceptions import NoSuchTableError
+        """Function MUST delegate non-empty DuckDB tables to the Iceberg writer."""
 
         # Simulate DuckDB with one table
         arrow_table = pa.table({"id": [1, 2, 3], "name": ["a", "b", "c"]})
@@ -936,17 +1111,11 @@ class TestExportDbtToIceberg:
         # Second execute call (SELECT * FROM ...) returns arrow table
         mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
 
-        # Simulate NoSuchTableError on first load (new table)
-        mock_catalog = MagicMock()
-        mock_iceberg_table = MagicMock()
-        mock_catalog.load_table.side_effect = NoSuchTableError("not found")
-        mock_catalog.create_table.return_value = mock_iceberg_table
-
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
+        writer = _make_writer_mock()
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -954,6 +1123,10 @@ class TestExportDbtToIceberg:
             patch(
                 "floe_core.plugin_registry.get_registry",
                 return_value=registry,
+            ),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
             ),
         ):
             export_dbt_to_iceberg(
@@ -963,19 +1136,79 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        # Verify create_table was called with correct identifier
-        mock_catalog.create_table.assert_called_once()
-        table_id = mock_catalog.create_table.call_args[0][0]
-        assert table_id == f"{SAFE_NAME}.customers", (
-            f"Expected Iceberg table ID '{SAFE_NAME}.customers', got '{table_id}'"
-        )
+        assert _written_table_calls(writer) == [
+            (f"{SAFE_NAME}.customers", arrow_table, "overwrite")
+        ]
 
-        # Verify data was appended to the new table
-        mock_iceberg_table.append.assert_called_once()
-        appended_data = mock_iceberg_table.append.call_args[0][0]
-        assert appended_data.num_rows == 3, (
-            f"Expected 3 rows appended, got {appended_data.num_rows}"
-        )
+    @pytest.mark.requirement("AC-4")
+    def test_export_streams_each_arrow_table_to_writer(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_with_catalog: CompiledArtifacts,
+    ) -> None:
+        """Exporter MUST write each Arrow table before fetching the next table."""
+        events: list[str] = []
+        tables_result = MagicMock()
+        tables_result.fetchall.return_value = [("main", "customers"), ("main", "orders")]
+        arrow_tables = {
+            "customers": pa.table({"id": [1]}),
+            "orders": pa.table({"order_id": [10]}),
+        }
+
+        def execute_side_effect(query: str) -> MagicMock:
+            if "information_schema.tables" in query:
+                events.append("list")
+                return tables_result
+            table_name = "customers" if "customers" in query else "orders"
+            result = MagicMock()
+
+            def fetch_arrow_table() -> pa.Table:
+                events.append(f"fetch:{table_name}")
+                return arrow_tables[table_name]
+
+            result.fetch_arrow_table.side_effect = fetch_arrow_table
+            return result
+
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = execute_side_effect
+
+        registry = MagicMock()
+        mock_plugin = MagicMock()
+        registry.get.return_value = mock_plugin
+        registry.configure.return_value = {}
+        writer = _make_writer_mock()
+
+        def write_side_effect(identifier: str, _arrow_table: pa.Table, *, mode: str) -> None:
+            events.append(f"write:{identifier}:{mode}")
+
+        writer.write_table.side_effect = write_side_effect
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+            ),
+        ):
+            result = export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts_with_catalog,
+            )
+
+        writer.ensure_namespace.assert_called_once_with(SAFE_NAME)
+        assert result.table_names == [f"{SAFE_NAME}.customers", f"{SAFE_NAME}.orders"]
+        assert events == [
+            "list",
+            "fetch:customers",
+            f"write:{SAFE_NAME}.customers:overwrite",
+            "fetch:orders",
+            f"write:{SAFE_NAME}.orders:overwrite",
+        ]
 
     @pytest.mark.requirement("AC-4")
     def test_export_returns_written_table_count(
@@ -992,20 +1225,20 @@ class TestExportDbtToIceberg:
         ]
         mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
 
-        mock_catalog = MagicMock()
-        mock_existing_table = MagicMock()
-        mock_catalog.load_table.return_value = mock_existing_table
-
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
+        writer = _make_writer_mock()
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
             patch.object(Path, "exists", return_value=True),
             patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+            ),
         ):
             result = export_dbt_to_iceberg(
                 context=context,
@@ -1024,7 +1257,7 @@ class TestExportDbtToIceberg:
         project_dir: Path,
         artifacts_with_catalog: CompiledArtifacts,
     ) -> None:
-        """When Iceberg table already exists, function MUST overwrite it."""
+        """Exporter MUST request overwrite mode for delegated table writes."""
         arrow_table = pa.table({"id": [1, 2], "value": [10, 20]})
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = [
@@ -1032,16 +1265,11 @@ class TestExportDbtToIceberg:
         ]
         mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
 
-        # Simulate existing table (load_table succeeds)
-        mock_catalog = MagicMock()
-        mock_existing_table = MagicMock()
-        mock_catalog.load_table.return_value = mock_existing_table
-
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
+        writer = _make_writer_mock((f"{SAFE_NAME}.orders",))
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -1049,6 +1277,10 @@ class TestExportDbtToIceberg:
             patch(
                 "floe_core.plugin_registry.get_registry",
                 return_value=registry,
+            ),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
             ),
         ):
             export_dbt_to_iceberg(
@@ -1058,13 +1290,7 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        # Verify overwrite was called, NOT create_table
-        mock_existing_table.overwrite.assert_called_once()
-        overwritten_data = mock_existing_table.overwrite.call_args[0][0]
-        assert overwritten_data.num_rows == 2, (
-            f"Expected 2 rows overwritten, got {overwritten_data.num_rows}"
-        )
-        mock_catalog.create_table.assert_not_called()
+        assert _written_table_calls(writer) == [(f"{SAFE_NAME}.orders", arrow_table, "overwrite")]
 
     @pytest.mark.requirement("AC-4")
     def test_export_overwrite_uses_endpoint_preserving_catalog_plugin_loader(
@@ -1073,7 +1299,7 @@ class TestExportDbtToIceberg:
         project_dir: Path,
         artifacts_with_catalog: CompiledArtifacts,
     ) -> None:
-        """Existing table overwrite must use plugin endpoint-preserving load hook."""
+        """Exporter must pass endpoint-preserving plugins through to the writer."""
         from floe_core.plugin_types import PluginType
 
         arrow_table = pa.table({"id": [1], "value": [10]})
@@ -1083,16 +1309,10 @@ class TestExportDbtToIceberg:
         ]
         mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
 
-        mock_catalog = MagicMock()
-        mock_catalog.load_table.side_effect = AssertionError(
-            "overwrite must not bypass endpoint-preserving plugin load"
-        )
-        mock_existing_table = MagicMock()
-
         class EndpointPreservingCatalogPlugin:
             def __init__(self) -> None:
-                self.connect = MagicMock(return_value=mock_catalog)
-                self.load_table_with_client_endpoint = MagicMock(return_value=mock_existing_table)
+                self.connect = MagicMock()
+                self.load_table_with_client_endpoint = MagicMock()
 
         registry = MagicMock()
         catalog_plugin = EndpointPreservingCatalogPlugin()
@@ -1105,11 +1325,16 @@ class TestExportDbtToIceberg:
 
         registry.get.side_effect = get_side_effect
         registry.configure.return_value = {}
+        writer = _make_writer_mock((f"{SAFE_NAME}.orders",))
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
             patch.object(Path, "exists", return_value=True),
             patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+            ) as writer_cls,
         ):
             export_dbt_to_iceberg(
                 context=context,
@@ -1118,11 +1343,10 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        catalog_plugin.load_table_with_client_endpoint.assert_called_once_with(
-            f"{SAFE_NAME}.orders"
-        )
-        mock_existing_table.overwrite.assert_called_once_with(arrow_table)
-        mock_catalog.create_table.assert_not_called()
+        catalog_plugin.connect.assert_not_called()
+        catalog_plugin.load_table_with_client_endpoint.assert_not_called()
+        assert writer_cls.call_args.kwargs["catalog_plugin"] is catalog_plugin
+        assert _written_table_calls(writer) == [(f"{SAFE_NAME}.orders", arrow_table, "overwrite")]
 
     @pytest.mark.requirement("AC-4")
     def test_export_repairs_stale_iceberg_registration_when_configured(
@@ -1131,25 +1355,15 @@ class TestExportDbtToIceberg:
         project_dir: Path,
         artifacts_with_catalog: CompiledArtifacts,
     ) -> None:
-        """Repair mode drops stale table registration and recreates output table."""
+        """Repair mode is passed to the delegated writer config."""
         arrow_table = pa.table({"id": [1], "value": [10]})
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = [("main", "orders")]
         mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
 
-        stale_error = RuntimeError(
-            "NotFoundException: Location does not exist: "
-            "s3://floe-iceberg/customer_360/orders/metadata/00001.metadata.json"
-        )
-        mock_catalog = MagicMock()
-        mock_catalog.load_table.side_effect = stale_error
-        recreated_table = MagicMock()
-        mock_catalog.create_table.return_value = recreated_table
-
         registry = MagicMock()
         catalog_plugin = MagicMock()
         storage_plugin = MagicMock()
-        catalog_plugin.connect.return_value = mock_catalog
         storage_plugin.get_pyiceberg_catalog_config.return_value = {
             "s3.endpoint": "http://minio:9000"
         }
@@ -1168,11 +1382,16 @@ class TestExportDbtToIceberg:
                 )
             }
         )
+        writer = _make_writer_mock((f"{SAFE_NAME}.orders",))
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
             patch.object(Path, "exists", return_value=True),
             patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+            ) as writer_cls,
         ):
             export_dbt_to_iceberg(
                 context=context,
@@ -1181,15 +1400,10 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts,
             )
 
-        catalog_plugin.drop_table.assert_called_once_with(
-            f"{SAFE_NAME}.orders",
-            purge=False,
-        )
-        mock_catalog.create_table.assert_called_once_with(
-            f"{SAFE_NAME}.orders",
-            schema=arrow_table.schema,
-        )
-        recreated_table.append.assert_called_once_with(arrow_table)
+        catalog_plugin.connect.assert_not_called()
+        config = writer_cls.call_args.kwargs["config"]
+        assert config.stale_table_recovery_mode == "repair"
+        assert _written_table_calls(writer) == [(f"{SAFE_NAME}.orders", arrow_table, "overwrite")]
 
     @pytest.mark.requirement("AC-4")
     def test_export_repairs_null_sequence_overwrite_state_when_configured(
@@ -1198,24 +1412,15 @@ class TestExportDbtToIceberg:
         project_dir: Path,
         artifacts_with_catalog: CompiledArtifacts,
     ) -> None:
-        """Repair mode recreates tables when PyIceberg rejects overwrite metadata."""
+        """Repair mode config is owned by the writer for overwrite state recovery."""
         arrow_table = pa.table({"id": [1], "value": [10]})
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = [("main", "orders")]
         mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
 
-        overwrite_error = ValueError("Only entries with status ADDED can have null sequence number")
-        existing_table = MagicMock()
-        existing_table.overwrite.side_effect = overwrite_error
-        mock_catalog = MagicMock()
-        mock_catalog.load_table.return_value = existing_table
-        recreated_table = MagicMock()
-        mock_catalog.create_table.return_value = recreated_table
-
         registry = MagicMock()
         catalog_plugin = MagicMock()
         storage_plugin = MagicMock()
-        catalog_plugin.connect.return_value = mock_catalog
         storage_plugin.get_pyiceberg_catalog_config.return_value = {
             "s3.endpoint": "http://minio:9000"
         }
@@ -1234,11 +1439,16 @@ class TestExportDbtToIceberg:
                 )
             }
         )
+        writer = _make_writer_mock((f"{SAFE_NAME}.orders",))
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
             patch.object(Path, "exists", return_value=True),
             patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+            ) as writer_cls,
         ):
             export_dbt_to_iceberg(
                 context=context,
@@ -1247,16 +1457,10 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts,
             )
 
-        existing_table.overwrite.assert_called_once_with(arrow_table)
-        catalog_plugin.drop_table.assert_called_once_with(
-            f"{SAFE_NAME}.orders",
-            purge=False,
-        )
-        mock_catalog.create_table.assert_called_once_with(
-            f"{SAFE_NAME}.orders",
-            schema=arrow_table.schema,
-        )
-        recreated_table.append.assert_called_once_with(arrow_table)
+        catalog_plugin.connect.assert_not_called()
+        config = writer_cls.call_args.kwargs["config"]
+        assert config.stale_table_recovery_mode == "repair"
+        assert _written_table_calls(writer) == [(f"{SAFE_NAME}.orders", arrow_table, "overwrite")]
 
     @pytest.mark.requirement("AC-4")
     def test_export_strict_mode_raises_null_sequence_overwrite_state(
@@ -1265,22 +1469,17 @@ class TestExportDbtToIceberg:
         project_dir: Path,
         artifacts_with_catalog: CompiledArtifacts,
     ) -> None:
-        """Strict mode surfaces PyIceberg overwrite metadata errors unchanged."""
+        """Strict mode writer errors surface unchanged through the exporter."""
         arrow_table = pa.table({"id": [1], "value": [10]})
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = [("main", "orders")]
         mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
 
         overwrite_error = ValueError("Only entries with status ADDED can have null sequence number")
-        existing_table = MagicMock()
-        existing_table.overwrite.side_effect = overwrite_error
-        mock_catalog = MagicMock()
-        mock_catalog.load_table.return_value = existing_table
 
         registry = MagicMock()
         catalog_plugin = MagicMock()
         storage_plugin = MagicMock()
-        catalog_plugin.connect.return_value = mock_catalog
         storage_plugin.get_pyiceberg_catalog_config.return_value = {
             "s3.endpoint": "http://minio:9000"
         }
@@ -1299,11 +1498,17 @@ class TestExportDbtToIceberg:
                 )
             }
         )
+        writer = _make_writer_mock((f"{SAFE_NAME}.orders",))
+        writer.write_table.side_effect = overwrite_error
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
             patch.object(Path, "exists", return_value=True),
             patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+            ) as writer_cls,
             pytest.raises(ValueError, match="null sequence number"),
         ):
             export_dbt_to_iceberg(
@@ -1313,9 +1518,10 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts,
             )
 
-        existing_table.overwrite.assert_called_once_with(arrow_table)
-        catalog_plugin.drop_table.assert_not_called()
-        mock_catalog.create_table.assert_not_called()
+        catalog_plugin.connect.assert_not_called()
+        config = writer_cls.call_args.kwargs["config"]
+        assert config.stale_table_recovery_mode == "strict"
+        writer.write_table.assert_called_once()
 
     @pytest.mark.requirement("AC-4")
     def test_export_skips_unsafe_identifiers(
@@ -1338,15 +1544,11 @@ class TestExportDbtToIceberg:
         arrow_table = pa.table({"id": [1]})
         mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
 
-        mock_catalog = MagicMock()
-        mock_iceberg_table = MagicMock()
-        mock_catalog.load_table.return_value = mock_iceberg_table
-
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
+        writer = _make_writer_mock((f"{SAFE_NAME}.safe_table",))
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -1354,6 +1556,10 @@ class TestExportDbtToIceberg:
             patch(
                 "floe_core.plugin_registry.get_registry",
                 return_value=registry,
+            ),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
             ),
         ):
             export_dbt_to_iceberg(
@@ -1363,13 +1569,9 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        # Only the safe table should have been loaded/written
-        # Exactly one table should be processed (safe_table)
-        load_calls = mock_catalog.load_table.call_args_list
-        assert len(load_calls) == 1, (
-            f"Expected exactly 1 load_table call (safe_table only), got {len(load_calls)}"
-        )
-        assert f"{SAFE_NAME}.safe_table" in str(load_calls[0])
+        writes = _written_table_calls(writer)
+        assert len(writes) == 1
+        assert writes[0][0] == f"{SAFE_NAME}.safe_table"
 
         # Warning should have been logged for unsafe identifiers
         assert context.log.warning.call_count >= 3, (
@@ -1392,13 +1594,11 @@ class TestExportDbtToIceberg:
         ]
         mock_conn.execute.return_value.fetch_arrow_table.return_value = empty_table
 
-        mock_catalog = MagicMock()
-
         registry = MagicMock()
         mock_plugin = MagicMock()
-        mock_plugin.connect.return_value = mock_catalog
         registry.get.return_value = mock_plugin
         registry.configure.return_value = {}
+        writer = _make_writer_mock()
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
@@ -1406,6 +1606,10 @@ class TestExportDbtToIceberg:
             patch(
                 "floe_core.plugin_registry.get_registry",
                 return_value=registry,
+            ),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
             ),
             pytest.raises(RuntimeError, match="Configured Iceberg export wrote no tables"),
         ):
@@ -1416,9 +1620,8 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts_with_catalog,
             )
 
-        # No Iceberg writes should have occurred
-        mock_catalog.load_table.assert_not_called()
-        mock_catalog.create_table.assert_not_called()
+        writer.ensure_namespace.assert_not_called()
+        writer.write_table.assert_not_called()
 
     @pytest.mark.requirement("AC-4")
     def test_export_uses_catalog_config_from_artifacts_not_from_disk(
@@ -1488,12 +1691,12 @@ class TestExportDbtToIceberg:
         )
 
     @pytest.mark.requirement("AC-4")
-    def test_export_configures_catalog_and_storage_before_connect(
+    def test_export_configures_catalog_and_storage_before_writer_construction(
         self,
         context: MagicMock,
         project_dir: Path,
     ) -> None:
-        """Catalog and storage configs MUST be validated before catalog connect."""
+        """Catalog and storage configs MUST be validated before writer construction."""
         from floe_core.plugin_types import PluginType
 
         artifacts = _make_artifacts(
@@ -1513,19 +1716,24 @@ class TestExportDbtToIceberg:
                 return catalog_plugin
             return storage_plugin
 
-        def connect_side_effect(*_args: object, **_kwargs: object) -> MagicMock:
+        writer = _make_writer_mock()
+
+        def writer_side_effect(*_args: object, **_kwargs: object) -> MagicMock:
             registry.configure.assert_any_call(PluginType.CATALOG, "polaris", {})
             registry.configure.assert_any_call(PluginType.STORAGE, "minio", {})
-            return MagicMock()
+            return writer
 
         registry.get.side_effect = get_side_effect
         registry.configure.return_value = {}
-        catalog_plugin.connect.side_effect = connect_side_effect
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
             patch.object(Path, "exists", return_value=True),
             patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                side_effect=writer_side_effect,
+            ) as writer_cls,
         ):
             export_dbt_to_iceberg(
                 context=context,
@@ -1535,15 +1743,16 @@ class TestExportDbtToIceberg:
             )
 
         assert registry.configure.call_count == 2
-        catalog_plugin.connect.assert_called_once()
+        catalog_plugin.connect.assert_not_called()
+        writer_cls.assert_called_once()
 
     @pytest.mark.requirement("AC-4")
-    def test_export_passes_storage_catalog_config_to_catalog_connect(
+    def test_export_passes_storage_catalog_config_to_writer(
         self,
         context: MagicMock,
         project_dir: Path,
     ) -> None:
-        """Export must connect catalog with config produced by StoragePlugin."""
+        """Export must construct writer with config produced by StoragePlugin."""
         from floe_core.plugin_types import PluginType
 
         artifacts = _make_artifacts(
@@ -1565,8 +1774,6 @@ class TestExportDbtToIceberg:
         registry = MagicMock()
         catalog_plugin = MagicMock()
         storage_plugin = MagicMock()
-        mock_catalog = MagicMock()
-        catalog_plugin.connect.return_value = mock_catalog
         storage_plugin.get_pyiceberg_catalog_config.return_value = catalog_config
 
         def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
@@ -1576,11 +1783,16 @@ class TestExportDbtToIceberg:
 
         registry.get.side_effect = get_side_effect
         registry.configure.return_value = {}
+        writer = _make_writer_mock()
 
         with (
             patch("duckdb.connect", return_value=mock_conn),
             patch.object(Path, "exists", return_value=True),
             patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+            ) as writer_cls,
         ):
             export_dbt_to_iceberg(
                 context=context,
@@ -1590,7 +1802,8 @@ class TestExportDbtToIceberg:
             )
 
         storage_plugin.get_pyiceberg_catalog_config.assert_called_once_with()
-        catalog_plugin.connect.assert_called_once_with(config=catalog_config)
+        catalog_plugin.connect.assert_not_called()
+        assert writer_cls.call_args.kwargs["catalog_connection_config"] == catalog_config
 
     @pytest.mark.requirement("AC-4")
     @pytest.mark.parametrize(

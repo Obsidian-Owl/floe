@@ -68,6 +68,16 @@ dagster:
       limits:
         cpu: "1"
         memory: 1536Mi
+    env:
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://floe-platform-otel:4317"
+      - name: OTEL_SERVICE_NAME
+        value: "floe-platform"
+      - name: POLARIS_CREDENTIAL
+        valueFrom:
+          secretKeyRef:
+            name: floe-platform-polaris-credentials
+            key: POLARIS_CREDENTIAL
 
   # Dagster daemon configuration
   dagsterDaemon:
@@ -89,6 +99,11 @@ dagster:
         value: "floe-platform"
       - name: DAGSTER_DEFAULT_SCHEDULE_CRON
         value: "*/10 * * * *"
+      - name: POLARIS_CREDENTIAL
+        valueFrom:
+          secretKeyRef:
+            name: floe-platform-polaris-credentials
+            key: POLARIS_CREDENTIAL
 
   # Run launcher configuration
   runLauncher:

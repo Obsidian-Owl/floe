@@ -24,6 +24,12 @@ from typing import Any
 import click
 
 from floe_core.cli.utils import ExitCode, error_exit, info, success
+from floe_core.compilation.errors import (
+    COMPOSITION_RENDERER_PRECONDITION_FAILED,
+    CompilationError,
+    CompilationException,
+)
+from floe_core.compilation.stages import CompilationStage
 from floe_core.helm import (
     HelmValuesConfig,
     HelmValuesGenerator,
@@ -47,6 +53,25 @@ def _load_compiled_artifacts(artifact_path: Path) -> CompiledArtifacts:
     return CompiledArtifacts.from_json_file(artifact_path)
 
 
+def _renderer_precondition_failed(
+    message: str,
+    *,
+    context: dict[str, Any] | None = None,
+) -> CompilationException:
+    """Build a structured Helm renderer precondition failure."""
+    return CompilationException(
+        CompilationError(
+            stage=CompilationStage.GENERATE,
+            code=COMPOSITION_RENDERER_PRECONDITION_FAILED,
+            message=message,
+            suggestion=(
+                "Recompile with required deployment bindings or fix the artifact before rendering."
+            ),
+            context=context,
+        )
+    )
+
+
 def _storage_helm_values(artifacts: CompiledArtifacts) -> dict[str, Any]:
     """Derive Helm storage values from compiled storage deployment binding."""
     if artifacts.deployment is None or artifacts.deployment.storage is None:
@@ -59,20 +84,42 @@ def _storage_helm_values(artifacts: CompiledArtifacts) -> dict[str, Any]:
     catalog = artifacts.deployment.catalog
     if catalog is None:
         msg = "MinIO Helm values require catalog deployment binding"
-        raise ValueError(msg)
+        raise _renderer_precondition_failed(msg)
     if catalog.provider != "polaris":
         msg = "MinIO Helm values require Polaris catalog deployment binding"
-        raise ValueError(msg)
+        raise _renderer_precondition_failed(
+            msg,
+            context={"storage_provider": storage.provider, "catalog_provider": catalog.provider},
+        )
 
     return _minio_storage_helm_values(storage, catalog)
 
 
-def _require_kubernetes_secret_ref(ref: CredentialRef | None, logical_key: str) -> CredentialRef:
+def _require_kubernetes_secret_ref(
+    ref: CredentialRef | None,
+    logical_key: str,
+    *,
+    context: dict[str, Any] | None = None,
+) -> CredentialRef:
     """Return a Kubernetes Secret credential ref or raise a Helm-specific error."""
     if ref is not None and ref.source == "kubernetes-secret" and ref.key is not None:
         return ref
     msg = f"MinIO Helm values require Kubernetes Secret credential reference for {logical_key}"
-    raise ValueError(msg)
+    raise _renderer_precondition_failed(msg, context=context)
+
+
+def _storage_credential_ref(
+    storage: StorageDeploymentBinding,
+    logical_key: str,
+    *,
+    context: dict[str, Any] | None = None,
+) -> CredentialRef:
+    """Return a storage credential ref or raise a structured renderer precondition."""
+    try:
+        return storage.credentials.as_credential_ref(logical_key)
+    except ValueError:
+        msg = f"MinIO Helm values require Kubernetes Secret credential reference for {logical_key}"
+        raise _renderer_precondition_failed(msg, context=context) from None
 
 
 def _minio_storage_helm_values(
@@ -84,12 +131,21 @@ def _minio_storage_helm_values(
     for bucket in storage.buckets:
         if bucket.name not in bucket_names:
             bucket_names.append(bucket.name)
+    provider_context = {"storage_provider": storage.provider, "catalog_provider": catalog.provider}
     if not bucket_names:
         msg = "MinIO Helm values require storage bucket requirements"
-        raise ValueError(msg)
+        raise _renderer_precondition_failed(msg, context=provider_context)
 
-    access_key_ref = storage.credentials.as_credential_ref("accessKeyId")
-    secret_key_ref = storage.credentials.as_credential_ref("secretAccessKey")
+    access_key_ref = _storage_credential_ref(
+        storage,
+        "accessKeyId",
+        context=provider_context,
+    )
+    secret_key_ref = _storage_credential_ref(
+        storage,
+        "secretAccessKey",
+        context=provider_context,
+    )
     if (
         access_key_ref.source != "kubernetes-secret"
         or secret_key_ref.source != "kubernetes-secret"
@@ -97,10 +153,10 @@ def _minio_storage_helm_values(
         or secret_key_ref.key is None
     ):
         msg = "MinIO Helm values require Kubernetes Secret credential references"
-        raise ValueError(msg)
+        raise _renderer_precondition_failed(msg, context=provider_context)
     if access_key_ref.name != secret_key_ref.name:
         msg = "MinIO Helm values require access and secret keys in the same Kubernetes Secret"
-        raise ValueError(msg)
+        raise _renderer_precondition_failed(msg, context=provider_context)
 
     polaris = catalog.polaris
     if polaris is None:
@@ -109,14 +165,16 @@ def _minio_storage_helm_values(
     polaris_access_ref = _require_kubernetes_secret_ref(
         polaris.credential_refs.get("accessKeyId"),
         "accessKeyId",
+        context=provider_context,
     )
     polaris_secret_ref = _require_kubernetes_secret_ref(
         polaris.credential_refs.get("secretAccessKey"),
         "secretAccessKey",
+        context=provider_context,
     )
     if polaris_access_ref.name != polaris_secret_ref.name:
         msg = "Polaris Helm values require access and secret keys in the same Kubernetes Secret"
-        raise ValueError(msg)
+        raise _renderer_precondition_failed(msg, context=provider_context)
 
     return {
         "minio": {

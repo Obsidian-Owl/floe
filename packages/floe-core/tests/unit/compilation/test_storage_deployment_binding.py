@@ -135,7 +135,7 @@ def test_missing_storage_plugin_raises_structured_compilation_error(tmp_path: Pa
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_PLUGIN_MISSING"
     assert "missing-storage" in error.message
     assert error.context == {"storage_plugin": "missing-storage"}
 
@@ -212,9 +212,12 @@ def test_storage_plugin_binding_failure_raises_structured_compilation_error(
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_PLUGIN_CONFIG_INVALID"
     assert "could not build deployment binding" in error.message
-    assert error.context == {"storage_plugin": "minio"}
+    assert error.context == {
+        "storage_plugin": "minio",
+        "error_type": "PluginConfigurationError",
+    }
 
 
 def test_incompatible_storage_catalog_composition_raises_structured_error(
@@ -619,12 +622,13 @@ def test_ingestion_plugin_binding_failure_raises_structured_compilation_error(
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_PLUGIN_CONFIG_INVALID"
     assert error.message == "Ingestion plugin 'dlt' could not build deployment binding"
     assert error.context == {
         "ingestion_plugin": "dlt",
         "storage_plugin": "minio",
         "catalog_plugin": "polaris",
+        "error_type": "PipelineConfigurationError",
     }
 
 
@@ -653,7 +657,7 @@ def test_ingestion_plugin_requirements_failure_raises_structured_compilation_err
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_PLUGIN_CONFIG_INVALID"
     assert error.message == "Ingestion plugin 'dlt' could not resolve composition requirements"
     assert error.context == {
         "ingestion_plugin": "dlt",
@@ -708,7 +712,7 @@ def test_non_ingestion_plugin_registered_for_ingestion_raises_structured_error(
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_PLUGIN_INTERFACE_INVALID"
     assert error.message == "Plugin 'dlt' is not an IngestionPlugin"
     assert error.context == {"ingestion_plugin": "dlt"}
 

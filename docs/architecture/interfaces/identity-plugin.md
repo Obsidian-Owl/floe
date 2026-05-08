@@ -7,6 +7,28 @@
 
 IdentityPlugin abstracts identity providers (Keycloak, Dex, Okta, Auth0), enabling consistent OIDC-based authentication across all floe services.
 
+## Composition Capabilities
+
+Identity plugins declare workload identity support with
+`get_identity_capabilities(self) -> PluginCapabilities`. The composition
+resolver uses this declaration to validate storage and catalog requirements
+that rely on identity-based credentials.
+
+Supported `identity_modes` are:
+
+- `aws-irsa` - AWS IAM Roles for Service Accounts.
+- `aws-pod-identity` - AWS EKS Pod Identity.
+- `gcp-workload-identity` - Google Kubernetes Engine Workload Identity.
+- `azure-workload-identity` - Azure workload identity federation.
+- `azure-managed-identity` - Azure managed identity.
+- `oidc-federation` - Generic OIDC federation for providers that support
+  workload identity through OIDC trust.
+
+`floe-core` validates named modes and provider labels only. Plugins own
+provider-specific translation, including service account annotations,
+federated credential objects, IAM role bindings, tenant IDs, and other
+cloud-specific resources.
+
 ## Interface Definition
 
 ```python

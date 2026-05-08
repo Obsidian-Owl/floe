@@ -1132,6 +1132,9 @@ class TestLoggingDecoupling:
                 "type": "duckdb",
                 "path": ":memory:",
             }
+            mock_plugin.augment_dbt_profile.side_effect = lambda profile_output, deployment: (
+                profile_output
+            )
 
             with (
                 patch(

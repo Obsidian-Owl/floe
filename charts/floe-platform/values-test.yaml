@@ -101,6 +101,16 @@ dagster:
       limits:
         cpu: "1"
         memory: 1536Mi
+    env:
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://floe-platform-otel:4317"
+      - name: OTEL_SERVICE_NAME
+        value: "floe-platform"
+      - name: POLARIS_CREDENTIAL
+        valueFrom:
+          secretKeyRef:
+            name: floe-platform-polaris-credentials
+            key: POLARIS_CREDENTIAL
   dagsterDaemon:
     image:
       <<: *dagsterDemoImage
@@ -111,6 +121,16 @@ dagster:
       limits:
         cpu: "1"
         memory: 1536Mi
+    env:
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://floe-platform-otel:4317"
+      - name: OTEL_SERVICE_NAME
+        value: "floe-platform"
+      - name: POLARIS_CREDENTIAL
+        valueFrom:
+          secretKeyRef:
+            name: floe-platform-polaris-credentials
+            key: POLARIS_CREDENTIAL
   # Run launcher configuration — image MUST match webserver/daemon image
   # so run pods have access to code locations and dbt project.
   runLauncher:

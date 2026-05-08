@@ -842,6 +842,7 @@ class TestStorageDeploymentBinding:
         assert payload["capabilities"] == {
             "protocols": ["s3-compatible"],
             "credential_modes": ["kubernetes-secret"],
+            "identity_modes": [],
             "sts_supported": False,
             "path_style_access": True,
         }
@@ -1948,30 +1949,30 @@ class TestCompiledArtifactsVersionBump:
 
     @pytest.mark.requirement("T1-AC-6")
     def test_compiled_artifacts_version_is_0_12_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.12.0'."""
-        assert COMPILED_ARTIFACTS_VERSION == "0.12.0", (
-            f"Expected version '0.12.0', got '{COMPILED_ARTIFACTS_VERSION}'"
+        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.15.0'."""
+        assert COMPILED_ARTIFACTS_VERSION == "0.15.0", (
+            f"Expected version '0.15.0', got '{COMPILED_ARTIFACTS_VERSION}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
     def test_version_history_contains_0_12_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.12.0' entry."""
-        assert "0.12.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
-            f"Version '0.12.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
+        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.15.0' entry."""
+        assert "0.15.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
+            f"Version '0.15.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
         )
 
     @pytest.mark.requirement("T1-AC-6")
     def test_version_history_0_12_0_references_iceberg_catalog_projection(self) -> None:
-        """Test that the 0.12.0 history entry mentions contract additions."""
-        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.12.0", "")
+        """Test that the 0.15.0 history entry mentions contract additions."""
+        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.15.0", "")
         entry_lower = entry.lower()
         assert "iceberg" in entry_lower and "catalog" in entry_lower, (
-            f"Version 0.12.0 history entry does not reference Iceberg catalog projection: '{entry}'"
+            f"Version 0.15.0 history entry does not reference Iceberg catalog projection: '{entry}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
     def test_compiled_artifacts_default_version_is_0_12_0(self) -> None:
-        """Test that CompiledArtifacts().version defaults to '0.12.0'."""
+        """Test that CompiledArtifacts().version defaults to '0.15.0'."""
         artifacts = CompiledArtifacts(
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
@@ -2000,7 +2001,7 @@ class TestCompiledArtifactsVersionBump:
                 lineage_namespace="test",
             ),
         )
-        assert artifacts.version == "0.12.0"
+        assert artifacts.version == "0.15.0"
 
 
 class TestGovernanceBackwardCompatibility:

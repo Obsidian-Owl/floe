@@ -285,6 +285,8 @@ def create_dataframe_from_connection(
 
     This is a placeholder that should be enhanced to support
     various connection types (DuckDB, PostgreSQL, Snowflake).
+    When ``connection_config`` includes a ``dataframe`` key, the supplied
+    DataFrame takes precedence over the configured dialect.
 
     Args:
         connection_config: Database connection configuration.
@@ -296,6 +298,13 @@ def create_dataframe_from_connection(
     import pandas as pd
 
     dialect = connection_config.get("dialect", "duckdb")
+
+    if "dataframe" in connection_config or dialect in {"pandas", "dataframe"}:
+        dataframe = connection_config.get("dataframe")
+        if not isinstance(dataframe, pd.DataFrame):
+            msg = "connection_config['dataframe'] must be a pandas DataFrame"
+            raise TypeError(msg)
+        return dataframe.copy(deep=True)
 
     if dialect == "duckdb":
         import duckdb

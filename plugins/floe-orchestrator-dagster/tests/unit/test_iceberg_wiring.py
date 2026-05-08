@@ -16,12 +16,23 @@ are in plugins/floe-orchestrator-dagster/tests/integration/.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
+from testing.fixtures.credentials import (
+    get_polaris_credentials,
+    get_polaris_oauth2_server_uri,
+    get_polaris_warehouse,
+)
 
 if TYPE_CHECKING:
     from floe_orchestrator_dagster import DagsterOrchestratorPlugin
+
+POLARIS_ENDPOINT = "http://polaris:8181/api/catalog"
+POLARIS_CLIENT_ID, POLARIS_CLIENT_SECRET = get_polaris_credentials()
+POLARIS_CREDENTIAL = f"{POLARIS_CLIENT_ID}:{POLARIS_CLIENT_SECRET}"
+POLARIS_TOKEN_URL = get_polaris_oauth2_server_uri(catalog_endpoint=POLARIS_ENDPOINT)
+POLARIS_WAREHOUSE = get_polaris_warehouse()
 
 
 class TestCreateIcebergResourcesFullWiring:
@@ -158,6 +169,84 @@ class TestCreateIcebergResourcesFullWiring:
             assert mock_registry.configure.call_count == 2
             mock_registry.configure.assert_any_call(PluginType.CATALOG, "mock-catalog", {})
             mock_registry.configure.assert_any_call(PluginType.STORAGE, "mock-storage", {})
+
+    @pytest.mark.requirement("004d-FR-115")
+    def test_create_iceberg_resources_completes_secret_free_polaris_config_from_env(
+        self,
+    ) -> None:
+        """Resource construction must hydrate Polaris credentials at runtime."""
+        from floe_core.plugin_types import PluginType
+        from floe_core.schemas.compiled_artifacts import PluginRef
+
+        from floe_orchestrator_dagster.resources.iceberg import create_iceberg_resources
+
+        catalog_ref = PluginRef(
+            type="polaris",
+            version="0.1.0",
+            config={
+                "uri": POLARIS_ENDPOINT,
+                "warehouse": POLARIS_WAREHOUSE,
+                "oauth2": {
+                    "client_id": POLARIS_CLIENT_ID,
+                    "token_url": POLARIS_TOKEN_URL,
+                },
+            },
+        )
+        storage_ref = PluginRef(
+            type="minio",
+            version="1.0.0",
+            config={"endpoint": "http://minio:9000", "bucket": "floe-iceberg"},
+        )
+        mock_catalog_plugin = MagicMock()
+        mock_storage_plugin = MagicMock()
+        mock_storage_plugin.get_pyiceberg_catalog_config.return_value = {}
+        mock_table_manager = MagicMock()
+        mock_io_manager = MagicMock()
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
+            if plugin_type is PluginType.CATALOG:
+                return mock_catalog_plugin
+            return mock_storage_plugin
+
+        with (
+            patch.dict(
+                "os.environ",
+                {"POLARIS_CREDENTIAL": POLARIS_CREDENTIAL},
+                clear=True,
+            ),
+            patch("floe_core.plugin_registry.get_registry") as mock_get_registry,
+            patch("floe_iceberg.IcebergTableManager") as mock_table_manager_cls,
+            patch(
+                "floe_orchestrator_dagster.io_manager.create_iceberg_io_manager"
+            ) as mock_create_io_manager,
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_registry.get.side_effect = get_side_effect
+            mock_registry.configure.return_value = MagicMock()
+            mock_table_manager_cls.return_value = mock_table_manager
+            mock_create_io_manager.return_value = mock_io_manager
+
+            create_iceberg_resources(catalog_ref=catalog_ref, storage_ref=storage_ref)
+
+        mock_registry.configure.assert_has_calls(
+            [
+                call(
+                    PluginType.CATALOG,
+                    "polaris",
+                    {
+                        "uri": POLARIS_ENDPOINT,
+                        "warehouse": POLARIS_WAREHOUSE,
+                        "oauth2": {
+                            "client_id": POLARIS_CLIENT_ID,
+                            "client_secret": POLARIS_CLIENT_SECRET,
+                            "token_url": POLARIS_TOKEN_URL,
+                        },
+                    },
+                )
+            ],
+            any_order=True,
+        )
 
     @pytest.mark.requirement("004d-FR-115")
     def test_create_iceberg_resources_configures_empty_dict_configs(self) -> None:

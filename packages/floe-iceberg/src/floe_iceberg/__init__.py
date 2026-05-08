@@ -38,6 +38,13 @@ __all__ = [
     # Core manager (orchestrator-agnostic)
     "IcebergTableManager",
     "IcebergTableManagerConfig",
+    "DefaultIcebergTableWriter",
+    "EndpointPreservingTableLoader",
+    "IcebergTableWrite",
+    "IcebergTableWriter",
+    "IcebergWriteMode",
+    "IcebergWriterResult",
+    "WriteCapableIcebergCatalog",
     # Schema drift detection
     "DriftDetector",
     # Errors
@@ -58,6 +65,34 @@ def __getattr__(name: str) -> object:
         from floe_iceberg.models import IcebergTableManagerConfig
 
         return IcebergTableManagerConfig
+    if name == "DefaultIcebergTableWriter":
+        from floe_iceberg.writer import DefaultIcebergTableWriter
+
+        return DefaultIcebergTableWriter
+    if name == "EndpointPreservingTableLoader":
+        from floe_iceberg.writer import EndpointPreservingTableLoader
+
+        return EndpointPreservingTableLoader
+    if name == "IcebergTableWrite":
+        from floe_iceberg.writer import IcebergTableWrite
+
+        return IcebergTableWrite
+    if name == "IcebergTableWriter":
+        from floe_iceberg.writer import IcebergTableWriter
+
+        return IcebergTableWriter
+    if name == "IcebergWriteMode":
+        from floe_iceberg.writer import IcebergWriteMode
+
+        return IcebergWriteMode
+    if name == "IcebergWriterResult":
+        from floe_iceberg.writer import IcebergWriterResult
+
+        return IcebergWriterResult
+    if name == "WriteCapableIcebergCatalog":
+        from floe_iceberg.writer import WriteCapableIcebergCatalog
+
+        return WriteCapableIcebergCatalog
     if name == "DriftDetector":
         from floe_iceberg.drift_detector import DriftDetector
 
