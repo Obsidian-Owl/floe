@@ -2,6 +2,17 @@
 
 from __future__ import annotations
 
+from floe_core.composition.error_codes import (
+    COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED,
+    COMPOSITION_IDENTITY_MODE_UNSUPPORTED,
+    COMPOSITION_IDENTITY_PROVIDER_MISSING,
+    COMPOSITION_IDENTITY_PROVIDER_UNSUPPORTED,
+    COMPOSITION_PROTOCOL_UNSUPPORTED,
+    COMPOSITION_SECRET_PROJECTION_UNSUPPORTED,
+    COMPOSITION_SECRET_PROVIDER_MISSING,
+    COMPOSITION_SECRET_PROVIDER_UNSUPPORTED,
+    COMPOSITION_STORAGE_MISSING,
+)
 from floe_core.composition.models import (
     CompositionIssue,
     CompositionValidationResult,
@@ -31,7 +42,7 @@ class CompositionResolver:
                 issues.append(
                     CompositionIssue(
                         severity="error",
-                        code="COMPOSITION_STORAGE_MISSING",
+                        code=COMPOSITION_STORAGE_MISSING,
                         message=(
                             f"catalog {requirement.plugin_name} requires storage "
                             "capabilities but no storage plugin was selected"
@@ -71,7 +82,7 @@ class CompositionResolver:
             issues.append(
                 CompositionIssue(
                     severity="error",
-                    code="COMPOSITION_PROTOCOL_UNSUPPORTED",
+                    code=COMPOSITION_PROTOCOL_UNSUPPORTED,
                     message=(
                         f"catalog {catalog.plugin_name} requires one of protocols "
                         f"{required_protocols}; storage {storage.plugin_name} "
@@ -87,7 +98,7 @@ class CompositionResolver:
             issues.append(
                 CompositionIssue(
                     severity="error",
-                    code="COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED",
+                    code=COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED,
                     message=(
                         f"catalog {catalog.plugin_name} requires one of credential modes "
                         f"{required_modes}; storage {storage.plugin_name} provides {storage_modes}"
@@ -137,7 +148,7 @@ class CompositionResolver:
             issues.append(
                 CompositionIssue(
                     severity="error",
-                    code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
+                    code=COMPOSITION_SECRET_PROJECTION_UNSUPPORTED,
                     message=(
                         f"catalog {requirement.plugin_name} requires one of secret "
                         f"projection modes {required_modes}; storage {storage.plugin_name} "
@@ -174,7 +185,7 @@ class CompositionResolver:
             issues.append(
                 CompositionIssue(
                     severity="error",
-                    code="COMPOSITION_SECRET_PROVIDER_MISSING",
+                    code=COMPOSITION_SECRET_PROVIDER_MISSING,
                     message=message,
                     plugins=[requirement.ref],
                 )
@@ -186,7 +197,7 @@ class CompositionResolver:
             issues.append(
                 CompositionIssue(
                     severity="error",
-                    code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
+                    code=COMPOSITION_SECRET_PROJECTION_UNSUPPORTED,
                     message=(
                         f"catalog {requirement.plugin_name} requires secret projection "
                         f"mode {mode}; secrets {secrets.plugin_name} provides {provided_modes}"
@@ -201,7 +212,7 @@ class CompositionResolver:
             issues.append(
                 CompositionIssue(
                     severity="error",
-                    code="COMPOSITION_SECRET_PROVIDER_UNSUPPORTED",
+                    code=COMPOSITION_SECRET_PROVIDER_UNSUPPORTED,
                     message=(
                         f"catalog {requirement.plugin_name} requires one of secret "
                         f"providers {required_providers}; secrets {secrets.plugin_name} "
@@ -240,7 +251,7 @@ class CompositionResolver:
             issues.append(
                 CompositionIssue(
                     severity="error",
-                    code="COMPOSITION_IDENTITY_PROVIDER_MISSING",
+                    code=COMPOSITION_IDENTITY_PROVIDER_MISSING,
                     message=(
                         f"catalog {requirement.plugin_name} requires identity mode {mode} "
                         "but no identity plugin was selected"
@@ -256,7 +267,7 @@ class CompositionResolver:
             issues.append(
                 CompositionIssue(
                     severity="error",
-                    code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+                    code=COMPOSITION_IDENTITY_MODE_UNSUPPORTED,
                     message=(
                         f"catalog {requirement.plugin_name} requires workload identity "
                         "but does not declare concrete identity modes; storage "
@@ -280,7 +291,7 @@ class CompositionResolver:
                 issues.append(
                     CompositionIssue(
                         severity="error",
-                        code="COMPOSITION_IDENTITY_PROVIDER_UNSUPPORTED",
+                        code=COMPOSITION_IDENTITY_PROVIDER_UNSUPPORTED,
                         message=(
                             f"catalog {requirement.plugin_name} requires one of identity "
                             f"providers {required_providers}; identity "
@@ -296,7 +307,7 @@ class CompositionResolver:
             issues.append(
                 CompositionIssue(
                     severity="error",
-                    code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+                    code=COMPOSITION_IDENTITY_MODE_UNSUPPORTED,
                     message=(
                         f"catalog {requirement.plugin_name} requires identity mode {mode}; "
                         f"identity {identity.plugin_name} provides {provided_modes}"
@@ -310,7 +321,7 @@ class CompositionResolver:
             issues.append(
                 CompositionIssue(
                     severity="error",
-                    code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+                    code=COMPOSITION_IDENTITY_MODE_UNSUPPORTED,
                     message=(
                         f"catalog {requirement.plugin_name} requires one of identity "
                         f"modes {required_modes}; storage {storage.plugin_name} "

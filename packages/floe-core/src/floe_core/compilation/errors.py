@@ -23,6 +23,22 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from floe_core.compilation.stages import CompilationStage
+from floe_core.composition.error_codes import (
+    COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED,
+    COMPOSITION_DEPLOYMENT_BINDING_MISSING,
+    COMPOSITION_IDENTITY_MODE_UNSUPPORTED,
+    COMPOSITION_IDENTITY_PROVIDER_MISSING,
+    COMPOSITION_IDENTITY_PROVIDER_UNSUPPORTED,
+    COMPOSITION_PLUGIN_CONFIG_INVALID,
+    COMPOSITION_PLUGIN_INTERFACE_INVALID,
+    COMPOSITION_PLUGIN_MISSING,
+    COMPOSITION_PROTOCOL_UNSUPPORTED,
+    COMPOSITION_RENDERER_PRECONDITION_FAILED,
+    COMPOSITION_SECRET_PROJECTION_UNSUPPORTED,
+    COMPOSITION_SECRET_PROVIDER_MISSING,
+    COMPOSITION_SECRET_PROVIDER_UNSUPPORTED,
+    COMPOSITION_STORAGE_MISSING,
+)
 
 
 class CompilationError(BaseModel):
@@ -212,10 +228,55 @@ ERROR_CODES = {
     # GENERATE errors
     "E501": "Failed to write output file",
     "E502": "Output directory does not exist",
+    # COMPOSITION errors
+    COMPOSITION_PLUGIN_MISSING: "Selected plugin could not be found or loaded",
+    COMPOSITION_PLUGIN_INTERFACE_INVALID: (
+        "Selected plugin does not implement the required interface"
+    ),
+    COMPOSITION_PLUGIN_CONFIG_INVALID: (
+        "Selected plugin configuration or provider-owned binding is invalid"
+    ),
+    COMPOSITION_STORAGE_MISSING: "Storage-dependent plugin selected without storage plugin",
+    COMPOSITION_PROTOCOL_UNSUPPORTED: "Selected plugins do not share a required protocol",
+    COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED: (
+        "Selected plugins do not share a required credential mode"
+    ),
+    COMPOSITION_SECRET_PROJECTION_UNSUPPORTED: (
+        "Selected plugins do not share a required secret projection mode"
+    ),
+    COMPOSITION_SECRET_PROVIDER_MISSING: ("A required secret provider was not selected"),
+    COMPOSITION_SECRET_PROVIDER_UNSUPPORTED: (
+        "Selected secret provider does not satisfy plugin requirements"
+    ),
+    COMPOSITION_IDENTITY_PROVIDER_MISSING: ("A required identity provider was not selected"),
+    COMPOSITION_IDENTITY_PROVIDER_UNSUPPORTED: (
+        "Selected identity provider does not satisfy plugin requirements"
+    ),
+    COMPOSITION_IDENTITY_MODE_UNSUPPORTED: (
+        "Selected plugins do not share a required identity mode"
+    ),
+    COMPOSITION_DEPLOYMENT_BINDING_MISSING: (
+        "Selected plugin does not provide the required deployment binding"
+    ),
+    COMPOSITION_RENDERER_PRECONDITION_FAILED: "Renderer cannot render the compiled artifact shape",
 }
 
 
 __all__ = [
+    "COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED",
+    "COMPOSITION_DEPLOYMENT_BINDING_MISSING",
+    "COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+    "COMPOSITION_IDENTITY_PROVIDER_MISSING",
+    "COMPOSITION_IDENTITY_PROVIDER_UNSUPPORTED",
+    "COMPOSITION_PLUGIN_CONFIG_INVALID",
+    "COMPOSITION_PLUGIN_INTERFACE_INVALID",
+    "COMPOSITION_PLUGIN_MISSING",
+    "COMPOSITION_PROTOCOL_UNSUPPORTED",
+    "COMPOSITION_RENDERER_PRECONDITION_FAILED",
+    "COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
+    "COMPOSITION_SECRET_PROVIDER_MISSING",
+    "COMPOSITION_SECRET_PROVIDER_UNSUPPORTED",
+    "COMPOSITION_STORAGE_MISSING",
     "CompilationError",
     "CompilationException",
     "ERROR_CODES",
