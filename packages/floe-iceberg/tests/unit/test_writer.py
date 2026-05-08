@@ -6,6 +6,7 @@ from typing import Any
 
 import pyarrow as pa
 import pytest
+from pyiceberg.exceptions import NamespaceAlreadyExistsError, NoSuchIcebergTableError
 
 from floe_iceberg.errors import StaleTableMetadataError
 from floe_iceberg.models import IcebergTableManagerConfig, StaleTableRecoveryMode
@@ -151,7 +152,9 @@ def _writer(catalog: _WriteCapableCatalog) -> DefaultIcebergTableWriter:
     )
 
 
+@pytest.mark.requirement("AC-318")
 def test_write_tables_creates_namespace_and_returns_written_result() -> None:
+    """Verify batch writes ensure namespaces and report written Iceberg tables."""
     catalog = _WriteCapableCatalog()
     arrow_table = _arrow_table()
     write = IcebergTableWrite(
@@ -169,7 +172,9 @@ def test_write_tables_creates_namespace_and_returns_written_result() -> None:
     assert catalog.tables["customer_360.customers"].appended == [arrow_table]
 
 
+@pytest.mark.requirement("AC-318")
 def test_existing_namespace_exception_is_success() -> None:
+    """Verify existing namespaces are treated as idempotent writer success."""
     catalog = _WriteCapableCatalog()
     catalog.raise_namespace_exists = True
     arrow_table = _arrow_table()
@@ -184,7 +189,29 @@ def test_existing_namespace_exception_is_success() -> None:
     assert result.table_names == ("customer_360.customers",)
 
 
+@pytest.mark.requirement("AC-318")
+def test_pyiceberg_existing_namespace_exception_is_success() -> None:
+    """Verify real PyIceberg namespace-exists errors are idempotent success."""
+
+    class _PyIcebergNamespaceCatalog(_WriteCapableCatalog):
+        def create_namespace(
+            self,
+            namespace: str,
+            properties: dict[str, str] | None = None,
+        ) -> None:
+            self.create_namespace_calls.append((namespace, properties))
+            raise NamespaceAlreadyExistsError(namespace)
+
+    catalog = _PyIcebergNamespaceCatalog()
+
+    _writer(catalog).ensure_namespace("customer_360")
+
+    assert catalog.create_namespace_calls == [("customer_360", None)]
+
+
+@pytest.mark.requirement("AC-318")
 def test_missing_table_creates_table_with_arrow_schema_then_appends() -> None:
+    """Verify missing tables are created with the Arrow schema before writing."""
     catalog = _WriteCapableCatalog()
     arrow_table = _arrow_table()
     write = IcebergTableWrite(
@@ -199,7 +226,27 @@ def test_missing_table_creates_table_with_arrow_schema_then_appends() -> None:
     assert catalog.tables["customer_360.customers"].appended == [arrow_table]
 
 
+@pytest.mark.requirement("AC-318")
+def test_pyiceberg_missing_table_exception_creates_table() -> None:
+    """Verify real PyIceberg missing-table errors trigger table creation."""
+
+    class _PyIcebergMissingTableCatalog(_WriteCapableCatalog):
+        def load_table(self, identifier: str) -> _FakeTable:
+            self.load_table_calls.append(identifier)
+            raise NoSuchIcebergTableError(identifier)
+
+    catalog = _PyIcebergMissingTableCatalog()
+    arrow_table = _arrow_table()
+
+    _writer(catalog).write_table("customer_360.customers", arrow_table)
+
+    assert catalog.created_tables == [("customer_360.customers", arrow_table.schema)]
+    assert catalog.tables["customer_360.customers"].appended == [arrow_table]
+
+
+@pytest.mark.requirement("AC-318")
 def test_write_table_defaults_to_overwrite_existing_table() -> None:
+    """Verify the default writer mode overwrites existing Iceberg table data."""
     catalog = _WriteCapableCatalog()
     arrow_table = _arrow_table()
     table = _FakeTable("customer_360.customers")
@@ -211,7 +258,9 @@ def test_write_table_defaults_to_overwrite_existing_table() -> None:
     assert table.appended == []
 
 
+@pytest.mark.requirement("AC-318")
 def test_write_table_rejects_invalid_mode_before_catalog_mutation() -> None:
+    """Verify invalid single-table modes fail before touching catalog state."""
     catalog = _WriteCapableCatalog()
     writer = _writer(catalog)
 
@@ -227,7 +276,9 @@ def test_write_table_rejects_invalid_mode_before_catalog_mutation() -> None:
     assert catalog.created_tables == []
 
 
+@pytest.mark.requirement("AC-318")
 def test_write_tables_rejects_invalid_mode_before_catalog_mutation() -> None:
+    """Verify invalid batch modes fail before namespace or table mutation."""
     catalog = _WriteCapableCatalog()
     writer = _writer(catalog)
 
@@ -248,7 +299,9 @@ def test_write_tables_rejects_invalid_mode_before_catalog_mutation() -> None:
     assert catalog.created_tables == []
 
 
+@pytest.mark.requirement("AC-318")
 def test_write_table_repairs_stale_metadata_in_repair_mode() -> None:
+    """Verify repair mode recreates tables when stale metadata blocks writes."""
     stale_catalog = _StaleMetadataCatalog()
     repaired_catalog = _WriteCapableCatalog()
     plugin = _ReconnectCatalogPlugin(stale_catalog, repaired_catalog)
@@ -271,7 +324,10 @@ def test_write_table_repairs_stale_metadata_in_repair_mode() -> None:
     assert repaired_catalog.tables["customer_360.customers"].appended == [arrow_table]
 
 
+@pytest.mark.requirement("AC-318")
 def test_write_table_raises_stale_metadata_error_in_strict_mode() -> None:
+    """Verify strict mode surfaces stale metadata without destructive repair."""
+
     class _StaleOverwriteTable(_FakeTable):
         def overwrite(self, data: Any) -> None:
             raise RuntimeError(
@@ -306,7 +362,9 @@ def test_write_table_raises_stale_metadata_error_in_strict_mode() -> None:
     assert stale_error.details["recovery_mode"] == "strict"
 
 
+@pytest.mark.requirement("AC-318")
 def test_endpoint_preserving_loader_on_catalog_plugin_is_used_when_available() -> None:
+    """Verify endpoint-preserving catalog hooks are preferred for table loads."""
     catalog = _WriteCapableCatalog()
     catalog.tables["customer_360.customers"] = _FakeTable("customer_360.customers")
     endpoint_table = _FakeTable("customer_360.customers")
@@ -324,7 +382,10 @@ def test_endpoint_preserving_loader_on_catalog_plugin_is_used_when_available() -
     assert catalog.tables["customer_360.customers"].overwritten == []
 
 
+@pytest.mark.requirement("AC-318")
 def test_catalog_without_write_methods_is_rejected() -> None:
+    """Verify writer construction rejects catalogs missing required write APIs."""
+
     class ReadOnlyCatalogPlugin:
         def connect(self, config: dict[str, Any]) -> object:
             return object()

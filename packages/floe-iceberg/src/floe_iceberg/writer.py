@@ -13,6 +13,21 @@ from floe_iceberg.errors import (
 )
 from floe_iceberg.models import IcebergTableManagerConfig, StaleTableRecoveryMode
 
+try:
+    from pyiceberg.exceptions import (
+        NamespaceAlreadyExistsError as _NamespaceAlreadyExistsError,
+    )
+    from pyiceberg.exceptions import (
+        NoSuchIcebergTableError as _NoSuchIcebergTableError,
+    )
+    from pyiceberg.exceptions import (
+        NoSuchTableError as _NoSuchTableError,
+    )
+except ImportError:  # pragma: no cover - PyIceberg is optional at import time.
+    _NamespaceAlreadyExistsError = None  # type: ignore[assignment,misc]
+    _NoSuchIcebergTableError = None  # type: ignore[assignment,misc]
+    _NoSuchTableError = None  # type: ignore[assignment,misc]
+
 IcebergWriteMode = Literal["append", "overwrite"]
 
 _NULL_SEQUENCE_OVERWRITE_ERROR = "only entries with status added can have null sequence number"
@@ -160,9 +175,6 @@ class DefaultIcebergTableWriter:
                     table.overwrite(arrow_table)
                 except Exception as exc:
                     table = self._repair_and_recreate(identifier, arrow_table, exc)
-            else:
-                msg = f"Unsupported Iceberg write mode: {mode}"
-                raise ValueError(msg)
 
         if hasattr(table, "refresh"):
             table.refresh()
@@ -197,6 +209,7 @@ class DefaultIcebergTableWriter:
             if not _is_missing_table_error(exc):
                 raise
         table = _create_table(catalog, identifier, arrow_table)
+        # A newly created table is empty, so append is equivalent to overwrite.
         table.append(arrow_table)
         return table, True
 
@@ -222,7 +235,7 @@ class DefaultIcebergTableWriter:
         is_stale_metadata = is_stale_table_metadata_error(exc)
         is_repairable_overwrite_state = _is_repairable_overwrite_state_error(exc)
         if not is_stale_metadata and not is_repairable_overwrite_state:
-            raise exc
+            raise
 
         if self._config.stale_table_recovery_mode is StaleTableRecoveryMode.STRICT:
             if is_stale_metadata:
@@ -232,11 +245,11 @@ class DefaultIcebergTableWriter:
                     original_error=exc,
                 )
                 raise stale_error from exc
-            raise exc
+            raise
 
         drop_table = getattr(self._catalog_plugin, "drop_table", None)
         if not callable(drop_table):
-            raise exc
+            raise
         drop_table(identifier, purge=False)
         self._catalog = None
         catalog = self._connect_catalog()
@@ -311,12 +324,21 @@ def _validate_write_mode(mode: str) -> None:
 
 
 def _is_existing_namespace_error(exc: Exception) -> bool:
-    exc_name = type(exc).__name__
+    if _NamespaceAlreadyExistsError is not None and isinstance(
+        exc,
+        _NamespaceAlreadyExistsError,
+    ):
+        return True
+    exc_name = type(exc).__name__.lower()
     message = str(exc).lower()
-    return "AlreadyExists" in exc_name or "already exists" in message
+    return "alreadyexists" in exc_name or "already exists" in message
 
 
 def _is_missing_table_error(exc: Exception) -> bool:
+    if _NoSuchTableError is not None and isinstance(exc, _NoSuchTableError):
+        return True
+    if _NoSuchIcebergTableError is not None and isinstance(exc, _NoSuchIcebergTableError):
+        return True
     exc_name = type(exc).__name__.lower()
     message = str(exc).lower()
     return "nosuchtable" in exc_name or "no such table" in message
