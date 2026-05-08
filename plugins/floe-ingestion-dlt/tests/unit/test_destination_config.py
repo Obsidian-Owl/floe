@@ -634,7 +634,7 @@ def test_health_check_stays_fast_without_catalog_config() -> None:
     assert status.details["object_storage_check"] == "not_configured"
 
 
-def test_catalog_health_check_timeout_applies_from_worker_thread() -> None:
+def test_health_check_timeout_helper_applies_from_worker_thread() -> None:
     """Worker-thread health checks still have a deterministic wall-clock timeout."""
     result: list[str] = []
     release_probe = threading.Event()
@@ -644,12 +644,12 @@ def test_catalog_health_check_timeout_applies_from_worker_thread() -> None:
             DltIngestionPlugin._run_health_check_with_timeout(
                 lambda: release_probe.wait(1.5),
                 0.1,
-                check_name="catalog_worker",
+                check_name="runtime_probe",
             )
         except Exception as exc:  # noqa: BLE001 - verifying surfaced error type/message
             result.append(f"{type(exc).__name__}: {exc}")
 
-    thread = threading.Thread(target=worker_call, name="health-caller")
+    thread = threading.Thread(target=worker_call, name="health-timeout-caller")
     start = plugin_module.time.perf_counter()
     thread.start()
     thread.join(0.75)
@@ -657,162 +657,12 @@ def test_catalog_health_check_timeout_applies_from_worker_thread() -> None:
 
     assert not thread.is_alive()
     assert elapsed < 0.75
-    assert result == ["TimeoutError: catalog_worker health check exceeded 0.1s"]
+    assert result == ["TimeoutError: runtime_probe health check exceeded 0.1s"]
     assert (
         len([thread for thread in threading.enumerate() if thread.name.startswith("dlt-health")])
         <= 1
     )
     release_probe.set()
-    slot = DltIngestionPlugin._health_check_slot("catalog_worker")
-    assert slot.acquire(timeout=0.75)
-    slot.release()
-
-
-def test_catalog_health_check_passes_timeout_to_httpx(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Catalog reachability uses bounded HTTP client timeouts."""
-    client_timeouts: list[float] = []
-    requests: list[tuple[str, str]] = []
-
-    class FakeClient:
-        def __init__(self, *, timeout: float) -> None:
-            client_timeouts.append(timeout)
-
-        def __enter__(self) -> FakeClient:
-            return self
-
-        def __exit__(self, *_args: object) -> None:
-            return None
-
-        def get(self, url: str) -> SimpleNamespace:
-            requests.append(("GET", url))
-            return SimpleNamespace(status_code=401)
-
-    monkeypatch.setattr(plugin_module.httpx, "Client", FakeClient)
-
-    plugin = DltIngestionPlugin()
-    error = plugin._check_catalog_reachable(
-        {"uri": "http://polaris:8181/api/catalog", "warehouse": "floe"},
-        timeout=0.25,
-    )
-
-    assert error is None
-    assert client_timeouts == [0.25]
-    assert requests == [("GET", "http://polaris:8181/api/catalog/v1/config?warehouse=floe")]
-
-
-def test_object_storage_health_check_passes_timeout_to_s3fs(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Object storage reachability configures bounded S3 client timeouts."""
-    calls: list[dict[str, Any]] = []
-
-    class FakeFilesystem:
-        def ls(self, path: str, *, detail: bool, max_items: int) -> list[str]:
-            assert path == "bucket"
-            assert detail is False
-            assert max_items == 1
-            return []
-
-    def fake_get_fs_token_paths(
-        *args: Any,
-        **kwargs: Any,
-    ) -> tuple[FakeFilesystem, None, list[str]]:
-        calls.append({"args": args, "kwargs": kwargs})
-        return FakeFilesystem(), None, ["bucket"]
-
-    monkeypatch.setattr(plugin_module.fsspec, "get_fs_token_paths", fake_get_fs_token_paths)
-
-    plugin = DltIngestionPlugin()
-    error = plugin._check_object_storage_reachable(
-        {
-            "bucket": "bucket",
-            "s3_endpoint": "http://minio:9000",
-            "s3_region": "us-east-1",
-        },
-        timeout=0.75,
-    )
-
-    assert error is None
-    assert calls == [
-        {
-            "args": ("s3://bucket",),
-            "kwargs": {
-                "key": os.environ.get("AWS_ACCESS_KEY_ID"),
-                "secret": os.environ.get("AWS_SECRET_ACCESS_KEY"),
-                "client_kwargs": {
-                    "endpoint_url": "http://minio:9000",
-                    "region_name": os.environ.get("AWS_REGION") or "us-east-1",
-                },
-                "config_kwargs": {
-                    "connect_timeout": 0.75,
-                    "read_timeout": 0.75,
-                    "s3": {"addressing_style": "path"},
-                },
-            },
-        }
-    ]
-
-
-def test_object_storage_health_check_has_wall_clock_timeout(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A blocking object-storage probe returns within the requested timeout."""
-    release_probe = threading.Event()
-
-    def blocking_get_fs_token_paths(*_args: Any, **_kwargs: Any) -> tuple[object, None, list[str]]:
-        release_probe.wait(1.5)
-        return object(), None, ["bucket"]
-
-    monkeypatch.setattr(plugin_module.fsspec, "get_fs_token_paths", blocking_get_fs_token_paths)
-
-    plugin = DltIngestionPlugin()
-    start = plugin_module.time.perf_counter()
-    error = plugin._check_object_storage_reachable(
-        {"bucket": "bucket", "s3_endpoint": "http://minio:9000"},
-        timeout=0.1,
-    )
-    elapsed = plugin_module.time.perf_counter() - start
-
-    assert elapsed < 0.75
-    assert error == "TimeoutError: object_storage health check exceeded 0.1s"
-    release_probe.set()
-    slot = DltIngestionPlugin._health_check_slot("object_storage")
-    assert slot.acquire(timeout=0.75)
-    slot.release()
-
-
-def test_object_storage_health_check_timeout_applies_from_worker_thread(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Object-storage probes keep wall-clock timeout behavior in worker hosts."""
-    release_probe = threading.Event()
-
-    def blocking_get_fs_token_paths(*_args: Any, **_kwargs: Any) -> tuple[object, None, list[str]]:
-        release_probe.wait(1.5)
-        return object(), None, ["bucket"]
-
-    monkeypatch.setattr(plugin_module.fsspec, "get_fs_token_paths", blocking_get_fs_token_paths)
-    plugin = DltIngestionPlugin()
-    result: list[str | None] = []
-
-    def worker_call() -> None:
-        result.append(
-            plugin._check_object_storage_reachable(
-                {"bucket": "bucket", "s3_endpoint": "http://minio:9000"},
-                timeout=0.1,
-            )
-        )
-
-    thread = threading.Thread(target=worker_call, name="object-storage-health-caller")
-    start = plugin_module.time.perf_counter()
-    thread.start()
-    thread.join(0.75)
-    elapsed = plugin_module.time.perf_counter() - start
-
-    assert not thread.is_alive()
-    assert elapsed < 0.75
-    assert result == ["TimeoutError: object_storage health check exceeded 0.1s"]
-    release_probe.set()
-    slot = DltIngestionPlugin._health_check_slot("object_storage")
+    slot = DltIngestionPlugin._health_check_slot("runtime_probe")
     assert slot.acquire(timeout=0.75)
     slot.release()

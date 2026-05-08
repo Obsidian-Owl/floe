@@ -67,7 +67,7 @@ dlt = "floe_ingestion_dlt:DltIngestionPlugin"
 ```python
 pipeline = dlt.pipeline(
     pipeline_name="my_pipeline",     # Unique identifier, dlt state isolation
-    destination="iceberg",           # Iceberg destination
+    destination="filesystem",        # Runtime-bound filesystem destination
     dataset_name="my_dataset",       # Maps to Iceberg namespace
 )
 load_info = pipeline.run(source_data, write_disposition="append")
@@ -76,8 +76,9 @@ load_info = pipeline.run(source_data, write_disposition="append")
 #### Iceberg Destination Configuration
 ```python
 # Superseded historical sketch: ingestion APIs must not expose destination
-# configuration. Polaris and storage facts now flow through runtime/deployment
-# binding assembled from platform configuration.
+# configuration. Floe composes storage/catalog deployment binding from
+# platform configuration; dlt consumes a filesystem destination with Iceberg
+# table-format catalog environment at runtime.
 ```
 
 #### Schema Contracts

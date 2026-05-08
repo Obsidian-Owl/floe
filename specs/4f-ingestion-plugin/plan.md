@@ -4,13 +4,13 @@
 
 ## Summary
 
-Implement the `DltIngestionPlugin` as the default ingestion plugin for floe, providing data pipeline creation via dlt v1.21.0, execution with structured results, and Iceberg destination configuration via Polaris REST catalog. The plugin implements the existing `IngestionPlugin` ABC (no ABC changes), supports 3 source types (REST API, SQL Database, Filesystem), 3 write modes (append, replace, merge), 3 schema contracts (evolve, freeze, discard_value), cursor-based incremental loading, custom OTel spans, structured logging, and error categorization with tenacity-based retry. Orchestrator wiring follows the Epic 4E pattern — all Dagster-specific code (resource factory, asset factory, DagsterDltTranslator) lives in `plugins/floe-orchestrator-dagster/`.
+Implement the `DltIngestionPlugin` as the default ingestion plugin for floe, providing data pipeline creation via dlt v1.21.0, execution with structured results, and Iceberg table writes through a platform-composed filesystem runtime binding. Floe owns the deployment binding from storage/catalog platform configuration; dlt consumes that binding as a filesystem destination with Iceberg table format. The plugin implements the existing `IngestionPlugin` ABC (no ABC changes), supports 3 source types (REST API, SQL Database, Filesystem), 3 write modes (append, replace, merge), 3 schema contracts (evolve, freeze, discard_value), cursor-based incremental loading, custom OTel spans, structured logging, and error categorization with tenacity-based retry. Orchestrator wiring follows the Epic 4E pattern — all Dagster-specific code (resource factory, asset factory, DagsterDltTranslator) lives in `plugins/floe-orchestrator-dagster/`.
 
 ## Technical Context
 
 **Language/Version**: Python 3.11
-**Primary Dependencies**: dlt[iceberg]>=1.20.0 (framework), pydantic>=2.0 (config), structlog>=24.0 (logging), opentelemetry-api>=1.0 (tracing), tenacity>=8.0 (retry), httpx>=0.25.0 (health checks)
-**Storage**: Iceberg tables via Polaris REST catalog, MinIO/S3 for data files (dlt handles destination config)
+**Primary Dependencies**: dlt[iceberg]>=1.20.0 (framework), pydantic>=2.0 (config), structlog>=24.0 (logging), opentelemetry-api>=1.0 (tracing), tenacity>=8.0 (retry)
+**Storage**: Iceberg tables via Polaris REST catalog, MinIO/S3 for data files, with Floe composing runtime/deployment binding and dlt using a filesystem destination
 **Testing**: pytest, testing.base_classes (BasePluginDiscoveryTests, BaseHealthCheckTests), IntegrationTestBase
 **Target Platform**: K8s (dlt runs in-process within orchestrator pods)
 **Project Type**: Monorepo plugin package
@@ -267,7 +267,7 @@ This phase implements the plugin class with all ABC methods plus lifecycle.
 **T008: Implement health_check()**
 - File: `plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py`
 - Verify dlt is importable → HEALTHY
-- Verify Iceberg destination is reachable (test catalog connection) → HEALTHY
+- Keep health checks import-only and non-networked; runtime validation must happen through binding validation plus create/run paths
 - Return UNHEALTHY with message on failure
 - OTel span: `floe.ingestion.health_check`
 - Requirements: FR-007
@@ -277,7 +277,8 @@ This phase implements the plugin class with all ABC methods plus lifecycle.
 - Accept `IngestionConfig`, return dlt pipeline object
 - Configure dlt pipeline with:
   - `pipeline_name` derived from `destination_table`
-  - `destination="iceberg"`
+  - `destination="filesystem"` using the composed runtime binding
+  - Iceberg table format supplied through the binding's catalog environment
   - `dataset_name` from namespace portion of `destination_table`
 - Validate source_config against source-specific requirements
 - Raise `ValidationError` on invalid config

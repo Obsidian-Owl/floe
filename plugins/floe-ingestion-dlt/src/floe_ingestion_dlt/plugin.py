@@ -30,8 +30,6 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-import fsspec
-import httpx
 import structlog
 from floe_core.composition.models import PluginRequirements, RequirementSet
 from floe_core.plugin_metadata import HealthState, HealthStatus
@@ -515,8 +513,10 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 "dataset_name": dataset_name,
             }
             runtime_binding = self._pipeline_runtime_binding(config)
-            runtime_destination_config = self._destination_config_from_binding(runtime_binding)
-            if not runtime_destination_config:
+            runtime_destination_options = self._destination_filesystem_options_from_binding(
+                runtime_binding
+            )
+            if not runtime_destination_options:
                 raise PipelineConfigurationError(
                     "dlt runtime binding is required for dlt ingestion pipelines",
                     source_type=config.source_type,
@@ -525,7 +525,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             from dlt.destinations import filesystem
 
             with self._temporary_runtime_binding_environment(runtime_binding):
-                pipeline_kwargs["destination"] = filesystem(**runtime_destination_config)
+                pipeline_kwargs["destination"] = filesystem(**runtime_destination_options)
                 pipeline = dlt.pipeline(**pipeline_kwargs)
             if runtime_binding:
                 pipeline._floe_dlt_runtime_binding = runtime_binding
@@ -791,33 +791,9 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         return {}
 
     @staticmethod
-    def _destination_config_from_binding(binding: Mapping[str, Any]) -> dict[str, Any]:
+    def _destination_filesystem_options_from_binding(binding: Mapping[str, Any]) -> dict[str, Any]:
         destination_filesystem = binding.get("destination_filesystem")
         return dict(destination_filesystem) if isinstance(destination_filesystem, Mapping) else {}
-
-    @staticmethod
-    def _first_config_value(catalog_config: dict[str, Any], *keys: str) -> Any | None:
-        for key in keys:
-            value = catalog_config.get(key)
-            if value not in (None, ""):
-                return value
-        return None
-
-    def _bucket_url(self, catalog_config: dict[str, Any]) -> str | None:
-        bucket_url = self._first_config_value(
-            catalog_config,
-            "bucket_url",
-            "storage_url",
-            "base_location",
-            "default_base_location",
-        )
-        if bucket_url is not None:
-            return str(bucket_url)
-        bucket = self._first_config_value(catalog_config, "bucket", "s3_bucket")
-        if bucket is None:
-            return None
-        bucket_str = str(bucket)
-        return bucket_str if "://" in bucket_str else f"s3://{bucket_str}"
 
     @contextmanager
     def _temporary_runtime_binding_environment(self, binding: Mapping[str, Any]) -> Any:
@@ -878,76 +854,6 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             return
         pyiceberg_catalog._ENV_CONFIG = previous_config
 
-    def _catalog_health_url(self, catalog_config: dict[str, Any]) -> str:
-        uri = str(self._first_config_value(catalog_config, "uri", "catalog_uri") or "").rstrip("/")
-        warehouse = self._first_config_value(catalog_config, "warehouse")
-        if not uri:
-            raise ValueError("catalog uri is required for catalog health check")
-        health_url = f"{uri}/v1/config"
-        if warehouse is not None:
-            health_url = f"{health_url}?warehouse={warehouse}"
-        return health_url
-
-    def _check_catalog_reachable(
-        self,
-        catalog_config: dict[str, Any],
-        timeout: float,
-    ) -> str | None:
-        def _catalog_check() -> None:
-            with httpx.Client(timeout=timeout) as client:
-                client.get(self._catalog_health_url(catalog_config))
-
-        try:
-            self._run_health_check_with_timeout(
-                _catalog_check,
-                timeout,
-                check_name="catalog",
-            )
-            return None
-        except Exception as exc:
-            return f"{type(exc).__name__}: {sanitize_error_message(str(exc))}"
-
-    def _check_object_storage_reachable(
-        self,
-        catalog_config: dict[str, Any],
-        timeout: float,
-    ) -> str | None:
-        bucket_url = self._bucket_url(catalog_config)
-        if bucket_url is None or not bucket_url.startswith("s3://"):
-            return None
-
-        def _object_storage_check() -> None:
-            fs, _, paths = fsspec.get_fs_token_paths(
-                bucket_url,
-                key=os.environ.get("AWS_ACCESS_KEY_ID"),
-                secret=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-                client_kwargs={
-                    "endpoint_url": self._first_config_value(
-                        catalog_config,
-                        "s3_endpoint",
-                        "endpoint",
-                    ),
-                    "region_name": os.environ.get("AWS_REGION")
-                    or self._first_config_value(catalog_config, "s3_region", "region"),
-                },
-                config_kwargs={
-                    "connect_timeout": timeout,
-                    "read_timeout": timeout,
-                    "s3": {"addressing_style": "path"},
-                },
-            )
-            fs.ls(paths[0], detail=False, max_items=1)
-
-        try:
-            self._run_health_check_with_timeout(
-                _object_storage_check,
-                timeout,
-                check_name="object_storage",
-            )
-            return None
-        except Exception as exc:
-            return f"{type(exc).__name__}: {sanitize_error_message(str(exc))}"
-
     @staticmethod
     def _object_storage_check_state(bucket_url: str | None) -> str:
         if bucket_url is None:
@@ -955,36 +861,6 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         if not bucket_url.startswith("s3://"):
             return "skipped_non_s3"
         return "configured"
-
-    def _call_health_probe_with_deadline(
-        self,
-        probe: Callable[[dict[str, Any], float], str | None],
-        catalog_config: dict[str, Any],
-        deadline: float,
-        *,
-        check_name: str,
-    ) -> str | None:
-        remaining = deadline - time.perf_counter()
-        if remaining <= 0:
-            return f"TimeoutError: {check_name} health check exceeded 0s"
-
-        result: list[str | None] = []
-
-        def _probe() -> None:
-            result.append(probe(catalog_config, remaining))
-
-        try:
-            self._run_health_check_with_timeout(
-                _probe,
-                remaining,
-                check_name=f"{check_name}_budget",
-            )
-        except TimeoutError:
-            return f"TimeoutError: {check_name} health check exceeded {remaining}s"
-        except Exception as exc:
-            return f"{type(exc).__name__}: {sanitize_error_message(str(exc))}"
-
-        return result[0] if result else None
 
     @classmethod
     def _run_health_check_with_timeout(
