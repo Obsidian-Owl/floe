@@ -243,7 +243,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         except ImportError as e:
             logger.error(
                 "infisical-python-sdk not installed",
-                error=type(e).__name__,
+                extra={"error_type": type(e).__name__},
             )
             raise InfisicalBackendUnavailableError(
                 site_url=self._config.site_url,
@@ -254,7 +254,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             if "unauthorized" in error_str or "401" in error_str or "auth" in error_str:
                 logger.error(
                     "Infisical authentication failed",
-                    error=type(e).__name__,
+                    extra={"error_type": type(e).__name__},
                 )
                 raise InfisicalAuthError(
                     reason=_safe_error_reason(e, "authentication failed")
@@ -262,7 +262,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             if "connection" in error_str or "timeout" in error_str:
                 logger.error(
                     "Failed to connect to Infisical",
-                    error=type(e).__name__,
+                    extra={"error_type": type(e).__name__},
                 )
                 raise InfisicalBackendUnavailableError(
                     site_url=self._config.site_url,
@@ -270,7 +270,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
                 ) from e
             logger.error(
                 "Infisical authentication error",
-                error=type(e).__name__,
+                extra={"error_type": type(e).__name__},
             )
             raise InfisicalAuthError(reason=_safe_error_reason(e, "authentication failed")) from e
 

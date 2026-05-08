@@ -460,7 +460,7 @@ class TestInfisicalSecretsPluginAuthentication:
 
         mock_exception.assert_not_called()
         mock_error.assert_called_once()
-        assert mock_error.call_args.kwargs["error"] == "Exception"
+        assert mock_error.call_args.kwargs["extra"] == {"error_type": "Exception"}
         assert exc_info.value.reason == "authentication failed (401)"
         assert "client_secret" not in str(exc_info.value)
 
