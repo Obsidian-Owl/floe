@@ -633,6 +633,8 @@ class TestCompiledArtifactsExtensions:
 class TestStorageDeploymentBinding:
     """Tests for compiled storage deployment bindings."""
 
+    pytestmark = pytest.mark.requirement("PCU-005")
+
     def _rich_binding(self) -> StorageDeploymentBinding:
         credentials = StorageCredentialBinding(
             mode="kubernetes-secret",
@@ -942,6 +944,31 @@ class TestStorageDeploymentBinding:
         assert "minio-secret-value" not in serialized
         assert "raw-secret-value" not in serialized
 
+    def test_compiled_artifacts_reject_raw_secret_dbt_profiles(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        """Top-level generated dbt profiles must reject raw credential material."""
+        with pytest.raises(ValidationError, match="raw credential material"):
+            CompiledArtifacts(
+                metadata=sample_compilation_metadata,
+                identity=sample_product_identity,
+                observability=sample_observability_config,
+                dbt_profiles={
+                    "floe": {
+                        "target": "dev",
+                        "outputs": {
+                            "dev": {
+                                "type": "duckdb",
+                                "password": "raw-secret-value",  # pragma: allowlist secret
+                            }
+                        },
+                    }
+                },
+            )
+
     @pytest.mark.parametrize(
         "factory",
         [
@@ -968,6 +995,8 @@ class TestStorageDeploymentBinding:
 
 class TestStorageCredentialBinding:
     """Tests for storage credential binding validation."""
+
+    pytestmark = pytest.mark.requirement("PCU-005")
 
     @pytest.mark.parametrize(
         "factory",

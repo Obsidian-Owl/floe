@@ -323,7 +323,7 @@ class TestAuthenticateForRealm:
                     {},
                     realm="sales-domain",
                     client_id="sales-client",
-                    client_secret="sales-secret",
+                    client_secret=SecretStr("sales-secret"),
                 )
 
                 # Verify custom client credentials were used
@@ -334,6 +334,15 @@ class TestAuthenticateForRealm:
                 assert token == "custom-token"
         finally:
             plugin.shutdown()
+
+    @pytest.mark.requirement("7A-FR-032")
+    def test_authenticate_for_realm_requires_secretstr_for_custom_secret(self) -> None:
+        """Custom realm client secrets must use SecretStr at the API boundary."""
+        from floe_identity_keycloak import KeycloakIdentityPlugin
+
+        annotations = KeycloakIdentityPlugin.authenticate_for_realm.__annotations__
+
+        assert annotations["client_secret"] == "SecretStr | None"  # pragma: allowlist secret
 
 
 class TestShutdownClearsRealmValidators:

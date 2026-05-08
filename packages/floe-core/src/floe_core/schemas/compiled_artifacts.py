@@ -44,13 +44,23 @@ _SECRET_FIELD_MARKERS = (
     "access-key",
     "access_key",
     "accesskey",
+    "bearer",
     "credential",
+    "oauth",
     "password",
+    "private-key",
+    "private_key",
+    "privatekey",
     "secret",
     "token",
 )
 _SECRET_VALUE_MARKERS = (
+    "bearer",
+    "oauth",
     "password",
+    "private-key",
+    "private_key",
+    "privatekey",
     "raw-secret-value",
     "secret-value",
     "token",
@@ -73,6 +83,9 @@ _PLUGIN_CONFIG_SECRET_FIELDS = frozenset(
     }
 )
 _DEFAULT_ADMIN_CREDENTIAL_PATTERN = re.compile(r"(?<![a-z0-9])[a-z0-9_-]*admin[0-9]*(?![a-z0-9])")
+_DBT_ENV_VAR_REFERENCE_PATTERN = re.compile(
+    r"\{\{\s*env_var\(\s*['\"][A-Z_][A-Z0-9_]*['\"]\s*\)\s*\}\}"
+)
 _OMIT_PLUGIN_CONFIG_VALUE = object()
 
 
@@ -121,7 +134,11 @@ def _validate_kubernetes_namespace(namespace: str) -> str:
 
 
 def _assert_no_secret_material(value: Any, path: str) -> None:
-    """Reject raw credential-looking fields in serialized artifact fragments."""
+    """Reject raw credential-looking fields in serialized artifact fragments.
+
+    Key names are the primary guard. String value checks are best-effort coverage
+    for obvious fixture and default credential values.
+    """
     if isinstance(value, dict):
         for key, child in value.items():
             key_text = str(key).lower()
@@ -158,6 +175,42 @@ def _assert_no_secret_material(value: Any, path: str) -> None:
             "use JSON-compatible dict, list, string, number, boolean, or null values"
         )
         raise ValueError(msg)
+
+
+def _is_dbt_env_var_reference(value: Any) -> bool:
+    """Return True when a dbt profile value is an env_var reference."""
+    return (
+        isinstance(value, str)
+        and _DBT_ENV_VAR_REFERENCE_PATTERN.fullmatch(value.strip()) is not None
+    )
+
+
+def _assert_no_dbt_profile_secret_material(value: Any, path: str) -> None:
+    """Reject raw dbt profile credentials while allowing env_var references."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key).lower()
+            child_path = f"{path}.{key}"
+            if any(marker in key_text for marker in _SECRET_FIELD_MARKERS):
+                if _is_dbt_env_var_reference(child):
+                    continue
+                msg = (
+                    f"{child_path} looks like raw credential material; use dbt env_var() "
+                    "references instead"
+                )
+                raise ValueError(msg)
+            _assert_no_dbt_profile_secret_material(child, child_path)
+        return
+
+    if isinstance(value, list | tuple | set | frozenset):
+        for index, child in enumerate(value):
+            _assert_no_dbt_profile_secret_material(child, f"{path}[{index}]")
+        return
+
+    if _is_dbt_env_var_reference(value):
+        return
+
+    _assert_no_secret_material(value, path)
 
 
 def _normalize_plugin_config_key(key: object) -> str:
@@ -1209,6 +1262,17 @@ class CompiledArtifacts(BaseModel):
         default=None,
         description="Resolved quality configuration",
     )
+
+    @field_validator("dbt_profiles")
+    @classmethod
+    def validate_secret_free_dbt_profiles(
+        cls,
+        value: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        """Ensure generated dbt profiles do not inline credential material."""
+        if value is not None:
+            _assert_no_dbt_profile_secret_material(value, "dbt_profiles")
+        return value
 
     def _to_serializable_dict(self) -> dict[str, Any]:
         """Return the shared JSON-safe artifact payload."""

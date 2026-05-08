@@ -232,7 +232,10 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             self._authenticated = True
 
         except ImportError as e:
-            logger.exception("infisical-python-sdk not installed")
+            logger.error(
+                "infisical-python-sdk not installed",
+                error=type(e).__name__,
+            )
             raise InfisicalBackendUnavailableError(
                 site_url=self._config.site_url,
                 reason="infisical-python-sdk not installed. Install with: pip install",
@@ -240,15 +243,24 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         except Exception as e:
             error_str = str(e).lower()
             if "unauthorized" in error_str or "401" in error_str or "auth" in error_str:
-                logger.exception("Infisical authentication failed")
+                logger.error(
+                    "Infisical authentication failed",
+                    error=type(e).__name__,
+                )
                 raise InfisicalAuthError(reason=str(e)) from e
             if "connection" in error_str or "timeout" in error_str:
-                logger.exception("Failed to connect to Infisical")
+                logger.error(
+                    "Failed to connect to Infisical",
+                    error=type(e).__name__,
+                )
                 raise InfisicalBackendUnavailableError(
                     site_url=self._config.site_url,
                     reason=str(e),
                 ) from e
-            logger.exception("Infisical authentication error")
+            logger.error(
+                "Infisical authentication error",
+                error=type(e).__name__,
+            )
             raise InfisicalAuthError(reason=str(e)) from e
 
     def shutdown(self) -> None:

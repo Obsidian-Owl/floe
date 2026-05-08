@@ -26,7 +26,7 @@ import time
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
 import structlog
@@ -451,21 +451,25 @@ def _build_storage_deployment_binding(
             )
         )
     credential_modes = [selected_credential_mode]
-    secret_projection_modes = (
-        cast("list[SecretProjectionMode]", [selected_credential_mode])
-        if selected_credential_mode
-        in {
-            "kubernetes-secret",
-            "external-secret-sync",
-            "csi-secret-volume",
-            "environment",
-        }
-        else []
+    valid_secret_projection_modes: tuple[SecretProjectionMode, ...] = (
+        "kubernetes-secret",
+        "external-secret-sync",
+        "csi-secret-volume",
+        "environment",
     )
-    identity_modes = cast(
-        "list[IdentityMode]",
-        list(storage_binding.capabilities.identity_modes),
+    secret_projection_modes = [
+        mode for mode in valid_secret_projection_modes if mode == selected_credential_mode
+    ]
+    valid_identity_modes: tuple[IdentityMode, ...] = (
+        "aws-irsa",
+        "aws-pod-identity",
+        "gcp-workload-identity",
+        "azure-workload-identity",
+        "azure-managed-identity",
+        "oidc-federation",
     )
+    declared_identity_modes = set(storage_binding.capabilities.identity_modes)
+    identity_modes = [mode for mode in valid_identity_modes if mode in declared_identity_modes]
     storage_capabilities = PluginCapabilities(
         plugin_type="storage",
         plugin_name=storage_plugin.name,
@@ -1058,7 +1062,7 @@ def run_enforce_stage(
             raise ValueError("token must be non-empty when provided")
         if len(token) > 2_048:
             raise ValueError("token exceeds maximum length")
-        if not re.match(r"^[A-Za-z0-9._\-]+$", token):
+        if not re.match(r"^[A-Za-z0-9._=\-]+$", token):
             raise ValueError("token contains invalid characters")
     if principal is not None:
         if not principal.strip():
