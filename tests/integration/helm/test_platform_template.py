@@ -382,6 +382,29 @@ class TestDagsterOtelEnvVars:
                 f"Env vars found: {env_names}"
             )
 
+    @pytest.mark.requirement("ALPHA-ICEBERG")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_values_test_projects_polaris_credential_into_dagster_deployments(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """Test runtime Dagster pods receive Polaris OAuth credential references."""
+        documents = _render_template_with_values_file(platform_chart_path, "values-test.yaml")
+        dagster_deps = _find_dagster_deployments(documents)
+        assert dagster_deps, "Expected Dagster Deployments with values-test.yaml"
+
+        for dep in dagster_deps:
+            name = dep["metadata"]["name"]
+            envs = {env.get("name"): env for env in _get_container_env_vars(dep)}
+            polaris_credential = envs.get("POLARIS_CREDENTIAL")
+            assert polaris_credential is not None, (
+                f"Dagster Deployment '{name}' missing POLARIS_CREDENTIAL env var"
+            )
+            assert polaris_credential["valueFrom"]["secretKeyRef"] == {
+                "name": "floe-platform-polaris-credentials",
+                "key": "POLARIS_CREDENTIAL",
+            }
+
     @pytest.mark.requirement("AC-17.6")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
     def test_dagster_deployments_have_otel_service_name(

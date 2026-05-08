@@ -122,6 +122,7 @@ def create_iceberg_resources(
     from floe_iceberg import IcebergTableManager
 
     from floe_orchestrator_dagster.io_manager import create_iceberg_io_manager
+    from floe_orchestrator_dagster.runtime_catalog_config import runtime_catalog_config
 
     registry = get_registry()
 
@@ -136,7 +137,7 @@ def create_iceberg_resources(
     validated_catalog_config = registry.configure(
         PluginType.CATALOG,
         catalog_ref.type,
-        catalog_ref.config or {},
+        runtime_catalog_config(catalog_ref.type, catalog_ref.config),
     )
     if validated_catalog_config is None:
         raise RuntimeError(f"Catalog plugin config for {catalog_ref.type} could not be validated")
