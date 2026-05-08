@@ -38,7 +38,7 @@ dlt is the recommended ingestion framework because:
 - **Lightweight**: No additional services required
 - **Dagster-native**: First-class integration with Dagster assets
 - **60+ connectors**: REST APIs, databases, SaaS apps
-- **Iceberg support**: Native dlt destination for Iceberg
+- **Iceberg support**: dlt filesystem destination with `table_format="iceberg"` from the platform-composed runtime binding
 
 ### External: Airbyte
 
@@ -152,7 +152,8 @@ class DltIngestionPlugin(IngestionPlugin):
     def create_pipeline(self, config: IngestionConfig) -> dlt.Pipeline:
         return dlt.pipeline(
             pipeline_name=config.name,
-            destination="filesystem",  # Write to Iceberg via filesystem
+            destination="filesystem",
+            table_format="iceberg",
             dataset_name=config.destination_table.split(".")[0],
         )
 

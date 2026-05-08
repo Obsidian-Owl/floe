@@ -151,7 +151,7 @@ tests/contract/test_core_to_ingestion_contract.py
 | `pydantic` | `BaseModel`, `ConfigDict`, `Field`, `SecretStr`, `field_validator` | `pydantic` |
 | `structlog` | Structured logging | `structlog` |
 | `opentelemetry-api` | Span creation, attributes | `opentelemetry.trace` |
-| `dlt` | Pipeline API, Iceberg destination, sources | `dlt` |
+| `dlt` | Pipeline API, filesystem destination with `table_format="iceberg"`, sources | `dlt` |
 | `tenacity` | Retry decorator, stop/wait strategies | `tenacity` |
 
 ### Produces for Others

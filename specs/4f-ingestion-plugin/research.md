@@ -150,7 +150,7 @@ resources.update(semantic_resources)
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `dlt[iceberg]` | `>=1.20.0,<2.0.0` | Core framework + Iceberg destination |
+| `dlt[iceberg]` | `>=1.20.0,<2.0.0` | Core framework + filesystem destination and Iceberg table-format support |
 | `floe-core` | `>=0.1.0` | ABC, PluginMetadata, telemetry |
 | `pydantic` | `>=2.0,<3.0` | Config validation |
 | `structlog` | `>=24.0,<26.0` | Structured logging |

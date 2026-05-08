@@ -213,7 +213,7 @@ class SourceConnectionError(IngestionError):
 
 
 class DestinationWriteError(IngestionError):
-    """Failed to write data to Iceberg destination.
+    """Failed to write Iceberg-formatted data through dlt filesystem destination.
 
     Raised during run() when the load step fails.
     Default category: TRANSIENT (may be temporary).

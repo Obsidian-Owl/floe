@@ -15,7 +15,7 @@
 # Install the dlt ingestion plugin
 pip install floe-ingestion-dlt
 
-# Install dlt with Iceberg destination support
+# Install dlt with filesystem destination and Iceberg table-format support
 pip install "dlt[iceberg]"
 
 # Install source-specific packages
@@ -261,13 +261,15 @@ pip install "dlt[filesystem]"    # For file sources
 
 ### DestinationWriteError
 
-**Symptom**: `run()` fails writing to Iceberg
+**Symptom**: `create_pipeline()` or `run()` fails while applying runtime binding or writing Iceberg-formatted data files
 
 **Solution**:
-1. Verify Polaris catalog is reachable: `curl http://polaris:8181/api/catalog/v1/config`
-2. Verify MinIO/S3 storage is accessible
-3. Check namespace exists in Polaris catalog
-4. Verify write permissions
+1. Confirm `IngestionConfig.runtime_binding.destination_filesystem` is present and points at the expected bucket URL
+2. Confirm `DltIngestionBinding` supplied the required Iceberg catalog environment for the execution pod
+3. Check the target namespace/table identifiers produced by the platform compiler
+4. Verify the execution identity has write permissions to the configured filesystem location
+
+These checks diagnose create/run failures only. Plugin `health_check()` does not probe catalog or storage readiness.
 
 ### Rate Limiting
 

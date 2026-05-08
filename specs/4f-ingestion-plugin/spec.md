@@ -55,7 +55,7 @@ A data engineer configures an ingestion source in floe.yaml and expects the plug
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid `IngestionConfig` with `source_type="rest_api"`, **When** `create_pipeline(config)` is called, **Then** a dlt pipeline object is returned configured with the correct source and Iceberg destination
+1. **Given** a valid `IngestionConfig` with `source_type="rest_api"` and a runtime binding, **When** `create_pipeline(config)` is called, **Then** a dlt pipeline object is returned configured with the correct source, `destination="filesystem"`, and Iceberg table format settings from the runtime binding
 2. **Given** a created pipeline, **When** `run(pipeline)` executes successfully, **Then** `IngestionResult.success` is True and `rows_loaded > 0`
 3. **Given** a pipeline with `write_mode="append"`, **When** run twice, **Then** data accumulates (rows double) rather than replacing
 4. **Given** a pipeline with `write_mode="merge"` and primary key, **When** run with updated records, **Then** existing records are updated and new records are inserted
@@ -290,7 +290,7 @@ A data engineer expects transient errors (network timeouts, rate limits) to be r
 
 ### Key Entities
 
-- **DltIngestionPlugin**: Concrete implementation of `IngestionPlugin` ABC for dlt. Handles pipeline creation, execution, and Iceberg destination configuration. Registered via `floe.ingestion` entry point with name "dlt". Lives in `plugins/floe-ingestion-dlt/`.
+- **DltIngestionPlugin**: Concrete implementation of `IngestionPlugin` ABC for dlt. Handles pipeline creation and execution using dlt's filesystem destination plus Iceberg table-format/catalog settings supplied through `DltIngestionBinding`. Registered via `floe.ingestion` entry point with name "dlt". Lives in `plugins/floe-ingestion-dlt/`.
 
 - **DltIngestionConfig**: Pydantic v2 configuration model for the dlt ingestion plugin. Includes `sources` (list of source definitions) and `retry_config` (retry parameters). Uses `ConfigDict(frozen=True, extra="forbid")`. Destination settings are supplied by runtime/deployment binding, not plugin config.
 
@@ -327,7 +327,7 @@ A data engineer expects transient errors (network timeouts, rate limits) to be r
 - Plugin registry from Epic 1 is available for plugin discovery
 - Catalog plugin (Epic 4C, Polaris) is available and provides REST catalog
 - Storage plugin (Epic 4D, Iceberg) provides table management and IOManager
-- dlt v1.21.0+ is available with Iceberg destination support
+- dlt v1.21.0+ is available with filesystem destination support and `table_format="iceberg"`
 - dagster-dlt v0.25.0+ is available with first-class Dagster integration (dependency of `plugins/floe-orchestrator-dagster/`, NOT of the ingestion plugin)
 - PyIceberg v0.10.0+ is available for Iceberg table operations
 - Polaris REST catalog is deployed and accessible in K8s

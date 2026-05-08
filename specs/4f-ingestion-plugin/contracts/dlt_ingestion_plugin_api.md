@@ -28,9 +28,9 @@ from floe_ingestion_dlt.config import DltIngestionConfig
 class DltIngestionPlugin(IngestionPlugin):
     """dlt-based implementation of IngestionPlugin.
 
-    Provides data ingestion via dlt pipelines with Iceberg destination
-    and Polaris REST catalog. Supports REST API, SQL Database, and
-    Filesystem source types.
+    Provides data ingestion via dlt pipelines using the filesystem destination
+    with table_format="iceberg" and catalog environment from DltIngestionBinding.
+    Supports REST API, SQL Database, and Filesystem source types.
 
     Example:
         >>> from floe_ingestion_dlt import DltIngestionPlugin, DltIngestionConfig
