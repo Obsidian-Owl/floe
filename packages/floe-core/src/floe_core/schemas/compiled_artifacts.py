@@ -23,7 +23,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
@@ -203,13 +203,24 @@ def _is_non_secret_endpoint_url(value: str) -> bool:
         return False
     if parsed.username or parsed.password:
         return False
+    if parsed.fragment:
+        return False
 
     query_keys = {
         re.sub(r"[^a-z0-9]", "", part.split("=", 1)[0].lower())
         for part in parsed.query.split("&")
         if part
     }
-    return not (query_keys & _URL_CREDENTIAL_QUERY_KEYS)
+    if query_keys & _URL_CREDENTIAL_QUERY_KEYS:
+        return False
+
+    for _, query_value in parse_qsl(parsed.query, keep_blank_values=True):
+        value_text = query_value.lower()
+        if any(marker in value_text for marker in _SECRET_VALUE_MARKERS) or (
+            _DEFAULT_ADMIN_CREDENTIAL_PATTERN.search(value_text) is not None
+        ):
+            return False
+    return True
 
 
 def _assert_no_dbt_profile_secret_material(value: Any, path: str) -> None:

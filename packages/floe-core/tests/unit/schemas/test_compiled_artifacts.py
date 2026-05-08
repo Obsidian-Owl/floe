@@ -1040,6 +1040,34 @@ class TestStorageDeploymentBinding:
                 },
             )
 
+    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
+    def test_compiled_artifacts_reject_fragment_token_dbt_profile_urls(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        """dbt profile URLs with credential fragments are not safe endpoint refs."""
+        credential_url = "https://idp.example/callback#access_token=leaked"
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            CompiledArtifacts(
+                metadata=sample_compilation_metadata,
+                identity=sample_product_identity,
+                observability=sample_observability_config,
+                dbt_profiles={
+                    "floe": {
+                        "target": "dev",
+                        "outputs": {
+                            "dev": {
+                                "type": "duckdb",
+                                "token": credential_url,
+                            }
+                        },
+                    }
+                },
+            )
+
     @pytest.mark.parametrize(
         "factory",
         [
