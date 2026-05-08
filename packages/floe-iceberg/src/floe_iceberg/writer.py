@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from inspect import getattr_static
 from typing import Any, Literal, Protocol, cast
@@ -184,13 +184,30 @@ class DefaultIcebergTableWriter:
         writes: Iterable[IcebergTableWrite],
     ) -> IcebergWriterResult:
         """Write a batch of tables and return a write summary."""
-        pending_writes = tuple(writes)
-        for write in pending_writes:
-            _validate_write_mode(write.mode)
+        if isinstance(writes, Sequence):
+            for write in writes:
+                _validate_write_mode(write.mode)
+            return self._write_validated_tables(namespace, writes)
 
         self.ensure_namespace(namespace)
         table_names: list[str] = []
-        for write in pending_writes:
+        for write in writes:
+            _validate_write_mode(write.mode)
+            self.write_table(write.identifier, write.arrow_table, mode=write.mode)
+            table_names.append(write.identifier)
+        return IcebergWriterResult(
+            tables_written=len(table_names),
+            table_names=tuple(table_names),
+        )
+
+    def _write_validated_tables(
+        self,
+        namespace: str,
+        writes: Iterable[IcebergTableWrite],
+    ) -> IcebergWriterResult:
+        self.ensure_namespace(namespace)
+        table_names: list[str] = []
+        for write in writes:
             self.write_table(write.identifier, write.arrow_table, mode=write.mode)
             table_names.append(write.identifier)
         return IcebergWriterResult(

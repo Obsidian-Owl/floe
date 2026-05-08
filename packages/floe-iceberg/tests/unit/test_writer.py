@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 import pyarrow as pa
@@ -193,6 +194,31 @@ def test_write_tables_writes_multiple_tables_in_one_batch() -> None:
     )
     assert catalog.create_namespace_calls == [("customer_360", None)]
     assert catalog.tables["customer_360.customers"].appended == [customers]
+    assert catalog.tables["customer_360.orders"].appended == [orders]
+
+
+@pytest.mark.requirement("AC-318")
+def test_write_tables_streams_generator_writes_without_materializing() -> None:
+    """Verify iterable batch writes process each table before requesting the next."""
+    catalog = _WriteCapableCatalog()
+    customers = _arrow_table()
+    orders = pa.table({"order_id": [10], "total": [42.0]})
+    events: list[str] = []
+
+    def writes() -> Iterable[IcebergTableWrite]:
+        events.append("yield:customers")
+        yield IcebergTableWrite("customer_360.customers", customers)
+        assert catalog.tables["customer_360.customers"].appended == [customers]
+        events.append("yield:orders")
+        yield IcebergTableWrite("customer_360.orders", orders)
+
+    result = _writer(catalog).write_tables("customer_360", writes())
+
+    assert result == IcebergWriterResult(
+        tables_written=2,
+        table_names=("customer_360.customers", "customer_360.orders"),
+    )
+    assert events == ["yield:customers", "yield:orders"]
     assert catalog.tables["customer_360.orders"].appended == [orders]
 
 
