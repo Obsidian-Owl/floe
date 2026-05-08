@@ -195,22 +195,31 @@ def _apply_iceberg_attach(
         return profile_output
 
     polaris = deployment.catalog.polaris
-    if polaris.warehouse is None:
+    if polaris.warehouse is None or polaris.catalog_uri is None:
         return profile_output
 
-    endpoint = polaris.catalog_uri or polaris.endpoint_internal
     attach_entry = {
         "path": polaris.warehouse,
         "alias": "iceberg",
         "type": "iceberg",
-        "options": {"endpoint": endpoint},
+        "options": {"endpoint": polaris.catalog_uri},
     }
 
     updated = dict(profile_output)
     updated["extensions"] = _merge_unique_list(updated.get("extensions"), ["httpfs", "iceberg"])
 
     existing_attach = updated.get("attach")
-    attach = list(existing_attach) if isinstance(existing_attach, list) else []
+    if existing_attach is None:
+        attach = []
+    elif isinstance(existing_attach, list):
+        attach = list(existing_attach)
+    else:
+        msg = (
+            "DuckDB profile existing 'attach' value must be a list before "
+            "adding the Iceberg catalog attachment."
+        )
+        raise ValueError(msg)
+
     if attach_entry not in attach:
         attach.append(attach_entry)
     updated["attach"] = attach

@@ -353,6 +353,56 @@ class TestAttachOptionsAllowlist:
         assert attach_entry["schema"] == "public"
 
     @pytest.mark.requirement("001-SEC-004")
+    def test_endpoint_and_secret_option_keys_accepted(self, plugin: DuckDBComputePlugin) -> None:
+        """Test Iceberg REST attach endpoint and secret options pass validation."""
+        config = ComputeConfig(
+            plugin="duckdb",
+            connection={
+                "path": ":memory:",
+                "attach": [
+                    {
+                        "path": "floe-demo",
+                        "alias": "iceberg",
+                        "type": "iceberg",
+                        "options": {
+                            "endpoint": "http://polaris:8181/api/catalog",
+                            "secret": "polaris",  # pragma: allowlist secret
+                        },
+                    }
+                ],
+            },
+        )
+
+        profile = plugin.generate_dbt_profile(config)
+        attach_entry = profile["attach"][0]
+        assert attach_entry["endpoint"] == "http://polaris:8181/api/catalog"
+        assert attach_entry["secret"] == "polaris"  # pragma: allowlist secret
+
+    @pytest.mark.requirement("001-SEC-004")
+    @pytest.mark.parametrize("option_key", ["endpoint_url", "secret_ref", "secrets"])
+    def test_adjacent_disallowed_option_keys_rejected(
+        self, plugin: DuckDBComputePlugin, option_key: str
+    ) -> None:
+        """Test option names adjacent to allowed keys still fail validation."""
+        config = ComputeConfig(
+            plugin="duckdb",
+            connection={
+                "path": ":memory:",
+                "attach": [
+                    {
+                        "path": "floe-demo",
+                        "alias": "iceberg",
+                        "type": "iceberg",
+                        "options": {option_key: "http://polaris:8181/api/catalog"},
+                    }
+                ],
+            },
+        )
+
+        with pytest.raises(ValueError, match=f"Invalid attach option key.*{option_key}"):
+            plugin.generate_dbt_profile(config)
+
+    @pytest.mark.requirement("001-SEC-004")
     def test_disallowed_option_key_rejected(self, plugin: DuckDBComputePlugin) -> None:
         """Test that disallowed option keys raise ValueError."""
         config = ComputeConfig(

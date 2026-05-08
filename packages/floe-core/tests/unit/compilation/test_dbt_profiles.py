@@ -286,6 +286,140 @@ class TestGenerateDBTProfiles:
             "options": {"endpoint": "http://floe-platform-polaris:8181/api/catalog"},
         } in dev_output["attach"]
 
+    def test_apply_iceberg_attach_requires_catalog_uri(self) -> None:
+        """Do not fall back to endpoint_internal, which may point at storage."""
+        from floe_core.compilation.dbt_profiles import _apply_iceberg_attach
+
+        deployment = DeploymentConfig(
+            catalog=CatalogDeploymentBinding(
+                provider="polaris",
+                polaris=PolarisCatalogDeploymentBinding(
+                    storage_type="S3",
+                    warehouse="floe-demo",
+                    default_base_location="s3://floe-iceberg",
+                    allowed_locations=["s3://floe-iceberg"],
+                    endpoint="http://localhost:8181/api/catalog",
+                    endpoint_internal="http://floe-platform-minio:9000",
+                    catalog_uri=None,
+                    path_style_access=True,
+                    sts_unavailable=True,
+                ),
+            ),
+        )
+
+        profile = _apply_iceberg_attach(
+            {"type": "duckdb", "path": ":memory:", "threads": 4},
+            deployment,
+        )
+
+        assert "attach" not in profile
+        assert "extensions" not in profile
+
+    @pytest.mark.parametrize(
+        ("deployment", "expected_profile"),
+        [
+            (None, {"type": "duckdb", "path": ":memory:"}),
+            (DeploymentConfig(), {"type": "duckdb", "path": ":memory:"}),
+            (
+                DeploymentConfig(
+                    catalog=CatalogDeploymentBinding(
+                        provider="polaris",
+                        polaris=PolarisCatalogDeploymentBinding(
+                            storage_type="S3",
+                            warehouse=None,
+                            default_base_location="s3://floe-iceberg",
+                            allowed_locations=["s3://floe-iceberg"],
+                            endpoint="http://localhost:8181/api/catalog",
+                            endpoint_internal="http://floe-platform-polaris:8181/api/catalog",
+                            catalog_uri="http://floe-platform-polaris:8181/api/catalog",
+                            path_style_access=True,
+                            sts_unavailable=True,
+                        ),
+                    ),
+                ),
+                {"type": "duckdb", "path": ":memory:"},
+            ),
+        ],
+    )
+    def test_apply_iceberg_attach_skips_missing_deployment_catalog_or_warehouse(
+        self,
+        deployment: DeploymentConfig | None,
+        expected_profile: dict[str, object],
+    ) -> None:
+        """Missing deployment/catalog/warehouse leaves the profile unchanged."""
+        from floe_core.compilation.dbt_profiles import _apply_iceberg_attach
+
+        assert _apply_iceberg_attach({"type": "duckdb", "path": ":memory:"}, deployment) == (
+            expected_profile
+        )
+
+    def test_apply_iceberg_attach_rejects_non_list_attach(self) -> None:
+        """Existing non-list attach config is invalid instead of silently dropped."""
+        from floe_core.compilation.dbt_profiles import _apply_iceberg_attach
+
+        deployment = DeploymentConfig(
+            catalog=CatalogDeploymentBinding(
+                provider="polaris",
+                polaris=PolarisCatalogDeploymentBinding(
+                    storage_type="S3",
+                    warehouse="floe-demo",
+                    default_base_location="s3://floe-iceberg",
+                    allowed_locations=["s3://floe-iceberg"],
+                    endpoint="http://localhost:8181/api/catalog",
+                    endpoint_internal="http://floe-platform-polaris:8181/api/catalog",
+                    catalog_uri="http://floe-platform-polaris:8181/api/catalog",
+                    path_style_access=True,
+                    sts_unavailable=True,
+                ),
+            ),
+        )
+
+        with pytest.raises(ValueError, match="existing 'attach' value must be a list"):
+            _apply_iceberg_attach(
+                {"type": "duckdb", "path": ":memory:", "attach": {"path": "bad"}},
+                deployment,
+            )
+
+    def test_apply_iceberg_attach_preserves_existing_entries_without_duplicates(self) -> None:
+        """Existing extensions and attach entries stay first and are not duplicated."""
+        from floe_core.compilation.dbt_profiles import _apply_iceberg_attach
+
+        deployment = DeploymentConfig(
+            catalog=CatalogDeploymentBinding(
+                provider="polaris",
+                polaris=PolarisCatalogDeploymentBinding(
+                    storage_type="S3",
+                    warehouse="floe-demo",
+                    default_base_location="s3://floe-iceberg",
+                    allowed_locations=["s3://floe-iceberg"],
+                    endpoint="http://localhost:8181/api/catalog",
+                    endpoint_internal="http://floe-platform-polaris:8181/api/catalog",
+                    catalog_uri="http://floe-platform-polaris:8181/api/catalog",
+                    path_style_access=True,
+                    sts_unavailable=True,
+                ),
+            ),
+        )
+        attach_entry = {
+            "path": "floe-demo",
+            "alias": "iceberg",
+            "type": "iceberg",
+            "options": {"endpoint": "http://floe-platform-polaris:8181/api/catalog"},
+        }
+
+        profile = _apply_iceberg_attach(
+            {
+                "type": "duckdb",
+                "path": ":memory:",
+                "extensions": ["iceberg", "httpfs"],
+                "attach": [attach_entry],
+            },
+            deployment,
+        )
+
+        assert profile["extensions"] == ["iceberg", "httpfs"]
+        assert profile["attach"] == [attach_entry]
+
 
 class TestCredentialPlaceholders:
     """Tests for credential placeholder generation."""
