@@ -274,6 +274,7 @@ def _build_storage_deployment_binding(
     from floe_core.compilation.errors import (
         COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED,
         COMPOSITION_DEPLOYMENT_BINDING_MISSING,
+        COMPOSITION_IDENTITY_MODE_UNSUPPORTED,
         COMPOSITION_PLUGIN_CONFIG_INVALID,
         COMPOSITION_PLUGIN_INTERFACE_INVALID,
         COMPOSITION_PLUGIN_MISSING,
@@ -509,6 +510,27 @@ def _build_storage_deployment_binding(
     ]
     valid_identity_modes = get_args(IdentityMode)
     declared_identity_modes = set(storage_binding.capabilities.identity_modes)
+    invalid_identity_modes = sorted(declared_identity_modes - set(valid_identity_modes))
+    if invalid_identity_modes:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_IDENTITY_MODE_UNSUPPORTED,
+                message=(
+                    f"Storage plugin {storage_plugin.name!r} declares unsupported identity modes "
+                    f"{invalid_identity_modes}"
+                ),
+                suggestion=(
+                    "Update StorageCapabilities.identity_modes to use supported "
+                    "IdentityMode values."
+                ),
+                context={
+                    "storage_plugin": storage_plugin.name,
+                    "invalid_identity_modes": invalid_identity_modes,
+                    "valid_identity_modes": list(valid_identity_modes),
+                },
+            )
+        )
     identity_modes = [mode for mode in valid_identity_modes if mode in declared_identity_modes]
     storage_capabilities = PluginCapabilities(
         plugin_type="storage",

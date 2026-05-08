@@ -83,7 +83,7 @@ _PLUGIN_CONFIG_SECRET_FIELDS = frozenset(
 )
 _DEFAULT_ADMIN_CREDENTIAL_PATTERN = re.compile(r"(?<![a-z0-9])[a-z0-9_-]*admin[0-9]*(?![a-z0-9])")
 _DBT_ENV_VAR_REFERENCE_PATTERN = re.compile(
-    r"\{\{\s*env_var\(\s*['\"][A-Z_][A-Z0-9_]*['\"]"
+    r"\{\{\s*env_var\(\s*['\"][A-Za-z_][A-Za-z0-9_]*['\"]"
     r"(?:\s*,\s*['\"][^'\"]*['\"])?\s*\)\s*\}\}"
 )
 _URL_CREDENTIAL_QUERY_KEYS = frozenset(
