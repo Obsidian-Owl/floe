@@ -206,15 +206,12 @@ def _is_non_secret_endpoint_url(value: str) -> bool:
     if parsed.fragment:
         return False
 
-    query_keys = {
-        re.sub(r"[^a-z0-9]", "", part.split("=", 1)[0].lower())
-        for part in parsed.query.split("&")
-        if part
-    }
+    query_params = parse_qsl(parsed.query, keep_blank_values=True)
+    query_keys = {re.sub(r"[^a-z0-9]", "", key.lower()) for key, _ in query_params}
     if query_keys & _URL_CREDENTIAL_QUERY_KEYS:
         return False
 
-    for _, query_value in parse_qsl(parsed.query, keep_blank_values=True):
+    for _, query_value in query_params:
         value_text = query_value.lower()
         if any(marker in value_text for marker in _SECRET_VALUE_MARKERS) or (
             _DEFAULT_ADMIN_CREDENTIAL_PATTERN.search(value_text) is not None
