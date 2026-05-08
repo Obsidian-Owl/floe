@@ -82,6 +82,18 @@ def test_demo_compile_emits_minio_storage_deployment_binding() -> None:
     assert dev_profile["s3_endpoint"] == "http://floe-platform-minio:9000"
     assert dev_profile["s3_region"] == "us-east-1"
     assert dev_profile["s3_access_key_id"] == "{{ env_var('AWS_ACCESS_KEY_ID') }}"
+    assert dev_profile["secrets"] == [
+        {
+            "type": "iceberg",
+            "name": "polaris",
+            "client_id": "{{ env_var('POLARIS_CLIENT_ID') }}",
+            "client_secret": "{{ env_var('POLARIS_CLIENT_SECRET') }}",  # pragma: allowlist secret
+            "oauth2_server_uri": "{{ env_var('POLARIS_OAUTH2_SERVER_URI') }}",
+            "authorization_type": "oauth2",
+            "oauth2_scope": "{{ env_var('POLARIS_SCOPE', 'PRINCIPAL_ROLE:ALL') }}",
+        }
+    ]
+    assert dev_profile["attach"][0]["options"]["secret"] == "polaris"  # pragma: allowlist secret
     assert "minio" + "admin" not in payload
 
 

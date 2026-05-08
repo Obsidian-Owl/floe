@@ -81,6 +81,18 @@ tests:
           pattern: "key: POLARIS_CREDENTIAL"
       - matchRegex:
           path: data["dagster.yaml"]
+          pattern: "name: POLARIS_CLIENT_ID"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "key: client-id"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "name: POLARIS_CLIENT_SECRET"
+      - matchRegex:
+          path: data["dagster.yaml"]
+          pattern: "key: client-secret"
+      - matchRegex:
+          path: data["dagster.yaml"]
           pattern: "name: POLARIS_OAUTH2_SERVER_URI"
       - matchRegex:
           path: data["dagster.yaml"]

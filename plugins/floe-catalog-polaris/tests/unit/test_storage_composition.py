@@ -115,6 +115,13 @@ def test_build_catalog_deployment_translates_storage_binding_to_polaris_binding(
     assert binding.dbt.iceberg_rest.uri == "http://polaris:8181/api/catalog"
     assert binding.dbt.iceberg_rest.uri != binding.polaris.endpoint_internal
     assert binding.dbt.iceberg_rest.warehouse == "floe"
+    assert binding.dbt.iceberg_rest.oauth2 is not None
+    assert binding.dbt.iceberg_rest.oauth2.secret_name == "polaris"  # pragma: allowlist secret
+    assert binding.dbt.iceberg_rest.oauth2.client_id_env == "POLARIS_CLIENT_ID"
+    # pragma: allowlist nextline secret
+    assert binding.dbt.iceberg_rest.oauth2.client_secret_env == "POLARIS_CLIENT_SECRET"
+    assert binding.dbt.iceberg_rest.oauth2.oauth2_server_uri_env == "POLARIS_OAUTH2_SERVER_URI"
+    assert binding.dbt.iceberg_rest.oauth2.oauth2_scope_env == "POLARIS_SCOPE"
 
     payload = binding.model_dump_json()
     assert "raw-secret-value" not in payload

@@ -435,6 +435,69 @@ class TestAugmentDBTProfile:
             }
         ]
 
+    def test_augment_dbt_profile_translates_oauth2_binding_to_duckdb_secret(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """DuckDB receives catalog auth through generic Iceberg REST bindings."""
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            DbtCatalogBinding,
+            DeploymentConfig,
+            IcebergRestCatalogBinding,
+            IcebergRestOAuth2Binding,
+        )
+
+        deployment = DeploymentConfig(
+            catalog=CatalogDeploymentBinding(
+                provider="future-catalog",
+                dbt=DbtCatalogBinding(
+                    iceberg_rest=IcebergRestCatalogBinding(
+                        catalog_name="iceberg",
+                        uri="http://future-catalog:8181/api/catalog",
+                        warehouse="floe",
+                        oauth2=IcebergRestOAuth2Binding(
+                            secret_name="catalog_oauth",  # pragma: allowlist secret
+                            client_id_env="CATALOG_CLIENT_ID",
+                            client_secret_env="CATALOG_CLIENT_SECRET",  # pragma: allowlist secret
+                            oauth2_server_uri_env="CATALOG_OAUTH2_SERVER_URI",
+                            oauth2_scope_env="CATALOG_SCOPE",
+                            oauth2_scope_default="PRINCIPAL_ROLE:ALL",
+                        ),
+                    )
+                ),
+            )
+        )
+
+        profile = duckdb_plugin.augment_dbt_profile(
+            {"type": "duckdb", "path": ":memory:"},
+            deployment,
+        )
+
+        assert profile["secrets"] == [
+            {
+                "type": "iceberg",
+                "name": "catalog_oauth",
+                "client_id": "{{ env_var('CATALOG_CLIENT_ID') }}",
+                # pragma: allowlist nextline secret
+                "client_secret": "{{ env_var('CATALOG_CLIENT_SECRET') }}",
+                "oauth2_server_uri": "{{ env_var('CATALOG_OAUTH2_SERVER_URI') }}",
+                "authorization_type": "oauth2",
+                "oauth2_scope": "{{ env_var('CATALOG_SCOPE', 'PRINCIPAL_ROLE:ALL') }}",
+            }
+        ]
+        assert profile["attach"] == [
+            {
+                "path": "floe",
+                "alias": "iceberg",
+                "type": "iceberg",
+                "options": {
+                    "endpoint": "http://future-catalog:8181/api/catalog",
+                    "secret": "catalog_oauth",  # pragma: allowlist secret
+                },
+            }
+        ]
+
     def test_augment_dbt_profile_skips_missing_catalog_projection(
         self,
         duckdb_plugin: DuckDBComputePlugin,

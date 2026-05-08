@@ -89,12 +89,70 @@ def _iceberg_rest_attach_entry(binding: IcebergRestCatalogBinding) -> dict[str, 
     """Translate a neutral Iceberg REST catalog binding into dbt-duckdb attach config."""
     options: dict[str, str] = {"endpoint": binding.uri}
     options.update(binding.properties)
+    if binding.oauth2 is not None:
+        options.setdefault("secret", binding.oauth2.secret_name)
     return {
         "path": binding.warehouse,
         "alias": binding.catalog_name,
         "type": "iceberg",
         "options": options,
     }
+
+
+def _env_var_placeholder(env_name: str, default: str | None = None) -> str:
+    """Return a dbt env_var placeholder without importing core compilation code."""
+    if default is not None:
+        return f"{{{{ env_var('{env_name}', '{default}') }}}}"
+    return f"{{{{ env_var('{env_name}') }}}}"
+
+
+def _iceberg_rest_secret_entry(binding: IcebergRestCatalogBinding) -> dict[str, Any] | None:
+    """Translate Iceberg REST OAuth2 env refs into a dbt-duckdb secret entry."""
+    oauth2 = binding.oauth2
+    if oauth2 is None:
+        return None
+
+    secret: dict[str, Any] = {
+        "type": "iceberg",
+        "name": oauth2.secret_name,
+        "client_id": _env_var_placeholder(oauth2.client_id_env),
+        "client_secret": _env_var_placeholder(oauth2.client_secret_env),
+        "oauth2_server_uri": _env_var_placeholder(oauth2.oauth2_server_uri_env),
+        "authorization_type": "oauth2",
+    }
+    if oauth2.oauth2_scope_env is not None:
+        secret["oauth2_scope"] = _env_var_placeholder(
+            oauth2.oauth2_scope_env,
+            oauth2.oauth2_scope_default,
+        )
+    return secret
+
+
+def _merge_duckdb_secret(existing: Any, addition: dict[str, Any]) -> list[Any]:
+    """Merge a dbt-duckdb secret definition by name without silent conflicts."""
+    if isinstance(existing, list):
+        secrets = list(existing)
+    elif existing is None:
+        secrets = []
+    else:
+        msg = (
+            "DuckDB profile existing 'secrets' value must be a list before "
+            "adding the Iceberg catalog secret."
+        )
+        raise ValueError(msg)
+
+    addition_name = addition.get("name")
+    for secret in secrets:
+        if not isinstance(secret, dict):
+            continue
+        if secret.get("name") == addition_name:
+            if secret == addition:
+                return secrets
+            msg = f"DuckDB profile already defines a different secret named {addition_name!r}."
+            raise ValueError(msg)
+
+    secrets.append(addition)
+    return secrets
 
 
 def _validate_sql_identifier(value: str, field_name: str) -> None:
@@ -493,8 +551,11 @@ class DuckDBComputePlugin(ComputePlugin):
             return profile
 
         attach_entry = _iceberg_rest_attach_entry(iceberg_rest)
+        secret_entry = _iceberg_rest_secret_entry(iceberg_rest)
         updated = dict(profile)
         updated["extensions"] = _merge_unique_list(updated.get("extensions"), ["httpfs", "iceberg"])
+        if secret_entry is not None:
+            updated["secrets"] = _merge_duckdb_secret(updated.get("secrets"), secret_entry)
 
         existing_attach = updated.get("attach")
         if existing_attach is None:

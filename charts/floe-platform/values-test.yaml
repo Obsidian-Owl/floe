@@ -143,6 +143,16 @@ dagster:
                   secretKeyRef:
                     name: floe-platform-polaris-credentials
                     key: POLARIS_CREDENTIAL
+              - name: POLARIS_CLIENT_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: floe-platform-polaris-credentials
+                    key: client-id
+              - name: POLARIS_CLIENT_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: floe-platform-polaris-credentials
+                    key: client-secret
               - name: POLARIS_SCOPE
                 value: PRINCIPAL_ROLE:ALL
               - name: POLARIS_OAUTH2_SERVER_URI

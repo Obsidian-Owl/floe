@@ -42,6 +42,7 @@ from floe_core.schemas.compiled_artifacts import (
     CatalogDeploymentBinding,
     DbtCatalogBinding,
     IcebergRestCatalogBinding,
+    IcebergRestOAuth2Binding,
     PolarisCatalogDeploymentBinding,
     StorageDeploymentBinding,
 )
@@ -425,6 +426,14 @@ class PolarisCatalogPlugin(CatalogPlugin):
             catalog_name="iceberg",
             uri=config.uri,
             warehouse=config.warehouse,
+            oauth2=IcebergRestOAuth2Binding(
+                secret_name="polaris",  # pragma: allowlist secret
+                client_id_env="POLARIS_CLIENT_ID",
+                client_secret_env="POLARIS_CLIENT_SECRET",  # pragma: allowlist secret
+                oauth2_server_uri_env="POLARIS_OAUTH2_SERVER_URI",
+                oauth2_scope_env="POLARIS_SCOPE",
+                oauth2_scope_default="PRINCIPAL_ROLE:ALL",
+            ),
         )
         return CatalogDeploymentBinding(
             provider="polaris",

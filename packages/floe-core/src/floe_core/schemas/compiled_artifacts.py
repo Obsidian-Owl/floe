@@ -687,6 +687,19 @@ class PolarisCatalogDeploymentBinding(BaseModel):
     credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
 
 
+class IcebergRestOAuth2Binding(BaseModel):
+    """Secret-free OAuth2 references for an Iceberg REST catalog consumer."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    secret_name: NonEmptyString = "iceberg"
+    client_id_env: NonEmptyString
+    client_secret_env: NonEmptyString
+    oauth2_server_uri_env: NonEmptyString
+    oauth2_scope_env: NonEmptyString | None = None
+    oauth2_scope_default: NonEmptyString | None = None
+
+
 class IcebergRestCatalogBinding(BaseModel):
     """Secret-free Iceberg REST catalog projection for runtime consumers."""
 
@@ -696,6 +709,7 @@ class IcebergRestCatalogBinding(BaseModel):
     uri: NonEmptyString
     warehouse: NonEmptyString
     properties: dict[str, str] = Field(default_factory=dict)
+    oauth2: IcebergRestOAuth2Binding | None = None
 
     @field_validator("properties")
     @classmethod
@@ -1575,6 +1589,7 @@ __all__ = [
     "CompilationMetadata",
     "CredentialRef",
     "DbtCatalogBinding",
+    "IcebergRestOAuth2Binding",
     "DeploymentConfig",
     "DeploymentMode",
     "DltIngestionBinding",
