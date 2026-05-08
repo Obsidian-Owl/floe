@@ -6,6 +6,7 @@ Requirements: 7A-FR-032 (Realm-based multi-tenancy for Data Mesh domain isolatio
 
 from __future__ import annotations
 
+from typing import get_type_hints
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -340,9 +341,9 @@ class TestAuthenticateForRealm:
         """Custom realm client secrets must use SecretStr at the API boundary."""
         from floe_identity_keycloak import KeycloakIdentityPlugin
 
-        annotations = KeycloakIdentityPlugin.authenticate_for_realm.__annotations__
+        hints = get_type_hints(KeycloakIdentityPlugin.authenticate_for_realm)
 
-        assert annotations["client_secret"] == "SecretStr | None"  # pragma: allowlist secret
+        assert hints["client_secret"] == SecretStr | None
 
 
 class TestShutdownClearsRealmValidators:

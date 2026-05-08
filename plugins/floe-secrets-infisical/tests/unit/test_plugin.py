@@ -454,13 +454,15 @@ class TestInfisicalSecretsPluginAuthentication:
             patch.dict(sys.modules, {"infisical_client": mock_infisical_client_module}),
             patch("floe_secrets_infisical.plugin.logger.exception") as mock_exception,
             patch("floe_secrets_infisical.plugin.logger.error") as mock_error,
-            pytest.raises(InfisicalAuthError),
+            pytest.raises(InfisicalAuthError) as exc_info,
         ):
             InfisicalSecretsPlugin(config=mock_infisical_config).startup()
 
         mock_exception.assert_not_called()
         mock_error.assert_called_once()
         assert mock_error.call_args.kwargs["error"] == "Exception"
+        assert exc_info.value.reason == "authentication failed (401)"
+        assert "client_secret" not in str(exc_info.value)
 
 
 class TestInfisicalSecretsPluginPathOrganization:

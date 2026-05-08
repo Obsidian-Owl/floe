@@ -944,6 +944,42 @@ class TestStorageDeploymentBinding:
         assert "minio-secret-value" not in serialized
         assert "raw-secret-value" not in serialized
 
+    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
+    def test_compiled_artifacts_accept_env_var_dbt_profile_secrets(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        """dbt profile secret fields may reference environment variables."""
+        artifacts = CompiledArtifacts(
+            metadata=sample_compilation_metadata,
+            identity=sample_product_identity,
+            observability=sample_observability_config,
+            dbt_profiles={
+                "floe": {
+                    "target": "dev",
+                    "outputs": {
+                        "dev": {
+                            "type": "duckdb",
+                            "password": "{{ env_var('DB_PASSWORD') }}",  # pragma: allowlist secret
+                            "token": "{{ env_var('DB_TOKEN', '') }}",  # pragma: allowlist secret
+                        }
+                    },
+                }
+            },
+        )
+
+        assert (
+            artifacts.dbt_profiles["floe"]["outputs"]["dev"]["password"]
+            == "{{ env_var('DB_PASSWORD') }}"
+        )
+        assert (
+            artifacts.dbt_profiles["floe"]["outputs"]["dev"]["token"]
+            == "{{ env_var('DB_TOKEN', '') }}"
+        )
+
+    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
     def test_compiled_artifacts_reject_raw_secret_dbt_profiles(
         self,
         sample_compilation_metadata: CompilationMetadata,

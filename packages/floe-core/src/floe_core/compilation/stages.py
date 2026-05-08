@@ -26,7 +26,7 @@ import time
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, get_args
 from uuid import UUID
 
 import structlog
@@ -451,23 +451,11 @@ def _build_storage_deployment_binding(
             )
         )
     credential_modes = [selected_credential_mode]
-    valid_secret_projection_modes: tuple[SecretProjectionMode, ...] = (
-        "kubernetes-secret",
-        "external-secret-sync",
-        "csi-secret-volume",
-        "environment",
-    )
+    valid_secret_projection_modes = get_args(SecretProjectionMode)
     secret_projection_modes = [
         mode for mode in valid_secret_projection_modes if mode == selected_credential_mode
     ]
-    valid_identity_modes: tuple[IdentityMode, ...] = (
-        "aws-irsa",
-        "aws-pod-identity",
-        "gcp-workload-identity",
-        "azure-workload-identity",
-        "azure-managed-identity",
-        "oidc-federation",
-    )
+    valid_identity_modes = get_args(IdentityMode)
     declared_identity_modes = set(storage_binding.capabilities.identity_modes)
     identity_modes = [mode for mode in valid_identity_modes if mode in declared_identity_modes]
     storage_capabilities = PluginCapabilities(
