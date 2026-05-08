@@ -17,6 +17,8 @@ from floe_iceberg.writer import (
     DefaultIcebergTableWriter,
 )
 
+from floe_orchestrator_dagster.runtime_catalog_config import runtime_catalog_config
+
 _SAFE_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
@@ -170,7 +172,10 @@ def export_dbt_to_iceberg(
         project_dir=project_dir,
     )
 
-    catalog_config = artifacts.plugins.catalog.config
+    catalog_config = runtime_catalog_config(
+        artifacts.plugins.catalog.type,
+        artifacts.plugins.catalog.config,
+    )
     storage_config = artifacts.plugins.storage.config
 
     registry = _plugin_registry_module.get_registry()
@@ -178,7 +183,7 @@ def export_dbt_to_iceberg(
     storage_type = artifacts.plugins.storage.type
     # configure() validates config and applies it to the cached plugin instance.
     # get() then returns that configured instance for the runtime connection.
-    validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config or {})
+    validated_config = registry.configure(PluginType.CATALOG, catalog_type, catalog_config)
     if validated_config is None:
         raise RuntimeError(f"Catalog plugin config for {catalog_type} could not be validated")
     catalog_plugin = cast(CatalogPlugin, registry.get(PluginType.CATALOG, catalog_type))

@@ -7,7 +7,7 @@ and CLI behavior for the same module.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from floe_core.plugin_types import PluginType
@@ -28,11 +28,24 @@ from floe_core.schemas.compiled_artifacts import (
     StorageServiceEndpoint,
 )
 from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
+from testing.fixtures.credentials import (
+    get_polaris_credentials,
+    get_polaris_oauth2_server_uri,
+    get_polaris_scope,
+    get_polaris_warehouse,
+)
 
 from floe_orchestrator_dagster.validation.iceberg_outputs import (
     expected_iceberg_tables,
     validate_iceberg_outputs,
 )
+
+POLARIS_ENDPOINT = "http://polaris:8181/api/catalog"
+POLARIS_CLIENT_ID, POLARIS_CLIENT_SECRET = get_polaris_credentials()
+POLARIS_CREDENTIAL = f"{POLARIS_CLIENT_ID}:{POLARIS_CLIENT_SECRET}"
+POLARIS_SCOPE = get_polaris_scope()
+POLARIS_TOKEN_URL = get_polaris_oauth2_server_uri(catalog_endpoint=POLARIS_ENDPOINT)
+POLARIS_WAREHOUSE = get_polaris_warehouse()
 
 
 def _make_storage_deployment(endpoint: str) -> DeploymentConfig:
@@ -115,6 +128,76 @@ def _make_artifacts(
         ),
         transforms=transforms,
         deployment=deployment,
+    )
+
+
+@pytest.mark.requirement("ALPHA-ICEBERG")
+def test_validate_iceberg_outputs_completes_secret_free_polaris_config_from_env() -> None:
+    """Runtime validation must hydrate Polaris credentials outside CompiledArtifacts."""
+    artifacts = _make_artifacts(
+        transforms=ResolvedTransforms(
+            models=[ResolvedModel(name="mart_customer_360", compute="duckdb")],
+            default_compute="duckdb",
+        )
+    )
+    catalog_config = dict(artifacts.plugins.catalog.config or {})
+    catalog_config["warehouse"] = POLARIS_WAREHOUSE
+    catalog_config["oauth2"] = {
+        "client_id": POLARIS_CLIENT_ID,
+        "token_url": POLARIS_TOKEN_URL,
+        "scope": POLARIS_SCOPE,
+    }
+    artifacts = artifacts.model_copy(
+        update={
+            "plugins": artifacts.plugins.model_copy(
+                update={
+                    "catalog": artifacts.plugins.catalog.model_copy(
+                        update={"config": catalog_config}
+                    )
+                }
+            )
+        }
+    )
+    catalog_plugin = MagicMock()
+    storage_plugin = MagicMock()
+    catalog = MagicMock()
+    catalog.load_table.return_value = MagicMock()
+    catalog_plugin.connect.return_value = catalog
+    storage_plugin.get_pyiceberg_catalog_config.return_value = {}
+    registry = MagicMock()
+
+    def get_side_effect(plugin_type: PluginType, _name: str) -> MagicMock:
+        if plugin_type is PluginType.CATALOG:
+            return catalog_plugin
+        return storage_plugin
+
+    registry.get.side_effect = get_side_effect
+    registry.configure.return_value = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"POLARIS_CREDENTIAL": POLARIS_CREDENTIAL}, clear=True),
+        patch("floe_core.plugin_registry.get_registry", return_value=registry),
+    ):
+        validate_iceberg_outputs(artifacts)
+
+    registry.configure.assert_has_calls(
+        [
+            call(
+                PluginType.CATALOG,
+                "polaris",
+                {
+                    "uri": "memory://",
+                    "warehouse": POLARIS_WAREHOUSE,
+                    "oauth2": {
+                        "client_id": POLARIS_CLIENT_ID,
+                        "client_secret": POLARIS_CLIENT_SECRET,
+                        "token_url": POLARIS_TOKEN_URL,
+                        "scope": POLARIS_SCOPE,
+                    },
+                },
+            )
+        ],
+        any_order=True,
     )
 
 

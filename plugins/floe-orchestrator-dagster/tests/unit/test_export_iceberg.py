@@ -21,7 +21,7 @@ from __future__ import annotations
 import builtins
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pyarrow as pa
 import pytest
@@ -36,6 +36,11 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedTransforms,
 )
 from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
+from testing.fixtures.credentials import (
+    get_polaris_credentials,
+    get_polaris_oauth2_server_uri,
+    get_polaris_warehouse,
+)
 
 from floe_orchestrator_dagster.export.iceberg import export_dbt_to_iceberg
 
@@ -46,6 +51,10 @@ from floe_orchestrator_dagster.export.iceberg import export_dbt_to_iceberg
 PRODUCT_NAME = "customer-360"
 SAFE_NAME = "customer_360"
 EXPECTED_DUCKDB_PATH = f"/tmp/{SAFE_NAME}.duckdb"
+POLARIS_ENDPOINT = "http://polaris:8181/api/catalog"
+POLARIS_CLIENT_ID, POLARIS_CLIENT_SECRET = get_polaris_credentials()
+POLARIS_TOKEN_URL = get_polaris_oauth2_server_uri(catalog_endpoint=POLARIS_ENDPOINT)
+POLARIS_WAREHOUSE = get_polaris_warehouse()
 
 
 def _make_artifacts(
@@ -285,6 +294,91 @@ class TestExportDbtToIceberg:
         )
         assert result.tables_written == 1
         assert result.table_names == [f"{SAFE_NAME}.customers"]
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_completes_secret_free_polaris_config_from_env(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+    ) -> None:
+        """Export must hydrate Polaris credentials from runtime env, not artifacts."""
+        from floe_core.plugin_types import PluginType
+
+        artifacts = _make_artifacts(
+            catalog=PluginRef(
+                type="polaris",
+                version="0.1.0",
+                config={
+                    "uri": POLARIS_ENDPOINT,
+                    "warehouse": POLARIS_WAREHOUSE,
+                    "oauth2": {
+                        "client_id": POLARIS_CLIENT_ID,
+                        "token_url": POLARIS_TOKEN_URL,
+                    },
+                },
+            ),
+            storage=PluginRef(
+                type="minio",
+                version="1.0.0",
+                config={"endpoint": "http://minio:9000", "bucket": "floe-iceberg"},
+            ),
+        )
+        mock_conn = MagicMock()
+        _configure_mock_duckdb_table(mock_conn)
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+        storage_plugin.get_pyiceberg_catalog_config.return_value = {}
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
+            if plugin_type is PluginType.CATALOG:
+                return catalog_plugin
+            return storage_plugin
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = MagicMock()
+        writer = _make_writer_mock()
+
+        with (
+            patch.dict(
+                "os.environ",
+                {"POLARIS_CLIENT_SECRET": POLARIS_CLIENT_SECRET},
+                clear=True,
+            ),
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+                create=True,
+            ),
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts,
+            )
+
+        registry.configure.assert_has_calls(
+            [
+                call(
+                    PluginType.CATALOG,
+                    "polaris",
+                    {
+                        "uri": POLARIS_ENDPOINT,
+                        "warehouse": POLARIS_WAREHOUSE,
+                        "oauth2": {
+                            "client_id": POLARIS_CLIENT_ID,
+                            "client_secret": POLARIS_CLIENT_SECRET,
+                            "token_url": POLARIS_TOKEN_URL,
+                        },
+                    },
+                )
+            ],
+            any_order=True,
+        )
 
     @pytest.mark.requirement("AC-4")
     def test_export_resolves_duckdb_path_from_compiled_dbt_profile(
