@@ -166,6 +166,11 @@ operator-facing and map to the action needed to fix the platform selection or
 compiled artifact. Legacy numeric `E*` codes remain valid for broader
 compilation stages outside plugin composition.
 
+The canonical constant definitions live in
+`floe_core.composition.error_codes`. `floe_core.compilation.errors` re-exports
+them for existing compilation error consumers, but new composition code should
+import from `floe_core.composition.error_codes`.
+
 | Code | Meaning | Operator action |
 | --- | --- | --- |
 | `COMPOSITION_PLUGIN_MISSING` | A selected plugin cannot be found or loaded. | Install the plugin package or fix the manifest plugin type. |

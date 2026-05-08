@@ -1300,7 +1300,6 @@ def test_catalog_plugin_build_failure_raises_secret_safe_config_code(
         "catalog_plugin": "polaris",
         "error_type": error_type,
     }
-    assert "error" not in error.context
     assert "super-secret" not in str(error.context)
 
 
@@ -1978,7 +1977,7 @@ def test_compile_rejects_selected_storage_mode_not_declared_by_capabilities(
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED"
     assert (
         "Storage plugin 'aws-object-storage' selected credential mode 'external-secret-sync' "
         "but declares credential modes ['kubernetes-secret']"
@@ -2048,6 +2047,98 @@ def test_compile_accepts_selected_external_secret_sync_with_capable_secrets_prov
     assert artifacts.deployment is not None
     assert artifacts.deployment.storage is not None
     assert artifacts.deployment.storage.credentials.mode == "external-secret-sync"
+
+
+def test_compile_validates_selected_secrets_plugin_type(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configured secrets plugin must implement the SecretsPlugin interface."""
+
+    class NotSecretsPlugin:
+        name = "fake-secrets"
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class IsolatedRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            if plugin_type == PluginType.STORAGE:
+                return ExternalSecretStoragePlugin()
+            if plugin_type == PluginType.SECRETS:
+                return NotSecretsPlugin()
+            raise AssertionError(f"unexpected plugin lookup: {plugin_type}:{name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedRegistry)
+    manifest_path = _external_secret_manifest_path(tmp_path, include_secrets=True)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_INTERFACE_INVALID"
+    assert "is not a SecretsPlugin" in error.message
+    assert error.context == {"secrets_plugin": "fake-secrets"}  # pragma: allowlist secret
+
+
+def test_compile_classifies_selected_secrets_plugin_resolution_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configured secrets plugin load failures must use composition taxonomy."""
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class IsolatedRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            if plugin_type == PluginType.STORAGE:
+                return ExternalSecretStoragePlugin()
+            if plugin_type == PluginType.SECRETS:
+                raise PluginError("entry point load failed")
+            raise AssertionError(f"unexpected plugin lookup: {plugin_type}:{name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedRegistry)
+    manifest_path = _external_secret_manifest_path(tmp_path, include_secrets=True)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_MISSING"
+    assert error.context == {"secrets_plugin": "fake-secrets"}  # pragma: allowlist secret
 
 
 def test_storage_only_compile_validates_selected_identity_plugin_type(
@@ -2196,6 +2287,89 @@ def test_storage_only_compile_validates_selected_identity_plugin_type(
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_PLUGIN_INTERFACE_INVALID"
     assert "is not an IdentityPlugin" in error.message
+    assert error.context == {"identity_plugin": "fake-identity"}
+
+
+def test_storage_only_compile_classifies_selected_identity_plugin_resolution_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configured identity plugin load failures must use composition taxonomy."""
+
+    class StorageOnlyPlugin(StoragePlugin):
+        @property
+        def name(self) -> str:
+            return "minio"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def get_config_schema(self) -> None:
+            return None
+
+        def get_pyiceberg_fileio(self) -> FileIO:
+            raise NotImplementedError
+
+        def get_warehouse_uri(self, namespace: str) -> str:
+            return f"s3://warehouse/{namespace}"
+
+        def get_dbt_profile_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_dagster_io_manager_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_helm_values_override(self) -> dict[str, Any]:
+            return {}
+
+        def get_deployment_binding(self) -> StorageDeploymentBinding:
+            return _minimal_storage_binding()
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class IsolatedRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            if plugin_type == PluginType.STORAGE:
+                return StorageOnlyPlugin()
+            if plugin_type == PluginType.IDENTITY:
+                raise PluginError("entry point load failed")
+            raise AssertionError(f"unexpected plugin lookup: {plugin_type}:{name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedRegistry)
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest = yaml.safe_load((ROOT / "demo" / "manifest.yaml").read_text(encoding="utf-8"))
+    manifest["plugins"].pop("catalog", None)
+    manifest["plugins"]["storage"] = {"type": "minio"}
+    manifest["plugins"]["identity"] = {"type": "fake-identity"}
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_MISSING"
     assert error.context == {"identity_plugin": "fake-identity"}

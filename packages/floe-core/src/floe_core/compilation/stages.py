@@ -272,6 +272,7 @@ def _build_storage_deployment_binding(
         return None
 
     from floe_core.compilation.errors import (
+        COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED,
         COMPOSITION_DEPLOYMENT_BINDING_MISSING,
         COMPOSITION_PLUGIN_CONFIG_INVALID,
         COMPOSITION_PLUGIN_INTERFACE_INVALID,
@@ -410,7 +411,7 @@ def _build_storage_deployment_binding(
                 raise CompilationException(
                     CompilationError(
                         stage=CompilationStage.RESOLVE,
-                        code="E201",
+                        code=COMPOSITION_PLUGIN_INTERFACE_INVALID,
                         message=f"Plugin {plugins.secrets.type!r} is not a SecretsPlugin",
                         suggestion=(
                             "Use a plugin registered under the floe.secrets entry point group"
@@ -426,7 +427,7 @@ def _build_storage_deployment_binding(
         raise CompilationException(
             CompilationError(
                 stage=CompilationStage.RESOLVE,
-                code="E201",
+                code=COMPOSITION_PLUGIN_MISSING,
                 message=f"Secrets plugin {plugin_name!r} could not be resolved",
                 suggestion=(
                     "Install the secrets plugin package and verify "
@@ -452,7 +453,7 @@ def _build_storage_deployment_binding(
                 raise CompilationException(
                     CompilationError(
                         stage=CompilationStage.RESOLVE,
-                        code="E201",
+                        code=COMPOSITION_PLUGIN_INTERFACE_INVALID,
                         message=f"Plugin {plugins.identity.type!r} is not an IdentityPlugin",
                         suggestion=(
                             "Use a plugin registered under the floe.identity entry point group"
@@ -468,7 +469,7 @@ def _build_storage_deployment_binding(
         raise CompilationException(
             CompilationError(
                 stage=CompilationStage.RESOLVE,
-                code="E201",
+                code=COMPOSITION_PLUGIN_MISSING,
                 message=f"Identity plugin {plugin_name!r} could not be resolved",
                 suggestion=(
                     "Install the identity plugin package and verify "
@@ -484,7 +485,7 @@ def _build_storage_deployment_binding(
         raise CompilationException(
             CompilationError(
                 stage=CompilationStage.RESOLVE,
-                code="E201",
+                code=COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED,
                 message=(
                     f"Storage plugin {storage_plugin.name!r} selected credential mode "
                     f"{selected_credential_mode!r} but declares credential modes "
