@@ -294,7 +294,8 @@ class TestPluginInterfaceContract:
             "is_external",
             "create_pipeline",
             "run",
-            "get_destination_config",
+            "get_composition_requirements",
+            "build_deployment_binding",
         ]
         for method in required_methods:
             assert method in methods, (

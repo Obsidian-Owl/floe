@@ -120,19 +120,23 @@ class IngestionPlugin(ABC):
         """
         pass
 
-    @abstractmethod
-    def get_destination_config(self, catalog_config: dict) -> dict:
-        """Generate destination configuration for writing to Iceberg.
+    def get_composition_requirements(self) -> any:
+        """Declare storage/catalog requirements for platform composition."""
+        return None
 
-        All ingestion plugins MUST write to Iceberg tables via the catalog.
-        """
-        pass
+    def build_deployment_binding(self, *, storage: any, catalog: any) -> any:
+        """Build a secret-free deployment binding from composed platform state."""
+        raise NotImplementedError
 
     @abstractmethod
     def create_dagster_assets(self, configs: list[IngestionConfig]) -> list:
         """Create Dagster assets from ingestion configurations."""
         pass
 ```
+
+Ingestion destination wiring is provided by `CompiledArtifacts.deployment.ingestion`.
+Ingestion plugins consume composed runtime bindings rather than accepting raw
+catalog/storage dictionaries.
 
 ## Plugin Implementations
 
@@ -165,20 +169,15 @@ class DltIngestionPlugin(IngestionPlugin):
             error=str(info.exception) if info.has_failed_jobs else None,
         )
 
-    def get_destination_config(self, catalog_config: dict) -> dict:
-        return {
-            "filesystem": {
-                "bucket_url": catalog_config["warehouse_path"],
-                "credentials": catalog_config["credentials"],
-            },
-            "table_format": "iceberg",
-        }
-
     def create_dagster_assets(self, configs: list[IngestionConfig]) -> list:
         from dagster_embedded_elt.dlt import DagsterDltResource, dlt_assets
         # Returns Dagster assets for each ingestion config
         ...
 ```
+
+Ingestion destination wiring is provided by `CompiledArtifacts.deployment.ingestion`.
+Ingestion plugins consume composed runtime bindings rather than accepting raw
+catalog/storage dictionaries.
 
 ### Airbyte Plugin (External)
 
@@ -213,12 +212,6 @@ class AirbyteIngestionPlugin(IngestionPlugin):
         # Wait for completion, return result
         ...
 
-    def get_destination_config(self, catalog_config: dict) -> dict:
-        # Airbyte destination must be configured separately
-        return {
-            "destination_type": "iceberg",
-            "iceberg_catalog": catalog_config["catalog_uri"],
-        }
 ```
 
 ## Configuration

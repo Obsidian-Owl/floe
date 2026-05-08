@@ -5,7 +5,7 @@ provide data loading from external sources. Ingestion plugins are
 responsible for:
 - Creating ingestion pipelines from configuration
 - Executing pipelines to load data
-- Providing destination configuration for Iceberg tables
+- Building runtime deployment bindings from composed platform state
 
 Example:
     >>> from floe_core.plugins.ingestion import IngestionPlugin
@@ -104,7 +104,10 @@ class IngestionPlugin(PluginMetadata):
         - is_external property
         - create_pipeline() method
         - run() method
-        - get_destination_config() method
+
+    Plugins that participate in platform composition should also implement:
+        - get_composition_requirements()
+        - build_deployment_binding()
 
     Example:
         >>> class DLTPlugin(IngestionPlugin):
@@ -215,30 +218,3 @@ class IngestionPlugin(PluginMetadata):
         raise NotImplementedError(
             f"{self.name} does not implement ingestion deployment binding generation"
         )
-
-    @abstractmethod
-    def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
-        """Generate destination configuration for Iceberg.
-
-        Creates destination configuration for writing to Iceberg tables
-        via the platform's catalog.
-
-        Args:
-            catalog_config: Catalog connection configuration.
-
-        Returns:
-            Destination configuration dict for Iceberg.
-
-        Example:
-            >>> config = plugin.get_destination_config({
-            ...     "uri": "http://polaris:8181/api/catalog",
-            ...     "warehouse": "floe_warehouse"
-            ... })
-            >>> config
-            {
-                'destination': 'iceberg',
-                'catalog_uri': 'http://polaris:8181/api/catalog',
-                'warehouse': 'floe_warehouse'
-            }
-        """
-        ...

@@ -255,11 +255,18 @@ class IngestionPlugin(ABC):
         """Execute the ingestion pipeline."""
         pass
 
-    @abstractmethod
-    def get_destination_config(self, catalog_config: dict) -> dict:
-        """Generate destination configuration for Iceberg."""
-        pass
+    def get_composition_requirements(self) -> any:
+        """Declare storage/catalog requirements for platform composition."""
+        return None
+
+    def build_deployment_binding(self, *, storage: any, catalog: any) -> any:
+        """Build a secret-free deployment binding from composed platform state."""
+        raise NotImplementedError
 ```
+
+Ingestion destination wiring is provided by `CompiledArtifacts.deployment.ingestion`.
+Ingestion plugins consume composed runtime bindings rather than accepting raw
+catalog/storage dictionaries.
 
 ## DBTPlugin
 

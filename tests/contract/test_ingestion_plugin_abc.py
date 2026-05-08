@@ -15,7 +15,7 @@ Requirements Covered:
 - 4F-FR-001: IngestionPlugin ABC with is_external property
 - 4F-FR-001: create_pipeline() method with config parameter
 - 4F-FR-001: run() method with pipeline parameter
-- 4F-FR-001: get_destination_config() method with catalog_config parameter
+- 4F-FR-001: Runtime binding deployment contract
 - 4F-FR-001: Plugin metadata requirements (name, version, floe_api_version)
 """
 
@@ -114,30 +114,6 @@ class TestIngestionPluginABCDefinition:
         assert "self" in params
         assert "pipeline" in params
         assert "kwargs" in params  # **kwargs
-
-    @pytest.mark.requirement("4F-FR-001")
-    def test_get_destination_config_is_abstract(self) -> None:
-        """Verify get_destination_config() is an abstract method with correct signature.
-
-        4F-FR-001: IngestionPlugin must define get_destination_config() that
-        generates destination configuration for Iceberg.
-        """
-        from floe_core.plugins.ingestion import IngestionPlugin
-
-        # Method must exist
-        assert hasattr(IngestionPlugin, "get_destination_config")
-
-        # Must be abstract
-        method = IngestionPlugin.get_destination_config
-        assert getattr(method, "__isabstractmethod__", False), (
-            "get_destination_config() must be abstract"
-        )
-
-        # Check signature
-        sig = inspect.signature(IngestionPlugin.get_destination_config)
-        params = list(sig.parameters.keys())
-        assert "self" in params
-        assert "catalog_config" in params
 
 
 class TestIngestionPluginMetadataRequirements:
@@ -241,7 +217,7 @@ class TestIngestionPluginInstantiationContract:
                 _ = config
                 return {}
 
-            # Missing: run, get_destination_config
+            # Missing: run
 
         with pytest.raises(TypeError, match="abstract"):
             IncompletePlugin()  # type: ignore[abstract]
@@ -285,10 +261,6 @@ class TestIngestionPluginInstantiationContract:
                 _ = pipeline, kwargs
                 return IngestionResult(success=True, rows_loaded=0)
 
-            def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
-                _ = catalog_config
-                return {"destination": "mock"}
-
         # Should not raise
         plugin = CompleteMockPlugin()
 
@@ -297,3 +269,15 @@ class TestIngestionPluginInstantiationContract:
         assert plugin.version == "1.0.0"
         assert plugin.floe_api_version == "1.0"
         assert plugin.is_external is False
+
+
+@pytest.mark.requirement("4F-FR-001")
+def test_ingestion_plugin_uses_runtime_binding_contract() -> None:
+    """Verify IngestionPlugin no longer exposes catalog_config destination mapping."""
+    from floe_core.plugins.ingestion import IngestionPlugin
+
+    assert hasattr(IngestionPlugin, "create_pipeline")
+    assert hasattr(IngestionPlugin, "run")
+    assert hasattr(IngestionPlugin, "build_deployment_binding")
+    assert hasattr(IngestionPlugin, "get_composition_requirements")
+    assert not hasattr(IngestionPlugin, "get_destination_config")
