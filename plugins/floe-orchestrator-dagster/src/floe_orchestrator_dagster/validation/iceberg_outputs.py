@@ -49,6 +49,11 @@ def _qualify_table(namespace: str, table_name: str) -> str:
     return f"{namespace}.{table_name}"
 
 
+def _dedupe_preserving_order(values: Sequence[str]) -> list[str]:
+    """Return unique values in first-seen order."""
+    return list(dict.fromkeys(values))
+
+
 def expected_iceberg_tables(
     artifacts: CompiledArtifacts,
     expected_tables: Sequence[str] | None = None,
@@ -80,7 +85,9 @@ def expected_iceberg_tables(
         if not derived_tables:
             raise RuntimeError("No expected Iceberg tables were derived from CompiledArtifacts")
         expected_tables = derived_tables
-    return [_qualify_table(namespace, table_name) for table_name in expected_tables]
+    return _dedupe_preserving_order(
+        [_qualify_table(namespace, table_name) for table_name in expected_tables]
+    )
 
 
 def connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> Catalog:
