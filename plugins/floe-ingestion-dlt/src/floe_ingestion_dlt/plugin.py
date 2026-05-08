@@ -524,9 +524,9 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 )
             from dlt.destinations import filesystem
 
-            pipeline_kwargs["destination"] = filesystem(**runtime_destination_config)
-
-            pipeline = dlt.pipeline(**pipeline_kwargs)
+            with self._temporary_runtime_binding_environment(runtime_binding):
+                pipeline_kwargs["destination"] = filesystem(**runtime_destination_config)
+                pipeline = dlt.pipeline(**pipeline_kwargs)
             if runtime_binding:
                 pipeline._floe_dlt_runtime_binding = runtime_binding
 

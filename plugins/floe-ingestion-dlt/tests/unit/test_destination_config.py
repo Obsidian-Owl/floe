@@ -190,6 +190,40 @@ def test_create_pipeline_passes_runtime_filesystem_destination_without_leaking_e
     assert "PYICEBERG_CATALOG__POLARIS__S3__SECRET_ACCESS_KEY" not in os.environ
 
 
+def test_create_pipeline_applies_runtime_catalog_env_while_constructing_destination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """dlt destination construction must see the runtime PyIceberg catalog env."""
+    observations: dict[str, str | None] = {}
+
+    def fake_filesystem(**_kwargs: Any) -> object:
+        observations["catalog_uri"] = os.environ.get("PYICEBERG_CATALOG__POLARIS__URI")
+        return object()
+
+    import dlt
+    import dlt.destinations
+
+    monkeypatch.setattr(dlt.destinations, "filesystem", fake_filesystem)
+    monkeypatch.setattr(dlt, "pipeline", lambda **kwargs: SimpleNamespace(**kwargs))
+    monkeypatch.delenv("PYICEBERG_CATALOG__POLARIS__URI", raising=False)
+
+    plugin = DltIngestionPlugin()
+    plugin.configure(_plugin_config())
+    plugin.startup()
+
+    plugin.create_pipeline(
+        IngestionConfig(
+            source_type="filesystem",
+            source_config={},
+            destination_table="bronze.orders",
+            runtime_binding=_runtime_binding(),
+        )
+    )
+
+    assert observations == {"catalog_uri": "http://runtime-polaris:8181/api/catalog"}
+    assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
+
+
 def test_create_pipeline_ignores_configured_plugin_state_when_binding_is_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
