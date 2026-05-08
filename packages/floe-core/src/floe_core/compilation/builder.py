@@ -27,6 +27,7 @@ from floe_core.schemas.compiled_artifacts import (
     CompiledArtifacts,
     DeploymentConfig,
     EnforcementResultSummary,
+    IngestionOutputTable,
     ObservabilityConfig,
     ProductIdentity,
     ResolvedGovernance,
@@ -159,12 +160,39 @@ def build_artifacts(
         observability=observability,
         plugins=plugins,
         deployment=deployment,
+        ingestion_outputs=build_ingestion_outputs(spec),
         transforms=transforms,
         dbt_profiles=dbt_profiles,
         enforcement_result=enforcement_result,
         quality_config=quality_config,
         governance=governance,
     )
+
+
+def build_ingestion_outputs(spec: FloeSpec) -> list[IngestionOutputTable]:
+    """Build platform state for product-level ingestion outputs."""
+    if spec.ingestion is None:
+        return []
+
+    outputs: list[IngestionOutputTable] = []
+    for source in spec.ingestion.sources:
+        outputs.append(
+            IngestionOutputTable(
+                source_name=source.name,
+                source_type=source.source_type,
+                logical_table=source.destination_table,
+                physical_table=source.destination_table,
+                file_format=source.format,
+                source_path=source.path,
+                write_mode=source.write_mode,
+                schema_contract=source.schema_contract,
+                freshness_field=source.cursor_field or "_loaded_at",
+                primary_key=source.primary_key,
+                cursor_field=source.cursor_field,
+                quality_tier="bronze",
+            )
+        )
+    return outputs
 
 
 def compute_source_hash(
@@ -233,6 +261,7 @@ def get_git_commit() -> str | None:
 
 __all__ = [
     "build_artifacts",
+    "build_ingestion_outputs",
     "compute_source_hash",
     "get_git_commit",
 ]

@@ -259,6 +259,23 @@ plugins:
     ]
     assert "format" not in artifacts.plugins.ingestion.config["sources"][0]
     assert "path" not in artifacts.plugins.ingestion.config["sources"][0]
+    assert [output.model_dump(mode="json") for output in artifacts.ingestion_outputs] == [
+        {
+            "source_name": "orders_csv",
+            "source_type": "filesystem",
+            "table_format": "iceberg",
+            "logical_table": "bronze.orders",
+            "physical_table": "bronze.orders",
+            "file_format": "csv",
+            "source_path": "data/orders.csv",
+            "write_mode": "append",
+            "schema_contract": "evolve",
+            "freshness_field": "_loaded_at",
+            "primary_key": None,
+            "cursor_field": None,
+            "quality_tier": "bronze",
+        }
+    ]
 
 
 def test_compile_pipeline_fails_when_product_ingestion_has_no_plugin(
@@ -327,6 +344,45 @@ def test_no_ingestion_spec_returns_same_plugins() -> None:
     plugins = _plugins_with_ingestion_config()
 
     assert resolve_ingestion_config(spec, plugins) is plugins
+
+
+def test_build_ingestion_outputs_returns_empty_list_without_ingestion() -> None:
+    """Compiled ingestion output state is absent when floe.yaml has no ingestion."""
+    from floe_core.compilation.builder import build_ingestion_outputs
+
+    spec = FloeSpec(
+        api_version="floe.dev/v1",
+        kind="FloeSpec",
+        metadata=FloeMetadata(name="orders-product", version="1.0.0"),
+        transforms=[TransformSpec(name="orders")],
+    )
+
+    assert build_ingestion_outputs(spec) == []
+
+
+def test_build_ingestion_outputs_maps_product_sources_to_output_tables() -> None:
+    """Product ingestion sources compile to platform-visible output table state."""
+    from floe_core.compilation.builder import build_ingestion_outputs
+
+    outputs = build_ingestion_outputs(_spec_with_ingestion())
+
+    assert [output.model_dump(mode="json") for output in outputs] == [
+        {
+            "source_name": "orders_csv",
+            "source_type": "filesystem",
+            "table_format": "iceberg",
+            "logical_table": "bronze.orders",
+            "physical_table": "bronze.orders",
+            "file_format": "csv",
+            "source_path": "./data/customers.csv",
+            "write_mode": "merge",
+            "schema_contract": "freeze",
+            "freshness_field": "updated_at",
+            "primary_key": ["order_id"],
+            "cursor_field": "updated_at",
+            "quality_tier": "bronze",
+        }
+    ]
 
 
 def test_manifest_selected_dlt_receives_product_ingestion_sources() -> None:

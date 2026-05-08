@@ -478,3 +478,25 @@ def test_demo_compile_has_no_ingestion_catalog_config_duplication() -> None:
     assert "catalog_config" not in ingestion.config
     assert artifacts.deployment is not None
     assert artifacts.deployment.ingestion is not None
+
+
+def test_demo_compile_emits_ingestion_output_tables() -> None:
+    from floe_core.compilation.stages import compile_pipeline
+
+    root = Path(__file__).resolve().parents[2]
+    artifacts = compile_pipeline(
+        root / "demo" / "customer-360" / "floe.yaml",
+        root / "demo" / "manifest.yaml",
+        emit_lineage=False,
+    )
+
+    outputs = {table.logical_table: table for table in artifacts.ingestion_outputs}
+
+    assert set(outputs) == {
+        "bronze.raw_customers",
+        "bronze.raw_transactions",
+        "bronze.raw_support_tickets",
+    }
+    assert outputs["bronze.raw_transactions"].source_name == "raw-transactions"
+    assert outputs["bronze.raw_transactions"].file_format == "csv"
+    assert outputs["bronze.raw_transactions"].quality_tier == "bronze"

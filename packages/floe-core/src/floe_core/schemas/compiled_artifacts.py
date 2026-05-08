@@ -56,6 +56,13 @@ _SECRET_VALUE_MARKERS = (
     "secret-value",
     "token",
 )
+_INGESTION_OUTPUT_SOURCE_PATH_SECRET_MARKERS = (
+    "access_key",
+    "secret_key",
+    "password",
+    "token",
+    "signature",
+)
 _DLT_FILESYSTEM_CREDENTIAL_KEYS = frozenset(
     {
         "endpoint_url",
@@ -718,6 +725,48 @@ class IngestionDeploymentBinding(BaseModel):
     dlt: DltIngestionBinding
 
 
+class IngestionOutputTable(BaseModel):
+    """Platform-visible Iceberg table state created by ingestion sources."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source_name: NonEmptyString
+    source_type: Literal["filesystem"]
+    table_format: Literal["iceberg"] = "iceberg"
+    logical_table: NonEmptyString
+    physical_table: NonEmptyString
+    file_format: Literal["csv", "jsonl", "parquet"]
+    source_path: NonEmptyString
+    write_mode: Literal["append", "replace", "merge"]
+    schema_contract: Literal["evolve", "freeze"]
+    freshness_field: NonEmptyString | None = None
+    primary_key: NonEmptyString | list[NonEmptyString] | None = None
+    cursor_field: NonEmptyString | None = None
+    quality_tier: Literal["bronze", "silver", "gold"] = "bronze"
+
+    @field_validator("logical_table", "physical_table")
+    @classmethod
+    def validate_namespace_table_identifier(cls, value: str) -> str:
+        """Validate table identifiers as exactly namespace.table."""
+        parts = value.split(".")
+        if len(parts) != 2 or any(part.strip() != part or not part for part in parts):
+            msg = "table identifier must be exactly namespace.table with non-empty parts"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("source_path")
+    @classmethod
+    def validate_source_path_secret_free(cls, value: str) -> str:
+        """Reject embedded credential material in source paths."""
+        lower_value = value.lower()
+        if "@" in value or any(
+            marker in lower_value for marker in _INGESTION_OUTPUT_SOURCE_PATH_SECRET_MARKERS
+        ):
+            msg = "source_path must not contain embedded credential material"
+            raise ValueError(msg)
+        return value
+
+
 class DeploymentConfig(BaseModel):
     """Deployment bindings derived during compilation."""
 
@@ -1167,6 +1216,11 @@ class CompiledArtifacts(BaseModel):
         description="Deployment bindings derived from resolved plugin configuration",
     )
 
+    ingestion_outputs: list[IngestionOutputTable] = Field(
+        default_factory=list,
+        description="Platform-visible Iceberg tables created by ingestion sources",
+    )
+
     transforms: ResolvedTransforms | None = Field(
         default=None,
         description="Compiled transform configuration (v0.2.0+, optional for backward compat)",
@@ -1425,6 +1479,7 @@ __all__ = [
     "DeploymentMode",
     "DltIngestionBinding",
     "IngestionDeploymentBinding",
+    "IngestionOutputTable",
     "KubernetesSecretRef",
     "ManifestRef",
     "ObservabilityConfig",

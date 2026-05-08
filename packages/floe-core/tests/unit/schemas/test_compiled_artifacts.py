@@ -31,6 +31,7 @@ from floe_core.schemas.compiled_artifacts import (
     DagsterStorageBinding,
     DbtStorageBinding,
     DeploymentConfig,
+    IngestionOutputTable,
     KubernetesSecretRef,
     ObservabilityConfig,
     PluginRef,
@@ -416,6 +417,70 @@ class TestResolvedGovernance:
         assert "data_retention_days" in str(exc_info.value)
 
 
+class TestIngestionOutputTable:
+    def test_ingestion_output_table_serializes_secret_free_state(self) -> None:
+        table = IngestionOutputTable(
+            source_name="raw-transactions",
+            source_type="filesystem",
+            table_format="iceberg",
+            logical_table="bronze.raw_transactions",
+            physical_table="bronze.raw_transactions",
+            file_format="csv",
+            source_path="./seeds/raw_transactions.csv",
+            write_mode="replace",
+            schema_contract="evolve",
+            freshness_field="_loaded_at",
+            quality_tier="bronze",
+        )
+
+        payload = table.model_dump(mode="json")
+
+        assert payload["source_name"] == "raw-transactions"
+        assert payload["logical_table"] == "bronze.raw_transactions"
+        assert payload["physical_table"] == "bronze.raw_transactions"
+        assert payload["quality_tier"] == "bronze"
+
+    def test_ingestion_output_table_rejects_secret_like_path(self) -> None:
+        with pytest.raises(ValidationError, match="source_path"):
+            IngestionOutputTable(
+                source_name="raw-transactions",
+                source_type="filesystem",
+                table_format="iceberg",
+                logical_table="bronze.raw_transactions",
+                physical_table="bronze.raw_transactions",
+                file_format="csv",
+                source_path="s3://example/raw.csv?signature=example",
+                write_mode="replace",
+                schema_contract="evolve",
+            )
+
+    @pytest.mark.parametrize(
+        "table_name",
+        [
+            "bronze",
+            "bronze.",
+            ".raw_transactions",
+            "bronze.raw.transactions",
+            "bronze. raw_transactions",
+        ],
+    )
+    def test_ingestion_output_table_rejects_invalid_table_identifier(
+        self,
+        table_name: str,
+    ) -> None:
+        with pytest.raises(ValidationError, match="logical_table"):
+            IngestionOutputTable(
+                source_name="raw-transactions",
+                source_type="filesystem",
+                logical_table=table_name,
+                physical_table="bronze.raw_transactions",
+                file_format="csv",
+                source_path="./seeds/raw_transactions.csv",
+                write_mode="replace",
+                schema_contract="evolve",
+            )
+
+
 class TestCompiledArtifactsExtensions:
     """Tests for CompiledArtifacts v0.2.0 extensions."""
 
@@ -558,6 +623,7 @@ class TestCompiledArtifactsExtensions:
         assert artifacts.transforms is None
         assert artifacts.dbt_profiles is None
         assert artifacts.governance is None
+        assert artifacts.ingestion_outputs == []
 
     @pytest.mark.requirement("2B-FR-007")
     def test_compiled_artifacts_full(
