@@ -477,11 +477,12 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             raise RuntimeError(_NOT_STARTED_ERROR)
 
         effective_client_id = client_id or self._config.client_id
-        effective_client_secret = (
-            client_secret.get_secret_value()
-            if client_secret is not None
-            else self._config.client_secret.get_secret_value()
-        )
+        if client_secret is None:
+            effective_client_secret = self._config.client_secret.get_secret_value()
+        elif isinstance(client_secret, SecretStr):
+            effective_client_secret = client_secret.get_secret_value()
+        else:
+            effective_client_secret = str(client_secret)
 
         token_url = f"{self._config.server_url}/realms/{realm}/protocol/openid-connect/token"
 

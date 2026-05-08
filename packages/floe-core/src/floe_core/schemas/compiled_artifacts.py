@@ -47,7 +47,6 @@ _SECRET_FIELD_MARKERS = (
     "accesskey",
     "bearer",
     "credential",
-    "oauth",
     "password",
     "private-key",
     "private_key",
@@ -57,7 +56,6 @@ _SECRET_FIELD_MARKERS = (
 )
 _SECRET_VALUE_MARKERS = (
     "bearer",
-    "oauth",
     "password",
     "private-key",
     "private_key",

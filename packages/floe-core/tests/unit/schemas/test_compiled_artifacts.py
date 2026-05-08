@@ -962,6 +962,7 @@ class TestStorageDeploymentBinding:
                     "outputs": {
                         "dev": {
                             "type": "duckdb",
+                            "auth-mode": "oauth2",
                             "oauth2-server-uri": "http://polaris:8181/api/catalog/v1/oauth/tokens",
                             "password": "{{ env_var('DB_PASSWORD') }}",  # pragma: allowlist secret
                             "token": "{{ env_var('DB_TOKEN', '') }}",  # pragma: allowlist secret
@@ -983,6 +984,7 @@ class TestStorageDeploymentBinding:
             artifacts.dbt_profiles["floe"]["outputs"]["dev"]["oauth2-server-uri"]
             == "http://polaris:8181/api/catalog/v1/oauth/tokens"
         )
+        assert artifacts.dbt_profiles["floe"]["outputs"]["dev"]["auth-mode"] == "oauth2"
 
     @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
     def test_compiled_artifacts_reject_raw_secret_dbt_profiles(
