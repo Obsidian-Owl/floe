@@ -118,7 +118,9 @@ class DltIngestionPlugin(IngestionPlugin):
 
         Verifies:
         1. dlt is importable
-        2. Iceberg destination is reachable (catalog connection test)
+        2. Plugin lifecycle state is ready for runtime use
+        3. Runtime binding is present when destination configuration is needed
+           (catalog and object storage network checks are deferred to create/run)
 
         Returns:
             HealthStatus with state=HEALTHY or UNHEALTHY.

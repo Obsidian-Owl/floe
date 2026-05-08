@@ -103,7 +103,7 @@ All tests MUST follow `.claude/rules/testing-standards.md`:
 
 - [ ] T008 Implement DltIngestionPlugin class skeleton with metadata properties (name, version, floe_api_version, is_external, get_config_schema) in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
 - [ ] T009 Implement startup() and shutdown() lifecycle methods with OTel spans and source package validation in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
-- [ ] T010 Implement health_check() returning HealthStatus (verify dlt importable + catalog reachable) in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
+- [ ] T010 Implement health_check() returning HealthStatus that reports lifecycle state, dlt import readiness, and runtime-binding readiness without requiring catalog connectivity in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
 - [ ] T011 Update __init__.py exports (DltIngestionPlugin, DltIngestionConfig, IngestionSourceConfig) in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/__init__.py
 
 **Checkpoint**: Foundation ready - `DltIngestionPlugin` can be instantiated, started, health-checked, and shut down. User story implementation can now begin.

@@ -169,7 +169,7 @@ A data engineer expects transient errors (network timeouts, rate limits) to be r
 
 - What happens when the dlt source package is not installed (ImportError)? → `startup()` raises `ImportError` with installation instructions (FR-009)
 - How does the system handle an empty source (0 rows extracted)? → `run()` returns `IngestionResult(success=True, rows_loaded=0)` (FR-030)
-- What happens when Polaris catalog is unreachable during pipeline creation? → `health_check()` returns UNHEALTHY; `create_pipeline()` raises `SourceConnectionError` (FR-007, FR-058)
+- What happens when platform destination services fail during pipeline creation or execution? → `create_pipeline()` or `run()` raises the relevant configuration or runtime error; `health_check()` remains limited to plugin lifecycle, dlt importability, and runtime-binding readiness (FR-007, FR-058)
 - What happens when source credentials expire mid-pipeline? → Caught by `categorize_error()` as TRANSIENT (credential refresh may succeed); reported in `IngestionResult.errors` (FR-051, US8)
 - What happens when Iceberg write fails mid-transaction (partial load)? → dlt/Iceberg rollback via snapshot isolation; plugin wraps in `DestinationWriteError` (FR-057, US8)
 
@@ -185,7 +185,7 @@ A data engineer expects transient errors (network timeouts, rate limits) to be r
 - **FR-004**: Plugin MUST expose `name="dlt"`, `version="0.1.0"`, `floe_api_version="1.0"` metadata properties
 - **FR-005**: Plugin MUST return `is_external=False` (dlt runs in-process)
 - **FR-006**: Plugin MUST accept configuration via `DltIngestionConfig` Pydantic model with `model_config = ConfigDict(frozen=True, extra="forbid")`
-- **FR-007**: Plugin MUST implement `health_check()` returning `HealthStatus` (HEALTHY when dlt is importable and destination is reachable)
+- **FR-007**: Plugin MUST implement `health_check()` returning `HealthStatus` based on plugin lifecycle state, dlt importability, and runtime-binding readiness; it MUST NOT perform catalog or object-storage network probes
 - **FR-008**: Plugin MUST implement `startup()` and `shutdown()` lifecycle methods
 - **FR-009**: Plugin MUST validate that required dlt source packages are importable at startup and raise `ImportError` with installation instructions if missing
 - **FR-010**: Plugin MUST expose its capabilities via plugin metadata (supported source types, supported write modes, supported schema contracts)
