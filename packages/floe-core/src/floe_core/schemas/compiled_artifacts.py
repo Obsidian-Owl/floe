@@ -88,11 +88,10 @@ _DBT_ENV_VAR_REFERENCE_PATTERN = re.compile(
 )
 _URL_CREDENTIAL_QUERY_KEYS = frozenset(
     {
-        "access_key",
-        "access_token",
+        "accesskey",
+        "accesstoken",
         "apikey",
-        "api_key",
-        "client_secret",
+        "clientsecret",
         "password",
         "secret",
         "token",
@@ -205,7 +204,11 @@ def _is_non_secret_endpoint_url(value: str) -> bool:
     if parsed.username or parsed.password:
         return False
 
-    query_keys = {part.split("=", 1)[0].lower() for part in parsed.query.split("&") if part}
+    query_keys = {
+        re.sub(r"[^a-z0-9]", "", part.split("=", 1)[0].lower())
+        for part in parsed.query.split("&")
+        if part
+    }
     return not (query_keys & _URL_CREDENTIAL_QUERY_KEYS)
 
 

@@ -1012,6 +1012,34 @@ class TestStorageDeploymentBinding:
                 },
             )
 
+    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
+    def test_compiled_artifacts_reject_credential_query_dbt_profile_urls(
+        self,
+        sample_compilation_metadata: CompilationMetadata,
+        sample_product_identity: ProductIdentity,
+        sample_observability_config: ObservabilityConfig,
+    ) -> None:
+        """dbt profile URLs with credential query params are not safe endpoint refs."""
+        credential_url = "https://x.test/oauth?client-secret=leaked"  # pragma: allowlist secret
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            CompiledArtifacts(
+                metadata=sample_compilation_metadata,
+                identity=sample_product_identity,
+                observability=sample_observability_config,
+                dbt_profiles={
+                    "floe": {
+                        "target": "dev",
+                        "outputs": {
+                            "dev": {
+                                "type": "duckdb",
+                                "password": credential_url,
+                            }
+                        },
+                    }
+                },
+            )
+
     @pytest.mark.parametrize(
         "factory",
         [
