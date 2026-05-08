@@ -89,10 +89,10 @@ def test_demo_compile_emits_minio_storage_deployment_binding() -> None:
             "client_id": "{{ env_var('POLARIS_CLIENT_ID') }}",
             "client_secret": "{{ env_var('POLARIS_CLIENT_SECRET') }}",  # pragma: allowlist secret
             "oauth2_server_uri": "{{ env_var('POLARIS_OAUTH2_SERVER_URI') }}",
-            "authorization_type": "oauth2",
             "oauth2_scope": "{{ env_var('POLARIS_SCOPE', 'PRINCIPAL_ROLE:ALL') }}",
         }
     ]
+    assert "authorization_type" not in dev_profile["secrets"][0]
     assert dev_profile["attach"][0]["options"]["secret"] == "polaris"  # pragma: allowlist secret
     assert "minio" + "admin" not in payload
 

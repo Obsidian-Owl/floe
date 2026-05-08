@@ -118,7 +118,6 @@ def _iceberg_rest_secret_entry(binding: IcebergRestCatalogBinding) -> dict[str, 
         "client_id": _env_var_placeholder(oauth2.client_id_env),
         "client_secret": _env_var_placeholder(oauth2.client_secret_env),
         "oauth2_server_uri": _env_var_placeholder(oauth2.oauth2_server_uri_env),
-        "authorization_type": "oauth2",
     }
     if oauth2.oauth2_scope_env is not None:
         secret["oauth2_scope"] = _env_var_placeholder(

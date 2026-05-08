@@ -482,10 +482,10 @@ class TestAugmentDBTProfile:
                 # pragma: allowlist nextline secret
                 "client_secret": "{{ env_var('CATALOG_CLIENT_SECRET') }}",
                 "oauth2_server_uri": "{{ env_var('CATALOG_OAUTH2_SERVER_URI') }}",
-                "authorization_type": "oauth2",
                 "oauth2_scope": "{{ env_var('CATALOG_SCOPE', 'PRINCIPAL_ROLE:ALL') }}",
             }
         ]
+        assert "authorization_type" not in profile["secrets"][0]
         assert profile["attach"] == [
             {
                 "path": "floe",
