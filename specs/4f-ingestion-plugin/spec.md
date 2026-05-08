@@ -274,7 +274,7 @@ A data engineer expects transient errors (network timeouts, rate limits) to be r
 - **FR-067**: Plugin MUST accept configuration through `DltIngestionConfig` Pydantic model
 - **FR-068**: Config MUST include `sources: list[IngestionSourceConfig]` defining data sources to ingest
 - **FR-069**: Each `IngestionSourceConfig` MUST include `name`, `source_type`, `source_config`, `destination_table`, `write_mode`, `schema_contract`
-- **FR-070**: Config MUST include `catalog_config: dict[str, Any]` for Polaris connection (inherited from platform config)
+- **FR-070**: Config MUST NOT include catalog or storage destination settings. Polaris, warehouse, and filesystem destination facts MUST flow through the runtime/deployment binding composed from platform configuration.
 - **FR-071**: Config MUST include optional `retry_config: RetryConfig` with `max_retries` and `initial_delay_seconds`
 - **FR-072**: Config MUST validate all fields using Pydantic v2 field validators
 - **FR-073**: Config MUST use `SecretStr` for any credential fields
@@ -292,7 +292,7 @@ A data engineer expects transient errors (network timeouts, rate limits) to be r
 
 - **DltIngestionPlugin**: Concrete implementation of `IngestionPlugin` ABC for dlt. Handles pipeline creation, execution, and Iceberg destination configuration. Registered via `floe.ingestion` entry point with name "dlt". Lives in `plugins/floe-ingestion-dlt/`.
 
-- **DltIngestionConfig**: Pydantic v2 configuration model for the dlt ingestion plugin. Includes `sources` (list of source definitions), `catalog_config` (Polaris connection), `retry_config` (retry parameters). Uses `ConfigDict(frozen=True, extra="forbid")`.
+- **DltIngestionConfig**: Pydantic v2 configuration model for the dlt ingestion plugin. Includes `sources` (list of source definitions) and `retry_config` (retry parameters). Uses `ConfigDict(frozen=True, extra="forbid")`. Destination settings are supplied by runtime/deployment binding, not plugin config.
 
 - **IngestionSourceConfig**: Pydantic v2 model defining a single ingestion source. Includes `name` (unique identifier), `source_type` (rest_api|sql_database|filesystem), `source_config` (source-specific params), `destination_table` (Iceberg table path), `write_mode` (append|replace|merge), `schema_contract` (evolve|freeze|discard_value), `cursor_field` (optional, for incremental).
 
@@ -430,13 +430,14 @@ PluginRef(
     version="0.1.0",
     config={
         "sources": [...],
-        "catalog_config": {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse"
-        }
+        "retry_config": {"max_retries": 3}
     }
 )
 ```
+
+Destination facts for Polaris, warehouse, and object storage are composed into
+the runtime binding used by orchestrator deployment and execution. They are not
+duplicated under `CompiledArtifacts.plugins.ingestion.config`.
 
 ### File Ownership (Exclusive)
 

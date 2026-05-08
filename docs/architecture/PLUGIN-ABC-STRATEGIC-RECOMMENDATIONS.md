@@ -492,9 +492,9 @@ class SemanticLayerPlugin(ABC):
 def generate_connector_config(
     self,
     source_config: dict[str, Any],
-    destination_config: dict[str, Any]
+    output_dir: Path
 ) -> dict[str, Any]:
-    """Generate ingestion connector configuration."""
+    """Generate ingestion connector configuration from source-owned config."""
     pass
 
 @abstractmethod
@@ -584,7 +584,6 @@ class IngestionPlugin(ABC):
     def generate_connector_config(
         self,
         source_config: dict[str, Any],
-        destination_config: dict[str, Any],
         output_dir: Path
     ) -> list[Path]:
         """Generate ingestion connector configuration files.
@@ -597,7 +596,6 @@ class IngestionPlugin(ABC):
 
         Args:
             source_config: Source system configuration (API keys, endpoints)
-            destination_config: Destination configuration (catalog, warehouse)
             output_dir: Directory to write configuration files
 
         Returns:
@@ -654,8 +652,9 @@ class IngestionPlugin(ABC):
 1. **`generate_connector_config` (not `create_pipeline`)**: Declarative, not imperative
 2. **No `run()` method**: Execution handled by OrchestratorPlugin (Dagster schedules ingestion jobs)
 3. **Runtime destination binding**: Catalog and storage composition produce the
-   binding consumed by ingestion jobs; ingestion plugins do not expose a public
-   destination-config compatibility method.
+   binding consumed by ingestion jobs; ingestion public APIs do not accept
+   destination config and plugins do not expose a compatibility method for it.
+   The runtime/deployment layer passes composed destination facts internally.
 4. **dlt-specific execution**: `DLTPlugin` internals handle `dlt.pipeline()` creation, but ABC doesn't expose it
 
 **Execution Flow**:

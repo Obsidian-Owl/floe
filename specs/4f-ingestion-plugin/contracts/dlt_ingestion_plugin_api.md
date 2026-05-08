@@ -34,7 +34,7 @@ class DltIngestionPlugin(IngestionPlugin):
 
     Example:
         >>> from floe_ingestion_dlt import DltIngestionPlugin, DltIngestionConfig
-        >>> config = DltIngestionConfig(sources=[...], catalog_config={...})
+        >>> config = DltIngestionConfig(sources=[...])
         >>> plugin = DltIngestionPlugin(config=config)
         >>> plugin.startup()
         >>> pipeline = plugin.create_pipeline(ingestion_config_with_runtime_binding)
@@ -42,7 +42,7 @@ class DltIngestionPlugin(IngestionPlugin):
         >>> plugin.shutdown()
 
     Args:
-        config: Plugin configuration with sources and catalog details.
+        config: Plugin configuration with ingestion-owned source and retry details.
     """
 
     def __init__(self, config: DltIngestionConfig) -> None:

@@ -75,14 +75,9 @@ load_info = pipeline.run(source_data, write_disposition="append")
 
 #### Iceberg Destination Configuration
 ```python
-# For Polaris REST catalog:
-destination_config = {
-    "catalog_type": "rest",
-    "credentials": {
-        "uri": "http://polaris:8181/api/catalog",
-        "warehouse": "floe_warehouse",
-    },
-}
+# Superseded historical sketch: ingestion APIs must not expose destination
+# configuration. Polaris and storage facts now flow through runtime/deployment
+# binding assembled from platform configuration.
 ```
 
 #### Schema Contracts

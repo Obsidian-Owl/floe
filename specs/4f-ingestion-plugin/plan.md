@@ -192,8 +192,10 @@ This phase establishes the plugin package and shared infrastructure.
 - `DltIngestionConfig(BaseModel)` with `model_config = ConfigDict(frozen=True, extra="forbid")`
 - Fields:
   - `sources: list[IngestionSourceConfig]` (data sources to ingest)
-  - `catalog_config: dict[str, Any]` (Polaris connection details)
   - `retry_config: RetryConfig | None` (optional retry parameters)
+- Destination settings are not plugin config fields. Polaris, warehouse, and
+  filesystem destination facts are composed from platform config into the
+  runtime/deployment binding consumed by the dlt runtime.
 - `IngestionSourceConfig(BaseModel)` with frozen=True, extra="forbid":
   - `name: str` (unique identifier, min_length=1)
   - `source_type: str` (rest_api|sql_database|filesystem)

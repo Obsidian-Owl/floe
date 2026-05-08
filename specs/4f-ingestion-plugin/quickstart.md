@@ -48,10 +48,6 @@ config = DltIngestionConfig(
             cursor_field="updated_at",
         ),
     ],
-    catalog_config={
-        "uri": "http://polaris:8181/api/catalog",
-        "warehouse": "floe_warehouse",
-    },
 )
 ```
 
@@ -203,7 +199,6 @@ from floe_ingestion_dlt.config import RetryConfig
 
 config = DltIngestionConfig(
     sources=[...],
-    catalog_config={...},
     retry_config=RetryConfig(
         max_retries=5,           # More retries for flaky APIs
         initial_delay_seconds=2.0,  # Longer initial backoff
