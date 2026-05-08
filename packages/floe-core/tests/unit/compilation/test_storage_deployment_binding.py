@@ -16,7 +16,7 @@ from floe_core.composition.models import (
     PluginRequirements,
     RequirementSet,
 )
-from floe_core.plugin_errors import PluginConfigurationError
+from floe_core.plugin_errors import PluginConfigurationError, PluginError
 from floe_core.plugins.catalog import CatalogPlugin
 from floe_core.plugins.identity import IdentityPlugin, TokenValidationResult, UserInfo
 from floe_core.plugins.secrets import SecretsPlugin
@@ -37,6 +37,30 @@ from floe_core.schemas.compiled_artifacts import (
 
 ROOT = Path(__file__).resolve().parents[5]
 pytestmark = pytest.mark.requirement("AC-4")
+
+
+def test_composition_error_codes_are_documented() -> None:
+    """Public composition failures must be listed for stable operator diagnostics."""
+    from floe_core.compilation.errors import ERROR_CODES
+
+    expected_codes = {
+        "COMPOSITION_PLUGIN_MISSING",
+        "COMPOSITION_PLUGIN_INTERFACE_INVALID",
+        "COMPOSITION_PLUGIN_CONFIG_INVALID",
+        "COMPOSITION_STORAGE_MISSING",
+        "COMPOSITION_PROTOCOL_UNSUPPORTED",
+        "COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED",
+        "COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
+        "COMPOSITION_SECRET_PROVIDER_MISSING",
+        "COMPOSITION_SECRET_PROVIDER_UNSUPPORTED",
+        "COMPOSITION_IDENTITY_PROVIDER_MISSING",
+        "COMPOSITION_IDENTITY_PROVIDER_UNSUPPORTED",
+        "COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+        "COMPOSITION_DEPLOYMENT_BINDING_MISSING",
+        "COMPOSITION_RENDERER_PRECONDITION_FAILED",
+    }
+
+    assert expected_codes.issubset(ERROR_CODES)
 
 
 class FakeSecretsPlugin(SecretsPlugin):
@@ -429,9 +453,91 @@ def test_missing_storage_plugin_raises_structured_compilation_error(tmp_path: Pa
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_PLUGIN_MISSING"
     assert "missing-storage" in error.message
     assert error.context == {"storage_plugin": "missing-storage"}
+
+
+def test_wrong_storage_plugin_interface_raises_composition_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A plugin loaded from storage selection must implement StoragePlugin."""
+
+    class NotStoragePlugin:
+        name = "minio"
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class WrongInterfaceRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> NotStoragePlugin:
+            return NotStoragePlugin()
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", WrongInterfaceRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_INTERFACE_INVALID"
+    assert error.context == {"storage_plugin": "minio"}
+
+
+def test_storage_plugin_configure_failure_raises_composition_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configure-time storage plugin validation must use the config-invalid code."""
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class ConfigFailingRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            raise PluginConfigurationError(
+                name,
+                [{"field": "endpoint", "message": "required"}],
+            )
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            raise AssertionError("get() must not be reached after configure failure")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", ConfigFailingRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_CONFIG_INVALID"
+    assert error.context == {"storage_plugin": "minio"}
 
 
 def test_storage_plugin_binding_failure_raises_structured_compilation_error(
@@ -506,9 +612,695 @@ def test_storage_plugin_binding_failure_raises_structured_compilation_error(
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_PLUGIN_CONFIG_INVALID"
     assert "could not build deployment binding" in error.message
+    assert error.context == {
+        "storage_plugin": "minio",
+        "error_type": "PluginConfigurationError",
+    }
+
+
+def test_storage_plugin_binding_value_error_raises_secret_safe_config_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Provider-owned binding validation failures must not expose raw exception text."""
+
+    class ValueErrorStoragePlugin(StoragePlugin):
+        @property
+        def name(self) -> str:
+            return "minio"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def get_config_schema(self) -> None:
+            return None
+
+        def get_pyiceberg_fileio(self) -> FileIO:
+            raise NotImplementedError
+
+        def get_warehouse_uri(self, namespace: str) -> str:
+            return f"s3://unused/{namespace}"
+
+        def get_dbt_profile_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_dagster_io_manager_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_helm_values_override(self) -> dict[str, Any]:
+            return {}
+
+        def get_deployment_binding(self) -> Any:
+            raise ValueError("password=super-secret")
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class ValueErrorStorageRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> ValueErrorStoragePlugin:
+            return ValueErrorStoragePlugin()
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", ValueErrorStorageRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_CONFIG_INVALID"
+    assert "super-secret" not in error.message
+    assert "password=super-secret" not in error.message
+    assert error.context == {"storage_plugin": "minio", "error_type": "ValueError"}
+    assert "super-secret" not in str(error.context)
+    assert "password=super-secret" not in str(error.context)
+
+
+def test_storage_plugin_missing_deployment_binding_raises_composition_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Storage plugins without deployment bindings must produce a specific code."""
+
+    class LegacyStoragePlugin(StoragePlugin):
+        @property
+        def name(self) -> str:
+            return "minio"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def get_config_schema(self) -> None:
+            return None
+
+        def get_pyiceberg_fileio(self) -> FileIO:
+            raise NotImplementedError
+
+        def get_warehouse_uri(self, namespace: str) -> str:
+            return f"s3://unused/{namespace}"
+
+        def get_dbt_profile_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_dagster_io_manager_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_helm_values_override(self) -> dict[str, Any]:
+            return {}
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class LegacyStorageRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> LegacyStoragePlugin:
+            return LegacyStoragePlugin()
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", LegacyStorageRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_DEPLOYMENT_BINDING_MISSING"
     assert error.context == {"storage_plugin": "minio"}
+
+
+def _minimal_storage_binding() -> StorageDeploymentBinding:
+    """Return a valid MinIO-like storage binding for catalog composition tests."""
+    return StorageDeploymentBinding(
+        provider="minio",
+        protocol="s3-compatible",
+        endpoint=StorageServiceEndpoint(
+            internal_url="http://floe-platform-minio:9000",
+            external_url="http://localhost:9000",
+            region="us-east-1",
+            warehouse_path="s3://floe-iceberg",
+            path_style_access=True,
+        ),
+        credentials=StorageCredentialBinding(
+            mode="kubernetes-secret",
+            secret_ref=KubernetesSecretRef(
+                name="floe-platform-minio-credentials",
+                namespace="floe-system",
+                keys={
+                    "accessKeyId": "accesskey",
+                    "secretAccessKey": "secretkey",  # pragma: allowlist secret
+                },
+            ),
+        ),
+        capabilities=StorageCapabilities(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+            path_style_access=True,
+        ),
+        dbt=DbtStorageBinding(
+            profile_name="floe",
+            target_name="dev",
+            schema_name="analytics",
+        ),
+        dagster=DagsterStorageBinding(
+            resource_key="storage",
+            asset_io_manager_key="io_manager",
+        ),
+    )
+
+
+class _MinimalStoragePlugin(StoragePlugin):
+    @property
+    def name(self) -> str:
+        return "minio"
+
+    @property
+    def version(self) -> str:
+        return "0.1.0"
+
+    @property
+    def floe_api_version(self) -> str:
+        return "1.0"
+
+    def get_config_schema(self) -> None:
+        return None
+
+    def get_pyiceberg_fileio(self) -> FileIO:
+        raise NotImplementedError
+
+    def get_warehouse_uri(self, namespace: str) -> str:
+        return f"s3://unused/{namespace}"
+
+    def get_dbt_profile_config(self) -> dict[str, Any]:
+        return {}
+
+    def get_dagster_io_manager_config(self) -> dict[str, Any]:
+        return {}
+
+    def get_helm_values_override(self) -> dict[str, Any]:
+        return {}
+
+    def get_deployment_binding(self) -> StorageDeploymentBinding:
+        return _minimal_storage_binding()
+
+
+class _CompatibleCatalogPlugin(CatalogPlugin):
+    def __init__(self, build_error: Exception | None = None) -> None:
+        self._build_error = build_error
+
+    @property
+    def name(self) -> str:
+        return "polaris"
+
+    @property
+    def version(self) -> str:
+        return "0.1.0"
+
+    @property
+    def floe_api_version(self) -> str:
+        return "1.0"
+
+    def connect(self, config: dict[str, Any]) -> Any:
+        raise NotImplementedError
+
+    def create_namespace(
+        self,
+        namespace: str,
+        properties: dict[str, str] | None = None,
+    ) -> None:
+        raise NotImplementedError
+
+    def vend_credentials(self, table_path: str, operations: list[str]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def list_namespaces(self, parent: str | None = None) -> list[str]:
+        raise NotImplementedError
+
+    def delete_namespace(self, namespace: str) -> None:
+        raise NotImplementedError
+
+    def create_table(
+        self,
+        identifier: str,
+        schema: dict[str, Any],
+        location: str | None = None,
+        properties: dict[str, str] | None = None,
+    ) -> None:
+        raise NotImplementedError
+
+    def list_tables(self, namespace: str) -> list[str]:
+        raise NotImplementedError
+
+    def drop_table(self, identifier: str, purge: bool = False) -> None:
+        raise NotImplementedError
+
+    def get_storage_requirements(self) -> PluginRequirements:
+        return PluginRequirements(
+            plugin_type="catalog",
+            plugin_name="polaris",
+            requirements=RequirementSet(
+                protocols=["s3-compatible"],
+                credential_modes=["kubernetes-secret"],
+            ),
+        )
+
+    def build_catalog_deployment(
+        self,
+        storage: StorageDeploymentBinding,
+    ) -> CatalogDeploymentBinding:
+        if self._build_error is not None:
+            raise self._build_error
+        return CatalogDeploymentBinding(
+            provider="polaris",
+            polaris=PolarisCatalogDeploymentBinding(
+                storage_type="S3",
+                default_base_location="s3://unused",
+                allowed_locations=[],
+                endpoint="http://unused",
+                endpoint_internal="http://unused",
+                path_style_access=True,
+                sts_unavailable=True,
+                credential_refs={
+                    "accessKeyId": CredentialRef(source="none", name="none"),
+                    "secretAccessKey": CredentialRef(source="none", name="none"),
+                },
+            ),
+        )
+
+
+def test_missing_catalog_plugin_raises_composition_code(tmp_path: Path) -> None:
+    """Catalog plugin resolution failures must identify missing catalog plugins."""
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest = yaml.safe_load((ROOT / "demo" / "manifest.yaml").read_text(encoding="utf-8"))
+    manifest["plugins"]["catalog"]["type"] = "missing-catalog"
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_MISSING"
+    assert error.context == {"catalog_plugin": "missing-catalog"}
+
+
+def test_catalog_plugin_configure_failure_raises_composition_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configure-time catalog plugin validation must use the config-invalid code."""
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class CatalogConfigFailingRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            if plugin_type == PluginType.CATALOG:
+                raise PluginConfigurationError(
+                    name,
+                    [{"field": "uri", "message": "required"}],
+                )
+
+        def get(self, plugin_type: PluginType, name: str) -> StoragePlugin:
+            if plugin_type == PluginType.STORAGE:
+                return _MinimalStoragePlugin()
+            raise AssertionError("catalog get() must not be reached after configure failure")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", CatalogConfigFailingRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_CONFIG_INVALID"
+    assert error.context == {"catalog_plugin": "polaris"}
+
+
+@pytest.mark.parametrize("failure_point", ["configure", "get"])
+def test_catalog_plugin_load_failure_raises_composition_missing_code(
+    monkeypatch: pytest.MonkeyPatch,
+    failure_point: str,
+) -> None:
+    """Non-validation catalog registry failures must use the plugin-missing code."""
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class CatalogLoadFailingRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            if plugin_type == PluginType.CATALOG and failure_point == "configure":
+                raise PluginError("entry point load failed with token=secret")
+
+        def get(self, plugin_type: PluginType, name: str) -> StoragePlugin | CatalogPlugin:
+            if plugin_type == PluginType.STORAGE:
+                return _MinimalStoragePlugin()
+            if plugin_type == PluginType.CATALOG and failure_point == "get":
+                raise PluginError("entry point load failed with token=secret")
+            if plugin_type == PluginType.CATALOG:
+                return _CompatibleCatalogPlugin()
+            raise AssertionError(f"unexpected plugin request: {plugin_type}:{name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", CatalogLoadFailingRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_MISSING"
+    assert error.context == {"catalog_plugin": "polaris"}
+
+
+def test_wrong_catalog_plugin_interface_raises_composition_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A plugin loaded from catalog selection must implement CatalogPlugin."""
+
+    class MinimalStoragePlugin(StoragePlugin):
+        @property
+        def name(self) -> str:
+            return "minio"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def get_config_schema(self) -> None:
+            return None
+
+        def get_pyiceberg_fileio(self) -> FileIO:
+            raise NotImplementedError
+
+        def get_warehouse_uri(self, namespace: str) -> str:
+            return f"s3://unused/{namespace}"
+
+        def get_dbt_profile_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_dagster_io_manager_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_helm_values_override(self) -> dict[str, Any]:
+            return {}
+
+        def get_deployment_binding(self) -> StorageDeploymentBinding:
+            return _minimal_storage_binding()
+
+    class NotCatalogPlugin:
+        name = "polaris"
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class WrongCatalogRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> object:
+            if plugin_type == PluginType.STORAGE:
+                return MinimalStoragePlugin()
+            if plugin_type == PluginType.CATALOG:
+                return NotCatalogPlugin()
+            raise AssertionError(f"unexpected plugin request: {plugin_type}:{name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", WrongCatalogRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_INTERFACE_INVALID"
+    assert error.context == {"catalog_plugin": "polaris"}
+
+
+def test_catalog_plugin_missing_deployment_binding_raises_composition_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catalog plugins without deployment translators must produce a specific code."""
+
+    class MinimalStoragePlugin(StoragePlugin):
+        @property
+        def name(self) -> str:
+            return "minio"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def get_config_schema(self) -> None:
+            return None
+
+        def get_pyiceberg_fileio(self) -> FileIO:
+            raise NotImplementedError
+
+        def get_warehouse_uri(self, namespace: str) -> str:
+            return f"s3://unused/{namespace}"
+
+        def get_dbt_profile_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_dagster_io_manager_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_helm_values_override(self) -> dict[str, Any]:
+            return {}
+
+        def get_deployment_binding(self) -> StorageDeploymentBinding:
+            return _minimal_storage_binding()
+
+    class LegacyCatalogPlugin(CatalogPlugin):
+        @property
+        def name(self) -> str:
+            return "polaris"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def connect(self, config: dict[str, Any]) -> Any:
+            raise NotImplementedError
+
+        def create_namespace(
+            self,
+            namespace: str,
+            properties: dict[str, str] | None = None,
+        ) -> None:
+            raise NotImplementedError
+
+        def vend_credentials(self, table_path: str, operations: list[str]) -> dict[str, Any]:
+            raise NotImplementedError
+
+        def list_namespaces(self, parent: str | None = None) -> list[str]:
+            raise NotImplementedError
+
+        def delete_namespace(self, namespace: str) -> None:
+            raise NotImplementedError
+
+        def create_table(
+            self,
+            identifier: str,
+            schema: dict[str, Any],
+            location: str | None = None,
+            properties: dict[str, str] | None = None,
+        ) -> None:
+            raise NotImplementedError
+
+        def list_tables(self, namespace: str) -> list[str]:
+            raise NotImplementedError
+
+        def drop_table(self, identifier: str, purge: bool = False) -> None:
+            raise NotImplementedError
+
+        def get_storage_requirements(self) -> PluginRequirements:
+            return PluginRequirements(
+                plugin_type="catalog",
+                plugin_name="polaris",
+                requirements=RequirementSet(
+                    protocols=["s3-compatible"],
+                    credential_modes=["kubernetes-secret"],
+                ),
+            )
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class LegacyCatalogRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> StoragePlugin | CatalogPlugin:
+            if plugin_type == PluginType.STORAGE:
+                return MinimalStoragePlugin()
+            if plugin_type == PluginType.CATALOG:
+                return LegacyCatalogPlugin()
+            raise AssertionError(f"unexpected plugin request: {plugin_type}:{name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", LegacyCatalogRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_DEPLOYMENT_BINDING_MISSING"
+    assert error.context == {"storage_plugin": "minio", "catalog_plugin": "polaris"}
+
+
+@pytest.mark.parametrize(
+    ("build_error", "error_type"),
+    [
+        (PluginError("client_secret=super-secret"), "PluginError"),
+        (ValueError("password=super-secret"), "ValueError"),
+    ],
+)
+def test_catalog_plugin_build_failure_raises_secret_safe_config_code(
+    monkeypatch: pytest.MonkeyPatch,
+    build_error: Exception,
+    error_type: str,
+) -> None:
+    """Catalog deployment build failures must not expose raw exception text."""
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class CatalogBuildFailingRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> StoragePlugin | CatalogPlugin:
+            if plugin_type == PluginType.STORAGE:
+                return _MinimalStoragePlugin()
+            if plugin_type == PluginType.CATALOG:
+                return _CompatibleCatalogPlugin(build_error=build_error)
+            raise AssertionError(f"unexpected plugin request: {plugin_type}:{name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", CatalogBuildFailingRegistry)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            ROOT / "demo" / "manifest.yaml",
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_CONFIG_INVALID"
+    assert error.context == {
+        "storage_plugin": "minio",
+        "catalog_plugin": "polaris",
+        "error_type": error_type,
+    }
+    assert "super-secret" not in str(error.context)
 
 
 def test_incompatible_storage_catalog_composition_raises_structured_error(
@@ -1185,7 +1977,7 @@ def test_compile_rejects_selected_storage_mode_not_declared_by_capabilities(
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED"
     assert (
         "Storage plugin 'aws-object-storage' selected credential mode 'external-secret-sync' "
         "but declares credential modes ['kubernetes-secret']"
@@ -1255,6 +2047,98 @@ def test_compile_accepts_selected_external_secret_sync_with_capable_secrets_prov
     assert artifacts.deployment is not None
     assert artifacts.deployment.storage is not None
     assert artifacts.deployment.storage.credentials.mode == "external-secret-sync"
+
+
+def test_compile_validates_selected_secrets_plugin_type(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configured secrets plugin must implement the SecretsPlugin interface."""
+
+    class NotSecretsPlugin:
+        name = "fake-secrets"
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class IsolatedRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            if plugin_type == PluginType.STORAGE:
+                return ExternalSecretStoragePlugin()
+            if plugin_type == PluginType.SECRETS:
+                return NotSecretsPlugin()
+            raise AssertionError(f"unexpected plugin lookup: {plugin_type}:{name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedRegistry)
+    manifest_path = _external_secret_manifest_path(tmp_path, include_secrets=True)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_INTERFACE_INVALID"
+    assert "is not a SecretsPlugin" in error.message
+    assert error.context == {"secrets_plugin": "fake-secrets"}  # pragma: allowlist secret
+
+
+def test_compile_classifies_selected_secrets_plugin_resolution_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configured secrets plugin load failures must use composition taxonomy."""
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class IsolatedRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            if plugin_type == PluginType.STORAGE:
+                return ExternalSecretStoragePlugin()
+            if plugin_type == PluginType.SECRETS:
+                raise PluginError("entry point load failed")
+            raise AssertionError(f"unexpected plugin lookup: {plugin_type}:{name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedRegistry)
+    manifest_path = _external_secret_manifest_path(tmp_path, include_secrets=True)
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_MISSING"
+    assert error.context == {"secrets_plugin": "fake-secrets"}  # pragma: allowlist secret
 
 
 def test_storage_only_compile_validates_selected_identity_plugin_type(
@@ -1403,6 +2287,89 @@ def test_storage_only_compile_validates_selected_identity_plugin_type(
 
     error = exc_info.value.error
     assert error.stage == CompilationStage.RESOLVE
-    assert error.code == "E201"
+    assert error.code == "COMPOSITION_PLUGIN_INTERFACE_INVALID"
     assert "is not an IdentityPlugin" in error.message
+    assert error.context == {"identity_plugin": "fake-identity"}
+
+
+def test_storage_only_compile_classifies_selected_identity_plugin_resolution_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configured identity plugin load failures must use composition taxonomy."""
+
+    class StorageOnlyPlugin(StoragePlugin):
+        @property
+        def name(self) -> str:
+            return "minio"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def get_config_schema(self) -> None:
+            return None
+
+        def get_pyiceberg_fileio(self) -> FileIO:
+            raise NotImplementedError
+
+        def get_warehouse_uri(self, namespace: str) -> str:
+            return f"s3://warehouse/{namespace}"
+
+        def get_dbt_profile_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_dagster_io_manager_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_helm_values_override(self) -> dict[str, Any]:
+            return {}
+
+        def get_deployment_binding(self) -> StorageDeploymentBinding:
+            return _minimal_storage_binding()
+
+    import floe_core.plugin_registry as plugin_registry
+    from floe_core.plugin_types import PluginType
+
+    class IsolatedRegistry:
+        def discover_all(self) -> None:
+            return None
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            return None
+
+        def get(self, plugin_type: PluginType, name: str) -> Any:
+            if plugin_type == PluginType.STORAGE:
+                return StorageOnlyPlugin()
+            if plugin_type == PluginType.IDENTITY:
+                raise PluginError("entry point load failed")
+            raise AssertionError(f"unexpected plugin lookup: {plugin_type}:{name}")
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedRegistry)
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest = yaml.safe_load((ROOT / "demo" / "manifest.yaml").read_text(encoding="utf-8"))
+    manifest["plugins"].pop("catalog", None)
+    manifest["plugins"]["storage"] = {"type": "minio"}
+    manifest["plugins"]["identity"] = {"type": "fake-identity"}
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    with pytest.raises(CompilationException) as exc_info:
+        compile_pipeline(
+            ROOT / "demo" / "customer-360" / "floe.yaml",
+            manifest_path,
+            emit_lineage=False,
+        )
+
+    error = exc_info.value.error
+    assert error.stage == CompilationStage.RESOLVE
+    assert error.code == "COMPOSITION_PLUGIN_MISSING"
     assert error.context == {"identity_plugin": "fake-identity"}

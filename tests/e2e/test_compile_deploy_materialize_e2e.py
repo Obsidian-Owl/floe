@@ -175,6 +175,31 @@ class TestCompileDeployMaterialize:
             assert artifacts.plugins.compute.type == "duckdb", (
                 f"Expected compute=duckdb for {product_name}, got {artifacts.plugins.compute.type}"
             )
+            assert artifacts.plugins.storage is not None, (
+                f"Storage plugin not resolved for {product_name}"
+            )
+            assert artifacts.plugins.storage.type == "minio", (
+                f"Expected storage=minio for {product_name}, got {artifacts.plugins.storage.type}"
+            )
+            assert artifacts.plugins.catalog is not None, (
+                f"Catalog plugin not resolved for {product_name}"
+            )
+            assert artifacts.plugins.catalog.type == "polaris", (
+                f"Expected catalog=polaris for {product_name}, got {artifacts.plugins.catalog.type}"
+            )
+
+            # Storage/catalog composition feeds deployment renderers and demo runtime.
+            assert artifacts.deployment is not None, (
+                f"Deployment bindings missing for {product_name}"
+            )
+            assert artifacts.deployment.storage is not None, (
+                f"Storage deployment binding missing for {product_name}"
+            )
+            assert artifacts.deployment.storage.provider == "minio"
+            assert artifacts.deployment.catalog is not None, (
+                f"Catalog deployment binding missing for {product_name}"
+            )
+            assert artifacts.deployment.catalog.provider == "polaris"
 
             # Verify transforms were resolved
             assert artifacts.transforms is not None, f"Transforms not resolved for {product_name}"
