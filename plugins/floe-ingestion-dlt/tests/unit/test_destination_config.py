@@ -1,4 +1,4 @@
-"""Destination configuration tests for the dlt ingestion plugin."""
+"""Runtime binding destination tests for the dlt ingestion plugin."""
 
 from __future__ import annotations
 
@@ -84,53 +84,6 @@ def _partial_runtime_binding_model() -> DltIngestionBinding:
         table_format="iceberg",
         source_filesystem=binding["source_filesystem"],
     )
-
-
-def test_destination_config_matches_dlt_filesystem_iceberg_setup() -> None:
-    """Catalog config maps to the exact kwargs used to build dlt filesystem destination."""
-    plugin = DltIngestionPlugin()
-
-    destination_config = plugin.get_destination_config(
-        {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe-demo",
-            "bucket": "floe-iceberg",
-            "s3_endpoint": "http://minio:9000",
-            "s3_region": "us-east-1",
-            "s3_path_style_access": True,
-            "s3_access_key": "must-not-pass-through",  # pragma: allowlist secret
-            "s3_secret_key": "must-not-pass-through",  # pragma: allowlist secret
-        }
-    )
-
-    assert destination_config == {
-        "bucket_url": "s3://floe-iceberg",
-        "credentials": {
-            "endpoint_url": "http://minio:9000",
-            "region_name": "us-east-1",
-            "s3_url_style": "path",
-        },
-    }
-
-
-def test_destination_config_accepts_explicit_bucket_url() -> None:
-    """An explicit object-store URL is passed directly to dlt filesystem."""
-    plugin = DltIngestionPlugin()
-
-    destination_config = plugin.get_destination_config(
-        {
-            "bucket_url": "s3://custom-warehouse/root",
-            "s3_endpoint": "http://minio:9000",
-        }
-    )
-
-    assert destination_config == {
-        "bucket_url": "s3://custom-warehouse/root",
-        "credentials": {
-            "endpoint_url": "http://minio:9000",
-            "s3_url_style": "path",
-        },
-    }
 
 
 def test_create_pipeline_passes_runtime_filesystem_destination_without_leaking_env(

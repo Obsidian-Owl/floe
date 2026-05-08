@@ -775,72 +775,6 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             return sanitize_error_message(error_msg, max_length=max_length)
         return sanitize_error_message(f"{', '.join(context)}: {error_msg}", max_length=max_length)
 
-    def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
-        """Generate Iceberg destination configuration for dlt.
-
-        Legacy utility that maps platform catalog/storage settings to dlt filesystem destination
-        kwargs. dlt's Iceberg support is the filesystem destination plus
-        PyIceberg catalog configuration, not a standalone ``iceberg`` destination.
-        Runtime ingestion no longer calls this method; deployment bindings now
-        provide destination filesystem settings directly.
-
-        Args:
-            catalog_config: Catalog connection configuration with keys:
-                - uri: Polaris catalog URI (e.g., "http://polaris:8181/api/catalog")
-                - warehouse: Warehouse name (e.g., "floe_warehouse")
-                - s3_endpoint: Optional S3/MinIO endpoint
-                - s3_access_key: Optional S3 access key
-                - s3_secret_key: Optional S3 secret key
-                - s3_region: Optional S3 region
-
-        Returns:
-            dlt filesystem destination kwargs for Iceberg writes.
-        """
-        tracer = get_tracer()
-        with ingestion_span(tracer, "get_destination_config"):
-            dest_config: dict[str, Any] = {}
-
-            bucket_url = self._bucket_url(catalog_config)
-            if bucket_url is not None:
-                dest_config["bucket_url"] = bucket_url
-
-            credentials: dict[str, Any] = {}
-            s3_endpoint = self._first_config_value(
-                catalog_config,
-                "s3_endpoint",
-                "endpoint",
-                "minio_endpoint",
-            )
-            if s3_endpoint is not None:
-                credentials["endpoint_url"] = str(s3_endpoint)
-            s3_region = self._first_config_value(catalog_config, "s3_region", "region")
-            if s3_region is not None:
-                credentials["region_name"] = str(s3_region)
-            path_style = catalog_config.get(
-                "s3_path_style_access",
-                catalog_config.get("path_style_access", s3_endpoint is not None),
-            )
-            if path_style:
-                credentials["s3_url_style"] = "path"
-            if credentials:
-                dest_config["credentials"] = credentials
-
-            if "s3_access_key" in catalog_config or "s3_secret_key" in catalog_config:
-                logger.warning(
-                    "s3_credentials_in_config",
-                    message="S3 credentials should use environment variables "
-                    "(AWS_ACCESS_KEY_ID), not config passthrough. See FR-018.",
-                )
-
-            logger.info(
-                "destination_config_generated",
-                destination="filesystem",
-                has_bucket_url="bucket_url" in dest_config,
-                has_s3_endpoint=bool(credentials.get("endpoint_url")),
-            )
-
-            return dest_config
-
     @staticmethod
     def _pipeline_runtime_binding(config: IngestionConfig) -> dict[str, Any]:
         return DltIngestionPlugin._normalize_runtime_binding(config.runtime_binding)
@@ -1320,8 +1254,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         """Generate source configuration for reading from Iceberg Gold layer (FR-009).
 
         Creates configuration for reading from the Iceberg Gold layer
-        via the Polaris catalog. This is the inverse of
-        get_destination_config().
+        via the Polaris catalog for reverse-ETL reads.
 
         Args:
             catalog_config: Catalog connection configuration.

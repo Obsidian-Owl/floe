@@ -77,13 +77,30 @@ def _runtime_binding(catalog_config: dict[str, Any]) -> dict[str, Any]:
     return {
         "destination": "filesystem",
         "source": "filesystem",
-        "destination_filesystem": DltIngestionPlugin().get_destination_config(catalog_config),
+        "destination_filesystem": _destination_filesystem_binding(catalog_config),
         "source_filesystem": {
             "endpoint_url": catalog_config["s3_endpoint"],
             "region_name": catalog_config["s3_region"],
             "s3_url_style": "path" if catalog_config["s3_path_style_access"] else "virtual",
         },
         "iceberg_catalog_env": iceberg_catalog_env,
+    }
+
+
+def _destination_filesystem_binding(catalog_config: dict[str, Any]) -> dict[str, Any]:
+    """Build dlt filesystem destination config in runtime-binding shape."""
+    bucket_url = str(catalog_config.get("bucket_url") or catalog_config["bucket"])
+    if "://" not in bucket_url:
+        bucket_url = f"s3://{bucket_url}"
+    credentials = {
+        "endpoint_url": catalog_config["s3_endpoint"],
+        "region_name": catalog_config["s3_region"],
+    }
+    if catalog_config.get("s3_path_style_access"):
+        credentials["s3_url_style"] = "path"
+    return {
+        "bucket_url": bucket_url,
+        "credentials": credentials,
     }
 
 

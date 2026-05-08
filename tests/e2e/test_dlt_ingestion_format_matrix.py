@@ -107,12 +107,12 @@ def _catalog_config() -> dict[str, Any]:
 
 
 def _runtime_binding(catalog_config: dict[str, Any]) -> dict[str, Any]:
-    """Build binding-shaped runtime config from legacy E2E catalog config."""
+    """Build binding-shaped runtime config from E2E platform bindings."""
     return {
         "plugin_name": "dlt",
         "destination": "filesystem",
         "table_format": "iceberg",
-        "destination_filesystem": DltIngestionPlugin().get_destination_config(catalog_config),
+        "destination_filesystem": _destination_filesystem_binding(catalog_config),
         "source_filesystem": {
             "endpoint_url": catalog_config["s3_endpoint"],
             "region_name": catalog_config["s3_region"],
@@ -126,6 +126,23 @@ def _runtime_binding(catalog_config: dict[str, Any]) -> dict[str, Any]:
             "PYICEBERG_CATALOG__POLARIS__SCOPE": "POLARIS_SCOPE",
             "PYICEBERG_CATALOG__POLARIS__OAUTH2_SERVER_URI": ("POLARIS_OAUTH2_SERVER_URI"),
         },
+    }
+
+
+def _destination_filesystem_binding(catalog_config: dict[str, Any]) -> dict[str, Any]:
+    """Build dlt filesystem destination config in runtime-binding shape."""
+    bucket_url = str(catalog_config.get("bucket_url") or catalog_config["bucket"])
+    if "://" not in bucket_url:
+        bucket_url = f"s3://{bucket_url}"
+    credentials = {
+        "endpoint_url": catalog_config["s3_endpoint"],
+        "region_name": catalog_config["s3_region"],
+    }
+    if catalog_config.get("s3_path_style_access"):
+        credentials["s3_url_style"] = "path"
+    return {
+        "bucket_url": bucket_url,
+        "credentials": credentials,
     }
 
 

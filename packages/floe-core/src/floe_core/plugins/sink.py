@@ -257,8 +257,7 @@ class SinkConnector(ABC):
         """Generate source configuration for reading from Iceberg Gold layer.
 
         Creates configuration for reading from the Iceberg Gold layer
-        via the Polaris catalog. This is the inverse of
-        IngestionPlugin.get_destination_config().
+        via the Polaris catalog for reverse-ETL source reads.
 
         Args:
             catalog_config: Catalog connection configuration.

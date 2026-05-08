@@ -534,13 +534,6 @@ def run(
     """Run ingestion pipeline."""
     pass
 
-@abstractmethod
-def get_destination_config(
-    self,
-    catalog_config: dict
-) -> dict:
-    """Get destination configuration."""
-    pass
 ```
 
 ### Root Cause Analysis
@@ -654,38 +647,15 @@ class IngestionPlugin(ABC):
         """
         pass
 
-    @abstractmethod
-    def get_destination_config(
-        self,
-        catalog_plugin: CatalogPlugin
-    ) -> dict[str, Any]:
-        """Get destination configuration for ingestion target.
-
-        Ingestion writes to Iceberg tables (via CatalogPlugin).
-        This method generates the destination configuration.
-
-        Args:
-            catalog_plugin: CatalogPlugin instance (provides catalog URI, credentials)
-
-        Returns:
-            Destination configuration dictionary
-
-        Example:
-            >>> dlt_plugin.get_destination_config(polaris_plugin)
-            {
-                "type": "iceberg",
-                "catalog_uri": "https://polaris.example.com/api/catalog",
-                "warehouse": "s3://bucket/warehouse/"
-            }
-        """
-        pass
 ```
 
 **Key Design Decisions**:
 
 1. **`generate_connector_config` (not `create_pipeline`)**: Declarative, not imperative
 2. **No `run()` method**: Execution handled by OrchestratorPlugin (Dagster schedules ingestion jobs)
-3. **`get_destination_config` retained**: Delegation to CatalogPlugin is cross-cutting pattern
+3. **Runtime destination binding**: Catalog and storage composition produce the
+   binding consumed by ingestion jobs; ingestion plugins do not expose a public
+   destination-config compatibility method.
 4. **dlt-specific execution**: `DLTPlugin` internals handle `dlt.pipeline()` creation, but ABC doesn't expose it
 
 **Execution Flow**:

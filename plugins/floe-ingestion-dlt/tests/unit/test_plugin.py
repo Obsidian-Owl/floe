@@ -504,109 +504,14 @@ class TestRunPipeline:
         }
 
 
-class TestGetDestinationConfig:
-    """Unit tests for T024 - get_destination_config() method."""
+class TestRuntimeBindingPublicSurface:
+    """Regression coverage for removed destination-config compatibility API."""
 
-    @pytest.mark.requirement("4F-FR-019")
-    def test_get_destination_config_basic(self) -> None:
-        """Test get_destination_config() with basic catalog configuration.
-
-        Given catalog_config with catalog-only fields, when get_destination_config()
-        is called, then it returns an empty dlt filesystem destination config.
-        """
+    def test_plugin_does_not_expose_destination_config_compatibility_api(self) -> None:
+        """Runtime bindings are the supported path for dlt destination config."""
         plugin = DltIngestionPlugin()
-        catalog_config = {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse",
-        }
 
-        result = plugin.get_destination_config(catalog_config)
-
-        assert result == {}
-
-    @pytest.mark.requirement("4F-FR-020")
-    def test_get_destination_config_s3_config(self) -> None:
-        """Test get_destination_config() with S3/MinIO configuration.
-
-        Given catalog_config with s3_endpoint, s3_access_key, s3_secret_key,
-        s3_region, when get_destination_config() is called, then only
-        non-secret filesystem credential parameters are mapped.
-        """
-        plugin = DltIngestionPlugin()
-        catalog_config = {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse",
-            "s3_endpoint": "http://minio:9000",
-            "s3_access_key": "AKIAEXAMPLE",  # pragma: allowlist secret
-            "s3_secret_key": "secret",  # pragma: allowlist secret
-            "s3_region": "us-east-1",
-        }
-
-        result = plugin.get_destination_config(catalog_config)
-
-        assert result == {
-            "credentials": {
-                "endpoint_url": "http://minio:9000",
-                "region_name": "us-east-1",
-                "s3_url_style": "path",
-            }
-        }
-
-    @pytest.mark.requirement("4F-FR-019")
-    def test_get_destination_config_minimal(self) -> None:
-        """Test get_destination_config() with empty catalog_config.
-
-        Given empty catalog_config {}, when get_destination_config() is called,
-        then it returns no dlt filesystem kwargs.
-        """
-        plugin = DltIngestionPlugin()
-        catalog_config: dict[str, str] = {}
-
-        result = plugin.get_destination_config(catalog_config)
-
-        assert result == {}
-
-    @pytest.mark.requirement("4F-FR-020")
-    def test_get_destination_config_partial_s3(self) -> None:
-        """Test get_destination_config() with partial S3 configuration.
-
-        Given catalog_config with only s3_endpoint (no keys/region), when
-        get_destination_config() is called, then only endpoint credentials appear
-        in output dict (no empty/null S3 fields).
-        """
-        plugin = DltIngestionPlugin()
-        catalog_config = {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse",
-            "s3_endpoint": "http://minio:9000",
-        }
-
-        result = plugin.get_destination_config(catalog_config)
-
-        assert result == {
-            "credentials": {
-                "endpoint_url": "http://minio:9000",
-                "s3_url_style": "path",
-            }
-        }
-
-    @pytest.mark.requirement("4F-FR-019")
-    def test_get_destination_config_not_started_ok(self) -> None:
-        """Test get_destination_config() does not require plugin to be started.
-
-        get_destination_config is a pure mapping function that doesn't
-        depend on plugin state. It should work without calling startup().
-        """
-        plugin = DltIngestionPlugin()  # NOT started
-        catalog_config = {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse",
-        }
-
-        # Should not raise RuntimeError
-        result = plugin.get_destination_config(catalog_config)
-
-        assert result == {}
+        assert not hasattr(plugin, "get_destination_config")
 
 
 class TestIncrementalLoading:
@@ -956,62 +861,3 @@ class TestStructuredLogging:
                 if call[0][0] == "pipeline_run_failed":
                     found = True
             assert found, "pipeline_run_failed event not logged"
-
-    @pytest.mark.requirement("4F-FR-048")
-    def test_get_destination_config_logs_config_generated(self) -> None:
-        """Test get_destination_config() logs 'destination_config_generated' event.
-
-        Given catalog_config dict, when get_destination_config() is called,
-        then logger.info is called with event="destination_config_generated".
-        """
-        from unittest.mock import patch
-
-        plugin = DltIngestionPlugin()
-        catalog_config = {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse",
-        }
-
-        with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:
-            plugin.get_destination_config(catalog_config)
-
-            # Verify logger.info was called with destination_config_generated
-            mock_logger.info.assert_called()
-            # Find the destination_config_generated call
-            found = False
-            for call in mock_logger.info.call_args_list:
-                if call[0][0] == "destination_config_generated":
-                    found = True
-            assert found, "destination_config_generated event not logged"
-
-    @pytest.mark.requirement("4F-FR-049")
-    def test_secrets_not_logged(self) -> None:
-        """Test get_destination_config() does not log secret values.
-
-        Given catalog_config with s3_secret_key and s3_access_key, when
-        get_destination_config() is called, then logger.info calls do NOT
-        include the actual secret values in any arguments.
-        """
-        from unittest.mock import patch
-
-        plugin = DltIngestionPlugin()
-        catalog_config = {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse",
-            "s3_endpoint": "http://minio:9000",
-            "s3_access_key": "sensitive-access-key-12345",
-            "s3_secret_key": "super-secret-key-67890",  # pragma: allowlist secret
-        }
-
-        with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:
-            plugin.get_destination_config(catalog_config)
-
-            # Verify secrets are NOT in any logger call
-            for call in mock_logger.info.call_args_list:
-                call_str = str(call)
-                assert "sensitive-access-key-12345" not in call_str, (
-                    "s3_access_key value leaked in logs"
-                )
-                assert "super-secret-key-67890" not in call_str, (
-                    "s3_secret_key value leaked in logs"
-                )
