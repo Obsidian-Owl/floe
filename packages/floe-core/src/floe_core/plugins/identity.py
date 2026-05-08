@@ -21,6 +21,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
+from floe_core.composition.models import CapabilitySet, PluginCapabilities
 from floe_core.plugin_metadata import PluginMetadata
 
 
@@ -220,6 +221,18 @@ class IdentityPlugin(PluginMetadata):
             ...     print(f"Invalid: {result.error}")
         """
         ...
+
+    def get_identity_capabilities(self) -> PluginCapabilities:
+        """Return workload identity capabilities for composition validation.
+
+        The default is intentionally empty so existing identity plugins remain
+        discoverable until they adopt composition explicitly.
+        """
+        return PluginCapabilities(
+            plugin_type="identity",
+            plugin_name=self.name,
+            capabilities=CapabilitySet(),
+        )
 
     def get_oidc_config(self, realm: str | None = None) -> OIDCConfig:
         """Get OIDC configuration for service integration.

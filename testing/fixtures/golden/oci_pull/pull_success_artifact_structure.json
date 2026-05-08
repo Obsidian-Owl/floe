@@ -1,13 +1,13 @@
 {
   "name": "pull_success_artifact_structure",
   "function_name": "",
-  "captured_at": "2026-02-15T08:45:26.776153+00:00",
-  "checksum": "abf20ea57e1e7b7d",
+  "captured_at": "2026-05-07T08:51:37.561192+00:00",
+  "checksum": "b325f7a58703142e",
   "output": {
-    "version": "0.8.0",
+    "version": "0.13.0",
     "metadata": {
       "compiled_at": "2026-01-15 10:30:00+00:00",
-      "floe_version": "0.8.0",
+      "floe_version": "0.13.0",
       "source_hash": "sha256:golden123abc",
       "product_name": "golden-product",
       "product_version": "1.0.0"
@@ -73,8 +73,11 @@
       "storage": null,
       "ingestion": null,
       "semantic": null,
-      "lineage_backend": null
+      "lineage_backend": null,
+      "secrets": null,
+      "identity": null
     },
+    "deployment": null,
     "transforms": {
       "models": [
         {
@@ -107,7 +110,6 @@
         }
       }
     },
-    "deployment": null,
     "governance": null,
     "enforcement_result": null,
     "data_contracts": [],

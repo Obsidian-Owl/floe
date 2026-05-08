@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 from floe_core.schemas.data_contract import DataContract
 from floe_core.schemas.quality_config import QualityConfig
@@ -55,7 +55,25 @@ _SECRET_VALUE_MARKERS = (
     "secret-value",
     "token",
 )
+_PLUGIN_CONFIG_SECRET_FIELDS = frozenset(
+    {
+        "accesskey",
+        "apikey",
+        "apitoken",
+        "bearertoken",
+        "clientsecret",
+        "clienttoken",
+        "password",
+        "privatekey",
+        "refreshtoken",
+        "secret",
+        "secretaccesskey",
+        "secretkey",
+        "token",
+    }
+)
 _DEFAULT_ADMIN_CREDENTIAL_PATTERN = re.compile(r"(?<![a-z0-9])[a-z0-9_-]*admin[0-9]*(?![a-z0-9])")
+_OMIT_PLUGIN_CONFIG_VALUE = object()
 
 
 def _validate_configmap_name(name: str) -> str:
@@ -140,6 +158,74 @@ def _assert_no_secret_material(value: Any, path: str) -> None:
             "use JSON-compatible dict, list, string, number, boolean, or null values"
         )
         raise ValueError(msg)
+
+
+def _normalize_plugin_config_key(key: object) -> str:
+    """Normalize a plugin config key for credential-field detection."""
+    return re.sub(r"[^a-z0-9]", "", str(key).lower())
+
+
+def _assert_no_plugin_ref_secret_material(value: Any, path: str) -> None:
+    """Reject raw credential fields while allowing secret reference names."""
+    if isinstance(value, SecretStr):
+        msg = (
+            f"{path} looks like raw credential material; use connection_secret_ref "
+            "or provider-owned secret references instead"
+        )
+        raise ValueError(msg)
+
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if _normalize_plugin_config_key(key) in _PLUGIN_CONFIG_SECRET_FIELDS:
+                msg = (
+                    f"{child_path} looks like raw credential material; use connection_secret_ref "
+                    "or provider-owned secret references instead"
+                )
+                raise ValueError(msg)
+            _assert_no_plugin_ref_secret_material(child, child_path)
+        return
+
+    if isinstance(value, list | tuple | set | frozenset):
+        for index, child in enumerate(value):
+            _assert_no_plugin_ref_secret_material(child, f"{path}[{index}]")
+        return
+
+    if isinstance(value, str | int | float | bool | type(None)):
+        return
+
+    if isinstance(value, Iterable):
+        msg = (
+            f"{path} contains unsupported plugin config type {type(value).__name__}; "
+            "use JSON-compatible dict, list, string, number, boolean, or null values"
+        )
+        raise ValueError(msg)
+
+
+def sanitize_plugin_config_for_artifact(value: Any) -> Any:
+    """Return a JSON-compatible plugin config projection without raw credentials."""
+    if isinstance(value, SecretStr):
+        return _OMIT_PLUGIN_CONFIG_VALUE
+
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, child in value.items():
+            if _normalize_plugin_config_key(key) in _PLUGIN_CONFIG_SECRET_FIELDS:
+                continue
+            sanitized_child = sanitize_plugin_config_for_artifact(child)
+            if sanitized_child is not _OMIT_PLUGIN_CONFIG_VALUE:
+                sanitized[str(key)] = sanitized_child
+        return sanitized
+
+    if isinstance(value, list | tuple | set | frozenset):
+        sanitized_items = []
+        for child in value:
+            sanitized_child = sanitize_plugin_config_for_artifact(child)
+            if sanitized_child is not _OMIT_PLUGIN_CONFIG_VALUE:
+                sanitized_items.append(sanitized_child)
+        return sanitized_items
+
+    return value
 
 
 class CompilationMetadata(BaseModel):
@@ -281,6 +367,13 @@ class PluginRef(BaseModel):
         examples=[{"threads": 4, "memory_limit": "8GB"}],
     )
 
+    @model_validator(mode="after")
+    def validate_secret_free_config(self) -> PluginRef:
+        """Ensure resolved plugin refs do not serialize raw credential material."""
+        if self.config is not None:
+            _assert_no_plugin_ref_secret_material(self.config, f"plugins.{self.type}.config")
+        return self
+
 
 class ResolvedPlugins(BaseModel):
     """Resolved plugin selections after inheritance.
@@ -296,6 +389,8 @@ class ResolvedPlugins(BaseModel):
         storage: Resolved storage plugin (optional)
         ingestion: Resolved ingestion plugin (optional)
         semantic: Resolved semantic layer plugin (optional)
+        secrets: Resolved secrets plugin (optional)
+        identity: Resolved identity plugin (optional)
 
     Example:
         >>> plugins = ResolvedPlugins(
@@ -340,6 +435,14 @@ class ResolvedPlugins(BaseModel):
         default=None,
         description="Resolved lineage backend plugin (optional, v0.5.0+)",
     )
+    secrets: PluginRef | None = Field(
+        default=None,
+        description="Resolved secrets plugin (optional)",
+    )
+    identity: PluginRef | None = Field(
+        default=None,
+        description="Resolved identity plugin (optional)",
+    )
 
 
 class KubernetesSecretRef(BaseModel):
@@ -369,16 +472,23 @@ class CredentialRef(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    source: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
+    source: Literal[
+        "kubernetes-secret",
+        "environment",
+        "workload-identity",
+        "external-secret-sync",
+        "csi-secret-volume",
+        "none",
+    ]
     name: NonEmptyString
     key: NonEmptyString | None = None
 
     @model_validator(mode="after")
     def validate_key_for_source(self) -> CredentialRef:
-        """Ensure only Kubernetes Secret credential refs carry key names."""
-        if self.source == "kubernetes-secret":
+        """Ensure only secret-backed credential refs carry key names."""
+        if self.source in {"kubernetes-secret", "external-secret-sync", "csi-secret-volume"}:
             if self.key is None:
-                msg = "kubernetes-secret credential ref requires key"
+                msg = f"{self.source} credential ref requires key"
                 raise ValueError(msg)
             return self
         if self.key is not None:
@@ -392,7 +502,14 @@ class StorageCredentialBinding(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    mode: Literal["kubernetes-secret", "environment", "workload-identity", "none"]
+    mode: Literal[
+        "kubernetes-secret",
+        "environment",
+        "workload-identity",
+        "external-secret-sync",
+        "csi-secret-volume",
+        "none",
+    ]
     secret_ref: KubernetesSecretRef | None = None
     env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
     service_account_ref: NonEmptyString | None = None
@@ -400,12 +517,12 @@ class StorageCredentialBinding(BaseModel):
     @model_validator(mode="after")
     def validate_mode_sources(self) -> StorageCredentialBinding:
         """Ensure credential source fields match the selected mode."""
-        if self.mode == "kubernetes-secret":
+        if self.mode in {"kubernetes-secret", "external-secret-sync", "csi-secret-volume"}:
             if self.secret_ref is None:
-                msg = "kubernetes-secret credential binding requires secret_ref"
+                msg = f"{self.mode} credential binding requires secret_ref"
                 raise ValueError(msg)
             if self.env_refs or self.service_account_ref is not None:
-                msg = "kubernetes-secret credential binding only accepts secret_ref"
+                msg = f"{self.mode} credential binding only accepts secret_ref"
                 raise ValueError(msg)
             return self
         if self.mode == "environment":
@@ -431,9 +548,9 @@ class StorageCredentialBinding(BaseModel):
 
     def as_credential_ref(self, logical_key: str) -> CredentialRef:
         """Return a consumer credential reference for a logical key."""
-        if self.mode == "kubernetes-secret":
+        if self.mode in {"kubernetes-secret", "external-secret-sync", "csi-secret-volume"}:
             if self.secret_ref is None:
-                msg = "kubernetes-secret credential binding requires secret_ref"
+                msg = f"{self.mode} credential binding requires secret_ref"
                 raise ValueError(msg)
             secret_key = self.secret_ref.keys.get(logical_key)
             if secret_key is None:
@@ -485,6 +602,7 @@ class StorageCapabilities(BaseModel):
 
     protocols: list[NonEmptyString] = Field(default_factory=list)
     credential_modes: list[NonEmptyString] = Field(default_factory=list)
+    identity_modes: list[NonEmptyString] = Field(default_factory=list)
     sts_supported: bool = False
     path_style_access: bool = False
 
