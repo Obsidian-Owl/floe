@@ -20,7 +20,19 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from floe_core.compute_config import ComputeConfig
-from floe_core.schemas.compiled_artifacts import DbtStorageBinding, PluginRef, ResolvedPlugins
+from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
+    DagsterStorageBinding,
+    DbtStorageBinding,
+    DeploymentConfig,
+    KubernetesSecretRef,
+    PluginRef,
+    PolarisCatalogDeploymentBinding,
+    ResolvedPlugins,
+    StorageCredentialBinding,
+    StorageDeploymentBinding,
+    StorageServiceEndpoint,
+)
 
 
 class TestGenerateDBTProfiles:
@@ -191,6 +203,88 @@ class TestGenerateDBTProfiles:
         assert dev_output["s3_path_style_access"] is True
         assert dev_output["s3_access_key_id"] == "{{ env_var('AWS_ACCESS_KEY_ID') }}"
         assert dev_output["s3_secret_access_key"] == "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+
+    @pytest.mark.requirement("FR-005")
+    def test_generate_dbt_profiles_adds_iceberg_attach_from_deployment(
+        self,
+        mock_compute_plugin: MagicMock,
+        resolved_plugins: ResolvedPlugins,
+    ) -> None:
+        """Test that compiled catalog deployment state augments DuckDB profiles."""
+        from floe_core.compilation.dbt_profiles import generate_dbt_profiles
+
+        mock_compute_plugin.generate_dbt_profile.return_value = {
+            "type": "duckdb",
+            "path": ":memory:",
+            "threads": 4,
+            "extensions": ["httpfs"],
+        }
+        deployment = DeploymentConfig(
+            storage=StorageDeploymentBinding(
+                provider="minio",
+                protocol="s3-compatible",
+                endpoint=StorageServiceEndpoint(
+                    internal_url="http://floe-platform-minio:9000",
+                    external_url="http://localhost:9000",
+                    region="us-east-1",
+                    warehouse_path="s3://floe-iceberg",
+                    path_style_access=True,
+                ),
+                credentials=StorageCredentialBinding(
+                    mode="kubernetes-secret",
+                    secret_ref=KubernetesSecretRef(
+                        name="floe-platform-minio-credentials",
+                        namespace="floe-system",
+                        keys={
+                            "accessKeyId": "accesskey",
+                            "secretAccessKey": "secretkey",  # pragma: allowlist secret
+                        },
+                    ),
+                ),
+                dbt=DbtStorageBinding(
+                    profile_name="floe",
+                    target_name="dev",
+                    schema_name="analytics",
+                ),
+                dagster=DagsterStorageBinding(
+                    resource_key="storage",
+                    asset_io_manager_key="io_manager",
+                ),
+            ),
+            catalog=CatalogDeploymentBinding(
+                provider="polaris",
+                polaris=PolarisCatalogDeploymentBinding(
+                    storage_type="S3",
+                    warehouse="floe-demo",
+                    default_base_location="s3://floe-iceberg",
+                    allowed_locations=["s3://floe-iceberg"],
+                    endpoint="http://localhost:8181/api/catalog",
+                    endpoint_internal="http://floe-platform-polaris:8181/api/catalog",
+                    catalog_uri="http://floe-platform-polaris:8181/api/catalog",
+                    path_style_access=True,
+                    sts_unavailable=True,
+                ),
+            ),
+        )
+
+        with patch(
+            "floe_core.compilation.dbt_profiles.get_compute_plugin",
+            return_value=mock_compute_plugin,
+        ):
+            profiles = generate_dbt_profiles(
+                plugins=resolved_plugins,
+                product_name="customer_360",
+                deployment=deployment,
+            )
+
+        dev_output = profiles["customer_360"]["outputs"]["dev"]
+        assert "iceberg" in dev_output["extensions"]
+        assert {
+            "path": "floe-demo",
+            "alias": "iceberg",
+            "type": "iceberg",
+            "options": {"endpoint": "http://floe-platform-polaris:8181/api/catalog"},
+        } in dev_output["attach"]
 
 
 class TestCredentialPlaceholders:

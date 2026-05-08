@@ -28,7 +28,11 @@ from floe_core.plugin_types import PluginType
 
 if TYPE_CHECKING:
     from floe_core.plugins.compute import ComputePlugin
-    from floe_core.schemas.compiled_artifacts import DbtStorageBinding, ResolvedPlugins
+    from floe_core.schemas.compiled_artifacts import (
+        DbtStorageBinding,
+        DeploymentConfig,
+        ResolvedPlugins,
+    )
 
 logger = structlog.get_logger(__name__)
 
@@ -165,11 +169,60 @@ def _expand_product_placeholders(value: Any, product_name: str) -> Any:
     return value
 
 
+def _merge_unique_list(existing: Any, additions: list[str]) -> list[Any]:
+    """Return a list preserving existing order and adding missing values once."""
+    if isinstance(existing, list):
+        merged = list(existing)
+    elif existing is None:
+        merged = []
+    else:
+        merged = [existing]
+
+    for addition in additions:
+        if addition not in merged:
+            merged.append(addition)
+    return merged
+
+
+def _apply_iceberg_attach(
+    profile_output: dict[str, Any],
+    deployment: DeploymentConfig | None,
+) -> dict[str, Any]:
+    """Add DuckDB Iceberg REST catalog attachment from compiled deployment state."""
+    if deployment is None or deployment.catalog is None:
+        return profile_output
+    if profile_output.get("type") != "duckdb":
+        return profile_output
+
+    polaris = deployment.catalog.polaris
+    if polaris.warehouse is None:
+        return profile_output
+
+    endpoint = polaris.catalog_uri or polaris.endpoint_internal
+    attach_entry = {
+        "path": polaris.warehouse,
+        "alias": "iceberg",
+        "type": "iceberg",
+        "options": {"endpoint": endpoint},
+    }
+
+    updated = dict(profile_output)
+    updated["extensions"] = _merge_unique_list(updated.get("extensions"), ["httpfs", "iceberg"])
+
+    existing_attach = updated.get("attach")
+    attach = list(existing_attach) if isinstance(existing_attach, list) else []
+    if attach_entry not in attach:
+        attach.append(attach_entry)
+    updated["attach"] = attach
+    return updated
+
+
 def generate_dbt_profiles(
     plugins: ResolvedPlugins,
     product_name: str,
     environments: list[str] | None = None,
     storage_binding: DbtStorageBinding | None = None,
+    deployment: DeploymentConfig | None = None,
 ) -> dict[str, Any]:
     """Generate dbt profiles.yml configuration from resolved plugins.
 
@@ -182,6 +235,7 @@ def generate_dbt_profiles(
         product_name: Data product name (used as profile name in dbt).
         environments: List of environment names to generate (default: ["dev"]).
         storage_binding: Optional compiled storage projection for dbt profile outputs.
+        deployment: Optional compiled deployment state for profile-specific translations.
 
     Returns:
         Dictionary matching dbt profiles.yml structure:
@@ -242,6 +296,7 @@ def generate_dbt_profiles(
                         profile_key,
                         format_env_var_placeholder(env_name),
                     )
+            profile_output = _apply_iceberg_attach(profile_output, deployment)
             outputs[env] = profile_output
         except Exception as e:
             logger.error(

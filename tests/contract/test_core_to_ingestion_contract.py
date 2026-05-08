@@ -480,6 +480,30 @@ def test_demo_compile_has_no_ingestion_catalog_config_duplication() -> None:
     assert artifacts.deployment.ingestion is not None
 
 
+def test_demo_compile_generates_dbt_iceberg_attach_for_raw_tables() -> None:
+    """Floe-generated dbt profile can discover dlt-written Iceberg raw tables."""
+    from floe_core.compilation.stages import compile_pipeline
+
+    root = Path(__file__).resolve().parents[2]
+    artifacts = compile_pipeline(
+        root / "demo" / "customer-360" / "floe.yaml",
+        root / "demo" / "manifest.yaml",
+        emit_lineage=False,
+    )
+
+    assert artifacts.dbt_profiles is not None
+    dev_output = artifacts.dbt_profiles["customer-360"]["outputs"]["dev"]
+
+    assert "iceberg" in dev_output["extensions"]
+    assert any(
+        attach.get("alias") == "iceberg"
+        and attach.get("type") == "iceberg"
+        and attach.get("options", {}).get("endpoint")
+        == "http://floe-platform-polaris:8181/api/catalog"
+        for attach in dev_output["attach"]
+    )
+
+
 def test_demo_compile_emits_ingestion_output_tables() -> None:
     from floe_core.compilation.stages import compile_pipeline
 

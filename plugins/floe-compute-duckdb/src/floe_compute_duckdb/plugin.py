@@ -56,8 +56,10 @@ _SAFE_WAREHOUSE_PATTERN = re.compile(r"^[a-zA-Z0-9_\-/:. ]+$")
 _ALLOWED_ATTACH_OPTION_KEYS = frozenset(
     {
         "catalog_uri",
+        "endpoint",
         "read_only",
         "schema",
+        "secret",
         "access_mode",
         "type",
     }

@@ -890,6 +890,7 @@ def compile_pipeline(
                     plugins=plugins,
                     product_name=spec.metadata.name,
                     storage_binding=storage_dbt_binding,
+                    deployment=deployment,
                 )
                 compile_span.set_attribute("compile.profile_name", spec.metadata.name)
                 duration_ms = (time.perf_counter() - stage_start) * 1000
