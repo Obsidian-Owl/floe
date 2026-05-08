@@ -38,14 +38,15 @@ See Also:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from dagster import ConfigurableResource
+from floe_core.plugins.dbt import DBTPlugin
 from pydantic import Field, PrivateAttr
 
 if TYPE_CHECKING:
-    from floe_core.plugins.dbt import DBTPlugin, DBTRunResult, LintResult
+    from floe_core.plugins.dbt import DBTRunResult, LintResult
 
 logger = structlog.get_logger(__name__)
 
@@ -72,14 +73,14 @@ def load_dbt_plugin(plugin_name: str) -> DBTPlugin:
     registry = PluginRegistry()
     registry.discover_all()  # Discover plugins from entry points
     try:
-        return registry.get(PluginType.DBT, plugin_name)
+        return cast(DBTPlugin, registry.get(PluginType.DBT, plugin_name))
     except PluginNotFoundError:
         available = [p.name for p in registry.list(PluginType.DBT)]
         msg = f"Unknown plugin: {plugin_name}. Available: {available}"
         raise ValueError(msg) from None
 
 
-class DBTResource(ConfigurableResource):
+class DBTResource(ConfigurableResource[Any]):
     """Dagster ConfigurableResource for DBT operations.
 
     Provides a Dagster resource that wraps DBTPlugin for use in asset

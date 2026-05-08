@@ -136,7 +136,7 @@ def create_sync_semantic_schemas_asset(
         required_resource_keys={"semantic_layer"},
         deps=deps or [],
     )
-    def _sync_semantic_schemas_asset(context) -> list[str]:  # noqa: ANN001
+    def _sync_semantic_schemas_asset(context) -> list[str]:  # type: ignore[no-untyped-def] # noqa: ANN001
         return _sync_semantic_schemas(
             context,
             default_manifest_path=manifest_path,

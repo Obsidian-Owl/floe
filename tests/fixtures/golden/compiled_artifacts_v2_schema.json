@@ -1174,6 +1174,17 @@
             "type": "string"
           },
           "title": "Properties"
+        },
+        "oauth2": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IcebergRestOAuth2Binding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -1181,6 +1192,66 @@
         "warehouse"
       ],
       "title": "IcebergRestCatalogBinding",
+      "type": "object"
+    },
+    "IcebergRestOAuth2Binding": {
+      "additionalProperties": false,
+      "description": "Secret-free OAuth2 references for an Iceberg REST catalog consumer.",
+      "properties": {
+        "secret_name": {
+          "default": "iceberg",
+          "minLength": 1,
+          "title": "Secret Name",
+          "type": "string"
+        },
+        "client_id_env": {
+          "minLength": 1,
+          "title": "Client Id Env",
+          "type": "string"
+        },
+        "client_secret_env": {
+          "minLength": 1,
+          "title": "Client Secret Env",
+          "type": "string"
+        },
+        "oauth2_server_uri_env": {
+          "minLength": 1,
+          "title": "Oauth2 Server Uri Env",
+          "type": "string"
+        },
+        "oauth2_scope_env": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Oauth2 Scope Env"
+        },
+        "oauth2_scope_default": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Oauth2 Scope Default"
+        }
+      },
+      "required": [
+        "client_id_env",
+        "client_secret_env",
+        "oauth2_server_uri_env"
+      ],
+      "title": "IcebergRestOAuth2Binding",
       "type": "object"
     },
     "IngestionDeploymentBinding": {

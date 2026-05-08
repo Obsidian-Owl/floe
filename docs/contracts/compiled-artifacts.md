@@ -163,11 +163,21 @@ Catalog bindings have two layers:
   shape.
 
 ```python
+class IcebergRestOAuth2Binding(BaseModel):
+    secret_name: str = "iceberg"
+    client_id_env: str
+    client_secret_env: str
+    oauth2_server_uri_env: str
+    oauth2_scope_env: str | None = None
+    oauth2_scope_default: str | None = None
+
+
 class IcebergRestCatalogBinding(BaseModel):
     catalog_name: str = "iceberg"
     uri: str
     warehouse: str
     properties: dict[str, str] = {}
+    oauth2: IcebergRestOAuth2Binding | None = None
 
 
 class DbtCatalogBinding(BaseModel):

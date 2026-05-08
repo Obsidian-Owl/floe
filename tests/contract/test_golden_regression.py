@@ -149,6 +149,32 @@ class TestCompiledArtifactsContract:
             "Regenerate with ./scripts/generate-contract-golden --force"
         )
 
+    @pytest.mark.requirement("CONTRACT-001")
+    def test_compiled_artifacts_iceberg_rest_oauth2_schema_is_current(self) -> None:
+        """Test that golden schema includes Iceberg REST OAuth2 bindings."""
+        golden = load_golden("compiled_artifacts_v2_schema.json")
+
+        assert "$defs" in golden, (
+            "Schema missing '$defs' section. "
+            "Regenerate with ./scripts/generate-contract-golden --force"
+        )
+
+        definitions = golden["$defs"]
+        assert "IcebergRestCatalogBinding" in definitions, (
+            "Schema missing 'IcebergRestCatalogBinding' definition. "
+            "Regenerate with ./scripts/generate-contract-golden --force"
+        )
+        assert "IcebergRestOAuth2Binding" in definitions, (
+            "Schema missing 'IcebergRestOAuth2Binding' definition. "
+            "Regenerate with ./scripts/generate-contract-golden --force"
+        )
+
+        oauth2_property = definitions["IcebergRestCatalogBinding"]["properties"].get("oauth2")
+        assert oauth2_property is not None, (
+            "IcebergRestCatalogBinding missing oauth2 property. "
+            "Regenerate with ./scripts/generate-contract-golden --force"
+        )
+
 
 class TestPluginInterfaceContract:
     """Test plugin interface stability."""
