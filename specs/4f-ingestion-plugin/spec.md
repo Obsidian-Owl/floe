@@ -65,16 +65,16 @@ A data engineer configures an ingestion source in floe.yaml and expects the plug
 
 ### User Story 3 - Load Data to Iceberg via Polaris (Priority: P0)
 
-A data engineer expects ingested data to land in Iceberg tables managed by the Polaris REST catalog. The plugin must configure dlt's Iceberg destination with Polaris connection details from the platform's catalog configuration.
+A data engineer expects ingested data to land in Iceberg tables managed by the Polaris REST catalog. The platform compiler and orchestrator provide a runtime binding that carries catalog environment and destination filesystem details into the dlt execution environment.
 
 **Why this priority**: Iceberg via Polaris is the enforced storage format. Without destination configuration, data has nowhere to go.
 
-**Independent Test**: Can be fully tested by calling `get_destination_config()` with Polaris catalog config and verifying the returned dict contains correct Iceberg destination parameters.
+**Independent Test**: Can be fully tested by creating an `IngestionConfig` with a runtime binding containing `destination_filesystem` and Iceberg catalog environment values, calling `create_pipeline()`, and verifying the dlt pipeline receives the filesystem destination and preserves the binding for `run()`.
 
 **Acceptance Scenarios**:
 
-1. **Given** a catalog config with `uri="http://polaris:8181/api/catalog"` and `warehouse="floe_warehouse"`, **When** `get_destination_config(catalog_config)` is called, **Then** it returns a dict with `destination="iceberg"`, catalog URI, and warehouse name
-2. **Given** valid destination config, **When** a pipeline runs, **Then** data is written as Parquet files to Iceberg tables registered in Polaris
+1. **Given** a runtime binding with Polaris catalog environment and `destination_filesystem.bucket_url`, **When** `create_pipeline(config)` is called, **Then** it configures a dlt filesystem destination using the runtime binding and stores the binding on the pipeline for execution
+2. **Given** a valid runtime binding, **When** a pipeline runs, **Then** data is written as Parquet files to Iceberg tables registered in Polaris
 3. **Given** a schema contract of `evolve`, **When** the source schema changes (new column), **Then** the Iceberg table schema evolves automatically
 4. **Given** a schema contract of `freeze`, **When** the source schema changes, **Then** the pipeline raises an error (schema change rejected)
 
@@ -193,15 +193,15 @@ A data engineer expects transient errors (network timeouts, rate limits) to be r
 **Pipeline Creation (FR-011 to FR-020)**
 
 - **FR-011**: `create_pipeline()` MUST accept `IngestionConfig` and return a configured dlt pipeline object
-- **FR-012**: Pipeline MUST be configured with Iceberg destination using catalog config from `get_destination_config()`
+- **FR-012**: Pipeline MUST be configured with dlt's filesystem destination using `IngestionConfig.runtime_binding.destination_filesystem`
 - **FR-013**: Pipeline MUST support `source_type` values: `rest_api`, `sql_database`, `filesystem` (minimum viable set)
 - **FR-014**: Pipeline MUST validate `source_config` against source-specific schemas before pipeline creation
 - **FR-015**: Pipeline MUST resolve source credentials from environment variables (dlt's default config hierarchy)
 - **FR-016**: Pipeline MUST raise `ValidationError` if `IngestionConfig` is invalid (empty source_type, invalid write_mode)
 - **FR-017**: Pipeline MUST use `pipeline_name` derived from `destination_table` for dlt state isolation
 - **FR-018**: Pipeline MUST configure `dataset_name` from the Iceberg namespace portion of `destination_table`
-- **FR-019**: `get_destination_config()` MUST accept catalog config dict and return dlt Iceberg destination configuration including `catalog_uri`, `catalog_type="rest"`, and `warehouse` name
-- **FR-020**: `get_destination_config()` MUST support MinIO/S3 storage configuration for Iceberg file storage
+- **FR-019**: `create_pipeline()` MUST require a runtime binding containing `destination_filesystem` and fail with a configuration error when the destination handoff is missing
+- **FR-020**: Runtime binding MUST support MinIO/S3 destination filesystem configuration, including bucket URL, endpoint URL, region, and path-style access where required
 
 **Data Loading (FR-021 to FR-030)**
 
@@ -237,7 +237,7 @@ A data engineer expects transient errors (network timeouts, rate limits) to be r
 
 **Observability (FR-044 to FR-050)**
 
-- **FR-044**: Plugin MUST emit OpenTelemetry spans for `create_pipeline`, `run`, and `get_destination_config` operations
+- **FR-044**: Plugin MUST emit OpenTelemetry spans for `create_pipeline` and `run` operations
 - **FR-045**: Spans MUST include attributes: `ingestion.source_type`, `ingestion.destination_table`, `ingestion.write_mode`
 - **FR-046**: Completed run spans MUST include: `ingestion.rows_loaded`, `ingestion.bytes_written`, `ingestion.duration_seconds`
 - **FR-047**: Failed run spans MUST include: `error.type`, `error.message`, `error.category` (TRANSIENT|PERMANENT|PARTIAL)
@@ -366,8 +366,8 @@ The complete integration chain from configuration to data landing:
 ```
 CompiledArtifacts (floe-core)
   -> PluginRegistry.get(INGESTION, "dlt")  -> DltIngestionPlugin
-  -> plugin.get_destination_config(catalog_config) -> dlt Iceberg config
-  -> plugin.create_pipeline(config) -> dlt pipeline object
+  -> plugin.build_deployment_binding(storage, catalog) -> runtime binding
+  -> plugin.create_pipeline(config with runtime_binding) -> dlt pipeline object
   -> plugin.run(pipeline) -> IngestionResult (rows_loaded, bytes_written)
 
 Orchestrator (runtime wiring, lives in orchestrator plugin):

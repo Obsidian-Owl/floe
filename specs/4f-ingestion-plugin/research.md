@@ -47,9 +47,6 @@ class IngestionPlugin(PluginMetadata):
 
     @abstractmethod
     def run(self, pipeline: Any, **kwargs: Any) -> IngestionResult: ...
-
-    @abstractmethod
-    def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]: ...
 ```
 
 **PluginMetadata** requires: `name`, `version`, `floe_api_version` properties, optional `startup()`, `shutdown()`, `health_check()`, `get_config_schema()`.

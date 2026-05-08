@@ -292,7 +292,7 @@ DltIngestionPlugin
   ├── config: DltIngestionConfig             (1:1, constructor param)
   ├── create_pipeline(IngestionConfig) → dlt pipeline object
   ├── run(pipeline) → IngestionResult
-  └── get_destination_config(dict) → dict
+  └── build_deployment_binding(storage, catalog) → runtime binding
 
 ErrorCategory enum
   └── used by → IngestionError.category      (1:1)

@@ -56,7 +56,7 @@ Implement the `DltIngestionPlugin` as the default ingestion plugin for floe, pro
 - [x] Layer ownership respected: Plugin (Layer 1: Foundation), orchestrator wiring (Layer 3: Services)
 
 **Principle VIII: Observability By Default**
-- [x] OpenTelemetry traces emitted: Custom spans for `create_pipeline`, `run`, `get_destination_config` (dlt has no native OTel)
+- [x] OpenTelemetry traces emitted: Custom spans for `create_pipeline` and `run` (dlt has no native OTel)
 - [x] OpenLineage events for data transformations: Automatic via orchestrator's lineage integration (e.g., `openlineage-dagster`)
 
 ## Project Structure
@@ -161,7 +161,7 @@ tests/contract/test_core_to_ingestion_contract.py
 | `DltIngestionPlugin` instance | Plugin Registry | Entry point `floe.ingestion` |
 | dlt pipeline object | Orchestrator (via run()) | `create_pipeline()` return value |
 | `IngestionResult` | Orchestrator, observability | `run()` return value |
-| Iceberg destination config | dlt pipeline | `get_destination_config()` return value |
+| Runtime destination binding | dlt pipeline | `IngestionConfig.runtime_binding.destination_filesystem` |
 | Orchestrator ingestion resources | Dagster Definitions | `try_create_ingestion_resources()` in orchestrator plugin |
 | Dagster assets per dlt resource | Dagster asset graph | Asset factory in orchestrator plugin |
 | Test fixtures (`dlt_config`, `dlt_plugin`) | Integration tests | `testing/fixtures/ingestion.py` |
@@ -283,15 +283,12 @@ This phase implements the plugin class with all ABC methods plus lifecycle.
 - OTel span: `floe.ingestion.create_pipeline`
 - Requirements: FR-011, FR-012, FR-013, FR-014, FR-015, FR-016, FR-017, FR-018, FR-058
 
-**T010: Implement get_destination_config()**
+**T010: Implement runtime destination binding**
 - File: `plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py`
-- Accept catalog config dict, return dlt Iceberg destination configuration
-- Map catalog config to dlt destination params:
-  - `catalog_type: "rest"`
-  - `credentials.uri` from catalog_config
-  - `credentials.warehouse` from catalog_config
-- Support MinIO/S3 storage configuration
-- OTel span: `floe.ingestion.get_destination_config`
+- Require `IngestionConfig.runtime_binding` during pipeline creation
+- Map `destination_filesystem` to dlt filesystem destination parameters
+- Apply runtime Iceberg catalog environment while creating and running the pipeline
+- Support MinIO/S3 destination filesystem configuration
 - Requirements: FR-019, FR-020
 
 **T011: Implement run()**
@@ -390,7 +387,7 @@ This phase creates all test infrastructure and test files.
   - `run()` returns IngestionResult with correct metrics (mocked dlt)
   - `run()` handles empty source data (0 rows)
   - `run()` handles pipeline failure (mocked error)
-  - `get_destination_config()` with Polaris catalog config returns correct dict
+  - `create_pipeline()` with runtime binding configures dlt filesystem destination
   - `health_check()` with mocked dlt (healthy, unhealthy)
   - `startup()` and `shutdown()` lifecycle
   - OTel spans emitted for all operations (traced test)
@@ -509,7 +506,7 @@ T001 (package scaffold)
 T006 (plugin skeleton)
   └─> T007 (lifecycle) ─> T008 (health check)
   └─> T009 (create_pipeline)
-  └─> T010 (get_destination_config)
+  └─> T010 (runtime destination binding)
   └─> T011 (run) — depends on T009, T010
 
 T012 (resource factory) depends on T006

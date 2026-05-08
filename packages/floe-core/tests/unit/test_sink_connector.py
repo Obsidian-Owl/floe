@@ -90,10 +90,6 @@ class BidirectionalPlugin(IngestionPlugin, SinkConnector):
         _ = pipeline, kwargs
         return IngestionResult(success=True, rows_loaded=0)
 
-    def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
-        _ = catalog_config
-        return {"destination": "mock"}
-
     def list_available_sinks(self) -> list[str]:
         return ["rest_api"]
 
@@ -136,10 +132,6 @@ class PlainIngestionPlugin(IngestionPlugin):
     def run(self, pipeline: Any, **kwargs: Any) -> IngestionResult:
         _ = pipeline, kwargs
         return IngestionResult(success=True, rows_loaded=0)
-
-    def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
-        _ = catalog_config
-        return {"destination": "mock"}
 
 
 # ---------------------------------------------------------------------------

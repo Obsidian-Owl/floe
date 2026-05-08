@@ -133,9 +133,10 @@ class TestCreatePipeline:
             runtime_binding=_runtime_binding(),
         )
 
-        # Just verify create_pipeline doesn't raise - ingestion_span is tested separately
         pipeline = dlt_plugin.create_pipeline(config)
-        assert pipeline is not None
+        assert pipeline.pipeline_name == "ingest_raw_data"
+        assert pipeline.dataset_name == "bronze"
+        assert pipeline._floe_dlt_runtime_binding == _runtime_binding()
 
 
 class TestRunPipeline:
@@ -632,11 +633,16 @@ class TestOTelSpanEmission:
             # Verify get_tracer was called
             mock_get_tracer.assert_called_once()
 
-            # Verify tracer.start_as_current_span was called with correct name
-            mock_tracer.start_as_current_span.assert_called()
+            # Verify tracer.start_as_current_span was called with operation metadata.
+            mock_tracer.start_as_current_span.assert_called_once()
             call_args = mock_tracer.start_as_current_span.call_args
-            span_name = call_args[0][0]
-            assert "create_pipeline" in span_name
+            assert call_args.args[0] == "ingestion.create_pipeline"
+            assert call_args.kwargs["attributes"] == {
+                "ingestion.operation": "create_pipeline",
+                "ingestion.source_type": "rest_api",
+                "ingestion.destination_table": "bronze.raw_data",
+                "ingestion.write_mode": "append",
+            }
 
     @pytest.mark.requirement("4F-FR-044")
     def test_run_emits_otel_span(self, dlt_plugin: DltIngestionPlugin) -> None:
