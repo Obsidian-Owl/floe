@@ -908,15 +908,41 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 yield
                 return
             previous = {key: os.environ.get(key) for key in runtime_env}
+            pyiceberg_env_config = None
             try:
                 os.environ.update(runtime_env)
+                pyiceberg_env_config = self._refresh_pyiceberg_environment_config()
                 yield
             finally:
+                self._restore_pyiceberg_environment_config(pyiceberg_env_config)
                 for key, value in previous.items():
                     if value is None:
                         os.environ.pop(key, None)
                     else:
                         os.environ[key] = value
+
+    @staticmethod
+    def _refresh_pyiceberg_environment_config() -> tuple[Any, Any] | None:
+        """Refresh PyIceberg's cached environment config after binding env changes."""
+        try:
+            import pyiceberg.catalog as pyiceberg_catalog
+            from pyiceberg.utils.config import Config as PyIcebergConfig
+        except ImportError:
+            return None
+
+        previous_config = getattr(pyiceberg_catalog, "_ENV_CONFIG", None)
+        pyiceberg_catalog._ENV_CONFIG = PyIcebergConfig()
+        return pyiceberg_catalog, previous_config
+
+    @staticmethod
+    def _restore_pyiceberg_environment_config(snapshot: tuple[Any, Any] | None) -> None:
+        """Restore PyIceberg's cached config after runtime binding scope exits."""
+        if snapshot is None:
+            return
+        pyiceberg_catalog, previous_config = snapshot
+        if previous_config is None:
+            return
+        pyiceberg_catalog._ENV_CONFIG = previous_config
 
     def _catalog_health_url(self, catalog_config: dict[str, Any]) -> str:
         uri = str(self._first_config_value(catalog_config, "uri", "catalog_uri") or "").rstrip("/")

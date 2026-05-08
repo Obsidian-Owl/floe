@@ -415,6 +415,40 @@ def test_run_applies_runtime_binding_catalog_env(monkeypatch: pytest.MonkeyPatch
     assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
 
 
+def test_run_refreshes_pyiceberg_cached_environment_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PyIceberg must see binding env even when imported before pipeline execution."""
+    import pyiceberg.catalog as pyiceberg_catalog
+    from pyiceberg.utils.config import Config as PyIcebergConfig
+
+    monkeypatch.delenv("PYICEBERG_CATALOG__POLARIS__URI", raising=False)
+    pyiceberg_catalog._ENV_CONFIG = PyIcebergConfig()
+    original_config = pyiceberg_catalog._ENV_CONFIG
+
+    observations: dict[str, str | None] = {}
+
+    class FakePipeline:
+        pipeline_name = "runtime-pyiceberg-cache"
+        _floe_dlt_runtime_binding = _runtime_binding()
+
+        def run(self, _source: object, **_kwargs: Any) -> object:
+            catalog_config = pyiceberg_catalog._ENV_CONFIG.get_catalog_config("polaris")
+            observations["catalog_uri"] = (
+                None if catalog_config is None else catalog_config.get("uri")
+            )
+            return SimpleNamespace(metrics={})
+
+    plugin = DltIngestionPlugin()
+    plugin.startup()
+
+    plugin.run(FakePipeline(), source=object(), table_name="orders")
+
+    assert observations == {"catalog_uri": "http://runtime-polaris:8181/api/catalog"}
+    assert pyiceberg_catalog._ENV_CONFIG is original_config
+    assert "PYICEBERG_CATALOG__POLARIS__URI" not in os.environ
+
+
 def test_run_resolves_runtime_binding_env_refs(monkeypatch: pytest.MonkeyPatch) -> None:
     """Runtime env refs map source process env vars into dlt PyIceberg env names."""
     observations: dict[str, tuple[str | None, str | None, str | None]] = {}
