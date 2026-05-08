@@ -174,6 +174,12 @@ compilation stages outside plugin composition.
 | `COMPOSITION_STORAGE_MISSING` | A storage-dependent plugin was selected without a storage plugin. | Select a storage plugin or remove the storage-dependent consumer. |
 | `COMPOSITION_PROTOCOL_UNSUPPORTED` | Selected plugins do not share a required storage protocol. | Choose compatible storage/catalog providers or adjust provider config. |
 | `COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED` | Selected plugins do not share a required credential mode. | Choose compatible credential modes or update provider config. |
+| `COMPOSITION_SECRET_PROJECTION_UNSUPPORTED` | Selected plugins do not share a required secret projection mode. | Choose compatible storage/catalog/secrets providers or adjust provider config. |
+| `COMPOSITION_SECRET_PROVIDER_MISSING` | A catalog requires a secret provider but none was selected. | Select a secrets plugin that supports the required provider and projection mode. |
+| `COMPOSITION_SECRET_PROVIDER_UNSUPPORTED` | The selected secrets plugin does not satisfy the catalog provider requirement. | Choose a compatible secrets provider or adjust catalog requirements. |
+| `COMPOSITION_IDENTITY_PROVIDER_MISSING` | A catalog requires identity integration but none was selected. | Select an identity plugin that supports the required identity mode. |
+| `COMPOSITION_IDENTITY_PROVIDER_UNSUPPORTED` | The selected identity plugin does not satisfy the catalog provider requirement. | Choose a compatible identity provider or adjust catalog requirements. |
+| `COMPOSITION_IDENTITY_MODE_UNSUPPORTED` | Selected storage, catalog, and identity plugins do not share a required identity mode. | Choose compatible workload identity settings or update provider config. |
 | `COMPOSITION_DEPLOYMENT_BINDING_MISSING` | A selected plugin does not emit the required typed deployment binding. | Upgrade or fix the plugin implementation. |
 | `COMPOSITION_RENDERER_PRECONDITION_FAILED` | A renderer cannot render the compiled artifact shape. | Recompile with required deployment bindings or fix the artifact before rendering. |
 
