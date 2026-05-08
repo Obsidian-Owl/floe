@@ -23,6 +23,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
@@ -86,6 +87,18 @@ _DEFAULT_ADMIN_CREDENTIAL_PATTERN = re.compile(r"(?<![a-z0-9])[a-z0-9_-]*admin[0
 _DBT_ENV_VAR_REFERENCE_PATTERN = re.compile(
     r"\{\{\s*env_var\(\s*['\"][A-Z_][A-Z0-9_]*['\"]"
     r"(?:\s*,\s*['\"][^'\"]*['\"])?\s*\)\s*\}\}"
+)
+_URL_CREDENTIAL_QUERY_KEYS = frozenset(
+    {
+        "access_key",
+        "access_token",
+        "apikey",
+        "api_key",
+        "client_secret",
+        "password",
+        "secret",
+        "token",
+    }
 )
 _OMIT_PLUGIN_CONFIG_VALUE = object()
 
@@ -186,6 +199,18 @@ def _is_dbt_env_var_reference(value: Any) -> bool:
     )
 
 
+def _is_non_secret_endpoint_url(value: str) -> bool:
+    """Return True for endpoint URLs whose structure does not embed credentials."""
+    parsed = urlsplit(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False
+    if parsed.username or parsed.password:
+        return False
+
+    query_keys = {part.split("=", 1)[0].lower() for part in parsed.query.split("&") if part}
+    return not (query_keys & _URL_CREDENTIAL_QUERY_KEYS)
+
+
 def _assert_no_dbt_profile_secret_material(value: Any, path: str) -> None:
     """Reject raw dbt profile credentials while allowing env_var references."""
     if isinstance(value, dict):
@@ -193,7 +218,9 @@ def _assert_no_dbt_profile_secret_material(value: Any, path: str) -> None:
             key_text = str(key).lower()
             child_path = f"{path}.{key}"
             if any(marker in key_text for marker in _SECRET_FIELD_MARKERS):
-                if _is_dbt_env_var_reference(child):
+                if _is_dbt_env_var_reference(child) or (
+                    isinstance(child, str) and _is_non_secret_endpoint_url(child)
+                ):
                     continue
                 msg = (
                     f"{child_path} looks like raw credential material; use dbt env_var() "
@@ -209,6 +236,8 @@ def _assert_no_dbt_profile_secret_material(value: Any, path: str) -> None:
         return
 
     if _is_dbt_env_var_reference(value):
+        return
+    if isinstance(value, str) and _is_non_secret_endpoint_url(value):
         return
 
     _assert_no_secret_material(value, path)
