@@ -290,7 +290,7 @@ Edit(...)
 **Example Workflow**:
 ```python
 # 1. Find where ComputePlugin is defined (LSP Go to Definition)
-# → Navigate to packages/floe-core/src/floe_core/plugin_interfaces.py
+# → Navigate to packages/floe-core/src/floe_core/plugins/compute.py
 
 # 2. Hover over ComputePlugin (LSP Hover)
 # → See full docstring, attributes, example usage
@@ -488,7 +488,7 @@ def create_assets(spec: FloeSpec):  # NO! Use CompiledArtifacts
 
 **K8s-Native ONLY**:
 - All tests run in Kubernetes (Kind cluster locally)
-- Integration tests use real services (Polaris, S3, PostgreSQL)
+- Integration tests use real services (Polaris, PostgreSQL, MinIO via the S3-compatible protocol)
 - No Docker Compose (deprecated in target state)
 
 **Test Organization**:
@@ -575,7 +575,7 @@ floe/
 |------|----------|----------------|-----------|
 | **Unit** | `tests/unit/` | No (mocks only) | Host (fast) |
 | **Contract** | `tests/contract/` (ROOT) | No (schema only) | Host (fast) |
-| **Integration** | `tests/integration/` | Yes (Polaris, S3, DB) | K8s (Kind) |
+| **Integration** | `tests/integration/` | Yes (Polaris, MinIO/S3-compatible protocol, DB) | K8s (Kind) |
 | **E2E** | `tests/e2e/` | Yes (full stack) | K8s (Kind) |
 
 **Examples**:

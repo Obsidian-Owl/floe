@@ -1,7 +1,7 @@
 # ComputePlugin
 
 **Purpose**: Define where dbt transforms execute (compute engines)
-**Location**: `floe_core/interfaces/compute.py`
+**Location**: `packages/floe-core/src/floe_core/plugins/compute.py`
 **Entry Point**: `floe.computes`
 **ADR**: [ADR-0010: Target-Agnostic Compute](../adr/0010-target-agnostic-compute.md)
 
@@ -9,8 +9,12 @@ ComputePlugin abstracts the execution environment for dbt transformations. This 
 
 ## Interface Definition
 
+The live ABC is `ComputePlugin` in
+`packages/floe-core/src/floe_core/plugins/compute.py`. The snippet below is a
+conceptual excerpt for the public contract.
+
 ```python
-# floe_core/interfaces/compute.py
+# Conceptual excerpt; see packages/floe-core/src/floe_core/plugins/compute.py
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 

@@ -1,7 +1,7 @@
 # DBTPlugin
 
 **Purpose**: dbt compilation environment (local, fusion, cloud)
-**Location**: `floe_core/plugin_interfaces.py`
+**Location**: `packages/floe-core/src/floe_core/plugins/dbt.py`
 **Entry Point**: `floe.dbt`
 **ADR**: [ADR-0043: dbt Compilation Environment Abstraction](../adr/0043-dbt-runtime-abstraction.md)
 
@@ -11,8 +11,12 @@ DBTPlugin abstracts dbt compilation and execution environments, enabling platfor
 
 ## Interface Definition
 
+The live ABC is `DBTPlugin` in
+`packages/floe-core/src/floe_core/plugins/dbt.py`. The snippet below is a
+conceptual excerpt for the public contract.
+
 ```python
-# floe_core/plugin_interfaces.py
+# Conceptual excerpt; see packages/floe-core/src/floe_core/plugins/dbt.py
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any

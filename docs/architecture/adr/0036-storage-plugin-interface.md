@@ -23,7 +23,7 @@ catalog = load_catalog(
 **Issues with this approach:**
 1. **Cloud provider lock-in**: S3 syntax doesn't work for GCS (`gs://`) or Azure (`abfss://`)
 2. **Credential management**: Different auth for AWS (IAM), GCS (service account), Azure (SAS)
-3. **Testing complexity**: Cannot easily swap MinIO for local evaluation and a validated cloud object-storage backend for production
+3. **Testing complexity**: Cannot easily exercise local evaluation and future provider-native object-storage backends through the same contract
 4. **Enterprise requirements**: Some organizations require specific storage (on-prem, multi-cloud)
 
 ### Organizations Have Different Storage Needs
@@ -172,8 +172,8 @@ plugins:
 
 - **Composability** - Storage backends are plugins, not hardcoded paths (ADR-0037)
 - **PyIceberg alignment** - Follows industry-standard FileIO pattern
-- **Cloud portability** - Same code works on AWS, GCP, Azure, on-prem
-- **Testing efficiency** - Swap MinIO for local evaluation and a validated cloud object-storage backend for production
+- **Portability path** - The alpha lane validates MinIO through the S3-compatible protocol while leaving room for provider-native plugins
+- **Testing efficiency** - MinIO exercises S3-compatible Iceberg behavior in local and remote Kubernetes validation lanes
 - **Credential security** - Centralized credential management per backend
 - **Multi-cloud support** - Future: Multiple storage plugins per platform
 
@@ -195,12 +195,13 @@ plugins:
 ### Reference Implementation Excerpt: MinIOStoragePlugin
 
 The production implementation in `plugins/floe-storage-minio` is the source of
-truth. This excerpt shows the public plugin shape: MinIO emits S3-compatible
-provider facts and credential references, not Polaris bootstrap JSON or raw
-credential values.
+truth. The conceptual excerpt below shows the public plugin shape: MinIO emits
+S3-compatible provider facts and credential references, not Polaris bootstrap
+JSON or raw credential values. See the live plugin for exact imports and method
+body details.
 
 ```python
-# floe-storage-minio/src/floe_storage_minio/plugin.py
+# Conceptual excerpt; see plugins/floe-storage-minio/src/floe_storage_minio/plugin.py
 from typing import Any
 from pydantic import BaseModel
 from floe_core.plugin_errors import PluginConfigurationError
@@ -318,7 +319,7 @@ class MinIOStoragePlugin(StoragePlugin):
                 },
                 env_refs={
                     "accessKeyId": "AWS_ACCESS_KEY_ID",
-                    "secretAccessKey": "AWS_SECRET_ACCESS_KEY",
+                    "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
                 },
             ),
             dbt=DbtStorageBinding(
@@ -413,7 +414,7 @@ Per ADR-0037 (Composability Principle):
 | Scenario | Decision | Rationale |
 |----------|----------|-----------|
 | Multiple storage backends exist | **Plugin** ✅ | S3, GCS, Azure, MinIO all valid |
-| Organization may swap storage | **Plugin** ✅ | Start with MinIO for local evaluation, then validate the chosen S3-compatible cloud backend |
+| Organization may swap storage | **Plugin** ✅ | Start with MinIO for local evaluation, then add and validate provider-native plugins as needed |
 | Storage requires different credentials | **Plugin** ✅ | AWS IAM ≠ GCS service account ≠ Azure SAS |
 | Storage-specific features | **Plugin** ✅ | S3 Transfer Acceleration, GCS lifecycle policies |
 
@@ -610,7 +611,10 @@ Table operations (create_table, evolve_schema, write_data, manage_snapshots) are
 - CatalogPlugin already returns PyIceberg Catalog for table registration
 - StoragePlugin already provides storage bindings and FileIO for data access
 
-See: Epic 4D (Storage Plugin) specification for full details.
+See the historical Epic 4D storage-plugin specification for original
+background; the live contract in
+`packages/floe-core/src/floe_core/plugins/storage.py` and this ADR are the
+current truth.
 
 ## Open Questions
 
@@ -634,7 +638,7 @@ for direct advanced use, but they are not the cross-plugin contract.
 - [ADR-0037: Composability Principle](0037-composability-principle.md) - Plugin architecture rationale
 - [plugin-system/](../plugin-system/index.md) - Plugin patterns
 - [interfaces/storage-plugin.md](../interfaces/storage-plugin.md) - StoragePlugin ABC definition
-- [Epic 4D: Storage Plugin](../../../specs/4d-storage-plugin/spec.md) - IcebergTableManager specification
+- [Epic 4D: Storage Plugin](../../../specs/4d-storage-plugin/spec.md) - Historical background for the original storage-plugin work
 - **Industry References:**
   - [PyIceberg FileIO Documentation](https://py.iceberg.apache.org/api/#fileio)
   - [AWS S3 with Iceberg](https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-iceberg-how-iceberg-works.html)

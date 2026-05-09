@@ -1,20 +1,21 @@
 # Plugin Composition Uplift Tracker
 
-Status: Active after storage composition PR
+Status: Active after MinIO/storage composition landed
 Owner: Floe architecture
-Last updated: 2026-05-07
+Last updated: 2026-05-09
 
 ## Purpose
 
 This document tracks adoption of Floe's composition model across plugin
-families after the storage-side closeout PR. Follow-on plugin-family uplift is
-tracked here, outside the storage PR, unless a plugin is required for the
-implemented Iceberg runtime path.
+families after the MinIO/storage composition work landed. Follow-on
+plugin-family uplift is tracked here unless a plugin is required for the
+implemented alpha Iceberg runtime path.
 
-The storage PR should establish the pattern for the Iceberg runtime path. Other
-plugins should adopt the pattern only when they participate in concrete
-cross-plugin composition. This prevents a platform-wide rewrite while keeping a
-clear target state.
+The landed work establishes the pattern for MinIO-backed, S3-compatible storage
+composition in the Polaris/DuckDB/Dagster alpha path. Other plugins should
+adopt the pattern only when they participate in concrete cross-plugin
+composition. This prevents a platform-wide rewrite while keeping a clear target
+state.
 
 ## Composition Levels
 
@@ -29,12 +30,12 @@ clear target state.
 
 | Plugin family | Target level | Status | Scope |
 | --- | --- | --- | --- |
-| Storage | 3 | In storage composition PR | Neutral storage binding, bucket requirements, credential refs, capabilities, provisioning intent |
-| Catalog | 3 | In storage composition PR for Polaris | Catalog storage requirements, Polaris deployment binding, bootstrap payload, storage secret refs |
-| Compute / dbt | 3 | In storage composition PR for DuckDB/dbt profile path | Runtime storage binding consumption, profile generation, endpoint/credential consistency |
-| Orchestrator / Dagster | 3 | In storage composition PR for Dagster runtime path | Run pod env/Secret refs, Iceberg resource binding, endpoint consistency |
-| Helm / deployment renderer | 3 | In storage composition PR | Render resolved deployment bindings; no semantic storage decisions in templates |
-| Secrets / identity | 2 | PCU-005 implemented | Credential projection and workload identity modes are typed capabilities validated by the resolver |
+| Storage | 3 | Landed for `floe-storage-minio` | Neutral storage binding, bucket requirements, credential refs, capabilities, provisioning intent |
+| Catalog | 3 | Landed for Polaris + MinIO | Catalog storage requirements, Polaris deployment binding, bootstrap payload, storage Secret refs |
+| Compute / dbt | 3 | Landed for DuckDB/dbt profile path | Runtime storage binding consumption, profile generation, endpoint/credential consistency |
+| Orchestrator / Dagster | 2 then 3 | Remaining migration | Dagster still needs binding-first Iceberg writer/runtime ownership cleanup |
+| Helm / deployment renderer | 3 | Landed for MinIO/Polaris binding rendering | Render resolved deployment bindings; no semantic storage decisions in templates |
+| Secrets / identity | 2 then 3 | Remaining projection work | Credential and workload identity modes are typed; full provider-owned projection still needs implementation |
 
 ## Follow-On Plugin Families
 
@@ -45,8 +46,8 @@ clear target state.
 | Lineage backend | 1 then 2 | Backend deployment/auth or endpoint wiring becomes plugin-owned | OpenLineage remains enforced standard |
 | Telemetry backend | 1 then 2 | OTLP backend deployment topology becomes plugin-owned | OpenTelemetry remains enforced standard |
 | Quality | 1 then 2 | Quality plugin needs runtime compute/storage capabilities | dbt tests remain enforced baseline |
-| RBAC | 2 then 3 | Workload identities and Secret refs are generated from plugin bindings | Should consume declared runtime surfaces |
-| Network / pod security | 2 then 3 | Network policy needs service endpoints from plugin deployment bindings | Should consume deployment bindings instead of static service names |
+| RBAC | 2 then 3 | Workload identities and Secret refs are generated from plugin bindings | Remaining work; should consume declared runtime surfaces |
+| Network / pod security | 2 then 3 | Network policy needs service endpoints from plugin deployment bindings | Remaining work; should consume deployment bindings instead of static service names |
 | Alert channels | 1 | Alert delivery backends add auth/deployment requirements | Keep low priority until user-facing alerts are implemented |
 
 ## Adoption Rules
@@ -61,7 +62,7 @@ clear target state.
 - Helm and other renderers consume resolved deployment bindings; they do not
   rediscover plugin config.
 
-## Storage PR Exit Criteria
+## Landed MinIO/Storage Composition
 
 - `floe-storage-minio` remains strict with no `s3` alias.
 - `CompiledArtifacts.deployment.storage` carries neutral storage desired state.
@@ -76,6 +77,18 @@ clear target state.
 - Remote infrastructure E2E is run, product failures are separated from
   infrastructure failures, and billable resources are directly verified and
   cleaned up.
+
+## Remaining Composition Work
+
+- Credential and identity projection: provider-owned secret and workload
+  identity resources need complete translation from typed modes.
+- Dagster/Iceberg runtime ownership: orchestrators should delegate table
+  mutation to the Iceberg writer contract instead of owning write semantics.
+- Semantic datasource binding: semantic plugins should consume compiled
+  compute/catalog/storage bindings rather than duplicate connection logic.
+- RBAC and network policy generation: policy plugins should consume resolved
+  service endpoints, Secret refs, and identity surfaces from deployment
+  bindings.
 
 ## Future Tracking Items
 

@@ -1,8 +1,8 @@
 # IdentityPlugin
 
 **Purpose**: User authentication via OIDC
-**Location**: `floe_core/interfaces/identity.py`
-**Entry Point**: `floe.identities`
+**Location**: `packages/floe-core/src/floe_core/plugins/identity.py`
+**Entry Point**: `floe.identity`
 **ADR**: [ADR-0024: Identity and Access Management](../adr/0024-identity-access-management.md)
 
 IdentityPlugin abstracts identity providers (Keycloak, Dex, Okta, Auth0), enabling consistent OIDC-based authentication across all floe services.
@@ -31,8 +31,12 @@ cloud-specific resources.
 
 ## Interface Definition
 
+The live ABC is `IdentityPlugin` in
+`packages/floe-core/src/floe_core/plugins/identity.py`. The snippet below is a
+conceptual excerpt for the public contract.
+
 ```python
-# floe_core/interfaces/identity.py
+# Conceptual excerpt; see packages/floe-core/src/floe_core/plugins/identity.py
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 

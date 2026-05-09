@@ -1,7 +1,7 @@
 # OrchestratorPlugin
 
 **Purpose**: Job scheduling and execution orchestration
-**Location**: `floe_core/plugin_interfaces.py`
+**Location**: `packages/floe-core/src/floe_core/plugins/orchestrator.py`
 **Entry Point**: `floe.orchestrators`
 **ADR**: [ADR-0011: Pluggable Orchestration](../adr/0011-pluggable-orchestration.md)
 
@@ -9,8 +9,12 @@ OrchestratorPlugin abstracts workflow orchestration, enabling platform teams to 
 
 ## Interface Definition
 
+The live ABC is `OrchestratorPlugin` in
+`packages/floe-core/src/floe_core/plugins/orchestrator.py`. The snippet below
+is a conceptual excerpt for the public contract.
+
 ```python
-# floe_core/plugin_interfaces.py
+# Conceptual excerpt; see packages/floe-core/src/floe_core/plugins/orchestrator.py
 from abc import ABC, abstractmethod
 from typing import Any
 

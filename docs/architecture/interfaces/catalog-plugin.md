@@ -1,7 +1,7 @@
 # CatalogPlugin
 
 **Purpose**: Iceberg table catalog management and product identity
-**Location**: `floe_core/interfaces/catalog.py`
+**Location**: `packages/floe-core/src/floe_core/plugins/catalog.py`
 **Entry Point**: `floe.catalogs`
 **ADR**: [ADR-0008: Repository Split](../adr/0008-repository-split.md), [ADR-0030: Namespace-Based Identity](../adr/0030-namespace-identity.md)
 
@@ -40,8 +40,12 @@ the shared composition vocabulary.
 
 ## Interface Definition
 
+The live ABC is `CatalogPlugin` in
+`packages/floe-core/src/floe_core/plugins/catalog.py`. The snippet below is a
+conceptual excerpt that highlights the composition contract.
+
 ```python
-# floe_core/interfaces/catalog.py
+# Conceptual excerpt; see packages/floe-core/src/floe_core/plugins/catalog.py
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime

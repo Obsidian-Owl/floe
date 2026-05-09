@@ -37,11 +37,11 @@
 
 **Data teams** get opinionated workflows:
 - ✅ 30 lines replaces 300+ lines of boilerplate
-- ✅ Same config works everywhere (dev/staging/prod parity)
+- ✅ Same data-product config shape across environments; platform bindings supply environment-specific infrastructure
 - ✅ Standards enforced automatically (compile-time validation)
-- ✅ Full composability (swap DuckDB → Snowflake without pipeline changes)
+- ✅ Composition boundaries for the alpha path, with broader provider interchangeability tracked as follow-on work
 
-**Batteries included. Fully customizable. Alpha-ready for the documented Customer 360 validation path.**
+**Batteries included. Extensible by plugin. Alpha-ready for the documented Customer 360 validation path.**
 
 ---
 
@@ -67,8 +67,8 @@
 
 **For platform teams:**
 - Get a **pre-integrated stack** (DuckDB + Dagster + Polaris + dbt tested together)
-- Say "yes" to edge cases with **plugin architecture** (add Spark? Swap ComputePlugin. Need Kafka? Add IngestionPlugin)
-- **Automatic credential vending** (SecretReference pattern, manage 1 OAuth config instead of 1200 secrets)
+- Say "yes" to edge cases with **plugin architecture** (add Spark? Implement a ComputePlugin. Need Kafka? Add an IngestionPlugin)
+- **Secret-free compiled artifacts** (CredentialRef pattern and deployment bindings keep raw credentials out of generated contracts)
 - **Enforce at compile-time** (violations caught before deployment, not in production)
 
 **For data teams:**
@@ -154,9 +154,9 @@ The root data-team compile command is a planned lifecycle entry point and is not
 - ✅ Orchestration code for the alpha Dagster runtime path
 - ✅ Kubernetes manifests (Jobs, Services, ConfigMaps)
 - ✅ Environment-specific settings (dev/staging/prod)
-- ✅ Credential vending (SecretReference pattern, no hardcoded secrets)
+- ✅ Credential references and Secret-free compiled artifacts
 
-**Same `floe.yaml` works across dev, staging, production.**
+**The same data-product intent can be compiled against environment-specific platform bindings.**
 
 ---
 
@@ -164,9 +164,9 @@ The root data-team compile command is a planned lifecycle entry point and is not
 
 ### 🔌 Composable by Design
 
-**Choose from 14 plugin categories.** Swap implementations without breaking pipelines.
+**Choose from 14 plugin categories.** Swap implementations behind stable contracts as each category reaches the composition level required by your runtime path.
 
-The alpha-supported runtime path is documented in the Floe docs. Some plugin examples below describe the target architecture or ecosystem integrations and are labeled as such in the documentation.
+The alpha-supported runtime path has landed MinIO/S3-compatible storage composition for the documented demo path. Complete provider interchangeability across compute, identity, semantic, RBAC, network, and orchestration/runtime writer surfaces remains planned follow-on work and is tracked in the architecture docs.
 
 **Multi-compute pipelines:** Platform teams approve N compute targets. Data engineers select per-step from the approved list. Different steps can use different engines:
 
@@ -193,8 +193,8 @@ transforms:
 **Environment parity preserved:** Each step uses the SAME compute across dev/staging/prod. No "works in dev, fails in prod" surprises.
 
 **Real-world swap scenarios:**
-- DuckDB (embedded, cost-effective) ↔ Snowflake (managed, elastic)
-- Dagster (asset-centric) ↔ Airflow 3.x (DAG-based)
+- DuckDB (embedded, alpha path) ↔ Snowflake (planned/provider implementation)
+- Dagster (asset-centric, alpha path) ↔ Airflow 3.x (planned/provider implementation)
 - Jaeger (alpha-supported telemetry backend) ↔ Datadog (planned/ecosystem telemetry example)
 
 **Plugin categories:** Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend, DBT, SemanticLayer, Ingestion, Quality, RBAC, AlertChannel, Secrets, Identity
@@ -225,25 +225,25 @@ Fix the demo platform or data-product inputs, then re-run the alpha validator.
 
 **Layer boundaries enforce separation:**
 - Credentials in platform config → Data teams **cannot access**
-- Automatic vending with SecretReference → **No hardcoded secrets possible**
+- Secret references and deployment bindings → raw credentials stay out of compiled artifacts
 - Layer architecture → Data teams **cannot override** platform policies
 - Type-safe schemas → Catch errors at **compile-time**
 
-**Result:** Manage 1 OAuth config instead of 1200 credentials.
+**Result:** Keep credential ownership in the platform layer instead of spreading raw secrets through product repos.
 
 ### ⚡ Environment Parity
 
-**Same pipeline config works everywhere:**
+**Same data-product intent, environment-specific platform bindings:**
 
 | Environment | Platform Config | Pipeline Config |
 |-------------|-----------------|-----------------|
-| **Dev** | DuckDB (local cluster) | `floe.yaml` (no changes) |
-| **Staging** | DuckDB (shared cluster) | `floe.yaml` (no changes) |
-| **Prod** | DuckDB (production cluster) | `floe.yaml` (no changes) |
+| **Dev** | DuckDB + MinIO local evaluation | `floe.yaml` shape is stable |
+| **Staging** | Shared Kubernetes services | `floe.yaml` shape is stable |
+| **Prod** | Organization-approved providers | `floe.yaml` shape is stable, subject to approved plugin support |
 
-Or swap to Snowflake, Databricks, or Spark—the pipeline config stays identical.
+Provider swaps require the corresponding plugin and composition contract to be implemented and validated.
 
-**Result:** No "works on my machine" issues. No config drift. What you test is what you deploy.
+**Result:** Data-product intent stays separate from platform-owned infrastructure bindings.
 
 ### 🌐 Data Mesh Direction
 

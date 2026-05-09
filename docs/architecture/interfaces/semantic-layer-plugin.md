@@ -1,7 +1,7 @@
 # SemanticLayerPlugin
 
 **Purpose**: Business intelligence API and semantic modeling
-**Location**: `floe_core/interfaces/semantic_layer.py`
+**Location**: `packages/floe-core/src/floe_core/plugins/semantic.py`
 **Entry Point**: `floe.semantic_layers`
 **ADR**: [ADR-0001: Cube Semantic Layer](../adr/0001-cube-semantic-layer.md)
 
@@ -9,8 +9,12 @@ SemanticLayerPlugin abstracts semantic/consumption layers (Cube, dbt Semantic La
 
 ## Interface Definition
 
+The live ABC is `SemanticLayerPlugin` in
+`packages/floe-core/src/floe_core/plugins/semantic.py`. The snippet below is a
+conceptual excerpt for the public contract.
+
 ```python
-# floe_core/interfaces/semantic_layer.py
+# Conceptual excerpt; see packages/floe-core/src/floe_core/plugins/semantic.py
 from abc import ABC, abstractmethod
 from pathlib import Path
 

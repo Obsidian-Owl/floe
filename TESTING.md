@@ -66,7 +66,7 @@ checks that cannot run correctly from inside an in-cluster test Job.
 |-----------|----------------------|-------------------|
 | Unit | Host (`uv run pytest`) | None (mocks only) |
 | Contract | Host (`uv run pytest`) | None |
-| **Integration** | **Kind cluster (K8s)** | Polaris, PostgreSQL, S3 (LocalStack) |
+| **Integration** | **Kind cluster (K8s)** | Polaris, PostgreSQL, MinIO/S3-compatible protocol |
 | **E2E bootstrap** | **Host (local machine or DevPod workspace)** | Real `helm`, `kubectl`, cluster access |
 | **E2E platform_blackbox** | **Kind cluster (K8s Job)** | Full deployed platform stack |
 | **E2E developer_workflow** | **Host (local machine or DevPod workspace)** | Repo metadata (`.git`, `.gitignore`, `.vuln-ignore`) plus any required tools |

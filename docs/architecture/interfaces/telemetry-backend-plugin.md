@@ -1,7 +1,7 @@
 # TelemetryBackendPlugin
 
 **Purpose**: Pluggable OTLP backends for traces, metrics, and logs
-**Location**: `floe_core/interfaces/telemetry.py`
+**Location**: `packages/floe-core/src/floe_core/plugins/telemetry.py`
 **Entry Point**: `floe.telemetry_backends`
 **ADR**: [ADR-0035: Observability Plugin Interface](../adr/0035-observability-plugin-interface.md)
 
@@ -10,6 +10,10 @@ TelemetryBackendPlugin separates telemetry collection (OpenTelemetry SDK, enforc
 > **Note**: OpenTelemetry instrumentation is **enforced** across all floe components. This plugin only controls where telemetry data is sent.
 
 ## Interface Definition
+
+The live ABC is `TelemetryBackendPlugin` in
+`packages/floe-core/src/floe_core/plugins/telemetry.py`. The snippet below is a
+conceptual excerpt for the public contract.
 
 ```python
 from abc import ABC, abstractmethod

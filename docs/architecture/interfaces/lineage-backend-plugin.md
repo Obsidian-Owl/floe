@@ -1,7 +1,7 @@
 # LineageBackendPlugin
 
 **Purpose**: Pluggable OpenLineage backends for data lineage
-**Location**: `floe_core/interfaces/lineage.py`
+**Location**: `packages/floe-core/src/floe_core/plugins/lineage.py`
 **Entry Point**: `floe.lineage_backends`
 **ADR**: [ADR-0035: Observability Plugin Interface](../adr/0035-observability-plugin-interface.md)
 
@@ -10,6 +10,10 @@ LineageBackendPlugin separates lineage collection (OpenLineage events, enforced)
 > **Note**: OpenLineage event emission is **enforced** across all floe pipelines. This plugin only controls where lineage data is sent.
 
 ## Interface Definition
+
+The live ABC is `LineageBackendPlugin` in
+`packages/floe-core/src/floe_core/plugins/lineage.py`. The snippet below is a
+conceptual excerpt for the public contract.
 
 ```python
 from abc import ABC, abstractmethod

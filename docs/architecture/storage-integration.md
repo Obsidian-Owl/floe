@@ -54,12 +54,16 @@ than through writer results or orchestrator logs.
 
 ## Object Storage Options
 
+The implemented alpha lane uses `floe-storage-minio` with the S3-compatible
+protocol. Provider-native AWS S3, GCS, and Azure storage plugins remain future
+extensions unless a deployment has explicitly validated them.
+
 | Storage | Use Case | Authentication |
 |---------|----------|----------------|
 | **MinIO** | Local evaluation and self-hosted S3-compatible endpoint | Access Key / Secret Key |
-| **AWS S3** | Validated AWS object-storage backend | IRSA (recommended) or IAM User |
-| **Google Cloud Storage** | Production on GCP | Workload Identity (recommended) or SA Key |
-| **Azure Blob / ADLS Gen2** | Production on Azure | Managed Identity (recommended) or SP |
+| **AWS S3** | Future/provider-native object-storage plugin | IRSA (recommended) or IAM User |
+| **Google Cloud Storage** | Future/provider-native object-storage plugin | Workload Identity (recommended) or SA Key |
+| **Azure Blob / ADLS Gen2** | Future/provider-native object-storage plugin | Managed Identity (recommended) or SP |
 
 ### MinIO Local Evaluation
 
@@ -67,7 +71,7 @@ MinIO is the local evaluation object store used by Floe chart and demo paths:
 
 - S3-compatible API (works with Iceberg's S3 file IO)
 - Included in the `floe-platform` Helm chart
-- Easy local setup via Docker or Kubernetes
+- Easy local setup in the Kind/Helm evaluation lane
 - Supports versioning for backup/recovery
 
 ```yaml
@@ -81,14 +85,16 @@ storage:
     secret_key_ref: minio-credentials
 ```
 
-### AWS S3
+### Future AWS S3 Plugin
 
-For production on AWS, use IAM Roles for Service Accounts (IRSA):
+A provider-native AWS S3 plugin should use IAM Roles for Service Accounts
+(IRSA). Until that plugin is implemented and validated, the alpha path remains
+MinIO through the S3-compatible protocol:
 
 ```yaml
-# manifest.yaml
+# conceptual future manifest.yaml
 storage:
-  type: minio
+  type: s3
   warehouse_path: s3://my-company-data-lake/floe/iceberg
   config:
     region: us-east-1
@@ -260,9 +266,11 @@ Not all compute engines support all storage backends. The PolicyEnforcer validat
 | Spark | ✅ | ✅ | ✅ |
 | Snowflake | N/A (uses Snowflake storage) | N/A | N/A |
 
-**MVP Scope**: S3-compatible storage only (AWS S3, MinIO).
+**Alpha Scope**: MinIO through the S3-compatible protocol.
 
-For GCP/Azure deployments, use MinIO as the storage layer, which provides S3-compatible access for DuckDB while running on cloud-native infrastructure:
+For GCP/Azure evaluation before provider-native plugins are implemented, use
+MinIO as the storage layer. It provides S3-compatible access for DuckDB while
+running on cloud-native infrastructure:
 
 ```yaml
 # manifest.yaml (GCP deployment with MinIO)
@@ -274,7 +282,9 @@ storage:
     # MinIO deployed on GKE/AKS provides S3-compatible API
 ```
 
-Native GCS and Azure ADLS support for DuckDB is pending upstream DuckDB Iceberg extension updates and will be added in a future release.
+Native GCS, Azure ADLS, and AWS S3 plugin support should be added as future
+provider-specific plugins with their own identity and credential projection
+contracts.
 
 ## Backup Strategies
 
@@ -362,22 +372,20 @@ data_architecture:
 ```yaml
 # Full storage configuration schema
 storage:
-  type: minio | gcs | azure
+  type: minio
   warehouse_path: string  # URI to Iceberg warehouse root
   config:
-    # MinIO / S3 protocol
-    endpoint: string      # S3-compatible endpoint (MinIO only)
+    # MinIO via S3-compatible protocol
+    endpoint: string      # S3-compatible endpoint
     region: string        # AWS region
     access_key_ref: string  # K8s Secret reference
     secret_key_ref: string  # K8s Secret reference
-    auth: irsa | access_key  # Authentication method
+    auth: access_key      # Implemented alpha authentication method
 
-    # GCS
-    project: string       # GCP project ID
-    auth: workload_identity | service_account_key
-
-    # Azure
-    auth: managed_identity | service_principal
+# Future provider-native plugins add provider-owned schemas for:
+# - AWS S3: IRSA or IAM access keys
+# - GCS: Workload Identity or service account references
+# - Azure: Managed Identity or service principal references
 ```
 
 ## References
