@@ -615,6 +615,16 @@ def test_definitions_has_at_least_one_asset(project_dir: Path) -> None:
     assert len(asset_list) >= 1, "Definitions must include at least one @dbt_assets asset"
 
 
+@pytest.mark.requirement("AC-1")
+def test_definitions_has_product_named_job(project_dir: Path) -> None:
+    """Definitions must expose a stable Dagster-safe product job for API callers."""
+    result = load_product_definitions(PRODUCT_NAME, project_dir)
+
+    job = result.get_job_def(SAFE_NAME)
+
+    assert job.name == SAFE_NAME
+
+
 # ===========================================================================
 # AC-1 + AC-3: Iceberg resource presence/absence
 # ===========================================================================

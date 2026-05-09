@@ -11,7 +11,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import yaml
-from dagster import AssetKey, Definitions, ResourceDefinition
+from dagster import AssetKey, Definitions, ResourceDefinition, define_asset_job
 from dagster_dbt import DbtCliResource, dbt_assets
 from floe_core.compilation.naming import dbt_project_name
 from floe_core.lineage.facets import TraceCorrelationFacetBuilder
@@ -399,5 +399,6 @@ def build_product_definitions(
 
     return Definitions(
         assets=assets,
+        jobs=[define_asset_job(_safe_product_name(product_name))],
         resources=resources,
     )
