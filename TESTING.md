@@ -173,6 +173,38 @@ host-side `bootstrap` lane first, then the standard in-cluster
 and only runs the gated `destructive` lane after bootstrap + platform success
 unless `FORCE_DESTRUCTIVE=true`.
 
+### dlt Ingestion E2E Coverage
+
+The dlt ingestion E2E suite lives in the standard service-backed
+`platform_blackbox` lane. These tests require the deployed Dagster, Polaris, and
+MinIO services; they fail at the infrastructure smoke check when the local Kind
+cluster or DevPod port-forwards are unavailable.
+
+| Test | Purpose | User Experience Covered |
+|------|---------|-------------------------|
+| `tests/e2e/test_customer360_dlt_ingestion.py` | Customer 360 CSV ingestion demo | Data engineers declare three local CSV sources in `floe.yaml`; platform-owned dlt/Polaris/MinIO config comes from `manifest.yaml`. |
+| `tests/e2e/test_dlt_ingestion_format_matrix.py` | CSV, JSONL, and Parquet landed-file matrix | Platform validates common landed-file formats and realistic ingestion failures against MinIO and Polaris. |
+
+The Customer 360 test keeps the demo readable and CSV-only. It compiles
+`demo/customer-360/floe.yaml`, runs each configured source through the same
+Dagster source-construction and `DltIngestionPlugin` path used by runtime
+assets, then validates the raw Iceberg tables through PyIceberg.
+
+The format matrix uses isolated MinIO prefixes and Iceberg namespaces for CSV,
+JSONL, and Parquet fixtures. It also validates common ingestion issues: missing
+object paths, malformed JSONL, schema freeze rejecting an added column, and
+unsupported formats failing before empty table creation.
+
+Useful focused commands:
+
+```bash
+uv run pytest tests/e2e/test_customer360_dlt_ingestion.py --collect-only -q
+uv run pytest tests/e2e/test_dlt_ingestion_format_matrix.py --collect-only -q
+
+# Requires live platform services
+uv run pytest tests/e2e/test_customer360_dlt_ingestion.py tests/e2e/test_dlt_ingestion_format_matrix.py -q
+```
+
 If you use DevPod on Hetzner, start the workspace before running the validation
 flow:
 ```bash

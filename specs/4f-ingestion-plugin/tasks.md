@@ -103,7 +103,7 @@ All tests MUST follow `.claude/rules/testing-standards.md`:
 
 - [ ] T008 Implement DltIngestionPlugin class skeleton with metadata properties (name, version, floe_api_version, is_external, get_config_schema) in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
 - [ ] T009 Implement startup() and shutdown() lifecycle methods with OTel spans and source package validation in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
-- [ ] T010 Implement health_check() returning HealthStatus (verify dlt importable + catalog reachable) in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
+- [ ] T010 Implement health_check() returning HealthStatus that reports lifecycle state, dlt import readiness, and runtime-binding readiness without requiring catalog connectivity in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
 - [ ] T011 Update __init__.py exports (DltIngestionPlugin, DltIngestionConfig, IngestionSourceConfig) in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/__init__.py
 
 **Checkpoint**: Foundation ready - `DltIngestionPlugin` can be instantiated, started, health-checked, and shut down. User story implementation can now begin.
@@ -150,9 +150,9 @@ All tests MUST follow `.claude/rules/testing-standards.md`:
 
 ### Implementation for User Story 2
 
-- [ ] T021 [US2] Implement create_pipeline() accepting IngestionConfig, configuring dlt pipeline with pipeline_name from destination_table, destination="iceberg", dataset_name from namespace — in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
+- [ ] T021 [US2] Implement create_pipeline() accepting IngestionConfig, configuring dlt pipeline with pipeline_name from destination_table, destination filesystem from runtime binding, dataset_name from namespace — in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
 - [ ] T022 [US2] Implement run() executing dlt pipeline, populating IngestionResult with rows_loaded, bytes_written, duration_seconds, handling empty source data (0 rows = success) — in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
-- [ ] T023 [US2] Implement get_destination_config() mapping catalog_config to dlt Iceberg destination parameters (catalog_type="rest", credentials.uri, credentials.warehouse, S3 config) — in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
+- [ ] T023 [US2] Implement runtime binding handling that requires destination_filesystem and applies Iceberg catalog environment during pipeline creation/run — in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
 
 **Checkpoint**: US2 complete — Pipelines can be created and executed. FR-011 to FR-018, FR-021 satisfied.
 
@@ -168,7 +168,7 @@ All tests MUST follow `.claude/rules/testing-standards.md`:
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T024 [P] [US3] Create unit tests for get_destination_config() — Polaris catalog config maps to correct dlt Iceberg destination params, MinIO/S3 storage config supported — in plugins/floe-ingestion-dlt/tests/unit/test_plugin.py
+- [ ] T024 [P] [US3] Create unit tests for runtime binding destination handoff — destination_filesystem maps to dlt filesystem destination, MinIO/S3 storage config supported — in plugins/floe-ingestion-dlt/tests/unit/test_plugin.py
 - [ ] T025 [P] [US3] Create integration test for pipeline execution with append mode — data lands in Iceberg, row count verified via table scan, performance verified via `time.perf_counter()` with 30s hard timeout (SC-004) — in plugins/floe-ingestion-dlt/tests/integration/test_pipeline.py
 - [ ] T026 [P] [US3] Create integration tests for replace and merge write modes — replace overwrites, merge upserts with primary key (both delete-insert and upsert strategies per FR-025) — in plugins/floe-ingestion-dlt/tests/integration/test_pipeline.py
 
@@ -263,12 +263,12 @@ All tests MUST follow `.claude/rules/testing-standards.md`:
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T046 [P] [US7] Create unit tests for OTel span emission — create_pipeline, run, get_destination_config emit spans with correct attributes — in plugins/floe-ingestion-dlt/tests/unit/test_plugin.py
+- [ ] T046 [P] [US7] Create unit tests for OTel span emission — create_pipeline and run emit spans with correct attributes — in plugins/floe-ingestion-dlt/tests/unit/test_plugin.py
 - [ ] T047 [P] [US7] Create unit tests for structured logging — pipeline operations log pipeline_id, source_type, status; secrets are NOT logged — in plugins/floe-ingestion-dlt/tests/unit/test_plugin.py
 
 ### Implementation for User Story 7
 
-- [ ] T048 [US7] Wire OTel tracing helpers into all plugin methods (create_pipeline, run, get_destination_config, startup, shutdown, health_check) — in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
+- [ ] T048 [US7] Wire OTel tracing helpers into all plugin methods (create_pipeline, run, startup, shutdown, health_check) — in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
 - [ ] T049 [US7] Add structlog logging to all plugin operations with bound context (pipeline_id, source_type, destination_table) and secret masking — in plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py
 
 **Checkpoint**: US7 complete — OTel spans and structured logs emitted for all operations. SC-011 satisfied. FR-044 to FR-050 satisfied.
@@ -336,7 +336,7 @@ All tests MUST follow `.claude/rules/testing-standards.md`:
 - **US4 (P1)**: Can start after Foundational (Phase 2) — Independent of US2/US3 (orchestrator wiring)
 - **US5 (P1)**: Depends on US2 (needs working pipeline to test schema contracts)
 - **US6 (P1)**: Depends on US2 (needs working pipeline to test incremental loading)
-- **US7 (P2)**: Can start after Foundational for lifecycle methods; pipeline method wiring (create_pipeline, run, get_destination_config) requires US2 completion
+- **US7 (P2)**: Can start after Foundational for lifecycle methods; pipeline method wiring (create_pipeline, run) requires US2 completion
 - **US8 (P2)**: Can start after Foundational — Error handling is additive
 
 ### Within Each User Story

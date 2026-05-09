@@ -67,7 +67,7 @@ class SinkConnector(ABC):
 
     @abstractmethod
     def get_source_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
-        """Get lakehouse source config (reverse of get_destination_config)."""
+        """Get lakehouse source config for reading curated tables."""
         ...
 
 

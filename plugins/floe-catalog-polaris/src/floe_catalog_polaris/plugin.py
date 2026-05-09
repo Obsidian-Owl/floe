@@ -40,6 +40,9 @@ from floe_core.plugins import CatalogPlugin
 from floe_core.plugins.catalog import Catalog
 from floe_core.schemas.compiled_artifacts import (
     CatalogDeploymentBinding,
+    DbtCatalogBinding,
+    IcebergRestCatalogBinding,
+    IcebergRestOAuth2Binding,
     PolarisCatalogDeploymentBinding,
     StorageDeploymentBinding,
 )
@@ -413,14 +416,35 @@ class PolarisCatalogPlugin(CatalogPlugin):
 
         access_ref = storage.credentials.as_credential_ref("accessKeyId")
         secret_ref = storage.credentials.as_credential_ref("secretAccessKey")
+        config = self._require_config()
+        runtime_iceberg_rest = IcebergRestCatalogBinding(
+            catalog_name="polaris",
+            uri=config.uri,
+            warehouse=config.warehouse,
+        )
+        dbt_iceberg_rest = IcebergRestCatalogBinding(
+            catalog_name="iceberg",
+            uri=config.uri,
+            warehouse=config.warehouse,
+            oauth2=IcebergRestOAuth2Binding(
+                secret_name="polaris",  # pragma: allowlist secret
+                client_id_env="POLARIS_CLIENT_ID",
+                client_secret_env="POLARIS_CLIENT_SECRET",  # pragma: allowlist secret
+                oauth2_server_uri_env="POLARIS_OAUTH2_SERVER_URI",
+                oauth2_scope_env="POLARIS_SCOPE",
+                oauth2_scope_default="PRINCIPAL_ROLE:ALL",
+            ),
+        )
         return CatalogDeploymentBinding(
             provider="polaris",
             polaris=PolarisCatalogDeploymentBinding(
                 storage_type="S3",
+                warehouse=config.warehouse,
                 default_base_location=storage.warehouse.uri,
                 allowed_locations=storage.allowed_locations,
                 endpoint=storage.endpoint.external_url,
                 endpoint_internal=storage.endpoint.internal_url,
+                catalog_uri=config.uri,
                 path_style_access=storage.endpoint.path_style_access,
                 sts_unavailable=not storage.capabilities.sts_supported,
                 credential_refs={
@@ -428,6 +452,8 @@ class PolarisCatalogPlugin(CatalogPlugin):
                     "secretAccessKey": secret_ref,
                 },
             ),
+            iceberg_rest=runtime_iceberg_rest,
+            dbt=DbtCatalogBinding(iceberg_rest=dbt_iceberg_rest),
         )
 
     def create_namespace(

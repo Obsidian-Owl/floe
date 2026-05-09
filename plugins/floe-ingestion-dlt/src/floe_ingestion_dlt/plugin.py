@@ -2,7 +2,8 @@
 
 This module implements the IngestionPlugin ABC using dlt (data load tool)
 as the ingestion framework. dlt supports REST APIs, SQL databases, and
-filesystem sources with Iceberg as the destination.
+filesystem sources that write through dlt's filesystem destination while
+Floe binds Iceberg table format and catalog runtime settings.
 
 The plugin runs in-process (is_external=False) and delegates data loading
 to dlt's pipeline execution engine.
@@ -12,7 +13,7 @@ Requirements Covered:
     - FR-004: Plugin metadata (name, version, floe_api_version)
     - FR-005: is_external=False
     - FR-006: get_config_schema returns DltIngestionConfig
-    - FR-007: health_check() with dlt import + catalog check
+    - FR-007: health_check() import-only, non-network runtime health
     - FR-008: startup() and shutdown() lifecycle
     - FR-009: Source package validation at startup
     - FR-010: Plugin capabilities metadata
@@ -21,12 +22,17 @@ Requirements Covered:
 from __future__ import annotations
 
 import hashlib
+import os
+import threading
 import time
 import uuid
+from collections.abc import Callable, Mapping
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 import structlog
+from floe_core.composition.models import PluginRequirements, RequirementSet
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.ingestion import (
     IngestionConfig,
@@ -34,6 +40,13 @@ from floe_core.plugins.ingestion import (
     IngestionResult,
 )
 from floe_core.plugins.sink import EgressResult, SinkConfig, SinkConnector
+from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
+    DltIngestionBinding,
+    IngestionDeploymentBinding,
+    StorageDeploymentBinding,
+)
+from floe_core.telemetry.sanitization import sanitize_error_message
 
 from floe_ingestion_dlt.config import (
     VALID_SCHEMA_CONTRACTS,
@@ -56,7 +69,6 @@ from floe_ingestion_dlt.tracing import (
     record_egress_result,
     record_ingestion_error,
     record_ingestion_result,
-    sanitize_error_message,
 )
 
 if TYPE_CHECKING:
@@ -86,7 +98,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
 
     Features:
         - REST API, SQL database, and filesystem source support
-        - Iceberg destination via Polaris REST catalog
+        - Filesystem destination with Iceberg table format and Polaris binding
         - Schema contract enforcement (evolve, freeze, discard_value)
         - Write modes: append, replace, merge
         - OTel tracing and structured logging
@@ -99,6 +111,10 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         >>> status.state
         <HealthState.HEALTHY: 'healthy'>
     """
+
+    _iceberg_env_lock = threading.RLock()
+    _health_slots_lock = threading.Lock()
+    _health_check_slots: dict[str, threading.Lock] = {}
 
     def __init__(self) -> None:
         """Initialize plugin state."""
@@ -169,6 +185,129 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         from floe_ingestion_dlt.config import DltIngestionConfig
 
         return DltIngestionConfig
+
+    def get_composition_requirements(self) -> PluginRequirements:
+        """Return storage and catalog requirements for dlt Iceberg ingestion."""
+        return PluginRequirements(
+            plugin_type="ingestion",
+            plugin_name=self.name,
+            requirements=RequirementSet(
+                protocols=["s3-compatible", "s3"],
+                credential_modes=["kubernetes-secret", "environment", "workload-identity"],
+                catalog_providers=["iceberg-rest"],
+                table_formats=["iceberg"],
+            ),
+        )
+
+    def build_deployment_binding(
+        self,
+        *,
+        storage: StorageDeploymentBinding,
+        catalog: CatalogDeploymentBinding,
+    ) -> IngestionDeploymentBinding:
+        """Translate composed storage/catalog bindings into dlt runtime config."""
+        if storage.warehouse is None:
+            raise PipelineConfigurationError("dlt ingestion requires storage warehouse binding")
+        iceberg_rest = catalog.iceberg_rest
+        if iceberg_rest is None:
+            raise PipelineConfigurationError(
+                "dlt ingestion requires an Iceberg REST catalog deployment binding"
+            )
+
+        source_filesystem = {
+            "endpoint_url": storage.endpoint.internal_url,
+            "region_name": storage.endpoint.region,
+            "s3_url_style": "path" if storage.endpoint.path_style_access else "virtual",
+        }
+        destination_credentials: dict[str, str] = {
+            "endpoint_url": storage.endpoint.internal_url,
+            "region_name": storage.endpoint.region,
+        }
+        if storage.endpoint.path_style_access:
+            destination_credentials["s3_url_style"] = "path"
+        destination_filesystem: dict[str, Any] = {
+            "bucket_url": storage.warehouse.uri,
+            "credentials": destination_credentials,
+        }
+
+        iceberg_catalog_env = self._compile_safe_iceberg_environment(
+            catalog_name=iceberg_rest.catalog_name,
+            uri=iceberg_rest.uri,
+            warehouse=iceberg_rest.warehouse,
+            s3_endpoint=storage.endpoint.internal_url,
+            s3_region=storage.endpoint.region,
+            s3_path_style_access=storage.endpoint.path_style_access,
+        )
+        env_refs = self._compile_runtime_env_refs(
+            storage.runtime.env_refs,
+            catalog_name=iceberg_rest.catalog_name,
+        )
+
+        return IngestionDeploymentBinding(
+            provider="dlt",
+            dlt=DltIngestionBinding(
+                plugin_name=self.name,
+                destination="filesystem",
+                table_format="iceberg",
+                source_filesystem=source_filesystem,
+                destination_filesystem=destination_filesystem,
+                iceberg_catalog_env=iceberg_catalog_env,
+                env_refs=env_refs,
+            ),
+        )
+
+    @staticmethod
+    def _compile_runtime_env_refs(
+        storage_env_refs: Mapping[str, str],
+        *,
+        catalog_name: str,
+    ) -> dict[str, str]:
+        """Return target runtime env names and their source process env vars."""
+        env_catalog = catalog_name.upper().replace("-", "_")
+        prefix = f"PYICEBERG_CATALOG__{env_catalog}__"
+        env_refs: dict[str, str] = {
+            f"{prefix}CREDENTIAL": f"{env_catalog}_CREDENTIAL",
+            f"{prefix}SCOPE": f"{env_catalog}_SCOPE",
+            f"{prefix}OAUTH2_SERVER_URI": f"{env_catalog}_OAUTH2_SERVER_URI",
+        }
+        access_key_env = storage_env_refs.get("accessKeyId") or storage_env_refs.get(
+            "AWS_ACCESS_KEY_ID"
+        )
+        if access_key_env:
+            env_refs["AWS_ACCESS_KEY_ID"] = str(access_key_env)
+        secret_key_env = storage_env_refs.get("secretAccessKey") or storage_env_refs.get(
+            "AWS_SECRET_ACCESS_KEY"
+        )
+        if secret_key_env:
+            env_refs["AWS_SECRET_ACCESS_KEY"] = str(secret_key_env)
+        return env_refs
+
+    @staticmethod
+    def _compile_safe_iceberg_environment(
+        *,
+        catalog_name: str,
+        uri: str,
+        warehouse: str | None,
+        s3_endpoint: str,
+        s3_region: str,
+        s3_path_style_access: bool,
+    ) -> dict[str, str]:
+        """Build secret-free PyIceberg env from explicit deployment bindings only."""
+        env_catalog = catalog_name.upper().replace("-", "_")
+        prefix = f"PYICEBERG_CATALOG__{env_catalog}__"
+        env = {
+            "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME": catalog_name,
+            "ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE": "rest",
+            f"{prefix}TYPE": "rest",
+            f"{prefix}URI": uri,
+            f"{prefix}S3__ENDPOINT": s3_endpoint,
+            f"{prefix}S3__REGION": s3_region,
+        }
+        if warehouse is not None:
+            env[f"{prefix}WAREHOUSE"] = warehouse
+        if s3_path_style_access:
+            env[f"{prefix}S3__PATH_STYLE_ACCESS"] = "true"
+        return env
 
     def startup(self) -> None:
         """Initialize the plugin (FR-008, FR-009).
@@ -277,29 +416,8 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 )
                 return status
 
-            # Check 2: dlt is importable
             try:
                 import dlt as _dlt  # noqa: F401
-
-                elapsed_ms = (time.perf_counter() - start) * 1000
-                status = HealthStatus(
-                    state=HealthState.HEALTHY,
-                    message="dlt ingestion plugin is healthy",
-                    details={
-                        "dlt_version": self._dlt_version,
-                        "started": self._started,
-                        "response_time_ms": elapsed_ms,
-                        "checked_at": checked_at,
-                        "timeout": effective_timeout,
-                    },
-                )
-                logger.info(
-                    "health_check_completed",
-                    state=status.state.value,
-                    dlt_version=self._dlt_version,
-                    response_time_ms=elapsed_ms,
-                )
-                return status
             except ImportError:
                 elapsed_ms = (time.perf_counter() - start) * 1000
                 status = HealthStatus(
@@ -319,6 +437,31 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     response_time_ms=elapsed_ms,
                 )
                 return status
+
+            bucket_url = None
+            object_storage_check = self._object_storage_check_state(bucket_url)
+
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            status = HealthStatus(
+                state=HealthState.HEALTHY,
+                message="dlt ingestion plugin is healthy",
+                details={
+                    "dlt_version": self._dlt_version,
+                    "started": self._started,
+                    "catalog_check": "not_configured",
+                    "object_storage_check": object_storage_check,
+                    "response_time_ms": elapsed_ms,
+                    "checked_at": checked_at,
+                    "timeout": effective_timeout,
+                },
+            )
+            logger.info(
+                "health_check_completed",
+                state=status.state.value,
+                dlt_version=self._dlt_version,
+                response_time_ms=elapsed_ms,
+            )
+            return status
 
     def create_pipeline(self, config: IngestionConfig) -> Any:
         """Create a dlt pipeline from configuration.
@@ -375,10 +518,27 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
 
             import dlt
 
-            pipeline = dlt.pipeline(
-                pipeline_name=pipeline_name,
-                dataset_name=dataset_name,
+            pipeline_kwargs: dict[str, Any] = {
+                "pipeline_name": pipeline_name,
+                "dataset_name": dataset_name,
+            }
+            runtime_binding = self._pipeline_runtime_binding(config)
+            runtime_destination_options = self._destination_filesystem_options_from_binding(
+                runtime_binding
             )
+            if not runtime_destination_options:
+                raise PipelineConfigurationError(
+                    "dlt runtime binding is required for dlt ingestion pipelines",
+                    source_type=config.source_type,
+                    destination_table=config.destination_table,
+                )
+            from dlt.destinations import filesystem
+
+            with self._temporary_runtime_binding_environment(runtime_binding):
+                pipeline_kwargs["destination"] = filesystem(**runtime_destination_options)
+                pipeline = dlt.pipeline(**pipeline_kwargs)
+            if runtime_binding:
+                pipeline._floe_dlt_runtime_binding = runtime_binding
 
             logger.info(
                 "pipeline_created",
@@ -387,6 +547,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 source_type=config.source_type,
                 destination_table=config.destination_table,
                 write_mode=config.write_mode,
+                has_destination=True,
             )
 
             return pipeline
@@ -403,6 +564,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 - schema_contract: Schema contract mode (evolve, freeze, discard_value)
                 - cursor_field: Field name for incremental loading (optional)
                 - primary_key: Primary key field(s) for merge operations (optional)
+                - source_type: Floe source type, used for source-specific result validation
 
         Returns:
             IngestionResult with execution metrics.
@@ -424,6 +586,9 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         schema_contract_mode = kwargs.get("schema_contract", "evolve")
         cursor_field = kwargs.get("cursor_field")
         primary_key = kwargs.get("primary_key")
+        source_name = kwargs.get("source_name")
+        source_path = kwargs.get("source_path")
+        source_type = kwargs.get("source_type")
 
         # Map schema_contract string to dlt's expected format
         if schema_contract_mode == "evolve":
@@ -435,7 +600,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         elif schema_contract_mode == "freeze":
             schema_contract = {
                 "columns": "freeze",
-                "tables": "freeze",
+                "tables": "evolve",
                 "data_type": "freeze",
             }
         elif schema_contract_mode == "discard_value":
@@ -482,11 +647,38 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             write_mode=write_disposition,
         ) as span:
             try:
+                if source_type == "filesystem" and self._filesystem_source_matched(source) is False:
+                    elapsed = time.perf_counter() - start_time
+                    empty_source_error = RuntimeError("filesystem source matched no files")
+                    error_msg = self._with_source_error_context(
+                        str(empty_source_error),
+                        source_name=source_name,
+                        source_path=source_path,
+                    )
+                    record_ingestion_error(span, empty_source_error, category="permanent")
+                    logger.error(
+                        "pipeline_run_empty_filesystem_source",
+                        pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
+                        source_name=source_name,
+                        source_path=source_path,
+                        error=error_msg,
+                        error_category="permanent",
+                        duration_seconds=elapsed,
+                    )
+                    return IngestionResult(
+                        success=False,
+                        rows_loaded=0,
+                        bytes_written=0,
+                        duration_seconds=elapsed,
+                        errors=[error_msg],
+                    )
+
                 # Prepare pipeline.run() kwargs
                 run_kwargs = {
                     "write_disposition": write_disposition,
                     "table_name": table_name,
                     "schema_contract": schema_contract,
+                    "table_format": kwargs.get("table_format", "iceberg"),
                 }
 
                 # Add primary_key if provided with merge disposition
@@ -494,7 +686,15 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     run_kwargs["primary_key"] = primary_key
 
                 # Execute the pipeline
-                load_info = pipeline.run(source, **run_kwargs)
+                runtime_binding = self._normalize_runtime_binding(
+                    getattr(pipeline, "_floe_dlt_runtime_binding", None)
+                )
+                if not runtime_binding:
+                    raise PipelineConfigurationError(
+                        "dlt runtime binding is required before pipeline execution"
+                    )
+                with self._temporary_runtime_binding_environment(runtime_binding):
+                    load_info = pipeline.run(source, **run_kwargs)
 
                 elapsed = time.perf_counter() - start_time
 
@@ -535,7 +735,11 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
 
             except Exception as e:
                 elapsed = time.perf_counter() - start_time
-                error_msg = sanitize_error_message(str(e))
+                error_msg = self._with_source_error_context(
+                    str(e),
+                    source_name=source_name,
+                    source_path=source_path,
+                )
 
                 # Check if this is a schema contract violation
                 # dlt raises exceptions containing "schema" and "contract" when
@@ -591,63 +795,161 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     errors=[error_msg],
                 )
 
-    def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
-        """Generate Iceberg destination configuration for dlt.
+    @staticmethod
+    def _with_source_error_context(
+        error_msg: str,
+        *,
+        source_name: Any,
+        source_path: Any,
+        max_length: int = 500,
+    ) -> str:
+        """Prefix an ingestion error with source identity when provided."""
+        context: list[str] = []
+        if source_name not in (None, ""):
+            context.append(f"source={source_name}")
+        if source_path not in (None, ""):
+            context.append(f"path={source_path}")
+        if not context:
+            return sanitize_error_message(error_msg, max_length=max_length)
+        return sanitize_error_message(f"{', '.join(context)}: {error_msg}", max_length=max_length)
 
-        Maps the platform's catalog config (Polaris REST catalog) to dlt's
-        Iceberg destination parameters.
+    @staticmethod
+    def _filesystem_source_matched(source: Any) -> bool | None:
+        probe = getattr(source, "_floe_filesystem_source_probe", None)
+        matched = getattr(probe, "matched", None)
+        return matched if isinstance(matched, bool) else None
 
-        Args:
-            catalog_config: Catalog connection configuration with keys:
-                - uri: Polaris catalog URI (e.g., "http://polaris:8181/api/catalog")
-                - warehouse: Warehouse name (e.g., "floe_warehouse")
-                - s3_endpoint: Optional S3/MinIO endpoint
-                - s3_access_key: Optional S3 access key
-                - s3_secret_key: Optional S3 secret key
-                - s3_region: Optional S3 region
+    @staticmethod
+    def _pipeline_runtime_binding(config: IngestionConfig) -> dict[str, Any]:
+        return DltIngestionPlugin._normalize_runtime_binding(config.runtime_binding)
 
-        Returns:
-            dlt destination configuration dict for Iceberg.
-        """
-        tracer = get_tracer()
-        with ingestion_span(tracer, "get_destination_config"):
-            dest_config: dict[str, Any] = {
-                "destination": "iceberg",
-                "catalog_type": "rest",
-            }
+    @staticmethod
+    def _normalize_runtime_binding(binding: Any) -> dict[str, Any]:
+        if isinstance(binding, Mapping):
+            return dict(binding)
+        model_dump = getattr(binding, "model_dump", None)
+        if callable(model_dump):
+            normalized = model_dump(mode="python")
+            if isinstance(normalized, Mapping):
+                return dict(normalized)
+        return {}
 
-            # Map catalog URI
-            if "uri" in catalog_config:
-                dest_config["catalog_uri"] = catalog_config["uri"]
+    @staticmethod
+    def _destination_filesystem_options_from_binding(binding: Mapping[str, Any]) -> dict[str, Any]:
+        destination_filesystem = binding.get("destination_filesystem")
+        return dict(destination_filesystem) if isinstance(destination_filesystem, Mapping) else {}
 
-            # Map warehouse
-            if "warehouse" in catalog_config:
-                dest_config["warehouse"] = catalog_config["warehouse"]
+    @contextmanager
+    def _temporary_runtime_binding_environment(self, binding: Mapping[str, Any]) -> Any:
+        iceberg_catalog_env = binding.get("iceberg_catalog_env")
+        env_refs = binding.get("env_refs")
+        if not isinstance(iceberg_catalog_env, Mapping) and not isinstance(env_refs, Mapping):
+            yield
+            return
 
-            # Map S3/MinIO storage config
-            if "s3_endpoint" in catalog_config:
-                dest_config["s3_endpoint"] = catalog_config["s3_endpoint"]
-            if "s3_access_key" in catalog_config:
-                logger.warning(
-                    "s3_credentials_in_config",
-                    message="S3 credentials should use environment variables "
-                    "(AWS_ACCESS_KEY_ID), not config passthrough. See FR-018.",
+        with self._iceberg_env_lock:
+            runtime_env: dict[str, str] = {}
+            if isinstance(iceberg_catalog_env, Mapping):
+                runtime_env.update(
+                    {str(key): str(value) for key, value in iceberg_catalog_env.items()}
                 )
-                dest_config["s3_access_key"] = catalog_config["s3_access_key"]
-            if "s3_secret_key" in catalog_config:
-                dest_config["s3_secret_key"] = catalog_config["s3_secret_key"]
-            if "s3_region" in catalog_config:
-                dest_config["s3_region"] = catalog_config["s3_region"]
+            if isinstance(env_refs, Mapping):
+                for target_name, source_name in env_refs.items():
+                    source_value = os.environ.get(str(source_name))
+                    if source_value is not None:
+                        runtime_env[str(target_name)] = source_value
+            if not runtime_env:
+                yield
+                return
+            previous = {key: os.environ.get(key) for key in runtime_env}
+            pyiceberg_env_config = None
+            try:
+                os.environ.update(runtime_env)
+                pyiceberg_env_config = self._refresh_pyiceberg_environment_config()
+                yield
+            finally:
+                self._restore_pyiceberg_environment_config(pyiceberg_env_config)
+                for key, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
 
-            logger.info(
-                "destination_config_generated",
-                catalog_type="rest",
-                has_uri="uri" in catalog_config,
-                has_warehouse="warehouse" in catalog_config,
-                has_s3="s3_endpoint" in catalog_config,
-            )
+    @staticmethod
+    def _refresh_pyiceberg_environment_config() -> tuple[Any, Any] | None:
+        """Refresh PyIceberg's cached environment config after binding env changes."""
+        try:
+            import pyiceberg.catalog as pyiceberg_catalog
+            from pyiceberg.utils.config import Config as PyIcebergConfig
+        except ImportError:
+            return None
 
-            return dest_config
+        previous_config = getattr(pyiceberg_catalog, "_ENV_CONFIG", None)
+        pyiceberg_catalog._ENV_CONFIG = PyIcebergConfig()
+        return pyiceberg_catalog, previous_config
+
+    @staticmethod
+    def _restore_pyiceberg_environment_config(snapshot: tuple[Any, Any] | None) -> None:
+        """Restore PyIceberg's cached config after runtime binding scope exits."""
+        if snapshot is None:
+            return
+        pyiceberg_catalog, previous_config = snapshot
+        if previous_config is None:
+            return
+        pyiceberg_catalog._ENV_CONFIG = previous_config
+
+    @staticmethod
+    def _object_storage_check_state(bucket_url: str | None) -> str:
+        if bucket_url is None:
+            return "not_configured"
+        if not bucket_url.startswith("s3://"):
+            return "skipped_non_s3"
+        return "configured"
+
+    @classmethod
+    def _run_health_check_with_timeout(
+        cls,
+        check: Callable[[], None],
+        timeout: float,
+        *,
+        check_name: str,
+    ) -> None:
+        slot = cls._health_check_slot(check_name)
+        if not slot.acquire(blocking=False):
+            raise TimeoutError(f"{check_name} health check already running")
+
+        done = threading.Event()
+        errors: list[BaseException] = []
+
+        def _worker() -> None:
+            try:
+                check()
+            except BaseException as exc:  # noqa: BLE001 - propagated to caller
+                errors.append(exc)
+            finally:
+                done.set()
+                slot.release()
+
+        thread = threading.Thread(
+            target=_worker,
+            name=f"dlt-health-{check_name}",
+            daemon=True,
+        )
+        try:
+            thread.start()
+        except BaseException:
+            slot.release()
+            raise
+
+        if not done.wait(timeout):
+            raise TimeoutError(f"{check_name} health check exceeded {timeout}s")
+        if errors:
+            raise errors[0]
+
+    @classmethod
+    def _health_check_slot(cls, check_name: str) -> threading.Lock:
+        with cls._health_slots_lock:
+            return cls._health_check_slots.setdefault(check_name, threading.Lock())
 
     # -----------------------------------------------------------------------
     # SinkConnector ABC implementation (Epic 4G - Reverse ETL)
@@ -804,11 +1106,13 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 table_name = kwargs.get("table_name", "egress_output")
                 write_disposition = kwargs.get("write_disposition", "append")
 
-                pipeline = dlt.pipeline(
-                    pipeline_name=f"floe_egress_{sink_type}",
-                    destination=sink_type,
-                    credentials=connection_config or None,
-                )
+                pipeline_kwargs: dict[str, Any] = {
+                    "pipeline_name": f"floe_egress_{sink_type}",
+                    "destination": sink_type,
+                }
+                if connection_config:
+                    pipeline_kwargs["credentials"] = connection_config
+                pipeline = dlt.pipeline(**pipeline_kwargs)
 
                 load_info = pipeline.run(
                     data,
@@ -870,8 +1174,7 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         """Generate source configuration for reading from Iceberg Gold layer (FR-009).
 
         Creates configuration for reading from the Iceberg Gold layer
-        via the Polaris catalog. This is the inverse of
-        get_destination_config().
+        via the Polaris catalog for reverse-ETL reads.
 
         Args:
             catalog_config: Catalog connection configuration.

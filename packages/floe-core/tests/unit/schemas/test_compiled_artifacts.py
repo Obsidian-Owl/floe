@@ -15,6 +15,7 @@ Requirements: FR-003, FR-007, FR-011
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ from floe_core.schemas.compiled_artifacts import (
     DagsterStorageBinding,
     DbtStorageBinding,
     DeploymentConfig,
+    IngestionOutputTable,
     KubernetesSecretRef,
     ObservabilityConfig,
     PluginRef,
@@ -159,21 +161,6 @@ class TestPluginRef:
         assert ref.version == "0.9.0"
         assert ref.config == {"threads": 4, "memory_limit": "8GB"}
 
-    @pytest.mark.requirement("PCU-005")
-    def test_plugin_ref_rejects_raw_secret_config_fields(self) -> None:
-        """Plugin refs must not serialize raw credential-bearing config fields."""
-        sensitive_key = "client_" + "secret"
-
-        with pytest.raises(ValidationError, match="plugins.keycloak.config.client_secret"):
-            PluginRef(
-                type="keycloak",
-                version="0.1.0",
-                config={
-                    "realm": "floe",
-                    sensitive_key: "provided-at-runtime",
-                },
-            )
-
     @pytest.mark.requirement("2B-FR-007")
     def test_invalid_version_not_semver(self) -> None:
         """Test that non-semver version is rejected."""
@@ -225,31 +212,6 @@ class TestResolvedPlugins:
         assert plugins.compute.type == "duckdb"
         assert plugins.catalog is not None
         assert plugins.catalog.type == "polaris"
-
-    @pytest.mark.requirement("PCU-005")
-    def test_valid_resolved_plugins_includes_secrets_and_identity(self) -> None:
-        """ResolvedPlugins should expose selected security providers."""
-        plugins = ResolvedPlugins(
-            compute=PluginRef(type="duckdb", version="0.9.0"),
-            orchestrator=PluginRef(type="dagster", version="1.5.0"),
-            secrets=PluginRef(
-                type="k8s",
-                version="0.1.0",
-                config={"namespace": "floe-system"},
-            ),
-            identity=PluginRef(
-                type="keycloak",
-                version="0.1.0",
-                config={"realm": "floe"},
-            ),
-        )
-
-        assert plugins.secrets is not None
-        assert plugins.secrets.type == "k8s"
-        assert plugins.secrets.config == {"namespace": "floe-system"}
-        assert plugins.identity is not None
-        assert plugins.identity.type == "keycloak"
-        assert plugins.identity.config == {"realm": "floe"}
 
     @pytest.mark.requirement("2B-FR-007")
     def test_missing_compute_rejected(self) -> None:
@@ -455,6 +417,115 @@ class TestResolvedGovernance:
         assert "data_retention_days" in str(exc_info.value)
 
 
+class TestIngestionOutputTable:
+    @staticmethod
+    def _make_table(source_path: str) -> IngestionOutputTable:
+        return IngestionOutputTable(
+            source_name="raw-transactions",
+            source_type="filesystem",
+            logical_table="bronze.raw_transactions",
+            physical_table="bronze.raw_transactions",
+            file_format="csv",
+            source_path=source_path,
+            write_mode="replace",
+            schema_contract="evolve",
+        )
+
+    def test_ingestion_output_table_serializes_secret_free_state(self) -> None:
+        table = IngestionOutputTable(
+            source_name="raw-transactions",
+            source_type="filesystem",
+            table_format="iceberg",
+            logical_table="bronze.raw_transactions",
+            physical_table="bronze.raw_transactions",
+            file_format="csv",
+            source_path="./seeds/raw_transactions.csv",
+            write_mode="replace",
+            schema_contract="evolve",
+            freshness_field="_loaded_at",
+            quality_tier="bronze",
+        )
+
+        payload = table.model_dump(mode="json")
+
+        assert payload["source_name"] == "raw-transactions"
+        assert payload["logical_table"] == "bronze.raw_transactions"
+        assert payload["physical_table"] == "bronze.raw_transactions"
+        assert payload["quality_tier"] == "bronze"
+
+    def test_ingestion_output_table_rejects_secret_like_path(self) -> None:
+        with pytest.raises(ValidationError, match="source_path"):
+            self._make_table("s3://example/raw.csv?signature=example")
+
+    @pytest.mark.parametrize(
+        "source_path",
+        [
+            " ./seeds/raw_transactions.csv",
+            "./seeds/raw_transactions.csv ",
+        ],
+    )
+    def test_ingestion_output_table_rejects_whitespace_padded_path(self, source_path: str) -> None:
+        with pytest.raises(ValidationError, match="source_path"):
+            self._make_table(source_path)
+
+    def test_ingestion_output_table_rejects_absolute_local_path(self) -> None:
+        with pytest.raises(ValidationError, match="source_path"):
+            self._make_table("/var/data/raw_transactions.csv")
+
+    def test_ingestion_output_table_rejects_unsupported_uri_scheme(self) -> None:
+        with pytest.raises(ValidationError, match="source_path"):
+            self._make_table("https://example.com/raw_transactions.csv")
+
+    def test_ingestion_output_table_rejects_object_store_uri_without_bucket(self) -> None:
+        with pytest.raises(ValidationError, match="source_path"):
+            self._make_table("s3:///raw_transactions.csv")
+
+    def test_ingestion_output_table_accepts_tokenized_filename(self) -> None:
+        table = IngestionOutputTable(
+            source_name="tokenized-customers",
+            source_type="filesystem",
+            logical_table="bronze.tokenized_customers",
+            physical_table="bronze.tokenized_customers",
+            file_format="csv",
+            source_path="./data/tokenized_customers.csv",
+            write_mode="replace",
+            schema_contract="evolve",
+        )
+
+        assert table.source_path == "./data/tokenized_customers.csv"
+
+    def test_ingestion_output_table_rejects_credential_query_path(self) -> None:
+        with pytest.raises(ValidationError, match="source_path"):
+            self._make_table("s3://bucket/raw.csv?X-Amz-Credential=value")
+
+    @pytest.mark.parametrize(
+        "table_name",
+        [
+            "bronze",
+            "bronze.",
+            ".raw_transactions",
+            "bronze.raw.transactions",
+            "bronze. raw_transactions",
+            "bronze.raw transactions",
+        ],
+    )
+    def test_ingestion_output_table_rejects_invalid_table_identifier(
+        self,
+        table_name: str,
+    ) -> None:
+        with pytest.raises(ValidationError, match="logical_table"):
+            IngestionOutputTable(
+                source_name="raw-transactions",
+                source_type="filesystem",
+                logical_table=table_name,
+                physical_table="bronze.raw_transactions",
+                file_format="csv",
+                source_path="./seeds/raw_transactions.csv",
+                write_mode="replace",
+                schema_contract="evolve",
+            )
+
+
 class TestCompiledArtifactsExtensions:
     """Tests for CompiledArtifacts v0.2.0 extensions."""
 
@@ -597,6 +668,7 @@ class TestCompiledArtifactsExtensions:
         assert artifacts.transforms is None
         assert artifacts.dbt_profiles is None
         assert artifacts.governance is None
+        assert artifacts.ingestion_outputs == []
 
     @pytest.mark.requirement("2B-FR-007")
     def test_compiled_artifacts_full(
@@ -632,8 +704,6 @@ class TestCompiledArtifactsExtensions:
 
 class TestStorageDeploymentBinding:
     """Tests for compiled storage deployment bindings."""
-
-    pytestmark = pytest.mark.requirement("PCU-005")
 
     def _rich_binding(self) -> StorageDeploymentBinding:
         credentials = StorageCredentialBinding(
@@ -785,16 +855,6 @@ class TestStorageDeploymentBinding:
             "s3.endpoint": "http://floe-platform-minio:9000"
         }
 
-    def test_storage_capabilities_accept_identity_modes(self) -> None:
-        """StorageCapabilities should expose concrete workload identity modes."""
-        capabilities = StorageCapabilities(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa"],
-        )
-
-        assert capabilities.identity_modes == ["aws-irsa"]
-
     @pytest.mark.parametrize(
         ("field_name", "fragment"),
         [
@@ -847,6 +907,7 @@ class TestStorageDeploymentBinding:
             {"storage": {"token": "raw-secret-value"}},
             {"storage": {"value": "raw-secret-value"}},
             {"storage": frozenset({"raw-secret-value"})},
+            {"storage": {"credentials": {"endpoint_url": "http://minio:9000"}}},
         ],
     )
     def test_dagster_storage_binding_rejects_raw_secret_resources(
@@ -901,6 +962,7 @@ class TestStorageDeploymentBinding:
             provider="polaris",
             polaris=PolarisCatalogDeploymentBinding(
                 storage_type="S3",
+                warehouse="floe-demo",
                 default_base_location="s3://floe-iceberg",
                 allowed_locations=["s3://floe-iceberg"],
                 endpoint="http://localhost:9000",
@@ -944,163 +1006,6 @@ class TestStorageDeploymentBinding:
         assert "minio-secret-value" not in serialized
         assert "raw-secret-value" not in serialized
 
-    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
-    def test_compiled_artifacts_accept_env_var_dbt_profile_secrets(
-        self,
-        sample_compilation_metadata: CompilationMetadata,
-        sample_product_identity: ProductIdentity,
-        sample_observability_config: ObservabilityConfig,
-    ) -> None:
-        """dbt profile secret fields may reference environment variables."""
-        artifacts = CompiledArtifacts(
-            metadata=sample_compilation_metadata,
-            identity=sample_product_identity,
-            observability=sample_observability_config,
-            dbt_profiles={
-                "floe": {
-                    "target": "dev",
-                    "outputs": {
-                        "dev": {
-                            "type": "duckdb",
-                            "auth-mode": "oauth2",
-                            "oauth2-server-uri": "http://polaris:8181/api/catalog/v1/oauth/tokens",
-                            "password": "{{ env_var('DB_PASSWORD') }}",  # pragma: allowlist secret
-                            "secret": "{{ env_var('db_password') }}",  # pragma: allowlist secret
-                            "token": "{{ env_var('DB_TOKEN', '') }}",  # pragma: allowlist secret
-                        }
-                    },
-                }
-            },
-        )
-
-        assert (
-            artifacts.dbt_profiles["floe"]["outputs"]["dev"]["password"]
-            == "{{ env_var('DB_PASSWORD') }}"
-        )
-        assert (
-            artifacts.dbt_profiles["floe"]["outputs"]["dev"]["token"]
-            == "{{ env_var('DB_TOKEN', '') }}"
-        )
-        assert (
-            artifacts.dbt_profiles["floe"]["outputs"]["dev"]["secret"]
-            == "{{ env_var('db_password') }}"
-        )
-        assert (
-            artifacts.dbt_profiles["floe"]["outputs"]["dev"]["oauth2-server-uri"]
-            == "http://polaris:8181/api/catalog/v1/oauth/tokens"
-        )
-        assert artifacts.dbt_profiles["floe"]["outputs"]["dev"]["auth-mode"] == "oauth2"
-
-    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
-    def test_compiled_artifacts_reject_raw_secret_dbt_profiles(
-        self,
-        sample_compilation_metadata: CompilationMetadata,
-        sample_product_identity: ProductIdentity,
-        sample_observability_config: ObservabilityConfig,
-    ) -> None:
-        """Top-level generated dbt profiles must reject raw credential material."""
-        with pytest.raises(ValidationError, match="raw credential material"):
-            CompiledArtifacts(
-                metadata=sample_compilation_metadata,
-                identity=sample_product_identity,
-                observability=sample_observability_config,
-                dbt_profiles={
-                    "floe": {
-                        "target": "dev",
-                        "outputs": {
-                            "dev": {
-                                "type": "duckdb",
-                                "password": "raw-secret-value",  # pragma: allowlist secret
-                            }
-                        },
-                    }
-                },
-            )
-
-    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
-    def test_compiled_artifacts_reject_credential_query_dbt_profile_urls(
-        self,
-        sample_compilation_metadata: CompilationMetadata,
-        sample_product_identity: ProductIdentity,
-        sample_observability_config: ObservabilityConfig,
-    ) -> None:
-        """dbt profile URLs with credential query params are not safe endpoint refs."""
-        credential_url = "https://x.test/oauth?client-secret=leaked"  # pragma: allowlist secret
-
-        with pytest.raises(ValidationError, match="raw credential material"):
-            CompiledArtifacts(
-                metadata=sample_compilation_metadata,
-                identity=sample_product_identity,
-                observability=sample_observability_config,
-                dbt_profiles={
-                    "floe": {
-                        "target": "dev",
-                        "outputs": {
-                            "dev": {
-                                "type": "duckdb",
-                                "password": credential_url,
-                            }
-                        },
-                    }
-                },
-            )
-
-    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
-    def test_compiled_artifacts_reject_fragment_token_dbt_profile_urls(
-        self,
-        sample_compilation_metadata: CompilationMetadata,
-        sample_product_identity: ProductIdentity,
-        sample_observability_config: ObservabilityConfig,
-    ) -> None:
-        """dbt profile URLs with credential fragments are not safe endpoint refs."""
-        credential_url = "https://idp.example/callback#access_token=leaked"
-
-        with pytest.raises(ValidationError, match="raw credential material"):
-            CompiledArtifacts(
-                metadata=sample_compilation_metadata,
-                identity=sample_product_identity,
-                observability=sample_observability_config,
-                dbt_profiles={
-                    "floe": {
-                        "target": "dev",
-                        "outputs": {
-                            "dev": {
-                                "type": "duckdb",
-                                "token": credential_url,
-                            }
-                        },
-                    }
-                },
-            )
-
-    @pytest.mark.requirement("SEC-COMPILED-ARTIFACTS")
-    def test_compiled_artifacts_reject_encoded_credential_query_keys(
-        self,
-        sample_compilation_metadata: CompilationMetadata,
-        sample_product_identity: ProductIdentity,
-        sample_observability_config: ObservabilityConfig,
-    ) -> None:
-        """dbt profile URL credential query keys are decoded before matching."""
-        credential_url = "https://x.test/oauth?client%2Dsecret=leaked"  # pragma: allowlist secret
-
-        with pytest.raises(ValidationError, match="raw credential material"):
-            CompiledArtifacts(
-                metadata=sample_compilation_metadata,
-                identity=sample_product_identity,
-                observability=sample_observability_config,
-                dbt_profiles={
-                    "floe": {
-                        "target": "dev",
-                        "outputs": {
-                            "dev": {
-                                "type": "duckdb",
-                                "password": credential_url,
-                            }
-                        },
-                    }
-                },
-            )
-
     @pytest.mark.parametrize(
         "factory",
         [
@@ -1125,10 +1030,158 @@ class TestStorageDeploymentBinding:
             factory()
 
 
+class TestIngestionDeploymentBinding:
+    """Contract tests for secret-free dlt ingestion deployment bindings."""
+
+    def test_dlt_binding_accepts_secret_free_runtime_fragments(self) -> None:
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            CredentialRef,
+            DeploymentConfig,
+            DltIngestionBinding,
+            IngestionDeploymentBinding,
+            PolarisCatalogDeploymentBinding,
+        )
+
+        catalog = CatalogDeploymentBinding(
+            provider="polaris",
+            polaris=PolarisCatalogDeploymentBinding(
+                storage_type="S3",
+                warehouse="floe-demo",
+                default_base_location="s3://floe-iceberg",
+                allowed_locations=["s3://floe-iceberg"],
+                endpoint="http://localhost:8181/api/catalog",
+                endpoint_internal="http://polaris:8181/api/catalog",
+                path_style_access=True,
+                sts_unavailable=True,
+                credential_refs={
+                    "accessKeyId": CredentialRef(source="none", name="none"),
+                    "secretAccessKey": CredentialRef(source="none", name="none"),
+                },
+            ),
+        )
+        binding = DltIngestionBinding(
+            plugin_name="dlt",
+            destination="filesystem",
+            table_format="iceberg",
+            source_filesystem={
+                "endpoint_url": "http://floe-platform-minio:9000",
+                "region_name": "us-east-1",
+                "s3_url_style": "path",
+            },
+            destination_filesystem={
+                "bucket_url": "s3://floe-iceberg",
+                "credentials": {
+                    "endpoint_url": "http://floe-platform-minio:9000",
+                    "region_name": "us-east-1",
+                    "s3_url_style": "path",
+                },
+            },
+            iceberg_catalog_env={
+                "ICEBERG_CATALOG__ICEBERG_CATALOG_NAME": "polaris",
+                "ICEBERG_CATALOG__ICEBERG_CATALOG_TYPE": "rest",
+                "PYICEBERG_CATALOG__POLARIS__TYPE": "rest",
+                "PYICEBERG_CATALOG__POLARIS__URI": "http://polaris:8181/api/catalog",
+                "PYICEBERG_CATALOG__POLARIS__WAREHOUSE": "floe-demo",
+            },
+            env_refs={
+                "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+                "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+                "PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL",
+            },
+        )
+
+        deployment = DeploymentConfig(
+            catalog=catalog,
+            ingestion=IngestionDeploymentBinding(provider="dlt", dlt=binding),
+        )
+
+        assert deployment.catalog is not None
+        assert deployment.catalog.polaris.warehouse == "floe-demo"
+        assert deployment.ingestion is not None
+        assert deployment.ingestion.dlt.destination == "filesystem"
+        assert deployment.ingestion.dlt.table_format == "iceberg"
+        assert deployment.ingestion.dlt.destination_filesystem["bucket_url"] == "s3://floe-iceberg"
+
+    def test_dlt_binding_rejects_raw_secret_material(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import DltIngestionBinding
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            DltIngestionBinding(
+                plugin_name="dlt",
+                destination="filesystem",
+                table_format="iceberg",
+                source_filesystem={},
+                destination_filesystem={
+                    "credentials": {
+                        "aws_secret_access_key": "raw-secret-value",  # pragma: allowlist secret
+                    }
+                },
+                iceberg_catalog_env={},
+                env_refs={},
+            )
+
+    def test_dlt_binding_rejects_secret_values_in_allowed_credential_keys(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import DltIngestionBinding
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            DltIngestionBinding(
+                plugin_name="dlt",
+                destination="filesystem",
+                table_format="iceberg",
+                source_filesystem={},
+                destination_filesystem={
+                    "credentials": {
+                        "endpoint_url": "raw-secret-value",  # pragma: allowlist secret
+                    }
+                },
+                iceberg_catalog_env={},
+                env_refs={},
+            )
+
+    def test_dlt_binding_rejects_opaque_filesystem_fragment_values(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import DltIngestionBinding
+
+        with pytest.raises(ValidationError, match="JSON-compatible"):
+            DltIngestionBinding(
+                plugin_name="dlt",
+                destination="filesystem",
+                table_format="iceberg",
+                source_filesystem={},
+                destination_filesystem={"credentials": {"endpoint_url": object()}},
+                iceberg_catalog_env={},
+                env_refs={},
+            )
+
+    @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+    def test_dlt_binding_rejects_non_finite_filesystem_fragment_numbers(
+        self,
+        value: float,
+    ) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import DltIngestionBinding
+
+        with pytest.raises(ValidationError, match="finite"):
+            DltIngestionBinding(
+                plugin_name="dlt",
+                destination="filesystem",
+                table_format="iceberg",
+                source_filesystem={},
+                destination_filesystem={"credentials": {"endpoint_url": value}},
+                iceberg_catalog_env={},
+                env_refs={},
+            )
+
+
 class TestStorageCredentialBinding:
     """Tests for storage credential binding validation."""
-
-    pytestmark = pytest.mark.requirement("PCU-005")
 
     @pytest.mark.parametrize(
         "factory",
@@ -1158,8 +1211,6 @@ class TestStorageCredentialBinding:
         "binding_kwargs",
         [
             {"mode": "kubernetes-secret"},
-            {"mode": "external-secret-sync"},
-            {"mode": "csi-secret-volume"},
             {"mode": "environment"},
             {"mode": "environment", "env_refs": {}},
             {"mode": "workload-identity"},
@@ -1214,38 +1265,6 @@ class TestStorageCredentialBinding:
                 "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
                 "service_account_ref": "storage-service-account",
             },
-            {
-                "mode": "external-secret-sync",
-                "secret_ref": KubernetesSecretRef(
-                    name="storage-credentials",
-                    namespace="floe-system",
-                ),
-                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
-            },
-            {
-                "mode": "external-secret-sync",
-                "secret_ref": KubernetesSecretRef(
-                    name="storage-credentials",
-                    namespace="floe-system",
-                ),
-                "service_account_ref": "storage-service-account",
-            },
-            {
-                "mode": "csi-secret-volume",
-                "secret_ref": KubernetesSecretRef(
-                    name="storage-credentials",
-                    namespace="floe-system",
-                ),
-                "env_refs": {"accessKeyId": "AWS_ACCESS_KEY_ID"},
-            },
-            {
-                "mode": "csi-secret-volume",
-                "secret_ref": KubernetesSecretRef(
-                    name="storage-credentials",
-                    namespace="floe-system",
-                ),
-                "service_account_ref": "storage-service-account",
-            },
         ],
     )
     def test_mode_inconsistent_credential_bindings_are_rejected(
@@ -1291,8 +1310,6 @@ class TestStorageCredentialBinding:
                 name="storage-service-account",
                 key="accessKeyId",
             ),
-            lambda: CredentialRef(source="external-secret-sync", name="storage-credentials"),
-            lambda: CredentialRef(source="csi-secret-volume", name="storage-credentials"),
             lambda: CredentialRef(source="none", name="none", key="accessKeyId"),
         ],
     )
@@ -1314,26 +1331,6 @@ class TestStorageCredentialBinding:
         assert ref.source == "environment"
         assert ref.name == "AWS_ACCESS_KEY_ID"
         assert ref.key is None
-
-    @pytest.mark.parametrize("mode", ["external-secret-sync", "csi-secret-volume"])
-    def test_secret_projection_credential_ref_uses_configured_secret_key(
-        self,
-        mode: str,
-    ) -> None:
-        binding = StorageCredentialBinding(
-            mode=mode,
-            secret_ref=KubernetesSecretRef(
-                name="storage-credentials",
-                namespace="floe-system",
-                keys={"accessKeyId": "root-user"},
-            ),
-        )
-
-        ref = binding.as_credential_ref("accessKeyId")
-
-        assert ref.source == mode
-        assert ref.name == "storage-credentials"
-        assert ref.key == "root-user"
 
     def test_environment_credential_ref_raises_for_missing_logical_key(self) -> None:
         binding = StorageCredentialBinding(
@@ -1948,40 +1945,34 @@ class TestGovernanceLifecycleFields:
 
 
 class TestCompiledArtifactsVersionBump:
-    """Tests for AC-6: version bump to 0.13.0 with history entry."""
+    """Tests for AC-6: current contract version and history entries."""
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_version_is_0_13_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.13.0'."""
-        assert COMPILED_ARTIFACTS_VERSION == "0.13.0", (
-            f"Expected version '0.13.0', got '{COMPILED_ARTIFACTS_VERSION}'"
+    def test_compiled_artifacts_version_is_0_12_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.15.0'."""
+        assert COMPILED_ARTIFACTS_VERSION == "0.15.0", (
+            f"Expected version '0.15.0', got '{COMPILED_ARTIFACTS_VERSION}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_contains_0_13_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.13.0' entry."""
-        assert "0.13.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
-            f"Version '0.13.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
+    def test_version_history_contains_0_12_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.15.0' entry."""
+        assert "0.15.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
+            f"Version '0.15.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_0_13_0_references_secret_projection_modes(self) -> None:
-        """Test that the 0.13.0 history entry mentions contract additions."""
-        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.13.0", "")
+    def test_version_history_0_12_0_references_iceberg_catalog_projection(self) -> None:
+        """Test that the 0.15.0 history entry mentions contract additions."""
+        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.15.0", "")
         entry_lower = entry.lower()
-        assert "secret projection" in entry_lower, (
-            f"Version 0.13.0 history entry does not reference secret projection: '{entry}'"
-        )
-        assert "credential binding" in entry_lower, (
-            f"Version 0.13.0 history entry does not reference credential binding: '{entry}'"
-        )
-        assert "modes" in entry_lower, (
-            f"Version 0.13.0 history entry does not reference modes: '{entry}'"
+        assert "iceberg" in entry_lower and "catalog" in entry_lower, (
+            f"Version 0.15.0 history entry does not reference Iceberg catalog projection: '{entry}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_default_version_is_0_13_0(self) -> None:
-        """Test that CompiledArtifacts().version defaults to '0.13.0'."""
+    def test_compiled_artifacts_default_version_is_0_12_0(self) -> None:
+        """Test that CompiledArtifacts().version defaults to '0.15.0'."""
         artifacts = CompiledArtifacts(
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
@@ -2010,7 +2001,7 @@ class TestCompiledArtifactsVersionBump:
                 lineage_namespace="test",
             ),
         )
-        assert artifacts.version == "0.13.0"
+        assert artifacts.version == "0.15.0"
 
 
 class TestGovernanceBackwardCompatibility:

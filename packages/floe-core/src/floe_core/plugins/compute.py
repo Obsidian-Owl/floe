@@ -52,6 +52,8 @@ __all__ = [
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
+    from floe_core.schemas.compiled_artifacts import DeploymentConfig
+
 
 class ComputePlugin(PluginMetadata):
     """Abstract base class for compute engine plugins.
@@ -267,6 +269,27 @@ class ComputePlugin(PluginMetadata):
             []
         """
         return []
+
+    def augment_dbt_profile(
+        self,
+        profile: dict[str, Any],
+        deployment: DeploymentConfig | None = None,
+    ) -> dict[str, Any]:
+        """Augment a generated dbt profile with compiled deployment projections.
+
+        Compute plugins own adapter-specific profile shape. Storage and catalog
+        plugins expose neutral deployment projections in ``DeploymentConfig``;
+        compute plugins may translate those projections into adapter-specific
+        profile fragments such as DuckDB ``attach`` entries.
+
+        Args:
+            profile: Adapter profile output from ``generate_dbt_profile``.
+            deployment: Optional compiled deployment bindings.
+
+        Returns:
+            The original or augmented profile dictionary.
+        """
+        return profile
 
     def get_catalog_attachment_sql(
         self,

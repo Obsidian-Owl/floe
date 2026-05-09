@@ -47,9 +47,6 @@ class IngestionPlugin(PluginMetadata):
 
     @abstractmethod
     def run(self, pipeline: Any, **kwargs: Any) -> IngestionResult: ...
-
-    @abstractmethod
-    def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]: ...
 ```
 
 **PluginMetadata** requires: `name`, `version`, `floe_api_version` properties, optional `startup()`, `shutdown()`, `health_check()`, `get_config_schema()`.
@@ -70,7 +67,7 @@ dlt = "floe_ingestion_dlt:DltIngestionPlugin"
 ```python
 pipeline = dlt.pipeline(
     pipeline_name="my_pipeline",     # Unique identifier, dlt state isolation
-    destination="iceberg",           # Iceberg destination
+    destination="filesystem",        # Runtime-bound filesystem destination
     dataset_name="my_dataset",       # Maps to Iceberg namespace
 )
 load_info = pipeline.run(source_data, write_disposition="append")
@@ -78,14 +75,10 @@ load_info = pipeline.run(source_data, write_disposition="append")
 
 #### Iceberg Destination Configuration
 ```python
-# For Polaris REST catalog:
-destination_config = {
-    "catalog_type": "rest",
-    "credentials": {
-        "uri": "http://polaris:8181/api/catalog",
-        "warehouse": "floe_warehouse",
-    },
-}
+# Superseded historical sketch: ingestion APIs must not expose destination
+# configuration. Floe composes storage/catalog deployment binding from
+# platform configuration; dlt consumes a filesystem destination with Iceberg
+# table-format catalog environment at runtime.
 ```
 
 #### Schema Contracts
@@ -157,7 +150,7 @@ resources.update(semantic_resources)
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `dlt[iceberg]` | `>=1.20.0,<2.0.0` | Core framework + Iceberg destination |
+| `dlt[iceberg]` | `>=1.20.0,<2.0.0` | Core framework + filesystem destination and Iceberg table-format support |
 | `floe-core` | `>=0.1.0` | ABC, PluginMetadata, telemetry |
 | `pydantic` | `>=2.0,<3.0` | Config validation |
 | `structlog` | `>=24.0,<26.0` | Structured logging |

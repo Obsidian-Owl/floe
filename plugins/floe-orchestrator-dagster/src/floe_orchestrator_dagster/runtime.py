@@ -11,7 +11,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import yaml
-from dagster import AssetKey, Definitions, ResourceDefinition
+from dagster import AssetKey, Definitions, ResourceDefinition, define_asset_job
 from dagster_dbt import DbtCliResource, dbt_assets
 from floe_core.compilation.naming import dbt_project_name
 from floe_core.lineage.facets import TraceCorrelationFacetBuilder
@@ -30,11 +30,6 @@ _PROJECT_DIR_REQUIRED_MESSAGE = (
     "Dagster runtime definitions require project_dir so dbt manifest, profiles.yml, "
     "and compiled_artifacts.json are resolved from one product directory; use the "
     "generated definitions.py loader/shim path for runtime definitions."
-)
-_INGESTION_RUNTIME_DISABLED_MESSAGE = (
-    "Dagster ingestion runtime is not enabled because compiled JSON config cannot yet "
-    "construct executable dlt source objects; implement a source-construction layer "
-    "before enabling ingestion assets."
 )
 logger = logging.getLogger(__name__)
 
@@ -55,13 +50,24 @@ def _has_ingestion_workloads(plugins: Any | None) -> bool:
         return True
     if not config:
         return False
-    keys = set(config)
-    if keys != {"sources"}:
+
+    sources = config.get("sources")
+    if "sources" in config and not isinstance(sources, list):
         return True
-    sources = config["sources"]
-    if not isinstance(sources, list):
+    if isinstance(sources, list) and sources:
         return True
-    return len(sources) > 0
+
+    flat_workload_keys = {
+        "source_type",
+        "source_config",
+        "destination_table",
+        "write_mode",
+        "schema_contract",
+        "cursor_field",
+        "primary_key",
+        "name",
+    }
+    return bool(flat_workload_keys.intersection(config))
 
 
 def _lineage_namespace(artifacts: CompiledArtifacts) -> str | None:
@@ -216,8 +222,6 @@ def build_product_definitions(
     policy.validate_required_plugins(artifacts.plugins)
 
     plugins = artifacts.plugins
-    if _has_ingestion_workloads(plugins):
-        raise ValueError(_INGESTION_RUNTIME_DISABLED_MESSAGE)
 
     manifest_path = project_dir / "target" / "manifest.json"
 
@@ -338,6 +342,26 @@ def build_product_definitions(
     }
     assets: list[Any] = [_dbt_assets_fn]
 
+    if _has_ingestion_workloads(plugins):
+        from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
+        from floe_orchestrator_dagster.resources.ingestion import create_ingestion_resources
+
+        ingestion_runtime_binding = None
+        deployment = getattr(artifacts, "deployment", None)
+        ingestion_deployment = getattr(deployment, "ingestion", None) if deployment else None
+        dlt_binding = getattr(ingestion_deployment, "dlt", None)
+        if dlt_binding is not None:
+            ingestion_runtime_binding = dlt_binding.model_dump(mode="python")
+
+        resources.update(create_ingestion_resources(plugins.ingestion))
+        assets.extend(
+            create_ingestion_assets(
+                plugins.ingestion,
+                project_dir=project_dir,
+                runtime_binding=ingestion_runtime_binding,
+            )
+        )
+
     if plugins and plugins.semantic:
         semantic_resources = _create_semantic_resources(plugins)
         resources.update(semantic_resources)
@@ -375,5 +399,6 @@ def build_product_definitions(
 
     return Definitions(
         assets=assets,
+        jobs=[define_asset_job(_safe_product_name(product_name))],
         resources=resources,
     )

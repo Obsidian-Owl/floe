@@ -28,7 +28,10 @@ See Also:
 
 from __future__ import annotations
 
+import re
+from collections import Counter
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -64,6 +67,23 @@ FORBIDDEN_ENVIRONMENT_FIELDS = frozenset(
     }
 )
 """Fields that must not appear in FloeSpec (environment-agnostic, C004)."""
+
+CREDENTIAL_PATH_PARTS = frozenset(
+    {
+        "credential",
+        "credentials",
+        "access_key",
+        "secret_key",
+        "token",
+        "api_key",
+        "password",
+        "signature",
+        "awsaccesskeyid",
+        "aws_access_key_id",
+        "aws_secret_access_key",
+    }
+)
+"""Credential-like terms forbidden in ingestion source URI query and fragment parts."""
 
 
 class FloeMetadata(BaseModel):
@@ -593,6 +613,162 @@ class DestinationConfig(BaseModel):
         return v
 
 
+class IngestionSourceSpec(BaseModel):
+    """Declarative product-level ingestion source in floe.yaml.
+
+    Defines a data-engineer-owned ingestion source without embedding
+    environment-specific connection details. Runtime credentials and
+    endpoints are resolved from platform configuration in later stages.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    name: Annotated[str, Field(min_length=1, max_length=100)]
+    source_type: Annotated[
+        Literal["filesystem"],
+        Field(alias="sourceType", description="Declarative source type"),
+    ]
+    format: Literal["csv", "jsonl", "parquet"]
+    path: Annotated[str, Field(min_length=1)]
+    destination_table: Annotated[
+        str,
+        Field(alias="destinationTable", min_length=1),
+    ]
+    write_mode: Annotated[
+        Literal["append", "replace", "merge"],
+        Field(default="append", alias="writeMode"),
+    ]
+    schema_contract: Annotated[
+        Literal["evolve", "freeze"],
+        Field(default="evolve", alias="schemaContract"),
+    ]
+    cursor_field: Annotated[str | None, Field(default=None, alias="cursorField")]
+    primary_key: Annotated[str | list[str] | None, Field(default=None, alias="primaryKey")]
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """Validate source name uses portable identifier characters."""
+        if re.fullmatch(r"[A-Za-z0-9_-]+", v) is None:
+            msg = "name may contain only alphanumeric characters, underscores, and hyphens"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("destination_table")
+    @classmethod
+    def validate_destination_table(cls, v: str) -> str:
+        """Validate destination table is exactly namespace.table."""
+        parts = v.split(".")
+        if len(parts) != 2 or any(part.strip() != part or not part for part in parts):
+            msg = "destinationTable must be exactly namespace.table with non-empty parts"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, v: str) -> str:
+        """Validate path is relative local storage or an approved object-store URI."""
+        path = v.strip()
+        if not path:
+            msg = "path must not be empty"
+            raise ValueError(msg)
+        if path != v:
+            msg = "path must not contain leading or trailing whitespace"
+            raise ValueError(msg)
+
+        parsed = urlsplit(v)
+        if _contains_credential_path_part(parsed.query) or _contains_credential_path_part(
+            parsed.fragment
+        ):
+            msg = "path must not contain credential-like query or fragment content"
+            raise ValueError(msg)
+
+        if parsed.scheme:
+            if parsed.scheme not in {"s3", "gs", "az"}:
+                msg = "path URI scheme must be one of s3://, gs://, or az://"
+                raise ValueError(msg)
+            if parsed.username or parsed.password or "@" in parsed.netloc:
+                msg = "path must not contain embedded credentials"
+                raise ValueError(msg)
+            if not parsed.netloc:
+                msg = "object-store path must include a bucket or container"
+                raise ValueError(msg)
+            return v
+
+        if v.startswith("/"):
+            msg = "local path must be relative"
+            raise ValueError(msg)
+        if "://" in v:
+            msg = "path URI scheme must be one of s3://, gs://, or az://"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("primary_key")
+    @classmethod
+    def validate_primary_key(cls, v: str | list[str] | None) -> str | list[str] | None:
+        """Validate primary key fields are non-empty when provided."""
+        if v is None:
+            return v
+        if isinstance(v, str):
+            if not v.strip():
+                msg = "primaryKey must contain a non-empty field name"
+                raise ValueError(msg)
+            return v
+        if not v:
+            msg = "primaryKey list must contain at least one field name"
+            raise ValueError(msg)
+        if any(not field.strip() for field in v):
+            msg = "primaryKey list members must be non-empty field names"
+            raise ValueError(msg)
+        return v
+
+    @model_validator(mode="after")
+    def validate_merge_primary_key(self) -> IngestionSourceSpec:
+        """Require a primary key for merge writes."""
+        if self.write_mode == "merge" and not self.primary_key:
+            msg = "primaryKey is required when writeMode is merge"
+            raise ValueError(msg)
+        return self
+
+
+class ProductIngestionSpec(BaseModel):
+    """Product-level ingestion configuration for floe.yaml."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    sources: Annotated[
+        list[IngestionSourceSpec],
+        Field(min_length=1, description="Ingestion sources for this data product"),
+    ]
+
+    @field_validator("sources")
+    @classmethod
+    def validate_unique_source_names(
+        cls, v: list[IngestionSourceSpec]
+    ) -> list[IngestionSourceSpec]:
+        """Validate ingestion sources do not collide at source or table level."""
+        names = [source.name for source in v]
+        duplicate_names = {name for name, count in Counter(names).items() if count > 1}
+        if duplicate_names:
+            msg = (
+                "Duplicate ingestion source names are not allowed: "
+                f"{', '.join(sorted(duplicate_names))}"
+            )
+            raise ValueError(msg)
+
+        destination_tables = [source.destination_table for source in v]
+        duplicate_tables = {
+            table for table, count in Counter(destination_tables).items() if count > 1
+        }
+        if duplicate_tables:
+            msg = (
+                "Duplicate ingestion destination tables are not allowed: "
+                f"{', '.join(sorted(duplicate_tables))}"
+            )
+            raise ValueError(msg)
+        return v
+
+
 class PlatformRef(BaseModel):
     """Reference to a platform manifest.
 
@@ -734,6 +910,10 @@ class FloeSpec(BaseModel):
         default=None,
         description="Optional reverse ETL destinations (Epic 4G)",
     )
+    ingestion: ProductIngestionSpec | None = Field(
+        default=None,
+        description="Optional ingestion sources",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -857,9 +1037,24 @@ def _find_forbidden_fields(
     return forbidden_found
 
 
+def _contains_credential_path_part(value: str) -> bool:
+    """Return True when a URI query or fragment contains credential-like terms."""
+    if not value:
+        return False
+
+    lowered = value.lower()
+    normalized = re.sub(r"[^a-z0-9]+", "", lowered)
+    return any(
+        term in lowered or re.sub(r"[^a-z0-9]+", "", term) in normalized
+        for term in CREDENTIAL_PATH_PARTS
+    )
+
+
 __all__ = [
     "DestinationConfig",
     "FloeMetadata",
+    "IngestionSourceSpec",
+    "ProductIngestionSpec",
     "TransformSpec",
     "ScheduleSpec",
     "PlatformRef",

@@ -157,40 +157,8 @@ def test_resolver_rejects_malformed_capability_payload() -> None:
         )
 
 
-def test_capability_set_accepts_security_composition_modes() -> None:
-    """CapabilitySet should carry secret projection and identity capabilities."""
-    capabilities = CapabilitySet(
-        credential_modes=["kubernetes-secret", "workload-identity"],
-        secret_projection_modes=["kubernetes-secret", "external-secret-sync"],
-        identity_modes=["aws-irsa", "oidc-federation"],
-        providers=["kubernetes", "aws", "oidc"],
-    )
-
-    assert capabilities.secret_projection_modes == [
-        "kubernetes-secret",
-        "external-secret-sync",
-    ]
-    assert capabilities.identity_modes == ["aws-irsa", "oidc-federation"]
-    assert capabilities.providers == ["kubernetes", "aws", "oidc"]
-
-
-def test_requirement_set_accepts_security_composition_modes() -> None:
-    """RequirementSet should describe required secret and identity modes."""
-    requirements = RequirementSet(
-        credential_modes=["external-secret-sync"],
-        secret_projection_modes=["external-secret-sync"],
-        identity_modes=["gcp-workload-identity"],
-        providers=["gcp"],
-    )
-
-    assert requirements.credential_modes == ["external-secret-sync"]
-    assert requirements.secret_projection_modes == ["external-secret-sync"]
-    assert requirements.identity_modes == ["gcp-workload-identity"]
-    assert requirements.providers == ["gcp"]
-
-
-def test_resolver_accepts_kubernetes_secret_with_implicit_baseline() -> None:
-    """Existing MinIO and Polaris path must stay valid without secrets plugin."""
+def test_resolver_rejects_ingestion_unsupported_catalog_provider() -> None:
+    """Resolver must reject ingestion catalog provider needs the catalog lacks."""
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
@@ -198,27 +166,37 @@ def test_resolver_accepts_kubernetes_secret_with_implicit_baseline() -> None:
         capabilities=CapabilitySet(
             protocols=["s3-compatible"],
             credential_modes=["kubernetes-secret"],
-            secret_projection_modes=["kubernetes-secret"],
         ),
     )
-    catalog = PluginRequirements(
+    catalog = PluginCapabilities(
         plugin_type="catalog",
-        plugin_name="polaris",
-        requirements=RequirementSet(
-            protocols=["s3-compatible"],
-            credential_modes=["kubernetes-secret"],
-            secret_projection_modes=["kubernetes-secret"],
-        ),
+        plugin_name="glue",
+        capabilities=CapabilitySet(catalog_providers=["glue"]),
+    )
+    ingestion = PluginRequirements(
+        plugin_type="ingestion",
+        plugin_name="dlt",
+        requirements=RequirementSet(catalog_providers=["iceberg-rest"]),
     )
 
-    result = resolver.validate([storage], [catalog])
+    result = resolver.validate([storage, catalog], [ingestion])
 
-    assert result.valid is True
-    assert result.issues == []
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_CATALOG_UNSUPPORTED",
+            message=(
+                "ingestion dlt requires one of catalog providers ['iceberg-rest']; "
+                "catalog glue provides ['glue']"
+            ),
+            plugins=["catalog:glue", "ingestion:dlt"],
+        )
+    ]
 
 
-def test_resolver_rejects_provider_requirement_without_baseline_secrets_plugin() -> None:
-    """Provider requirements force an explicit secrets plugin even on baseline modes."""
+def test_resolver_rejects_ingestion_unsupported_table_format() -> None:
+    """Resolver must reject ingestion table formats the catalog lacks."""
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
@@ -226,602 +204,40 @@ def test_resolver_rejects_provider_requirement_without_baseline_secrets_plugin()
         capabilities=CapabilitySet(
             protocols=["s3-compatible"],
             credential_modes=["kubernetes-secret"],
-            secret_projection_modes=["kubernetes-secret"],
         ),
     )
-    catalog = PluginRequirements(
+    catalog = PluginCapabilities(
         plugin_type="catalog",
         plugin_name="polaris",
-        requirements=RequirementSet(
-            protocols=["s3-compatible"],
-            credential_modes=["kubernetes-secret"],
-            secret_projection_modes=["kubernetes-secret"],
-            providers=["infisical"],
+        capabilities=CapabilitySet(
+            catalog_providers=["iceberg-rest"],
+            table_formats=["delta"],
         ),
     )
+    ingestion = PluginRequirements(
+        plugin_type="ingestion",
+        plugin_name="dlt",
+        requirements=RequirementSet(table_formats=["iceberg"]),
+    )
 
-    result = resolver.validate([storage], [catalog])
+    result = resolver.validate([storage, catalog], [ingestion])
 
     assert result.valid is False
     assert result.issues == [
         CompositionIssue(
             severity="error",
-            code="COMPOSITION_SECRET_PROVIDER_MISSING",
+            code="COMPOSITION_TABLE_FORMAT_UNSUPPORTED",
             message=(
-                "catalog polaris requires one of secret providers ['infisical'] "
-                "for secret projection mode kubernetes-secret but no secrets plugin "
-                "was selected"
+                "ingestion dlt requires one of table formats ['iceberg']; "
+                "catalog polaris provides ['delta']"
             ),
-            plugins=["catalog:polaris"],
+            plugins=["catalog:polaris", "ingestion:dlt"],
         )
     ]
 
 
-def test_resolver_rejects_external_secret_sync_without_secrets_plugin() -> None:
-    """External secret sync requires an explicit secrets provider."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="aws-object-storage",
-        capabilities=CapabilitySet(
-            protocols=["s3"],
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="glue",
-        requirements=RequirementSet(
-            protocols=["s3"],
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-        ),
-    )
-
-    result = resolver.validate([storage], [catalog])
-
-    assert result.valid is False
-    assert result.issues == [
-        CompositionIssue(
-            severity="error",
-            code="COMPOSITION_SECRET_PROVIDER_MISSING",
-            message=(
-                "catalog glue requires secret projection mode external-secret-sync "
-                "but no secrets plugin was selected"
-            ),
-            plugins=["catalog:glue"],
-        )
-    ]
-
-
-def test_resolver_accepts_external_secret_sync_with_matching_secrets_plugin() -> None:
-    """External secret sync succeeds when selected secrets plugin supports it."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="aws-object-storage",
-        capabilities=CapabilitySet(
-            protocols=["s3"],
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="glue",
-        requirements=RequirementSet(
-            protocols=["s3"],
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-        ),
-    )
-    secrets = PluginCapabilities(
-        plugin_type="secrets",
-        plugin_name="infisical",
-        capabilities=CapabilitySet(
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-            providers=["infisical"],
-        ),
-    )
-
-    result = resolver.validate([storage, secrets], [catalog])
-
-    assert result.valid is True
-    assert result.issues == []
-
-
-def test_resolver_rejects_unsupported_secret_provider() -> None:
-    """Secret provider labels must match when requirements name providers."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="aws-object-storage",
-        capabilities=CapabilitySet(
-            protocols=["s3"],
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="glue",
-        requirements=RequirementSet(
-            protocols=["s3"],
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-            providers=["infisical"],
-        ),
-    )
-    secrets = PluginCapabilities(
-        plugin_type="secrets",
-        plugin_name="vault",
-        capabilities=CapabilitySet(
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-            providers=["vault"],
-        ),
-    )
-
-    result = resolver.validate([storage, secrets], [catalog])
-
-    assert result.valid is False
-    assert result.issues == [
-        CompositionIssue(
-            severity="error",
-            code="COMPOSITION_SECRET_PROVIDER_UNSUPPORTED",
-            message=(
-                "catalog glue requires one of secret providers ['infisical']; "
-                "secrets vault provides ['vault']"
-            ),
-            plugins=["secrets:vault", "catalog:glue"],
-        )
-    ]
-
-
-def test_resolver_rejects_unsupported_secret_projection_mode() -> None:
-    """Selected secrets provider must support the requested projection mode."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="azure-blob",
-        capabilities=CapabilitySet(
-            protocols=["azure-blob"],
-            credential_modes=["csi-secret-volume"],
-            secret_projection_modes=["csi-secret-volume"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="rest",
-        requirements=RequirementSet(
-            protocols=["azure-blob"],
-            credential_modes=["csi-secret-volume"],
-            secret_projection_modes=["csi-secret-volume"],
-        ),
-    )
-    secrets = PluginCapabilities(
-        plugin_type="secrets",
-        plugin_name="infisical",
-        capabilities=CapabilitySet(
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-            providers=["infisical"],
-        ),
-    )
-
-    result = resolver.validate([storage, secrets], [catalog])
-
-    assert result.valid is False
-    assert result.issues == [
-        CompositionIssue(
-            severity="error",
-            code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
-            message=(
-                "catalog rest requires secret projection mode csi-secret-volume; "
-                "secrets infisical provides ['external-secret-sync']"
-            ),
-            plugins=["secrets:infisical", "catalog:rest"],
-        )
-    ]
-
-
-def test_resolver_rejects_identity_mode_without_identity_plugin() -> None:
-    """Workload identity requires an explicit identity provider."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="aws-object-storage",
-        capabilities=CapabilitySet(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa"],
-            providers=["aws"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="glue",
-        requirements=RequirementSet(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa"],
-            providers=["aws"],
-        ),
-    )
-
-    result = resolver.validate([storage], [catalog])
-
-    assert result.valid is False
-    assert result.issues == [
-        CompositionIssue(
-            severity="error",
-            code="COMPOSITION_IDENTITY_PROVIDER_MISSING",
-            message=(
-                "catalog glue requires identity mode aws-irsa but no identity plugin was selected"
-            ),
-            plugins=["catalog:glue"],
-        )
-    ]
-
-
-def test_resolver_rejects_unsupported_identity_mode() -> None:
-    """Selected identity provider must support the requested identity mode."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="aws-object-storage",
-        capabilities=CapabilitySet(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa"],
-            providers=["aws"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="glue",
-        requirements=RequirementSet(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa"],
-            providers=["aws"],
-        ),
-    )
-    identity = PluginCapabilities(
-        plugin_type="identity",
-        plugin_name="keycloak",
-        capabilities=CapabilitySet(
-            credential_modes=["workload-identity"],
-            identity_modes=["oidc-federation"],
-            providers=["oidc"],
-        ),
-    )
-
-    result = resolver.validate([storage, identity], [catalog])
-
-    assert result.valid is False
-    assert result.issues == [
-        CompositionIssue(
-            severity="error",
-            code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
-            message=(
-                "catalog glue requires identity mode aws-irsa; "
-                "identity keycloak provides ['oidc-federation']"
-            ),
-            plugins=["identity:keycloak", "catalog:glue"],
-        )
-    ]
-
-
-def test_resolver_rejects_unsupported_identity_provider() -> None:
-    """Identity provider labels must match when requirements name providers."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="aws-object-storage",
-        capabilities=CapabilitySet(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="glue",
-        requirements=RequirementSet(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa"],
-            providers=["aws"],
-        ),
-    )
-    identity = PluginCapabilities(
-        plugin_type="identity",
-        plugin_name="keycloak",
-        capabilities=CapabilitySet(
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa"],
-            providers=["oidc"],
-        ),
-    )
-
-    result = resolver.validate([storage, identity], [catalog])
-
-    assert result.valid is False
-    assert result.issues == [
-        CompositionIssue(
-            severity="error",
-            code="COMPOSITION_IDENTITY_PROVIDER_UNSUPPORTED",
-            message=(
-                "catalog glue requires one of identity providers ['aws']; "
-                "identity keycloak provides ['oidc']"
-            ),
-            plugins=["identity:keycloak", "catalog:glue"],
-        )
-    ]
-
-
-def test_resolver_treats_security_modes_as_alternatives_for_kubernetes_secret_path() -> None:
-    """Kubernetes Secret path should satisfy mixed-mode requirements without identity."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="minio",
-        capabilities=CapabilitySet(
-            protocols=["s3-compatible"],
-            credential_modes=["kubernetes-secret", "workload-identity"],
-            secret_projection_modes=["kubernetes-secret", "external-secret-sync"],
-            identity_modes=["oidc-federation"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="polaris",
-        requirements=RequirementSet(
-            protocols=["s3-compatible"],
-            credential_modes=["kubernetes-secret", "workload-identity"],
-            secret_projection_modes=["kubernetes-secret", "external-secret-sync"],
-            identity_modes=["oidc-federation"],
-        ),
-    )
-
-    result = resolver.validate([storage], [catalog])
-
-    assert result.valid is True
-    assert result.issues == []
-
-
-def test_resolver_accepts_one_matching_identity_mode_from_alternatives() -> None:
-    """One matching identity mode should satisfy an alternative mode list."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="aws-object-storage",
-        capabilities=CapabilitySet(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa", "aws-pod-identity"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="glue",
-        requirements=RequirementSet(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa", "aws-pod-identity"],
-        ),
-    )
-    identity = PluginCapabilities(
-        plugin_type="identity",
-        plugin_name="aws",
-        capabilities=CapabilitySet(
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-pod-identity"],
-            providers=["aws"],
-        ),
-    )
-
-    result = resolver.validate([storage, identity], [catalog])
-
-    assert result.valid is True
-    assert result.issues == []
-
-
-def test_resolver_rejects_no_matching_secret_projection_alternative() -> None:
-    """Secret projection alternatives must have a storage/catalog match."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="aws-object-storage",
-        capabilities=CapabilitySet(
-            protocols=["s3"],
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="glue",
-        requirements=RequirementSet(
-            protocols=["s3"],
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["kubernetes-secret"],
-        ),
-    )
-    secrets = PluginCapabilities(
-        plugin_type="secrets",
-        plugin_name="k8s",
-        capabilities=CapabilitySet(
-            credential_modes=["kubernetes-secret"],
-            secret_projection_modes=["kubernetes-secret"],
-            providers=["kubernetes"],
-        ),
-    )
-
-    result = resolver.validate([storage, secrets], [catalog])
-
-    assert result.valid is False
-    assert result.issues == [
-        CompositionIssue(
-            severity="error",
-            code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
-            message=(
-                "catalog glue requires one of secret projection modes "
-                "['kubernetes-secret']; storage aws-object-storage provides "
-                "['external-secret-sync']"
-            ),
-            plugins=["storage:aws-object-storage", "catalog:glue"],
-        )
-    ]
-
-
-def test_resolver_rejects_identity_mode_not_supported_by_storage() -> None:
-    """Identity modes must be compatible across storage, catalog, and identity."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="aws-object-storage",
-        capabilities=CapabilitySet(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="glue",
-        requirements=RequirementSet(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa", "aws-pod-identity"],
-        ),
-    )
-    identity = PluginCapabilities(
-        plugin_type="identity",
-        plugin_name="aws",
-        capabilities=CapabilitySet(
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-pod-identity"],
-            providers=["aws"],
-        ),
-    )
-
-    result = resolver.validate([storage, identity], [catalog])
-
-    assert result.valid is False
-    assert result.issues == [
-        CompositionIssue(
-            severity="error",
-            code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
-            message=(
-                "catalog glue requires one of identity modes "
-                "['aws-irsa', 'aws-pod-identity']; storage aws-object-storage provides "
-                "['aws-irsa']; "
-                "identity aws provides ['aws-pod-identity']"
-            ),
-            plugins=["storage:aws-object-storage", "identity:aws", "catalog:glue"],
-        )
-    ]
-
-
-def test_resolver_rejects_missing_storage_secret_projection_modes() -> None:
-    """Required secret projection modes need matching storage capabilities."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="aws-object-storage",
-        capabilities=CapabilitySet(
-            protocols=["s3"],
-            credential_modes=["external-secret-sync"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="glue",
-        requirements=RequirementSet(
-            protocols=["s3"],
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-        ),
-    )
-    secrets = PluginCapabilities(
-        plugin_type="secrets",
-        plugin_name="infisical",
-        capabilities=CapabilitySet(
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-            providers=["infisical"],
-        ),
-    )
-
-    result = resolver.validate([storage, secrets], [catalog])
-
-    assert result.valid is False
-    assert result.issues == [
-        CompositionIssue(
-            severity="error",
-            code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
-            message=(
-                "catalog glue requires one of secret projection modes "
-                "['external-secret-sync']; storage aws-object-storage provides []"
-            ),
-            plugins=["storage:aws-object-storage", "catalog:glue"],
-        )
-    ]
-
-
-def test_resolver_rejects_workload_identity_without_catalog_identity_modes() -> None:
-    """Generic workload identity requires catalog to name concrete identity modes."""
-    resolver = CompositionResolver()
-    storage = PluginCapabilities(
-        plugin_type="storage",
-        plugin_name="aws-object-storage",
-        capabilities=CapabilitySet(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa"],
-        ),
-    )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="glue",
-        requirements=RequirementSet(
-            protocols=["s3"],
-            credential_modes=["workload-identity"],
-        ),
-    )
-    identity = PluginCapabilities(
-        plugin_type="identity",
-        plugin_name="aws",
-        capabilities=CapabilitySet(
-            credential_modes=["workload-identity"],
-            identity_modes=["aws-irsa"],
-            providers=["aws"],
-        ),
-    )
-
-    result = resolver.validate([storage, identity], [catalog])
-
-    assert result.valid is False
-    assert result.issues == [
-        CompositionIssue(
-            severity="error",
-            code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
-            message=(
-                "catalog glue requires workload identity but does not declare "
-                "concrete identity modes; storage aws-object-storage provides ['aws-irsa']; "
-                "identity aws provides ['aws-irsa']"
-            ),
-            plugins=["storage:aws-object-storage", "identity:aws", "catalog:glue"],
-        )
-    ]
-
-
-def test_resolver_rejects_explicit_secrets_plugin_without_kubernetes_secret_support() -> None:
-    """Explicit secrets plugin must support Kubernetes Secret projection when selected."""
+def test_resolver_ingestion_protocol_error_names_ingestion_plugin() -> None:
+    """Ingestion storage protocol diagnostics must identify ingestion as requester."""
     resolver = CompositionResolver()
     storage = PluginCapabilities(
         plugin_type="storage",
@@ -829,39 +245,58 @@ def test_resolver_rejects_explicit_secrets_plugin_without_kubernetes_secret_supp
         capabilities=CapabilitySet(
             protocols=["s3-compatible"],
             credential_modes=["kubernetes-secret"],
-            secret_projection_modes=["kubernetes-secret"],
         ),
     )
-    catalog = PluginRequirements(
-        plugin_type="catalog",
-        plugin_name="polaris",
-        requirements=RequirementSet(
-            protocols=["s3-compatible"],
-            credential_modes=["kubernetes-secret"],
-            secret_projection_modes=["kubernetes-secret"],
-        ),
-    )
-    secrets = PluginCapabilities(
-        plugin_type="secrets",
-        plugin_name="infisical",
-        capabilities=CapabilitySet(
-            credential_modes=["external-secret-sync"],
-            secret_projection_modes=["external-secret-sync"],
-            providers=["infisical"],
-        ),
+    ingestion = PluginRequirements(
+        plugin_type="ingestion",
+        plugin_name="dlt",
+        requirements=RequirementSet(protocols=["s3"]),
     )
 
-    result = resolver.validate([storage, secrets], [catalog])
+    result = resolver.validate([storage], [ingestion])
 
     assert result.valid is False
     assert result.issues == [
         CompositionIssue(
             severity="error",
-            code="COMPOSITION_SECRET_PROJECTION_UNSUPPORTED",
+            code="COMPOSITION_PROTOCOL_UNSUPPORTED",
             message=(
-                "catalog polaris requires secret projection mode kubernetes-secret; "
-                "secrets infisical provides ['external-secret-sync']"
+                "ingestion dlt requires one of protocols ['s3']; "
+                "storage minio provides ['s3-compatible']"
             ),
-            plugins=["secrets:infisical", "catalog:polaris"],
+            plugins=["storage:minio", "ingestion:dlt"],
+        )
+    ]
+
+
+def test_resolver_ingestion_credential_error_names_ingestion_plugin() -> None:
+    """Ingestion storage credential diagnostics must identify ingestion as requester."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="minio",
+        capabilities=CapabilitySet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+        ),
+    )
+    ingestion = PluginRequirements(
+        plugin_type="ingestion",
+        plugin_name="dlt",
+        requirements=RequirementSet(credential_modes=["workload-identity"]),
+    )
+
+    result = resolver.validate([storage], [ingestion])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED",
+            message=(
+                "ingestion dlt requires one of credential modes ['workload-identity']; "
+                "storage minio provides ['kubernetes-secret']"
+            ),
+            plugins=["storage:minio", "ingestion:dlt"],
         )
     ]

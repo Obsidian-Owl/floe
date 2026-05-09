@@ -16,6 +16,7 @@ import pytest
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
+    IngestionOutputTable,
     ObservabilityConfig,
     PluginRef,
     ResolvedModel,
@@ -149,16 +150,18 @@ def test_main_reset_only_drops_without_validating_and_prints_diagnostics(
         *,
         artifacts: CompiledArtifacts,
         expected_tables: list[str] | None,
+        include_ingestion: bool,
     ) -> list[str]:
-        calls.append(("reset", (artifacts, expected_tables)))
+        calls.append(("reset", (artifacts, expected_tables, include_ingestion)))
         return ["customer_360.mart_customer_360"]
 
     def validate_outputs(
         *,
         artifacts: CompiledArtifacts,
         expected_tables: list[str] | None,
+        include_ingestion: bool,
     ) -> iceberg_outputs.IcebergOutputValidationResult:
-        calls.append(("validate", (artifacts, expected_tables)))
+        calls.append(("validate", (artifacts, expected_tables, include_ingestion)))
         return iceberg_outputs.IcebergOutputValidationResult(
             expected_table_names=["customer_360.mart_customer_360"],
             table_names=["customer_360.mart_customer_360"],
@@ -187,7 +190,89 @@ def test_main_reset_only_drops_without_validating_and_prints_diagnostics(
 
     payload = json.loads(capsys.readouterr().out)
     assert [name for name, _value in calls] == ["load", "reset"]
+    assert calls[1][1] == (artifacts, ["mart_customer_360"], False)
     assert payload["action"] == "reset"
     assert payload["recovery_mode"] == "reset"
     assert payload["dropped_tables"] == ["customer_360.mart_customer_360"]
     assert payload["tables_validated"] == 0
+
+
+@pytest.mark.requirement("ALPHA-ICEBERG")
+def test_main_include_ingestion_threads_flag_to_validation_and_prints_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI include-ingestion flag reaches validation and reports its table output."""
+    artifacts_path = tmp_path / "compiled_artifacts.json"
+    artifacts_path.write_text("{}")
+    artifacts = _make_artifacts().model_copy(
+        update={
+            "ingestion_outputs": [
+                IngestionOutputTable(
+                    source_name="raw-transactions",
+                    source_type="filesystem",
+                    logical_table="bronze.raw_transactions",
+                    physical_table="bronze.raw_transactions",
+                    file_format="csv",
+                    source_path="./seeds/raw_transactions.csv",
+                    write_mode="replace",
+                    schema_contract="evolve",
+                )
+            ]
+        }
+    )
+    calls: list[tuple[str, Any]] = []
+
+    def model_validate_json(_payload: str) -> CompiledArtifacts:
+        calls.append(("load", None))
+        return artifacts
+
+    def validate_outputs(
+        *,
+        artifacts: CompiledArtifacts,
+        expected_tables: list[str] | None,
+        include_ingestion: bool,
+    ) -> iceberg_outputs.IcebergOutputValidationResult:
+        calls.append(("validate", (artifacts, expected_tables, include_ingestion)))
+        return iceberg_outputs.IcebergOutputValidationResult(
+            expected_table_names=[
+                "customer_360.mart_customer_360",
+                "bronze.raw_transactions",
+            ],
+            table_names=[
+                "customer_360.mart_customer_360",
+                "bronze.raw_transactions",
+            ],
+        )
+
+    monkeypatch.setattr(
+        iceberg_outputs.CompiledArtifacts,
+        "model_validate_json",
+        model_validate_json,
+    )
+    monkeypatch.setattr(iceberg_outputs, "validate_iceberg_outputs", validate_outputs)
+
+    assert (
+        iceberg_outputs._main(
+            [
+                "--artifacts-path",
+                str(artifacts_path),
+                "--include-ingestion",
+            ]
+        )
+        == 0
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert [name for name, _value in calls] == ["load", "validate"]
+    assert calls[1][1] == (artifacts, None, True)
+    assert payload["expected_table_names"] == [
+        "customer_360.mart_customer_360",
+        "bronze.raw_transactions",
+    ]
+    assert payload["table_names"] == [
+        "customer_360.mart_customer_360",
+        "bronze.raw_transactions",
+    ]
+    assert payload["tables_validated"] == 2

@@ -1389,6 +1389,31 @@ class TestDemoPluginResolver:
         )
 
     @pytest.mark.requirement("WU11-AC6")
+    def test_dockerfile_copies_all_resolved_demo_workspace_packages(self) -> None:
+        """Every package passed through FLOE_PLUGINS must be copied into build stage."""
+        result = subprocess.run(
+            [sys.executable, str(DEMO_PLUGIN_RESOLVER), "--manifest", str(DEMO_MANIFEST)],
+            check=True,
+            capture_output=True,
+            shell=False,
+            text=True,
+        )
+        packages = result.stdout.split()
+        content = _read_dockerfile_raw()
+
+        missing = [
+            package
+            for package in packages
+            if f"COPY packages/{package} /build/packages/{package}" not in content
+            and f"COPY plugins/{package} /build/plugins/{package}" not in content
+        ]
+
+        assert not missing, (
+            "Dockerfile must COPY every workspace package emitted by "
+            f"scripts/resolve-demo-plugins.py before installing FLOE_PLUGINS. Missing: {missing}"
+        )
+
+    @pytest.mark.requirement("WU11-AC6")
     def test_resolver_includes_manifest_quality_provider(self, tmp_path: Path) -> None:
         """The demo image package list must include the selected quality provider."""
         manifest = yaml.safe_load(DEMO_MANIFEST.read_text())

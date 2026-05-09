@@ -99,6 +99,7 @@ COPY plugins/floe-catalog-polaris /build/plugins/floe-catalog-polaris
 COPY plugins/floe-orchestrator-dagster /build/plugins/floe-orchestrator-dagster
 COPY plugins/floe-compute-duckdb /build/plugins/floe-compute-duckdb
 COPY plugins/floe-dbt-core /build/plugins/floe-dbt-core
+COPY plugins/floe-ingestion-dlt /build/plugins/floe-ingestion-dlt
 COPY plugins/floe-lineage-marquez /build/plugins/floe-lineage-marquez
 COPY plugins/floe-storage-minio /build/plugins/floe-storage-minio
 COPY packages/floe-iceberg /build/packages/floe-iceberg

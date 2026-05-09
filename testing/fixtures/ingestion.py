@@ -52,7 +52,6 @@ def dlt_config() -> DltIngestionConfig:
                 schema_contract="evolve",
             )
         ],
-        catalog_config={},
         retry_config=RetryConfig(),
     )
 
@@ -180,14 +179,12 @@ def create_ingestion_source_config(
 
 def create_dlt_ingestion_config(
     sources: list[IngestionSourceConfig] | None = None,
-    catalog_config: dict[str, Any] | None = None,
     retry_config: RetryConfig | None = None,
 ) -> DltIngestionConfig:
     """Factory function to create DltIngestionConfig with overrides.
 
     Args:
         sources: List of source configurations. Defaults to single test source.
-        catalog_config: Catalog configuration. Defaults to empty dict.
         retry_config: Retry configuration. Defaults to RetryConfig().
 
     Returns:
@@ -205,15 +202,11 @@ def create_dlt_ingestion_config(
             )
         ]
 
-    if catalog_config is None:
-        catalog_config = {}
-
     if retry_config is None:
         retry_config = RetryConfig()
 
     return DltIngestionConfig(
         sources=sources,
-        catalog_config=catalog_config,
         retry_config=retry_config,
     )
 

@@ -392,6 +392,244 @@ class TestGenerateDBTProfileWithAttach:
         assert "type" not in profile["attach"][0]
 
 
+class TestAugmentDBTProfile:
+    """Test compiled deployment projections for DuckDB dbt profiles."""
+
+    def test_augment_dbt_profile_uses_neutral_catalog_binding(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """DuckDB translates catalog dbt projection without Polaris coupling."""
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            DbtCatalogBinding,
+            DeploymentConfig,
+            IcebergRestCatalogBinding,
+        )
+
+        deployment = DeploymentConfig(
+            catalog=CatalogDeploymentBinding(
+                provider="future-catalog",
+                dbt=DbtCatalogBinding(
+                    iceberg_rest=IcebergRestCatalogBinding(
+                        catalog_name="raw",
+                        uri="http://future-catalog:8181/api/catalog",
+                        warehouse="s3://warehouse",
+                    )
+                ),
+            )
+        )
+
+        profile = duckdb_plugin.augment_dbt_profile(
+            {"type": "duckdb", "path": ":memory:", "extensions": ["httpfs"]},
+            deployment,
+        )
+
+        assert profile["extensions"] == ["httpfs", "iceberg"]
+        assert profile["attach"] == [
+            {
+                "path": "s3://warehouse",
+                "alias": "raw",
+                "type": "iceberg",
+                "options": {"endpoint": "http://future-catalog:8181/api/catalog"},
+            }
+        ]
+
+    def test_augment_dbt_profile_translates_oauth2_binding_to_duckdb_secret(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """DuckDB receives catalog auth through generic Iceberg REST bindings."""
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            DbtCatalogBinding,
+            DeploymentConfig,
+            IcebergRestCatalogBinding,
+            IcebergRestOAuth2Binding,
+        )
+
+        deployment = DeploymentConfig(
+            catalog=CatalogDeploymentBinding(
+                provider="future-catalog",
+                dbt=DbtCatalogBinding(
+                    iceberg_rest=IcebergRestCatalogBinding(
+                        catalog_name="iceberg",
+                        uri="http://future-catalog:8181/api/catalog",
+                        warehouse="floe",
+                        oauth2=IcebergRestOAuth2Binding(
+                            secret_name="catalog_oauth",  # pragma: allowlist secret
+                            client_id_env="CATALOG_CLIENT_ID",
+                            client_secret_env="CATALOG_CLIENT_SECRET",  # pragma: allowlist secret
+                            oauth2_server_uri_env="CATALOG_OAUTH2_SERVER_URI",
+                            oauth2_scope_env="CATALOG_SCOPE",
+                            oauth2_scope_default="PRINCIPAL_ROLE:ALL",
+                        ),
+                    )
+                ),
+            )
+        )
+
+        profile = duckdb_plugin.augment_dbt_profile(
+            {"type": "duckdb", "path": ":memory:"},
+            deployment,
+        )
+
+        assert profile["secrets"] == [
+            {
+                "type": "iceberg",
+                "name": "catalog_oauth",
+                "client_id": "{{ env_var('CATALOG_CLIENT_ID') }}",
+                # pragma: allowlist nextline secret
+                "client_secret": "{{ env_var('CATALOG_CLIENT_SECRET') }}",
+                "oauth2_server_uri": "{{ env_var('CATALOG_OAUTH2_SERVER_URI') }}",
+                "oauth2_scope": "{{ env_var('CATALOG_SCOPE', 'PRINCIPAL_ROLE:ALL') }}",
+            }
+        ]
+        assert "authorization_type" not in profile["secrets"][0]
+        assert profile["attach"] == [
+            {
+                "path": "floe",
+                "alias": "iceberg",
+                "type": "iceberg",
+                "options": {
+                    "endpoint": "http://future-catalog:8181/api/catalog",
+                    "secret": "catalog_oauth",  # pragma: allowlist secret
+                },
+            }
+        ]
+
+    def test_augment_dbt_profile_skips_missing_catalog_projection(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Profiles without a dbt catalog projection are left unchanged."""
+        from floe_core.schemas.compiled_artifacts import CatalogDeploymentBinding, DeploymentConfig
+
+        base_profile = {"type": "duckdb", "path": ":memory:"}
+        deployment = DeploymentConfig(
+            catalog=CatalogDeploymentBinding(provider="future-catalog"),
+        )
+
+        profile = duckdb_plugin.augment_dbt_profile(base_profile, deployment)
+
+        assert profile is base_profile
+
+    def test_augment_dbt_profile_can_use_generic_catalog_projection(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Future catalog plugins can expose generic Iceberg REST state only."""
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            DeploymentConfig,
+            IcebergRestCatalogBinding,
+        )
+
+        deployment = DeploymentConfig(
+            catalog=CatalogDeploymentBinding(
+                provider="future-catalog",
+                iceberg_rest=IcebergRestCatalogBinding(
+                    catalog_name="future",
+                    uri="http://future-catalog:8181/api/catalog",
+                    warehouse="floe",
+                ),
+            )
+        )
+
+        profile = duckdb_plugin.augment_dbt_profile(
+            {"type": "duckdb", "path": ":memory:"},
+            deployment,
+        )
+
+        assert profile["attach"] == [
+            {
+                "path": "floe",
+                "alias": "future",
+                "type": "iceberg",
+                "options": {"endpoint": "http://future-catalog:8181/api/catalog"},
+            }
+        ]
+
+    def test_augment_dbt_profile_rejects_non_list_attach(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Existing attach configuration must use the dbt-duckdb list shape."""
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            DbtCatalogBinding,
+            DeploymentConfig,
+            IcebergRestCatalogBinding,
+        )
+
+        deployment = DeploymentConfig(
+            catalog=CatalogDeploymentBinding(
+                provider="future-catalog",
+                dbt=DbtCatalogBinding(
+                    iceberg_rest=IcebergRestCatalogBinding(
+                        uri="http://future-catalog:8181/api/catalog",
+                        warehouse="floe",
+                    )
+                ),
+            )
+        )
+
+        with pytest.raises(ValueError, match="attach.*list"):
+            duckdb_plugin.augment_dbt_profile(
+                {"type": "duckdb", "path": ":memory:", "attach": {"path": "bad"}},
+                deployment,
+            )
+
+    def test_augment_dbt_profile_preserves_existing_entries_without_duplicates(
+        self,
+        duckdb_plugin: DuckDBComputePlugin,
+    ) -> None:
+        """Augmentation is idempotent and preserves user-provided attachments."""
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            DbtCatalogBinding,
+            DeploymentConfig,
+            IcebergRestCatalogBinding,
+        )
+
+        deployment = DeploymentConfig(
+            catalog=CatalogDeploymentBinding(
+                provider="future-catalog",
+                dbt=DbtCatalogBinding(
+                    iceberg_rest=IcebergRestCatalogBinding(
+                        catalog_name="iceberg",
+                        uri="http://future-catalog:8181/api/catalog",
+                        warehouse="floe",
+                    )
+                ),
+            )
+        )
+        existing_entry = {
+            "path": "other.duckdb",
+            "alias": "other",
+        }
+
+        first = duckdb_plugin.augment_dbt_profile(
+            {
+                "type": "duckdb",
+                "path": ":memory:",
+                "extensions": ["json", "iceberg"],
+                "attach": [existing_entry],
+            },
+            deployment,
+        )
+        second = duckdb_plugin.augment_dbt_profile(first, deployment)
+
+        expected_catalog_entry = {
+            "path": "floe",
+            "alias": "iceberg",
+            "type": "iceberg",
+            "options": {"endpoint": "http://future-catalog:8181/api/catalog"},
+        }
+        assert second["extensions"] == ["json", "iceberg", "httpfs"]
+        assert second["attach"] == [existing_entry, expected_catalog_entry]
+
+
 class TestRequiredDBTPackages:
     """Test required dbt packages."""
 

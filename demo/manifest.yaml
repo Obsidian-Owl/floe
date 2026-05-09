@@ -24,7 +24,7 @@ metadata:
 # Plugin Configuration
 # =============================================================================
 # These plugins are automatically used by all data products referencing this manifest.
-# Data engineers don't need to configure these - they just write SQL.
+# Data engineers don't need to configure platform services - they declare sources and write SQL.
 
 plugins:
   # Compute: DuckDB for local/demo, can be swapped to Spark/Snowflake in production
@@ -56,6 +56,15 @@ plugins:
         client_secret: demo-secret  # pragma: allowlist secret
         scope: PRINCIPAL_ROLE:ALL
         token_url: http://floe-platform-polaris:8181/api/catalog/v1/oauth/tokens
+
+  # Ingestion: dlt loads data-engineer-owned sources into Iceberg via composed storage/catalog
+  ingestion:
+    type: dlt
+    version: 0.1.0
+    config:
+      retry_config:
+        max_retries: 3
+        initial_delay_seconds: 1.0
 
   # Storage: MinIO S3-compatible storage for demo
   storage:

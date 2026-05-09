@@ -42,7 +42,8 @@
         "is_external": {},
         "create_pipeline": {},
         "run": {},
-        "get_destination_config": {}
+        "get_composition_requirements": {},
+        "build_deployment_binding": {}
       }
     }
   }

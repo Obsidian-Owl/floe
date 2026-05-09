@@ -257,10 +257,19 @@ def _runtime_plugin_config(
     selection: PluginSelection | None,
     fallback: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Return manifest config for runtime plugin setup, falling back to artifact config."""
+    """Return runtime plugin config with manifest values plus resolved additions."""
+    config = dict(fallback or {})
     if selection is not None and selection.config is not None:
-        return selection.config
-    return fallback or {}
+        config.update(selection.config)
+    return config
+
+
+def _has_active_ingestion(plugins: ResolvedPlugins) -> bool:
+    """Return whether product ingestion sources were resolved for deployment."""
+    if plugins.ingestion is None or plugins.ingestion.config is None:
+        return False
+    sources = plugins.ingestion.config.get("sources")
+    return isinstance(sources, list) and len(sources) > 0
 
 
 def _build_storage_deployment_binding(
@@ -268,7 +277,8 @@ def _build_storage_deployment_binding(
     manifest_plugins: PluginsConfig,
 ) -> DeploymentConfig | None:
     """Build deployment bindings from resolved storage plugin configuration."""
-    if plugins.storage is None:
+    active_ingestion = _has_active_ingestion(plugins)
+    if plugins.storage is None and not active_ingestion:
         return None
 
     from floe_core.compilation.errors import (
@@ -278,6 +288,7 @@ def _build_storage_deployment_binding(
         COMPOSITION_PLUGIN_CONFIG_INVALID,
         COMPOSITION_PLUGIN_INTERFACE_INVALID,
         COMPOSITION_PLUGIN_MISSING,
+        COMPOSITION_STORAGE_MISSING,
         CompilationError,
         CompilationException,
     )
@@ -297,12 +308,42 @@ def _build_storage_deployment_binding(
     from floe_core.plugin_types import PluginType
     from floe_core.plugins.catalog import CatalogPlugin
     from floe_core.plugins.identity import IdentityPlugin
+    from floe_core.plugins.ingestion import IngestionPlugin
     from floe_core.plugins.secrets import SecretsPlugin
     from floe_core.plugins.storage import StoragePlugin
     from floe_core.schemas.compiled_artifacts import DeploymentConfig
 
     registry = PluginRegistry()
     registry.discover_all()
+    if plugins.storage is None:
+        composition_issues = [
+            {
+                "code": COMPOSITION_STORAGE_MISSING,
+                "message": "Active ingestion sources require a storage plugin",
+                "plugins": [
+                    f"ingestion:{plugins.ingestion.type}"
+                    if plugins.ingestion is not None
+                    else "ingestion:unknown"
+                ],
+            }
+        ]
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=COMPOSITION_STORAGE_MISSING,
+                message="Active ingestion sources require a storage plugin",
+                suggestion="Select a storage plugin in the platform manifest",
+                context={
+                    "composition_issues": composition_issues,
+                    "storage_plugin": None,
+                    "catalog_plugin": plugins.catalog.type if plugins.catalog is not None else None,
+                    "ingestion_plugin": plugins.ingestion.type
+                    if plugins.ingestion is not None
+                    else None,
+                },
+            )
+        )
+
     storage_config = _runtime_plugin_config(manifest_plugins.storage, plugins.storage.config)
     try:
         registry.configure(
@@ -546,8 +587,36 @@ def _build_storage_deployment_binding(
     )
     composition_capabilities.insert(0, storage_capabilities)
 
-    if plugins.catalog is None:
+    if plugins.catalog is None and not active_ingestion:
         return DeploymentConfig(storage=storage_binding)
+    if plugins.catalog is None:
+        composition_issues = [
+            {
+                "code": "COMPOSITION_CATALOG_MISSING",
+                "message": "Active ingestion sources require a catalog plugin",
+                "plugins": [
+                    f"ingestion:{plugins.ingestion.type}"
+                    if plugins.ingestion is not None
+                    else "ingestion:unknown"
+                ],
+            }
+        ]
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="COMPOSITION_CATALOG_MISSING",
+                message="Active ingestion sources require a catalog plugin",
+                suggestion="Select a catalog plugin in the platform manifest",
+                context={
+                    "composition_issues": composition_issues,
+                    "storage_plugin": plugins.storage.type,
+                    "catalog_plugin": None,
+                    "ingestion_plugin": plugins.ingestion.type
+                    if plugins.ingestion is not None
+                    else None,
+                },
+            )
+        )
 
     catalog_config = _runtime_plugin_config(manifest_plugins.catalog, plugins.catalog.config)
     try:
@@ -633,6 +702,16 @@ def _build_storage_deployment_binding(
             )
 
         catalog_binding = catalog_plugin.build_catalog_deployment(storage_binding)
+        composition_capabilities.append(
+            PluginCapabilities(
+                plugin_type="catalog",
+                plugin_name=catalog_plugin.name,
+                capabilities=CapabilitySet(
+                    catalog_providers=["iceberg-rest"] if catalog_plugin.name == "polaris" else [],
+                    table_formats=["iceberg"],
+                ),
+            )
+        )
     except CompilationException:
         raise
     except NotImplementedError as exc:
@@ -667,13 +746,165 @@ def _build_storage_deployment_binding(
                 ),
                 context={
                     "storage_plugin": plugins.storage.type,
-                    "catalog_plugin": plugins.catalog.type,
+                    "catalog_plugin": plugins.catalog.type if plugins.catalog is not None else None,
                     "error_type": type(exc).__name__,
                 },
             )
         ) from exc
 
-    return DeploymentConfig(storage=storage_binding, catalog=catalog_binding)
+    def _raise_ingestion_composition_error(
+        issues: list[Any],
+        ingestion_plugin_type: str,
+    ) -> None:
+        issue_payload = [issue.model_dump(mode="json") for issue in issues]
+        first_issue = issues[0]
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code=first_issue.code,
+                message=first_issue.message,
+                suggestion=(
+                    "Choose compatible storage, catalog, and ingestion plugins, "
+                    "or update their configuration so ingestion requirements are satisfied."
+                ),
+                context={
+                    "composition_issues": issue_payload,
+                    "storage_plugin": plugins.storage.type if plugins.storage is not None else None,
+                    "catalog_plugin": plugins.catalog.type if plugins.catalog is not None else None,
+                    "ingestion_plugin": ingestion_plugin_type,
+                },
+            )
+        )
+
+    ingestion_binding = None
+    if active_ingestion:
+        if plugins.ingestion is None:
+            msg = "active ingestion requires an ingestion plugin"
+            raise AssertionError(msg)
+        ingestion_config = _runtime_plugin_config(
+            manifest_plugins.ingestion,
+            plugins.ingestion.config,
+        )
+        try:
+            registry.configure(
+                PluginType.INGESTION,
+                plugins.ingestion.type,
+                ingestion_config,
+            )
+            ingestion_plugin = registry.get(PluginType.INGESTION, plugins.ingestion.type)
+        except PluginConfigurationError as exc:
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code=COMPOSITION_PLUGIN_CONFIG_INVALID,
+                    message=f"Ingestion plugin {plugins.ingestion.type!r} configuration is invalid",
+                    suggestion="Fix plugins.ingestion.config in the platform manifest",
+                    context={"ingestion_plugin": plugins.ingestion.type},
+                )
+            ) from exc
+        except PluginNotFoundError as exc:
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code=COMPOSITION_PLUGIN_MISSING,
+                    message=f"Ingestion plugin {plugins.ingestion.type!r} could not be resolved",
+                    suggestion=(
+                        "Install the ingestion plugin package and verify plugins.ingestion.type"
+                    ),
+                    context={"ingestion_plugin": plugins.ingestion.type},
+                )
+            ) from exc
+        except PluginError as exc:
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code=COMPOSITION_PLUGIN_MISSING,
+                    message=f"Ingestion plugin {plugins.ingestion.type!r} could not be loaded",
+                    suggestion=(
+                        "Install a compatible ingestion plugin package and verify "
+                        "its entry point registration"
+                    ),
+                    context={"ingestion_plugin": plugins.ingestion.type},
+                )
+            ) from exc
+
+        if not isinstance(ingestion_plugin, IngestionPlugin):
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code=COMPOSITION_PLUGIN_INTERFACE_INVALID,
+                    message=f"Plugin {plugins.ingestion.type!r} is not an IngestionPlugin",
+                    suggestion="Use a plugin registered under the floe.ingestion entry point group",
+                    context={"ingestion_plugin": plugins.ingestion.type},
+                )
+            )
+
+        try:
+            requirements = ingestion_plugin.get_composition_requirements()
+        except CompilationException:
+            raise
+        except Exception as exc:
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code=COMPOSITION_PLUGIN_CONFIG_INVALID,
+                    message=(
+                        f"Ingestion plugin {plugins.ingestion.type!r} "
+                        "could not resolve composition requirements"
+                    ),
+                    suggestion=(
+                        "Verify plugins.ingestion.config and ensure the ingestion "
+                        "plugin can declare compatible storage and catalog requirements"
+                    ),
+                    context={
+                        "ingestion_plugin": plugins.ingestion.type,
+                        "storage_plugin": plugins.storage.type,
+                        "catalog_plugin": plugins.catalog.type,
+                    },
+                )
+            ) from exc
+        if requirements is not None:
+            composition = CompositionResolver().validate(composition_capabilities, [requirements])
+            if not composition.valid:
+                _raise_ingestion_composition_error(
+                    composition.issues,
+                    plugins.ingestion.type,
+                )
+
+        try:
+            ingestion_binding = ingestion_plugin.build_deployment_binding(
+                storage=storage_binding,
+                catalog=catalog_binding,
+            )
+        except CompilationException:
+            raise
+        except Exception as exc:
+            raise CompilationException(
+                CompilationError(
+                    stage=CompilationStage.RESOLVE,
+                    code=COMPOSITION_PLUGIN_CONFIG_INVALID,
+                    message=(
+                        f"Ingestion plugin {plugins.ingestion.type!r} "
+                        "could not build deployment binding"
+                    ),
+                    suggestion=(
+                        "Verify plugins.ingestion.config and ensure the ingestion "
+                        "plugin can translate the selected storage and catalog bindings"
+                    ),
+                    context={
+                        "ingestion_plugin": plugins.ingestion.type,
+                        "storage_plugin": plugins.storage.type,
+                        "catalog_plugin": plugins.catalog.type,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+            ) from exc
+
+    return DeploymentConfig(
+        storage=storage_binding,
+        catalog=catalog_binding,
+        ingestion=ingestion_binding,
+    )
 
 
 def compile_pipeline(
@@ -723,6 +954,7 @@ def compile_pipeline(
     from floe_core.compilation.dbt_profiles import generate_dbt_profiles
     from floe_core.compilation.loader import load_floe_spec, load_manifest
     from floe_core.compilation.resolver import (
+        resolve_ingestion_config,
         resolve_manifest_inheritance,
         resolve_plugins,
         resolve_transform_compute,
@@ -821,11 +1053,23 @@ def compile_pipeline(
                 log.info("compilation_stage_start", stage=CompilationStage.RESOLVE.value)
                 resolved_manifest = resolve_manifest_inheritance(manifest)
                 plugins = resolve_plugins(resolved_manifest)
+                plugins = resolve_ingestion_config(spec, plugins)
                 transforms = resolve_transform_compute(spec, resolved_manifest)
+                ingestion_source_count = (
+                    len(spec.ingestion.sources) if spec.ingestion is not None else None
+                )
                 # Add resolution details as span attributes
                 resolve_span.set_attribute("compile.compute_plugin", plugins.compute.type)
                 resolve_span.set_attribute("compile.orchestrator_plugin", plugins.orchestrator.type)
                 resolve_span.set_attribute("compile.model_count", len(transforms.models))
+                if ingestion_source_count is not None:
+                    resolve_span.set_attribute(
+                        "compile.ingestion_source_count",
+                        ingestion_source_count,
+                    )
+                resolve_log_attrs: dict[str, Any] = {}
+                if ingestion_source_count is not None:
+                    resolve_log_attrs["compile.ingestion_source_count"] = ingestion_source_count
                 duration_ms = (time.perf_counter() - stage_start) * 1000
                 log.info(
                     "compilation_stage_complete",
@@ -834,6 +1078,7 @@ def compile_pipeline(
                     orchestrator_plugin=plugins.orchestrator.type,
                     model_count=len(transforms.models),
                     duration_ms=round(duration_ms, 2),
+                    **resolve_log_attrs,
                 )
 
             # Stage 4: ENFORCE - Policy enforcement
@@ -958,6 +1203,7 @@ def compile_pipeline(
                     plugins=plugins,
                     product_name=spec.metadata.name,
                     storage_binding=storage_dbt_binding,
+                    deployment=deployment,
                 )
                 compile_span.set_attribute("compile.profile_name", spec.metadata.name)
                 duration_ms = (time.perf_counter() - stage_start) * 1000

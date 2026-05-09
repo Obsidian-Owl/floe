@@ -18,6 +18,7 @@ See Also:
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Iterable
 from datetime import datetime
@@ -98,6 +99,27 @@ _URL_CREDENTIAL_QUERY_KEYS = frozenset(
     }
 )
 _OMIT_PLUGIN_CONFIG_VALUE = object()
+_INGESTION_OUTPUT_SOURCE_PATH_SECRET_MARKERS = (
+    "credential",
+    "credentials",
+    "access_key",
+    "secret_key",
+    "api_key",
+    "password",
+    "token",
+    "signature",
+    "awsaccesskeyid",
+    "aws_access_key_id",
+    "aws_secret_access_key",
+)
+_INGESTION_OUTPUT_TABLE_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_DLT_FILESYSTEM_CREDENTIAL_KEYS = frozenset(
+    {
+        "endpoint_url",
+        "region_name",
+        "s3_url_style",
+    }
+)
 
 
 def _validate_configmap_name(name: str) -> str:
@@ -226,6 +248,16 @@ def _assert_no_dbt_profile_secret_material(value: Any, path: str) -> None:
         for key, child in value.items():
             key_text = str(key).lower()
             child_path = f"{path}.{key}"
+            if key_text == "secrets" and isinstance(child, list):
+                for index, secret_entry in enumerate(child):
+                    _assert_no_dbt_profile_secret_material(secret_entry, f"{child_path}[{index}]")
+                continue
+            if key_text == "secret" and isinstance(child, str):
+                child_text = child.lower()
+                if not any(marker in child_text for marker in _SECRET_VALUE_MARKERS) and (
+                    _DEFAULT_ADMIN_CREDENTIAL_PATTERN.search(child_text) is None
+                ):
+                    continue
             if any(marker in key_text for marker in _SECRET_FIELD_MARKERS):
                 if _is_dbt_env_var_reference(child) or (
                     isinstance(child, str) and _is_non_secret_endpoint_url(child)
@@ -318,6 +350,65 @@ def sanitize_plugin_config_for_artifact(value: Any) -> Any:
         return sanitized_items
 
     return value
+
+
+def _assert_json_compatible_fragment(value: Any, path: str) -> None:
+    """Reject values that cannot be serialized into compiled artifact JSON."""
+    if isinstance(value, float) and not math.isfinite(value):
+        msg = f"{path} contains non-finite number {value!r}; use finite JSON numbers"
+        raise ValueError(msg)
+
+    if value is None or isinstance(value, str | int | float | bool):
+        return
+
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if not isinstance(key, str):
+                msg = (
+                    f"{path} contains unsupported runtime fragment key type "
+                    f"{type(key).__name__}; use string keys for JSON-compatible maps"
+                )
+                raise ValueError(msg)
+            _assert_json_compatible_fragment(child, f"{path}.{key}")
+        return
+
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            _assert_json_compatible_fragment(child, f"{path}[{index}]")
+        return
+
+    msg = (
+        f"{path} contains unsupported runtime fragment type {type(value).__name__}; "
+        "use JSON-compatible dict, list, string, number, boolean, or null values"
+    )
+    raise ValueError(msg)
+
+
+def _assert_dlt_filesystem_fragment_secret_free(value: Any, path: str) -> None:
+    """Reject secrets while allowing dlt filesystem credential config containers."""
+    _assert_json_compatible_fragment(value, path)
+
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if str(key) == "credentials" and isinstance(child, dict):
+                unknown_keys = set(child) - _DLT_FILESYSTEM_CREDENTIAL_KEYS
+                if unknown_keys:
+                    unknown_key = sorted(unknown_keys)[0]
+                    _assert_no_secret_material({unknown_key: child[unknown_key]}, child_path)
+                    msg = (
+                        f"{child_path}.{unknown_key} is not an allowed dlt filesystem "
+                        "credential config key"
+                    )
+                    raise ValueError(msg)
+                for credential_key, credential_value in child.items():
+                    _assert_no_secret_material(credential_value, f"{child_path}.{credential_key}")
+                continue
+
+            _assert_no_secret_material({key: child}, path)
+        return
+
+    _assert_no_secret_material(value, path)
 
 
 class CompilationMetadata(BaseModel):
@@ -804,13 +895,64 @@ class PolarisCatalogDeploymentBinding(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     storage_type: Literal["S3"]
+    warehouse: NonEmptyString | None = None
     default_base_location: NonEmptyString
     allowed_locations: list[NonEmptyString]
     endpoint: NonEmptyString
     endpoint_internal: NonEmptyString
+    catalog_uri: NonEmptyString | None = None
     path_style_access: bool
     sts_unavailable: bool
     credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+
+
+class IcebergRestOAuth2Binding(BaseModel):
+    """Secret-free OAuth2 references for an Iceberg REST catalog consumer."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    secret_name: NonEmptyString = "iceberg"
+    client_id_env: NonEmptyString
+    client_secret_env: NonEmptyString
+    oauth2_server_uri_env: NonEmptyString
+    oauth2_scope_env: NonEmptyString | None = None
+    oauth2_scope_default: NonEmptyString | None = None
+
+
+class IcebergRestCatalogBinding(BaseModel):
+    """Secret-free Iceberg REST catalog projection for runtime consumers."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    catalog_name: NonEmptyString = "iceberg"
+    uri: NonEmptyString
+    warehouse: NonEmptyString
+    properties: dict[str, str] = Field(default_factory=dict)
+    oauth2: IcebergRestOAuth2Binding | None = None
+
+    @field_validator("properties")
+    @classmethod
+    def validate_secret_free_properties(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure catalog properties do not inline credential values."""
+        _assert_no_secret_material(value, "catalog.iceberg_rest.properties")
+        return value
+
+
+class DbtCatalogBinding(BaseModel):
+    """dbt profile catalog projection derived from catalog-owned deployment state."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    profile_fragment: dict[str, Any] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+    iceberg_rest: IcebergRestCatalogBinding | None = None
+
+    @field_validator("profile_fragment")
+    @classmethod
+    def validate_secret_free_profile_fragment(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure catalog profile fragments do not inline credential values."""
+        _assert_no_secret_material(value, "dbt.catalog.profile_fragment")
+        return value
 
 
 class CatalogDeploymentBinding(BaseModel):
@@ -819,7 +961,54 @@ class CatalogDeploymentBinding(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     provider: NonEmptyString
-    polaris: PolarisCatalogDeploymentBinding
+    polaris: PolarisCatalogDeploymentBinding | None = None
+    iceberg_rest: IcebergRestCatalogBinding | None = None
+    dbt: DbtCatalogBinding | None = None
+
+    @model_validator(mode="after")
+    def validate_provider_binding(self) -> CatalogDeploymentBinding:
+        """Ensure provider-specific catalog binding is present when required."""
+        if self.provider == "polaris" and self.polaris is None:
+            msg = "polaris catalog deployment binding requires polaris details"
+            raise ValueError(msg)
+        return self
+
+
+class DltIngestionBinding(BaseModel):
+    """Secret-free dlt runtime binding derived from composed platform plugins."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    plugin_name: NonEmptyString
+    destination: Literal["filesystem"]
+    table_format: Literal["iceberg"]
+    source_filesystem: dict[str, Any] = Field(default_factory=dict)
+    destination_filesystem: dict[str, Any] = Field(default_factory=dict)
+    iceberg_catalog_env: dict[str, str] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+
+    @field_validator("source_filesystem", "destination_filesystem")
+    @classmethod
+    def validate_secret_free_runtime_maps(cls, value: dict[str, Any]) -> dict[str, Any]:
+        """Ensure dlt runtime maps carry config only, not credential values."""
+        _assert_dlt_filesystem_fragment_secret_free(value, "ingestion.dlt.runtime")
+        return value
+
+    @field_validator("iceberg_catalog_env")
+    @classmethod
+    def validate_secret_free_catalog_env(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure dlt catalog env carries only non-secret PyIceberg properties."""
+        _assert_no_secret_material(value, "ingestion.dlt.iceberg_catalog_env")
+        return value
+
+
+class IngestionDeploymentBinding(BaseModel):
+    """Secret-free ingestion deployment binding."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    provider: Literal["dlt"]
+    dlt: DltIngestionBinding
 
 
 class DeploymentConfig(BaseModel):
@@ -829,6 +1018,92 @@ class DeploymentConfig(BaseModel):
 
     storage: StorageDeploymentBinding | None = None
     catalog: CatalogDeploymentBinding | None = None
+    ingestion: IngestionDeploymentBinding | None = None
+
+
+class IngestionOutputTable(BaseModel):
+    """Platform-visible Iceberg table state created by ingestion sources."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source_name: NonEmptyString
+    source_type: Literal["filesystem"]
+    table_format: Literal["iceberg"] = "iceberg"
+    logical_table: NonEmptyString
+    physical_table: NonEmptyString
+    file_format: Literal["csv", "jsonl", "parquet"]
+    source_path: NonEmptyString
+    write_mode: Literal["append", "replace", "merge"]
+    schema_contract: Literal["evolve", "freeze"]
+    freshness_field: NonEmptyString | None = None
+    primary_key: NonEmptyString | list[NonEmptyString] | None = None
+    cursor_field: NonEmptyString | None = None
+    quality_tier: Literal["bronze", "silver", "gold"] = "bronze"
+
+    @field_validator("logical_table", "physical_table")
+    @classmethod
+    def validate_namespace_table_identifier(cls, value: str) -> str:
+        """Validate table identifiers as exactly namespace.table."""
+        parts = value.split(".")
+        if len(parts) != 2 or any(part.strip() != part or not part for part in parts):
+            msg = "table identifier must be exactly namespace.table with non-empty parts"
+            raise ValueError(msg)
+        if any(_INGESTION_OUTPUT_TABLE_IDENTIFIER.fullmatch(part) is None for part in parts):
+            msg = "table identifier parts must use safe identifier characters"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("source_path")
+    @classmethod
+    def validate_source_path(cls, value: str) -> str:
+        """Validate source path using FloeSpec ingestion source path semantics."""
+        path = value.strip()
+        if not path:
+            msg = "source_path must not be empty"
+            raise ValueError(msg)
+        if path != value:
+            msg = "source_path must not contain leading or trailing whitespace"
+            raise ValueError(msg)
+
+        parsed = urlsplit(value)
+        if _contains_ingestion_output_credential_path_part(
+            parsed.query
+        ) or _contains_ingestion_output_credential_path_part(parsed.fragment):
+            msg = "source_path must not contain embedded credential material"
+            raise ValueError(msg)
+
+        if parsed.scheme:
+            if parsed.scheme not in {"s3", "gs", "az"}:
+                msg = "source_path URI scheme must be one of s3://, gs://, or az://"
+                raise ValueError(msg)
+            if parsed.username or parsed.password or "@" in parsed.netloc:
+                msg = "source_path must not contain embedded credential material"
+                raise ValueError(msg)
+            if not parsed.netloc:
+                msg = "object-store source_path must include a bucket or container"
+                raise ValueError(msg)
+            return value
+
+        if value.startswith("/"):
+            msg = "local source_path must be relative"
+            raise ValueError(msg)
+        if "://" in value:
+            msg = "source_path URI scheme must be one of s3://, gs://, or az://"
+            raise ValueError(msg)
+        return value
+
+
+def _contains_ingestion_output_credential_path_part(value: str) -> bool:
+    """Return True when a URI query or fragment contains credential-like terms."""
+    if not value:
+        return False
+
+    lowered = value.lower()
+    normalized = re.sub(r"[^a-z0-9]+", "", lowered)
+    return any(
+        term in lowered or re.sub(r"[^a-z0-9]+", "", term) in normalized
+        for term in _INGESTION_OUTPUT_SOURCE_PATH_SECRET_MARKERS
+    )
 
 
 class ResolvedModel(BaseModel):
@@ -1270,6 +1545,11 @@ class CompiledArtifacts(BaseModel):
         description="Deployment bindings derived from resolved plugin configuration",
     )
 
+    ingestion_outputs: list[IngestionOutputTable] = Field(
+        default_factory=list,
+        description="Platform-visible Iceberg tables created by ingestion sources",
+    )
+
     transforms: ResolvedTransforms | None = Field(
         default=None,
         description="Compiled transform configuration (v0.2.0+, optional for backward compat)",
@@ -1535,8 +1815,14 @@ __all__ = [
     "CompiledArtifacts",
     "CompilationMetadata",
     "CredentialRef",
+    "DbtCatalogBinding",
     "DeploymentConfig",
     "DeploymentMode",
+    "DltIngestionBinding",
+    "IcebergRestCatalogBinding",
+    "IcebergRestOAuth2Binding",
+    "IngestionDeploymentBinding",
+    "IngestionOutputTable",
     "KubernetesSecretRef",
     "ManifestRef",
     "ObservabilityConfig",

@@ -39,16 +39,15 @@ See Also:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 from dagster import ConfigurableIOManager
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from pyiceberg.expressions import BooleanExpression, EqualTo, Reference
-from pyiceberg.expressions import literal as iceberg_literal
 
 if TYPE_CHECKING:
-    from floe_iceberg import IcebergTableManager
+    from floe_iceberg.manager import IcebergTableManager
 
 # =============================================================================
 # Configuration Models
@@ -205,7 +204,7 @@ class IcebergIOManager(ConfigurableIOManager):
     @property
     def table_manager(self) -> IcebergTableManager:
         """Return the table manager instance."""
-        return self._table_manager
+        return cast("IcebergTableManager", self._table_manager)
 
     @property
     def config(self) -> IcebergIOManagerConfig:
@@ -502,8 +501,8 @@ class IcebergIOManager(ConfigurableIOManager):
                 # Build expression and convert to string for WriteConfig compatibility
                 # PyIceberg will parse this back into an expression
                 expr = EqualTo(
-                    Reference(partition_column),
-                    iceberg_literal(context.partition_key),
+                    term=Reference(partition_column),
+                    value=context.partition_key,
                 )
                 config_kwargs["overwrite_filter"] = str(expr)
 
@@ -534,8 +533,8 @@ class IcebergIOManager(ConfigurableIOManager):
             ):
                 # Use PyIceberg expression API (type-safe, no parsing)
                 return EqualTo(
-                    Reference(partition_column),
-                    iceberg_literal(context.partition_key),
+                    term=Reference(partition_column),
+                    value=context.partition_key,
                 )
 
         return None

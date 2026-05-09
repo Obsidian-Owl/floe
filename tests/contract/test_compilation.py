@@ -45,6 +45,8 @@ from floe_core.schemas.versions import (
 )
 from pydantic import ValidationError
 
+from testing.fixtures.credentials import get_polaris_credentials
+
 
 @pytest.fixture(autouse=True)
 def _disable_plugin_instrumentation_audit(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -66,14 +68,14 @@ class TestCompilation:
     def test_compile_customer_360(self, tmp_path: Path, compiled_artifacts: Any) -> None:
         """Test compilation of customer-360 demo pipeline.
 
-        Validates that demo/customer-360/floe.yaml compiles to valid CompiledArtifacts v0.5.0.
+        Validates that demo/customer-360/floe.yaml compiles to valid CompiledArtifacts.
 
         Args:
             tmp_path: Temporary directory fixture.
             compiled_artifacts: Compilation factory fixture from conftest.
 
         Validates:
-            - CompiledArtifacts version is 0.5.0
+            - CompiledArtifacts version matches COMPILED_ARTIFACTS_VERSION
             - Metadata contains product name "customer-360"
             - Plugins resolved (compute, orchestrator)
             - Observability config present with telemetry
@@ -1218,6 +1220,8 @@ class TestGovernanceObservabilityContract:
         """
         from floe_core.compilation.stages import compile_pipeline
 
+        polaris_client_id, polaris_client_secret = get_polaris_credentials()
+
         # Create minimal manifest without governance
         manifest_no_governance: dict[str, Any] = {
             "apiVersion": "floe.dev/v1",
@@ -1231,6 +1235,45 @@ class TestGovernanceObservabilityContract:
             "plugins": {
                 "compute": {"type": "duckdb", "config": {"threads": 1}},
                 "orchestrator": {"type": "dagster", "config": {}},
+                "catalog": {
+                    "type": "polaris",
+                    "config": {
+                        "uri": "http://floe-platform-polaris:8181/api/catalog",
+                        "warehouse": "floe-demo",
+                        "oauth2": {
+                            "client_id": polaris_client_id,
+                            "client_secret": polaris_client_secret,
+                            "scope": "PRINCIPAL_ROLE:ALL",
+                            "token_url": (
+                                "http://floe-platform-polaris:8181/api/catalog/v1/oauth/tokens"
+                            ),
+                        },
+                    },
+                },
+                "ingestion": {
+                    "type": "dlt",
+                    "version": "0.1.0",
+                    "config": {
+                        "retry_config": {
+                            "max_retries": 3,
+                            "initial_delay_seconds": 1.0,
+                        }
+                    },
+                },
+                "storage": {
+                    "type": "minio",
+                    "config": {
+                        "endpoint": "http://floe-platform-minio:9000",
+                        "bucket": "floe-iceberg",
+                        "artifact_bucket": "floe-artifacts",
+                        "region": "us-east-1",
+                        "path_style_access": True,
+                        "credential_secret_name": (
+                            "floe-platform-minio-credentials"  # pragma: allowlist secret
+                        ),
+                        "credential_secret_namespace": "floe-system",  # pragma: allowlist secret
+                    },
+                },
             },
             "observability": {
                 "tracing": {"enabled": True, "exporter": "otlp", "endpoint": "http://otel:4317"},

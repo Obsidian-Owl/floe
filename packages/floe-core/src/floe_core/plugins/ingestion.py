@@ -5,7 +5,7 @@ provide data loading from external sources. Ingestion plugins are
 responsible for:
 - Creating ingestion pipelines from configuration
 - Executing pipelines to load data
-- Providing destination configuration for Iceberg tables
+- Building runtime deployment bindings from composed platform state
 
 Example:
     >>> from floe_core.plugins.ingestion import IngestionPlugin
@@ -19,10 +19,22 @@ Example:
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, Protocol
 
 from floe_core.plugin_metadata import PluginMetadata
+
+
+class SupportsRuntimeBindingModelDump(Protocol):
+    """Protocol for Pydantic-like runtime binding models."""
+
+    def model_dump(self, *, mode: Literal["json", "python"] | str = "python") -> Mapping[str, Any]:
+        """Return a Python mapping representation of the runtime binding."""
+        ...
+
+
+RuntimeBinding = Mapping[str, Any] | SupportsRuntimeBindingModelDump
 
 
 @dataclass
@@ -50,6 +62,7 @@ class IngestionConfig:
     destination_table: str = ""
     write_mode: str = "append"
     schema_contract: str = "evolve"
+    runtime_binding: RuntimeBinding | None = None
 
 
 @dataclass
@@ -91,7 +104,10 @@ class IngestionPlugin(PluginMetadata):
         - is_external property
         - create_pipeline() method
         - run() method
-        - get_destination_config() method
+
+    Plugins that participate in platform composition should also implement:
+        - get_composition_requirements()
+        - build_deployment_binding()
 
     Example:
         >>> class DLTPlugin(IngestionPlugin):
@@ -188,29 +204,17 @@ class IngestionPlugin(PluginMetadata):
         """
         ...
 
-    @abstractmethod
-    def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
-        """Generate destination configuration for Iceberg.
+    def get_composition_requirements(self) -> Any:
+        """Return peer plugin requirements for deployment composition."""
+        return None
 
-        Creates destination configuration for writing to Iceberg tables
-        via the platform's catalog.
-
-        Args:
-            catalog_config: Catalog connection configuration.
-
-        Returns:
-            Destination configuration dict for Iceberg.
-
-        Example:
-            >>> config = plugin.get_destination_config({
-            ...     "uri": "http://polaris:8181/api/catalog",
-            ...     "warehouse": "floe_warehouse"
-            ... })
-            >>> config
-            {
-                'destination': 'iceberg',
-                'catalog_uri': 'http://polaris:8181/api/catalog',
-                'warehouse': 'floe_warehouse'
-            }
-        """
-        ...
+    def build_deployment_binding(
+        self,
+        *,
+        storage: Any,
+        catalog: Any,
+    ) -> Any:
+        """Build secret-free ingestion deployment binding from composed plugins."""
+        raise NotImplementedError(
+            f"{self.name} does not implement ingestion deployment binding generation"
+        )

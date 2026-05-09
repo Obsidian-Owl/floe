@@ -7,12 +7,12 @@ the expected behavior for T021 and T022 implementation.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import pytest
 from floe_core.plugins.ingestion import IngestionConfig, IngestionResult
-from testing.fixtures.credentials import get_minio_credentials
 
 from floe_ingestion_dlt.errors import PipelineConfigurationError
 from floe_ingestion_dlt.plugin import DltIngestionPlugin
@@ -30,6 +30,21 @@ def dlt_plugin() -> Generator[DltIngestionPlugin, None, None]:
     plugin.shutdown()
 
 
+def _runtime_binding() -> dict[str, Any]:
+    """Return minimal runtime binding required for dlt pipeline creation."""
+    return {
+        "destination": "filesystem",
+        "destination_filesystem": {"bucket_url": "file:///tmp/floe-test"},
+    }
+
+
+def _bound_mock_pipeline() -> MagicMock:
+    """Return a mock dlt pipeline carrying the required floe runtime binding."""
+    pipeline = MagicMock()
+    pipeline._floe_dlt_runtime_binding = _runtime_binding()
+    return pipeline
+
+
 class TestCreatePipeline:
     """Unit tests for T018 - create_pipeline() method."""
 
@@ -45,6 +60,7 @@ class TestCreatePipeline:
             source_type="rest_api",
             source_config={"url": "https://api.example.com"},
             destination_table="bronze.raw_data",
+            runtime_binding=_runtime_binding(),
         )
 
         pipeline = dlt_plugin.create_pipeline(config)
@@ -63,6 +79,7 @@ class TestCreatePipeline:
             source_type="rest_api",
             source_config={"url": "https://api.example.com"},
             destination_table="bronze.raw_data",
+            runtime_binding=_runtime_binding(),
         )
 
         with pytest.raises(RuntimeError, match="Plugin must be started"):
@@ -113,11 +130,13 @@ class TestCreatePipeline:
             source_type="rest_api",
             source_config={"url": "https://api.example.com"},
             destination_table="bronze.raw_data",
+            runtime_binding=_runtime_binding(),
         )
 
-        # Just verify create_pipeline doesn't raise - ingestion_span is tested separately
         pipeline = dlt_plugin.create_pipeline(config)
-        assert pipeline is not None
+        assert pipeline.pipeline_name == "ingest_raw_data"
+        assert pipeline.dataset_name == "bronze"
+        assert pipeline._floe_dlt_runtime_binding == _runtime_binding()
 
 
 class TestRunPipeline:
@@ -130,7 +149,7 @@ class TestRunPipeline:
         Given a mock pipeline object, when run(pipeline) is called, it
         returns an IngestionResult with success=True.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         result = dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
@@ -144,7 +163,7 @@ class TestRunPipeline:
         Given a successful run, the IngestionResult has rows_loaded >= 0,
         bytes_written >= 0, duration_seconds >= 0.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         result = dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
@@ -159,7 +178,7 @@ class TestRunPipeline:
         Given a pipeline that fails (mock), run returns
         IngestionResult(success=False, errors=[...]).
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         # Configure mock to raise exception during execution
         mock_pipeline.run.side_effect = Exception("Pipeline execution failed")
 
@@ -168,6 +187,70 @@ class TestRunPipeline:
         assert len(result.errors) > 0
         assert "Pipeline execution failed" in result.errors[0]
 
+    @pytest.mark.requirement("4F-FR-015")
+    def test_run_missing_runtime_binding_returns_failure(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Manual pipelines without floe runtime binding fail before dlt execution."""
+        run_calls = 0
+
+        def run(_source: object, **_kwargs: Any) -> object:
+            nonlocal run_calls
+            run_calls += 1
+            return SimpleNamespace(metrics={})
+
+        pipeline = SimpleNamespace(pipeline_name="manual", run=run)
+
+        result = dlt_plugin.run(pipeline, source=[], write_disposition="append")
+
+        assert result.success is False
+        assert any("dlt runtime binding is required" in error for error in result.errors)
+        assert run_calls == 0
+
+    @pytest.mark.requirement("4F-FR-015")
+    def test_run_empty_runtime_binding_returns_failure(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Pipelines carrying an empty runtime binding fail before dlt execution."""
+        pipeline = _bound_mock_pipeline()
+        pipeline._floe_dlt_runtime_binding = {}
+        pipeline.run.return_value = MagicMock(metrics={})
+
+        result = dlt_plugin.run(pipeline, source=[], write_disposition="append")
+
+        assert result.success is False
+        assert any("dlt runtime binding is required" in error for error in result.errors)
+        pipeline.run.assert_not_called()
+
+    @pytest.mark.requirement("4F-FR-049")
+    def test_run_failure_sanitizes_source_context(self, dlt_plugin: DltIngestionPlugin) -> None:
+        """Source error context must not leak credential-bearing source paths."""
+        mock_pipeline = _bound_mock_pipeline()
+        mock_pipeline.run.side_effect = Exception(
+            "extract failed: password=exception-secret-token"  # pragma: allowlist secret
+        )
+
+        result = dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+            source_name="api_key=source-secret-token",  # pragma: allowlist secret
+            source_path=(
+                "s3://user:path-secret-token@bucket/raw/events.jsonl"  # pragma: allowlist secret
+                "?token=query-secret-token&safe=value"  # pragma: allowlist secret
+            ),
+        )
+
+        assert result.success is False
+        error = result.errors[0]
+        assert len(error) <= 500
+        assert "source=api_key=<REDACTED>" in error
+        assert "path=s3://<REDACTED>@bucket/raw/events.jsonl?token=<REDACTED>" in error
+        assert "source-secret-token" not in error
+        assert "path-secret-token" not in error
+        assert "query-secret-token" not in error
+        assert "exception-secret-token" not in error
+
     @pytest.mark.requirement("4F-FR-018")
     def test_run_empty_source_returns_zero_rows(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Test run returns zero rows for empty source data.
@@ -175,13 +258,86 @@ class TestRunPipeline:
         Given a pipeline with empty source data, run returns
         IngestionResult(success=True, rows_loaded=0).
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         # Configure mock to return empty result
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         result = dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
         assert result.success is True
         assert result.rows_loaded == 0
+
+    @pytest.mark.requirement("4F-FR-015")
+    def test_run_filesystem_empty_source_returns_failure(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Filesystem batch sources fail when source preflight found no files."""
+        mock_pipeline = _bound_mock_pipeline()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+        missing_source = SimpleNamespace(
+            _floe_filesystem_source_probe=SimpleNamespace(matched=False)
+        )
+
+        result = dlt_plugin.run(
+            mock_pipeline,
+            source=missing_source,
+            write_disposition="append",
+            source_type="filesystem",
+            source_name="missing_object_source",
+            source_path="s3://raw/landing/missing/",
+        )
+
+        assert result.success is False
+        assert result.rows_loaded == 0
+        assert result.errors is not None
+        assert "missing_object_source" in result.errors[0]
+        assert "s3://raw/landing/missing/" in result.errors[0]
+        assert "matched no files" in result.errors[0]
+        mock_pipeline.run.assert_not_called()
+
+    @pytest.mark.requirement("4F-FR-015")
+    def test_run_filesystem_zero_metrics_without_probe_succeeds(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Filesystem metrics absence alone must not be treated as missing input."""
+        mock_pipeline = _bound_mock_pipeline()
+        mock_pipeline.run.return_value = MagicMock(metrics={})
+
+        result = dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+            source_type="filesystem",
+            source_name="empty_metrics_source",
+            source_path="s3://raw/landing/customers.csv",
+        )
+
+        assert result.success is True
+        assert result.rows_loaded == 0
+        assert not result.errors
+
+    @pytest.mark.requirement("4F-FR-015")
+    def test_run_filesystem_zero_rows_with_written_bytes_succeeds(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """Filesystem result validation does not fail when dlt wrote files."""
+        mock_pipeline = _bound_mock_pipeline()
+        table_metric = SimpleNamespace(items_count=0, file_size=128)
+        job_metric = SimpleNamespace(table_metrics={"raw": table_metric})
+        package_metrics = SimpleNamespace(started_at=True, job_metrics={"job": job_metric})
+        mock_pipeline.run.return_value = SimpleNamespace(metrics={"load": [package_metrics]})
+
+        result = dlt_plugin.run(
+            mock_pipeline,
+            source=[],
+            write_disposition="append",
+            source_type="filesystem",
+            source_name="empty_file_source",
+            source_path="s3://raw/landing/empty.csv",
+        )
+
+        assert result.success is True
+        assert result.rows_loaded == 0
+        assert result.bytes_written == 128
 
     @pytest.mark.requirement("4F-FR-015")
     def test_run_not_started_raises(self) -> None:
@@ -191,7 +347,7 @@ class TestRunPipeline:
         startup is required.
         """
         plugin = DltIngestionPlugin()
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
 
         with pytest.raises(RuntimeError, match="Plugin must be started"):
             plugin.run(mock_pipeline)
@@ -203,7 +359,7 @@ class TestRunPipeline:
         Verify OTel span is emitted with name 'run_pipeline' and includes
         result attributes like rows_loaded, bytes_written, success.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         # Just verify run doesn't raise and returns result - ingestion_span is tested separately
@@ -217,7 +373,7 @@ class TestRunPipeline:
         Given write_disposition="append" kwarg, when run() is called,
         then pipeline.run() is invoked with write_disposition="append".
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(mock_pipeline, source=[], write_disposition="append")
@@ -234,7 +390,7 @@ class TestRunPipeline:
         Given write_disposition="replace" kwarg, when run() is called,
         then pipeline.run() is invoked with write_disposition="replace".
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(mock_pipeline, source=[], write_disposition="replace")
@@ -251,7 +407,7 @@ class TestRunPipeline:
         Given write_disposition="merge" kwarg, when run() is called,
         then pipeline.run() is invoked with write_disposition="merge".
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(mock_pipeline, source=[], write_disposition="merge")
@@ -268,7 +424,7 @@ class TestRunPipeline:
         Given table_name kwarg with write_disposition="merge", when run()
         is called, then both parameters are passed to pipeline.run().
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(
@@ -292,7 +448,7 @@ class TestRunPipeline:
         pipeline.run() is invoked with schema_contract dict with all fields
         set to "evolve".
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(
@@ -317,10 +473,10 @@ class TestRunPipeline:
         """Test run passes schema_contract dict to pipeline.run() for freeze.
 
         Given schema_contract="freeze" kwarg, when run() is called, then
-        pipeline.run() is invoked with schema_contract dict with all fields
-        set to "freeze".
+        pipeline.run() is invoked with schema_contract dict that allows the
+        initial table and freezes column/type drift.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(
@@ -336,7 +492,7 @@ class TestRunPipeline:
         assert "schema_contract" in call_kwargs
         assert call_kwargs["schema_contract"] == {
             "columns": "freeze",
-            "tables": "freeze",
+            "tables": "evolve",
             "data_type": "freeze",
         }
 
@@ -348,7 +504,7 @@ class TestRunPipeline:
         pipeline.run() is invoked with schema_contract dict with columns and
         data_type set to "discard_value", tables set to "evolve".
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(
@@ -376,7 +532,7 @@ class TestRunPipeline:
         in message, when run() is called, then it returns
         IngestionResult(success=False) with SchemaContractViolation info in errors.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         # Configure mock to raise schema contract violation
         mock_pipeline.run.side_effect = Exception(
             "Schema contract violation: column 'new_field' not allowed"
@@ -401,7 +557,7 @@ class TestRunPipeline:
         Given no schema_contract kwarg, when run() is called, then
         pipeline.run() is invoked with schema_contract dict set to "evolve" mode.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         # Call run() without schema_contract kwarg
@@ -422,119 +578,14 @@ class TestRunPipeline:
         }
 
 
-class TestGetDestinationConfig:
-    """Unit tests for T024 - get_destination_config() method."""
+class TestRuntimeBindingPublicSurface:
+    """Regression coverage for removed destination-config compatibility API."""
 
-    @pytest.mark.requirement("4F-FR-019")
-    def test_get_destination_config_basic(self) -> None:
-        """Test get_destination_config() with basic catalog configuration.
-
-        Given catalog_config with uri and warehouse, when get_destination_config()
-        is called, then it returns dict with destination="iceberg",
-        catalog_type="rest", catalog_uri, and warehouse.
-        """
+    def test_plugin_does_not_expose_destination_config_compatibility_api(self) -> None:
+        """Runtime bindings are the supported path for dlt destination config."""
         plugin = DltIngestionPlugin()
-        catalog_config = {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse",
-        }
 
-        result = plugin.get_destination_config(catalog_config)
-
-        assert result["destination"] == "iceberg"
-        assert result["catalog_type"] == "rest"
-        assert result["catalog_uri"] == "http://polaris:8181/api/catalog"
-        assert result["warehouse"] == "floe_warehouse"
-
-    @pytest.mark.requirement("4F-FR-020")
-    def test_get_destination_config_s3_config(self) -> None:
-        """Test get_destination_config() with S3/MinIO configuration.
-
-        Given catalog_config with s3_endpoint, s3_access_key, s3_secret_key,
-        s3_region, when get_destination_config() is called, then all S3
-        parameters are mapped to output dict.
-        """
-        plugin = DltIngestionPlugin()
-        _expected_access, _expected_secret = get_minio_credentials()
-        catalog_config = {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse",
-            "s3_endpoint": "http://minio:9000",
-            "s3_access_key": _expected_access,
-            "s3_secret_key": _expected_secret,  # pragma: allowlist secret
-            "s3_region": "us-east-1",
-        }
-
-        result = plugin.get_destination_config(catalog_config)
-
-        assert result["destination"] == "iceberg"
-        assert result["catalog_type"] == "rest"
-        assert result["s3_endpoint"] == "http://minio:9000"
-        assert result["s3_access_key"] == _expected_access
-        assert result["s3_secret_key"] == _expected_secret  # pragma: allowlist secret
-        assert result["s3_region"] == "us-east-1"
-
-    @pytest.mark.requirement("4F-FR-019")
-    def test_get_destination_config_minimal(self) -> None:
-        """Test get_destination_config() with empty catalog_config.
-
-        Given empty catalog_config {}, when get_destination_config() is called,
-        then it returns dict with just destination and catalog_type (base fields).
-        """
-        plugin = DltIngestionPlugin()
-        catalog_config: dict[str, str] = {}
-
-        result = plugin.get_destination_config(catalog_config)
-
-        assert result["destination"] == "iceberg"
-        assert result["catalog_type"] == "rest"
-        assert "catalog_uri" not in result
-        assert "warehouse" not in result
-        assert "s3_endpoint" not in result
-
-    @pytest.mark.requirement("4F-FR-020")
-    def test_get_destination_config_partial_s3(self) -> None:
-        """Test get_destination_config() with partial S3 configuration.
-
-        Given catalog_config with only s3_endpoint (no keys/region), when
-        get_destination_config() is called, then only s3_endpoint appears
-        in output dict (no empty/null S3 fields).
-        """
-        plugin = DltIngestionPlugin()
-        catalog_config = {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse",
-            "s3_endpoint": "http://minio:9000",
-        }
-
-        result = plugin.get_destination_config(catalog_config)
-
-        assert result["destination"] == "iceberg"
-        assert result["catalog_type"] == "rest"
-        assert result["s3_endpoint"] == "http://minio:9000"
-        # Verify keys/region are not present
-        assert "s3_access_key" not in result
-        assert "s3_secret_key" not in result
-        assert "s3_region" not in result
-
-    @pytest.mark.requirement("4F-FR-019")
-    def test_get_destination_config_not_started_ok(self) -> None:
-        """Test get_destination_config() does not require plugin to be started.
-
-        get_destination_config is a pure mapping function that doesn't
-        depend on plugin state. It should work without calling startup().
-        """
-        plugin = DltIngestionPlugin()  # NOT started
-        catalog_config = {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse",
-        }
-
-        # Should not raise RuntimeError
-        result = plugin.get_destination_config(catalog_config)
-
-        assert result["destination"] == "iceberg"
-        assert result["catalog_type"] == "rest"
+        assert not hasattr(plugin, "get_destination_config")
 
 
 class TestIncrementalLoading:
@@ -547,7 +598,7 @@ class TestIncrementalLoading:
         Given cursor_field kwarg is passed, when run() is called, then it
         accepts the parameter without error and returns IngestionResult.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         result = dlt_plugin.run(
@@ -568,7 +619,7 @@ class TestIncrementalLoading:
         Given primary_key and write_disposition="merge" kwargs, when run()
         is called, then primary_key is passed to pipeline.run().
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         dlt_plugin.run(
@@ -591,7 +642,7 @@ class TestIncrementalLoading:
         Given no cursor_field kwarg (non-incremental mode), when run() is
         called, then it proceeds normally and returns IngestionResult.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         result = dlt_plugin.run(
@@ -611,7 +662,7 @@ class TestIncrementalLoading:
         Given pipeline.run() returns metrics, when run() is called, then
         IngestionResult.rows_loaded reflects the metrics extraction logic.
         """
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         result = dlt_plugin.run(
@@ -642,6 +693,7 @@ class TestOTelSpanEmission:
             source_type="rest_api",
             source_config={"url": "https://api.example.com"},
             destination_table="bronze.raw_data",
+            runtime_binding=_runtime_binding(),
         )
 
         with patch("floe_ingestion_dlt.plugin.get_tracer") as mock_get_tracer:
@@ -654,11 +706,16 @@ class TestOTelSpanEmission:
             # Verify get_tracer was called
             mock_get_tracer.assert_called_once()
 
-            # Verify tracer.start_as_current_span was called with correct name
-            mock_tracer.start_as_current_span.assert_called()
+            # Verify tracer.start_as_current_span was called with operation metadata.
+            mock_tracer.start_as_current_span.assert_called_once()
             call_args = mock_tracer.start_as_current_span.call_args
-            span_name = call_args[0][0]
-            assert "create_pipeline" in span_name
+            assert call_args.args[0] == "ingestion.create_pipeline"
+            assert call_args.kwargs["attributes"] == {
+                "ingestion.operation": "create_pipeline",
+                "ingestion.source_type": "rest_api",
+                "ingestion.destination_table": "bronze.raw_data",
+                "ingestion.write_mode": "append",
+            }
 
     @pytest.mark.requirement("4F-FR-044")
     def test_run_emits_otel_span(self, dlt_plugin: DltIngestionPlugin) -> None:
@@ -670,7 +727,7 @@ class TestOTelSpanEmission:
         """
         from unittest.mock import patch
 
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         with patch("floe_ingestion_dlt.plugin.get_tracer") as mock_get_tracer:
@@ -698,7 +755,7 @@ class TestOTelSpanEmission:
         """
         from unittest.mock import patch
 
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
         with patch("floe_ingestion_dlt.plugin.record_ingestion_result") as mock_record:
@@ -720,7 +777,7 @@ class TestOTelSpanEmission:
         """
         from unittest.mock import patch
 
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.run.side_effect = Exception("Pipeline execution failed")
 
         with patch("floe_ingestion_dlt.plugin.record_ingestion_error") as mock_record:
@@ -784,6 +841,7 @@ class TestStructuredLogging:
             source_type="rest_api",
             source_config={"url": "https://api.example.com"},
             destination_table="bronze.raw_data",
+            runtime_binding=_runtime_binding(),
         )
 
         with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:
@@ -812,7 +870,7 @@ class TestStructuredLogging:
         """
         from unittest.mock import patch
 
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.pipeline_name = "test_pipeline"
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
@@ -838,7 +896,7 @@ class TestStructuredLogging:
         """
         from unittest.mock import patch
 
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.pipeline_name = "test_pipeline"
         mock_pipeline.run.return_value = MagicMock(metrics={})
 
@@ -866,7 +924,7 @@ class TestStructuredLogging:
         """
         from unittest.mock import patch
 
-        mock_pipeline = MagicMock()
+        mock_pipeline = _bound_mock_pipeline()
         mock_pipeline.pipeline_name = "test_pipeline"
         mock_pipeline.run.side_effect = Exception("Pipeline execution failed")
 
@@ -882,62 +940,3 @@ class TestStructuredLogging:
                 if call[0][0] == "pipeline_run_failed":
                     found = True
             assert found, "pipeline_run_failed event not logged"
-
-    @pytest.mark.requirement("4F-FR-048")
-    def test_get_destination_config_logs_config_generated(self) -> None:
-        """Test get_destination_config() logs 'destination_config_generated' event.
-
-        Given catalog_config dict, when get_destination_config() is called,
-        then logger.info is called with event="destination_config_generated".
-        """
-        from unittest.mock import patch
-
-        plugin = DltIngestionPlugin()
-        catalog_config = {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse",
-        }
-
-        with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:
-            plugin.get_destination_config(catalog_config)
-
-            # Verify logger.info was called with destination_config_generated
-            mock_logger.info.assert_called()
-            # Find the destination_config_generated call
-            found = False
-            for call in mock_logger.info.call_args_list:
-                if call[0][0] == "destination_config_generated":
-                    found = True
-            assert found, "destination_config_generated event not logged"
-
-    @pytest.mark.requirement("4F-FR-049")
-    def test_secrets_not_logged(self) -> None:
-        """Test get_destination_config() does not log secret values.
-
-        Given catalog_config with s3_secret_key and s3_access_key, when
-        get_destination_config() is called, then logger.info calls do NOT
-        include the actual secret values in any arguments.
-        """
-        from unittest.mock import patch
-
-        plugin = DltIngestionPlugin()
-        catalog_config = {
-            "uri": "http://polaris:8181/api/catalog",
-            "warehouse": "floe_warehouse",
-            "s3_endpoint": "http://minio:9000",
-            "s3_access_key": "sensitive-access-key-12345",
-            "s3_secret_key": "super-secret-key-67890",  # pragma: allowlist secret
-        }
-
-        with patch("floe_ingestion_dlt.plugin.logger") as mock_logger:
-            plugin.get_destination_config(catalog_config)
-
-            # Verify secrets are NOT in any logger call
-            for call in mock_logger.info.call_args_list:
-                call_str = str(call)
-                assert "sensitive-access-key-12345" not in call_str, (
-                    "s3_access_key value leaked in logs"
-                )
-                assert "super-secret-key-67890" not in call_str, (
-                    "s3_secret_key value leaked in logs"
-                )

@@ -1029,6 +1029,8 @@ query RunStatus($runId: ID!) {
 """
 
 _COMPLETED_MARQUEZ_STATE = "COMPLETED"
+_DAGSTER_LAUNCH_RUN_TIMEOUT_SECONDS = 30.0
+_DAGSTER_LAUNCH_TIMEOUT_MARQUEZ_GRACE_SECONDS = 180.0
 
 
 def _marquez_job_runs(
@@ -1118,6 +1120,7 @@ def _wait_for_fresh_completed_marquez_run(
     namespace: str,
     job_name: str,
     before_run_ids: set[str],
+    timeout: float = 60.0,
 ) -> bool:
     """Wait until Marquez ingests a fresh COMPLETED run for the expected job."""
 
@@ -1136,10 +1139,34 @@ def _wait_for_fresh_completed_marquez_run(
 
     return wait_for_condition(
         _has_fresh_completed_run,
-        timeout=60.0,
+        timeout=timeout,
         interval=3.0,
         description=f"Marquez fresh COMPLETED run for {namespace}/{job_name}",
         raise_on_timeout=False,
+    )
+
+
+def _wait_for_lineage_after_launch_timeout(
+    marquez_client: httpx.Client,
+    *,
+    expected_namespace: str | None,
+    expected_job_name: str | None,
+    before_run_ids: set[str] | None,
+) -> bool:
+    """Wait for runtime lineage when Dagster accepted a launch but timed out responding."""
+    if not expected_namespace or not expected_job_name or before_run_ids is None:
+        return False
+
+    logger.warning(
+        "trigger_lineage_run: launchRun timed out; waiting for fresh Marquez "
+        "evidence because Dagster may have accepted the run"
+    )
+    return _wait_for_fresh_completed_marquez_run(
+        marquez_client,
+        namespace=expected_namespace,
+        job_name=expected_job_name,
+        before_run_ids=before_run_ids,
+        timeout=_DAGSTER_LAUNCH_TIMEOUT_MARQUEZ_GRACE_SECONDS,
     )
 
 
@@ -1293,8 +1320,16 @@ def _trigger_lineage_run(
         response = httpx.post(
             f"{dagster_url}/graphql",
             json={"query": _LAUNCH_RUN_MUTATION, "variables": variables},
-            timeout=30.0,
+            timeout=_DAGSTER_LAUNCH_RUN_TIMEOUT_SECONDS,
         )
+    except httpx.ReadTimeout:
+        _wait_for_lineage_after_launch_timeout(
+            marquez_client,
+            expected_namespace=expected_namespace,
+            expected_job_name=expected_job_name,
+            before_run_ids=run_ids_before,
+        )
+        return
     except httpx.HTTPError as exc:
         logger.warning(
             "seed_observability: launchRun request failed (%s); skipping lineage run",

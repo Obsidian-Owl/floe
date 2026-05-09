@@ -199,7 +199,7 @@ Each of the 11 plugin types extends `PluginMetadata` with type-specific methods.
 | `LineageBackendPlugin` | `PluginMetadata` | `get_transport_config()`, `get_namespace_strategy()` |
 | `DBTPlugin` | `PluginMetadata` | `compile_project()`, `run_models()`, `test_models()` |
 | `SemanticLayerPlugin` | `PluginMetadata` | `sync_from_dbt_manifest()`, `get_datasource_config()` |
-| `IngestionPlugin` | `PluginMetadata` | `create_pipeline()`, `run()`, `get_destination_config()` |
+| `IngestionPlugin` | `PluginMetadata` | `create_pipeline()`, `run()`, `get_composition_requirements()`, `build_deployment_binding()` |
 | `SecretsPlugin` | `PluginMetadata` | `get_secret()`, `set_secret()`, `list_secrets()` |
 | `IdentityPlugin` | `PluginMetadata` | `authenticate()`, `get_user_info()`, `validate_token()` |
 

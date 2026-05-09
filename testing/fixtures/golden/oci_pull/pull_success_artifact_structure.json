@@ -110,6 +110,8 @@
         }
       }
     },
+    "deployment": null,
+    "ingestion_outputs": [],
     "governance": null,
     "enforcement_result": null,
     "data_contracts": [],

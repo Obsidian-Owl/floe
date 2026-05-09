@@ -8,11 +8,11 @@ These are source-parsing tests: they read the shell script as text and
 assert on structural properties.  They run in <1s with no infrastructure.
 
 Requirements Covered:
-    - AC-3.1: Collect logs from ALL pods in $TEST_NAMESPACE (last $LOG_TAIL_LINES lines)
+    - AC-3.1: Collect logs from ALL pods in $TEST_NAMESPACE (default all lines)
     - AC-3.2: Save each pod's logs to test-artifacts/pod-logs/{pod-name}.log
     - AC-3.3: Capture K8s events to test-artifacts/pod-logs/events.txt
     - AC-3.4: Print summary of collected pod log files to stdout
-    - BC-1: LOG_TAIL_LINES env var overrides default 100
+    - BC-1: LOG_TAIL_LINES env var overrides default all-lines capture
     - BC-2: Individual pod log failures skip with warning, don't fail loop
     - BC-3: Per-pod timeout of 10 seconds
 
@@ -140,7 +140,7 @@ class TestExtractPodLogsFunctionExists:
 
 
 # ---------------------------------------------------------------------------
-# Tests — LOG_TAIL_LINES variable with default 100
+# Tests — LOG_TAIL_LINES variable with default all-lines capture
 # ---------------------------------------------------------------------------
 
 
@@ -159,25 +159,41 @@ class TestLogTailLinesVariable:
         )
 
     @pytest.mark.requirement("BC-1")
-    def test_log_tail_lines_default_100(self) -> None:
-        """LOG_TAIL_LINES MUST default to 100 if not set.
+    def test_log_tail_lines_default_all_lines(self) -> None:
+        """LOG_TAIL_LINES MUST default to all lines if not set.
 
         The default can appear either in the function body or at the
         script's top-level configuration block.
         """
         script = _read_script()
-        # Check script-wide: must have a default assignment of 100
-        # Patterns: LOG_TAIL_LINES="${LOG_TAIL_LINES:-100}"
-        #       or: LOG_TAIL_LINES=${LOG_TAIL_LINES:-100}
-        #       or: : "${LOG_TAIL_LINES:=100}"
+        # Check script-wide: must have a default assignment of -1 (kubectl all lines).
+        # Patterns: LOG_TAIL_LINES="${LOG_TAIL_LINES:--1}"
+        #       or: LOG_TAIL_LINES=${LOG_TAIL_LINES:--1}
+        #       or: : "${LOG_TAIL_LINES:=-1}"
         default_pattern = re.compile(
-            r"""LOG_TAIL_LINES[=}].*(?::-|:=)\s*100\b"""
+            r"""LOG_TAIL_LINES[=}].*(?::-|:=)\s*-1\b"""
             r"""|"""
-            r""":\s+"\$\{LOG_TAIL_LINES:=100\}"""
+            r""":\s+"\$\{LOG_TAIL_LINES:=-1\}"""
         )
         assert default_pattern.search(script), (
-            "LOG_TAIL_LINES does not have a default value of 100. "
-            'Expected pattern like: LOG_TAIL_LINES="${LOG_TAIL_LINES:-100}"'
+            "LOG_TAIL_LINES does not have a default value of -1. "
+            'Expected pattern like: LOG_TAIL_LINES="${LOG_TAIL_LINES:--1}"'
+        )
+
+    @pytest.mark.requirement("AC-3.1")
+    def test_collects_all_containers_for_each_pod(self) -> None:
+        """Pod diagnostics MUST include every container in the pod.
+
+        Failed Dagster run pods can hide useful output outside the default
+        container selection, so the artifact collection path must request all
+        containers explicitly.
+        """
+        script = _read_script()
+        body = _extract_function_body(script, "extract_pod_logs")
+        assert body is not None, "extract_pod_logs() function not found"
+        assert "--all-containers=true" in body, (
+            "extract_pod_logs() must pass --all-containers=true to kubectl logs "
+            "so failed pod diagnostics include every container."
         )
 
 

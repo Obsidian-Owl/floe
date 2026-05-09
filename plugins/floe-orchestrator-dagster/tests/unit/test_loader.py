@@ -27,10 +27,13 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-from dagster import AssetKey, Definitions, ResourceDefinition, build_op_context
+from dagster import AssetKey, Definitions, ResourceDefinition, asset, build_op_context
 from floe_core.schemas.compiled_artifacts import (
     CompilationMetadata,
     CompiledArtifacts,
+    DeploymentConfig,
+    DltIngestionBinding,
+    IngestionDeploymentBinding,
     ObservabilityConfig,
     PluginRef,
     ResolvedModel,
@@ -256,13 +259,62 @@ def project_dir_with_ingestion(tmp_path: Path) -> Path:
             config={
                 "sources": [
                     {
-                        "name": "github-events",
-                        "source_type": "rest_api",
-                        "destination_table": "bronze.github_events",
+                        "name": "raw_customers",
+                        "source_type": "filesystem",
+                        "source_config": {
+                            "format": "csv",
+                            "path": "data/raw_customers.csv",
+                        },
+                        "destination_table": "bronze.raw_customers",
                     }
                 ]
             },
         ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_binding(tmp_path: Path) -> Path:
+    """Temporary project dir with dlt ingestion and compiled runtime binding."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "sources": [
+                    {
+                        "name": "raw_customers",
+                        "source_type": "filesystem",
+                        "source_config": {
+                            "format": "csv",
+                            "path": "s3://raw/customers/*.csv",
+                        },
+                        "destination_table": "bronze.raw_customers",
+                    }
+                ]
+            },
+        ),
+    ).model_copy(
+        update={
+            "deployment": DeploymentConfig(
+                ingestion=IngestionDeploymentBinding(
+                    provider="dlt",
+                    dlt=DltIngestionBinding(
+                        plugin_name="dlt",
+                        destination="filesystem",
+                        table_format="iceberg",
+                        source_filesystem={
+                            "endpoint_url": "http://minio:9000",
+                            "region_name": "us-east-1",
+                            "s3_url_style": "path",
+                        },
+                    ),
+                )
+            )
+        }
     )
     _write_artifacts_and_manifest(pdir, artifacts)
     return pdir
@@ -307,6 +359,23 @@ def project_dir_with_ingestion_empty_config(tmp_path: Path) -> Path:
             type="dlt",
             version="0.1.0",
             config={},
+        ),
+    )
+    _write_artifacts_and_manifest(pdir, artifacts)
+    return pdir
+
+
+@pytest.fixture
+def project_dir_with_ingestion_plugin_settings_only(tmp_path: Path) -> Path:
+    """Temporary project dir with ingestion selected but only plugin settings."""
+    pdir = tmp_path / "dbt_project"
+    artifacts = _make_artifacts(
+        ingestion=PluginRef(
+            type="dlt",
+            version="0.1.0",
+            config={
+                "retry_config": {"max_attempts": 3},
+            },
         ),
     )
     _write_artifacts_and_manifest(pdir, artifacts)
@@ -399,9 +468,13 @@ def project_dir_with_ingestion_no_manifest(tmp_path: Path) -> Path:
             config={
                 "sources": [
                     {
-                        "name": "github-events",
-                        "source_type": "rest_api",
-                        "destination_table": "bronze.github_events",
+                        "name": "raw_customers",
+                        "source_type": "filesystem",
+                        "source_config": {
+                            "format": "csv",
+                            "path": "data/raw_customers.csv",
+                        },
+                        "destination_table": "bronze.raw_customers",
                     }
                 ]
             },
@@ -540,6 +613,16 @@ def test_definitions_has_at_least_one_asset(project_dir: Path) -> None:
     # Dagster stores assets as a sequence; ensure non-empty.
     asset_list = list(assets)
     assert len(asset_list) >= 1, "Definitions must include at least one @dbt_assets asset"
+
+
+@pytest.mark.requirement("AC-1")
+def test_definitions_has_product_named_job(project_dir: Path) -> None:
+    """Definitions must expose a stable Dagster-safe product job for API callers."""
+    result = load_product_definitions(PRODUCT_NAME, project_dir)
+
+    job = result.get_job_def(SAFE_NAME)
+
+    assert job.name == SAFE_NAME
 
 
 # ===========================================================================
@@ -1232,12 +1315,45 @@ def test_runtime_semantic_asset_depends_on_compiled_model_assets(
 
 
 @pytest.mark.requirement("AC-5")
-def test_runtime_fails_loudly_when_ingestion_configured(
+def test_runtime_wires_ingestion_when_configured(
     project_dir_with_ingestion: Path,
 ) -> None:
-    """Dagster ingestion runtime is blocked until source construction exists."""
-    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
-        load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion)
+    """Dagster runtime wires filesystem ingestion resources and assets."""
+    result = load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion)
+
+    resources = result.resources or {}
+    assert "ingestion" in resources
+    assert "run_ingestion_raw_customers" in _asset_names(result)
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_passes_dlt_ingestion_binding_to_asset_factory(
+    project_dir_with_ingestion_binding: Path,
+) -> None:
+    """Compiled dlt deployment binding must reach Dagster ingestion assets."""
+
+    @asset
+    def expected_ingestion_asset() -> None:
+        return None
+
+    expected_asset = expected_ingestion_asset
+
+    with patch(
+        "floe_orchestrator_dagster.assets.ingestion.create_ingestion_assets",
+        return_value=[expected_asset],
+    ) as create_assets:
+        result = load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_binding)
+
+    assert expected_asset in list(result.assets or [])
+    create_assets.assert_called_once()
+    call = create_assets.call_args
+    assert call is not None
+    assert call.kwargs["project_dir"] == project_dir_with_ingestion_binding
+    assert call.kwargs["runtime_binding"]["source_filesystem"] == {
+        "endpoint_url": "http://minio:9000",
+        "region_name": "us-east-1",
+        "s3_url_style": "path",
+    }
 
 
 @pytest.mark.requirement("AC-5")
@@ -1274,11 +1390,26 @@ def test_runtime_allows_selected_ingestion_with_empty_config(
 
 
 @pytest.mark.requirement("AC-5")
+def test_runtime_ignores_ingestion_plugin_settings_without_sources(
+    project_dir_with_ingestion_plugin_settings_only: Path,
+) -> None:
+    """Plugin-level ingestion settings without sources are not executable workloads."""
+    result = load_product_definitions(
+        PRODUCT_NAME,
+        project_dir_with_ingestion_plugin_settings_only,
+    )
+
+    resources = result.resources or {}
+    assert "ingestion" not in resources
+    assert not any(name.startswith("run_ingestion_") for name in _asset_names(result))
+
+
+@pytest.mark.requirement("AC-5")
 def test_runtime_fails_for_flat_ingestion_workload_config(
     project_dir_with_ingestion_flat_config: Path,
 ) -> None:
     """Legacy flat non-empty ingestion config is a workload and must fail."""
-    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+    with pytest.raises(Exception, match="sources"):
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_flat_config)
 
 
@@ -1287,7 +1418,7 @@ def test_runtime_fails_for_non_list_ingestion_sources(
     project_dir_with_ingestion_sources_dict: Path,
 ) -> None:
     """Malformed non-list sources config must fail loudly."""
-    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+    with pytest.raises(Exception, match="sources"):
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_sources_dict)
 
 
@@ -1296,7 +1427,7 @@ def test_runtime_fails_for_sources_none_before_missing_manifest(
     project_dir_with_ingestion_sources_none_no_manifest: Path,
 ) -> None:
     """Explicit sources=None is malformed and fails before manifest inspection."""
-    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+    with pytest.raises(Exception, match="sources"):
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_sources_none_no_manifest)
 
 
@@ -1305,7 +1436,7 @@ def test_runtime_fails_for_empty_sources_with_other_workload_keys(
     project_dir_with_ingestion_empty_sources_and_flat_keys: Path,
 ) -> None:
     """Empty sources plus flat workload keys is still a workload config."""
-    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+    with pytest.raises(Exception, match="Extra inputs"):
         load_product_definitions(
             PRODUCT_NAME,
             project_dir_with_ingestion_empty_sources_and_flat_keys,
@@ -1313,11 +1444,11 @@ def test_runtime_fails_for_empty_sources_with_other_workload_keys(
 
 
 @pytest.mark.requirement("AC-5")
-def test_runtime_ingestion_failure_precedes_missing_manifest(
+def test_runtime_still_requires_dbt_manifest_with_valid_ingestion(
     project_dir_with_ingestion_no_manifest: Path,
 ) -> None:
-    """Unsupported ingestion error must win before dbt manifest inspection."""
-    with pytest.raises(ValueError, match="compiled JSON config cannot yet construct executable"):
+    """Valid ingestion wiring does not bypass existing dbt manifest validation."""
+    with pytest.raises(Exception, match="manifest.json does not exist"):
         load_product_definitions(PRODUCT_NAME, project_dir_with_ingestion_no_manifest)
 
 

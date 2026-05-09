@@ -267,10 +267,6 @@ class TestSinkConnectorMixinContract:
                 _ = pipeline, kwargs
                 return IngestionResult(success=True)
 
-            def get_destination_config(self, catalog_config: dict[str, Any]) -> dict[str, Any]:
-                _ = catalog_config
-                return {}
-
             def list_available_sinks(self) -> list[str]:
                 return ["rest_api"]
 

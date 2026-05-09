@@ -51,9 +51,16 @@ def _qualify_table(namespace: str, table_name: str) -> str:
     return f"{namespace}.{table_name}"
 
 
+def _dedupe_preserving_order(values: Sequence[str]) -> list[str]:
+    """Return unique values in first-seen order."""
+    return list(dict.fromkeys(values))
+
+
 def expected_iceberg_tables(
     artifacts: CompiledArtifacts,
     expected_tables: Sequence[str] | None = None,
+    *,
+    include_ingestion: bool = False,
 ) -> list[str]:
     """Return fully qualified Iceberg table identifiers expected for artifacts.
 
@@ -62,16 +69,27 @@ def expected_iceberg_tables(
         expected_tables: Optional explicit table names. Unqualified names are
             resolved under the product namespace from compiled metadata. When
             omitted, all compiled transform model names are expected.
+        include_ingestion: Include compiled ingestion output tables when deriving
+            expected tables from artifacts.
 
     Returns:
         Fully qualified Iceberg table identifiers.
     """
     namespace = _product_namespace(artifacts)
     if expected_tables is None:
-        if artifacts.transforms is None:
+        derived_tables: list[str] = []
+        if artifacts.transforms is not None:
+            derived_tables.extend(model.name for model in artifacts.transforms.models)
+        elif not include_ingestion:
             raise RuntimeError("CompiledArtifacts has no transforms for Iceberg output validation")
-        expected_tables = [model.name for model in artifacts.transforms.models]
-    return [_qualify_table(namespace, table_name) for table_name in expected_tables]
+        if include_ingestion:
+            derived_tables.extend(table.physical_table for table in artifacts.ingestion_outputs)
+        if not derived_tables:
+            raise RuntimeError("No expected Iceberg tables were derived from CompiledArtifacts")
+        expected_tables = derived_tables
+    return _dedupe_preserving_order(
+        [_qualify_table(namespace, table_name) for table_name in expected_tables]
+    )
 
 
 def connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> Catalog:
@@ -122,6 +140,8 @@ _connect_catalog_from_artifacts = connect_catalog_from_artifacts
 def validate_iceberg_outputs(
     artifacts: CompiledArtifacts,
     expected_tables: Sequence[str] | None = None,
+    *,
+    include_ingestion: bool = False,
 ) -> IcebergOutputValidationResult:
     """Validate that all expected Iceberg tables can be loaded.
 
@@ -129,6 +149,8 @@ def validate_iceberg_outputs(
         artifacts: Compiled artifact contract for the deployed product.
         expected_tables: Optional explicit table names. Unqualified names are
             resolved under the product namespace from compiled metadata.
+        include_ingestion: Include compiled ingestion output tables when deriving
+            expected tables from artifacts.
 
     Returns:
         Validation result with expected and confirmed table identifiers.
@@ -137,7 +159,11 @@ def validate_iceberg_outputs(
         RuntimeError: If catalog/storage config is absent, plugin validation
             fails, or any expected Iceberg table cannot be loaded.
     """
-    expected_table_names = expected_iceberg_tables(artifacts, expected_tables)
+    expected_table_names = expected_iceberg_tables(
+        artifacts,
+        expected_tables,
+        include_ingestion=include_ingestion,
+    )
     if not expected_table_names:
         raise RuntimeError("No expected Iceberg tables were derived from CompiledArtifacts")
 
@@ -167,9 +193,15 @@ def validate_iceberg_outputs(
 def reset_iceberg_outputs(
     artifacts: CompiledArtifacts,
     expected_tables: Sequence[str] | None = None,
+    *,
+    include_ingestion: bool = False,
 ) -> list[str]:
     """Drop expected Iceberg output table registrations before a materialization run."""
-    expected_table_names = expected_iceberg_tables(artifacts, expected_tables)
+    expected_table_names = expected_iceberg_tables(
+        artifacts,
+        expected_tables,
+        include_ingestion=include_ingestion,
+    )
     catalog = connect_catalog_from_artifacts(artifacts)
     dropped: list[str] = []
     for table_name in expected_table_names:
@@ -186,12 +218,15 @@ def reset_iceberg_outputs(
 def validate_iceberg_outputs_from_file(
     artifacts_path: Path,
     expected_tables: Sequence[str] | None = None,
+    *,
+    include_ingestion: bool = False,
 ) -> IcebergOutputValidationResult:
     """Load CompiledArtifacts from disk and validate expected Iceberg tables."""
     artifacts = CompiledArtifacts.model_validate_json(artifacts_path.read_text())
     return validate_iceberg_outputs(
         artifacts=artifacts,
         expected_tables=expected_tables,
+        include_ingestion=include_ingestion,
     )
 
 
@@ -225,6 +260,11 @@ def _main(argv: Sequence[str] | None = None) -> int:
         help="Recovery behavior used by the materialization path being validated.",
     )
     parser.add_argument(
+        "--include-ingestion",
+        action="store_true",
+        help="Include compiled ingestion output tables in expected Iceberg validation.",
+    )
+    parser.add_argument(
         "--reset-only",
         action="store_true",
         help="Drop expected Iceberg output registrations and exit without validation.",
@@ -239,6 +279,7 @@ def _main(argv: Sequence[str] | None = None) -> int:
         dropped_tables = reset_iceberg_outputs(
             artifacts=artifacts,
             expected_tables=expected_tables,
+            include_ingestion=args.include_ingestion,
         )
         print(
             json.dumps(
@@ -248,6 +289,7 @@ def _main(argv: Sequence[str] | None = None) -> int:
                     "expected_table_names": expected_iceberg_tables(
                         artifacts,
                         expected_tables,
+                        include_ingestion=args.include_ingestion,
                     ),
                     "recovery_mode": "reset",
                     "table_names": [],
@@ -261,6 +303,7 @@ def _main(argv: Sequence[str] | None = None) -> int:
     result = validate_iceberg_outputs(
         artifacts=artifacts,
         expected_tables=expected_tables,
+        include_ingestion=args.include_ingestion,
     )
     print(
         json.dumps(

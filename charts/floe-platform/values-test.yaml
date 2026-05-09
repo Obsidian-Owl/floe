@@ -163,6 +163,20 @@ dagster:
                   secretKeyRef:
                     name: floe-platform-polaris-credentials
                     key: POLARIS_CREDENTIAL
+              - name: POLARIS_CLIENT_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: floe-platform-polaris-credentials
+                    key: client-id
+              - name: POLARIS_CLIENT_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: floe-platform-polaris-credentials
+                    key: client-secret
+              - name: POLARIS_SCOPE
+                value: PRINCIPAL_ROLE:ALL
+              - name: POLARIS_OAUTH2_SERVER_URI
+                value: http://floe-platform-polaris:8181/api/catalog/v1/oauth/tokens
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: false
@@ -171,6 +185,16 @@ dagster:
               capabilities:
                 drop:
                   - ALL
+        # Run pods execute dbt + dlt + plugin discovery in the same demo image.
+        # Keep this aligned with values-demo.yaml so E2E and demo exercise the
+        # same workload envelope.
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
   # Enable user deployments to allow workspace.yaml to be mounted
   # Even with no actual code locations, this enables the workspace file mount
   dagster-user-deployments:

@@ -145,12 +145,41 @@
           "type": "string"
         },
         "polaris": {
-          "$ref": "#/$defs/PolarisCatalogDeploymentBinding"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PolarisCatalogDeploymentBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "iceberg_rest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IcebergRestCatalogBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dbt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DbtCatalogBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
-        "provider",
-        "polaris"
+        "provider"
       ],
       "title": "CatalogDeploymentBinding",
       "type": "object"
@@ -208,6 +237,8 @@
             "kubernetes-secret",
             "environment",
             "workload-identity",
+            "external-secret-sync",
+            "csi-secret-volume",
             "none"
           ],
           "title": "Source",
@@ -714,6 +745,38 @@
       "title": "DataQuality",
       "type": "object"
     },
+    "DbtCatalogBinding": {
+      "additionalProperties": false,
+      "description": "dbt profile catalog projection derived from catalog-owned deployment state.",
+      "properties": {
+        "profile_fragment": {
+          "additionalProperties": true,
+          "title": "Profile Fragment",
+          "type": "object"
+        },
+        "env_refs": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Env Refs",
+          "type": "object"
+        },
+        "iceberg_rest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IcebergRestCatalogBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "DbtCatalogBinding",
+      "type": "object"
+    },
     "DbtStorageBinding": {
       "additionalProperties": false,
       "description": "dbt profile storage projection.",
@@ -774,6 +837,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/CatalogDeploymentBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ingestion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IngestionDeploymentBinding"
             },
             {
               "type": "null"
@@ -912,6 +986,59 @@
       "title": "DimensionWeights",
       "type": "object"
     },
+    "DltIngestionBinding": {
+      "additionalProperties": false,
+      "description": "Secret-free dlt runtime binding derived from composed platform plugins.",
+      "properties": {
+        "plugin_name": {
+          "minLength": 1,
+          "title": "Plugin Name",
+          "type": "string"
+        },
+        "destination": {
+          "const": "filesystem",
+          "title": "Destination",
+          "type": "string"
+        },
+        "table_format": {
+          "const": "iceberg",
+          "title": "Table Format",
+          "type": "string"
+        },
+        "source_filesystem": {
+          "additionalProperties": true,
+          "title": "Source Filesystem",
+          "type": "object"
+        },
+        "destination_filesystem": {
+          "additionalProperties": true,
+          "title": "Destination Filesystem",
+          "type": "object"
+        },
+        "iceberg_catalog_env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Iceberg Catalog Env",
+          "type": "object"
+        },
+        "env_refs": {
+          "additionalProperties": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Env Refs",
+          "type": "object"
+        }
+      },
+      "required": [
+        "plugin_name",
+        "destination",
+        "table_format"
+      ],
+      "title": "DltIngestionBinding",
+      "type": "object"
+    },
     "EnforcementResultSummary": {
       "additionalProperties": false,
       "description": "Lightweight summary of enforcement result for inclusion in CompiledArtifacts.\n\nThis summary contains only the essential metrics for downstream consumption.\nFull violation details are exported separately (SARIF/JSON/HTML).\n\nContract Version: 0.7.0 (Epic 3E additions)\n\nAttributes:\n    passed: Overall pass/fail status.\n    error_count: Number of error-severity violations.\n    warning_count: Number of warning-severity violations.\n    policy_types_checked: List of policy types that were enforced.\n    models_validated: Number of models that were validated.\n    enforcement_level: Applied enforcement level (off, warn, strict).\n    rbac_principal: Authenticated principal name from RBAC validation (Epic 3E).\n    secrets_scanned: Count of secret scanning violations found (Epic 3E).\n\nExample:\n    >>> summary = EnforcementResultSummary(\n    ...     passed=False,\n    ...     error_count=3,\n    ...     warning_count=5,\n    ...     policy_types_checked=[\"naming\", \"coverage\", \"documentation\"],\n    ...     models_validated=50,\n    ...     enforcement_level=\"strict\",\n    ... )\n    >>> summary.passed\n    False\n\nSee Also:\n    - data-model.md: EnforcementResultSummary entity specification\n    - EnforcementResult: Full result in enforcement module",
@@ -1021,6 +1148,263 @@
         }
       },
       "title": "GateTier",
+      "type": "object"
+    },
+    "IcebergRestCatalogBinding": {
+      "additionalProperties": false,
+      "description": "Secret-free Iceberg REST catalog projection for runtime consumers.",
+      "properties": {
+        "catalog_name": {
+          "default": "iceberg",
+          "minLength": 1,
+          "title": "Catalog Name",
+          "type": "string"
+        },
+        "uri": {
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        },
+        "warehouse": {
+          "minLength": 1,
+          "title": "Warehouse",
+          "type": "string"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Properties"
+        },
+        "oauth2": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IcebergRestOAuth2Binding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "uri",
+        "warehouse"
+      ],
+      "title": "IcebergRestCatalogBinding",
+      "type": "object"
+    },
+    "IcebergRestOAuth2Binding": {
+      "additionalProperties": false,
+      "description": "Secret-free OAuth2 references for an Iceberg REST catalog consumer.",
+      "properties": {
+        "secret_name": {
+          "default": "iceberg",
+          "minLength": 1,
+          "title": "Secret Name",
+          "type": "string"
+        },
+        "client_id_env": {
+          "minLength": 1,
+          "title": "Client Id Env",
+          "type": "string"
+        },
+        "client_secret_env": {
+          "minLength": 1,
+          "title": "Client Secret Env",
+          "type": "string"
+        },
+        "oauth2_server_uri_env": {
+          "minLength": 1,
+          "title": "Oauth2 Server Uri Env",
+          "type": "string"
+        },
+        "oauth2_scope_env": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Oauth2 Scope Env"
+        },
+        "oauth2_scope_default": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Oauth2 Scope Default"
+        }
+      },
+      "required": [
+        "client_id_env",
+        "client_secret_env",
+        "oauth2_server_uri_env"
+      ],
+      "title": "IcebergRestOAuth2Binding",
+      "type": "object"
+    },
+    "IngestionDeploymentBinding": {
+      "additionalProperties": false,
+      "description": "Secret-free ingestion deployment binding.",
+      "properties": {
+        "provider": {
+          "const": "dlt",
+          "title": "Provider",
+          "type": "string"
+        },
+        "dlt": {
+          "$ref": "#/$defs/DltIngestionBinding"
+        }
+      },
+      "required": [
+        "provider",
+        "dlt"
+      ],
+      "title": "IngestionDeploymentBinding",
+      "type": "object"
+    },
+    "IngestionOutputTable": {
+      "additionalProperties": false,
+      "description": "Platform-visible Iceberg table state created by ingestion sources.",
+      "properties": {
+        "source_name": {
+          "minLength": 1,
+          "title": "Source Name",
+          "type": "string"
+        },
+        "source_type": {
+          "const": "filesystem",
+          "title": "Source Type",
+          "type": "string"
+        },
+        "table_format": {
+          "const": "iceberg",
+          "default": "iceberg",
+          "title": "Table Format",
+          "type": "string"
+        },
+        "logical_table": {
+          "minLength": 1,
+          "title": "Logical Table",
+          "type": "string"
+        },
+        "physical_table": {
+          "minLength": 1,
+          "title": "Physical Table",
+          "type": "string"
+        },
+        "file_format": {
+          "enum": [
+            "csv",
+            "jsonl",
+            "parquet"
+          ],
+          "title": "File Format",
+          "type": "string"
+        },
+        "source_path": {
+          "minLength": 1,
+          "title": "Source Path",
+          "type": "string"
+        },
+        "write_mode": {
+          "enum": [
+            "append",
+            "replace",
+            "merge"
+          ],
+          "title": "Write Mode",
+          "type": "string"
+        },
+        "schema_contract": {
+          "enum": [
+            "evolve",
+            "freeze"
+          ],
+          "title": "Schema Contract",
+          "type": "string"
+        },
+        "freshness_field": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Freshness Field"
+        },
+        "primary_key": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Primary Key"
+        },
+        "cursor_field": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cursor Field"
+        },
+        "quality_tier": {
+          "default": "bronze",
+          "enum": [
+            "bronze",
+            "silver",
+            "gold"
+          ],
+          "title": "Quality Tier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_name",
+        "source_type",
+        "logical_table",
+        "physical_table",
+        "file_format",
+        "source_path",
+        "write_mode",
+        "schema_contract"
+      ],
+      "title": "IngestionOutputTable",
       "type": "object"
     },
     "KubernetesSecretRef": {
@@ -1530,6 +1914,19 @@
           "title": "Storage Type",
           "type": "string"
         },
+        "warehouse": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Warehouse"
+        },
         "default_base_location": {
           "minLength": 1,
           "title": "Default Base Location",
@@ -1552,6 +1949,19 @@
           "minLength": 1,
           "title": "Endpoint Internal",
           "type": "string"
+        },
+        "catalog_uri": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog Uri"
         },
         "path_style_access": {
           "title": "Path Style Access",
@@ -2143,7 +2553,7 @@
     },
     "ResolvedPlugins": {
       "additionalProperties": false,
-      "description": "Resolved plugin selections after inheritance.\n\nContains references to all resolved plugins that will be used\nfor pipeline execution. Required plugins (compute, orchestrator)\nmust be present; optional plugins may be None.\n\nAttributes:\n    compute: Resolved compute plugin (required)\n    orchestrator: Resolved orchestrator plugin (required)\n    catalog: Resolved catalog plugin (optional)\n    storage: Resolved storage plugin (optional)\n    ingestion: Resolved ingestion plugin (optional)\n    semantic: Resolved semantic layer plugin (optional)\n\nExample:\n    >>> plugins = ResolvedPlugins(\n    ...     compute=PluginRef(type=\"duckdb\", version=\"0.9.0\"),\n    ...     orchestrator=PluginRef(type=\"dagster\", version=\"1.5.0\"),\n    ...     catalog=PluginRef(type=\"polaris\", version=\"0.1.0\"),\n    ... )\n    >>> plugins.compute.type\n    'duckdb'\n\nSee Also:\n    - data-model.md: ResolvedPlugins entity specification",
+      "description": "Resolved plugin selections after inheritance.\n\nContains references to all resolved plugins that will be used\nfor pipeline execution. Required plugins (compute, orchestrator)\nmust be present; optional plugins may be None.\n\nAttributes:\n    compute: Resolved compute plugin (required)\n    orchestrator: Resolved orchestrator plugin (required)\n    catalog: Resolved catalog plugin (optional)\n    storage: Resolved storage plugin (optional)\n    ingestion: Resolved ingestion plugin (optional)\n    semantic: Resolved semantic layer plugin (optional)\n    secrets: Resolved secrets plugin (optional)\n    identity: Resolved identity plugin (optional)\n\nExample:\n    >>> plugins = ResolvedPlugins(\n    ...     compute=PluginRef(type=\"duckdb\", version=\"0.9.0\"),\n    ...     orchestrator=PluginRef(type=\"dagster\", version=\"1.5.0\"),\n    ...     catalog=PluginRef(type=\"polaris\", version=\"0.1.0\"),\n    ... )\n    >>> plugins.compute.type\n    'duckdb'\n\nSee Also:\n    - data-model.md: ResolvedPlugins entity specification",
       "properties": {
         "compute": {
           "$ref": "#/$defs/PluginRef",
@@ -2212,6 +2622,30 @@
           ],
           "default": null,
           "description": "Resolved lineage backend plugin (optional, v0.5.0+)"
+        },
+        "secrets": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resolved secrets plugin (optional)"
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resolved identity plugin (optional)"
         }
       },
       "required": [
@@ -3566,6 +4000,14 @@
           "title": "Credential Modes",
           "type": "array"
         },
+        "identity_modes": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Identity Modes",
+          "type": "array"
+        },
         "sts_supported": {
           "default": false,
           "title": "Sts Supported",
@@ -3589,6 +4031,8 @@
             "kubernetes-secret",
             "environment",
             "workload-identity",
+            "external-secret-sync",
+            "csi-secret-volume",
             "none"
           ],
           "title": "Mode",
@@ -4328,7 +4772,7 @@
   "description": "Output of floe compile - unified for all deployment modes.\n\nCompiledArtifacts is the single source of truth for pipeline execution.\nIt contains resolved, validated configuration after manifest inheritance.\n\nThe observability field contains TelemetryConfig which provides:\n- OpenTelemetry SDK configuration (Layer 1 - ENFORCED)\n- OTLP Collector endpoint (Layer 2 - ENFORCED)\n- Backend plugin selection (Layer 3 - PLUGGABLE)\n\nContract Version: 0.5.0 (see docstring header for version history)\n\nAttributes:\n    version: Schema version (semver) - default 0.5.0\n    metadata: Compilation metadata\n    identity: Product identity from catalog\n    mode: Deployment mode (simple, centralized, mesh)\n    inheritance_chain: Manifest inheritance lineage\n    observability: Observability configuration with TelemetryConfig\n    plugins: Resolved plugin selections (v0.2.0+)\n    transforms: Compiled transform configuration (v0.2.0+)\n    dbt_profiles: Generated profiles.yml content (v0.2.0+)\n    governance: Resolved governance settings (v0.2.0+, optional)\n    enforcement_result: Enforcement result summary (v0.3.0+, optional)\n    data_contracts: Validated data contracts (v0.3.0+, Epic 3C)\n\nExamples:\n    >>> from datetime import datetime\n    >>> from floe_core.schemas.telemetry import TelemetryConfig, ResourceAttributes\n    >>> artifacts = CompiledArtifacts(\n    ...     version=\"0.2.0\",\n    ...     metadata=CompilationMetadata(\n    ...         compiled_at=datetime.now(),\n    ...         floe_version=\"0.2.0\",\n    ...         source_hash=\"sha256:abc123\",\n    ...         product_name=\"my-pipeline\",\n    ...         product_version=\"1.0.0\",\n    ...     ),\n    ...     identity=ProductIdentity(\n    ...         product_id=\"default.my_pipeline\",\n    ...         domain=\"default\",\n    ...         repository=\"github.com/acme/my-pipeline\",\n    ...     ),\n    ...     mode=\"simple\",\n    ...     observability=ObservabilityConfig(\n    ...         telemetry=TelemetryConfig(\n    ...             resource_attributes=ResourceAttributes(...),\n    ...         ),\n    ...         lineage_namespace=\"my-pipeline\",\n    ...     ),\n    ...     plugins=ResolvedPlugins(\n    ...         compute=PluginRef(type=\"duckdb\", version=\"0.9.0\"),\n    ...         orchestrator=PluginRef(type=\"dagster\", version=\"1.5.0\"),\n    ...     ),\n    ...     transforms=ResolvedTransforms(\n    ...         models=[ResolvedModel(name=\"stg_customers\", compute=\"duckdb\")],\n    ...         default_compute=\"duckdb\",\n    ...     ),\n    ...     dbt_profiles={\"default\": {\"target\": \"dev\", \"outputs\": {...}}},\n    ... )\n\nSee Also:\n    - docs/contracts/compiled-artifacts.md: Full specification\n    - ADR-0012: CompiledArtifacts contract design\n    - TelemetryConfig: OpenTelemetry configuration",
   "properties": {
     "version": {
-      "default": "0.10.0",
+      "default": "0.15.0",
       "description": "Schema version (semver)",
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
       "title": "Version",
@@ -4388,6 +4832,14 @@
       ],
       "default": null,
       "description": "Deployment bindings derived from resolved plugin configuration"
+    },
+    "ingestion_outputs": {
+      "description": "Platform-visible Iceberg tables created by ingestion sources",
+      "items": {
+        "$ref": "#/$defs/IngestionOutputTable"
+      },
+      "title": "Ingestion Outputs",
+      "type": "array"
     },
     "transforms": {
       "anyOf": [

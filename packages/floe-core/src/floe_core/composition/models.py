@@ -40,6 +40,8 @@ class CapabilitySet(BaseModel):
     secret_projection_modes: list[SecretProjectionMode] = Field(default_factory=list)
     identity_modes: list[IdentityMode] = Field(default_factory=list)
     providers: list[str] = Field(default_factory=list)
+    catalog_providers: list[str] = Field(default_factory=list)
+    table_formats: list[str] = Field(default_factory=list)
     path_style_access: bool | None = None
     sts: bool | None = None
 
@@ -54,6 +56,8 @@ class RequirementSet(BaseModel):
     secret_projection_modes: list[SecretProjectionMode] = Field(default_factory=list)
     identity_modes: list[IdentityMode] = Field(default_factory=list)
     providers: list[str] = Field(default_factory=list)
+    catalog_providers: list[str] = Field(default_factory=list)
+    table_formats: list[str] = Field(default_factory=list)
     requires_server_side_storage_access: bool | None = None
     supports_no_sts: bool | None = None
     supports_path_style_access: bool | None = None

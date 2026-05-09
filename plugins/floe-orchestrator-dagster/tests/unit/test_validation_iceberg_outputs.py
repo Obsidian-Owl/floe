@@ -17,6 +17,7 @@ from floe_core.schemas.compiled_artifacts import (
     DagsterStorageBinding,
     DbtStorageBinding,
     DeploymentConfig,
+    IngestionOutputTable,
     KubernetesSecretRef,
     ObservabilityConfig,
     PluginRef,
@@ -87,6 +88,7 @@ def _make_artifacts(
     *,
     transforms: ResolvedTransforms | None = None,
     deployment: DeploymentConfig | None = None,
+    ingestion_outputs: list[IngestionOutputTable] | None = None,
 ) -> CompiledArtifacts:
     """Build compiled artifacts with configured catalog and storage plugins."""
     return CompiledArtifacts(
@@ -128,6 +130,7 @@ def _make_artifacts(
         ),
         transforms=transforms,
         deployment=deployment,
+        ingestion_outputs=ingestion_outputs or [],
     )
 
 
@@ -208,6 +211,82 @@ def test_expected_iceberg_tables_fails_when_transforms_missing() -> None:
 
     with pytest.raises(RuntimeError, match="CompiledArtifacts has no transforms"):
         expected_iceberg_tables(artifacts)
+
+
+@pytest.mark.requirement("ALPHA-ICEBERG")
+def test_expected_iceberg_tables_includes_ingestion_outputs_when_requested() -> None:
+    """Callers can opt into validating compiled ingestion output tables."""
+    artifacts = _make_artifacts(transforms=None).model_copy(
+        update={
+            "ingestion_outputs": [
+                IngestionOutputTable(
+                    source_name="raw-transactions",
+                    source_type="filesystem",
+                    logical_table="bronze.raw_transactions",
+                    physical_table="bronze.raw_transactions",
+                    file_format="csv",
+                    source_path="./seeds/raw_transactions.csv",
+                    write_mode="replace",
+                    schema_contract="evolve",
+                )
+            ]
+        }
+    )
+
+    assert expected_iceberg_tables(artifacts, include_ingestion=True) == ["bronze.raw_transactions"]
+
+
+@pytest.mark.requirement("ALPHA-ICEBERG")
+def test_expected_iceberg_tables_deduplicates_after_qualification() -> None:
+    """Expected table derivation removes duplicate identifiers without reordering."""
+    artifacts = _make_artifacts(
+        transforms=ResolvedTransforms(
+            models=[
+                ResolvedModel(name="orders", compute="duckdb"),
+                ResolvedModel(name="customer_360.dim_customer", compute="duckdb"),
+            ],
+            default_compute="duckdb",
+        ),
+        ingestion_outputs=[
+            IngestionOutputTable(
+                source_name="raw-orders",
+                source_type="filesystem",
+                logical_table="raw.orders",
+                physical_table="customer_360.orders",
+                file_format="csv",
+                source_path="./seeds/orders.csv",
+                write_mode="replace",
+                schema_contract="evolve",
+            ),
+            IngestionOutputTable(
+                source_name="dim-customer",
+                source_type="filesystem",
+                logical_table="customer_360.dim_customer",
+                physical_table="customer_360.dim_customer",
+                file_format="csv",
+                source_path="./seeds/dim_customer.csv",
+                write_mode="replace",
+                schema_contract="evolve",
+            ),
+        ],
+    )
+
+    assert expected_iceberg_tables(artifacts, include_ingestion=True) == [
+        "customer_360.orders",
+        "customer_360.dim_customer",
+    ]
+    assert expected_iceberg_tables(
+        artifacts,
+        expected_tables=[
+            "orders",
+            "customer_360.orders",
+            "analytics.orders",
+            "analytics.orders",
+        ],
+    ) == [
+        "customer_360.orders",
+        "analytics.orders",
+    ]
 
 
 @pytest.mark.requirement("ALPHA-ICEBERG")

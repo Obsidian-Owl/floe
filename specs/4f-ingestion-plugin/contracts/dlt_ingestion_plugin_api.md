@@ -6,7 +6,7 @@
 
 ## Overview
 
-DltIngestionPlugin is the default implementation of the `IngestionPlugin` ABC. It wraps dlt (data load tool) v1.21.0 to provide data pipeline creation, execution, and Iceberg destination configuration. The plugin is orchestrator-agnostic; all orchestrator-specific wiring lives in the orchestrator plugin.
+DltIngestionPlugin is the default implementation of the `IngestionPlugin` ABC. It wraps dlt (data load tool) v1.21.0 to provide data pipeline creation and execution. Destination handoff is runtime-bound: platform composition builds the storage/catalog binding, the orchestrator passes it through `IngestionConfig.runtime_binding`, and the plugin uses `destination_filesystem` to configure dlt's filesystem destination. The plugin is orchestrator-agnostic; all orchestrator-specific wiring lives in the orchestrator plugin.
 
 ## Class Interface
 
@@ -28,21 +28,21 @@ from floe_ingestion_dlt.config import DltIngestionConfig
 class DltIngestionPlugin(IngestionPlugin):
     """dlt-based implementation of IngestionPlugin.
 
-    Provides data ingestion via dlt pipelines with Iceberg destination
-    and Polaris REST catalog. Supports REST API, SQL Database, and
-    Filesystem source types.
+    Provides data ingestion via dlt pipelines using the filesystem destination
+    with table_format="iceberg" and catalog environment from DltIngestionBinding.
+    Supports REST API, SQL Database, and Filesystem source types.
 
     Example:
         >>> from floe_ingestion_dlt import DltIngestionPlugin, DltIngestionConfig
-        >>> config = DltIngestionConfig(sources=[...], catalog_config={...})
+        >>> config = DltIngestionConfig(sources=[...])
         >>> plugin = DltIngestionPlugin(config=config)
         >>> plugin.startup()
-        >>> pipeline = plugin.create_pipeline(ingestion_config)
+        >>> pipeline = plugin.create_pipeline(ingestion_config_with_runtime_binding)
         >>> result = plugin.run(pipeline)
         >>> plugin.shutdown()
 
     Args:
-        config: Plugin configuration with sources and catalog details.
+        config: Plugin configuration with ingestion-owned source and retry details.
     """
 
     def __init__(self, config: DltIngestionConfig) -> None:
@@ -118,7 +118,9 @@ class DltIngestionPlugin(IngestionPlugin):
 
         Verifies:
         1. dlt is importable
-        2. Iceberg destination is reachable (catalog connection test)
+        2. Plugin lifecycle state is ready for runtime use
+        3. Runtime binding is present when destination configuration is needed
+           (catalog and object storage network checks are deferred to create/run)
 
         Returns:
             HealthStatus with state=HEALTHY or UNHEALTHY.
@@ -144,7 +146,7 @@ class DltIngestionPlugin(IngestionPlugin):
 
         Configures a dlt pipeline with:
         - pipeline_name derived from destination_table
-        - destination="iceberg" with REST catalog config
+        - destination="filesystem" using runtime_binding.destination_filesystem
         - dataset_name from Iceberg namespace
 
         Args:
@@ -195,26 +197,6 @@ class DltIngestionPlugin(IngestionPlugin):
         """
         ...
 
-    def get_destination_config(
-        self, catalog_config: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Build dlt Iceberg destination configuration.
-
-        Maps Polaris catalog config to dlt destination parameters:
-        - catalog_type: "rest"
-        - credentials.uri: catalog URI
-        - credentials.warehouse: warehouse name
-
-        Args:
-            catalog_config: Polaris REST catalog connection details
-                           (uri, warehouse, optional S3/MinIO config).
-
-        Returns:
-            Dict suitable for dlt.pipeline(destination=iceberg(**config)).
-
-        OTel Span: floe.ingestion.get_destination_config
-        """
-        ...
 ```
 
 ## Method Contracts
@@ -223,15 +205,16 @@ class DltIngestionPlugin(IngestionPlugin):
 
 | Input | Type | Required | Description |
 |-------|------|----------|-------------|
-| config | IngestionConfig | Yes | Source type, config, destination, write mode |
+| config | IngestionConfig | Yes | Source type, config, destination, write mode, runtime binding |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| pipeline | dlt.Pipeline | Configured dlt pipeline ready for run() |
+| pipeline | dlt.Pipeline | Configured dlt pipeline with filesystem destination ready for run() |
 
 | Error | When | Category |
 |-------|------|----------|
 | ValidationError | Invalid source_type, empty fields | CONFIGURATION |
+| PipelineConfigurationError | Missing runtime binding or destination_filesystem | CONFIGURATION |
 | SourceConnectionError | Source unreachable | TRANSIENT |
 | PipelineConfigurationError | dlt source package not installed | CONFIGURATION |
 
@@ -252,15 +235,16 @@ class DltIngestionPlugin(IngestionPlugin):
 | SchemaContractViolation | Schema freeze rejects change | PERMANENT |
 | SourceConnectionError | Source fails during extract | TRANSIENT |
 
-### get_destination_config()
+### Runtime destination handoff
 
 | Input | Type | Required | Description |
 |-------|------|----------|-------------|
-| catalog_config | dict[str, Any] | Yes | Polaris connection: uri, warehouse |
+| config.runtime_binding.destination_filesystem | dict[str, Any] | Yes | dlt filesystem destination settings including bucket URL and storage credentials |
+| config.runtime_binding.iceberg_catalog_env | dict[str, str] | Yes | PyIceberg catalog environment for Polaris REST catalog resolution |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| config | dict[str, Any] | dlt Iceberg destination parameters |
+| pipeline | dlt.Pipeline | dlt pipeline configured with `filesystem(**destination_filesystem)` and runtime catalog environment |
 
 ### health_check()
 

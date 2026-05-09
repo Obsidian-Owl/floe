@@ -30,7 +30,7 @@ from floe_core.schemas.compiled_artifacts import (
     ResolvedTransforms,
     sanitize_plugin_config_for_artifact,
 )
-from floe_core.schemas.floe_spec import FloeSpec
+from floe_core.schemas.floe_spec import FloeSpec, IngestionSourceSpec
 from floe_core.schemas.manifest import PlatformManifest
 
 # Default plugin version when not specified
@@ -115,6 +115,92 @@ def resolve_plugins(manifest: PlatformManifest) -> ResolvedPlugins:
         secrets=_to_plugin_ref(plugins.secrets),
         identity=_to_plugin_ref(plugins.identity),
     )
+
+
+def resolve_ingestion_config(spec: FloeSpec, plugins: ResolvedPlugins) -> ResolvedPlugins:
+    """Merge product-level ingestion sources into resolved ingestion plugin config.
+
+    Args:
+        spec: FloeSpec with optional product ingestion sources.
+        plugins: Resolved plugin selections from the platform manifest.
+
+    Returns:
+        ResolvedPlugins with ingestion sources merged into the ingestion plugin config,
+        or the original plugins object when the product has no ingestion.
+
+    Raises:
+        CompilationException: If product ingestion is declared without a supported
+            ingestion plugin selected in the platform manifest.
+    """
+    if spec.ingestion is None:
+        return plugins
+
+    if plugins.ingestion is None:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message="Product declares ingestion sources but no ingestion plugin is selected",
+                suggestion="Add plugins.ingestion to the platform manifest",
+                context={"product": spec.metadata.name},
+            )
+        )
+
+    if plugins.ingestion.type != "dlt":
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=(
+                    "Product-level ingestion sources currently require the dlt ingestion plugin"
+                ),
+                suggestion="Set plugins.ingestion.type to dlt in the platform manifest",
+                context={
+                    "product": spec.metadata.name,
+                    "ingestion_plugin": plugins.ingestion.type,
+                },
+            )
+        )
+
+    existing_config = dict(plugins.ingestion.config or {})
+    if "catalog_config" in existing_config:
+        raise CompilationException(
+            CompilationError(
+                stage=CompilationStage.RESOLVE,
+                code="E201",
+                message=(
+                    "dlt ingestion config no longer accepts catalog_config; "
+                    "catalog and storage settings are supplied through deployment bindings"
+                ),
+                suggestion=("Remove plugins.ingestion.config.catalog_config from the manifest"),
+                context={
+                    "product": spec.metadata.name,
+                    "ingestion_plugin": plugins.ingestion.type,
+                    "config_key": "catalog_config",
+                },
+            )
+        )
+    existing_config["sources"] = [
+        _resolve_ingestion_source_config(source) for source in spec.ingestion.sources
+    ]
+
+    return plugins.model_copy(
+        update={
+            "ingestion": plugins.ingestion.model_copy(update={"config": existing_config}),
+        }
+    )
+
+
+def _resolve_ingestion_source_config(source: IngestionSourceSpec) -> dict[str, object]:
+    """Convert a product ingestion source to the dlt plugin config contract."""
+    source_config = {"format": source.format, "path": source.path}
+    resolved_source = source.model_dump(
+        by_alias=False,
+        exclude={"format", "path"},
+        exclude_none=True,
+    )
+    resolved_source["source_config"] = source_config
+    return resolved_source
 
 
 def resolve_manifest_inheritance(

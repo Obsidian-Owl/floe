@@ -190,7 +190,7 @@
     "T023": {
       "linear_id": "FLO-2454",
       "uuid": "d672e742-de0f-407e-b914-450b65052bea",
-      "title": "Implement get_destination_config()",
+      "title": "Implement runtime destination binding hooks",
       "phase": 4,
       "user_story": "US2",
       "priority": "Urgent"
@@ -198,7 +198,7 @@
     "T024": {
       "linear_id": "FLO-2455",
       "uuid": "3373017a-3de6-47b7-af34-b28fd8da1198",
-      "title": "Unit tests for get_destination_config()",
+      "title": "Unit tests for runtime destination binding hooks",
       "phase": 5,
       "user_story": "US3",
       "priority": "Urgent"
@@ -238,7 +238,7 @@
     "T029": {
       "linear_id": "FLO-2460",
       "uuid": "035f8783-e747-42f2-9237-16c8a1e024e7",
-      "title": "Implement get_destination_config() for Polaris/Iceberg",
+      "title": "Implement filesystem destination binding for Polaris/Iceberg",
       "phase": 5,
       "user_story": "US3",
       "priority": "Urgent"

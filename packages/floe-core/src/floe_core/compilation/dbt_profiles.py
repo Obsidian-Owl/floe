@@ -28,7 +28,11 @@ from floe_core.plugin_types import PluginType
 
 if TYPE_CHECKING:
     from floe_core.plugins.compute import ComputePlugin
-    from floe_core.schemas.compiled_artifacts import DbtStorageBinding, ResolvedPlugins
+    from floe_core.schemas.compiled_artifacts import (
+        DbtStorageBinding,
+        DeploymentConfig,
+        ResolvedPlugins,
+    )
 
 logger = structlog.get_logger(__name__)
 
@@ -165,11 +169,31 @@ def _expand_product_placeholders(value: Any, product_name: str) -> Any:
     return value
 
 
+def _apply_profile_fragment(
+    profile_output: dict[str, Any],
+    profile_fragment: dict[str, Any],
+    env_refs: dict[str, str],
+) -> dict[str, Any]:
+    """Apply a neutral dbt profile fragment and env references."""
+    if profile_fragment:
+        profile_output = {
+            **profile_output,
+            **profile_fragment,
+        }
+    for profile_key, env_name in env_refs.items():
+        profile_output.setdefault(
+            profile_key,
+            format_env_var_placeholder(env_name),
+        )
+    return profile_output
+
+
 def generate_dbt_profiles(
     plugins: ResolvedPlugins,
     product_name: str,
     environments: list[str] | None = None,
     storage_binding: DbtStorageBinding | None = None,
+    deployment: DeploymentConfig | None = None,
 ) -> dict[str, Any]:
     """Generate dbt profiles.yml configuration from resolved plugins.
 
@@ -182,6 +206,7 @@ def generate_dbt_profiles(
         product_name: Data product name (used as profile name in dbt).
         environments: List of environment names to generate (default: ["dev"]).
         storage_binding: Optional compiled storage projection for dbt profile outputs.
+        deployment: Optional compiled deployment state for profile-specific translations.
 
     Returns:
         Dictionary matching dbt profiles.yml structure:
@@ -233,15 +258,22 @@ def generate_dbt_profiles(
         try:
             profile_output = plugin.generate_dbt_profile(compute_config)
             if storage_binding is not None:
-                profile_output = {
-                    **profile_output,
-                    **storage_binding.profile_fragment,
-                }
-                for profile_key, env_name in storage_binding.env_refs.items():
-                    profile_output.setdefault(
-                        profile_key,
-                        format_env_var_placeholder(env_name),
-                    )
+                profile_output = _apply_profile_fragment(
+                    profile_output,
+                    storage_binding.profile_fragment,
+                    storage_binding.env_refs,
+                )
+            if (
+                deployment is not None
+                and deployment.catalog is not None
+                and deployment.catalog.dbt is not None
+            ):
+                profile_output = _apply_profile_fragment(
+                    profile_output,
+                    deployment.catalog.dbt.profile_fragment,
+                    deployment.catalog.dbt.env_refs,
+                )
+            profile_output = plugin.augment_dbt_profile(profile_output, deployment)
             outputs[env] = profile_output
         except Exception as e:
             logger.error(

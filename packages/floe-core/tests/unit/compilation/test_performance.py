@@ -43,6 +43,7 @@ def mock_compute_plugin() -> Any:
         "type": "duckdb",
         "path": ":memory:",
     }
+    mock_plugin.augment_dbt_profile.side_effect = lambda profile_output, deployment: profile_output
 
     with patch(
         "floe_core.compilation.dbt_profiles.get_compute_plugin",

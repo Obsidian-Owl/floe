@@ -4,13 +4,13 @@
 
 ## Summary
 
-Implement the `DltIngestionPlugin` as the default ingestion plugin for floe, providing data pipeline creation via dlt v1.21.0, execution with structured results, and Iceberg destination configuration via Polaris REST catalog. The plugin implements the existing `IngestionPlugin` ABC (no ABC changes), supports 3 source types (REST API, SQL Database, Filesystem), 3 write modes (append, replace, merge), 3 schema contracts (evolve, freeze, discard_value), cursor-based incremental loading, custom OTel spans, structured logging, and error categorization with tenacity-based retry. Orchestrator wiring follows the Epic 4E pattern — all Dagster-specific code (resource factory, asset factory, DagsterDltTranslator) lives in `plugins/floe-orchestrator-dagster/`.
+Implement the `DltIngestionPlugin` as the default ingestion plugin for floe, providing data pipeline creation via dlt v1.21.0, execution with structured results, and Iceberg table writes through a platform-composed filesystem runtime binding. Floe owns the deployment binding from storage/catalog platform configuration; dlt consumes that binding as a filesystem destination with Iceberg table format. The plugin implements the existing `IngestionPlugin` ABC (no ABC changes), supports 3 source types (REST API, SQL Database, Filesystem), 3 write modes (append, replace, merge), 3 schema contracts (evolve, freeze, discard_value), cursor-based incremental loading, custom OTel spans, structured logging, and error categorization with tenacity-based retry. Orchestrator wiring follows the Epic 4E pattern — all Dagster-specific code (resource factory, asset factory, DagsterDltTranslator) lives in `plugins/floe-orchestrator-dagster/`.
 
 ## Technical Context
 
 **Language/Version**: Python 3.11
-**Primary Dependencies**: dlt[iceberg]>=1.20.0 (framework), pydantic>=2.0 (config), structlog>=24.0 (logging), opentelemetry-api>=1.0 (tracing), tenacity>=8.0 (retry), httpx>=0.25.0 (health checks)
-**Storage**: Iceberg tables via Polaris REST catalog, MinIO/S3 for data files (dlt handles destination config)
+**Primary Dependencies**: dlt[iceberg]>=1.20.0 (framework), pydantic>=2.0 (config), structlog>=24.0 (logging), opentelemetry-api>=1.0 (tracing), tenacity>=8.0 (retry)
+**Storage**: Iceberg tables via Polaris REST catalog, MinIO/S3 for data files, with Floe composing runtime/deployment binding and dlt using a filesystem destination
 **Testing**: pytest, testing.base_classes (BasePluginDiscoveryTests, BaseHealthCheckTests), IntegrationTestBase
 **Target Platform**: K8s (dlt runs in-process within orchestrator pods)
 **Project Type**: Monorepo plugin package
@@ -56,7 +56,7 @@ Implement the `DltIngestionPlugin` as the default ingestion plugin for floe, pro
 - [x] Layer ownership respected: Plugin (Layer 1: Foundation), orchestrator wiring (Layer 3: Services)
 
 **Principle VIII: Observability By Default**
-- [x] OpenTelemetry traces emitted: Custom spans for `create_pipeline`, `run`, `get_destination_config` (dlt has no native OTel)
+- [x] OpenTelemetry traces emitted: Custom spans for `create_pipeline` and `run` (dlt has no native OTel)
 - [x] OpenLineage events for data transformations: Automatic via orchestrator's lineage integration (e.g., `openlineage-dagster`)
 
 ## Project Structure
@@ -151,7 +151,7 @@ tests/contract/test_core_to_ingestion_contract.py
 | `pydantic` | `BaseModel`, `ConfigDict`, `Field`, `SecretStr`, `field_validator` | `pydantic` |
 | `structlog` | Structured logging | `structlog` |
 | `opentelemetry-api` | Span creation, attributes | `opentelemetry.trace` |
-| `dlt` | Pipeline API, Iceberg destination, sources | `dlt` |
+| `dlt` | Pipeline API, filesystem destination with `table_format="iceberg"`, sources | `dlt` |
 | `tenacity` | Retry decorator, stop/wait strategies | `tenacity` |
 
 ### Produces for Others
@@ -161,7 +161,7 @@ tests/contract/test_core_to_ingestion_contract.py
 | `DltIngestionPlugin` instance | Plugin Registry | Entry point `floe.ingestion` |
 | dlt pipeline object | Orchestrator (via run()) | `create_pipeline()` return value |
 | `IngestionResult` | Orchestrator, observability | `run()` return value |
-| Iceberg destination config | dlt pipeline | `get_destination_config()` return value |
+| Runtime destination binding | dlt pipeline | `IngestionConfig.runtime_binding.destination_filesystem` |
 | Orchestrator ingestion resources | Dagster Definitions | `try_create_ingestion_resources()` in orchestrator plugin |
 | Dagster assets per dlt resource | Dagster asset graph | Asset factory in orchestrator plugin |
 | Test fixtures (`dlt_config`, `dlt_plugin`) | Integration tests | `testing/fixtures/ingestion.py` |
@@ -192,8 +192,10 @@ This phase establishes the plugin package and shared infrastructure.
 - `DltIngestionConfig(BaseModel)` with `model_config = ConfigDict(frozen=True, extra="forbid")`
 - Fields:
   - `sources: list[IngestionSourceConfig]` (data sources to ingest)
-  - `catalog_config: dict[str, Any]` (Polaris connection details)
   - `retry_config: RetryConfig | None` (optional retry parameters)
+- Destination settings are not plugin config fields. Polaris, warehouse, and
+  filesystem destination facts are composed from platform config into the
+  runtime/deployment binding consumed by the dlt runtime.
 - `IngestionSourceConfig(BaseModel)` with frozen=True, extra="forbid":
   - `name: str` (unique identifier, min_length=1)
   - `source_type: str` (rest_api|sql_database|filesystem)
@@ -265,7 +267,7 @@ This phase implements the plugin class with all ABC methods plus lifecycle.
 **T008: Implement health_check()**
 - File: `plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py`
 - Verify dlt is importable → HEALTHY
-- Verify Iceberg destination is reachable (test catalog connection) → HEALTHY
+- Keep health checks import-only and non-networked; runtime validation must happen through binding validation plus create/run paths
 - Return UNHEALTHY with message on failure
 - OTel span: `floe.ingestion.health_check`
 - Requirements: FR-007
@@ -275,7 +277,8 @@ This phase implements the plugin class with all ABC methods plus lifecycle.
 - Accept `IngestionConfig`, return dlt pipeline object
 - Configure dlt pipeline with:
   - `pipeline_name` derived from `destination_table`
-  - `destination="iceberg"`
+  - `destination="filesystem"` using the composed runtime binding
+  - Iceberg table format supplied through the binding's catalog environment
   - `dataset_name` from namespace portion of `destination_table`
 - Validate source_config against source-specific requirements
 - Raise `ValidationError` on invalid config
@@ -283,15 +286,12 @@ This phase implements the plugin class with all ABC methods plus lifecycle.
 - OTel span: `floe.ingestion.create_pipeline`
 - Requirements: FR-011, FR-012, FR-013, FR-014, FR-015, FR-016, FR-017, FR-018, FR-058
 
-**T010: Implement get_destination_config()**
+**T010: Implement runtime destination binding**
 - File: `plugins/floe-ingestion-dlt/src/floe_ingestion_dlt/plugin.py`
-- Accept catalog config dict, return dlt Iceberg destination configuration
-- Map catalog config to dlt destination params:
-  - `catalog_type: "rest"`
-  - `credentials.uri` from catalog_config
-  - `credentials.warehouse` from catalog_config
-- Support MinIO/S3 storage configuration
-- OTel span: `floe.ingestion.get_destination_config`
+- Require `IngestionConfig.runtime_binding` during pipeline creation
+- Map `destination_filesystem` to dlt filesystem destination parameters
+- Apply runtime Iceberg catalog environment while creating and running the pipeline
+- Support MinIO/S3 destination filesystem configuration
 - Requirements: FR-019, FR-020
 
 **T011: Implement run()**
@@ -390,7 +390,7 @@ This phase creates all test infrastructure and test files.
   - `run()` returns IngestionResult with correct metrics (mocked dlt)
   - `run()` handles empty source data (0 rows)
   - `run()` handles pipeline failure (mocked error)
-  - `get_destination_config()` with Polaris catalog config returns correct dict
+  - `create_pipeline()` with runtime binding configures dlt filesystem destination
   - `health_check()` with mocked dlt (healthy, unhealthy)
   - `startup()` and `shutdown()` lifecycle
   - OTel spans emitted for all operations (traced test)
@@ -509,7 +509,7 @@ T001 (package scaffold)
 T006 (plugin skeleton)
   └─> T007 (lifecycle) ─> T008 (health check)
   └─> T009 (create_pipeline)
-  └─> T010 (get_destination_config)
+  └─> T010 (runtime destination binding)
   └─> T011 (run) — depends on T009, T010
 
 T012 (resource factory) depends on T006

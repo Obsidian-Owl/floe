@@ -1,8 +1,8 @@
 """OpenTelemetry tracing helpers for the dlt ingestion plugin.
 
 This module provides utilities for instrumenting ingestion operations with
-OpenTelemetry spans. Operations like create_pipeline, run, and
-get_destination_config emit spans for observability.
+OpenTelemetry spans. Operations like create_pipeline and run emit spans
+for observability.
 
 Security:
     - Spans MUST NOT include credentials, PII, or sensitive data (FR-049)

@@ -34,7 +34,6 @@ Top-level configuration for the DltIngestionPlugin instance.
 ```python
 from __future__ import annotations
 
-from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -50,10 +49,6 @@ class DltIngestionConfig(BaseModel):
         ...,
         min_length=1,
         description="Data sources to ingest (at least one required)"
-    )
-    catalog_config: dict[str, Any] = Field(
-        ...,
-        description="Polaris REST catalog connection details (uri, warehouse)"
     )
     retry_config: RetryConfig | None = Field(
         default=None,
@@ -218,7 +213,7 @@ class SourceConnectionError(IngestionError):
 
 
 class DestinationWriteError(IngestionError):
-    """Failed to write data to Iceberg destination.
+    """Failed to write Iceberg-formatted data through dlt filesystem destination.
 
     Raised during run() when the load step fails.
     Default category: TRANSIENT (may be temporary).
@@ -281,8 +276,10 @@ class IngestionResult:
 ```
 DltIngestionConfig
   ├── sources: list[IngestionSourceConfig]  (1:N, required, min 1)
-  ├── catalog_config: dict                  (1:1, required)
   └── retry_config: RetryConfig | None      (1:0..1, optional)
+
+Runtime/deployment binding
+  └── destination_filesystem                 (1:1, composed from platform catalog/storage config)
 
 IngestionSourceConfig
   ├── maps to → IngestionConfig              (1:1, conversion in create_pipeline)
@@ -292,7 +289,7 @@ DltIngestionPlugin
   ├── config: DltIngestionConfig             (1:1, constructor param)
   ├── create_pipeline(IngestionConfig) → dlt pipeline object
   ├── run(pipeline) → IngestionResult
-  └── get_destination_config(dict) → dict
+  └── build_deployment_binding(storage, catalog) → runtime binding
 
 ErrorCategory enum
   └── used by → IngestionError.category      (1:1)
