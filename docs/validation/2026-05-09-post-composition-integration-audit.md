@@ -73,3 +73,12 @@ Status: Baseline failures recorded
 
 | Workstream | Reason | Required next artifact |
 | --- | --- | --- |
+| Storage strict MinIO cleanup | Matrix decision is `Remove stale path`; stale S3 package, registry entry point, and generated `"type": "s3"` artifacts still break trunk validation. | Cleanup PR removing stale S3 path and regenerating active artifacts with `minio`. |
+| Compute deployment-aware profile contract | Matrix decision is `Uplift now`; DuckDB consumes deployment bindings but has no explicit resolver-backed compute composition contract. | Compute composition contract and tests for deployment-aware dbt profile/catalog attachment behavior. |
+| Dagster binding-first runtime migration | Matrix decision is `Uplift now`; Dagster resource/export/validation paths still consume legacy storage-owned catalog config. | Binding-first Dagster runtime connection migration plan and regression tests. |
+| Iceberg writer runtime contract | Matrix decision is `Needs design`; `floe_iceberg.writer` still probes `StoragePlugin.get_pyiceberg_catalog_config()`. | Design note for neutral Iceberg writer connection inputs before product-code migration. |
+| Credential provider projection | Matrix decision is `Uplift now`; credential-provider plugins expose capabilities but no typed credential deployment projection. | Sensitive-value-safe credential binding contract using `CredentialRef` only. |
+| Identity workload binding | Matrix decision is `Uplift now`; identity capabilities are declared but not projected into typed deployment/runtime bindings. | Workload identity binding contract covering issuer, audience, and credential mode metadata. |
+| RBAC composition design | Matrix decision is `Needs design`; RBAC generation is plugin-backed but not composed from identity/capability bindings. | RBAC composition design mapping identity and plugin requirements into generated access policy. |
+| Network security composition design | Matrix decision is `Needs design`; K8s network security is discoverable but does not consume typed endpoint or identity bindings. | Endpoint and identity binding design for network policy generation. |
+| Semantic layer datasource composition | Matrix decision is `Needs design`; Cube still uses static Helm override while compute/catalog/storage projections are available elsewhere. | Semantic datasource binding design sourced from compute/catalog/storage deployment projections. |
