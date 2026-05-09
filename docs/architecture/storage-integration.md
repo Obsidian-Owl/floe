@@ -85,16 +85,16 @@ storage:
     secret_key_ref: minio-credentials
 ```
 
-### Future AWS S3 Plugin
+### Future Provider-Native AWS Storage Plugin
 
 A provider-native AWS S3 plugin should use IAM Roles for Service Accounts
 (IRSA). Until that plugin is implemented and validated, the alpha path remains
 MinIO through the S3-compatible protocol:
 
 ```yaml
-# conceptual future manifest.yaml
+# conceptual future manifest.yaml; not accepted by the current alpha registry
 storage:
-  type: s3
+  type: aws-s3
   warehouse_path: s3://my-company-data-lake/floe/iceberg
   config:
     region: us-east-1
