@@ -3,7 +3,11 @@
 Date: 2026-05-09
 Repo: /Users/dmccarthy/Projects/floe
 Branch: main
-Status: Baseline failures and Task 5 compatibility ledger recorded
+Status: Final synthesis complete; see [2026-05-09-post-composition-final-synthesis.md](2026-05-09-post-composition-final-synthesis.md)
+
+## Summary
+
+Final synthesis is captured in [2026-05-09-post-composition-final-synthesis.md](2026-05-09-post-composition-final-synthesis.md). Product runtime passed remote DevPod E2E against `origin/main` at `d9e3582a4d7d76ffaaf0b3b40bed96247fc39938` with `261 passed, 86 deselected, 7 warnings`. Local trunk health remains mixed because `make test-unit` and the strict MinIO rename contract fail on stale `floe_storage_s3` / S3 alias residue, while lint, typecheck, focused composition, focused Helm, and Helm chart checks pass. Infrastructure cleanup passed; no current-run DevPod/Hetzner resources remain.
 
 ## Entry Gate
 
