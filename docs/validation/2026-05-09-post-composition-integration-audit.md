@@ -113,8 +113,13 @@ Recommended next actions from Task 6:
 
 | Lane | Result | Evidence | Classification |
 | --- | --- | --- | --- |
-| DevPod remote E2E | Not run | Not recorded | Not recorded |
-| Hetzner cleanup inventory | Not run | Not recorded | Not recorded |
+| Preflight | Pass | `git status --short --branch` -> `## main...origin/main [ahead 6]`; local `HEAD` -> `ad8a27e088c565fee93f0cc7b9ef4c82a228b0ac`; `origin/main` -> `d9e3582a4d7d76ffaaf0b3b40bed96247fc39938`; `devpod version` -> `v0.6.15`; Hetzner provider initialized; `devpod list` empty before run. | Evidence lane |
+| DevPod remote E2E | Pass | `DEVPOD_WORKSPACE=floe-postcomp-audit make devpod-test` provisioned workspace `floe-postcomp-audit` / machine `floe-postc-a353f`, cloned `https://github.com/Obsidian-Owl/floe` branch `main`, and waited for Flux revision `d9e3582a4d7d76ffaaf0b3b40bed96247fc39938`. Remote E2E artifact path: `test-artifacts/devpod-run-20260509T030016Z-21729`. Exit code file: `0`. Final result: `261 passed, 86 deselected, 7 warnings in 1034.53s (0:17:14)`. | Product validation pass for `origin/main` product code, not local audit-doc commits |
+| DevPod remote teardown | Warn | After the remote command completed, DevPod emitted `Error tunneling to container: wait: remote command exited without exit status or exit signal`, then saved artifacts, reported `E2E tests PASSED`, and continued cleanup. | Tooling warning; not a product failure |
+| DevPod cleanup | Pass | `make devpod-test` Step 5 deleted workspace `floe-postcomp-audit`; post-run `devpod list` was empty. | Infra cleanup pass |
+| Hetzner direct cleanup inventory | Pass | `hcloud` was unavailable locally, so `.env` `DEVPOD_HETZNER_TOKEN` was used with direct Hetzner Cloud API `curl` calls. Pre-run inventory found no server, volume, or SSH key matching `floe-postcomp-audit`. Post-run inventory found no server, volume, or SSH key matching `floe-postcomp-audit` or actual machine prefix `floe-postc-a353f`; no manual deletion was required. | Infra cleanup pass |
+
+See `docs/validation/2026-05-09-post-composition-runtime-validation.md` for the concise command/result ledger.
 
 ## Follow-Up Workstreams
 
