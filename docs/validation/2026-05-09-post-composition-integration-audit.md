@@ -3,7 +3,7 @@
 Date: 2026-05-09
 Repo: /Users/dmccarthy/Projects/floe
 Branch: main
-Status: Baseline failures recorded
+Status: Baseline failures and Task 5 compatibility ledger recorded
 
 ## Entry Gate
 
@@ -61,6 +61,28 @@ Status: Baseline failures recorded
 
 | Severity | Page | Finding | Evidence | Disposition |
 | --- | --- | --- | --- | --- |
+| Medium | `docs/architecture/plugin-composition-uplift-tracker.md` | The tracker is still useful, but some status language is pre-closeout or broader than the current evidence. It says several areas are "In storage composition PR" and records PCU-005 as implemented, while the post-composition matrix still recommends credential-provider projection work. | Task 5 composition search found the tracker rows and compared them with `docs/validation/2026-05-09-post-composition-plugin-matrix.md`. | Verify and reconcile in a docs follow-up. |
+| Low | `docs/architecture/interfaces/storage-plugin.md`, `docs/architecture/plugin-system/interfaces.md`, `docs/architecture/ARCHITECTURE-SUMMARY.md`, `docs/architecture/adr/0036-storage-plugin-interface.md` | Current architecture docs correctly frame legacy storage helpers as compatibility surfaces and typed deployment bindings as target state. | Task 5 compatibility search found `get_helm_values_override()` references, but these docs explicitly describe the helpers as migration-era compatibility rather than target architecture. | Keep; update examples when helper APIs are actually removed. |
+| Low | `docs/superpowers/plans/**`, `docs/superpowers/specs/**` | Dated plans/specs contain old snippets and transitional instructions, including a historical `storage: s3` example in the identity/secret composition plan. | Task 5 searches found `docs/superpowers/plans/2026-05-07-identity-secret-composition.md:1335` and multiple dlt/storage composition plan snippets. | Historical only; do not treat as current public contract. |
+
+## Task 5 Compatibility Ledger Summary
+
+| Area | Result | Evidence |
+| --- | --- | --- |
+| Required compatibility/staleness search | Completed | `rg -n "deprecated|DeprecationWarning|legacy|compat|compatibility|get_helm_values_override|alias|floe-storage-s3|storage type.*s3|plugins\\.storage\\.type.*s3" packages plugins docs tests charts -g '*.py' -g '*.md' -g '*.yaml' -g '*.yml' -g '*.tpl'` returned 1661 hits. Ledger triage separates live compatibility, uplift-now migration surfaces, stale paths, and historical docs. |
+| Required composition-era search | Completed | `rg -n "composition|MinIO|Polaris|storage binding|deployment binding|identity mode|credential mode|dlt|Iceberg writer" docs/superpowers docs/validation docs/architecture docs/contracts tests packages plugins -g '*.md' -g '*.py' -g '*.json' -g '*.yaml' -g '*.yml'` returned 3898 hits. Findings were narrowed to current contract docs/tests versus historical plans and stale user-facing tracker language. |
+| Required filename sweep | Completed | `find tests packages plugins docs -type f \( -name '*composition*' -o -name '*storage*' -o -name '*minio*' -o -name '*polaris*' -o -name '*identity*' -o -name '*secret*' \) | sort` found tracked docs/tests/source plus ignored `.mypy_cache`, `.venv`, and `__pycache__` artifacts. The ledger records grouped purpose and disposition. |
+| Key stale path | Recorded | Ignored local `plugins/floe-storage-s3/`, stale installed `floe_storage_s3.plugin:S3StoragePlugin`, and demo compiled artifacts with `"type": "s3"` remain the strict MinIO cleanup target. |
+| Key live compatibility layers | Recorded | `StoragePlugin.get_pyiceberg_catalog_config()`, MinIO `get_helm_values_override()`, Dagster storage/catalog plugin-config fallback, dlt sink `get_source_config(catalog_config)`, semantic Cube Helm override, and identity/secrets capability-only validation are now ledgered with dispositions. |
+| Historical docs | Recorded | Dated `docs/superpowers` plans/specs and older epic/requirements docs are classified separately from current architecture docs. |
+| Generated artifacts | Recorded | Raw filename sweep surfaced ignored generated artifacts. They are classified as local cleanup candidates, not tracked contract evidence. |
+
+Recommended next actions from Task 5:
+
+1. Remove the stale S3 storage alias/package residue and regenerate demo compiled artifacts with `minio`.
+2. Reconcile `docs/architecture/plugin-composition-uplift-tracker.md` against the post-composition matrix and compatibility ledger.
+3. Design binding-first runtime inputs for Dagster/Iceberg writer and dlt sink/source config before removing legacy catalog-config helpers.
+4. Design semantic datasource and identity/credential deployment projections so Level 2/3 plugin composition work has typed, secret-free bindings.
 
 ## Runtime Validation
 
