@@ -84,6 +84,31 @@ Recommended next actions from Task 5:
 3. Design binding-first runtime inputs for Dagster/Iceberg writer and dlt sink/source config before removing legacy catalog-config helpers.
 4. Design semantic datasource and identity/credential deployment projections so Level 2/3 plugin composition work has typed, secret-free bindings.
 
+## Task 6 Documentation Truth Pass Summary
+
+| Area | Result | Evidence |
+| --- | --- | --- |
+| Documentation inventory | Completed | `find docs -type f -name '*.md' \| sort` found 295 Markdown files. |
+| Composition-era/stale language search | Completed | `rg -n "composition\|composability\|deployment binding\|storage binding\|compiled artifacts\|CompiledArtifacts\|MinIO\|floe-storage-minio\|floe-storage-s3\|storage: s3\|type: s3\|Polaris\|identity mode\|credential mode\|CredentialRef\|secret\|Helm\|renderer\|get_helm_values_override\|get_pyiceberg_catalog_config\|dlt\|Iceberg writer\|DevPod\|Hetzner\|TODO\|TBD\|aspirational\|target state\|legacy\|deprecated" docs README.md TESTING.md CLAUDE.md AGENTS.md -g '*.md'` returned 4,644 hits. |
+| Historical planning link search | Completed | `rg -n "docs/superpowers\|docs/requirements\|docs/research\|plugin-composition-uplift-tracker\|storage-minio\|identity-secret\|dlt-ingestion\|composition-closeout" docs README.md TESTING.md CLAUDE.md AGENTS.md -g '*.md'` returned 212 hits. |
+| Repo-native docs link/content validation | Pass | Repo-native validators found in `Makefile`, `.pre-commit-config.yaml`, `testing/ci/validate-docs-navigation.py`, and docs-site scripts. `uv run python testing/ci/validate-docs-navigation.py` exited 0 and includes published Markdown link checks. `uv run python testing/ci/validate-docs-content.py` exited 0 with `docs content validation passed`. No standalone external link checker such as lychee was configured. |
+| Separate truth-pass inventory | Added | `docs/validation/2026-05-09-post-composition-docs-truth-pass.md` records the doc-area classification table and exact reconciliation targets. |
+
+Key documentation findings:
+
+1. `docs/contracts/compiled-artifacts.md`, `docs/reference/plugin-catalog.md`, and the storage/catalog composition sections are the strongest current truth anchors for secret-free deployment bindings, plugin category count, renderer ownership, and composition diagnostics.
+2. `docs/architecture/plugin-composition-uplift-tracker.md` needs reconciliation: it still uses "In storage composition PR" language and marks PCU-005 implemented even though typed identity/credential deployment projections remain follow-up work.
+3. `docs/architecture/interfaces/index.md` and many `docs/architecture/interfaces/*.md` pages cite old `floe_core/interfaces/*.py` paths while implementation truth is under `floe_core/plugins/*.py`; `docs/architecture/interfaces/identity-plugin.md` also uses the wrong entry point group (`floe.identities` instead of `floe.identity`).
+4. `docs/architecture/storage-integration.md`, storage ADR material, `README.md`, `TESTING.md`, `CLAUDE.md`, and `AGENTS.md` should separate current strict MinIO/S3-compatible implementation truth from future native S3/GCS/Azure targets and broad target-state composability claims.
+5. `docs/superpowers/**`, `docs/plans/**`, `docs/requirements/**`, and `docs/research/**` are historical/provenance material. They should not be treated as current implementation contracts unless a current architecture page explicitly promotes them.
+
+Recommended next actions from Task 6:
+
+1. Reconcile the composition tracker with the plugin matrix and compatibility ledger.
+2. Correct interface docs against live `PluginType` entry points and `floe_core.plugins.*` ABC paths.
+3. Tighten public/agent docs around current MinIO binding ownership, secret-free `CompiledArtifacts`, Helm renderer ownership, DevPod/Hetzner infra-vs-product separation, and remaining post-composition design gaps.
+4. Add historical banners or archive treatment for superseded dated plans that can surface in search results.
+
 ## Runtime Validation
 
 | Lane | Result | Evidence | Classification |
