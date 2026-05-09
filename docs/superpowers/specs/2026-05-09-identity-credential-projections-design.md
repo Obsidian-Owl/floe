@@ -94,8 +94,14 @@ The identity projection describes workload identity facts selected by
 composition:
 
 ```python
+ProviderSelectionRef = Annotated[
+    str,
+    Field(pattern=r"^(identity|secrets):[a-z0-9][a-z0-9_-]*$"),
+]
+
+
 class IdentityDeploymentProjection(BaseModel):
-    provider_ref: PluginRef
+    provider_ref: ProviderSelectionRef
     provider: str
     issuer: str
     audience: str
@@ -108,9 +114,12 @@ class IdentityDeploymentProjection(BaseModel):
 Required semantics:
 
 - `provider_ref` points at the selected identity plugin, such as
-  `identity:keycloak`; it is not a provider implementation object.
+  `identity:keycloak`; it uses the same category-qualified string shape as
+  `PluginCapabilities.ref` and is not `PluginRef` because projection consumers
+  must not receive provider config.
 - `issuer` and `audience` are non-secret identity metadata, for example OIDC
-  issuer URL and expected token audience.
+  issuer URL and expected token audience. They must come from an identity-owned
+  projection source, not from resolver inspection of plugin config.
 - `workload_identity_mode` must be one of the resolver-supported identity
   modes.
 - `token_audience` and `token_audience_metadata` carry non-secret hints needed
@@ -127,7 +136,7 @@ runtime without carrying the material itself:
 
 ```python
 class CredentialProviderProjection(BaseModel):
-    provider_ref: PluginRef
+    provider_ref: ProviderSelectionRef
     provider: str
     supported_credential_modes: list[CredentialMode]
     supported_secret_projection_modes: list[SecretProjectionMode] = Field(default_factory=list)
@@ -137,7 +146,8 @@ class CredentialProviderProjection(BaseModel):
 Required semantics:
 
 - `provider_ref` points at the selected secrets or identity plugin, such as
-  `secrets:k8s`, `secrets:infisical`, or `identity:keycloak`.
+  `secrets:k8s`, `secrets:infisical`, or `identity:keycloak`. It is a
+  category-qualified, config-free reference, not `PluginRef`.
 - `supported_credential_modes` records the validated credential modes for that
   provider selection.
 - `supported_secret_projection_modes` records secret projection modes for
@@ -150,9 +160,32 @@ Required semantics:
 - Kubernetes Secret, external-secret-sync, and CSI secret volume modes use
   `CredentialRef` with `key`; environment and workload-identity modes do not.
 
-This projection should be derived from selected plugin capabilities,
-storage/catalog requirements, and existing deployment bindings. It must not ask
-one plugin to import or inspect another plugin's concrete classes.
+### Projection source
+
+Capability and requirement models remain the validation contract. They are not
+expanded into arbitrary provider configuration bags. Projection emission should
+derive facts from these explicit sources only:
+
+- selected `PluginCapabilities.ref` values, which become
+  category-qualified `provider_ref` strings;
+- selected capabilities and requirements, which supply mode and provider-label
+  vocabulary already validated by `CompositionResolver`;
+- existing typed deployment bindings, such as storage and catalog credential
+  bindings, when they already expose `CredentialRef` handles; and
+- provider-owned, non-secret projection metadata emitted by the selected
+  identity or secrets plugin.
+
+For the first Keycloak identity implementation, the identity plugin can satisfy
+the provider-owned metadata source by using its own `get_oidc_config()` result
+for `issuer` and an explicit non-secret audience/client identifier owned by the
+identity plugin configuration. The compiler may call a narrow identity-owned
+projection method or adapter for those fields, but it must not reach into
+`KeycloakIdentityConfig`, infer realm internals, or couple generic composition
+code to Keycloak implementation details.
+
+If an identity plugin advertises an identity mode that requires issuer or
+audience metadata but cannot emit those non-secret fields, projection emission
+must fail before `CompiledArtifacts` are produced.
 
 ## Secret Handling
 
