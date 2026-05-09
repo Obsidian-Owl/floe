@@ -40,6 +40,11 @@ IGNORED_SCAN_PARTS = {
     "__pycache__",
     ".pytest_cache",
     ".ruff_cache",
+    "docs/validation",
+    "docs-site/.astro",
+    "docs-site/dist",
+    "docs-site/node_modules",
+    "docs-site/src/content/docs",
     "docs/superpowers",
 }
 FORBIDDEN_REFERENCES = [
@@ -214,6 +219,17 @@ def test_active_scan_files_ignore_nested_generated_directories() -> None:
 
     assert not any("/.venv/" in path for path in scanned)
     assert not any("/__pycache__/" in path for path in scanned)
+
+
+def test_active_scan_files_ignore_historical_and_generated_docs() -> None:
+    """Scans must skip historical evidence and generated docs-site output."""
+    scanned = {path.relative_to(REPO_ROOT).as_posix() for path in _active_scan_files()}
+
+    assert not any(path.startswith("docs/validation/") for path in scanned)
+    assert not any(path.startswith("docs-site/.astro/") for path in scanned)
+    assert not any(path.startswith("docs-site/dist/") for path in scanned)
+    assert not any(path.startswith("docs-site/node_modules/") for path in scanned)
+    assert not any(path.startswith("docs-site/src/content/docs/") for path in scanned)
 
 
 def test_active_references_do_not_use_old_s3_plugin_names() -> None:
