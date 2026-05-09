@@ -95,7 +95,7 @@ Then output the completion banner. This order prevents edge cases where compacti
 
 **floe** is an open platform (Apache 2.0) for building internal data platforms.
 
-Choose your stack from 11 plugin types. Define your standards once. Data teams get opinionated workflows with governance built-in.
+Choose your stack from 14 plugin categories. Define your standards once. Data teams get opinionated workflows with governance built-in.
 
 **Start with a single platform. Scale to Data Mesh.**
 
