@@ -515,24 +515,20 @@ def test_catalog_without_write_methods_is_rejected() -> None:
 
 
 @pytest.mark.requirement("AC-318")
-def test_catalog_config_uses_storage_plugin_fallback() -> None:
-    """Verify writer uses StoragePlugin PyIceberg config without explicit config."""
+def test_catalog_config_without_explicit_config_does_not_probe_storage_plugin() -> None:
+    """Writer must not discover catalog config through storage plugin internals."""
 
     class StoragePlugin:
-        def __init__(self) -> None:
-            self.config = {"uri": "http://catalog.example"}
-
         def get_pyiceberg_catalog_config(self) -> dict[str, str]:
-            return self.config
+            raise AssertionError("storage helper must not be called")
 
     catalog = _WriteCapableCatalog()
     catalog_plugin = _CatalogPlugin(catalog)
-    storage_plugin = StoragePlugin()
     writer = DefaultIcebergTableWriter(
         catalog_plugin=catalog_plugin,
-        storage_plugin=storage_plugin,
+        storage_plugin=StoragePlugin(),
     )
 
     writer.ensure_namespace("customer_360")
 
-    assert catalog_plugin.connect_configs == [storage_plugin.config]
+    assert catalog_plugin.connect_configs == [{}]

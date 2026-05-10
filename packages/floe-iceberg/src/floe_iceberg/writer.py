@@ -128,7 +128,7 @@ class DefaultIcebergTableWriter:
 
         Args:
             catalog_plugin: Catalog plugin used to connect to an Iceberg catalog.
-            storage_plugin: Storage plugin used for default PyIceberg catalog config.
+            storage_plugin: Storage plugin used for file I/O and storage-owned behavior.
             catalog_connection_config: Optional explicit catalog connection config.
             config: Optional Iceberg manager configuration for stale metadata repair.
         """
@@ -302,12 +302,6 @@ class DefaultIcebergTableWriter:
     def _catalog_config(self) -> dict[str, Any]:
         if self._catalog_connection_config is not None:
             return self._catalog_connection_config
-
-        get_config = getattr(self._storage_plugin, "get_pyiceberg_catalog_config", None)
-        if callable(get_config):
-            config = get_config()
-            if isinstance(config, dict):
-                return config
         return {}
 
 
