@@ -23,10 +23,10 @@ Purpose: Classify provider compatibility gaps before implementation.
 | --- | --- | --- | --- | --- |
 | Native AWS S3 storage provider absent | AWS S3 + Glue; AWS S3 + Nessie | Provider plugin gap | Entry point inventory has no `floe-storage-aws-s3` plugin | Design native S3 storage plugin after matrix approval |
 | AWS credential and identity modes need proof against resolver | AWS S3 + Glue; AWS S3 + Nessie | Capability-only gap | Current composition model includes credential and identity modes but AWS provider declarations do not exist | Define AWS provider requirements and resolver tests in the first implementation unit |
-| Glue catalog binding absent | AWS S3 + Glue | Provider plugin gap and typed binding gap | Entry point inventory has no Glue catalog plugin and current catalog binding has Polaris-specific provider detail only | Design Glue catalog provider-owned binding before implementation |
+| Glue catalog binding absent | AWS S3 + Glue | Provider plugin gap | Entry point inventory has no Glue catalog plugin; implementation design must also decide whether Glue needs a provider-owned typed binding | Design Glue catalog provider and binding before implementation |
 | PyIceberg Glue translation not proven from `RuntimeCatalogConnection` | AWS S3 + Glue | Runtime translator gap | Current runtime translator handles generic URI/warehouse/S3 properties, not proven Glue catalog properties | Add translator proof or a Glue-specific runtime projection in a follow-up spec |
-| Nessie catalog provider absent | MinIO + Nessie; AWS S3 + Nessie | Provider plugin gap and typed binding gap | Entry point inventory has no Nessie catalog plugin | Design Nessie catalog binding if selected as fallback live proof |
-| GCS and Azure credential/endpoint models are unproven | GCS; Azure | Capability-only gap and Typed binding gap | No current provider plugin or runtime translation evidence | Keep as design pressure tests, not first implementation |
+| Nessie catalog provider absent | MinIO + Nessie; AWS S3 + Nessie | Provider plugin gap | Entry point inventory has no Nessie catalog plugin; implementation design must also decide the Nessie catalog binding shape | Design Nessie catalog provider and binding if selected as fallback live proof |
+| GCS and Azure credential/endpoint models are unproven | GCS; Azure | Capability-only gap | No current provider plugin or runtime translation evidence; use these as pressure tests for future binding fields | Keep as design pressure tests, not first implementation |
 | Hive lacks concrete alpha path | Hive | Out of scope | No current deployment trigger in the approved spike | Defer until a product path exists |
 
 ## Compatibility Helper Decision
