@@ -108,14 +108,44 @@ devpod list
 Direct Hetzner inventory must check these resource classes for the current run prefix:
 
 ```bash
-servers
-volumes
-ssh_keys
-load_balancers
-floating_ips
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
+HCLOUD_INVENTORY_TOKEN="${DEVPOD_HETZNER_TOKEN:-${HCLOUD_TOKEN:-}}"
+if [ -z "${HCLOUD_INVENTORY_TOKEN}" ]; then
+  echo "ERROR: set DEVPOD_HETZNER_TOKEN or HCLOUD_TOKEN before Hetzner inventory" >&2
+  exit 1
+fi
+
+if [ -z "${FLOE_PROVIDER_SPIKE_RUN:-}" ]; then
+  echo "ERROR: set FLOE_PROVIDER_SPIKE_RUN before Hetzner inventory" >&2
+  exit 1
+fi
+
+for resource_class in servers volumes ssh_keys load_balancers floating_ips; do
+  echo "== ${resource_class} matching ${FLOE_PROVIDER_SPIKE_RUN} =="
+  curl -fsS \
+    -H "Authorization: Bearer ${HCLOUD_INVENTORY_TOKEN}" \
+    -H "Content-Type: application/json" \
+    "https://api.hetzner.cloud/v1/${resource_class}" \
+    | jq -r --arg class "${resource_class}" --arg run "${FLOE_PROVIDER_SPIKE_RUN}" '
+        .[$class]
+        | map(select((.name // "") | contains($run)))
+        | if length == 0 then
+            "no matches"
+          else
+            (["id", "name", "status"] | @tsv),
+            (.[] | [.id, (.name // "-"), (.status // "-")] | @tsv)
+          end
+      '
+done
 ```
 
-Final evidence must state whether each class has no current-run resources remaining.
+Final evidence must state whether each class has no current-run resources remaining. Delete only current-run matches in a later cleanup step using the provider API or `devpod delete`.
 
 ## DevPod Evidence Source
 
