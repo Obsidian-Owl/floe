@@ -87,14 +87,18 @@ _DBT_ENV_VAR_REFERENCE_PATTERN = re.compile(
     r"\{\{\s*env_var\(\s*['\"][A-Za-z_][A-Za-z0-9_]*['\"]"
     r"(?:\s*,\s*['\"][^'\"]*['\"])?\s*\)\s*\}\}"
 )
+_ENV_VAR_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _URL_CREDENTIAL_QUERY_KEYS = frozenset(
     {
         "accesskey",
         "accesstoken",
         "apikey",
         "clientsecret",
+        "credential",
+        "credentials",
         "password",
         "secret",
+        "signature",
         "token",
     }
 )
@@ -191,6 +195,9 @@ def _assert_no_secret_material(value: Any, path: str) -> None:
         return
 
     if isinstance(value, str):
+        parsed = urlsplit(value)
+        if parsed.scheme and parsed.netloc:
+            value = _assert_no_uri_secret_components(value, path)
         value_text = value.lower()
         if any(marker in value_text for marker in _SECRET_VALUE_MARKERS) or (
             _DEFAULT_ADMIN_CREDENTIAL_PATTERN.search(value_text) is not None
@@ -208,6 +215,36 @@ def _assert_no_secret_material(value: Any, path: str) -> None:
             "use JSON-compatible dict, list, string, number, boolean, or null values"
         )
         raise ValueError(msg)
+
+
+def _assert_no_uri_secret_components(value: str, path: str) -> str:
+    """Reject URI components that carry credential-looking material."""
+    parsed = urlsplit(value)
+    if parsed.username or parsed.password:
+        msg = f"{path} looks like raw credential material; use CredentialRef fields instead"
+        raise ValueError(msg)
+
+    query_params = parse_qsl(parsed.query, keep_blank_values=True)
+    fragment_params = parse_qsl(parsed.fragment, keep_blank_values=True)
+    for section, params in (("query", query_params), ("fragment", fragment_params)):
+        keys = {re.sub(r"[^a-z0-9]", "", key.lower()) for key, _ in params}
+        if keys & _URL_CREDENTIAL_QUERY_KEYS or any(
+            any(
+                marker.replace("_", "").replace("-", "") in key
+                for marker in (*_SECRET_FIELD_MARKERS, *_URL_CREDENTIAL_QUERY_KEYS)
+            )
+            for key in keys
+        ):
+            msg = (
+                f"{path} {section} looks like raw credential material; "
+                "use CredentialRef fields instead"
+            )
+            raise ValueError(msg)
+
+        for _, param_value in params:
+            _assert_no_secret_material(param_value, f"{path}.{section}")
+
+    return parsed._replace(query="", fragment="").geturl()
 
 
 def _is_dbt_env_var_reference(value: Any) -> bool:
@@ -240,6 +277,12 @@ def _is_non_secret_endpoint_url(value: str) -> bool:
         ):
             return False
     return True
+
+
+def _assert_no_credential_bearing_uri(value: str, path: str) -> None:
+    """Reject URI strings that embed credential material."""
+    value_without_query_or_fragment = _assert_no_uri_secret_components(value, path)
+    _assert_no_secret_material(value_without_query_or_fragment, path)
 
 
 def _assert_no_dbt_profile_secret_material(value: Any, path: str) -> None:
@@ -972,6 +1015,61 @@ class CatalogDeploymentBinding(BaseModel):
             msg = "polaris catalog deployment binding requires polaris details"
             raise ValueError(msg)
         return self
+
+
+class RuntimeCatalogConnection(BaseModel):
+    """Secret-free runtime catalog connection projection for Iceberg consumers."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    catalog_name: NonEmptyString = "iceberg"
+    catalog_uri: NonEmptyString | None = None
+    warehouse: NonEmptyString | None = None
+    storage_endpoint: NonEmptyString | None = None
+    region: NonEmptyString | None = None
+    path_style_access: bool | None = None
+    properties: dict[str, str] = Field(default_factory=dict)
+    credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+    env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
+
+    @field_validator("properties")
+    @classmethod
+    def validate_secret_free_properties(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure runtime catalog properties do not inline credential material."""
+        for key, property_value in value.items():
+            if key == "token-refresh-enabled":
+                _assert_no_secret_material(property_value, f"runtime_catalog.properties.{key}")
+                continue
+            _assert_no_secret_material({key: property_value}, "runtime_catalog.properties")
+        return value
+
+    @field_validator("catalog_uri", "storage_endpoint")
+    @classmethod
+    def validate_secret_free_urls(cls, value: str | None, info: Any) -> str | None:
+        """Ensure runtime catalog URLs do not embed credential material."""
+        if value is None:
+            return value
+        _assert_no_credential_bearing_uri(value, f"runtime_catalog.{info.field_name}")
+        return value
+
+    @field_validator("warehouse")
+    @classmethod
+    def validate_secret_free_warehouse(cls, value: str | None) -> str | None:
+        """Ensure warehouse locations do not inline credential material."""
+        if value is None:
+            return value
+        _assert_no_credential_bearing_uri(value, "runtime_catalog.warehouse")
+        return value
+
+    @field_validator("env_refs")
+    @classmethod
+    def validate_env_refs(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure runtime env references are names, not inline credential values."""
+        for key, env_name in value.items():
+            if _ENV_VAR_NAME_PATTERN.fullmatch(env_name) is None:
+                msg = f"runtime_catalog.env_refs.{key} must be an environment variable name"
+                raise ValueError(msg)
+        return value
 
 
 class DltIngestionBinding(BaseModel):
@@ -1835,6 +1933,7 @@ __all__ = [
     "ResolvedTransforms",
     # Governance resolution (v0.2.0)
     "ResolvedGovernance",
+    "RuntimeCatalogConnection",
     # Enforcement summary (v0.3.0 - Epic 3B)
     "EnforcementResultSummary",
     # Deployment bindings

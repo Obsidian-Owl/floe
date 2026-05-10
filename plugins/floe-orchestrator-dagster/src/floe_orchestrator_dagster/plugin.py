@@ -243,6 +243,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
         plugins: Any | None,
         governance: Any | None = None,
         storage_binding: Any | None = None,
+        runtime_catalog_connection: Any | None = None,
     ) -> dict[str, Any]:
         """Create Iceberg resources from resolved plugins configuration.
 
@@ -256,6 +257,8 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             plugins: ResolvedPlugins from CompiledArtifacts, or None.
             governance: ResolvedGovernance from CompiledArtifacts, or None.
             storage_binding: Compiled Dagster storage projection, or None.
+            runtime_catalog_connection: Deployment-derived catalog connection
+                projection, or None.
 
         Returns:
             Dictionary with "iceberg" key if successful, empty dict only when
@@ -275,6 +278,7 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
             plugins,
             governance=governance,
             storage_binding=storage_binding,
+            runtime_catalog_connection=runtime_catalog_connection,
         )
 
     def _create_semantic_resources(

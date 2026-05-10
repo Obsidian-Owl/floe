@@ -26,14 +26,23 @@ from unittest.mock import MagicMock, call, patch
 import pyarrow as pa
 import pytest
 from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
     CompilationMetadata,
     CompiledArtifacts,
+    DagsterStorageBinding,
+    DbtStorageBinding,
+    DeploymentConfig,
     ObservabilityConfig,
     PluginRef,
+    PolarisCatalogDeploymentBinding,
     ResolvedGovernance,
     ResolvedModel,
     ResolvedPlugins,
     ResolvedTransforms,
+    StorageCredentialBinding,
+    StorageDeploymentBinding,
+    StorageServiceEndpoint,
+    StorageWarehouse,
 )
 from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
 from testing.fixtures.credentials import (
@@ -61,6 +70,7 @@ def _make_artifacts(
     catalog: PluginRef | None = None,
     storage: PluginRef | None = None,
     dbt_profiles: dict[str, object] | None = None,
+    deployment: DeploymentConfig | None = None,
 ) -> CompiledArtifacts:
     """Build a minimal valid CompiledArtifacts with optional catalog/storage.
 
@@ -125,7 +135,53 @@ def _make_artifacts(
             default_compute="duckdb",
         ),
         dbt_profiles=profiles,
+        deployment=deployment,
     )
+
+
+def _make_deployment(
+    *,
+    storage_endpoint: str = "http://floe-platform-minio:9000",
+    catalog_uri: str = "http://polaris:8181/api/catalog",
+) -> DeploymentConfig:
+    """Build deployment bindings used for runtime catalog projection assertions."""
+    storage = StorageDeploymentBinding(
+        provider="minio",
+        protocol="s3-compatible",
+        endpoint=StorageServiceEndpoint(
+            internal_url=storage_endpoint,
+            external_url="http://localhost:9000",
+            region="us-east-1",
+            warehouse_path="s3://floe-iceberg",
+            path_style_access=True,
+        ),
+        warehouse=StorageWarehouse(uri="s3://floe-iceberg", bucket="floe-iceberg"),
+        credentials=StorageCredentialBinding(mode="none"),
+        dbt=DbtStorageBinding(
+            profile_name="floe",
+            target_name="dev",
+            schema_name="analytics",
+        ),
+        dagster=DagsterStorageBinding(
+            resource_key="minio_storage",
+            asset_io_manager_key="iceberg_io_manager",
+        ),
+    )
+    catalog = CatalogDeploymentBinding(
+        provider="polaris",
+        polaris=PolarisCatalogDeploymentBinding(
+            storage_type="S3",
+            warehouse="s3://floe-iceberg",
+            default_base_location="s3://floe-iceberg",
+            allowed_locations=["s3://floe-iceberg"],
+            endpoint="http://localhost:9000",
+            endpoint_internal=storage_endpoint,
+            catalog_uri=catalog_uri,
+            path_style_access=True,
+            sts_unavailable=True,
+        ),
+    )
+    return DeploymentConfig(storage=storage, catalog=catalog)
 
 
 def _make_context() -> MagicMock:
@@ -193,6 +249,7 @@ def artifacts_with_catalog() -> CompiledArtifacts:
             version="1.0.0",
             config={"endpoint": "http://minio:9000", "access-key-id": "test"},
         ),
+        deployment=_make_deployment(),
     )
 
 
@@ -250,8 +307,6 @@ class TestExportDbtToIceberg:
         registry = MagicMock()
         catalog_plugin = MagicMock()
         storage_plugin = MagicMock()
-        catalog_connection_config = {"s3.endpoint": "http://minio:9000"}
-        storage_plugin.get_pyiceberg_catalog_config.return_value = catalog_connection_config
 
         def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
             if plugin_type is PluginType.CATALOG:
@@ -285,7 +340,13 @@ class TestExportDbtToIceberg:
         writer_cls_kwargs = writer_cls.call_args.kwargs
         assert writer_cls_kwargs["catalog_plugin"] is catalog_plugin
         assert writer_cls_kwargs["storage_plugin"] is storage_plugin
-        assert writer_cls_kwargs["catalog_connection_config"] == catalog_connection_config
+        assert writer_cls_kwargs["catalog_connection_config"] == {
+            "uri": "http://polaris:8181/api/catalog",
+            "warehouse": "s3://floe-iceberg",
+            "s3.endpoint": "http://floe-platform-minio:9000",
+            "s3.region": "us-east-1",
+            "s3.path-style-access": "true",
+        }
         writer.ensure_namespace.assert_called_once_with(SAFE_NAME)
         writer.write_table.assert_called_once_with(
             f"{SAFE_NAME}.customers",
@@ -294,6 +355,57 @@ class TestExportDbtToIceberg:
         )
         assert result.tables_written == 1
         assert result.table_names == [f"{SAFE_NAME}.customers"]
+
+    @pytest.mark.requirement("AC-4")
+    def test_export_uses_deployment_runtime_connection_without_storage_helper(
+        self,
+        context: MagicMock,
+        project_dir: Path,
+        artifacts_with_catalog: CompiledArtifacts,
+    ) -> None:
+        """Export must build writer catalog config from deployment bindings."""
+        from floe_core.plugin_types import PluginType
+
+        arrow_table = pa.table({"id": [1]})
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchall.return_value = [("main", "customers")]
+        mock_conn.execute.return_value.fetch_arrow_table.return_value = arrow_table
+
+        registry = MagicMock()
+        catalog_plugin = MagicMock()
+        storage_plugin = MagicMock()
+        storage_plugin.get_pyiceberg_catalog_config.side_effect = AssertionError(
+            "storage helper must not be called"
+        )
+
+        def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
+            if plugin_type is PluginType.CATALOG:
+                return catalog_plugin
+            return storage_plugin
+
+        registry.get.side_effect = get_side_effect
+        registry.configure.return_value = {}
+        writer = _make_writer_mock()
+
+        with (
+            patch("duckdb.connect", return_value=mock_conn),
+            patch.object(Path, "exists", return_value=True),
+            patch("floe_core.plugin_registry.get_registry", return_value=registry),
+            patch(
+                "floe_orchestrator_dagster.export.iceberg.DefaultIcebergTableWriter",
+                return_value=writer,
+            ) as writer_cls,
+        ):
+            export_dbt_to_iceberg(
+                context=context,
+                product_name=PRODUCT_NAME,
+                project_dir=project_dir,
+                artifacts=artifacts_with_catalog,
+            )
+
+        assert writer_cls.call_args.kwargs["catalog_connection_config"]["s3.endpoint"] == (
+            "http://floe-platform-minio:9000"
+        )
 
     @pytest.mark.requirement("AC-4")
     def test_export_completes_secret_free_polaris_config_from_env(
@@ -328,7 +440,6 @@ class TestExportDbtToIceberg:
         registry = MagicMock()
         catalog_plugin = MagicMock()
         storage_plugin = MagicMock()
-        storage_plugin.get_pyiceberg_catalog_config.return_value = {}
 
         def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
             if plugin_type is PluginType.CATALOG:
@@ -1364,9 +1475,6 @@ class TestExportDbtToIceberg:
         registry = MagicMock()
         catalog_plugin = MagicMock()
         storage_plugin = MagicMock()
-        storage_plugin.get_pyiceberg_catalog_config.return_value = {
-            "s3.endpoint": "http://minio:9000"
-        }
 
         def get_side_effect(plugin_type: object, _plugin_name: str) -> MagicMock:
             if str(plugin_type).endswith("CATALOG"):
@@ -1421,9 +1529,6 @@ class TestExportDbtToIceberg:
         registry = MagicMock()
         catalog_plugin = MagicMock()
         storage_plugin = MagicMock()
-        storage_plugin.get_pyiceberg_catalog_config.return_value = {
-            "s3.endpoint": "http://minio:9000"
-        }
 
         def get_side_effect(plugin_type: object, _plugin_name: str) -> MagicMock:
             if str(plugin_type).endswith("CATALOG"):
@@ -1480,9 +1585,6 @@ class TestExportDbtToIceberg:
         registry = MagicMock()
         catalog_plugin = MagicMock()
         storage_plugin = MagicMock()
-        storage_plugin.get_pyiceberg_catalog_config.return_value = {
-            "s3.endpoint": "http://minio:9000"
-        }
 
         def get_side_effect(plugin_type: object, _plugin_name: str) -> MagicMock:
             if str(plugin_type).endswith("CATALOG"):
@@ -1747,12 +1849,12 @@ class TestExportDbtToIceberg:
         writer_cls.assert_called_once()
 
     @pytest.mark.requirement("AC-4")
-    def test_export_passes_storage_catalog_config_to_writer(
+    def test_export_passes_empty_catalog_config_without_deployment(
         self,
         context: MagicMock,
         project_dir: Path,
     ) -> None:
-        """Export must construct writer with config produced by StoragePlugin."""
+        """Export passes empty writer catalog config when deployment is absent."""
         from floe_core.plugin_types import PluginType
 
         artifacts = _make_artifacts(
@@ -1763,10 +1865,6 @@ class TestExportDbtToIceberg:
                 config={"endpoint": "http://minio:9000", "path_style_access": True},
             ),
         )
-        catalog_config = {
-            "s3.endpoint": "http://minio:9000",
-            "s3.path-style-access": "true",
-        }
 
         mock_conn = MagicMock()
         _configure_mock_duckdb_table(mock_conn)
@@ -1774,7 +1872,9 @@ class TestExportDbtToIceberg:
         registry = MagicMock()
         catalog_plugin = MagicMock()
         storage_plugin = MagicMock()
-        storage_plugin.get_pyiceberg_catalog_config.return_value = catalog_config
+        storage_plugin.get_pyiceberg_catalog_config.side_effect = AssertionError(
+            "storage helper must not be called"
+        )
 
         def get_side_effect(plugin_type: PluginType, _plugin_name: str) -> MagicMock:
             if plugin_type is PluginType.CATALOG:
@@ -1801,9 +1901,8 @@ class TestExportDbtToIceberg:
                 artifacts=artifacts,
             )
 
-        storage_plugin.get_pyiceberg_catalog_config.assert_called_once_with()
         catalog_plugin.connect.assert_not_called()
-        assert writer_cls.call_args.kwargs["catalog_connection_config"] == catalog_config
+        assert writer_cls.call_args.kwargs["catalog_connection_config"] == {}
 
     @pytest.mark.requirement("AC-4")
     @pytest.mark.parametrize(

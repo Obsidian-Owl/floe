@@ -12,8 +12,10 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from floe_core.plugin_types import PluginType
 from floe_core.schemas.compiled_artifacts import (
+    CatalogDeploymentBinding,
     CompilationMetadata,
     CompiledArtifacts,
+    CredentialRef,
     DagsterStorageBinding,
     DbtStorageBinding,
     DeploymentConfig,
@@ -21,12 +23,14 @@ from floe_core.schemas.compiled_artifacts import (
     KubernetesSecretRef,
     ObservabilityConfig,
     PluginRef,
+    PolarisCatalogDeploymentBinding,
     ResolvedModel,
     ResolvedPlugins,
     ResolvedTransforms,
     StorageCredentialBinding,
     StorageDeploymentBinding,
     StorageServiceEndpoint,
+    StorageWarehouse,
 )
 from floe_core.schemas.telemetry import ResourceAttributes, TelemetryConfig
 from testing.fixtures.credentials import (
@@ -59,7 +63,9 @@ def _make_storage_deployment(endpoint: str) -> DeploymentConfig:
                 external_url=endpoint,
                 region="us-east-1",
                 warehouse_path="s3://floe-iceberg",
+                path_style_access=True,
             ),
+            warehouse=StorageWarehouse(uri="s3://floe-iceberg", bucket="floe-iceberg"),
             credentials=StorageCredentialBinding(
                 mode="kubernetes-secret",
                 secret_ref=KubernetesSecretRef(
@@ -82,6 +88,42 @@ def _make_storage_deployment(endpoint: str) -> DeploymentConfig:
             ),
         )
     )
+
+
+def _make_catalog_deployment(uri: str = POLARIS_ENDPOINT) -> CatalogDeploymentBinding:
+    """Build a compiled Polaris catalog deployment binding."""
+    return CatalogDeploymentBinding(
+        provider="polaris",
+        polaris=PolarisCatalogDeploymentBinding(
+            storage_type="S3",
+            warehouse="s3://floe-iceberg",
+            default_base_location="s3://floe-iceberg",
+            allowed_locations=["s3://floe-iceberg"],
+            endpoint="http://localhost:9000",
+            endpoint_internal="http://compiled-minio:9000",
+            catalog_uri=uri,
+            path_style_access=True,
+            sts_unavailable=True,
+            credential_refs={
+                "accessKeyId": CredentialRef(
+                    source="kubernetes-secret",
+                    name="floe-platform-minio",
+                    key="root-user",
+                ),
+                "secretAccessKey": CredentialRef(  # pragma: allowlist secret
+                    source="kubernetes-secret",
+                    name="floe-platform-minio",
+                    key="root-password",
+                ),
+            },
+        ),
+    )
+
+
+def _make_deployment(endpoint: str, catalog_uri: str = POLARIS_ENDPOINT) -> DeploymentConfig:
+    """Build compiled deployment bindings for storage and catalog runtime config."""
+    deployment = _make_storage_deployment(endpoint)
+    return deployment.model_copy(update={"catalog": _make_catalog_deployment(catalog_uri)})
 
 
 def _make_artifacts(
@@ -290,25 +332,31 @@ def test_expected_iceberg_tables_deduplicates_after_qualification() -> None:
 
 
 @pytest.mark.requirement("ALPHA-ICEBERG")
-def test_validate_iceberg_outputs_passes_storage_catalog_config_to_catalog() -> None:
-    """Validation must pass StoragePlugin catalog config into catalog.connect()."""
+def test_validate_iceberg_outputs_passes_deployment_runtime_config_to_catalog() -> None:
+    """Validation must pass deployment-derived runtime config into catalog.connect()."""
     artifacts = _make_artifacts(
         transforms=ResolvedTransforms(
             models=[ResolvedModel(name="mart_customer_360", compute="duckdb")],
             default_compute="duckdb",
-        )
+        ),
+        deployment=_make_deployment("http://compiled-minio:9000"),
     )
     catalog_plugin = MagicMock()
     storage_plugin = MagicMock()
     catalog = MagicMock()
     table = MagicMock()
     catalog_config = {
-        "s3.endpoint": "http://minio:9000",
+        "uri": POLARIS_ENDPOINT,
+        "warehouse": "s3://floe-iceberg",
+        "s3.endpoint": "http://compiled-minio:9000",
+        "s3.region": "us-east-1",
         "s3.path-style-access": "true",
     }
     catalog_plugin.connect.return_value = catalog
     catalog.load_table.return_value = table
-    storage_plugin.get_pyiceberg_catalog_config.return_value = catalog_config
+    storage_plugin.get_pyiceberg_catalog_config.side_effect = AssertionError(
+        "storage PyIceberg catalog helper must not be used"
+    )
     registry = MagicMock()
 
     def get_side_effect(plugin_type: PluginType, _name: str) -> MagicMock:
@@ -323,7 +371,14 @@ def test_validate_iceberg_outputs_passes_storage_catalog_config_to_catalog() -> 
         result = validate_iceberg_outputs(artifacts)
 
     catalog_plugin.connect.assert_called_once_with(config=catalog_config)
-    storage_plugin.get_pyiceberg_catalog_config.assert_called_once_with()
+    registry.configure.assert_has_calls(
+        [
+            call(PluginType.CATALOG, "polaris", {"uri": "memory://"}),
+            call(PluginType.STORAGE, "minio", {"endpoint": "memory://"}),
+        ],
+        any_order=True,
+    )
+    storage_plugin.get_pyiceberg_catalog_config.assert_not_called()
     storage_plugin.get_pyiceberg_fileio.assert_not_called()
     catalog.load_table.assert_called_once_with("customer_360.mart_customer_360")
     assert result.table_names == ["customer_360.mart_customer_360"]
@@ -337,17 +392,15 @@ def test_validate_iceberg_outputs_prefers_compiled_storage_endpoint() -> None:
             models=[ResolvedModel(name="mart_customer_360", compute="duckdb")],
             default_compute="duckdb",
         ),
-        deployment=_make_storage_deployment("http://compiled-minio:9000"),
+        deployment=_make_deployment("http://compiled-minio:9000"),
     )
     catalog_plugin = MagicMock()
     storage_plugin = MagicMock()
     catalog = MagicMock()
     catalog.load_table.return_value = MagicMock()
-    storage_plugin.get_pyiceberg_catalog_config.return_value = {
-        "s3.endpoint": "http://plugin-config-minio:9000",
-        "s3.region": "us-west-2",
-        "s3.path-style-access": "true",
-    }
+    storage_plugin.get_pyiceberg_catalog_config.side_effect = AssertionError(
+        "storage PyIceberg catalog helper must not be used"
+    )
     catalog_plugin.connect.return_value = catalog
     registry = MagicMock()
 
@@ -367,3 +420,4 @@ def test_validate_iceberg_outputs_prefers_compiled_storage_endpoint() -> None:
     assert connect_config["s3.endpoint"] == "http://compiled-minio:9000"
     assert connect_config["s3.region"] == "us-east-1"
     assert connect_config["s3.path-style-access"] == "true"
+    storage_plugin.get_pyiceberg_catalog_config.assert_not_called()

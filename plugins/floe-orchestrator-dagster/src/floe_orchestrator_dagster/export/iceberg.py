@@ -126,21 +126,20 @@ def _resolve_duckdb_path_from_profiles(
     )
 
 
-def _apply_compiled_storage_endpoint(
-    catalog_config: dict[str, Any],
-    artifacts: CompiledArtifacts,
-) -> dict[str, Any]:
-    """Apply compiled storage endpoint projection to PyIceberg catalog config."""
+def _runtime_catalog_connection_config(artifacts: CompiledArtifacts) -> dict[str, Any]:
+    """Return PyIceberg connection config derived from compiled deployment bindings."""
     deployment = artifacts.deployment
-    if deployment is None or deployment.storage is None:
-        return catalog_config
+    if deployment is None:
+        return {}
 
-    storage = deployment.storage
-    return {
-        **catalog_config,
-        "s3.endpoint": storage.endpoint.internal_url,
-        "s3.region": storage.endpoint.region,
-    }
+    from floe_core.runtime_catalog_connection import build_runtime_catalog_connection
+    from floe_iceberg.runtime_catalog import runtime_catalog_connection_to_pyiceberg_config
+
+    connection = build_runtime_catalog_connection(
+        storage=deployment.storage,
+        catalog=deployment.catalog,
+    )
+    return runtime_catalog_connection_to_pyiceberg_config(connection)
 
 
 def export_dbt_to_iceberg(
@@ -207,10 +206,7 @@ def export_dbt_to_iceberg(
 
     import duckdb
 
-    catalog_connection_config = _apply_compiled_storage_endpoint(
-        storage_plugin.get_pyiceberg_catalog_config(),
-        artifacts,
-    )
+    catalog_connection_config = _runtime_catalog_connection_config(artifacts)
     iceberg_config = IcebergTableManagerConfig.from_governance(artifacts.governance)
     writer = DefaultIcebergTableWriter(
         catalog_plugin=catalog_plugin,

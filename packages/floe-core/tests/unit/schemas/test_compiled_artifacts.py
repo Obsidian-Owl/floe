@@ -1030,6 +1030,95 @@ class TestStorageDeploymentBinding:
             factory()
 
 
+class TestRuntimeCatalogConnection:
+    """Tests for secret-free runtime catalog connection projection."""
+
+    def test_runtime_catalog_connection_serializes_secret_free_fields(self) -> None:
+        from floe_core.schemas.compiled_artifacts import (
+            CredentialRef,
+            RuntimeCatalogConnection,
+        )
+
+        connection = RuntimeCatalogConnection(
+            catalog_name="polaris",
+            catalog_uri="http://polaris:8181/api/catalog",
+            warehouse="s3://floe-iceberg",
+            storage_endpoint="http://floe-platform-minio:9000",
+            region="us-east-1",
+            path_style_access=True,
+            properties={"token-refresh-enabled": "true"},
+            credential_refs={
+                "accessKeyId": CredentialRef(
+                    source="kubernetes-secret",
+                    name="floe-platform-minio-credentials",
+                    key="root-user",
+                )
+            },
+            env_refs={"PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL"},
+        )
+
+        payload = connection.model_dump(mode="json")
+
+        assert payload["catalog_uri"] == "http://polaris:8181/api/catalog"
+        assert payload["path_style_access"] is True
+        assert payload["credential_refs"]["accessKeyId"]["name"] == (
+            "floe-platform-minio-credentials"
+        )
+        assert connection.credential_refs["accessKeyId"].source == "kubernetes-secret"
+        assert payload["env_refs"] == {
+            "PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL"
+        }
+
+    def test_runtime_catalog_connection_rejects_raw_secret_material(self) -> None:
+        from floe_core.schemas.compiled_artifacts import RuntimeCatalogConnection
+
+        invalid_values = [
+            {"properties": {"s3.secret-access-key": "raw-secret-value"}},
+            # pragma: allowlist nextline secret
+            {"catalog_uri": "http://user:raw-secret-value@polaris:8181/api/catalog"},
+            {"storage_endpoint": "http://minio:9000?token=raw-secret-value"},
+            {"catalog_uri": "http://polaris:8181/api/catalog?credential=abc123"},
+            {"catalog_uri": "http://polaris:8181/api/catalog#credential=abc123"},
+            {"catalog_uri": "http://polaris:8181/api/catalog?secret_access_key=abc123"},
+            {"catalog_uri": "http://polaris:8181/api/catalog#aws_secret_access_key=abc123"},
+            {"catalog_uri": "http://polaris:8181/api/catalog?X-Amz-Signature=abc123"},
+            {"properties": {"catalog-uri": "http://polaris:8181/api/catalog?credential=abc123"}},
+            {"warehouse": "s3://raw-secret-value/floe-iceberg"},
+        ]
+        for kwargs in invalid_values:
+            with pytest.raises(ValidationError, match="raw credential material"):
+                RuntimeCatalogConnection(catalog_name="polaris", **kwargs)
+
+    def test_runtime_catalog_connection_allows_secret_named_env_refs(self) -> None:
+        from floe_core.schemas.compiled_artifacts import RuntimeCatalogConnection
+
+        connection = RuntimeCatalogConnection(
+            catalog_name="polaris",
+            env_refs={
+                "session_token": "AWS_SESSION_TOKEN",
+                # pragma: allowlist nextline secret
+                "password": "ICEBERG_PASSWORD",
+                "bearer": "OAUTH_BEARER_TOKEN",
+            },
+        )
+
+        assert connection.env_refs == {
+            "session_token": "AWS_SESSION_TOKEN",
+            # pragma: allowlist nextline secret
+            "password": "ICEBERG_PASSWORD",
+            "bearer": "OAUTH_BEARER_TOKEN",
+        }
+
+    def test_runtime_catalog_connection_env_refs_must_be_env_var_names(self) -> None:
+        from floe_core.schemas.compiled_artifacts import RuntimeCatalogConnection
+
+        with pytest.raises(ValidationError, match="environment variable name"):
+            RuntimeCatalogConnection(
+                catalog_name="polaris",
+                env_refs={"credential": "not-an-env-var"},
+            )
+
+
 class TestIngestionDeploymentBinding:
     """Contract tests for secret-free dlt ingestion deployment bindings."""
 
