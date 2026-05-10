@@ -12,8 +12,9 @@ from typing import Literal, cast
 import floe_core.plugin_registry as _plugin_registry_module
 from floe_core.plugin_types import PluginType
 from floe_core.plugins.catalog import Catalog, CatalogPlugin
-from floe_core.plugins.storage import StoragePlugin
+from floe_core.runtime_catalog_connection import build_runtime_catalog_connection
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
+from floe_iceberg.runtime_catalog import runtime_catalog_connection_to_pyiceberg_config
 
 from floe_orchestrator_dagster.runtime_catalog_config import runtime_catalog_config
 
@@ -93,7 +94,7 @@ def expected_iceberg_tables(
 
 
 def connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> Catalog:
-    """Connect to the configured catalog using catalog/storage plugin config."""
+    """Connect to the configured catalog using deployment-derived runtime config."""
     plugins = artifacts.plugins
     if plugins is None or plugins.catalog is None:
         raise RuntimeError("CompiledArtifacts has no catalog plugin configured")
@@ -120,16 +121,20 @@ def connect_catalog_from_artifacts(artifacts: CompiledArtifacts) -> Catalog:
     )
     if validated_storage_config is None:
         raise RuntimeError(f"Storage plugin config for {storage_ref.type} could not be validated")
-    storage_plugin = cast(StoragePlugin, registry.get(PluginType.STORAGE, storage_ref.type))
 
-    catalog_connection_config = storage_plugin.get_pyiceberg_catalog_config()
-    if artifacts.deployment is not None and artifacts.deployment.storage is not None:
-        storage = artifacts.deployment.storage
-        catalog_connection_config = {
-            **catalog_connection_config,
-            "s3.endpoint": storage.endpoint.internal_url,
-            "s3.region": storage.endpoint.region,
-        }
+    # Load the storage plugin after validation so invalid config cannot reuse
+    # stale cached plugin state, while keeping PyIceberg connection properties
+    # derived from compiled deployment bindings.
+    registry.get(PluginType.STORAGE, storage_ref.type)
+
+    deployment = artifacts.deployment
+    runtime_catalog_connection = build_runtime_catalog_connection(
+        storage=deployment.storage if deployment else None,
+        catalog=deployment.catalog if deployment else None,
+    )
+    catalog_connection_config = runtime_catalog_connection_to_pyiceberg_config(
+        runtime_catalog_connection,
+    )
     return catalog_plugin.connect(config=catalog_connection_config)
 
 
@@ -167,7 +172,7 @@ def validate_iceberg_outputs(
     if not expected_table_names:
         raise RuntimeError("No expected Iceberg tables were derived from CompiledArtifacts")
 
-    # Let StoragePlugin own backend-specific PyIceberg catalog keys.
+    # Connect through deployment-derived runtime bindings.
     catalog = connect_catalog_from_artifacts(artifacts)
 
     loaded_tables: list[str] = []
