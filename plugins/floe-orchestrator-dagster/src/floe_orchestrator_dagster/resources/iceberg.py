@@ -41,6 +41,7 @@ if TYPE_CHECKING:
         PluginRef,
         ResolvedGovernance,
         ResolvedPlugins,
+        RuntimeCatalogConnection,
     )
 
 logger = logging.getLogger(__name__)
@@ -49,37 +50,13 @@ logger = logging.getLogger(__name__)
 _DEFAULT_NAMESPACE = "default"
 
 
-def _catalog_connection_config_from_binding(
-    storage_binding: DagsterStorageBinding | None,
-) -> dict[str, Any]:
-    """Return PyIceberg catalog connection config from compiled Dagster storage binding."""
-    if storage_binding is None:
-        return {}
-
-    resource_config = storage_binding.resources
-    connection_config: dict[str, str] = {}
-
-    endpoint_url = resource_config.get("endpoint_url")
-    if isinstance(endpoint_url, str) and endpoint_url:
-        connection_config["s3.endpoint"] = endpoint_url
-
-    region_name = resource_config.get("region_name")
-    if isinstance(region_name, str) and region_name:
-        connection_config["s3.region"] = region_name
-
-    path_style_access = resource_config.get("path_style_access")
-    if isinstance(path_style_access, bool):
-        connection_config["s3.path-style-access"] = str(path_style_access).lower()
-
-    return connection_config
-
-
 def create_iceberg_resources(
     catalog_ref: PluginRef,
     storage_ref: PluginRef,
     default_namespace: str = _DEFAULT_NAMESPACE,
     governance: ResolvedGovernance | None = None,
     storage_binding: DagsterStorageBinding | None = None,
+    runtime_catalog_connection: RuntimeCatalogConnection | None = None,
 ) -> dict[str, Any]:
     """Create Dagster resources dict with IcebergIOManager.
 
@@ -93,6 +70,8 @@ def create_iceberg_resources(
         default_namespace: Default Iceberg namespace for tables.
         governance: Resolved governance config for table lifecycle behavior.
         storage_binding: Optional compiled Dagster storage projection.
+        runtime_catalog_connection: Optional deployment-derived catalog connection
+            projection used to build PyIceberg catalog connection config.
 
     Returns:
         Dictionary with "iceberg" key mapped to IcebergIOManager instance.
@@ -120,6 +99,7 @@ def create_iceberg_resources(
     from floe_core.plugin_types import PluginType
     from floe_core.plugins.storage import StoragePlugin
     from floe_iceberg import IcebergTableManager
+    from floe_iceberg.runtime_catalog import runtime_catalog_connection_to_pyiceberg_config
 
     from floe_orchestrator_dagster.io_manager import create_iceberg_io_manager
     from floe_orchestrator_dagster.runtime_catalog_config import runtime_catalog_config
@@ -168,10 +148,9 @@ def create_iceberg_resources(
     )
     from floe_iceberg.models import IcebergTableManagerConfig
 
-    catalog_connection_config = {
-        **storage_plugin.get_pyiceberg_catalog_config(),
-        **_catalog_connection_config_from_binding(storage_binding),
-    }
+    catalog_connection_config = runtime_catalog_connection_to_pyiceberg_config(
+        runtime_catalog_connection,
+    )
 
     config = IcebergTableManagerConfig.from_governance(governance)
     if catalog_connection_config:
@@ -212,6 +191,7 @@ def try_create_iceberg_resources(
     plugins: ResolvedPlugins | None,
     governance: ResolvedGovernance | None = None,
     storage_binding: DagsterStorageBinding | None = None,
+    runtime_catalog_connection: RuntimeCatalogConnection | None = None,
 ) -> dict[str, Any]:
     """Attempt to create Iceberg resources for the runtime builder.
 
@@ -227,6 +207,8 @@ def try_create_iceberg_resources(
         governance: Resolved governance config from CompiledArtifacts.
             Used to derive Iceberg table lifecycle properties (TTL, snapshot retention).
         storage_binding: Optional compiled Dagster storage projection.
+        runtime_catalog_connection: Optional deployment-derived catalog connection
+            projection used to build PyIceberg catalog connection config.
 
     Returns:
         Dictionary with "iceberg" key if successful, empty dict only when
@@ -256,6 +238,7 @@ def try_create_iceberg_resources(
             storage_ref=plugins.storage,
             governance=governance,
             storage_binding=storage_binding,
+            runtime_catalog_connection=runtime_catalog_connection,
         )
     except Exception:
         logger.exception("iceberg_creation_failed")

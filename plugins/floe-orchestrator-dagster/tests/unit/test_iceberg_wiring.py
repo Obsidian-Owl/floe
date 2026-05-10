@@ -310,12 +310,9 @@ class TestCreateIcebergResourcesFullWiring:
             mock_get_registry.return_value = mock_registry
             mock_catalog_plugin = MagicMock()
             mock_storage_plugin = MagicMock()
-            mock_storage_plugin.get_pyiceberg_catalog_config.return_value = {
-                "s3.endpoint": "http://plugin-config-minio:9000",
-                "s3.region": "us-west-2",
-                "s3.path-style-access": "false",
-                "s3.access-key-id": "from-env",
-            }
+            mock_storage_plugin.get_pyiceberg_catalog_config.side_effect = AssertionError(
+                "storage helper must not be called"
+            )
             mock_registry.get.side_effect = [mock_catalog_plugin, mock_storage_plugin]
             mock_table_manager = MagicMock()
             mock_table_manager_cls.return_value = mock_table_manager
@@ -333,13 +330,59 @@ class TestCreateIcebergResourcesFullWiring:
             namespace="compiled_namespace",
         )
         table_manager_config = mock_table_manager_cls.call_args.kwargs["config"]
-        assert table_manager_config.catalog_connection_config == {
-            "s3.endpoint": "http://floe-platform-minio:9000",
+        assert table_manager_config.catalog_connection_config is None
+        assert result == {"iceberg": mock_io_manager}
+
+    @pytest.mark.requirement("004d-FR-115")
+    def test_create_iceberg_resources_uses_runtime_connection_without_storage_helper(self) -> None:
+        """Resource construction must not call storage-owned catalog config helpers."""
+        from floe_core.schemas.compiled_artifacts import PluginRef, RuntimeCatalogConnection
+
+        from floe_orchestrator_dagster.resources.iceberg import create_iceberg_resources
+
+        catalog_ref = PluginRef(type="mock-catalog", version="1.0.0", config={})
+        storage_ref = PluginRef(type="mock-storage", version="1.0.0", config={})
+        runtime_connection = RuntimeCatalogConnection(
+            catalog_uri="http://polaris:8181/api/catalog",
+            warehouse="s3://floe-iceberg",
+            storage_endpoint="http://compiled-minio:9000",
+            region="us-east-1",
+            path_style_access=True,
+        )
+
+        with (
+            patch("floe_core.plugin_registry.get_registry") as mock_get_registry,
+            patch("floe_iceberg.IcebergTableManager") as mock_table_manager_cls,
+            patch(
+                "floe_orchestrator_dagster.io_manager.create_iceberg_io_manager"
+            ) as mock_create_io_manager,
+        ):
+            mock_registry = MagicMock()
+            mock_get_registry.return_value = mock_registry
+            mock_catalog_plugin = MagicMock()
+            mock_storage_plugin = MagicMock()
+            mock_storage_plugin.get_pyiceberg_catalog_config.side_effect = AssertionError(
+                "storage helper must not be called"
+            )
+            mock_registry.get.side_effect = [mock_catalog_plugin, mock_storage_plugin]
+            mock_registry.configure.return_value = {}
+            mock_table_manager_cls.return_value = MagicMock()
+            mock_create_io_manager.return_value = MagicMock()
+
+            create_iceberg_resources(
+                catalog_ref=catalog_ref,
+                storage_ref=storage_ref,
+                runtime_catalog_connection=runtime_connection,
+            )
+
+        config = mock_table_manager_cls.call_args.kwargs["config"]
+        assert config.catalog_connection_config == {
+            "uri": "http://polaris:8181/api/catalog",
+            "warehouse": "s3://floe-iceberg",
+            "s3.endpoint": "http://compiled-minio:9000",
             "s3.region": "us-east-1",
             "s3.path-style-access": "true",
-            "s3.access-key-id": "from-env",
         }
-        assert result == {"iceberg": mock_io_manager}
 
     @pytest.mark.requirement("004d-FR-115")
     @pytest.mark.parametrize(
@@ -988,6 +1031,7 @@ class TestTryCreateIcebergResourcesEdgeCases:
                 storage_ref=plugins.storage,
                 governance=None,
                 storage_binding=None,
+                runtime_catalog_connection=None,
             )
 
             # Verify result has "iceberg" key

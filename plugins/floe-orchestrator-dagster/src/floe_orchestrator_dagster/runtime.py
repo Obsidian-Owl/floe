@@ -383,15 +383,23 @@ def build_product_definitions(
 
     if _has_iceberg_config(artifacts):
         storage_binding = None
+        runtime_catalog_connection = None
         deployment = getattr(artifacts, "deployment", None)
         if deployment is not None and getattr(deployment, "storage", None) is not None:
             storage_binding = deployment.storage.dagster
+            from floe_core.runtime_catalog_connection import build_runtime_catalog_connection
+
+            runtime_catalog_connection = build_runtime_catalog_connection(
+                storage=deployment.storage,
+                catalog=getattr(deployment, "catalog", None),
+            )
 
         def _iceberg_resource_fn(_init_context: Any) -> Any:
             result = try_create_iceberg_resources(
                 plugins,
                 governance=getattr(artifacts, "governance", None),
                 storage_binding=storage_binding,
+                runtime_catalog_connection=runtime_catalog_connection,
             )
             return result.get("iceberg")
 
