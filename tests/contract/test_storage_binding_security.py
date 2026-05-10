@@ -73,3 +73,23 @@ def test_storage_helm_values_use_secret_refs_not_storage_secret_values() -> None
     payload = str(values)
     for forbidden in FORBIDDEN_STORAGE_SECRET_VALUES:
         assert forbidden not in payload
+
+
+def test_first_party_runtime_paths_do_not_consume_storage_pyiceberg_helper() -> None:
+    """Dagster and writer runtime code must not consume storage-owned catalog config."""
+    repo_root = Path(__file__).resolve().parents[2]
+    searched_roots = [
+        repo_root / "plugins" / "floe-orchestrator-dagster" / "src",
+        repo_root / "packages" / "floe-iceberg" / "src",
+    ]
+    offenders: list[str] = []
+
+    for root in searched_roots:
+        for path in root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            if "def get_pyiceberg_catalog_config" in text:
+                continue
+            if "get_pyiceberg_catalog_config(" in text:
+                offenders.append(str(path.relative_to(repo_root)))
+
+    assert offenders == []
