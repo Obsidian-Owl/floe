@@ -1,16 +1,20 @@
 # IngestionPlugin
 
 **Purpose**: Data loading from external sources
-**Location**: `floe_core/interfaces/ingestion.py`
-**Entry Point**: `floe.ingestions`
+**Location**: `packages/floe-core/src/floe_core/plugins/ingestion.py`
+**Entry Point**: `floe.ingestion`
 **ADR**: [ADR-0020: Ingestion Plugins](../adr/0020-ingestion-plugins.md)
 
 IngestionPlugin abstracts data ingestion/EL (Extract-Load) tools, enabling platform teams to choose between embedded (dlt) or external (Airbyte) ingestion patterns while maintaining consistent pipeline definitions.
 
 ## Interface Definition
 
+The live ABC is `IngestionPlugin` in
+`packages/floe-core/src/floe_core/plugins/ingestion.py`. The snippet below is a
+conceptual excerpt for the public contract.
+
 ```python
-# floe_core/interfaces/ingestion.py
+# Conceptual excerpt; see packages/floe-core/src/floe_core/plugins/ingestion.py
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any

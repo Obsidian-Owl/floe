@@ -1,7 +1,7 @@
 # SecretsPlugin
 
 **Purpose**: Credential management and secret injection
-**Location**: `floe_core/interfaces/secrets.py`
+**Location**: `packages/floe-core/src/floe_core/plugins/secrets.py`
 **Entry Point**: `floe.secrets`
 **ADR**: [ADR-0023: Secrets Management](../adr/0023-secrets-management.md), [ADR-0031: Infisical Secrets](../adr/0031-infisical-secrets.md)
 
@@ -32,8 +32,12 @@ translation into its runtime or controller-specific resources.
 
 ## Interface Definition
 
+The live ABC is `SecretsPlugin` in
+`packages/floe-core/src/floe_core/plugins/secrets.py`. The snippet below is a
+conceptual excerpt for the public contract.
+
 ```python
-# floe_core/interfaces/secrets.py
+# Conceptual excerpt; see packages/floe-core/src/floe_core/plugins/secrets.py
 from abc import ABC, abstractmethod
 
 class SecretsPlugin(ABC):

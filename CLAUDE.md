@@ -29,7 +29,7 @@
 ## 8 Core Principles
 
 1. **Technology Ownership**: dbt=SQL, Dagster=orchestration, Iceberg=storage, Polaris=catalog, Cube=semantic
-2. **Plugin-First**: 11 types via entry points, ABCs required, >80% coverage
+2. **Plugin-First**: 14 categories via entry points, ABCs required, >80% coverage
 3. **Boundaries**: ENFORCE Iceberg/OTel/dbt/K8s; PLUG compute/catalog/orchestrator
 4. **Contracts**: `CompiledArtifacts` is SOLE cross-package contract
 5. **K8s-Native Testing**: Kind cluster, tests FAIL (no skip), 100% traceability
@@ -69,10 +69,12 @@ Layer 4: DATA           → K8s Jobs (dbt run, dlt ingestion)
 | `manifest.yaml` | Platform Team | Rarely |
 | `floe.yaml` | Data Engineers | Frequently |
 
-### Plugin Types (11)
+### Plugin Types (14)
 
 **ENFORCED**: Iceberg, dbt, OpenTelemetry, OpenLineage, Kubernetes
-**PLUGGABLE**: Compute, Orchestrator, Catalog, Semantic, Ingestion, Storage
+**PLUGGABLE**: Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend, DBT, SemanticLayer, Ingestion, Quality, RBAC, AlertChannel, Secrets, Identity
+
+**Current alpha composition scope**: MinIO/S3-compatible storage composition is implemented for the documented Polaris/DuckDB/Dagster demo path. Complete provider interchangeability across credential projection, identity integration, Dagster/Iceberg writer ownership, semantic datasource binding, RBAC, and network policy generation remains tracked follow-on work.
 
 ---
 

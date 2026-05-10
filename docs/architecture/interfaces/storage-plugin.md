@@ -1,7 +1,7 @@
 # StoragePlugin
 
 **Purpose**: Pluggable object storage backends (S3, GCS, Azure Blob, MinIO)
-**Location**: `floe_core/interfaces/storage.py`
+**Location**: `packages/floe-core/src/floe_core/plugins/storage.py`
 **Entry Point**: `floe.storage`
 **ADR**: [ADR-0036: Storage Plugin Interface](../adr/0036-storage-plugin-interface.md)
 
@@ -41,12 +41,15 @@ declared modes before deployment bindings are rendered.
 
 ## Interface Definition
 
-The snippet below shows the target semantic contract. The current migration-era
+The live ABC is `StoragePlugin` in
+`packages/floe-core/src/floe_core/plugins/storage.py`. The snippet below shows
+the target semantic contract as a conceptual excerpt. The current migration-era
 ABC may still expose legacy helper methods for dbt, Dagster, warehouse URI, and
 Helm fragments until the plugin uplift tracker closes them out. Those helpers
 are compatibility surface, not the architecture contract.
 
 ```python
+# Conceptual excerpt; see packages/floe-core/src/floe_core/plugins/storage.py
 from abc import ABC, abstractmethod
 from typing import Any
 from pyiceberg.io import FileIO

@@ -1,18 +1,20 @@
 # DataQualityPlugin
 
 **Purpose**: Data quality validation and monitoring
-**Location**: `floe_core/interfaces/data_quality.py`
-**Entry Point**: `floe.data_quality`
+**Location**: `packages/floe-core/src/floe_core/plugins/quality.py`
+**Entry Point**: `floe.quality`
 **ADR**: [ADR-0044: Unified Data Quality Plugin](../adr/0044-unified-data-quality-plugin.md)
 
 DataQualityPlugin abstracts data quality validation frameworks, enabling platform teams to choose between dbt tests, Great Expectations, Soda, or other quality tools while maintaining consistent quality gate enforcement.
 
-> **Note**: This interface is documented in ADR-0044. The interface definition below is a placeholder pending full specification.
+> **Note**: The live ABC is currently named `QualityPlugin`. The conceptual
+> `DataQualityPlugin` naming here follows ADR-0044 language and should not be
+> treated as a copied source excerpt.
 
 ## Interface Definition
 
 ```python
-# floe_core/interfaces/data_quality.py
+# Conceptual excerpt; see packages/floe-core/src/floe_core/plugins/quality.py
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
