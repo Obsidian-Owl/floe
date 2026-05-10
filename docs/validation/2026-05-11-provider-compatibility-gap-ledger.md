@@ -35,7 +35,8 @@ Do not use deprecated helper APIs as new provider contracts. New provider work m
 
 ## Secret-Free Decision
 
-Provider compatibility is invalid if it requires raw access keys, secret keys, tokens, client secrets, passwords, or bearer tokens inside `CompiledArtifacts`.
+Provider compatibility is invalid if it requires literal credential values,
+tokens, client secrets, passwords, or bearer tokens inside `CompiledArtifacts`.
 
 ## First Follow-Up Recommendation
 
