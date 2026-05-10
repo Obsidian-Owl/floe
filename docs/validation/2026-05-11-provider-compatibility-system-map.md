@@ -5,13 +5,13 @@ Repo: `/Users/dmccarthy/Projects/floe`
 Branch: `main`
 Purpose: Source map for the provider compatibility spike.
 
-## Current Head
+## Baseline Head
 
 | Item | Evidence |
 | --- | --- |
 | Branch | `main` |
-| HEAD | `901cfbb404e8b5ccc140de1a63e7d42e80257fa6` |
-| Recent commits | `901cfbb4 docs: plan provider compatibility spike`<br>`7347e8cb docs: add provider compatibility spike design`<br>`d97785cd [codex] Binding-first Dagster Iceberg runtime (#328)`<br>`50670b79 [codex] Post-composition cleanup roadmap (#327)`<br>`d9e3582a Stabilize dlt ingestion through composability layers (#326)` |
+| Baseline HEAD before this artifact | `901cfbb404e8b5ccc140de1a63e7d42e80257fa6` |
+| Five recent commits captured before this artifact | `901cfbb4 docs: plan provider compatibility spike`<br>`7347e8cb docs: add provider compatibility spike design`<br>`d97785cd [codex] Binding-first Dagster Iceberg runtime (#328)`<br>`50670b79 [codex] Post-composition cleanup roadmap (#327)`<br>`d9e3582a Stabilize dlt ingestion through composability layers (#326)` |
 
 ## Composition Contracts
 
