@@ -344,8 +344,6 @@ def test_resolver_rejects_minio_plus_glue_native_s3_requirement() -> None:
         capabilities=CapabilitySet(
             protocols=["s3-compatible"],
             credential_modes=["kubernetes-secret"],
-            path_style_access=True,
-            sts=False,
         ),
     )
     catalog = PluginRequirements(
@@ -366,10 +364,34 @@ def test_resolver_rejects_minio_plus_glue_native_s3_requirement() -> None:
     result = resolver.validate([storage, identity], [catalog])
 
     assert result.valid is False
-    assert sorted(issue.code for issue in result.issues) == [
-        "COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED",
-        "COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
-        "COMPOSITION_PROTOCOL_UNSUPPORTED",
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_PROTOCOL_UNSUPPORTED",
+            message=(
+                "catalog glue requires one of protocols ['s3']; "
+                "storage minio provides ['s3-compatible']"
+            ),
+            plugins=["storage:minio", "catalog:glue"],
+        ),
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED",
+            message=(
+                "catalog glue requires one of credential modes ['workload-identity']; "
+                "storage minio provides ['kubernetes-secret']"
+            ),
+            plugins=["storage:minio", "catalog:glue"],
+        ),
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+            message=(
+                "catalog glue requires one of identity modes ['aws-irsa']; "
+                "storage minio provides []; identity aws-irsa provides ['aws-irsa']"
+            ),
+            plugins=["storage:minio", "identity:aws-irsa", "catalog:glue"],
+        ),
     ]
 
 
