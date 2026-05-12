@@ -148,6 +148,9 @@ def _ensure_helm_chart_dependencies(
     timeout: int,
 ) -> subprocess.CompletedProcess[str] | None:
     """Add chart-declared Helm repos and build dependencies before rendering."""
+    if _vendored_helm_chart_dependencies_available(chart_path):
+        return None
+
     for repo_name, repository in _chart_dependency_repositories(chart_path):
         repo_result = run_helm(
             ["repo", "add", repo_name, repository, "--force-update"],
@@ -160,6 +163,64 @@ def _ensure_helm_chart_dependencies(
     if dependency_result.returncode != 0:
         return dependency_result
     return None
+
+
+def _vendored_helm_chart_dependencies_available(chart_path: Path) -> bool:
+    """Return True when all Chart.yaml dependencies are vendored at declared versions."""
+    chart_yaml = chart_path / "Chart.yaml"
+    if not chart_yaml.exists():
+        return False
+
+    raw_chart: Any = yaml.safe_load(chart_yaml.read_text()) or {}
+    if not isinstance(raw_chart, dict):
+        return False
+
+    raw_dependencies = raw_chart.get("dependencies", [])
+    if not isinstance(raw_dependencies, list) or not raw_dependencies:
+        return False
+
+    vendored_dir = chart_path / "charts"
+    if not vendored_dir.is_dir():
+        return False
+
+    for dependency in raw_dependencies:
+        if not isinstance(dependency, dict):
+            continue
+        name = dependency.get("name")
+        version = dependency.get("version")
+        alias = dependency.get("alias")
+        if not isinstance(name, str) or not isinstance(version, str):
+            return False
+
+        candidate_names = [name]
+        if isinstance(alias, str) and alias:
+            candidate_names.insert(0, alias)
+
+        if any(
+            _vendored_chart_directory_matches_version(vendored_dir / candidate, version)
+            for candidate in candidate_names
+        ):
+            continue
+        if any(
+            (vendored_dir / f"{candidate}-{version}.tgz").is_file() for candidate in candidate_names
+        ):
+            continue
+        return False
+
+    return True
+
+
+def _vendored_chart_directory_matches_version(chart_dir: Path, expected_version: str) -> bool:
+    """Return True when an unpacked vendored subchart declares the expected version."""
+    chart_yaml = chart_dir / "Chart.yaml"
+    if not chart_yaml.is_file():
+        return False
+
+    raw_chart: Any = yaml.safe_load(chart_yaml.read_text()) or {}
+    if not isinstance(raw_chart, dict):
+        return False
+
+    return raw_chart.get("version") == expected_version
 
 
 def run_helm_template(

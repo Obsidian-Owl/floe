@@ -10,6 +10,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 E2E_CONFTEST_PATH = REPO_ROOT / "tests" / "e2e" / "conftest.py"
+ROOT_CONFTEST_PATH = REPO_ROOT / "tests" / "conftest.py"
 
 pytestmark = pytest.mark.requirement("VAL-LANE-MARKERS")
 
@@ -19,6 +20,19 @@ def _load_e2e_conftest() -> ModuleType:
     spec = importlib.util.spec_from_file_location(
         "tests.e2e.conftest_for_validation_markers",
         E2E_CONFTEST_PATH,
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_root_conftest() -> ModuleType:
+    """Load the root tests conftest module lazily for structural tests."""
+    spec = importlib.util.spec_from_file_location(
+        "tests.conftest_for_validation_markers",
+        ROOT_CONFTEST_PATH,
     )
     assert spec is not None
     assert spec.loader is not None
@@ -57,9 +71,14 @@ class _FakeConfig:
     def __init__(self) -> None:
         self.lines: list[tuple[str, str]] = []
         self.option = SimpleNamespace(reruns=0, reruns_delay=0, fail_on_flaky=False, only_rerun=[])
+        self.hook = SimpleNamespace(pytest_deselected=self._record_deselected)
+        self.deselected_items: list[_FakeItem] = []
 
     def addinivalue_line(self, section: str, value: str) -> None:
         self.lines.append((section, value))
+
+    def _record_deselected(self, items: list[_FakeItem]) -> None:
+        self.deselected_items.extend(items)
 
 
 class _FakeItem:
@@ -135,6 +154,41 @@ def test_pytest_collection_modifyitems_defaults_unmarked_e2e_paths() -> None:
     assert items[1].marker_names == []
 
 
+def test_root_collection_deselects_live_aws_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default test collection should keep live AWS validation opt-in."""
+    monkeypatch.delenv("FLOE_RUN_LIVE_AWS_PROVIDER_TESTS", raising=False)
+    config = _FakeConfig()
+    items = [
+        _FakeItem("tests/integration/test_aws_provider_live.py::test_live", ["live_aws"]),
+        _FakeItem("tests/integration/test_other.py::test_other", ["integration"]),
+    ]
+
+    _load_root_conftest().pytest_collection_modifyitems(config, items)
+
+    assert [item.nodeid for item in items] == ["tests/integration/test_other.py::test_other"]
+    assert [item.nodeid for item in config.deselected_items] == [
+        "tests/integration/test_aws_provider_live.py::test_live"
+    ]
+
+
+def test_root_collection_keeps_live_aws_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Explicit live AWS lanes should collect tests and enforce their prerequisites."""
+    monkeypatch.setenv("FLOE_RUN_LIVE_AWS_PROVIDER_TESTS", "1")
+    config = _FakeConfig()
+    items = [
+        _FakeItem("tests/integration/test_aws_provider_live.py::test_live", ["live_aws"]),
+        _FakeItem("tests/integration/test_other.py::test_other", ["integration"]),
+    ]
+
+    _load_root_conftest().pytest_collection_modifyitems(config, items)
+
+    assert [item.nodeid for item in items] == [
+        "tests/integration/test_aws_provider_live.py::test_live",
+        "tests/integration/test_other.py::test_other",
+    ]
+    assert config.deselected_items == []
+
+
 def test_selected_items_require_smoke_check_for_platform_blackbox() -> None:
     """Platform-blackbox selections should trigger the smoke check."""
     items = [
@@ -199,6 +253,19 @@ def test_platform_runtime_modules_are_explicitly_marked_platform_blackbox() -> N
 
     assert "pytest.mark.platform_blackbox" in platform_bootstrap
     assert "pytest.mark.platform_blackbox" in platform_deployment
+
+
+@pytest.mark.requirement("LIVE-VALIDATION")
+def test_direct_helm_status_fallback_respects_standard_runner_rbac() -> None:
+    """Direct-Helm fallback should only query resources allowed to standard E2E."""
+    platform_deployment = (
+        REPO_ROOT / "tests" / "e2e" / "test_platform_deployment_e2e.py"
+    ).read_text()
+
+    assert '"deployments,services"' in platform_deployment
+    assert '"deployments,statefulsets,services"' not in platform_deployment
+    assert '"floe-platform-dagster-webserver"' in platform_deployment
+    assert '"floe-platform-dagster-daemon"' in platform_deployment
 
 
 def test_developer_workflow_outliers_are_explicitly_marked() -> None:

@@ -470,6 +470,7 @@ class TestCatalogOperations:
         assert plugin_with_catalog.list_namespaces() == ["bronze", "silver.sales"]
         assert plugin_with_catalog.list_tables("bronze") == ["bronze.customers"]
         plugin_with_catalog.create_table("bronze.customers", {"type": "struct"})
+        plugin_with_catalog.drop_table("bronze.customers_archive")
         plugin_with_catalog.drop_table("bronze.customers", purge=True)
         plugin_with_catalog.delete_namespace("bronze")
 
@@ -478,7 +479,8 @@ class TestCatalogOperations:
         catalog.list_namespaces.assert_called_once_with()
         catalog.list_tables.assert_called_once_with("bronze")
         catalog.create_table.assert_called_once_with("bronze.customers", {"type": "struct"})
-        catalog.drop_table.assert_called_once_with("bronze.customers", purge=True)
+        catalog.drop_table.assert_called_once_with("bronze.customers_archive")
+        catalog.purge_table.assert_called_once_with("bronze.customers")
         catalog.drop_namespace.assert_called_once_with("bronze")
 
     @pytest.mark.requirement("CATALOG-GLUE-022")

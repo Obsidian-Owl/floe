@@ -5,6 +5,7 @@ in test code, ensuring reliable and efficient waiting for async operations.
 
 Functions:
     wait_for_condition: Poll until a condition is true or timeout
+    wait_for_delay: Wait for a fixed delay with an explicit test-infra name
     wait_for_service: Wait for a K8s service to become ready
 
 Example:
@@ -153,6 +154,38 @@ def wait_for_condition(
         sleep_time = min(interval, remaining)
         if sleep_time > 0:
             time.sleep(sleep_time)
+
+
+def wait_for_delay(
+    seconds: float,
+    *,
+    description: str = "delay",
+    interval: float = 0.5,
+) -> None:
+    """Wait for a fixed delay through the shared test polling utility.
+
+    Use this for intentional retry backoff in tests. Most test waits should
+    poll an external condition with ``wait_for_condition`` instead.
+
+    Args:
+        seconds: Delay duration in seconds.
+        description: Description for timeout errors.
+        interval: Poll interval while waiting.
+    """
+    if seconds <= 0:
+        return
+
+    ready_at = time.monotonic() + seconds
+
+    def delay_elapsed() -> bool:
+        return time.monotonic() >= ready_at
+
+    wait_for_condition(
+        delay_elapsed,
+        timeout=seconds + interval,
+        interval=interval,
+        description=description,
+    )
 
 
 def wait_for_service(

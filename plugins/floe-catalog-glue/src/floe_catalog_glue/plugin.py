@@ -56,8 +56,12 @@ class _GlueCatalogOps(Protocol):
         """List tables in a namespace."""
         ...
 
-    def drop_table(self, identifier: str, purge: bool = False) -> None:
+    def drop_table(self, identifier: str) -> None:
         """Drop a table."""
+        ...
+
+    def purge_table(self, identifier: str) -> None:
+        """Drop a table and delete underlying files."""
         ...
 
 
@@ -282,7 +286,11 @@ class GlueCatalogPlugin(CatalogPlugin):
 
     def drop_table(self, identifier: str, purge: bool = False) -> None:
         """Drop an Iceberg table from AWS Glue."""
-        self._connected_catalog().drop_table(identifier, purge=purge)
+        catalog = self._connected_catalog()
+        if purge:
+            catalog.purge_table(identifier)
+            return
+        catalog.drop_table(identifier)
 
     def vend_credentials(
         self,

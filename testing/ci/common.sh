@@ -162,6 +162,16 @@ floe_render_test_job() {
         return 2
     fi
     floe_ensure_chart_dependencies || return 1
+    if [[ -n "${FLOE_TEST_PYTEST_ARGS_JSON:-}" ]]; then
+        helm template "${FLOE_RELEASE_NAME}" "${FLOE_CHART_DIR}" \
+            -f "${FLOE_VALUES_FILE}" \
+            --set tests.enabled=true \
+            --set-json "tests.pytestArgs=${FLOE_TEST_PYTEST_ARGS_JSON}" \
+            --namespace "${FLOE_NAMESPACE}" \
+            -s "templates/${template}"
+        return
+    fi
+
     helm template "${FLOE_RELEASE_NAME}" "${FLOE_CHART_DIR}" \
         -f "${FLOE_VALUES_FILE}" \
         --set tests.enabled=true \

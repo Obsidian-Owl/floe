@@ -1623,6 +1623,27 @@ requires-dist = [
 ]
 
 [[package]]
+name = "floe-catalog-glue"
+version = "0.1.0"
+source = { editable = "plugins/floe-catalog-glue" }
+dependencies = [
+    { name = "floe-core" },
+    { name = "pydantic" },
+    { name = "pyiceberg", extra = ["glue"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
+    { name = "pydantic", specifier = ">=2.0,<3.0" },
+    { name = "pyiceberg", extras = ["glue"], specifier = ">=0.11.1" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3" },
+]
+
+[[package]]
 name = "floe-catalog-polaris"
 version = "0.1.0"
 source = { editable = "plugins/floe-catalog-polaris" }
@@ -2091,6 +2112,27 @@ requires-dist = [
 ]
 
 [[package]]
+name = "floe-storage-aws-s3"
+version = "0.1.0"
+source = { editable = "plugins/floe-storage-aws-s3" }
+dependencies = [
+    { name = "floe-core" },
+    { name = "pydantic" },
+    { name = "pyiceberg", extra = ["s3fs"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
+    { name = "pydantic", specifier = ">=2.0,<3.0" },
+    { name = "pyiceberg", extras = ["s3fs"], specifier = ">=0.11.1" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3" },
+]
+
+[[package]]
 name = "floe-storage-minio"
 version = "0.1.0"
 source = { editable = "plugins/floe-storage-minio" }
@@ -2164,6 +2206,7 @@ dependencies = [
     { name = "floe-alert-email" },
     { name = "floe-alert-slack" },
     { name = "floe-alert-webhook" },
+    { name = "floe-catalog-glue" },
     { name = "floe-catalog-polaris" },
     { name = "floe-compute-duckdb" },
     { name = "floe-core" },
@@ -2181,6 +2224,7 @@ dependencies = [
     { name = "floe-secrets-infisical" },
     { name = "floe-secrets-k8s" },
     { name = "floe-semantic-cube" },
+    { name = "floe-storage-aws-s3" },
     { name = "floe-storage-minio" },
     { name = "floe-telemetry-console" },
     { name = "floe-telemetry-jaeger" },
@@ -2230,6 +2274,7 @@ requires-dist = [
     { name = "floe-alert-email", editable = "plugins/floe-alert-email" },
     { name = "floe-alert-slack", editable = "plugins/floe-alert-slack" },
     { name = "floe-alert-webhook", editable = "plugins/floe-alert-webhook" },
+    { name = "floe-catalog-glue", editable = "plugins/floe-catalog-glue" },
     { name = "floe-catalog-polaris", editable = "plugins/floe-catalog-polaris" },
     { name = "floe-compute-duckdb", editable = "plugins/floe-compute-duckdb" },
     { name = "floe-core", editable = "packages/floe-core" },
@@ -2247,6 +2292,7 @@ requires-dist = [
     { name = "floe-secrets-infisical", editable = "plugins/floe-secrets-infisical" },
     { name = "floe-secrets-k8s", editable = "plugins/floe-secrets-k8s" },
     { name = "floe-semantic-cube", editable = "plugins/floe-semantic-cube" },
+    { name = "floe-storage-aws-s3", editable = "plugins/floe-storage-aws-s3" },
     { name = "floe-storage-minio", editable = "plugins/floe-storage-minio" },
     { name = "floe-telemetry-console", editable = "plugins/floe-telemetry-console" },
     { name = "floe-telemetry-jaeger", editable = "plugins/floe-telemetry-jaeger" },
@@ -4992,6 +5038,9 @@ wheels = [
 ]
 
 [package.optional-dependencies]
+glue = [
+    { name = "boto3" },
+]
 s3fs = [
     { name = "s3fs" },
 ]

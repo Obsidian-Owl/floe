@@ -79,11 +79,19 @@ REQUIRED_DOCKERIGNORE_EXCLUSIONS: list[str] = [
     ".git",
     ".venv",
     "__pycache__",
+    "**/__pycache__",
     ".mypy_cache",
+    "**/.mypy_cache",
     ".pytest_cache",
+    "**/.pytest_cache",
     ".ruff_cache",
+    "**/.ruff_cache",
     ".specwright",
     ".claude",
+    "**/.terraform",
+    "**/*.tfstate*",
+    "**/tfplan",
+    "**/terraform.tfvars",
 ]
 
 
@@ -1979,6 +1987,59 @@ class TestHelmValuesImageOverride:
                 f"values-demo.yaml dagster.{component}.resources.limits.memory must match "
                 "the E2E profile used by values-test.yaml."
             )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_e2e_dagster_daemon_memory_budget_handles_live_suite(self) -> None:
+        """Verify the E2E daemon memory budget covers full live validation runs.
+
+        The full E2E suite loads all demo code locations and launches multiple
+        Dagster runs. The daemon must not use the smaller local-development
+        budget that OOMs under that workload.
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        daemon_resources = values.get("dagster", {}).get("dagsterDaemon", {}).get("resources", {})
+
+        assert daemon_resources.get("requests", {}).get("memory") == "768Mi", (
+            "values-test.yaml dagster.dagsterDaemon.resources.requests.memory "
+            "must reserve enough memory for the full E2E profile."
+        )
+        assert daemon_resources.get("limits", {}).get("memory") == "2Gi", (
+            "values-test.yaml dagster.dagsterDaemon.resources.limits.memory must "
+            "prevent OOMKills during full live validation."
+        )
+
+    @pytest.mark.requirement("WU11-AC3")
+    def test_e2e_postgresql_budget_handles_dagster_metadata_writes(self) -> None:
+        """Verify the E2E metadata database budget covers concurrent Dagster writes.
+
+        Full live validation launches repeated Dagster runs while Marquez and
+        Polaris also use PostgreSQL. Keep the E2E database above the minimal
+        local-development budget that rejects connections under that workload.
+        """
+        values = _load_values_yaml(VALUES_TEST)
+        primary_resources = values.get("postgresql", {}).get("primary", {}).get("resources", {})
+        demo_resources = _load_values_yaml(VALUES_DEMO).get("postgresql", {}).get("resources", {})
+
+        assert primary_resources.get("requests", {}).get("cpu") == "250m", (
+            "values-test.yaml postgresql.primary.resources.requests.cpu must "
+            "reserve enough CPU for live E2E metadata writes."
+        )
+        assert primary_resources.get("requests", {}).get("memory") == "512Mi", (
+            "values-test.yaml postgresql.primary.resources.requests.memory must "
+            "reserve enough memory for live E2E metadata writes."
+        )
+        assert primary_resources.get("limits", {}).get("memory") == "1Gi", (
+            "values-test.yaml postgresql.primary.resources.limits.memory must "
+            "avoid transient connection loss during full live validation."
+        )
+        assert demo_resources.get("requests", {}).get("cpu") == "250m", (
+            "values-demo.yaml postgresql.resources.requests.cpu must stay aligned "
+            "with the validated E2E metadata database profile."
+        )
+        assert demo_resources.get("limits", {}).get("memory") == "1Gi", (
+            "values-demo.yaml postgresql.resources.limits.memory must stay aligned "
+            "with the validated E2E metadata database profile."
+        )
 
     @pytest.mark.requirement("WU11-AC3")
     def test_values_demo_run_launcher_keeps_base_memory_limit(self) -> None:

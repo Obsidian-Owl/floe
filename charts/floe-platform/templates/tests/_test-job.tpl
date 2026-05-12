@@ -25,9 +25,8 @@ Fields:
                     `test-type` label, and the OTel service name suffix.
                     Use "e2e" for the non-destructive runner,
                     "e2e-destructive" for the destructive runner.
-  pytestMarker    — Value for `pytest -m`. Use "not destructive" to
-                    exclude destructive tests; "destructive" to include
-                    only destructive tests.
+  pytestMarker    — Legacy marker label for callers that have not yet moved
+                    to tests.pytestArgs.
   serviceAccount  — Rendered ServiceAccount name. Callers resolve the
                     helper themselves so the template can stay agnostic
                     about which SA a given suite uses.
@@ -85,6 +84,11 @@ spec:
             runAsNonRoot: true
             runAsUser: 1000
           args:
+            {{- if $context.Values.tests.pytestArgs }}
+            {{- range $arg := $context.Values.tests.pytestArgs }}
+            - {{ $arg | quote }}
+            {{- end }}
+            {{- else }}
             - "--tb=short"
             - "-v"
             - "--color=yes"
@@ -97,6 +101,7 @@ spec:
             - "--json-report"
             - "--json-report-file=/artifacts/{{ $artifactPrefix }}-report.json"
             - "--log-cli-level=INFO"
+            {{- end }}
           env:
             - name: INTEGRATION_TEST_HOST
               value: "k8s"

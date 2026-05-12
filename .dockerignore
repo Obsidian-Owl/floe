@@ -7,10 +7,14 @@
 # Python environments and caches
 .venv/
 __pycache__/
+**/__pycache__/
 *.pyc
 .mypy_cache/
+**/.mypy_cache/
 .pytest_cache/
+**/.pytest_cache/
 .ruff_cache/
+**/.ruff_cache/
 
 # IDE and editor
 .vscode/
@@ -19,6 +23,12 @@ __pycache__/
 # Project tooling (not needed in images)
 .specwright/
 .claude/
+
+# Local IaC state and provider caches (never needed in Docker build contexts)
+**/.terraform/
+**/*.tfstate*
+**/tfplan
+**/terraform.tfvars
 
 # Node (if any)
 node_modules/

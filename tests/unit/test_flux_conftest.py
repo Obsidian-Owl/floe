@@ -265,10 +265,11 @@ class TestRecoverSuspendedFluxStructural:
         )
 
     @pytest.mark.requirement("AC-3")
-    def test_uses_flux_resume_command(self) -> None:
-        """_recover_suspended_flux uses 'flux resume helmrelease' to unsuspend.
+    def test_uses_flux_resume_with_kubectl_patch_fallback(self) -> None:
+        """_recover_suspended_flux can unsuspend without requiring the flux CLI.
 
-        Must use the flux CLI resume command, not kubectl patch.
+        The in-cluster E2E runner has kubectl but does not ship the flux CLI.
+        Recovery must still work there.
         """
         source = _conftest_source()
         recover_fn_match = re.search(
@@ -283,6 +284,10 @@ class TestRecoverSuspendedFluxStructural:
         assert re.search(r"flux.*resume.*helmrelease", fn_body), (
             "_recover_suspended_flux must use 'flux resume helmrelease' command. "
             "Found no matching pattern in the function body."
+        )
+        assert all(token in fn_body for token in ['"kubectl"', '"patch"', '"helmrelease"']), (
+            "_recover_suspended_flux must fall back to 'kubectl patch helmrelease' "
+            "when the flux CLI is unavailable."
         )
 
 
@@ -343,6 +348,7 @@ class TestRecoverSuspendedFluxBehavioral:
     def test_resumes_when_suspend_is_true(
         self,
         mock_subprocess: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Runs flux resume when kubectl reports suspend=true.
 
@@ -362,6 +368,7 @@ class TestRecoverSuspendedFluxBehavioral:
             return _make_completed_process(returncode=0)
 
         mock_subprocess.side_effect = _kubectl_side_effect
+        monkeypatch.setattr("tests.e2e.conftest.shutil.which", lambda command: "/usr/bin/flux")
 
         _recover_suspended_flux()
 
@@ -380,6 +387,7 @@ class TestRecoverSuspendedFluxBehavioral:
     def test_resumes_both_releases_when_both_suspended(
         self,
         mock_subprocess: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Resumes BOTH floe-platform and floe-jobs-test when both are suspended.
 
@@ -398,6 +406,7 @@ class TestRecoverSuspendedFluxBehavioral:
             return _make_completed_process(returncode=0)
 
         mock_subprocess.side_effect = _kubectl_side_effect
+        monkeypatch.setattr("tests.e2e.conftest.shutil.which", lambda command: "/usr/bin/flux")
 
         _recover_suspended_flux()
 
@@ -501,6 +510,7 @@ class TestRecoverSuspendedFluxBehavioral:
         self,
         mock_subprocess: MagicMock,
         caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Logs a WARNING when resuming a suspended HelmRelease.
 
@@ -520,6 +530,7 @@ class TestRecoverSuspendedFluxBehavioral:
             return _make_completed_process(returncode=0)
 
         mock_subprocess.side_effect = _kubectl_side_effect
+        monkeypatch.setattr("tests.e2e.conftest.shutil.which", lambda command: "/usr/bin/flux")
 
         with caplog.at_level(logging.WARNING):
             _recover_suspended_flux()
@@ -541,6 +552,7 @@ class TestRecoverSuspendedFluxBehavioral:
     def test_selective_resume_only_suspended_release(
         self,
         mock_subprocess: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Only resumes the release that is actually suspended, not both.
 
@@ -567,6 +579,7 @@ class TestRecoverSuspendedFluxBehavioral:
             return _make_completed_process(returncode=0)
 
         mock_subprocess.side_effect = _kubectl_side_effect
+        monkeypatch.setattr("tests.e2e.conftest.shutil.which", lambda command: "/usr/bin/flux")
 
         _recover_suspended_flux()
 
@@ -592,6 +605,52 @@ class TestRecoverSuspendedFluxBehavioral:
             f"Must NOT resume {_RELEASE_JOBS} when it is not suspended. "
             "Only suspended releases should be resumed."
         )
+
+    @pytest.mark.requirement("AC-3")
+    def test_falls_back_to_kubectl_patch_when_flux_cli_missing(
+        self,
+        mock_subprocess: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Uses kubectl patch when a suspended HelmRelease is detected without flux CLI."""
+        from tests.e2e.conftest import _recover_suspended_flux
+
+        monkeypatch.setattr("tests.e2e.conftest.shutil.which", lambda command: None)
+
+        def _kubectl_side_effect(
+            cmd: list[str], **kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
+            """floe-platform is suspended, patch succeeds."""
+            if "kubectl" in cmd and "get" in cmd and "helmrelease" in cmd:
+                if _RELEASE_PLATFORM in cmd:
+                    return _make_completed_process(returncode=0, stdout="true")
+                return _make_completed_process(returncode=0, stdout="false")
+            if "kubectl" in cmd and "patch" in cmd and "helmrelease" in cmd:
+                return _make_completed_process(returncode=0)
+            return _make_completed_process(returncode=1, stderr="unexpected command")
+
+        mock_subprocess.side_effect = _kubectl_side_effect
+
+        _recover_suspended_flux()
+
+        patch_calls = [
+            c[0][0]
+            for c in mock_subprocess.call_args_list
+            if isinstance(c[0][0], list) and "patch" in c[0][0]
+        ]
+        assert patch_calls == [
+            [
+                "kubectl",
+                "patch",
+                "helmrelease",
+                _RELEASE_PLATFORM,
+                "-n",
+                "floe-test",
+                "--type=merge",
+                "-p",
+                '{"spec":{"suspend":false}}',
+            ]
+        ]
 
 
 # ===========================================================================

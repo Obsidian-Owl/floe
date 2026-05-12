@@ -64,10 +64,10 @@ dagster:
     resources:
       requests:
         cpu: 100m
-        memory: 512Mi
+        memory: 768Mi
       limits:
         cpu: "1"
-        memory: 1536Mi
+        memory: 2Gi
     env:
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
         value: "http://floe-platform-otel:4317"
@@ -87,10 +87,10 @@ dagster:
     resources:
       requests:
         cpu: 100m
-        memory: 512Mi
+        memory: 768Mi
       limits:
         cpu: "1"
-        memory: 1536Mi
+        memory: 2Gi
     # Demo scheduling: 10-minute intervals
     env:
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -262,12 +262,12 @@ postgresql:
   enabled: true
   resources:
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 250m
+      memory: 512Mi
       ephemeral-storage: 256Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: 1000m
+      memory: 1Gi
       ephemeral-storage: 1Gi
   persistence:
     enabled: true

@@ -370,8 +370,10 @@ def _recover_suspended_flux() -> None:
     previous E2E test run crashed mid-test while Flux reconciliation was
     temporarily suspended.
 
-    If a release is found suspended, issues ``flux resume helmrelease`` to
-    restore normal reconciliation before the new test suite starts.
+    If a release is found suspended, resumes reconciliation before the new
+    test suite starts. Uses the Flux CLI when available and falls back to a
+    kubectl patch because the in-cluster test runner intentionally keeps its
+    toolchain small.
 
     No-op when:
     - kubectl is not available or returns non-zero (no Flux CRDs installed).
@@ -391,20 +393,34 @@ def _recover_suspended_flux() -> None:
         if result.stdout.strip() == "true":
             logger.warning(
                 "HelmRelease %s is suspended (likely from a prior crashed run) — "
-                "running flux resume helmrelease to restore reconciliation",
+                "restoring reconciliation",
                 name,
             )
-            # Resume: flux resume helmrelease <name> -n <ns>
+            if shutil.which("flux"):
+                resume_cmd = ["flux", "resume", "helmrelease", name, "-n", ns]
+            else:
+                resume_cmd = [
+                    "kubectl",
+                    "patch",
+                    "helmrelease",
+                    name,
+                    "-n",
+                    ns,
+                    "--type=merge",
+                    "-p",
+                    '{"spec":{"suspend":false}}',
+                ]
             resume_result = subprocess.run(
-                ["flux", "resume", "helmrelease", name, "-n", ns],
+                resume_cmd,
                 capture_output=True,
                 text=True,
                 check=False,
             )
             if resume_result.returncode != 0:
                 logger.warning(
-                    "flux resume helmrelease %s failed: returncode=%d stderr=%s",
+                    "HelmRelease resume failed for %s: cmd=%s returncode=%d stderr=%s",
                     name,
+                    resume_cmd,
                     resume_result.returncode,
                     resume_result.stderr,
                 )
@@ -1030,7 +1046,15 @@ query RunStatus($runId: ID!) {
 
 _COMPLETED_MARQUEZ_STATE = "COMPLETED"
 _DAGSTER_LAUNCH_RUN_TIMEOUT_SECONDS = 30.0
-_DAGSTER_LAUNCH_TIMEOUT_MARQUEZ_GRACE_SECONDS = 180.0
+_DAGSTER_RUN_COMPLETION_TIMEOUT_SECONDS = float(
+    os.environ.get("FLOE_E2E_DAGSTER_RUN_TIMEOUT_SECONDS", "360")
+)
+_DAGSTER_LAUNCH_TIMEOUT_MARQUEZ_GRACE_SECONDS = float(
+    os.environ.get("FLOE_E2E_DAGSTER_LAUNCH_MARQUEZ_GRACE_SECONDS", "360")
+)
+_MARQUEZ_FRESH_RUN_TIMEOUT_SECONDS = float(
+    os.environ.get("FLOE_E2E_MARQUEZ_FRESH_RUN_TIMEOUT_SECONDS", "120")
+)
 
 
 def _marquez_job_runs(
@@ -1120,7 +1144,7 @@ def _wait_for_fresh_completed_marquez_run(
     namespace: str,
     job_name: str,
     before_run_ids: set[str],
-    timeout: float = 60.0,
+    timeout: float = _MARQUEZ_FRESH_RUN_TIMEOUT_SECONDS,
 ) -> bool:
     """Wait until Marquez ingests a fresh COMPLETED run for the expected job."""
 
@@ -1385,15 +1409,16 @@ def _trigger_lineage_run(
 
     completed = wait_for_condition(
         _run_complete,
-        timeout=180.0,
+        timeout=_DAGSTER_RUN_COMPLETION_TIMEOUT_SECONDS,
         interval=5.0,
         description=f"Dagster lineage run {run_id} to complete",
         raise_on_timeout=False,
     )
     if not completed:
         logger.warning(
-            "seed_observability: lineage run %s did not complete within 180s; continuing",
+            "seed_observability: lineage run %s did not complete within %.0fs; continuing",
             run_id,
+            _DAGSTER_RUN_COMPLETION_TIMEOUT_SECONDS,
         )
         return
 
@@ -1442,9 +1467,10 @@ def _trigger_lineage_run(
     if not ingested:
         logger.warning(
             "seed_observability: fresh COMPLETED Marquez run for %s/%s not confirmed "
-            "within 60s; continuing",
+            "within %.0fs; continuing",
             expected_namespace,
             expected_job_name,
+            _MARQUEZ_FRESH_RUN_TIMEOUT_SECONDS,
         )
     else:
         logger.info(

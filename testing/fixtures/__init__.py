@@ -12,6 +12,7 @@ Fixtures:
 
 Utilities:
     wait_for_condition: Poll until condition is true or timeout
+    wait_for_delay: Wait for an intentional retry backoff delay
     wait_for_service: Wait for service to become healthy
     generate_unique_namespace: Create isolated namespace for test
 
@@ -28,6 +29,8 @@ Example:
 """
 
 from __future__ import annotations
+
+from testing.fixtures import dagster_retry
 
 # Catalog plugin fixtures
 from testing.fixtures.catalog import (
@@ -170,6 +173,7 @@ from testing.fixtures.polling import (
     PollingConfig,
     PollingTimeoutError,
     wait_for_condition,
+    wait_for_delay,
     wait_for_service,
 )
 from testing.fixtures.postgres import (
@@ -218,6 +222,7 @@ __all__ = [
     "PollingConfig",
     "PollingTimeoutError",
     "wait_for_condition",
+    "wait_for_delay",
     "wait_for_service",
     # Namespace utilities
     "InvalidNamespaceError",
@@ -278,6 +283,7 @@ __all__ = [
     "materialize_asset",
     "materialize_to_memory",
     "wait_for_run_completion",
+    "dagster_retry",
     # Governance fixtures
     "create_api_token_finding",
     "create_aws_key_finding",
