@@ -168,8 +168,15 @@ class AwsS3ObjectStorePlugin(StoragePlugin):
             else []
         )
         runtime_env_refs = (
-            dict(credential_binding.env_refs) if config.credential_mode == "environment" else {}
+            {
+                KEY_ACCESS_KEY_ID: AWS_ACCESS_KEY_ENV,
+                KEY_SECRET_ACCESS_KEY: AWS_SECRET_KEY_ENV,
+            }
+            if config.credential_mode in {"environment", "kubernetes-secret"}
+            else {}
         )
+        if config.credential_mode == "environment":
+            runtime_env_refs[KEY_SESSION_TOKEN] = AWS_SESSION_TOKEN_ENV
         runtime_properties = self._pyiceberg_properties()
         dbt_profile_fragment: dict[str, Any] = {
             "s3_region": config.region,

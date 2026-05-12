@@ -146,6 +146,17 @@ class TestAwsS3ObjectStoreConfig:
         assert config.sts_supported is True
         assert config.create_policy == "must-exist"
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-024")
+    def test_artifact_bucket_rejects_empty_string(self) -> None:
+        """Artifact bucket overrides must be non-empty when explicitly provided."""
+        with pytest.raises(ValidationError, match="artifact_bucket"):
+            AwsS3ObjectStoreConfig(
+                bucket=TEST_BUCKET,
+                artifact_bucket="",
+                region=TEST_REGION,
+                credential_mode="environment",
+            )
+
 
 class TestAwsS3DeploymentBinding:
     """Test secret-free AWS S3 deployment bindings."""
@@ -264,6 +275,26 @@ class TestAwsS3DeploymentBinding:
             "accessKeyId": "accessKeyId",
             "secretAccessKey": "secretAccessKey",  # pragma: allowlist secret
             "sessionToken": "sessionToken",
+        }
+        assert binding.runtime.env_refs == {
+            "accessKeyId": "AWS_ACCESS_KEY_ID",
+            "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
+        }
+
+    @pytest.mark.requirement("STORAGE-AWS-S3-025")
+    def test_kubernetes_secret_runtime_env_refs_project_aws_env_names(self) -> None:
+        """Secret-backed mode still exposes runtime AWS env names for job wiring."""
+        config = AwsS3ObjectStoreConfig(
+            bucket=TEST_BUCKET,
+            region=TEST_REGION,
+            credential_mode="kubernetes-secret",
+            credential_secret_name="aws-s3-credentials",  # pragma: allowlist secret
+        )
+        binding = AwsS3ObjectStorePlugin(config=config).get_deployment_binding()
+
+        assert binding.runtime.env_refs == {
+            "accessKeyId": "AWS_ACCESS_KEY_ID",
+            "secretAccessKey": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
         }
 
     @pytest.mark.requirement("STORAGE-AWS-S3-011")

@@ -36,6 +36,7 @@ class AwsS3ObjectStoreConfig(BaseModel):
     )
     artifact_bucket: str | None = Field(
         default=None,
+        min_length=1,
         description="Artifact bucket. Defaults to bucket when unset.",
     )
     artifact_prefix: str = Field(
