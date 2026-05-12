@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from floe_core.composition.models import (
     CredentialMode,
@@ -28,6 +28,34 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
 TRACER_NAME = "floe.catalog.glue"
+
+
+class _GlueCatalogOps(Protocol):
+    """PyIceberg catalog operations used by the Glue plugin."""
+
+    def create_namespace(self, namespace: str, properties: dict[str, str]) -> None:
+        """Create a namespace with properties."""
+        ...
+
+    def list_namespaces(self, namespace: tuple[str, ...] | None = None) -> list[tuple[str, ...]]:
+        """List namespaces, optionally below a parent namespace."""
+        ...
+
+    def drop_namespace(self, namespace: str) -> None:
+        """Drop a namespace."""
+        ...
+
+    def create_table(self, identifier: str, schema: dict[str, Any], **kwargs: Any) -> None:
+        """Create an Iceberg table."""
+        ...
+
+    def list_tables(self, namespace: str) -> list[tuple[str, ...]]:
+        """List tables in a namespace."""
+        ...
+
+    def drop_table(self, identifier: str, purge: bool = False) -> None:
+        """Drop a table."""
+        ...
 
 
 class GlueCatalogPlugin(CatalogPlugin):
@@ -82,6 +110,10 @@ class GlueCatalogPlugin(CatalogPlugin):
     def connect(self, config: dict[str, Any]) -> Catalog:
         """Connect to AWS Glue using PyIceberg's Glue catalog."""
         catalog_config = self._pyiceberg_config()
+        conflicts = set(catalog_config) & set(config)
+        if conflicts:
+            msg = f"connect() config conflicts with plugin config: {sorted(conflicts)}"
+            raise ValueError(msg)
         catalog_config.update(config)
         catalog = cast(Catalog, load_catalog("glue", **catalog_config))
         self._catalog = catalog
@@ -164,9 +196,7 @@ class GlueCatalogPlugin(CatalogPlugin):
         """Return secret-free Glue credential references derived from storage."""
         cfg = self._require_config()
         if cfg.credential_mode == "kubernetes-secret":
-            if cfg.credential_secret_name is None:
-                msg = "kubernetes-secret credential_mode requires credential_secret_name"
-                raise ValueError(msg)
+            assert cfg.credential_secret_name is not None
             secret_ref = KubernetesSecretRef(
                 name=cfg.credential_secret_name,
                 namespace=cfg.credential_secret_namespace,
@@ -190,14 +220,14 @@ class GlueCatalogPlugin(CatalogPlugin):
             "sessionToken": storage.credentials.as_credential_ref("sessionToken"),
         }
 
-    def _connected_catalog(self) -> Catalog:
+    def _connected_catalog(self) -> _GlueCatalogOps:
         """Return the connected catalog or raise a catalog availability error."""
         if self._catalog is None:
             raise CatalogUnavailableError(
                 "glue",
                 cause=ValueError("Catalog not connected; call connect() first."),
             )
-        return self._catalog
+        return cast(_GlueCatalogOps, self._catalog)
 
     def create_namespace(
         self,
@@ -205,12 +235,11 @@ class GlueCatalogPlugin(CatalogPlugin):
         properties: dict[str, str] | None = None,
     ) -> None:
         """Create a namespace in AWS Glue."""
-        catalog = cast(Any, self._connected_catalog())
-        catalog.create_namespace(namespace, properties=properties or {})
+        self._connected_catalog().create_namespace(namespace, properties=properties or {})
 
     def list_namespaces(self, parent: str | None = None) -> list[str]:
         """List namespaces in AWS Glue."""
-        catalog = cast(Any, self._connected_catalog())
+        catalog = self._connected_catalog()
         raw_namespaces = (
             catalog.list_namespaces(tuple(parent.split(".")))
             if parent
@@ -220,8 +249,7 @@ class GlueCatalogPlugin(CatalogPlugin):
 
     def delete_namespace(self, namespace: str) -> None:
         """Delete a namespace from AWS Glue."""
-        catalog = cast(Any, self._connected_catalog())
-        catalog.drop_namespace(namespace)
+        self._connected_catalog().drop_namespace(namespace)
 
     def create_table(
         self,
@@ -236,8 +264,7 @@ class GlueCatalogPlugin(CatalogPlugin):
             kwargs["location"] = location
         if properties is not None:
             kwargs["properties"] = properties
-        catalog = cast(Any, self._connected_catalog())
-        catalog.create_table(identifier, schema, **kwargs)
+        self._connected_catalog().create_table(identifier, schema, **kwargs)
 
     def list_tables(self, namespace: str) -> list[str]:
         """List tables in an AWS Glue namespace."""
