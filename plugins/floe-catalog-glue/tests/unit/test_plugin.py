@@ -405,12 +405,49 @@ class TestPyIcebergConnection:
         with pytest.raises(ValueError, match="connect\\(\\) config conflicts"):
             plugin.connect({"type": "rest"})
 
+    @pytest.mark.requirement("CATALOG-GLUE-026")
+    def test_connect_accepts_matching_deployment_derived_config(self) -> None:
+        """connect accepts resolved deployment config when duplicate keys match plugin config."""
+        plugin = GlueCatalogPlugin(
+            config=GlueCatalogConfig(
+                region=TEST_REGION,
+                warehouse=TEST_WAREHOUSE_URI,
+                credential_mode="environment",
+            )
+        )
+        catalog = Mock()
+
+        with patch("floe_catalog_glue.plugin.load_catalog", return_value=catalog) as load_catalog:
+            assert (
+                plugin.connect(
+                    {
+                        "type": "glue",
+                        "glue.region": TEST_REGION,
+                        "warehouse": TEST_WAREHOUSE_URI,
+                        "s3.region": TEST_REGION,
+                    }
+                )
+                is catalog
+            )
+
+        load_catalog.assert_called_once_with(
+            "glue",
+            type="glue",
+            warehouse=TEST_WAREHOUSE_URI,
+            **{
+                "glue.region": TEST_REGION,
+                "glue.skip-archive": "true",
+                "s3.region": TEST_REGION,
+            },
+        )
+
 
 class TestCatalogOperations:
     """Test required CatalogPlugin operations delegate to PyIceberg."""
 
     @pytest.fixture()
     def plugin_with_catalog(self) -> GlueCatalogPlugin:
+        """Return a GlueCatalogPlugin with a mocked PyIceberg catalog attached."""
         plugin = GlueCatalogPlugin(
             config=GlueCatalogConfig(
                 region=TEST_REGION,

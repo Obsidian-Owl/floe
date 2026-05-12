@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from typing_extensions import Self
 
 GlueCredentialMode = Literal["environment", "workload-identity", "kubernetes-secret"]
 RetryMode = Literal["standard", "adaptive", "legacy"]
@@ -88,7 +89,7 @@ class GlueCatalogConfig(BaseModel):
         return data
 
     @model_validator(mode="after")
-    def validate_credential_mode(self) -> GlueCatalogConfig:
+    def validate_credential_mode(self) -> Self:
         """Ensure credential reference fields match credential_mode."""
         if self.credential_mode == "workload-identity":
             if self.service_account_ref is None:

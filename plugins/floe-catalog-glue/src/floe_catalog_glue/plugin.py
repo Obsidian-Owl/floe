@@ -28,6 +28,9 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
 TRACER_NAME = "floe.catalog.glue"
+KEY_ACCESS_KEY_ID = "accessKeyId"
+KEY_SECRET_ACCESS_KEY = "secretAccessKey"  # pragma: allowlist secret
+KEY_SESSION_TOKEN = "sessionToken"
 
 
 class _GlueCatalogOps(Protocol):
@@ -110,7 +113,11 @@ class GlueCatalogPlugin(CatalogPlugin):
     def connect(self, config: dict[str, Any]) -> Catalog:
         """Connect to AWS Glue using PyIceberg's Glue catalog."""
         catalog_config = self._pyiceberg_config()
-        conflicts = set(catalog_config) & set(config)
+        conflicts = {
+            key
+            for key, value in config.items()
+            if key in catalog_config and catalog_config[key] != value
+        }
         if conflicts:
             msg = f"connect() config conflicts with plugin config: {sorted(conflicts)}"
             raise ValueError(msg)
@@ -196,14 +203,16 @@ class GlueCatalogPlugin(CatalogPlugin):
         """Return secret-free Glue credential references derived from storage."""
         cfg = self._require_config()
         if cfg.credential_mode == "kubernetes-secret":
-            assert cfg.credential_secret_name is not None
+            if cfg.credential_secret_name is None:
+                msg = "kubernetes-secret mode requires credential_secret_name"
+                raise ValueError(msg)
             secret_ref = KubernetesSecretRef(
                 name=cfg.credential_secret_name,
                 namespace=cfg.credential_secret_namespace,
                 keys={
-                    "accessKeyId": cfg.access_key_secret_key,
-                    "secretAccessKey": cfg.secret_key_secret_key,
-                    "sessionToken": cfg.session_token_secret_key,
+                    KEY_ACCESS_KEY_ID: cfg.access_key_secret_key,
+                    KEY_SECRET_ACCESS_KEY: cfg.secret_key_secret_key,
+                    KEY_SESSION_TOKEN: cfg.session_token_secret_key,
                 },
             )
             return {
@@ -215,9 +224,9 @@ class GlueCatalogPlugin(CatalogPlugin):
                 for logical_key, secret_key in secret_ref.keys.items()
             }
         return {
-            "accessKeyId": storage.credentials.as_credential_ref("accessKeyId"),
-            "secretAccessKey": storage.credentials.as_credential_ref("secretAccessKey"),
-            "sessionToken": storage.credentials.as_credential_ref("sessionToken"),
+            KEY_ACCESS_KEY_ID: storage.credentials.as_credential_ref(KEY_ACCESS_KEY_ID),
+            KEY_SECRET_ACCESS_KEY: storage.credentials.as_credential_ref(KEY_SECRET_ACCESS_KEY),
+            KEY_SESSION_TOKEN: storage.credentials.as_credential_ref(KEY_SESSION_TOKEN),
         }
 
     def _connected_catalog(self) -> _GlueCatalogOps:
