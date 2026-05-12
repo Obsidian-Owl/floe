@@ -57,8 +57,9 @@ Run readiness checks and report the AWS account ID, region, bucket, Glue databas
 
 ## Clean Account Check
 
-After exporting the OpenTofu `recommended_environment` outputs and setting the
-current `FLOE_PROVIDER_SPIKE_RUN`, ask the agent to verify:
+After exporting all OpenTofu `recommended_environment` outputs, including the
+test prefix, Glue prefix, budget name, and provider-test policy ARN, set the
+current `FLOE_PROVIDER_SPIKE_RUN` and ask the agent to verify:
 
 ```bash
 aws sts get-caller-identity

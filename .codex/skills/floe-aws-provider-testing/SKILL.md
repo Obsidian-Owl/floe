@@ -39,8 +39,10 @@ AWS_PROFILE=<profile> tofu plan -out tfplan
 ```bash
 export FLOE_AWS_REGION=<region>
 export FLOE_AWS_TEST_BUCKET=<bucket>
-export FLOE_AWS_TEST_PREFIX=runs/
-export FLOE_AWS_GLUE_DATABASE_PREFIX=floe_provider_
+export FLOE_AWS_TEST_PREFIX=<s3-run-prefix>
+export FLOE_AWS_GLUE_DATABASE_PREFIX=<glue-database-prefix>
+export FLOE_AWS_BUDGET_NAME=<budget-name>
+export FLOE_AWS_PROVIDER_TEST_POLICY_ARN=<provider-test-policy-arn>
 ```
 
 8. Run `scripts/aws-provider-test-readiness.sh`.

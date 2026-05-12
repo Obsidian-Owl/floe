@@ -38,19 +38,23 @@ validate_inputs() {
         error "FLOE_PROVIDER_SPIKE_RUN must match ^floe-provider-[0-9]{8}T[0-9]{6}Z$"
     fi
 
-    if [[ ! "${test_prefix}" =~ ^runs/$ ]]; then
-        error "FLOE_AWS_TEST_PREFIX must match ^runs/$ for first live validation"
+    if [[ ! "${test_prefix}" =~ ^[a-zA-Z0-9][a-zA-Z0-9/_-]*/$ ]]; then
+        error "FLOE_AWS_TEST_PREFIX must be a relative S3 prefix ending with /"
     fi
 
-    if [[ ! "${FLOE_AWS_GLUE_DATABASE_PREFIX}" =~ ^floe_provider_$ ]]; then
-        error "FLOE_AWS_GLUE_DATABASE_PREFIX must match ^floe_provider_$ for first live validation"
+    if [[ "${test_prefix}" == "/" || "${test_prefix}" == "../"* || "${test_prefix}" == *"/../"* ]]; then
+        error "FLOE_AWS_TEST_PREFIX must not be root or contain parent traversal"
     fi
 
-    if [[ "${run_prefix}" != "runs/${FLOE_PROVIDER_SPIKE_RUN}/" ]]; then
+    if [[ ! "${FLOE_AWS_GLUE_DATABASE_PREFIX}" =~ ^[a-z][a-z0-9_]{2,40}_$ ]]; then
+        error "FLOE_AWS_GLUE_DATABASE_PREFIX must be lowercase snake_case and end with _"
+    fi
+
+    if [[ "${run_prefix}" != "${test_prefix}${FLOE_PROVIDER_SPIKE_RUN}/" ]]; then
         error "computed run_prefix is outside the allowed cleanup target: ${run_prefix}"
     fi
 
-    if [[ "${run_database}" != "floe_provider_${FLOE_PROVIDER_SPIKE_RUN//-/_}" ]]; then
+    if [[ "${run_database}" != "${FLOE_AWS_GLUE_DATABASE_PREFIX}${FLOE_PROVIDER_SPIKE_RUN//-/_}" ]]; then
         error "computed run_database is outside the allowed cleanup target: ${run_database}"
     fi
 }

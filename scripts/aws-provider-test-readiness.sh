@@ -20,16 +20,22 @@ require_env() {
 require_env FLOE_AWS_REGION
 require_env FLOE_AWS_TEST_BUCKET
 require_env FLOE_AWS_GLUE_DATABASE_PREFIX
+require_env FLOE_AWS_BUDGET_NAME
+require_env FLOE_AWS_PROVIDER_TEST_POLICY_ARN
 
 test_prefix="${FLOE_AWS_TEST_PREFIX:-runs/}"
 
 validate_inputs() {
-    if [[ ! "${test_prefix}" =~ ^runs/$ ]]; then
-        error "FLOE_AWS_TEST_PREFIX must match ^runs/$ for first live validation"
+    if [[ ! "${test_prefix}" =~ ^[a-zA-Z0-9][a-zA-Z0-9/_-]*/$ ]]; then
+        error "FLOE_AWS_TEST_PREFIX must be a relative S3 prefix ending with /"
     fi
 
-    if [[ ! "${FLOE_AWS_GLUE_DATABASE_PREFIX}" =~ ^floe_provider_$ ]]; then
-        error "FLOE_AWS_GLUE_DATABASE_PREFIX must match ^floe_provider_$ for first live validation"
+    if [[ "${test_prefix}" == "/" || "${test_prefix}" == "../"* || "${test_prefix}" == *"/../"* ]]; then
+        error "FLOE_AWS_TEST_PREFIX must not be root or contain parent traversal"
+    fi
+
+    if [[ ! "${FLOE_AWS_GLUE_DATABASE_PREFIX}" =~ ^[a-z][a-z0-9_]{2,40}_$ ]]; then
+        error "FLOE_AWS_GLUE_DATABASE_PREFIX must be lowercase snake_case and end with _"
     fi
 }
 
@@ -52,6 +58,45 @@ aws s3api list-objects-v2 \
     --prefix "${test_prefix}" \
     --max-items 1 \
     "${aws_args[@]}" >/dev/null
+
+log "Checking S3 public access block"
+public_access_state="$(
+    aws s3api get-public-access-block \
+        --bucket "${FLOE_AWS_TEST_BUCKET}" \
+        --query 'PublicAccessBlockConfiguration.[BlockPublicAcls,IgnorePublicAcls,BlockPublicPolicy,RestrictPublicBuckets]' \
+        --output text \
+        "${aws_args[@]}"
+)"
+if [[ "${public_access_state}" != $'True\tTrue\tTrue\tTrue' ]]; then
+    error "S3 public access block is not fully enabled for ${FLOE_AWS_TEST_BUCKET}: ${public_access_state}"
+fi
+
+log "Checking S3 lifecycle rule for ${test_prefix}"
+lifecycle_rule_count="$(
+    aws s3api get-bucket-lifecycle-configuration \
+        --bucket "${FLOE_AWS_TEST_BUCKET}" \
+        --query "length(Rules[?Status == 'Enabled' && Filter.Prefix == '${test_prefix}'])" \
+        --output text \
+        "${aws_args[@]}"
+)"
+if [[ "${lifecycle_rule_count}" == "0" ]]; then
+    error "No enabled S3 lifecycle rule found for prefix ${test_prefix}"
+fi
+
+log "Checking AWS Budget: ${FLOE_AWS_BUDGET_NAME}"
+account_id="$(
+    aws sts get-caller-identity \
+        --query Account \
+        --output text \
+        "${aws_args[@]}"
+)"
+aws budgets describe-budget \
+    --account-id "${account_id}" \
+    --budget-name "${FLOE_AWS_BUDGET_NAME}" >/dev/null
+
+log "Checking provider test IAM policy: ${FLOE_AWS_PROVIDER_TEST_POLICY_ARN}"
+aws iam get-policy \
+    --policy-arn "${FLOE_AWS_PROVIDER_TEST_POLICY_ARN}" >/dev/null
 
 probe_db="${FLOE_AWS_GLUE_DATABASE_PREFIX}readiness_$(date -u +%Y%m%d%H%M%S)"
 
