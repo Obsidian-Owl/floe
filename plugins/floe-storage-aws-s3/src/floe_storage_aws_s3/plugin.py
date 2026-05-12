@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from floe_core.plugins.storage import StoragePlugin
 from floe_core.schemas.compiled_artifacts import (
@@ -29,6 +29,9 @@ TRACER_NAME = "floe.storage.aws_s3"
 AWS_ACCESS_KEY_ENV = "AWS_ACCESS_KEY_ID"
 AWS_SECRET_KEY_ENV = "AWS_SECRET_ACCESS_KEY"  # pragma: allowlist secret
 AWS_SESSION_TOKEN_ENV = "AWS_SESSION_TOKEN"
+KEY_ACCESS_KEY_ID = "accessKeyId"
+KEY_SECRET_ACCESS_KEY = "secretAccessKey"  # pragma: allowlist secret
+KEY_SESSION_TOKEN = "sessionToken"
 
 
 def _s3_uri(bucket: str, prefix: str) -> str:
@@ -53,7 +56,14 @@ class AwsS3ObjectStorePlugin(StoragePlugin):
                 "aws-s3",
                 [{"field": "_config", "message": "Plugin 'aws-s3' not configured"}],
             )
-        return cast(AwsS3ObjectStoreConfig, self._config)
+        if not isinstance(self._config, AwsS3ObjectStoreConfig):
+            from floe_core.plugin_errors import PluginConfigurationError
+
+            raise PluginConfigurationError(
+                "aws-s3",
+                [{"field": "_config", "message": "Plugin 'aws-s3' config has invalid type"}],
+            )
+        return self._config
 
     @property
     def name(self) -> str:
@@ -112,31 +122,35 @@ class AwsS3ObjectStorePlugin(StoragePlugin):
         """Return secret-free credential references for the configured mode."""
         config = self._require_config()
         if config.credential_mode == "workload-identity":
-            assert config.service_account_ref is not None
+            if config.service_account_ref is None:
+                msg = "workload-identity credential_mode requires service_account_ref"
+                raise ValueError(msg)
             return StorageCredentialBinding(
                 mode="workload-identity",
                 service_account_ref=config.service_account_ref,
             )
         if config.credential_mode == "kubernetes-secret":
-            assert config.credential_secret_name is not None
+            if config.credential_secret_name is None:
+                msg = "kubernetes-secret credential_mode requires credential_secret_name"
+                raise ValueError(msg)
             return StorageCredentialBinding(
                 mode="kubernetes-secret",
                 secret_ref=KubernetesSecretRef(
                     name=config.credential_secret_name,
                     namespace=config.credential_secret_namespace,
                     keys={
-                        "accessKeyId": config.access_key_secret_key,
-                        "secretAccessKey": config.secret_key_secret_key,
-                        "sessionToken": config.session_token_secret_key,
+                        KEY_ACCESS_KEY_ID: config.access_key_secret_key,
+                        KEY_SECRET_ACCESS_KEY: config.secret_key_secret_key,
+                        KEY_SESSION_TOKEN: config.session_token_secret_key,
                     },
                 ),
             )
         return StorageCredentialBinding(
             mode="environment",
             env_refs={
-                "accessKeyId": AWS_ACCESS_KEY_ENV,
-                "secretAccessKey": AWS_SECRET_KEY_ENV,
-                "sessionToken": AWS_SESSION_TOKEN_ENV,
+                KEY_ACCESS_KEY_ID: AWS_ACCESS_KEY_ENV,
+                KEY_SECRET_ACCESS_KEY: AWS_SECRET_KEY_ENV,
+                KEY_SESSION_TOKEN: AWS_SESSION_TOKEN_ENV,
             },
         )
 
@@ -174,7 +188,6 @@ class AwsS3ObjectStorePlugin(StoragePlugin):
             {
                 "s3_access_key_id": AWS_ACCESS_KEY_ENV,
                 "s3_secret_access_key": AWS_SECRET_KEY_ENV,
-                "s3_session_token": AWS_SESSION_TOKEN_ENV,
             }
             if config.credential_mode == "environment"
             else {}

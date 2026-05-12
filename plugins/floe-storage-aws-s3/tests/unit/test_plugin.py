@@ -14,7 +14,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-from floe_storage_aws_s3.config import AwsS3ObjectStoreConfig
+from floe_storage_aws_s3.config import AwsS3ObjectStoreConfig, _normalize_prefix
 from floe_storage_aws_s3.plugin import AwsS3ObjectStorePlugin
 
 TEST_BUCKET = "floe-provider-tests"
@@ -78,6 +78,46 @@ class TestAwsS3ObjectStoreConfig:
                 credential_mode="environment",
                 credential_secret_name="aws-creds",  # pragma: allowlist secret
             )
+
+    @pytest.mark.requirement("STORAGE-AWS-S3-020")
+    def test_workload_identity_config_rejects_secret_name(self) -> None:
+        """Workload-identity mode rejects Kubernetes Secret fields from other modes."""
+        with pytest.raises(ValidationError, match="only accepts service_account_ref"):
+            AwsS3ObjectStoreConfig(
+                bucket=TEST_BUCKET,
+                region=TEST_REGION,
+                credential_mode="workload-identity",
+                service_account_ref=TEST_SERVICE_ACCOUNT,
+                credential_secret_name="aws-creds",  # pragma: allowlist secret
+            )
+
+    @pytest.mark.requirement("STORAGE-AWS-S3-021")
+    def test_kubernetes_secret_config_rejects_service_account(self) -> None:
+        """Kubernetes-secret mode rejects workload identity service account refs."""
+        with pytest.raises(ValidationError, match="only accepts credential_secret_name"):
+            AwsS3ObjectStoreConfig(
+                bucket=TEST_BUCKET,
+                region=TEST_REGION,
+                credential_mode="kubernetes-secret",
+                credential_secret_name="aws-creds",  # pragma: allowlist secret
+                service_account_ref=TEST_SERVICE_ACCOUNT,
+            )
+
+    @pytest.mark.requirement("STORAGE-AWS-S3-022")
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("warehouse", "warehouse/"),
+            ("/warehouse/", "warehouse/"),
+            ("", ""),
+            ("/", ""),
+            ("//", ""),
+            ("a/b/c", "a/b/c/"),
+        ],
+    )
+    def test_normalize_prefix_edge_cases(self, raw: str, expected: str) -> None:
+        """Prefix normalization handles slash-stripping edge cases deterministically."""
+        assert _normalize_prefix(raw) == expected
 
     @pytest.mark.requirement("STORAGE-AWS-S3-006")
     def test_endpoint_override_must_be_http_url(self) -> None:
@@ -189,8 +229,20 @@ class TestAwsS3DeploymentBinding:
         assert binding.dbt.env_refs == {
             "s3_access_key_id": "AWS_ACCESS_KEY_ID",
             "s3_secret_access_key": "AWS_SECRET_ACCESS_KEY",  # pragma: allowlist secret
-            "s3_session_token": "AWS_SESSION_TOKEN",
         }
+
+    @pytest.mark.requirement("STORAGE-AWS-S3-023")
+    def test_environment_dbt_binding_does_not_require_session_token(self) -> None:
+        """dbt profile env refs omit optional AWS_SESSION_TOKEN for non-STS credentials."""
+        config = AwsS3ObjectStoreConfig(
+            bucket=TEST_BUCKET,
+            region=TEST_REGION,
+            credential_mode="environment",
+        )
+        binding = AwsS3ObjectStorePlugin(config=config).get_deployment_binding()
+
+        assert "s3_session_token" not in binding.dbt.env_refs
+        assert "sessionToken" in binding.credentials.env_refs
 
     @pytest.mark.requirement("STORAGE-AWS-S3-010")
     def test_kubernetes_secret_binding_uses_secret_refs_without_values(self) -> None:
@@ -241,6 +293,7 @@ class TestStoragePluginMethods:
 
     @pytest.fixture()
     def configured_plugin(self) -> AwsS3ObjectStorePlugin:
+        """Return an AWS S3 plugin configured for workload-identity testing."""
         config = AwsS3ObjectStoreConfig(
             bucket=TEST_BUCKET,
             region=TEST_REGION,
