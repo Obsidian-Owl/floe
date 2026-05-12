@@ -15,6 +15,7 @@ from testing.fixtures.polling import (
     PollingConfig,
     PollingTimeoutError,
     wait_for_condition,
+    wait_for_delay,
     wait_for_http_status,
     wait_for_service,
 )
@@ -131,6 +132,33 @@ class TestWaitForCondition:
 
         assert exc_info.value.last_error is not None
         assert "Test error" in str(exc_info.value.last_error)
+
+
+class TestWaitForDelay:
+    """Tests for fixed-delay retry backoff helper."""
+
+    @pytest.mark.requirement("9c-FR-015")
+    def test_returns_immediately_for_zero_or_negative_delay(self) -> None:
+        """Non-positive delays should not call the polling loop."""
+        with patch("testing.fixtures.polling.wait_for_condition") as mock_wait:
+            wait_for_delay(0)
+            wait_for_delay(-1)
+
+        mock_wait.assert_not_called()
+
+    @pytest.mark.requirement("9c-FR-015")
+    def test_uses_shared_polling_loop_for_positive_delay(self) -> None:
+        """Positive delays should route through wait_for_condition."""
+        with (
+            patch("testing.fixtures.polling.time.monotonic", return_value=100.0),
+            patch("testing.fixtures.polling.wait_for_condition") as mock_wait,
+        ):
+            wait_for_delay(2.0, description="retry backoff", interval=0.25)
+
+        _, kwargs = mock_wait.call_args
+        assert kwargs["timeout"] == pytest.approx(2.25)
+        assert kwargs["interval"] == pytest.approx(0.25)
+        assert kwargs["description"] == "retry backoff"
 
 
 class TestWaitForService:

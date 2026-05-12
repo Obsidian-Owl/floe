@@ -69,6 +69,11 @@ echo "Job: ${JOB_NAME}"
 echo "Namespace: ${TEST_NAMESPACE}"
 echo "Kind cluster: ${FLOE_KIND_CLUSTER}"
 echo "Timeout: ${WAIT_TIMEOUT}s"
+if [[ "$#" -gt 0 ]]; then
+    FLOE_TEST_PYTEST_ARGS_JSON="$(python -c 'import json, sys; print(json.dumps(sys.argv[1:]))' "$@")"
+    export FLOE_TEST_PYTEST_ARGS_JSON
+    echo "Pytest args: $*"
+fi
 echo ""
 
 # Check prerequisites

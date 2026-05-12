@@ -353,6 +353,137 @@ dependencies:
         ]
 
     @pytest.mark.requirement("AC-2.7")
+    def test_uses_vendored_dependencies_without_network_repo_setup(
+        self,
+        tmp_path: Path,
+        mock_subprocess: MagicMock,
+    ) -> None:
+        """Vendored subcharts should avoid live repository access in E2E renders."""
+        chart_path = tmp_path / "chart"
+        vendored_path = chart_path / "charts"
+        vendored_path.mkdir(parents=True)
+        (chart_path / "Chart.yaml").write_text(
+            """
+apiVersion: v2
+name: test-chart
+version: 0.1.0
+dependencies:
+  - name: minio
+    version: 14.10.5
+    repository: https://charts.bitnami.com/bitnami
+  - name: opentelemetry-collector
+    alias: otel
+    version: 0.108.0
+    repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+  - name: cube
+    version: 0.1.0
+""",
+        )
+        (vendored_path / "minio-14.10.5.tgz").write_text("vendored")
+        (vendored_path / "otel-0.108.0.tgz").write_text("vendored")
+        (vendored_path / "cube").mkdir()
+        (vendored_path / "cube" / "Chart.yaml").write_text(
+            """
+apiVersion: v2
+name: cube
+version: 0.1.0
+""",
+        )
+        mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="rendered", stderr=""
+        )
+
+        result = run_helm_template("test-release", chart_path, timeout=60)
+
+        assert result.returncode == 0
+        commands = [call.args[0] for call in mock_subprocess.call_args_list]
+        assert commands == [["helm", "template", "test-release", str(chart_path)]]
+
+    @pytest.mark.requirement("AC-2.7")
+    def test_builds_dependencies_when_vendored_directory_version_is_stale(
+        self,
+        tmp_path: Path,
+        mock_subprocess: MagicMock,
+    ) -> None:
+        """Stale unpacked subcharts must not bypass Helm dependency build."""
+        chart_path = tmp_path / "chart"
+        vendored_path = chart_path / "charts"
+        vendored_path.mkdir(parents=True)
+        (chart_path / "Chart.yaml").write_text(
+            """
+apiVersion: v2
+name: test-chart
+version: 0.1.0
+dependencies:
+  - name: cube
+    version: 0.2.0
+""",
+        )
+        (vendored_path / "cube").mkdir()
+        (vendored_path / "cube" / "Chart.yaml").write_text(
+            """
+apiVersion: v2
+name: cube
+version: 0.1.0
+""",
+        )
+        mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="rendered", stderr=""
+        )
+
+        result = run_helm_template("test-release", chart_path, timeout=60)
+
+        assert result.returncode == 0
+        commands = [call.args[0] for call in mock_subprocess.call_args_list]
+        assert commands == [
+            ["helm", "dependency", "build", str(chart_path)],
+            ["helm", "template", "test-release", str(chart_path)],
+        ]
+
+    @pytest.mark.requirement("AC-2.7")
+    def test_builds_dependencies_when_vendored_archive_version_is_stale(
+        self,
+        tmp_path: Path,
+        mock_subprocess: MagicMock,
+    ) -> None:
+        """Stale chart archives must not satisfy newer Chart.yaml dependencies."""
+        chart_path = tmp_path / "chart"
+        vendored_path = chart_path / "charts"
+        vendored_path.mkdir(parents=True)
+        (chart_path / "Chart.yaml").write_text(
+            """
+apiVersion: v2
+name: test-chart
+version: 0.1.0
+dependencies:
+  - name: minio
+    version: 14.10.5
+    repository: https://charts.bitnami.com/bitnami
+""",
+        )
+        (vendored_path / "minio-14.10.4.tgz").write_text("stale")
+        mock_subprocess.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="rendered", stderr=""
+        )
+
+        result = run_helm_template("test-release", chart_path, timeout=60)
+
+        assert result.returncode == 0
+        commands = [call.args[0] for call in mock_subprocess.call_args_list]
+        assert commands == [
+            [
+                "helm",
+                "repo",
+                "add",
+                "minio",
+                "https://charts.bitnami.com/bitnami",
+                "--force-update",
+            ],
+            ["helm", "dependency", "build", str(chart_path)],
+            ["helm", "template", "test-release", str(chart_path)],
+        ]
+
+    @pytest.mark.requirement("AC-2.7")
     def test_returns_repo_add_failure_before_rendering(
         self,
         tmp_path: Path,

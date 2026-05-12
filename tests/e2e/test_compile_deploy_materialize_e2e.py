@@ -24,18 +24,30 @@ from __future__ import annotations
 
 import os
 import re
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
 
+from testing.fixtures.dagster_retry import launch_dagster_run_with_storage_retry
+from testing.fixtures.polling import wait_for_condition
 from testing.fixtures.services import ServiceEndpoint
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-
+_DAGSTER_RUN_COMPLETION_TIMEOUT_SECONDS = float(
+    os.environ.get("FLOE_E2E_DAGSTER_RUN_TIMEOUT_SECONDS", "360")
+)
+_RUN_STATUS_QUERY = """
+query RunStatus($runId: ID!) {
+    runOrError(runId: $runId) {
+        ... on Run { status }
+    }
+}
+"""
 # Demo product paths relative to project root
 DEMO_PRODUCTS = {
     "customer-360": "demo/customer-360/floe.yaml",
@@ -124,6 +136,103 @@ def _discover_repository_for_asset(
         f"Asset matching '{search_term}' not found in Dagster assetNodes. "
         f"Available asset key paths: {available}"
     )
+
+
+def _dagster_run_status(dagster_url: str, run_id: str) -> str | None:
+    """Return the current Dagster status for a run."""
+    response = httpx.post(
+        f"{dagster_url}/graphql",
+        json={"query": _RUN_STATUS_QUERY, "variables": {"runId": run_id}},
+        timeout=10.0,
+    )
+    if response.status_code != 200:
+        return None
+    return response.json().get("data", {}).get("runOrError", {}).get("status")
+
+
+@pytest.fixture(scope="class")
+def customer_360_materialization_run(
+    wait_for_service: Callable[..., None],
+) -> str:
+    """Launch and wait for one complete Customer 360 materialization run."""
+    dagster_url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
+    wait_for_service(
+        f"{dagster_url}/server_info",
+        timeout=60,
+        description="Dagster webserver",
+    )
+
+    mutation = """
+    mutation LaunchRun($executionParams: ExecutionParams!) {
+        launchRun(executionParams: $executionParams) {
+            __typename
+            ... on LaunchRunSuccess {
+                run {
+                    runId
+                    status
+                }
+            }
+            ... on PipelineNotFoundError {
+                message
+            }
+            ... on PythonError {
+                message
+            }
+            ... on RunConfigValidationInvalid {
+                errors { message }
+            }
+        }
+    }
+    """
+
+    repo_name, location_name, _asset_path, job_name = _discover_repository_for_asset(
+        dagster_url, "stg_crm_customers"
+    )
+    variables = {
+        "executionParams": {
+            "selector": {
+                "repositoryName": repo_name,
+                "repositoryLocationName": location_name,
+                "pipelineName": job_name,
+            },
+            "mode": "default",
+        },
+    }
+
+    response = launch_dagster_run_with_storage_retry(dagster_url, mutation, variables)
+    assert response.status_code == 200, (
+        f"Dagster GraphQL returned {response.status_code}: {response.text}"
+    )
+
+    launch_result = response.json().get("data", {}).get("launchRun", {})
+    launch_typename = launch_result.get("__typename", "unknown")
+    if launch_typename != "LaunchRunSuccess":
+        if launch_typename == "RunConfigValidationInvalid":
+            errs = [e.get("message", "") for e in launch_result.get("errors", [])]
+            error_msg = "; ".join(errs) or str(launch_result)
+        else:
+            error_msg = launch_result.get("message", str(launch_result))
+        pytest.fail(f"launchRun returned {launch_typename}: {error_msg}")
+
+    run_id = launch_result.get("run", {}).get("runId")
+    assert run_id, "No runId returned from LaunchRunSuccess"
+
+    completed = wait_for_condition(
+        lambda: _dagster_run_status(dagster_url, run_id) in ("SUCCESS", "FAILURE", "CANCELED"),
+        timeout=_DAGSTER_RUN_COMPLETION_TIMEOUT_SECONDS,
+        interval=5.0,
+        description="customer-360 materialization run to complete",
+        raise_on_timeout=False,
+    )
+    final_status = _dagster_run_status(dagster_url, run_id)
+    assert completed, (
+        f"Materialization run {run_id} did not complete within "
+        f"{_DAGSTER_RUN_COMPLETION_TIMEOUT_SECONDS:.0f}s; last status was {final_status!r}"
+    )
+    assert final_status == "SUCCESS", (
+        f"Materialization run {run_id} ended with status {final_status}"
+    )
+    return run_id
 
 
 @pytest.mark.e2e
@@ -496,145 +605,16 @@ class TestCompileDeployMaterialize:
     @pytest.mark.requirement("AC-2.2")
     def test_trigger_asset_materialization(
         self,
-        wait_for_service: Callable[..., None],
+        customer_360_materialization_run: str,
     ) -> None:
-        """Trigger asset materialization via Dagster GraphQL API.
-
-        Uses launchRun mutation to materialize a single asset (stg_customers)
-        and polls for run completion. Validates the deploy → materialize step
-        of the full lifecycle.
-        """
-        from testing.fixtures.polling import wait_for_condition
-
-        dagster_url = os.environ.get("DAGSTER_URL", ServiceEndpoint("dagster-webserver").url)
-        wait_for_service(
-            f"{dagster_url}/server_info",
-            timeout=60,
-            description="Dagster webserver",
-        )
-
-        # Launch materialization for stg_crm_customers asset
-        mutation = """
-        mutation LaunchRun($executionParams: ExecutionParams!) {
-            launchRun(executionParams: $executionParams) {
-                __typename
-                ... on LaunchRunSuccess {
-                    run {
-                        runId
-                        status
-                    }
-                }
-                ... on PipelineNotFoundError {
-                    message
-                }
-                ... on PythonError {
-                    message
-                }
-                ... on RunConfigValidationInvalid {
-                    errors { message }
-                }
-            }
-        }
-        """
-
-        # Discover repository context for the target asset (AC-16.1)
-        repo_name, location_name, _asset_path, job_name = _discover_repository_for_asset(
-            dagster_url, "stg_crm_customers"
-        )
-
-        # Materialize ALL assets in the job (seeds → staging → marts).
-        # Previously used assetSelection to target only stg_crm_customers,
-        # but @dbt_assets maps each dbt node to a separate asset — selecting
-        # only the staging model skips seed dependencies (main_raw schema).
-        variables = {
-            "executionParams": {
-                "selector": {
-                    "repositoryName": repo_name,
-                    "repositoryLocationName": location_name,
-                    "pipelineName": job_name,
-                },
-                "mode": "default",
-            },
-        }
-
-        response = httpx.post(
-            f"{dagster_url}/graphql",
-            json={"query": mutation, "variables": variables},
-            timeout=30.0,
-        )
-        assert response.status_code == 200, (
-            f"Dagster GraphQL returned {response.status_code}: {response.text}"
-        )
-
-        data = response.json()
-        launch_result = data.get("data", {}).get("launchRun", {})
-
-        # Dagster launchRun is a GraphQL union: LaunchRunSuccess | error types.
-        # Error types have __typename + message but no "run" key.
-        launch_typename = launch_result.get("__typename", "unknown")
-        if launch_typename != "LaunchRunSuccess":
-            if launch_typename == "RunConfigValidationInvalid":
-                errs = [e.get("message", "") for e in launch_result.get("errors", [])]
-                error_msg = "; ".join(errs) or str(launch_result)
-            else:
-                error_msg = launch_result.get("message", str(launch_result))
-            pytest.fail(f"launchRun returned {launch_typename}: {error_msg}")
-
-        run_id = launch_result.get("run", {}).get("runId")
-        assert run_id, "No runId returned from LaunchRunSuccess"
-
-        # Poll for run completion
-        def check_run_complete() -> bool:
-            """Check if materialization run has completed."""
-            status_query = """
-            query RunStatus($runId: ID!) {
-                runOrError(runId: $runId) {
-                    ... on Run {
-                        status
-                    }
-                }
-            }
-            """
-            resp = httpx.post(
-                f"{dagster_url}/graphql",
-                json={"query": status_query, "variables": {"runId": run_id}},
-                timeout=10.0,
-            )
-            if resp.status_code != 200:
-                return False
-            status = resp.json().get("data", {}).get("runOrError", {}).get("status")
-            return status in ("SUCCESS", "FAILURE", "CANCELED")
-
-        completed = wait_for_condition(
-            check_run_complete,
-            timeout=120.0,
-            interval=5.0,
-            description="materialization run to complete",
-            raise_on_timeout=False,
-        )
-        assert completed, f"Materialization run {run_id} did not complete within 120s"
-
-        # Verify final status is SUCCESS
-        status_query = """
-        query RunStatus($runId: ID!) {
-            runOrError(runId: $runId) {
-                ... on Run { status }
-            }
-        }
-        """
-        final_resp = httpx.post(
-            f"{dagster_url}/graphql",
-            json={"query": status_query, "variables": {"runId": run_id}},
-            timeout=10.0,
-        )
-        final_status = final_resp.json().get("data", {}).get("runOrError", {}).get("status")
-        assert final_status == "SUCCESS", (
-            f"Materialization run {run_id} ended with status {final_status}"
-        )
+        """Verify the shared materialization fixture completed a Dagster run."""
+        # Fixture performs launch and wait; body validates the fixture resolved.
+        assert str(uuid.UUID(customer_360_materialization_run)) == customer_360_materialization_run
 
     @pytest.mark.requirement("AC-2.2")
     def test_iceberg_tables_exist_after_materialization(
         self,
+        customer_360_materialization_run: str,
         polaris_client: Any,
     ) -> None:
         """Verify Iceberg tables exist in Polaris after materialization.
@@ -643,6 +623,8 @@ class TestCompileDeployMaterialize:
         at least one Iceberg table with expected schema columns. Validates
         the materialize → validate step of the full lifecycle.
         """
+        assert str(uuid.UUID(customer_360_materialization_run)) == customer_360_materialization_run
+
         # List tables in the customer-360 namespace
         # The namespace may be "customer_360" or "customer-360" depending on
         # how Dagster normalizes the product name

@@ -6,7 +6,7 @@ that tracer names follow the ``floe.{category}.{implementation}`` convention.
 
 Requirements:
     FR-022: All plugins discoverable via entry points
-    SC-001: 19 of 21 plugins have non-None tracer_name
+    SC-001: 22 of 24 plugins have non-None tracer_name
 """
 
 from __future__ import annotations
@@ -32,8 +32,8 @@ _EXCLUDED_GROUPS: frozenset[str] = frozenset(
 _TRACER_NAME_PATTERN = re.compile(r"^floe\.[a-z]+\.[a-z][a-z0-9_]*$")
 
 # Expected counts
-_EXPECTED_TOTAL_PLUGINS = 22
-_EXPECTED_INSTRUMENTED_PLUGINS = 20
+_EXPECTED_TOTAL_PLUGINS = 24
+_EXPECTED_INSTRUMENTED_PLUGINS = 22
 
 
 @pytest.mark.requirement("FR-022")
@@ -42,7 +42,7 @@ class TestPluginInstrumentationContract:
     """Contract tests for plugin OTel instrumentation."""
 
     def test_total_registered_plugins(self) -> None:
-        """All 21 plugins are discoverable via entry points."""
+        """All first-party plugins are discoverable via entry points."""
         total = 0
         for group in _PLUGIN_GROUPS:
             eps = entry_points(group=group)
@@ -53,7 +53,7 @@ class TestPluginInstrumentationContract:
         )
 
     def test_instrumented_plugin_count(self) -> None:
-        """19 of 21 plugins have non-None tracer_name."""
+        """All non-telemetry plugins have non-None tracer_name."""
         instrumented = 0
         uninstrumented: list[str] = []
 

@@ -56,6 +56,47 @@ def test_rendered_e2e_job_uses_if_not_present_for_test_runner() -> None:
     assert "imagePullPolicy: IfNotPresent" in result.stdout
 
 
+@pytest.mark.requirement("LIVE-VALIDATION")
+def test_rendered_e2e_job_accepts_targeted_pytest_args_override() -> None:
+    """Targeted live reruns must be able to replace the default pytest selection."""
+    result = subprocess.run(
+        [
+            "bash",
+            "-lc",
+            "source testing/ci/common.sh && "
+            "FLOE_TEST_PYTEST_ARGS_JSON='["
+            '"tests/e2e/test_observability.py::TestObservability::'
+            'test_openlineage_events_in_marquez",'
+            '"-q"]\' '
+            "floe_render_test_job tests/job-e2e.yaml",
+        ],
+        cwd=_REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, (
+        "Failed to render the E2E Job with targeted pytest args.\n"
+        f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    )
+
+    assert (
+        '"tests/e2e/test_observability.py::TestObservability::test_openlineage_events_in_marquez"'
+    ) in result.stdout
+    assert '"-q"' in result.stdout
+    assert '"platform_blackbox and not destructive"' not in result.stdout
+
+
+@pytest.mark.requirement("LIVE-VALIDATION")
+def test_integration_runner_exports_pytest_args_override() -> None:
+    """The documented runner arguments must flow into the rendered test Job."""
+    script = (_REPO_ROOT / "testing" / "ci" / "test-integration.sh").read_text()
+
+    assert "FLOE_TEST_PYTEST_ARGS_JSON=" in script
+    assert "json.dumps(sys.argv[1:])" in script
+    assert "export FLOE_TEST_PYTEST_ARGS_JSON" in script
+
+
 @pytest.mark.requirement("AC-DevPod-Remote-E2E")
 def test_test_runner_image_installs_dbt_installer_prerequisites() -> None:
     """The test-runner image must not rely on installer fallback downloads."""

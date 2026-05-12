@@ -48,16 +48,22 @@ pytestmark = [
 NAMESPACE = os.environ.get("FLOE_E2E_NAMESPACE", "floe-test")
 VALUES_TEST = Path(__file__).resolve().parents[2] / "charts" / "floe-platform" / "values-test.yaml"
 
-# Expected core services that MUST be deployed
-EXPECTED_COMPONENTS = frozenset(
-    {
-        "postgresql",
-        "polaris",
-        "dagster",
-        "minio",
-        "otel",
-    }
-)
+# Expected core Helm-managed resources that MUST be deployed. Most components
+# render a single service/deployment name; Dagster renders split webserver and
+# daemon resources.
+EXPECTED_RESOURCE_GROUPS = {
+    "postgresql": frozenset({"floe-platform-postgresql"}),
+    "polaris": frozenset({"floe-platform-polaris"}),
+    "dagster": frozenset(
+        {
+            "floe-platform-dagster-webserver",
+            "floe-platform-dagster-daemon",
+        },
+    ),
+    "minio": frozenset({"floe-platform-minio"}),
+    "otel": frozenset({"floe-platform-otel"}),
+}
+EXPECTED_COMPONENTS = frozenset(EXPECTED_RESOURCE_GROUPS)
 
 
 def _cube_store_enabled_in_test_values() -> bool:
@@ -81,6 +87,50 @@ def _get_cube_store_pods() -> list[dict[str, object]]:
     assert result.returncode == 0, f"kubectl failed: {result.stderr}"
     pods = json.loads(result.stdout)
     return pods.get("items", [])
+
+
+def _assert_helm_managed_platform_resources_deployed(
+    *,
+    helm_stderr: str,
+    helmrelease_stderr: str,
+) -> None:
+    """Validate direct-Helm deployments without granting release-secret access."""
+    result = run_kubectl(
+        [
+            "get",
+            "deployments,services",
+            "-l",
+            "app.kubernetes.io/instance=floe-platform,app.kubernetes.io/managed-by=Helm",
+            "-o",
+            "json",
+        ],
+        namespace=NAMESPACE,
+    )
+    assert result.returncode == 0, (
+        "Helm status is blocked by least-privilege test-runner RBAC, "
+        "Flux HelmRelease status could not be read, and Helm-managed resource "
+        "evidence could not be queried.\n"
+        f"helm stderr: {helm_stderr}\n"
+        f"helmrelease stderr: {helmrelease_stderr}\n"
+        f"kubectl stderr: {result.stderr}"
+    )
+
+    resources = json.loads(result.stdout)
+    items = resources.get("items", [])
+    resource_names = {
+        str(item.get("metadata", {}).get("name", "")) for item in items if isinstance(item, dict)
+    }
+    missing = {
+        component
+        for component, expected_names in EXPECTED_RESOURCE_GROUPS.items()
+        if not expected_names.issubset(resource_names)
+    }
+    assert not missing, (
+        "Direct-Helm deployment evidence is incomplete. Expected core "
+        "Helm-managed resources were not found.\n"
+        f"missing: {sorted(missing)}\n"
+        f"found: {sorted(resource_names)}"
+    )
 
 
 def _assert_cube_store_rollback_state() -> None:
@@ -117,6 +167,13 @@ class TestPlatformDeployment:
                 ["get", "helmrelease", "floe-platform", "-o", "json"],
                 namespace=NAMESPACE,
             )
+            if helmrelease.returncode != 0 and "resource type" in helmrelease.stderr:
+                _assert_helm_managed_platform_resources_deployed(
+                    helm_stderr=result.stderr,
+                    helmrelease_stderr=helmrelease.stderr,
+                )
+                return
+
             assert helmrelease.returncode == 0, (
                 "Helm status is blocked by least-privilege test-runner RBAC, "
                 "and Flux HelmRelease status could not be read.\n"

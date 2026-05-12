@@ -11,6 +11,7 @@ Note:
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -167,3 +168,24 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "requirement(id): Mark test as covering a specific requirement",
     )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Deselect live-cloud tests unless the live AWS provider lane is enabled."""
+    if os.environ.get("FLOE_RUN_LIVE_AWS_PROVIDER_TESTS") == "1":
+        return
+
+    selected: list[pytest.Item] = []
+    deselected: list[pytest.Item] = []
+    for item in items:
+        marker_names = {marker.name for marker in item.iter_markers()}
+        if "live_aws" in marker_names:
+            deselected.append(item)
+        else:
+            selected.append(item)
+
+    if not deselected:
+        return
+
+    config.hook.pytest_deselected(items=deselected)
+    items[:] = selected

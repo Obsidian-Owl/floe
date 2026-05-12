@@ -72,6 +72,9 @@ dependencies = [
     "floe-alert-webhook",
     # Storage plugins
     "floe-storage-minio",
+    "floe-storage-aws-s3",
+    # Catalog plugins
+    "floe-catalog-glue",
 ]
 
 [project.optional-dependencies]
@@ -138,6 +141,8 @@ floe-alert-slack = { path = "plugins/floe-alert-slack", editable = true }
 floe-alert-email = { path = "plugins/floe-alert-email", editable = true }
 floe-alert-alertmanager = { path = "plugins/floe-alert-alertmanager", editable = true }
 floe-alert-webhook = { path = "plugins/floe-alert-webhook", editable = true }
+floe-storage-aws-s3 = { path = "plugins/floe-storage-aws-s3", editable = true }
+floe-catalog-glue = { path = "plugins/floe-catalog-glue", editable = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -164,6 +169,8 @@ pythonpath = [
     "plugins/floe-alert-email/src",
     "plugins/floe-alert-alertmanager/src",
     "plugins/floe-alert-webhook/src",
+    "plugins/floe-storage-aws-s3/src",
+    "plugins/floe-catalog-glue/src",
     "tests/e2e",
     ".",
 ]
@@ -183,6 +190,7 @@ markers = [
     "platform_blackbox: Marks in-cluster product validation",
     "developer_workflow: Marks repo-aware host validation",
     "requires_sts: Marks tests requiring STS-enabled storage backend (MinIO with STS)",
+    "live_aws: Marks tests that require the live AWS provider test account",
     "benchmark: Marks performance benchmark tests (CodSpeed)",
 ]
 # Suppress deprecation warnings from third-party dependencies
