@@ -112,17 +112,13 @@ class AwsS3ObjectStorePlugin(StoragePlugin):
         """Return secret-free credential references for the configured mode."""
         config = self._require_config()
         if config.credential_mode == "workload-identity":
-            if config.service_account_ref is None:
-                msg = "workload-identity credential_mode requires service_account_ref"
-                raise ValueError(msg)
+            assert config.service_account_ref is not None
             return StorageCredentialBinding(
                 mode="workload-identity",
                 service_account_ref=config.service_account_ref,
             )
         if config.credential_mode == "kubernetes-secret":
-            if config.credential_secret_name is None:
-                msg = "kubernetes-secret credential_mode requires credential_secret_name"
-                raise ValueError(msg)
+            assert config.credential_secret_name is not None
             return StorageCredentialBinding(
                 mode="kubernetes-secret",
                 secret_ref=KubernetesSecretRef(

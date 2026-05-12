@@ -2,21 +2,35 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import tomllib
 from pydantic import ValidationError
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from floe_storage_aws_s3.config import AwsS3ObjectStoreConfig
 from floe_storage_aws_s3.plugin import AwsS3ObjectStorePlugin
+
+TEST_BUCKET = "floe-provider-tests"
+TEST_REGION = "ap-southeast-2"
+TEST_SERVICE_ACCOUNT = "floe-provider-tests"
+TEST_WAREHOUSE_URI = f"s3://{TEST_BUCKET}/warehouse/"
+TEST_ARTIFACT_URI = f"s3://{TEST_BUCKET}/artifacts/"
+TEST_AWS_ENDPOINT = f"https://s3.{TEST_REGION}.amazonaws.com"
 
 
 class TestPluginMetadata:
     """Test plugin metadata and config schema."""
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-001")
     def test_plugin_metadata(self) -> None:
+        """Plugin metadata exposes the stable aws-s3 identity and tracer name."""
         plugin = AwsS3ObjectStorePlugin()
 
         assert plugin.name == "aws-s3"
@@ -25,56 +39,68 @@ class TestPluginMetadata:
         assert plugin.description == "AWS S3 object storage plugin for Iceberg data"
         assert plugin.tracer_name == "floe.storage.aws_s3"
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-002")
     def test_get_config_schema_returns_aws_s3_config(self) -> None:
+        """Plugin config schema points consumers at the AWS S3 config model."""
         assert AwsS3ObjectStorePlugin().get_config_schema() is AwsS3ObjectStoreConfig
 
 
 class TestAwsS3ObjectStoreConfig:
     """Test AWS S3 config validation."""
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-003")
     def test_workload_identity_config_requires_service_account(self) -> None:
+        """Workload-identity mode rejects config without a service account ref."""
         with pytest.raises(ValidationError, match="service_account_ref"):
             AwsS3ObjectStoreConfig(
-                bucket="floe-provider-tests",
-                region="ap-southeast-2",
+                bucket=TEST_BUCKET,
+                region=TEST_REGION,
                 credential_mode="workload-identity",
             )
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-004")
     def test_kubernetes_secret_config_requires_secret_name(self) -> None:
+        """Kubernetes-secret mode rejects config without a Secret reference."""
         with pytest.raises(ValidationError, match="credential_secret_name"):
             AwsS3ObjectStoreConfig(
-                bucket="floe-provider-tests",
-                region="ap-southeast-2",
+                bucket=TEST_BUCKET,
+                region=TEST_REGION,
                 credential_mode="kubernetes-secret",
             )
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-005")
     def test_environment_config_rejects_secret_fields(self) -> None:
+        """Environment mode rejects Kubernetes Secret fields to keep sources exclusive."""
         with pytest.raises(ValidationError, match="only accepts environment variable names"):
             AwsS3ObjectStoreConfig(
-                bucket="floe-provider-tests",
-                region="ap-southeast-2",
+                bucket=TEST_BUCKET,
+                region=TEST_REGION,
                 credential_mode="environment",
                 credential_secret_name="aws-creds",  # pragma: allowlist secret
             )
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-006")
     def test_endpoint_override_must_be_http_url(self) -> None:
+        """Endpoint overrides must be explicit HTTP URLs for runtime clients."""
         with pytest.raises(ValidationError, match="endpoint_override"):
             AwsS3ObjectStoreConfig(
-                bucket="floe-provider-tests",
-                region="ap-southeast-2",
+                bucket=TEST_BUCKET,
+                region=TEST_REGION,
                 endpoint_override="s3.ap-southeast-2.amazonaws.com",
             )
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-007")
     def test_config_defaults_are_native_aws(self) -> None:
+        """Default config favors native AWS S3 behavior and externally managed buckets."""
         config = AwsS3ObjectStoreConfig(
-            bucket="floe-provider-tests",
-            region="ap-southeast-2",
+            bucket=TEST_BUCKET,
+            region=TEST_REGION,
             credential_mode="workload-identity",
-            service_account_ref="floe-provider-tests",
+            service_account_ref=TEST_SERVICE_ACCOUNT,
         )
 
         assert config.warehouse_prefix == "warehouse/"
-        assert config.artifact_bucket == "floe-provider-tests"
+        assert config.artifact_bucket == TEST_BUCKET
         assert config.artifact_prefix == "artifacts/"
         assert config.path_style_access is False
         assert config.sts_supported is True
@@ -84,12 +110,14 @@ class TestAwsS3ObjectStoreConfig:
 class TestAwsS3DeploymentBinding:
     """Test secret-free AWS S3 deployment bindings."""
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-008")
     def test_workload_identity_binding_emits_native_s3_contract(self) -> None:
+        """Workload identity emits native s3 bindings without credential values."""
         config = AwsS3ObjectStoreConfig(
-            bucket="floe-provider-tests",
-            region="ap-southeast-2",
+            bucket=TEST_BUCKET,
+            region=TEST_REGION,
             credential_mode="workload-identity",
-            service_account_ref="floe-provider-tests",
+            service_account_ref=TEST_SERVICE_ACCOUNT,
         )
         plugin = AwsS3ObjectStorePlugin(config=config)
 
@@ -98,28 +126,27 @@ class TestAwsS3DeploymentBinding:
 
         assert binding.provider == "aws-s3"
         assert binding.protocol == "s3"
-        assert binding.endpoint.internal_url == "https://s3.ap-southeast-2.amazonaws.com"
-        assert binding.endpoint.external_url == "https://s3.ap-southeast-2.amazonaws.com"
-        assert binding.endpoint.region == "ap-southeast-2"
-        assert binding.endpoint.warehouse_path == "s3://floe-provider-tests/warehouse/"
+        assert binding.endpoint.internal_url == TEST_AWS_ENDPOINT
+        assert binding.endpoint.external_url == TEST_AWS_ENDPOINT
+        assert binding.endpoint.region == TEST_REGION
+        assert binding.endpoint.warehouse_path == TEST_WAREHOUSE_URI
         assert binding.endpoint.path_style_access is False
-        assert binding.warehouse is not None
-        assert binding.warehouse.uri == "s3://floe-provider-tests/warehouse/"
-        assert binding.warehouse.bucket == "floe-provider-tests"
+        assert binding.warehouse.uri == TEST_WAREHOUSE_URI
+        assert binding.warehouse.bucket == TEST_BUCKET
         assert binding.warehouse.prefix == "warehouse/"
         assert binding.allowed_locations == [
-            "s3://floe-provider-tests/warehouse/",
-            "s3://floe-provider-tests/artifacts/",
+            TEST_WAREHOUSE_URI,
+            TEST_ARTIFACT_URI,
         ]
         bucket_contracts = [
             (bucket.name, bucket.purpose, bucket.create_policy) for bucket in binding.buckets
         ]
         assert bucket_contracts == [
-            ("floe-provider-tests", "warehouse", "must-exist"),
-            ("floe-provider-tests", "artifacts", "must-exist"),
+            (TEST_BUCKET, "warehouse", "must-exist"),
+            (TEST_BUCKET, "artifacts", "must-exist"),
         ]
         assert binding.credentials.mode == "workload-identity"
-        assert binding.credentials.service_account_ref == "floe-provider-tests"
+        assert binding.credentials.service_account_ref == TEST_SERVICE_ACCOUNT
         assert binding.capabilities.protocols == ["s3"]
         assert binding.capabilities.credential_modes == ["workload-identity"]
         assert binding.capabilities.identity_modes == ["aws-irsa", "aws-pod-identity"]
@@ -128,24 +155,26 @@ class TestAwsS3DeploymentBinding:
         assert binding.provisioning.enabled is False
         assert binding.provisioning.mode == "external"
         assert binding.provisioning.default_create_policy == "must-exist"
-        assert binding.runtime.pyiceberg_properties == {"s3.region": "ap-southeast-2"}
+        assert binding.runtime.pyiceberg_properties == {"s3.region": TEST_REGION}
         assert binding.runtime.env_refs == {}
         assert binding.dbt.profile_fragment == {
-            "s3_region": "ap-southeast-2",
+            "s3_region": TEST_REGION,
             "s3_path_style_access": False,
         }
         assert binding.dagster.resources == {
-            "bucket": "floe-provider-tests",
-            "region_name": "ap-southeast-2",
+            "bucket": TEST_BUCKET,
+            "region_name": TEST_REGION,
             "path_style_access": False,
         }
         assert "AWS_SECRET_ACCESS_KEY" not in payload
         assert "raw-secret-value" not in payload
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-009")
     def test_environment_binding_uses_env_refs_without_values(self) -> None:
+        """Environment mode projects environment variable names instead of values."""
         config = AwsS3ObjectStoreConfig(
-            bucket="floe-provider-tests",
-            region="ap-southeast-2",
+            bucket=TEST_BUCKET,
+            region=TEST_REGION,
             credential_mode="environment",
         )
         binding = AwsS3ObjectStorePlugin(config=config).get_deployment_binding()
@@ -163,10 +192,12 @@ class TestAwsS3DeploymentBinding:
             "s3_session_token": "AWS_SESSION_TOKEN",
         }
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-010")
     def test_kubernetes_secret_binding_uses_secret_refs_without_values(self) -> None:
+        """Kubernetes-secret mode projects Secret key references without values."""
         config = AwsS3ObjectStoreConfig(
-            bucket="floe-provider-tests",
-            region="ap-southeast-2",
+            bucket=TEST_BUCKET,
+            region=TEST_REGION,
             credential_mode="kubernetes-secret",
             credential_secret_name="aws-s3-credentials",  # pragma: allowlist secret
             credential_secret_namespace="floe-system",  # pragma: allowlist secret
@@ -183,10 +214,12 @@ class TestAwsS3DeploymentBinding:
             "sessionToken": "sessionToken",
         }
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-011")
     def test_endpoint_override_projects_localstack_properties(self) -> None:
+        """Endpoint overrides are projected for local S3-compatible testing."""
         config = AwsS3ObjectStoreConfig(
-            bucket="floe-provider-tests",
-            region="ap-southeast-2",
+            bucket=TEST_BUCKET,
+            region=TEST_REGION,
             endpoint_override="http://localhost:4566",
             path_style_access=True,
             credential_mode="environment",
@@ -198,7 +231,7 @@ class TestAwsS3DeploymentBinding:
         assert binding.endpoint.path_style_access is True
         assert binding.runtime.pyiceberg_properties == {
             "s3.endpoint": "http://localhost:4566",
-            "s3.region": "ap-southeast-2",
+            "s3.region": TEST_REGION,
             "s3.path-style-access": "true",
         }
 
@@ -209,37 +242,45 @@ class TestStoragePluginMethods:
     @pytest.fixture()
     def configured_plugin(self) -> AwsS3ObjectStorePlugin:
         config = AwsS3ObjectStoreConfig(
-            bucket="floe-provider-tests",
-            region="ap-southeast-2",
+            bucket=TEST_BUCKET,
+            region=TEST_REGION,
             credential_mode="workload-identity",
-            service_account_ref="floe-provider-tests",
+            service_account_ref=TEST_SERVICE_ACCOUNT,
         )
         return AwsS3ObjectStorePlugin(config=config)
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-012")
     def test_get_warehouse_uri(self, configured_plugin: AwsS3ObjectStorePlugin) -> None:
-        assert configured_plugin.get_warehouse_uri("bronze") == (
-            "s3://floe-provider-tests/warehouse/bronze/"
-        )
+        """Namespace warehouse URIs are derived below the configured warehouse prefix."""
+        assert configured_plugin.get_warehouse_uri("bronze") == f"{TEST_WAREHOUSE_URI}bronze/"
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-013")
     def test_get_dbt_profile_config(self, configured_plugin: AwsS3ObjectStorePlugin) -> None:
+        """Legacy dbt profile helper returns the binding-derived storage fragment."""
         assert configured_plugin.get_dbt_profile_config() == {
-            "s3_region": "ap-southeast-2",
+            "s3_region": TEST_REGION,
             "s3_path_style_access": False,
         }
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-014")
     def test_get_dagster_io_manager_config(self, configured_plugin: AwsS3ObjectStorePlugin) -> None:
+        """Legacy Dagster helper returns the binding-derived storage fragment."""
         assert configured_plugin.get_dagster_io_manager_config() == {
-            "bucket": "floe-provider-tests",
-            "region_name": "ap-southeast-2",
+            "bucket": TEST_BUCKET,
+            "region_name": TEST_REGION,
             "path_style_access": False,
         }
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-015")
     def test_get_pyiceberg_catalog_config_has_no_credentials(
         self, configured_plugin: AwsS3ObjectStorePlugin
     ) -> None:
-        assert configured_plugin.get_pyiceberg_catalog_config() == {"s3.region": "ap-southeast-2"}
+        """PyIceberg catalog config exposes only non-secret S3 properties."""
+        assert configured_plugin.get_pyiceberg_catalog_config() == {"s3.region": TEST_REGION}
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-016")
     def test_get_pyiceberg_fileio(self, configured_plugin: AwsS3ObjectStorePlugin) -> None:
+        """FileIO construction delegates to PyIceberg without needing inline credentials."""
         from pyiceberg.io.fsspec import FsspecFileIO
 
         with patch.dict("os.environ", {}, clear=False):
@@ -247,13 +288,17 @@ class TestStoragePluginMethods:
 
         assert isinstance(fileio, FsspecFileIO)
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-017")
     def test_get_helm_values_override_is_empty(
         self,
         configured_plugin: AwsS3ObjectStorePlugin,
     ) -> None:
+        """AWS S3 has no Helm-managed service values because buckets are external."""
         assert configured_plugin.get_helm_values_override() == {}
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-018")
     def test_methods_raise_without_config(self) -> None:
+        """Unconfigured plugin methods raise structured configuration errors."""
         from floe_core.plugin_errors import PluginConfigurationError
 
         plugin = AwsS3ObjectStorePlugin()
@@ -269,7 +314,9 @@ class TestStoragePluginMethods:
 class TestPackageMetadata:
     """Test package metadata without requiring workspace registration."""
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-019")
     def test_pyproject_declares_floe_storage_entry_point(self) -> None:
+        """Package metadata declares the aws-s3 storage plugin entry point."""
         pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
         pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
 

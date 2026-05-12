@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from typing_extensions import Self
 
 AwsS3ObjectStoreCredentialMode = Literal["environment", "workload-identity", "kubernetes-secret"]
 CreatePolicy = Literal["must-exist", "never-create"]
@@ -89,7 +90,7 @@ class AwsS3ObjectStoreConfig(BaseModel):
         return data
 
     @model_validator(mode="after")
-    def validate_credential_mode(self) -> AwsS3ObjectStoreConfig:
+    def validate_credential_mode(self) -> Self:
         """Ensure credential reference fields match credential_mode."""
         if self.credential_mode == "workload-identity":
             if self.service_account_ref is None:
