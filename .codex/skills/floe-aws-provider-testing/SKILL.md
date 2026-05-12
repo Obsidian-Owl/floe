@@ -42,6 +42,7 @@ export FLOE_AWS_TEST_BUCKET=<bucket>
 export FLOE_AWS_TEST_PREFIX=<s3-run-prefix>
 export FLOE_AWS_GLUE_DATABASE_PREFIX=<glue-database-prefix>
 export FLOE_AWS_BUDGET_NAME=<budget-name>
+export FLOE_AWS_BUDGET_EMAIL=<budget-email>
 export FLOE_AWS_PROVIDER_TEST_POLICY_ARN=<provider-test-policy-arn>
 ```
 

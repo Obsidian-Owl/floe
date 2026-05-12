@@ -33,6 +33,11 @@ output "budget_name" {
   value       = aws_budgets_budget.provider_tests.name
 }
 
+output "budget_email" {
+  description = "AWS Budget subscriber email used for provider compatibility test cost alerts."
+  value       = var.budget_email
+}
+
 output "recommended_environment" {
   description = "Environment variables recommended for Floe AWS provider compatibility tests."
   value = {
@@ -41,6 +46,7 @@ output "recommended_environment" {
     FLOE_AWS_TEST_PREFIX              = var.s3_run_prefix
     FLOE_AWS_GLUE_DATABASE_PREFIX     = var.glue_database_prefix
     FLOE_AWS_BUDGET_NAME              = aws_budgets_budget.provider_tests.name
+    FLOE_AWS_BUDGET_EMAIL             = var.budget_email
     FLOE_AWS_PROVIDER_TEST_POLICY_ARN = aws_iam_policy.provider_test_permissions.arn
   }
 }

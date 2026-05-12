@@ -71,10 +71,8 @@ variable "s3_run_prefix" {
   default     = "runs/"
 
   validation {
-    condition = can(regex("^[^/][A-Za-z0-9!_.*'()/-]*/$", var.s3_run_prefix)) && (
-      !startswith(var.s3_run_prefix, "/")
-    )
-    error_message = "s3_run_prefix must be a relative prefix ending with a slash."
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9/_-]*/$", var.s3_run_prefix))
+    error_message = "s3_run_prefix must be a relative prefix ending with a slash and contain only letters, numbers, slashes, underscores, and hyphens."
   }
 }
 
@@ -95,7 +93,7 @@ variable "glue_database_prefix" {
   default     = "floe_provider_"
 
   validation {
-    condition     = can(regex("^[a-z][a-z0-9_]*_$", var.glue_database_prefix))
+    condition     = can(regex("^[a-z][a-z0-9_]{2,40}_$", var.glue_database_prefix))
     error_message = "glue_database_prefix must be lowercase snake_case and end with an underscore."
   }
 }
