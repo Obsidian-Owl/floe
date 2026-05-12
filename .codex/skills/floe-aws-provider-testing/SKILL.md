@@ -9,7 +9,7 @@ Use this skill for Floe AWS provider test-account setup and cleanup.
 
 ## Preconditions
 
-- Work from `/Users/dmccarthy/Projects/floe` unless the user gives another Floe checkout.
+- Work from the repository root unless the user gives another Floe checkout.
 - Read `docs/contributing/aws-provider-testing.md`.
 - Use `infra/aws-provider-tests` for OpenTofu.
 - Confirm the AWS account is a sandbox or approved test account.

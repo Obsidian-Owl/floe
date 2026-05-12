@@ -48,7 +48,7 @@ creates:
 Use this prompt when asking an agent to set up the environment:
 
 ~~~text
-Set up the Floe AWS provider testing environment from /Users/dmccarthy/Projects/floe.
+Set up the Floe AWS provider testing environment from <path-to-floe-checkout>.
 Use AWS profile <profile-name>, region <region>, owner <owner>, and budget email <email>.
 Use OpenTofu under infra/aws-provider-tests.
 Do not create EKS, NAT Gateway, Glue jobs, Glue crawlers, Lake Formation, S3 Tables, or always-on EC2.

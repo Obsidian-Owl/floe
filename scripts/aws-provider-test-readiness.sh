@@ -177,7 +177,7 @@ jq -e \
 probe_db="${FLOE_AWS_GLUE_DATABASE_PREFIX}readiness_$(date -u +%Y%m%d%H%M%S)"
 
 log "Checking Glue create/get/delete access with ${probe_db}"
-printf '{"Name":"%s"}\n' "${probe_db}" >"${database_payload}"
+jq -n --arg name "${probe_db}" '{Name: $name}' >"${database_payload}"
 aws glue create-database \
     --database-input "file://${database_payload}" \
     "${aws_args[@]}" >/dev/null

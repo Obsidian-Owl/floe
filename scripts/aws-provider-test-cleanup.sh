@@ -90,19 +90,19 @@ if [[ "${database_state}" == "error" ]]; then
 fi
 
 if [[ "${database_state}" == "exists" ]]; then
-    table_names="$(
-        aws glue get-tables \
-            --database-name "${run_database}" \
-            --query 'TableList[].Name' \
-            --output text \
-            "${aws_args[@]}"
-    )"
-    for table_name in ${table_names}; do
+    while IFS= read -r table_name; do
+        [[ -z "${table_name}" ]] && continue
         aws glue delete-table \
             --database-name "${run_database}" \
             --name "${table_name}" \
             "${aws_args[@]}" >/dev/null
-    done
+    done < <(
+        aws glue get-tables \
+            --database-name "${run_database}" \
+            --query 'TableList[].Name' \
+            --output text \
+            "${aws_args[@]}" | tr '\t' '\n'
+    )
     aws glue delete-database \
         --name "${run_database}" \
         "${aws_args[@]}" >/dev/null

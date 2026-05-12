@@ -36,6 +36,7 @@ output "budget_name" {
 output "budget_email" {
   description = "AWS Budget subscriber email used for provider compatibility test cost alerts."
   value       = var.budget_email
+  sensitive   = true
 }
 
 output "recommended_environment" {
@@ -49,4 +50,5 @@ output "recommended_environment" {
     FLOE_AWS_BUDGET_EMAIL             = var.budget_email
     FLOE_AWS_PROVIDER_TEST_POLICY_ARN = aws_iam_policy.provider_test_permissions.arn
   }
+  sensitive = true
 }
