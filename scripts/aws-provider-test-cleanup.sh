@@ -104,7 +104,7 @@ if [[ "${database_state}" == "exists" ]]; then
             "${aws_args[@]}" >/dev/null
     done
     aws glue delete-database \
-        --database-name "${run_database}" \
+        --name "${run_database}" \
         "${aws_args[@]}" >/dev/null
 fi
 

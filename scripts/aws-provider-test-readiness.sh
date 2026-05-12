@@ -61,7 +61,7 @@ cleanup_probe() {
     rm -f "${database_payload}" "${budget_notifications_payload}" "${budget_subscribers_payload}" "${policy_payload}"
     if [[ -n "${probe_db}" ]]; then
         aws glue delete-database \
-            --database-name "${probe_db}" \
+            --name "${probe_db}" \
             "${aws_args[@]}" >/dev/null 2>&1 || true
     fi
 }
@@ -124,11 +124,11 @@ jq -e '
   | any(.NotificationType == "ACTUAL"
       and .ComparisonOperator == "GREATER_THAN"
       and .Threshold == 80
-      and .ThresholdType == "PERCENTAGE")
+      and ((.ThresholdType // "PERCENTAGE") == "PERCENTAGE"))
     and any(.NotificationType == "FORECASTED"
       and .ComparisonOperator == "GREATER_THAN"
       and .Threshold == 100
-      and .ThresholdType == "PERCENTAGE")
+      and ((.ThresholdType // "PERCENTAGE") == "PERCENTAGE"))
 ' "${budget_notifications_payload}" >/dev/null || \
     error "AWS Budget ${FLOE_AWS_BUDGET_NAME} is missing expected 80% actual or 100% forecasted notifications"
 
@@ -185,7 +185,7 @@ aws glue get-database \
     --name "${probe_db}" \
     "${aws_args[@]}" >/dev/null
 aws glue delete-database \
-    --database-name "${probe_db}" \
+    --name "${probe_db}" \
     "${aws_args[@]}" >/dev/null
 
 log "Readiness checks passed"
