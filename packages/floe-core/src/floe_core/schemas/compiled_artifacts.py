@@ -949,6 +949,31 @@ class PolarisCatalogDeploymentBinding(BaseModel):
     credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
 
 
+class GlueCatalogDeploymentBinding(BaseModel):
+    """AWS Glue catalog-owned deployment and runtime configuration."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    catalog_name: NonEmptyString = "glue"
+    region: NonEmptyString
+    warehouse: NonEmptyString
+    catalog_id: NonEmptyString | None = None
+    database_prefix: NonEmptyString | None = None
+    endpoint: NonEmptyString | None = None
+    skip_archive: bool = True
+    max_retries: int | None = Field(default=None, ge=1)
+    retry_mode: NonEmptyString | None = None
+    credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+    properties: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("properties")
+    @classmethod
+    def validate_secret_free_properties(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure Glue catalog properties do not inline credential values."""
+        _assert_no_secret_material(value, "catalog.glue.properties")
+        return value
+
+
 class IcebergRestOAuth2Binding(BaseModel):
     """Secret-free OAuth2 references for an Iceberg REST catalog consumer."""
 
@@ -1005,6 +1030,7 @@ class CatalogDeploymentBinding(BaseModel):
 
     provider: NonEmptyString
     polaris: PolarisCatalogDeploymentBinding | None = None
+    glue: GlueCatalogDeploymentBinding | None = None
     iceberg_rest: IcebergRestCatalogBinding | None = None
     dbt: DbtCatalogBinding | None = None
 
@@ -1013,6 +1039,9 @@ class CatalogDeploymentBinding(BaseModel):
         """Ensure provider-specific catalog binding is present when required."""
         if self.provider == "polaris" and self.polaris is None:
             msg = "polaris catalog deployment binding requires polaris details"
+            raise ValueError(msg)
+        if self.provider == "glue" and self.glue is None:
+            msg = "glue catalog deployment binding requires glue details"
             raise ValueError(msg)
         return self
 
@@ -1917,6 +1946,7 @@ __all__ = [
     "DeploymentConfig",
     "DeploymentMode",
     "DltIngestionBinding",
+    "GlueCatalogDeploymentBinding",
     "IcebergRestCatalogBinding",
     "IcebergRestOAuth2Binding",
     "IngestionDeploymentBinding",

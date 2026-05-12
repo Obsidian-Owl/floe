@@ -1030,6 +1030,67 @@ class TestStorageDeploymentBinding:
             factory()
 
 
+class TestGlueCatalogDeploymentBinding:
+    """Tests for AWS Glue catalog deployment binding."""
+
+    def test_glue_catalog_binding_serializes_secret_free_fields(self) -> None:
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            CredentialRef,
+            GlueCatalogDeploymentBinding,
+        )
+
+        binding = CatalogDeploymentBinding(
+            provider="glue",
+            glue=GlueCatalogDeploymentBinding(
+                catalog_name="glue",
+                region="ap-southeast-2",
+                warehouse="s3://floe-provider-tests/warehouse/",
+                catalog_id="278833447053",
+                database_prefix="floe_provider_",
+                skip_archive=True,
+                max_retries=5,
+                retry_mode="standard",
+                credential_refs={
+                    "role": CredentialRef(
+                        source="workload-identity",
+                        name="floe-provider-tests",
+                    )
+                },
+                properties={"glue.skip-archive": "true"},
+            ),
+        )
+
+        payload = binding.model_dump(mode="json")
+
+        assert payload["provider"] == "glue"
+        assert payload["glue"]["region"] == "ap-southeast-2"
+        assert payload["glue"]["warehouse"] == "s3://floe-provider-tests/warehouse/"
+        assert payload["glue"]["catalog_id"] == "278833447053"
+        assert payload["glue"]["credential_refs"]["role"]["source"] == "workload-identity"
+        assert "raw-secret-value" not in binding.model_dump_json()
+
+    def test_glue_provider_requires_glue_details(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import CatalogDeploymentBinding
+
+        with pytest.raises(ValidationError, match="glue catalog deployment binding"):
+            CatalogDeploymentBinding(provider="glue")
+
+    def test_glue_binding_rejects_raw_secret_properties(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            GlueCatalogDeploymentBinding(
+                region="ap-southeast-2",
+                warehouse="s3://floe-provider-tests/warehouse/",
+                properties={"glue.secret-access-key": "raw-secret-value"},
+            )
+
+
 class TestRuntimeCatalogConnection:
     """Tests for secret-free runtime catalog connection projection."""
 
