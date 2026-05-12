@@ -155,6 +155,17 @@
           ],
           "default": null
         },
+        "glue": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GlueCatalogDeploymentBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "iceberg_rest": {
           "anyOf": [
             {
@@ -1148,6 +1159,118 @@
         }
       },
       "title": "GateTier",
+      "type": "object"
+    },
+    "GlueCatalogDeploymentBinding": {
+      "additionalProperties": false,
+      "description": "AWS Glue catalog-owned deployment and runtime configuration.",
+      "properties": {
+        "catalog_name": {
+          "default": "glue",
+          "minLength": 1,
+          "title": "Catalog Name",
+          "type": "string"
+        },
+        "region": {
+          "minLength": 1,
+          "title": "Region",
+          "type": "string"
+        },
+        "warehouse": {
+          "minLength": 1,
+          "title": "Warehouse",
+          "type": "string"
+        },
+        "catalog_id": {
+          "anyOf": [
+            {
+              "pattern": "^\\d{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog Id"
+        },
+        "database_prefix": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Database Prefix"
+        },
+        "endpoint": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Endpoint"
+        },
+        "skip_archive": {
+          "default": true,
+          "title": "Skip Archive",
+          "type": "boolean"
+        },
+        "max_retries": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Retries"
+        },
+        "retry_mode": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retry Mode"
+        },
+        "credential_refs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/CredentialRef"
+          },
+          "title": "Credential Refs",
+          "type": "object"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Properties"
+        }
+      },
+      "required": [
+        "region",
+        "warehouse"
+      ],
+      "title": "GlueCatalogDeploymentBinding",
       "type": "object"
     },
     "IcebergRestCatalogBinding": {
@@ -4772,7 +4895,7 @@
   "description": "Output of floe compile - unified for all deployment modes.\n\nCompiledArtifacts is the single source of truth for pipeline execution.\nIt contains resolved, validated configuration after manifest inheritance.\n\nThe observability field contains TelemetryConfig which provides:\n- OpenTelemetry SDK configuration (Layer 1 - ENFORCED)\n- OTLP Collector endpoint (Layer 2 - ENFORCED)\n- Backend plugin selection (Layer 3 - PLUGGABLE)\n\nContract Version: 0.5.0 (see docstring header for version history)\n\nAttributes:\n    version: Schema version (semver) - default 0.5.0\n    metadata: Compilation metadata\n    identity: Product identity from catalog\n    mode: Deployment mode (simple, centralized, mesh)\n    inheritance_chain: Manifest inheritance lineage\n    observability: Observability configuration with TelemetryConfig\n    plugins: Resolved plugin selections (v0.2.0+)\n    transforms: Compiled transform configuration (v0.2.0+)\n    dbt_profiles: Generated profiles.yml content (v0.2.0+)\n    governance: Resolved governance settings (v0.2.0+, optional)\n    enforcement_result: Enforcement result summary (v0.3.0+, optional)\n    data_contracts: Validated data contracts (v0.3.0+, Epic 3C)\n\nExamples:\n    >>> from datetime import datetime\n    >>> from floe_core.schemas.telemetry import TelemetryConfig, ResourceAttributes\n    >>> artifacts = CompiledArtifacts(\n    ...     version=\"0.2.0\",\n    ...     metadata=CompilationMetadata(\n    ...         compiled_at=datetime.now(),\n    ...         floe_version=\"0.2.0\",\n    ...         source_hash=\"sha256:abc123\",\n    ...         product_name=\"my-pipeline\",\n    ...         product_version=\"1.0.0\",\n    ...     ),\n    ...     identity=ProductIdentity(\n    ...         product_id=\"default.my_pipeline\",\n    ...         domain=\"default\",\n    ...         repository=\"github.com/acme/my-pipeline\",\n    ...     ),\n    ...     mode=\"simple\",\n    ...     observability=ObservabilityConfig(\n    ...         telemetry=TelemetryConfig(\n    ...             resource_attributes=ResourceAttributes(...),\n    ...         ),\n    ...         lineage_namespace=\"my-pipeline\",\n    ...     ),\n    ...     plugins=ResolvedPlugins(\n    ...         compute=PluginRef(type=\"duckdb\", version=\"0.9.0\"),\n    ...         orchestrator=PluginRef(type=\"dagster\", version=\"1.5.0\"),\n    ...     ),\n    ...     transforms=ResolvedTransforms(\n    ...         models=[ResolvedModel(name=\"stg_customers\", compute=\"duckdb\")],\n    ...         default_compute=\"duckdb\",\n    ...     ),\n    ...     dbt_profiles={\"default\": {\"target\": \"dev\", \"outputs\": {...}}},\n    ... )\n\nSee Also:\n    - docs/contracts/compiled-artifacts.md: Full specification\n    - ADR-0012: CompiledArtifacts contract design\n    - TelemetryConfig: OpenTelemetry configuration",
   "properties": {
     "version": {
-      "default": "0.15.0",
+      "default": "0.16.0",
       "description": "Schema version (semver)",
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
       "title": "Version",

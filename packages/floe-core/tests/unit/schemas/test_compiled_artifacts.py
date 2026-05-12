@@ -1071,16 +1071,74 @@ class TestGlueCatalogDeploymentBinding:
         assert "raw-secret-value" not in binding.model_dump_json()
 
     def test_glue_provider_requires_glue_details(self) -> None:
-        from pydantic import ValidationError
-
         from floe_core.schemas.compiled_artifacts import CatalogDeploymentBinding
 
         with pytest.raises(ValidationError, match="glue catalog deployment binding"):
             CatalogDeploymentBinding(provider="glue")
 
-    def test_glue_binding_rejects_raw_secret_properties(self) -> None:
-        from pydantic import ValidationError
+    def test_non_glue_provider_rejects_glue_details(self) -> None:
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            GlueCatalogDeploymentBinding,
+            PolarisCatalogDeploymentBinding,
+        )
 
+        with pytest.raises(ValidationError, match="requires provider 'glue'"):
+            CatalogDeploymentBinding(
+                provider="polaris",
+                polaris=PolarisCatalogDeploymentBinding(
+                    storage_type="S3",
+                    warehouse="floe-demo",
+                    default_base_location="s3://floe-iceberg",
+                    allowed_locations=["s3://floe-iceberg"],
+                    endpoint="http://localhost:8181",
+                    endpoint_internal="http://polaris:8181",
+                    path_style_access=True,
+                    sts_unavailable=True,
+                ),
+                glue=GlueCatalogDeploymentBinding(
+                    region="ap-southeast-2",
+                    warehouse="s3://floe-provider-tests/warehouse/",
+                ),
+            )
+
+    def test_non_polaris_provider_rejects_polaris_details(self) -> None:
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            GlueCatalogDeploymentBinding,
+            PolarisCatalogDeploymentBinding,
+        )
+
+        with pytest.raises(ValidationError, match="requires provider 'polaris'"):
+            CatalogDeploymentBinding(
+                provider="glue",
+                glue=GlueCatalogDeploymentBinding(
+                    region="ap-southeast-2",
+                    warehouse="s3://floe-provider-tests/warehouse/",
+                ),
+                polaris=PolarisCatalogDeploymentBinding(
+                    storage_type="S3",
+                    warehouse="floe-demo",
+                    default_base_location="s3://floe-iceberg",
+                    allowed_locations=["s3://floe-iceberg"],
+                    endpoint="http://localhost:8181",
+                    endpoint_internal="http://polaris:8181",
+                    path_style_access=True,
+                    sts_unavailable=True,
+                ),
+            )
+
+    def test_glue_binding_rejects_invalid_catalog_id(self) -> None:
+        from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
+
+        with pytest.raises(ValidationError, match="catalog_id"):
+            GlueCatalogDeploymentBinding(
+                region="ap-southeast-2",
+                warehouse="s3://floe-provider-tests/warehouse/",
+                catalog_id="arn:aws:iam::278833447053:role/floe",
+            )
+
+    def test_glue_binding_rejects_raw_secret_properties(self) -> None:
         from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
 
         with pytest.raises(ValidationError, match="raw credential material"):
@@ -2156,31 +2214,31 @@ class TestCompiledArtifactsVersionBump:
     """Tests for AC-6: current contract version and history entries."""
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_version_is_0_12_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.15.0'."""
-        assert COMPILED_ARTIFACTS_VERSION == "0.15.0", (
-            f"Expected version '0.15.0', got '{COMPILED_ARTIFACTS_VERSION}'"
+    def test_compiled_artifacts_version_is_0_16_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.16.0'."""
+        assert COMPILED_ARTIFACTS_VERSION == "0.16.0", (
+            f"Expected version '0.16.0', got '{COMPILED_ARTIFACTS_VERSION}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_contains_0_12_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.15.0' entry."""
-        assert "0.15.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
-            f"Version '0.15.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
+    def test_version_history_contains_0_16_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.16.0' entry."""
+        assert "0.16.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
+            f"Version '0.16.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_0_12_0_references_iceberg_catalog_projection(self) -> None:
-        """Test that the 0.15.0 history entry mentions contract additions."""
-        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.15.0", "")
+    def test_version_history_0_16_0_references_glue_catalog_projection(self) -> None:
+        """Test that the 0.16.0 history entry mentions contract additions."""
+        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.16.0", "")
         entry_lower = entry.lower()
-        assert "iceberg" in entry_lower and "catalog" in entry_lower, (
-            f"Version 0.15.0 history entry does not reference Iceberg catalog projection: '{entry}'"
+        assert "glue" in entry_lower and "runtime" in entry_lower, (
+            f"Version 0.16.0 history entry does not reference Glue runtime changes: '{entry}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_default_version_is_0_12_0(self) -> None:
-        """Test that CompiledArtifacts().version defaults to '0.15.0'."""
+    def test_compiled_artifacts_default_version_is_0_16_0(self) -> None:
+        """Test that CompiledArtifacts().version defaults to '0.16.0'."""
         artifacts = CompiledArtifacts(
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
@@ -2209,7 +2267,7 @@ class TestCompiledArtifactsVersionBump:
                 lineage_namespace="test",
             ),
         )
-        assert artifacts.version == "0.15.0"
+        assert artifacts.version == "0.16.0"
 
 
 class TestGovernanceBackwardCompatibility:

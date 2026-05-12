@@ -130,6 +130,7 @@ def test_pyiceberg_glue_catalog_accepts_typed_retry_config_without_aws_call() ->
     )
     config = runtime_catalog_connection_to_pyiceberg_config(connection)
 
+    # This patch intentionally tracks PyIceberg's GlueCatalog boto3 import site.
     with patch("pyiceberg.catalog.glue.boto3.Session") as session_cls:
         session = session_cls.return_value
         session.client.return_value = Mock()

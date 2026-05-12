@@ -57,6 +57,7 @@ def build_runtime_catalog_connection(
         properties["glue.region"] = glue.region
         # PyIceberg parses skip-archive with strtobool, so keep its canonical string form.
         properties["glue.skip-archive"] = str(glue.skip_archive).lower()
+        # database_prefix is consumed by Glue namespace operations, not PyIceberg loading.
         if glue.catalog_id is not None:
             properties["glue.id"] = glue.catalog_id
         if glue.endpoint is not None:

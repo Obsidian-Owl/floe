@@ -42,6 +42,7 @@ PRODUCT_NAME_PATTERN = r"^[a-zA-Z][a-zA-Z0-9_-]*$"
 _MAX_K8S_NAME_LENGTH = 253
 _MAX_K8S_NAMESPACE_LENGTH = 63
 NonEmptyString = Annotated[str, Field(min_length=1)]
+AwsAccountId = Annotated[str, Field(pattern=r"^\d{12}$")]
 RuntimeCatalogPropertyValue = str | int | bool
 _SECRET_FIELD_MARKERS = (
     "access-key",
@@ -958,7 +959,7 @@ class GlueCatalogDeploymentBinding(BaseModel):
     catalog_name: NonEmptyString = "glue"
     region: NonEmptyString
     warehouse: NonEmptyString
-    catalog_id: NonEmptyString | None = None
+    catalog_id: AwsAccountId | None = None
     database_prefix: NonEmptyString | None = None
     endpoint: NonEmptyString | None = None
     skip_archive: bool = True
@@ -1053,8 +1054,14 @@ class CatalogDeploymentBinding(BaseModel):
     @model_validator(mode="after")
     def validate_provider_binding(self) -> CatalogDeploymentBinding:
         """Ensure provider-specific catalog binding is present when required."""
+        if self.provider != "polaris" and self.polaris is not None:
+            msg = "polaris catalog deployment binding requires provider 'polaris'"
+            raise ValueError(msg)
         if self.provider == "polaris" and self.polaris is None:
             msg = "polaris catalog deployment binding requires polaris details"
+            raise ValueError(msg)
+        if self.provider != "glue" and self.glue is not None:
+            msg = "glue catalog deployment binding requires provider 'glue'"
             raise ValueError(msg)
         if self.provider == "glue" and self.glue is None:
             msg = "glue catalog deployment binding requires glue details"

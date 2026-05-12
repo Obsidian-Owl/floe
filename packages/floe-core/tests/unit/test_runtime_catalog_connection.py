@@ -6,6 +6,7 @@ from floe_core.schemas.compiled_artifacts import (
     CredentialRef,
     DagsterStorageBinding,
     DbtStorageBinding,
+    GlueCatalogDeploymentBinding,
     PolarisCatalogDeploymentBinding,
     StorageCredentialBinding,
     StorageDeploymentBinding,
@@ -90,12 +91,6 @@ def test_build_runtime_catalog_connection_degrades_without_catalog() -> None:
 
 
 def test_build_runtime_catalog_connection_maps_glue_binding() -> None:
-    from floe_core.runtime_catalog_connection import build_runtime_catalog_connection
-    from floe_core.schemas.compiled_artifacts import (
-        CatalogDeploymentBinding,
-        GlueCatalogDeploymentBinding,
-    )
-
     catalog = CatalogDeploymentBinding(
         provider="glue",
         glue=GlueCatalogDeploymentBinding(

@@ -63,7 +63,7 @@ class CompiledArtifacts(BaseModel):
     """Output of the compilation pipeline - unified for all deployment modes."""
 
     # Schema version
-    version: str = COMPILED_ARTIFACTS_VERSION  # currently "0.15.0"
+    version: str = COMPILED_ARTIFACTS_VERSION  # currently "0.16.0"
 
     # Compilation metadata
     metadata: CompilationMetadata
@@ -520,7 +520,7 @@ class ContractMonitoringConfig(BaseModel):
 
 ```json
 {
-  "version": "0.15.0",
+  "version": "0.16.0",
   "metadata": {
     "compiled_at": "2026-01-03T10:00:00Z",
     "floe_version": "0.3.0",
@@ -602,7 +602,7 @@ class ContractMonitoringConfig(BaseModel):
 
 ```json
 {
-  "version": "0.15.0",
+  "version": "0.16.0",
   "metadata": {
     "compiled_at": "2026-01-03T10:00:00Z",
     "floe_version": "0.3.0",
@@ -661,7 +661,7 @@ class ContractMonitoringConfig(BaseModel):
 
 ```json
 {
-  "version": "0.15.0",
+  "version": "0.16.0",
   "metadata": {
     "compiled_at": "2026-01-03T10:00:00Z",
     "floe_version": "0.3.0",
