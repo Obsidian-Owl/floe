@@ -1,0 +1,12 @@
+aws_region                = "ap-southeast-2"
+name_prefix               = "floe-provider-tests"
+owner                     = "your-name"
+budget_email              = "you@example.com"
+monthly_budget_limit_usd  = 25
+run_data_retention_days   = 3
+glue_database_prefix      = "floe_provider_"
+
+common_tags = {
+  Environment = "test"
+  CostCenter  = "floe-provider-tests"
+}
