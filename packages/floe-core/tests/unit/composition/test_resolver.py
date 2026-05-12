@@ -312,8 +312,6 @@ def test_resolver_accepts_aws_s3_plus_glue_with_workload_identity() -> None:
             protocols=["s3"],
             credential_modes=["workload-identity"],
             identity_modes=["aws-irsa"],
-            sts=True,
-            path_style_access=False,
         ),
     )
     catalog = PluginRequirements(
@@ -323,9 +321,6 @@ def test_resolver_accepts_aws_s3_plus_glue_with_workload_identity() -> None:
             protocols=["s3"],
             credential_modes=["workload-identity"],
             identity_modes=["aws-irsa", "aws-pod-identity"],
-            requires_server_side_storage_access=True,
-            supports_no_sts=False,
-            supports_path_style_access=False,
         ),
     )
     identity = PluginCapabilities(
@@ -403,4 +398,13 @@ def test_resolver_rejects_glue_workload_identity_without_identity_provider() -> 
     result = resolver.validate([storage], [catalog])
 
     assert result.valid is False
-    assert result.issues[0].code == "COMPOSITION_IDENTITY_PROVIDER_MISSING"
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_IDENTITY_PROVIDER_MISSING",
+            message=(
+                "catalog glue requires identity mode aws-irsa but no identity plugin was selected"
+            ),
+            plugins=["catalog:glue"],
+        )
+    ]
