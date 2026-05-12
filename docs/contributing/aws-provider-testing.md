@@ -57,11 +57,12 @@ Run readiness checks and report the AWS account ID, region, bucket, Glue databas
 
 ## Clean Account Check
 
-After a run, ask the agent to verify:
+After exporting the OpenTofu `recommended_environment` outputs and setting the
+current `FLOE_PROVIDER_SPIKE_RUN`, ask the agent to verify:
 
 ```bash
 aws sts get-caller-identity
-scripts/aws-provider-test-cleanup.sh
+FLOE_PROVIDER_SPIKE_RUN=floe-provider-YYYYMMDDTHHMMSSZ scripts/aws-provider-test-cleanup.sh
 ```
 
 The final report must say whether current-run S3 prefixes and Glue databases
