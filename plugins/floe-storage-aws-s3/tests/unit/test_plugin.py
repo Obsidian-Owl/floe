@@ -318,6 +318,23 @@ class TestAwsS3DeploymentBinding:
             "s3.path-style-access": "true",
         }
 
+    @pytest.mark.requirement("STORAGE-AWS-S3-026")
+    def test_path_style_access_projects_without_endpoint_override(self) -> None:
+        """PyIceberg path-style access config is preserved without endpoint overrides."""
+        config = AwsS3ObjectStoreConfig(
+            bucket=TEST_BUCKET,
+            region=TEST_REGION,
+            path_style_access=True,
+            credential_mode="environment",
+        )
+        binding = AwsS3ObjectStorePlugin(config=config).get_deployment_binding()
+
+        assert binding.endpoint.path_style_access is True
+        assert binding.runtime.pyiceberg_properties == {
+            "s3.region": TEST_REGION,
+            "s3.path-style-access": "true",
+        }
+
 
 class TestStoragePluginMethods:
     """Test required StoragePlugin methods."""

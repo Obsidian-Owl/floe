@@ -105,6 +105,7 @@ class AwsS3ObjectStorePlugin(StoragePlugin):
         properties = {"s3.region": config.region}
         if config.endpoint_override is not None:
             properties["s3.endpoint"] = config.endpoint_override
+        if config.endpoint_override is not None or config.path_style_access:
             properties["s3.path-style-access"] = str(config.path_style_access).lower()
         return properties
 
