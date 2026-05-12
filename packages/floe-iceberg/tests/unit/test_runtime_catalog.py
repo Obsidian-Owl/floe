@@ -65,3 +65,30 @@ def test_runtime_catalog_connection_to_pyiceberg_config_merges_properties_last()
     assert config["s3.endpoint"] == "http://override-minio:9000"
     assert config["s3.path-style-access"] == "false"
     assert config["s3.region"] == "us-east-1"
+
+
+def test_runtime_catalog_connection_to_pyiceberg_config_preserves_glue_properties() -> None:
+    connection = RuntimeCatalogConnection(
+        catalog_name="glue",
+        warehouse="s3://floe-provider-tests/warehouse/",
+        properties={
+            "type": "glue",
+            "glue.region": "ap-southeast-2",
+            "glue.id": "278833447053",
+            "glue.skip-archive": "true",
+            "glue.max-retries": "5",
+            "glue.retry-mode": "standard",
+        },
+    )
+
+    config = runtime_catalog_connection_to_pyiceberg_config(connection)
+
+    assert config == {
+        "warehouse": "s3://floe-provider-tests/warehouse/",
+        "type": "glue",
+        "glue.region": "ap-southeast-2",
+        "glue.id": "278833447053",
+        "glue.skip-archive": "true",
+        "glue.max-retries": "5",
+        "glue.retry-mode": "standard",
+    }
