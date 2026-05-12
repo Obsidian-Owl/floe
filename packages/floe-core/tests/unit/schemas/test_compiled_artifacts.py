@@ -1165,6 +1165,29 @@ class TestRuntimeCatalogConnection:
             "PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL"
         }
 
+    def test_runtime_catalog_connection_preserves_secret_free_primitive_properties(self) -> None:
+        from floe_core.schemas.compiled_artifacts import RuntimeCatalogConnection
+
+        connection = RuntimeCatalogConnection(
+            catalog_name="glue",
+            properties={
+                "type": "glue",
+                "glue.max-retries": 5,
+                "feature.enabled": True,
+            },
+        )
+
+        assert connection.properties == {
+            "type": "glue",
+            "glue.max-retries": 5,
+            "feature.enabled": True,
+        }
+        assert connection.model_dump(mode="json")["properties"] == {
+            "type": "glue",
+            "glue.max-retries": 5,
+            "feature.enabled": True,
+        }
+
     def test_runtime_catalog_connection_rejects_raw_secret_material(self) -> None:
         from floe_core.schemas.compiled_artifacts import RuntimeCatalogConnection
 

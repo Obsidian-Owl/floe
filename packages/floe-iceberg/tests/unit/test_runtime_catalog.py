@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock, patch
+
 from floe_core.schemas.compiled_artifacts import CredentialRef, RuntimeCatalogConnection
 
 from floe_iceberg.runtime_catalog import runtime_catalog_connection_to_pyiceberg_config
@@ -76,7 +78,7 @@ def test_runtime_catalog_connection_to_pyiceberg_config_preserves_glue_propertie
             "glue.region": "ap-southeast-2",
             "glue.id": "278833447053",
             "glue.skip-archive": "true",
-            "glue.max-retries": "5",
+            "glue.max-retries": 5,
             "glue.retry-mode": "standard",
         },
     )
@@ -89,6 +91,53 @@ def test_runtime_catalog_connection_to_pyiceberg_config_preserves_glue_propertie
         "glue.region": "ap-southeast-2",
         "glue.id": "278833447053",
         "glue.skip-archive": "true",
-        "glue.max-retries": "5",
+        "glue.max-retries": 5,
         "glue.retry-mode": "standard",
+    }
+
+
+def test_runtime_catalog_connection_to_pyiceberg_config_preserves_glue_retry_type() -> None:
+    connection = RuntimeCatalogConnection(
+        catalog_name="glue",
+        warehouse="s3://floe-provider-tests/warehouse/",
+        properties={
+            "type": "glue",
+            "glue.region": "ap-southeast-2",
+            "glue.max-retries": 5,
+            "glue.retry-mode": "standard",
+        },
+    )
+
+    config = runtime_catalog_connection_to_pyiceberg_config(connection)
+
+    assert config["glue.max-retries"] == 5
+    assert isinstance(config["glue.max-retries"], int)
+
+
+def test_pyiceberg_glue_catalog_accepts_typed_retry_config_without_aws_call() -> None:
+    from pyiceberg.catalog import load_catalog
+
+    connection = RuntimeCatalogConnection(
+        catalog_name="glue",
+        warehouse="s3://floe-provider-tests/warehouse/",
+        properties={
+            "type": "glue",
+            "glue.region": "ap-southeast-2",
+            "glue.skip-archive": "true",
+            "glue.max-retries": 5,
+            "glue.retry-mode": "standard",
+        },
+    )
+    config = runtime_catalog_connection_to_pyiceberg_config(connection)
+
+    with patch("pyiceberg.catalog.glue.boto3.Session") as session_cls:
+        session = session_cls.return_value
+        session.client.return_value = Mock()
+
+        load_catalog("glue", **config)
+
+    client_kwargs = session.client.call_args.kwargs
+    assert client_kwargs["config"].retries == {
+        "max_attempts": 5,
+        "mode": "standard",
     }

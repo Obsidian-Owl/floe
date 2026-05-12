@@ -6,6 +6,7 @@ from floe_core.schemas.compiled_artifacts import (
     CatalogDeploymentBinding,
     CredentialRef,
     RuntimeCatalogConnection,
+    RuntimeCatalogPropertyValue,
     StorageDeploymentBinding,
 )
 
@@ -21,7 +22,7 @@ def build_runtime_catalog_connection(
     warehouse: str | None = None
     region: str | None = None
     path_style_access: bool | None = None
-    properties: dict[str, str] = {}
+    properties: dict[str, RuntimeCatalogPropertyValue] = {}
     credential_refs: dict[str, CredentialRef] = {}
     env_refs: dict[str, str] = {}
 
@@ -54,13 +55,14 @@ def build_runtime_catalog_connection(
         credential_refs.update(glue.credential_refs)
         properties["type"] = "glue"
         properties["glue.region"] = glue.region
+        # PyIceberg parses skip-archive with strtobool, so keep its canonical string form.
         properties["glue.skip-archive"] = str(glue.skip_archive).lower()
         if glue.catalog_id is not None:
             properties["glue.id"] = glue.catalog_id
         if glue.endpoint is not None:
             properties["glue.endpoint"] = glue.endpoint
         if glue.max_retries is not None:
-            properties["glue.max-retries"] = str(glue.max_retries)
+            properties["glue.max-retries"] = glue.max_retries
         if glue.retry_mode is not None:
             properties["glue.retry-mode"] = glue.retry_mode
         properties.update(glue.properties)

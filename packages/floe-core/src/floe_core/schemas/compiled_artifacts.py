@@ -42,6 +42,7 @@ PRODUCT_NAME_PATTERN = r"^[a-zA-Z][a-zA-Z0-9_-]*$"
 _MAX_K8S_NAME_LENGTH = 253
 _MAX_K8S_NAMESPACE_LENGTH = 63
 NonEmptyString = Annotated[str, Field(min_length=1)]
+RuntimeCatalogPropertyValue = str | int | bool
 _SECRET_FIELD_MARKERS = (
     "access-key",
     "access_key",
@@ -1072,13 +1073,16 @@ class RuntimeCatalogConnection(BaseModel):
     storage_endpoint: NonEmptyString | None = None
     region: NonEmptyString | None = None
     path_style_access: bool | None = None
-    properties: dict[str, str] = Field(default_factory=dict)
+    properties: dict[str, RuntimeCatalogPropertyValue] = Field(default_factory=dict)
     credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
     env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
 
     @field_validator("properties")
     @classmethod
-    def validate_secret_free_properties(cls, value: dict[str, str]) -> dict[str, str]:
+    def validate_secret_free_properties(
+        cls,
+        value: dict[str, RuntimeCatalogPropertyValue],
+    ) -> dict[str, RuntimeCatalogPropertyValue]:
         """Ensure runtime catalog properties do not inline credential material."""
         for key, property_value in value.items():
             if key == "token-refresh-enabled":
@@ -1979,6 +1983,7 @@ __all__ = [
     # Governance resolution (v0.2.0)
     "ResolvedGovernance",
     "RuntimeCatalogConnection",
+    "RuntimeCatalogPropertyValue",
     # Enforcement summary (v0.3.0 - Epic 3B)
     "EnforcementResultSummary",
     # Deployment bindings

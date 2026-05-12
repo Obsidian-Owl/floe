@@ -122,6 +122,6 @@ def test_build_runtime_catalog_connection_maps_glue_binding() -> None:
         "glue.id": "278833447053",
         "glue.endpoint": "https://glue.ap-southeast-2.amazonaws.com",
         "glue.skip-archive": "true",
-        "glue.max-retries": "5",
+        "glue.max-retries": 5,
         "glue.retry-mode": "standard",
     }
