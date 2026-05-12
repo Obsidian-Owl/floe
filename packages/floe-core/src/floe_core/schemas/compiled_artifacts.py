@@ -42,6 +42,8 @@ PRODUCT_NAME_PATTERN = r"^[a-zA-Z][a-zA-Z0-9_-]*$"
 _MAX_K8S_NAME_LENGTH = 253
 _MAX_K8S_NAMESPACE_LENGTH = 63
 NonEmptyString = Annotated[str, Field(min_length=1)]
+AwsAccountId = Annotated[str, Field(pattern=r"^\d{12}$")]
+RuntimeCatalogPropertyValue = str | int | bool
 _SECRET_FIELD_MARKERS = (
     "access-key",
     "access_key",
@@ -949,6 +951,46 @@ class PolarisCatalogDeploymentBinding(BaseModel):
     credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
 
 
+class GlueCatalogDeploymentBinding(BaseModel):
+    """AWS Glue catalog-owned deployment and runtime configuration."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    catalog_name: NonEmptyString = "glue"
+    region: NonEmptyString
+    warehouse: NonEmptyString
+    catalog_id: AwsAccountId | None = None
+    database_prefix: NonEmptyString | None = None
+    endpoint: NonEmptyString | None = None
+    skip_archive: bool = True
+    max_retries: int | None = Field(default=None, ge=1)
+    retry_mode: NonEmptyString | None = None
+    credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
+    properties: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("properties")
+    @classmethod
+    def validate_secret_free_properties(cls, value: dict[str, str]) -> dict[str, str]:
+        """Ensure Glue catalog properties do not inline credential values."""
+        _assert_no_secret_material(value, "catalog.glue.properties")
+        return value
+
+    @field_validator("warehouse")
+    @classmethod
+    def validate_secret_free_warehouse(cls, value: str) -> str:
+        """Ensure Glue warehouse URI does not inline credential values."""
+        _assert_no_secret_material(value, "catalog.glue.warehouse")
+        return value
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_secret_free_endpoint(cls, value: str | None) -> str | None:
+        """Ensure Glue endpoint URI does not inline credential values."""
+        if value is not None:
+            _assert_no_secret_material(value, "catalog.glue.endpoint")
+        return value
+
+
 class IcebergRestOAuth2Binding(BaseModel):
     """Secret-free OAuth2 references for an Iceberg REST catalog consumer."""
 
@@ -1005,14 +1047,24 @@ class CatalogDeploymentBinding(BaseModel):
 
     provider: NonEmptyString
     polaris: PolarisCatalogDeploymentBinding | None = None
+    glue: GlueCatalogDeploymentBinding | None = None
     iceberg_rest: IcebergRestCatalogBinding | None = None
     dbt: DbtCatalogBinding | None = None
 
     @model_validator(mode="after")
     def validate_provider_binding(self) -> CatalogDeploymentBinding:
         """Ensure provider-specific catalog binding is present when required."""
+        if self.provider != "polaris" and self.polaris is not None:
+            msg = "polaris catalog deployment binding requires provider 'polaris'"
+            raise ValueError(msg)
         if self.provider == "polaris" and self.polaris is None:
             msg = "polaris catalog deployment binding requires polaris details"
+            raise ValueError(msg)
+        if self.provider != "glue" and self.glue is not None:
+            msg = "glue catalog deployment binding requires provider 'glue'"
+            raise ValueError(msg)
+        if self.provider == "glue" and self.glue is None:
+            msg = "glue catalog deployment binding requires glue details"
             raise ValueError(msg)
         return self
 
@@ -1028,13 +1080,16 @@ class RuntimeCatalogConnection(BaseModel):
     storage_endpoint: NonEmptyString | None = None
     region: NonEmptyString | None = None
     path_style_access: bool | None = None
-    properties: dict[str, str] = Field(default_factory=dict)
+    properties: dict[str, RuntimeCatalogPropertyValue] = Field(default_factory=dict)
     credential_refs: dict[str, CredentialRef] = Field(default_factory=dict)
     env_refs: dict[str, NonEmptyString] = Field(default_factory=dict)
 
     @field_validator("properties")
     @classmethod
-    def validate_secret_free_properties(cls, value: dict[str, str]) -> dict[str, str]:
+    def validate_secret_free_properties(
+        cls,
+        value: dict[str, RuntimeCatalogPropertyValue],
+    ) -> dict[str, RuntimeCatalogPropertyValue]:
         """Ensure runtime catalog properties do not inline credential material."""
         for key, property_value in value.items():
             if key == "token-refresh-enabled":
@@ -1917,6 +1972,7 @@ __all__ = [
     "DeploymentConfig",
     "DeploymentMode",
     "DltIngestionBinding",
+    "GlueCatalogDeploymentBinding",
     "IcebergRestCatalogBinding",
     "IcebergRestOAuth2Binding",
     "IngestionDeploymentBinding",
@@ -1934,6 +1990,7 @@ __all__ = [
     # Governance resolution (v0.2.0)
     "ResolvedGovernance",
     "RuntimeCatalogConnection",
+    "RuntimeCatalogPropertyValue",
     # Enforcement summary (v0.3.0 - Epic 3B)
     "EnforcementResultSummary",
     # Deployment bindings

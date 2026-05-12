@@ -300,3 +300,133 @@ def test_resolver_ingestion_credential_error_names_ingestion_plugin() -> None:
             plugins=["storage:minio", "ingestion:dlt"],
         )
     ]
+
+
+def test_resolver_accepts_aws_s3_plus_glue_with_workload_identity() -> None:
+    """Resolver must accept AWS S3 plus Glue with native S3 workload identity."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="aws-s3",
+        capabilities=CapabilitySet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="glue",
+        requirements=RequirementSet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa", "aws-pod-identity"],
+        ),
+    )
+    identity = PluginCapabilities(
+        plugin_type="identity",
+        plugin_name="aws-irsa",
+        capabilities=CapabilitySet(identity_modes=["aws-irsa"]),
+    )
+
+    result = resolver.validate([storage, identity], [catalog])
+
+    assert result.valid is True
+    assert result.issues == []
+
+
+def test_resolver_rejects_minio_plus_glue_native_s3_requirement() -> None:
+    """Resolver must reject MinIO when Glue requires native S3 workload identity."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="minio",
+        capabilities=CapabilitySet(
+            protocols=["s3-compatible"],
+            credential_modes=["kubernetes-secret"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="glue",
+        requirements=RequirementSet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+        ),
+    )
+    identity = PluginCapabilities(
+        plugin_type="identity",
+        plugin_name="aws-irsa",
+        capabilities=CapabilitySet(identity_modes=["aws-irsa"]),
+    )
+
+    result = resolver.validate([storage, identity], [catalog])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_PROTOCOL_UNSUPPORTED",
+            message=(
+                "catalog glue requires one of protocols ['s3']; "
+                "storage minio provides ['s3-compatible']"
+            ),
+            plugins=["storage:minio", "catalog:glue"],
+        ),
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_CREDENTIAL_MODE_UNSUPPORTED",
+            message=(
+                "catalog glue requires one of credential modes ['workload-identity']; "
+                "storage minio provides ['kubernetes-secret']"
+            ),
+            plugins=["storage:minio", "catalog:glue"],
+        ),
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_IDENTITY_MODE_UNSUPPORTED",
+            message=(
+                "catalog glue requires one of identity modes ['aws-irsa']; "
+                "storage minio provides []; identity aws-irsa provides ['aws-irsa']"
+            ),
+            plugins=["storage:minio", "identity:aws-irsa", "catalog:glue"],
+        ),
+    ]
+
+
+def test_resolver_rejects_glue_workload_identity_without_identity_provider() -> None:
+    """Resolver must reject Glue workload identity without an identity plugin."""
+    resolver = CompositionResolver()
+    storage = PluginCapabilities(
+        plugin_type="storage",
+        plugin_name="aws-s3",
+        capabilities=CapabilitySet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+        ),
+    )
+    catalog = PluginRequirements(
+        plugin_type="catalog",
+        plugin_name="glue",
+        requirements=RequirementSet(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+        ),
+    )
+
+    result = resolver.validate([storage], [catalog])
+
+    assert result.valid is False
+    assert result.issues == [
+        CompositionIssue(
+            severity="error",
+            code="COMPOSITION_IDENTITY_PROVIDER_MISSING",
+            message=(
+                "catalog glue requires identity mode aws-irsa but no identity plugin was selected"
+            ),
+            plugins=["catalog:glue"],
+        )
+    ]

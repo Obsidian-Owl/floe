@@ -40,6 +40,59 @@ def _disable_plugin_instrumentation_audit(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(stages, "_discover_plugins_for_audit", lambda: [])
 
 
+def _fake_aws_s3_binding() -> StorageDeploymentBinding:
+    from floe_core.schemas.compiled_artifacts import (
+        StorageProvisioningIntent,
+        StorageRuntimeBinding,
+    )
+
+    return StorageDeploymentBinding(
+        provider="aws-s3",
+        protocol="s3",
+        endpoint=StorageServiceEndpoint(
+            internal_url="https://s3.ap-southeast-2.amazonaws.com",
+            external_url="https://s3.ap-southeast-2.amazonaws.com",
+            region="ap-southeast-2",
+            warehouse_path="s3://floe-provider-tests/warehouse/",
+            path_style_access=False,
+        ),
+        warehouse=StorageWarehouse(
+            uri="s3://floe-provider-tests/warehouse/",
+            bucket="floe-provider-tests",
+            prefix="warehouse/",
+        ),
+        allowed_locations=["s3://floe-provider-tests/warehouse/"],
+        credentials=StorageCredentialBinding(
+            mode="workload-identity",
+            service_account_ref="floe-provider-tests",
+        ),
+        capabilities=StorageCapabilities(
+            protocols=["s3"],
+            credential_modes=["workload-identity"],
+            identity_modes=["aws-irsa"],
+            sts_supported=True,
+            path_style_access=False,
+        ),
+        provisioning=StorageProvisioningIntent(
+            enabled=False,
+            mode="external",
+            default_create_policy="must-exist",
+        ),
+        runtime=StorageRuntimeBinding(
+            pyiceberg_properties={"s3.region": "ap-southeast-2"},
+        ),
+        dbt=DbtStorageBinding(
+            profile_name="floe",
+            target_name="dev",
+            schema_name="analytics",
+        ),
+        dagster=DagsterStorageBinding(
+            resource_key="aws_s3_storage",
+            asset_io_manager_key="iceberg_io_manager",
+        ),
+    )
+
+
 def test_demo_compile_emits_minio_storage_deployment_binding() -> None:
     """Demo compilation must attach the MinIO deployment storage binding."""
     artifacts = compile_pipeline(
@@ -218,6 +271,284 @@ def test_storage_plugin_binding_failure_raises_structured_compilation_error(
         "storage_plugin": "minio",
         "error_type": "PluginConfigurationError",
     }
+
+
+def test_compile_accepts_fake_aws_s3_plus_glue_contract(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Compilation accepts fake AWS S3 storage with fake Glue catalog binding."""
+    from floe_core.composition.models import CapabilitySet, PluginCapabilities
+    from floe_core.plugin_types import PluginType
+    from floe_core.plugins.identity import IdentityPlugin, TokenValidationResult, UserInfo
+    from floe_core.runtime_catalog_connection import build_runtime_catalog_connection
+    from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
+
+    class FakeAwsS3Plugin(StoragePlugin):
+        @property
+        def name(self) -> str:
+            return "aws-s3"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def get_pyiceberg_fileio(self) -> FileIO:
+            raise NotImplementedError
+
+        def get_warehouse_uri(self, namespace: str) -> str:
+            return f"s3://floe-provider-tests/warehouse/{namespace}"
+
+        def get_dbt_profile_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_dagster_io_manager_config(self) -> dict[str, Any]:
+            return {}
+
+        def get_helm_values_override(self) -> dict[str, Any]:
+            return {}
+
+        def get_deployment_binding(self) -> StorageDeploymentBinding:
+            return _fake_aws_s3_binding()
+
+    class FakeAwsIrsaPlugin(IdentityPlugin):
+        @property
+        def name(self) -> str:
+            return "aws-irsa"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def authenticate(self, credentials: dict[str, Any]) -> str | None:
+            raise NotImplementedError
+
+        def get_user_info(self, token: str) -> UserInfo | None:
+            raise NotImplementedError
+
+        def validate_token(self, token: str) -> TokenValidationResult:
+            raise NotImplementedError
+
+        def get_identity_capabilities(self) -> PluginCapabilities:
+            return PluginCapabilities(
+                plugin_type="identity",
+                plugin_name="aws-irsa",
+                capabilities=CapabilitySet(identity_modes=["aws-irsa"]),
+            )
+
+    class FakeGluePlugin(CatalogPlugin):
+        @property
+        def name(self) -> str:
+            return "glue"
+
+        @property
+        def version(self) -> str:
+            return "0.1.0"
+
+        @property
+        def floe_api_version(self) -> str:
+            return "1.0"
+
+        def connect(self, config: dict[str, Any]) -> Any:
+            raise NotImplementedError
+
+        def create_namespace(
+            self,
+            namespace: str,
+            properties: dict[str, str] | None = None,
+        ) -> None:
+            raise NotImplementedError
+
+        def vend_credentials(self, table_path: str, operations: list[str]) -> dict[str, Any]:
+            raise NotImplementedError
+
+        def list_namespaces(self, parent: str | None = None) -> list[str]:
+            raise NotImplementedError
+
+        def delete_namespace(self, namespace: str) -> None:
+            raise NotImplementedError
+
+        def create_table(
+            self,
+            identifier: str,
+            schema: dict[str, Any],
+            location: str | None = None,
+            properties: dict[str, str] | None = None,
+        ) -> None:
+            raise NotImplementedError
+
+        def list_tables(self, namespace: str) -> list[str]:
+            raise NotImplementedError
+
+        def drop_table(self, identifier: str, purge: bool = False) -> None:
+            raise NotImplementedError
+
+        def get_storage_requirements(self) -> PluginRequirements:
+            return PluginRequirements(
+                plugin_type="catalog",
+                plugin_name="glue",
+                requirements=RequirementSet(
+                    protocols=["s3"],
+                    credential_modes=["workload-identity"],
+                    identity_modes=["aws-irsa"],
+                ),
+            )
+
+        def build_catalog_deployment(
+            self,
+            storage: StorageDeploymentBinding,
+        ) -> CatalogDeploymentBinding:
+            warehouse = (
+                storage.warehouse.uri if storage.warehouse else storage.endpoint.warehouse_path
+            )
+            return CatalogDeploymentBinding(
+                provider="glue",
+                glue=GlueCatalogDeploymentBinding(
+                    region=storage.endpoint.region,
+                    warehouse=warehouse,
+                    catalog_id="278833447053",
+                    database_prefix="floe_provider_",
+                    credential_refs={
+                        "role": storage.credentials.as_credential_ref("role"),
+                    },
+                    properties={"glue.region": storage.runtime.pyiceberg_properties["s3.region"]},
+                ),
+            )
+
+    import floe_core.plugin_registry as plugin_registry
+
+    original_registry = plugin_registry.PluginRegistry
+
+    class IsolatedAwsGlueRegistry:
+        def __init__(self) -> None:
+            self._delegate = original_registry()
+
+        def discover_all(self) -> None:
+            self._delegate.discover_all()
+
+        def configure(
+            self,
+            plugin_type: PluginType,
+            name: str,
+            config: dict[str, Any],
+        ) -> None:
+            if plugin_type in {PluginType.STORAGE, PluginType.CATALOG, PluginType.IDENTITY}:
+                return None
+            self._delegate.configure(plugin_type, name, config)
+            return None
+
+        def get(
+            self,
+            plugin_type: PluginType,
+            name: str,
+        ) -> StoragePlugin | CatalogPlugin | IdentityPlugin:
+            if plugin_type == PluginType.STORAGE:
+                return FakeAwsS3Plugin()
+            if plugin_type == PluginType.CATALOG:
+                return FakeGluePlugin()
+            if plugin_type == PluginType.IDENTITY:
+                return FakeAwsIrsaPlugin()
+            return self._delegate.get(plugin_type, name)
+
+    monkeypatch.setattr(plugin_registry, "PluginRegistry", IsolatedAwsGlueRegistry)
+
+    spec_path = tmp_path / "floe.yaml"
+    spec_path.write_text(
+        """
+apiVersion: floe.dev/v1
+kind: FloeSpec
+metadata:
+  name: aws-glue-contract
+  version: 1.0.0
+transforms:
+  - name: orders
+""",
+        encoding="utf-8",
+    )
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest = yaml.safe_load((ROOT / "demo" / "manifest.yaml").read_text(encoding="utf-8"))
+    manifest["plugins"]["storage"]["type"] = "aws-s3"
+    manifest["plugins"]["storage"]["config"] = {}
+    manifest["plugins"]["catalog"]["type"] = "glue"
+    manifest["plugins"]["catalog"]["config"] = {}
+    manifest["plugins"]["identity"] = {"type": "aws-irsa", "config": {}}
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    artifacts = compile_pipeline(
+        spec_path,
+        manifest_path,
+        emit_lineage=False,
+    )
+
+    assert artifacts.deployment is not None
+    assert artifacts.deployment.storage is not None
+    assert artifacts.deployment.catalog is not None
+
+    storage = artifacts.deployment.storage
+    catalog = artifacts.deployment.catalog
+    assert storage.provider == "aws-s3"
+    assert storage.protocol == "s3"
+    assert storage.endpoint.region == "ap-southeast-2"
+    assert storage.endpoint.warehouse_path == "s3://floe-provider-tests/warehouse/"
+    assert storage.endpoint.path_style_access is False
+    assert storage.warehouse is not None
+    assert storage.warehouse.bucket == "floe-provider-tests"
+    assert storage.warehouse.prefix == "warehouse/"
+    assert storage.warehouse.uri == "s3://floe-provider-tests/warehouse/"
+    assert storage.credentials.mode == "workload-identity"
+    assert storage.credentials.service_account_ref == "floe-provider-tests"
+    assert storage.capabilities.protocols == ["s3"]
+    assert storage.capabilities.credential_modes == ["workload-identity"]
+    assert storage.capabilities.identity_modes == ["aws-irsa"]
+    assert storage.capabilities.sts_supported is True
+    assert storage.capabilities.path_style_access is False
+    assert storage.provisioning.enabled is False
+    assert storage.provisioning.mode == "external"
+    assert storage.runtime.pyiceberg_properties["s3.region"] == "ap-southeast-2"
+    assert storage.dbt.profile_name == "floe"
+    assert storage.dbt.target_name == "dev"
+    assert storage.dbt.schema_name == "analytics"
+    assert storage.dagster.resource_key == "aws_s3_storage"
+    assert storage.dagster.asset_io_manager_key == "iceberg_io_manager"
+
+    assert catalog.provider == "glue"
+    assert catalog.glue is not None
+    glue = catalog.glue
+    assert glue.region == "ap-southeast-2"
+    assert glue.warehouse == "s3://floe-provider-tests/warehouse/"
+    assert glue.catalog_id == "278833447053"
+    assert glue.database_prefix == "floe_provider_"
+    assert glue.properties == {"glue.region": "ap-southeast-2"}
+    assert glue.credential_refs["role"].source == "workload-identity"
+    assert glue.credential_refs["role"].name == "floe-provider-tests"
+    assert glue.credential_refs["role"].key is None
+
+    runtime_connection = build_runtime_catalog_connection(storage=storage, catalog=catalog)
+    assert runtime_connection.catalog_name == "glue"
+    assert runtime_connection.warehouse == "s3://floe-provider-tests/warehouse/"
+    assert runtime_connection.storage_endpoint == "https://s3.ap-southeast-2.amazonaws.com"
+    assert runtime_connection.region == "ap-southeast-2"
+    assert runtime_connection.path_style_access is False
+    assert runtime_connection.properties["type"] == "glue"
+    assert runtime_connection.properties["glue.region"] == "ap-southeast-2"
+    assert runtime_connection.properties["glue.id"] == "278833447053"
+    assert runtime_connection.properties["s3.region"] == "ap-southeast-2"
+    assert runtime_connection.credential_refs["role"].source == "workload-identity"
+    assert runtime_connection.credential_refs["role"].name == "floe-provider-tests"
+
+    serialized_artifacts = artifacts.model_dump_json()
+    assert "raw-secret-value" not in serialized_artifacts
+    assert "aws_secret_access_key" not in serialized_artifacts.lower()
+    assert "secretAccessKey" not in serialized_artifacts
+    assert "AKIA" not in serialized_artifacts
 
 
 def test_incompatible_storage_catalog_composition_raises_structured_error(

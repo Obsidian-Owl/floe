@@ -6,6 +6,7 @@ from floe_core.schemas.compiled_artifacts import (
     CredentialRef,
     DagsterStorageBinding,
     DbtStorageBinding,
+    GlueCatalogDeploymentBinding,
     PolarisCatalogDeploymentBinding,
     StorageCredentialBinding,
     StorageDeploymentBinding,
@@ -87,3 +88,35 @@ def test_build_runtime_catalog_connection_degrades_without_catalog() -> None:
     assert connection.storage_endpoint == "http://floe-platform-minio:9000"
     assert connection.region == "us-east-1"
     assert connection.path_style_access is True
+
+
+def test_build_runtime_catalog_connection_maps_glue_binding() -> None:
+    catalog = CatalogDeploymentBinding(
+        provider="glue",
+        glue=GlueCatalogDeploymentBinding(
+            catalog_name="glue",
+            region="ap-southeast-2",
+            warehouse="s3://floe-provider-tests/warehouse/",
+            catalog_id="278833447053",
+            database_prefix="floe_provider_",
+            endpoint="https://glue.ap-southeast-2.amazonaws.com",
+            skip_archive=True,
+            max_retries=5,
+            retry_mode="standard",
+        ),
+    )
+
+    connection = build_runtime_catalog_connection(storage=None, catalog=catalog)
+
+    assert connection.catalog_name == "glue"
+    assert connection.warehouse == "s3://floe-provider-tests/warehouse/"
+    assert connection.region == "ap-southeast-2"
+    assert connection.properties == {
+        "type": "glue",
+        "glue.region": "ap-southeast-2",
+        "glue.id": "278833447053",
+        "glue.endpoint": "https://glue.ap-southeast-2.amazonaws.com",
+        "glue.skip-archive": "true",
+        "glue.max-retries": 5,
+        "glue.retry-mode": "standard",
+    }

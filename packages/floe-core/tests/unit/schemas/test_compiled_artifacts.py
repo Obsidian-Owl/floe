@@ -1030,6 +1030,160 @@ class TestStorageDeploymentBinding:
             factory()
 
 
+class TestGlueCatalogDeploymentBinding:
+    """Tests for AWS Glue catalog deployment binding."""
+
+    def test_glue_catalog_binding_serializes_secret_free_fields(self) -> None:
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            CredentialRef,
+            GlueCatalogDeploymentBinding,
+        )
+
+        binding = CatalogDeploymentBinding(
+            provider="glue",
+            glue=GlueCatalogDeploymentBinding(
+                catalog_name="glue",
+                region="ap-southeast-2",
+                warehouse="s3://floe-provider-tests/warehouse/",
+                catalog_id="278833447053",
+                database_prefix="floe_provider_",
+                skip_archive=True,
+                max_retries=5,
+                retry_mode="standard",
+                credential_refs={
+                    "role": CredentialRef(
+                        source="workload-identity",
+                        name="floe-provider-tests",
+                    )
+                },
+                properties={"glue.skip-archive": "true"},
+            ),
+        )
+
+        payload = binding.model_dump(mode="json")
+
+        assert payload["provider"] == "glue"
+        assert payload["glue"]["region"] == "ap-southeast-2"
+        assert payload["glue"]["warehouse"] == "s3://floe-provider-tests/warehouse/"
+        assert payload["glue"]["catalog_id"] == "278833447053"
+        assert payload["glue"]["credential_refs"]["role"]["source"] == "workload-identity"
+        assert "raw-secret-value" not in binding.model_dump_json()
+
+    def test_glue_provider_requires_glue_details(self) -> None:
+        from floe_core.schemas.compiled_artifacts import CatalogDeploymentBinding
+
+        with pytest.raises(ValidationError, match="glue catalog deployment binding"):
+            CatalogDeploymentBinding(provider="glue")
+
+    def test_non_glue_provider_rejects_glue_details(self) -> None:
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            GlueCatalogDeploymentBinding,
+            PolarisCatalogDeploymentBinding,
+        )
+
+        with pytest.raises(ValidationError, match="requires provider 'glue'"):
+            CatalogDeploymentBinding(
+                provider="polaris",
+                polaris=PolarisCatalogDeploymentBinding(
+                    storage_type="S3",
+                    warehouse="floe-demo",
+                    default_base_location="s3://floe-iceberg",
+                    allowed_locations=["s3://floe-iceberg"],
+                    endpoint="http://localhost:8181",
+                    endpoint_internal="http://polaris:8181",
+                    path_style_access=True,
+                    sts_unavailable=True,
+                ),
+                glue=GlueCatalogDeploymentBinding(
+                    region="ap-southeast-2",
+                    warehouse="s3://floe-provider-tests/warehouse/",
+                ),
+            )
+
+    def test_non_polaris_provider_rejects_polaris_details(self) -> None:
+        from floe_core.schemas.compiled_artifacts import (
+            CatalogDeploymentBinding,
+            GlueCatalogDeploymentBinding,
+            PolarisCatalogDeploymentBinding,
+        )
+
+        with pytest.raises(ValidationError, match="requires provider 'polaris'"):
+            CatalogDeploymentBinding(
+                provider="glue",
+                glue=GlueCatalogDeploymentBinding(
+                    region="ap-southeast-2",
+                    warehouse="s3://floe-provider-tests/warehouse/",
+                ),
+                polaris=PolarisCatalogDeploymentBinding(
+                    storage_type="S3",
+                    warehouse="floe-demo",
+                    default_base_location="s3://floe-iceberg",
+                    allowed_locations=["s3://floe-iceberg"],
+                    endpoint="http://localhost:8181",
+                    endpoint_internal="http://polaris:8181",
+                    path_style_access=True,
+                    sts_unavailable=True,
+                ),
+            )
+
+    def test_glue_binding_rejects_invalid_catalog_id(self) -> None:
+        from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
+
+        with pytest.raises(ValidationError, match="catalog_id"):
+            GlueCatalogDeploymentBinding(
+                region="ap-southeast-2",
+                warehouse="s3://floe-provider-tests/warehouse/",
+                catalog_id="arn:aws:iam::278833447053:role/floe",
+            )
+
+    def test_glue_binding_rejects_raw_secret_properties(self) -> None:
+        from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            GlueCatalogDeploymentBinding(
+                region="ap-southeast-2",
+                warehouse="s3://floe-provider-tests/warehouse/",
+                properties={"glue.secret-access-key": "raw-secret-value"},
+            )
+
+    def test_glue_binding_rejects_raw_secret_warehouse_uri(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            GlueCatalogDeploymentBinding(
+                region="ap-southeast-2",
+                warehouse="s3://raw-secret-value/warehouse",
+            )
+
+    def test_glue_binding_rejects_endpoint_userinfo_credentials(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            GlueCatalogDeploymentBinding(
+                region="ap-southeast-2",
+                warehouse="s3://floe-provider-tests/warehouse/",
+                endpoint="https://" + "user:raw-secret-value" + "@glue.example",
+            )
+
+    def test_glue_binding_rejects_endpoint_signed_query_material(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            GlueCatalogDeploymentBinding(
+                region="ap-southeast-2",
+                warehouse="s3://floe-provider-tests/warehouse/",
+                endpoint="https://glue.example?X-Amz-Signature=abc123",
+            )
+
+
 class TestRuntimeCatalogConnection:
     """Tests for secret-free runtime catalog connection projection."""
 
@@ -1067,6 +1221,29 @@ class TestRuntimeCatalogConnection:
         assert connection.credential_refs["accessKeyId"].source == "kubernetes-secret"
         assert payload["env_refs"] == {
             "PYICEBERG_CATALOG__POLARIS__CREDENTIAL": "POLARIS_CREDENTIAL"
+        }
+
+    def test_runtime_catalog_connection_preserves_secret_free_primitive_properties(self) -> None:
+        from floe_core.schemas.compiled_artifacts import RuntimeCatalogConnection
+
+        connection = RuntimeCatalogConnection(
+            catalog_name="glue",
+            properties={
+                "type": "glue",
+                "glue.max-retries": 5,
+                "feature.enabled": True,
+            },
+        )
+
+        assert connection.properties == {
+            "type": "glue",
+            "glue.max-retries": 5,
+            "feature.enabled": True,
+        }
+        assert connection.model_dump(mode="json")["properties"] == {
+            "type": "glue",
+            "glue.max-retries": 5,
+            "feature.enabled": True,
         }
 
     def test_runtime_catalog_connection_rejects_raw_secret_material(self) -> None:
@@ -2037,31 +2214,31 @@ class TestCompiledArtifactsVersionBump:
     """Tests for AC-6: current contract version and history entries."""
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_version_is_0_12_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.15.0'."""
-        assert COMPILED_ARTIFACTS_VERSION == "0.15.0", (
-            f"Expected version '0.15.0', got '{COMPILED_ARTIFACTS_VERSION}'"
+    def test_compiled_artifacts_version_is_0_16_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION is exactly '0.16.0'."""
+        assert COMPILED_ARTIFACTS_VERSION == "0.16.0", (
+            f"Expected version '0.16.0', got '{COMPILED_ARTIFACTS_VERSION}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_contains_0_12_0(self) -> None:
-        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.15.0' entry."""
-        assert "0.15.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
-            f"Version '0.15.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
+    def test_version_history_contains_0_16_0(self) -> None:
+        """Test that COMPILED_ARTIFACTS_VERSION_HISTORY has a '0.16.0' entry."""
+        assert "0.16.0" in COMPILED_ARTIFACTS_VERSION_HISTORY, (
+            f"Version '0.16.0' not in history: {list(COMPILED_ARTIFACTS_VERSION_HISTORY.keys())}"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_version_history_0_12_0_references_iceberg_catalog_projection(self) -> None:
-        """Test that the 0.15.0 history entry mentions contract additions."""
-        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.15.0", "")
+    def test_version_history_0_16_0_references_glue_catalog_projection(self) -> None:
+        """Test that the 0.16.0 history entry mentions contract additions."""
+        entry = COMPILED_ARTIFACTS_VERSION_HISTORY.get("0.16.0", "")
         entry_lower = entry.lower()
-        assert "iceberg" in entry_lower and "catalog" in entry_lower, (
-            f"Version 0.15.0 history entry does not reference Iceberg catalog projection: '{entry}'"
+        assert "glue" in entry_lower and "runtime" in entry_lower, (
+            f"Version 0.16.0 history entry does not reference Glue runtime changes: '{entry}'"
         )
 
     @pytest.mark.requirement("T1-AC-6")
-    def test_compiled_artifacts_default_version_is_0_12_0(self) -> None:
-        """Test that CompiledArtifacts().version defaults to '0.15.0'."""
+    def test_compiled_artifacts_default_version_is_0_16_0(self) -> None:
+        """Test that CompiledArtifacts().version defaults to '0.16.0'."""
         artifacts = CompiledArtifacts(
             metadata=CompilationMetadata(
                 compiled_at=datetime.now(),
@@ -2090,7 +2267,7 @@ class TestCompiledArtifactsVersionBump:
                 lineage_namespace="test",
             ),
         )
-        assert artifacts.version == "0.15.0"
+        assert artifacts.version == "0.16.0"
 
 
 class TestGovernanceBackwardCompatibility:
