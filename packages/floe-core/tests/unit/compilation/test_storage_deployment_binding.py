@@ -281,6 +281,7 @@ def test_compile_accepts_fake_aws_s3_plus_glue_contract(
     from floe_core.composition.models import CapabilitySet, PluginCapabilities
     from floe_core.plugin_types import PluginType
     from floe_core.plugins.identity import IdentityPlugin, TokenValidationResult, UserInfo
+    from floe_core.runtime_catalog_connection import build_runtime_catalog_connection
     from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
 
     class FakeAwsS3Plugin(StoragePlugin):
@@ -490,11 +491,64 @@ transforms:
     assert artifacts.deployment is not None
     assert artifacts.deployment.storage is not None
     assert artifacts.deployment.catalog is not None
-    assert artifacts.deployment.storage.provider == "aws-s3"
-    assert artifacts.deployment.catalog.provider == "glue"
-    assert artifacts.deployment.catalog.glue is not None
-    assert artifacts.deployment.catalog.glue.region == "ap-southeast-2"
-    assert "raw-secret-value" not in artifacts.model_dump_json()
+
+    storage = artifacts.deployment.storage
+    catalog = artifacts.deployment.catalog
+    assert storage.provider == "aws-s3"
+    assert storage.protocol == "s3"
+    assert storage.endpoint.region == "ap-southeast-2"
+    assert storage.endpoint.warehouse_path == "s3://floe-provider-tests/warehouse/"
+    assert storage.endpoint.path_style_access is False
+    assert storage.warehouse is not None
+    assert storage.warehouse.bucket == "floe-provider-tests"
+    assert storage.warehouse.prefix == "warehouse/"
+    assert storage.warehouse.uri == "s3://floe-provider-tests/warehouse/"
+    assert storage.credentials.mode == "workload-identity"
+    assert storage.credentials.service_account_ref == "floe-provider-tests"
+    assert storage.capabilities.protocols == ["s3"]
+    assert storage.capabilities.credential_modes == ["workload-identity"]
+    assert storage.capabilities.identity_modes == ["aws-irsa"]
+    assert storage.capabilities.sts_supported is True
+    assert storage.capabilities.path_style_access is False
+    assert storage.provisioning.enabled is False
+    assert storage.provisioning.mode == "external"
+    assert storage.runtime.pyiceberg_properties["s3.region"] == "ap-southeast-2"
+    assert storage.dbt.profile_name == "floe"
+    assert storage.dbt.target_name == "dev"
+    assert storage.dbt.schema_name == "analytics"
+    assert storage.dagster.resource_key == "aws_s3_storage"
+    assert storage.dagster.asset_io_manager_key == "iceberg_io_manager"
+
+    assert catalog.provider == "glue"
+    assert catalog.glue is not None
+    glue = catalog.glue
+    assert glue.region == "ap-southeast-2"
+    assert glue.warehouse == "s3://floe-provider-tests/warehouse/"
+    assert glue.catalog_id == "278833447053"
+    assert glue.database_prefix == "floe_provider_"
+    assert glue.properties == {"glue.region": "ap-southeast-2"}
+    assert glue.credential_refs["role"].source == "workload-identity"
+    assert glue.credential_refs["role"].name == "floe-provider-tests"
+    assert glue.credential_refs["role"].key is None
+
+    runtime_connection = build_runtime_catalog_connection(storage=storage, catalog=catalog)
+    assert runtime_connection.catalog_name == "glue"
+    assert runtime_connection.warehouse == "s3://floe-provider-tests/warehouse/"
+    assert runtime_connection.storage_endpoint == "https://s3.ap-southeast-2.amazonaws.com"
+    assert runtime_connection.region == "ap-southeast-2"
+    assert runtime_connection.path_style_access is False
+    assert runtime_connection.properties["type"] == "glue"
+    assert runtime_connection.properties["glue.region"] == "ap-southeast-2"
+    assert runtime_connection.properties["glue.id"] == "278833447053"
+    assert runtime_connection.properties["s3.region"] == "ap-southeast-2"
+    assert runtime_connection.credential_refs["role"].source == "workload-identity"
+    assert runtime_connection.credential_refs["role"].name == "floe-provider-tests"
+
+    serialized_artifacts = artifacts.model_dump_json()
+    assert "raw-secret-value" not in serialized_artifacts
+    assert "aws_secret_access_key" not in serialized_artifacts.lower()
+    assert "secretAccessKey" not in serialized_artifacts
+    assert "AKIA" not in serialized_artifacts
 
 
 def test_incompatible_storage_catalog_composition_raises_structured_error(
