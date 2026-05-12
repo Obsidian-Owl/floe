@@ -973,6 +973,21 @@ class GlueCatalogDeploymentBinding(BaseModel):
         _assert_no_secret_material(value, "catalog.glue.properties")
         return value
 
+    @field_validator("warehouse")
+    @classmethod
+    def validate_secret_free_warehouse(cls, value: str) -> str:
+        """Ensure Glue warehouse URI does not inline credential values."""
+        _assert_no_secret_material(value, "catalog.glue.warehouse")
+        return value
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_secret_free_endpoint(cls, value: str | None) -> str | None:
+        """Ensure Glue endpoint URI does not inline credential values."""
+        if value is not None:
+            _assert_no_secret_material(value, "catalog.glue.endpoint")
+        return value
+
 
 class IcebergRestOAuth2Binding(BaseModel):
     """Secret-free OAuth2 references for an Iceberg REST catalog consumer."""

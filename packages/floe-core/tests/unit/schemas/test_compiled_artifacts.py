@@ -1090,6 +1090,41 @@ class TestGlueCatalogDeploymentBinding:
                 properties={"glue.secret-access-key": "raw-secret-value"},
             )
 
+    def test_glue_binding_rejects_raw_secret_warehouse_uri(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            GlueCatalogDeploymentBinding(
+                region="ap-southeast-2",
+                warehouse="s3://raw-secret-value/warehouse",
+            )
+
+    def test_glue_binding_rejects_endpoint_userinfo_credentials(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            GlueCatalogDeploymentBinding(
+                region="ap-southeast-2",
+                warehouse="s3://floe-provider-tests/warehouse/",
+                endpoint="https://" + "user:raw-secret-value" + "@glue.example",
+            )
+
+    def test_glue_binding_rejects_endpoint_signed_query_material(self) -> None:
+        from pydantic import ValidationError
+
+        from floe_core.schemas.compiled_artifacts import GlueCatalogDeploymentBinding
+
+        with pytest.raises(ValidationError, match="raw credential material"):
+            GlueCatalogDeploymentBinding(
+                region="ap-southeast-2",
+                warehouse="s3://floe-provider-tests/warehouse/",
+                endpoint="https://glue.example?X-Amz-Signature=abc123",
+            )
+
 
 class TestRuntimeCatalogConnection:
     """Tests for secret-free runtime catalog connection projection."""
