@@ -104,11 +104,16 @@ charts/**/charts/
 *.tgz
 !charts/floe-platform/flux-artifacts/*.tgz
 
-# Terraform
+# Terraform / OpenTofu
 .terraform/
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+!infra/aws-provider-tests/.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example
+tfplan
+*.tfplan
 
 # Secrets (NEVER commit)
 *.pem
