@@ -19,6 +19,7 @@ def build_runtime_catalog_connection(
     catalog_name = "iceberg"
     catalog_uri: str | None = None
     warehouse: str | None = None
+    region: str | None = None
     path_style_access: bool | None = None
     properties: dict[str, str] = {}
     credential_refs: dict[str, CredentialRef] = {}
@@ -45,8 +46,26 @@ def build_runtime_catalog_connection(
         path_style_access = polaris.path_style_access
         credential_refs.update(polaris.credential_refs)
 
+    if catalog is not None and catalog.glue is not None:
+        glue = catalog.glue
+        catalog_name = glue.catalog_name
+        warehouse = glue.warehouse
+        region = glue.region
+        credential_refs.update(glue.credential_refs)
+        properties["type"] = "glue"
+        properties["glue.region"] = glue.region
+        properties["glue.skip-archive"] = str(glue.skip_archive).lower()
+        if glue.catalog_id is not None:
+            properties["glue.id"] = glue.catalog_id
+        if glue.endpoint is not None:
+            properties["glue.endpoint"] = glue.endpoint
+        if glue.max_retries is not None:
+            properties["glue.max-retries"] = str(glue.max_retries)
+        if glue.retry_mode is not None:
+            properties["glue.retry-mode"] = glue.retry_mode
+        properties.update(glue.properties)
+
     storage_endpoint: str | None = None
-    region: str | None = None
     if storage is not None:
         storage_endpoint = storage.endpoint.internal_url
         region = storage.endpoint.region
