@@ -1,31 +1,25 @@
-# PyPI Trusted Publisher Setup
+# PyPI Token Publisher Setup
 
-Register each Floe package as a **pending publisher** so the first GitHub Actions
-upload auto-creates the PyPI project. No API tokens are needed — authentication
-uses short-lived OIDC tokens.
+This file currently documents the implemented PyPI token setup and alpha package
+registration cutline. Trusted publishing/OIDC migration is future work; the
+current `pypi-publish.yml` workflow uploads with `secrets.PYPI_API_TOKEN`.
 
 ## Prerequisites
 
 - PyPI account with Owner/Maintainer role on the Obsidian Owl organisation
 - GitHub environment `pypi` created on `Obsidian-Owl/floe` (Settings > Environments)
+- Account-scoped PyPI API token stored as `PYPI_API_TOKEN` in the `pypi`
+  environment
 
 ## Steps (per package)
 
-1. Go to <https://pypi.org/manage/account/publishing/>
-2. Under **"Add a new pending publisher"**, fill in:
+1. Confirm the PyPI project is owned by the Obsidian Owl organisation or can be
+   created by the first alpha upload.
+2. Confirm the `pypi` GitHub environment has a `PYPI_API_TOKEN` secret that can
+   publish the package.
+3. Record the package in the checklist below.
 
-   | Field | Value |
-   |-------|-------|
-   | PyPI project name | *(see table below)* |
-   | Owner | `Obsidian-Owl` |
-   | Repository name | `floe` |
-   | Workflow name | `pypi-publish.yml` |
-   | Environment name | `pypi` |
-
-3. Click **"Add"**
-4. Tick the package off in the checklist below
-
-## Pending Publisher Checklist
+## Alpha Publish Checklist
 
 Register only the packages in `python_packages.publish` from
 `release/floe-release.yaml` for the alpha release.
@@ -49,8 +43,8 @@ Register only the packages in `python_packages.publish` from
 ## Excluded from alpha
 
 These packages are listed under `python_packages.exclude` in
-`release/floe-release.yaml` and must not be registered as alpha pending
-publishers until their composition path is proven.
+`release/floe-release.yaml` and must not be registered or published for alpha
+until their composition path is proven.
 
 - `floe-alert-slack`
 - `floe-alert-email`
@@ -64,25 +58,26 @@ publishers until their composition path is proven.
 - `floe-telemetry-console`
 - `floe-quality-dbt`
 
-## Common fields (copy-paste reference)
+## GitHub environment fields
 
 ```
-Owner:           Obsidian-Owl
-Repository name: floe
-Workflow name:   pypi-publish.yml
-Environment:     pypi
+Environment:        pypi
+Secret name:        PYPI_API_TOKEN
+Workflow file:      pypi-publish.yml
+Publishing package: pypa/gh-action-pypi-publish
 ```
 
 ## After all packages are registered
 
-1. Verify all 15 alpha pending publishers appear at <https://pypi.org/manage/account/publishing/>
-2. The `pypi-publish.yml` workflow (triggered by version tags) will handle building,
-   uploading, and converting each pending publisher into a full trusted publisher
-   on first successful publish.
+1. Verify all 15 alpha packages are covered by the PyPI account token and
+   project ownership.
+2. The `pypi-publish.yml` workflow, triggered by version tags, builds the
+   manifest package set and uploads artifacts with `PYPI_API_TOKEN`.
 
-## Metadata (already in pyproject.toml)
+## Metadata
 
-All packages share this metadata — no need to enter it in PyPI manually:
+Package metadata is read from each package's `pyproject.toml`; the alpha release
+version comes from `release/floe-release.yaml`.
 
 | Field | Value |
 |-------|-------|
@@ -92,4 +87,4 @@ All packages share this metadata — no need to enter it in PyPI manually:
 | Python | >=3.10 |
 | Homepage | https://github.com/Obsidian-Owl/floe |
 | Repository | https://github.com/Obsidian-Owl/floe |
-| Version | 0.1.0 (alpha) |
+| Version | 0.1.0a1 |

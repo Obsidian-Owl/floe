@@ -106,7 +106,7 @@ While pre-1.0 (0.x.x):
 - [ ] AWS S3+Glue live validation is recorded, or accepted historical evidence is recorded in the manifest
 - [ ] AWS and Hetzner cleanup evidence is recorded
 - [ ] No critical/high severity security issues
-- [ ] PyPI pending publishers are registered for the 15 alpha packages
+- [ ] PyPI project access and `PYPI_API_TOKEN` are configured for the 15 alpha packages
 - [ ] Helm manifest policy is correct for the release
 
 ### Creating the Release
@@ -139,7 +139,7 @@ Releases create:
 | Artifact | Location | Trigger |
 |----------|----------|---------|
 | GitHub Release | GitHub Releases page | Tag push (`release.yml`) |
-| PyPI packages (15 alpha packages) | pypi.org | Version tag push (`pypi-publish.yml`, OIDC trusted publishing) |
+| PyPI packages (15 alpha packages) | pypi.org | Version tag push (`pypi-publish.yml`, `PYPI_API_TOKEN`) |
 | Helm charts | ghcr.io OCI registry | Helm tag/manual workflow when manifest policy allows (`helm-release.yaml`) |
 
 ### Planned Artifacts
@@ -206,8 +206,8 @@ If K8s services take too long to start:
 ## Automation Roadmap
 
 Completed:
-- **PyPI publish**: `pypi-publish.yml` with OIDC trusted publishing for the
-  15 alpha packages declared in `release/floe-release.yaml`
+- **PyPI publish**: `pypi-publish.yml` builds the 15 alpha packages declared in
+  `release/floe-release.yaml` and uploads them with `secrets.PYPI_API_TOKEN`
 - **Helm chart publish**: `helm-release.yaml` publishes the manifest-declared
   chart set when `helm.alpha_policy` allows release
 
