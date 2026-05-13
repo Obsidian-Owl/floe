@@ -177,6 +177,43 @@ def test_release_manifest_rejects_invalid_helm_policy(tmp_path: Path) -> None:
         validate_release_manifest(load_release_manifest(manifest_path), repo_root=tmp_path)
 
 
+def test_release_manifest_rejects_empty_alpha_helm_chart_set(tmp_path: Path) -> None:
+    manifest_path = _write_manifest(
+        tmp_path,
+        helm={"alpha_policy": "publish", "charts": []},
+    )
+
+    with pytest.raises(ReleaseManifestError, match="missing alpha Helm publish chart"):
+        validate_release_manifest(load_release_manifest(manifest_path), repo_root=tmp_path)
+
+
+def test_release_manifest_rejects_partial_alpha_helm_chart_set(tmp_path: Path) -> None:
+    _write_chart(tmp_path / "charts" / "floe-platform")
+    manifest_path = _write_manifest(
+        tmp_path,
+        helm={"alpha_policy": "publish", "charts": ["charts/floe-platform"]},
+    )
+
+    with pytest.raises(ReleaseManifestError, match="missing alpha Helm publish chart"):
+        validate_release_manifest(load_release_manifest(manifest_path), repo_root=tmp_path)
+
+
+def test_release_manifest_rejects_duplicate_alpha_helm_chart_entries(
+    tmp_path: Path,
+) -> None:
+    _write_chart(tmp_path / "charts" / "floe-platform")
+    manifest_path = _write_manifest(
+        tmp_path,
+        helm={
+            "alpha_policy": "publish",
+            "charts": ["charts/floe-platform", "charts/floe-platform"],
+        },
+    )
+
+    with pytest.raises(ReleaseManifestError, match="duplicate alpha Helm publish chart"):
+        validate_release_manifest(load_release_manifest(manifest_path), repo_root=tmp_path)
+
+
 def test_release_manifest_rejects_helm_version_mismatch(tmp_path: Path) -> None:
     manifest_path = _write_manifest(
         tmp_path,
@@ -379,7 +416,10 @@ def _write_manifest(
         ]
     )
     exclude_entries = exclude if exclude is not None else []
-    helm_data: dict[str, object] = {"alpha_policy": "publish", "charts": []}
+    helm_data: dict[str, object] = {
+        "alpha_policy": "publish",
+        "charts": ["charts/floe-platform", "charts/floe-jobs"],
+    }
     if helm:
         helm_data.update(helm)
 

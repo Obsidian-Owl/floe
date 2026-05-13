@@ -25,11 +25,9 @@ SECRET_VALUE_PATTERNS = (
     re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{20,}\b"),
 )
 ALPHA_TAG_RE = re.compile(r"^v?(\d+\.\d+\.\d+)-alpha\.(\d+)$")
-ALPHA_HELM_PUBLISH_CHART_PATHS = frozenset(
-    {
-        "charts/floe-platform",
-        "charts/floe-jobs",
-    },
+ALPHA_HELM_PUBLISH_CHART_PATHS = (
+    "charts/floe-platform",
+    "charts/floe-jobs",
 )
 
 
@@ -255,6 +253,10 @@ def validate_release_manifest(
 
 
 def _validate_alpha_helm_publish_charts(chart_paths: tuple[str, ...]) -> None:
+    expected_chart_paths = set(ALPHA_HELM_PUBLISH_CHART_PATHS)
+    seen_chart_paths: set[str] = set()
+    duplicate_chart_paths: set[str] = set()
+
     for chart_path in chart_paths:
         parsed_path = PurePosixPath(chart_path)
         if parsed_path.is_absolute():
@@ -273,6 +275,20 @@ def _validate_alpha_helm_publish_charts(chart_paths: tuple[str, ...]) -> None:
             raise ReleaseManifestError(
                 f"unsupported alpha Helm publish chart path: {chart_path}",
             )
+        if chart_path in seen_chart_paths:
+            duplicate_chart_paths.add(chart_path)
+        seen_chart_paths.add(chart_path)
+
+    if duplicate_chart_paths:
+        raise ReleaseManifestError(
+            f"duplicate alpha Helm publish chart path(s): {sorted(duplicate_chart_paths)}",
+        )
+
+    missing_chart_paths = sorted(expected_chart_paths - seen_chart_paths)
+    if missing_chart_paths:
+        raise ReleaseManifestError(
+            f"missing alpha Helm publish chart path(s): {missing_chart_paths}",
+        )
 
 
 def _load_package_entries(
