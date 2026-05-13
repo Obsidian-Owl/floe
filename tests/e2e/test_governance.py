@@ -849,58 +849,27 @@ class TestDependencyGovernance:
     @pytest.mark.e2e
     @pytest.mark.requirement("FR-064")
     def test_pip_audit_clean(self) -> None:
-        """Test that pip-audit finds no critical/high vulnerabilities.
+        """Test that the shared CI vulnerability audit gate passes.
 
-        Runs pip-audit (via uv-secure) on dependencies and verifies
-        no critical or high severity vulnerabilities exist.
+        Runs the same uv-secure wrapper used by CI and pre-push hooks so E2E
+        governance follows the repo's documented retry, ignore, and pip-audit
+        fallback behavior.
 
         Strategy:
-        1. Run uv-secure vulnerability scan
-        2. Parse output for CRITICAL/HIGH vulnerabilities
-        3. Fail if vulnerabilities found (excluding documented exceptions)
+        1. Run testing/ci/uv-security-audit.sh
+        2. Fail if the shared security gate reports vulnerabilities
+        3. Fail if the shared scanner/fallback path cannot complete
         """
         repo_root = _find_repo_root()
-
-        # Run uv-secure with same ignore list as CI.
-        # See .pre-commit-config.yaml for justification of ignored vulns.
-        # Scan only platform lock files — devtools/ has its own dependency
-        # lifecycle and is excluded from platform security governance.
-        lock_files = [
-            str(p)
-            for p in repo_root.rglob("uv.lock")
-            if "devtools" not in str(p) and ".venv" not in str(p)
-        ]
-        if not lock_files:
+        audit_script = repo_root / "testing" / "ci" / "uv-security-audit.sh"
+        if not audit_script.exists():
             pytest.fail(
-                "No platform uv.lock files found — security scan requires at least one "
-                "lock file in packages/ or plugins/ (devtools/ is intentionally excluded)."
+                "Shared vulnerability audit script not found at testing/ci/uv-security-audit.sh."
             )
-
-        vuln_ignore_path = repo_root / ".vuln-ignore"
-        if not vuln_ignore_path.exists():
-            pytest.fail(
-                ".vuln-ignore not found at repo root — shared vulnerability ignore "
-                "list is required for E2E security governance tests."
-            )
-        ignore_ids_list = [
-            line.strip()
-            for line in vuln_ignore_path.read_text().splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        ]
-
-        cmd = [
-            "uv",
-            "run",
-            "uv-secure",
-            "--no-check-uv-tool",
-        ]
-        if ignore_ids_list:
-            cmd += ["--ignore-vulns", ",".join(ignore_ids_list)]
-        cmd += lock_files
 
         try:
             result = subprocess.run(
-                cmd,
+                [str(audit_script)],
                 shell=False,
                 check=False,
                 capture_output=True,
@@ -909,10 +878,10 @@ class TestDependencyGovernance:
             )
 
             if result.returncode != 0:
-                pytest.fail(
-                    f"Vulnerability scan failed with vulnerabilities:\n"
-                    f"{result.stdout}\n{result.stderr}"
-                )
+                pytest.fail(f"Shared vulnerability audit failed:\n{result.stdout}\n{result.stderr}")
 
         except FileNotFoundError:
-            pytest.fail("uv-secure not found. Install with: uv pip install uv-secure")
+            pytest.fail(
+                "Shared vulnerability audit script could not be executed. "
+                "Run from a complete Floe checkout with testing/ci/ available."
+            )
