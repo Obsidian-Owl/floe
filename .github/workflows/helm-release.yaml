@@ -183,8 +183,7 @@ jobs:
           ls -la *.tgz 2>/dev/null || echo "No chart packages found"
           echo ""
           echo "Index content:"
-          # shellcheck disable=SC2002
-          cat index.yaml | head -50
+          head -50 index.yaml
 
       - name: Commit and push
         env:
@@ -316,6 +315,6 @@ jobs:
 
             ### Documentation
             - [Chart README](charts/floe-platform/README.md)
-            - [Deployment Guide](docs/deployment.md)
+            - [Deployment Guide](docs/guides/deployment/kubernetes-helm.md)
           files: dist/*.tgz
           fail_on_unmatched_files: true

@@ -211,6 +211,34 @@ def test_release_manifest_rejects_stale_manifest_git_tag(tmp_path: Path) -> None
         )
 
 
+@pytest.mark.parametrize(
+    "chart_path",
+    [
+        "/outside-chart",
+        "../outside-chart",
+        "outside-chart",
+        "charts/not-alpha",
+    ],
+)
+def test_release_manifest_rejects_unapproved_alpha_helm_chart_paths(
+    tmp_path: Path,
+    chart_path: str,
+) -> None:
+    if chart_path.startswith("/"):
+        chart_path = str(tmp_path / chart_path.removeprefix("/"))
+    chart_directory = Path(chart_path)
+    if not chart_directory.is_absolute():
+        chart_directory = tmp_path / chart_directory
+    _write_chart(chart_directory)
+    manifest_path = _write_manifest(
+        tmp_path,
+        helm={"alpha_policy": "publish", "charts": [chart_path]},
+    )
+
+    with pytest.raises(ReleaseManifestError, match="unsupported alpha Helm publish chart"):
+        validate_release_manifest(load_release_manifest(manifest_path), repo_root=tmp_path)
+
+
 def test_release_manifest_rejects_publish_entry_without_evidence(tmp_path: Path) -> None:
     manifest_path = _write_manifest(
         tmp_path,
@@ -392,6 +420,21 @@ def _write_pyproject(path: Path, name: str) -> None:
             name = "{name}"
             version = "0.1.0a1"
             """,
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_chart(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "Chart.yaml").write_text(
+        dedent(
+            f"""
+            apiVersion: v2
+            name: {path.name}
+            version: 0.1.0-alpha.1
+            """
         ).strip()
         + "\n",
         encoding="utf-8",

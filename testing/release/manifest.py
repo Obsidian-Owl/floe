@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 import yaml
@@ -25,6 +25,12 @@ SECRET_VALUE_PATTERNS = (
     re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{20,}\b"),
 )
 ALPHA_TAG_RE = re.compile(r"^v?(\d+\.\d+\.\d+)-alpha\.(\d+)$")
+ALPHA_HELM_PUBLISH_CHART_PATHS = frozenset(
+    {
+        "charts/floe-platform",
+        "charts/floe-jobs",
+    },
+)
 
 
 class ReleaseManifestError(ValueError):
@@ -196,6 +202,7 @@ def validate_release_manifest(
         raise ReleaseManifestError(
             f"unsupported helm.alpha_policy for alpha release: {manifest.helm.alpha_policy}",
         )
+    _validate_alpha_helm_publish_charts(manifest.helm.charts)
 
     Version(manifest.release.python_version)
     publish_names = tuple(pkg.name for pkg in manifest.python_packages.publish)
@@ -245,6 +252,27 @@ def validate_release_manifest(
         exclude_count=len(manifest.python_packages.exclude),
         publish_names=publish_names,
     )
+
+
+def _validate_alpha_helm_publish_charts(chart_paths: tuple[str, ...]) -> None:
+    for chart_path in chart_paths:
+        parsed_path = PurePosixPath(chart_path)
+        if parsed_path.is_absolute():
+            raise ReleaseManifestError(
+                f"unsupported alpha Helm publish chart path: {chart_path}",
+            )
+        if ".." in parsed_path.parts:
+            raise ReleaseManifestError(
+                f"unsupported alpha Helm publish chart path: {chart_path}",
+            )
+        if not parsed_path.parts or parsed_path.parts[0] != "charts":
+            raise ReleaseManifestError(
+                f"unsupported alpha Helm publish chart path: {chart_path}",
+            )
+        if chart_path not in ALPHA_HELM_PUBLISH_CHART_PATHS:
+            raise ReleaseManifestError(
+                f"unsupported alpha Helm publish chart path: {chart_path}",
+            )
 
 
 def _load_package_entries(
