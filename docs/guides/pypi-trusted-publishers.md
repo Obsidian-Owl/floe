@@ -25,79 +25,44 @@ uses short-lived OIDC tokens.
 3. Click **"Add"**
 4. Tick the package off in the checklist below
 
-## Package Checklist
+## Pending Publisher Checklist
 
-### Core packages (2)
+Register only the packages in `python_packages.publish` from
+`release/floe-release.yaml` for the alpha release.
 
-- [x] `floe-core` — Core plugin registry and interfaces for the floe data platform
+- [x] `floe-core` — Core plugin registry and interfaces for the Floe data platform
 - [x] `floe-iceberg` — IcebergTableManager utility for PyIceberg table operations
-
-### Alert plugins (4)
-
-- [ ] `floe-alert-alertmanager` — Alertmanager alert channel plugin
-- [ ] `floe-alert-email` — Email alert channel plugin
-- [ ] `floe-alert-slack` — Slack alert channel plugin
-- [ ] `floe-alert-webhook` — Webhook alert channel plugin
-
-### Catalog plugins (1)
-
-- [ ] `floe-catalog-polaris` — Apache Polaris catalog plugin
-
-### Compute plugins (1)
-
-- [ ] `floe-compute-duckdb` — DuckDB compute plugin
-
-### dbt plugins (2)
-
-- [ ] `floe-dbt-core` — DBT plugin using dbt-core Python API
-- [ ] `floe-dbt-fusion` — DBT plugin using dbt Fusion CLI
-
-### Identity plugins (1)
-
-- [ ] `floe-identity-keycloak` — Keycloak OIDC identity provider plugin
-
-### Ingestion plugins (1)
-
-- [ ] `floe-ingestion-dlt` — dlt ingestion plugin
-
-### Lineage plugins (1)
-
-- [ ] `floe-lineage-marquez` — Marquez lineage backend plugin (OpenLineage)
-
-### Network security plugins (1)
-
-- [ ] `floe-network-security-k8s` — Kubernetes Network Security plugin
-
-### Orchestrator plugins (1)
-
 - [ ] `floe-orchestrator-dagster` — Dagster orchestrator plugin
-
-### Quality plugins (2)
-
-- [ ] `floe-quality-dbt` — dbt-expectations data quality plugin
-- [ ] `floe-quality-gx` — Great Expectations data quality plugin
-
-### RBAC plugins (1)
-
-- [ ] `floe-rbac-k8s` — Kubernetes RBAC plugin
-
-### Secrets plugins (2)
-
-- [ ] `floe-secrets-infisical` — Infisical OSS secrets backend plugin
-- [ ] `floe-secrets-k8s` — Kubernetes Secrets backend plugin
-
-### Semantic layer plugins (1)
-
-- [ ] `floe-semantic-cube` — Cube semantic layer plugin
-
-### Storage plugins (1)
-
+- [ ] `floe-catalog-polaris` — Apache Polaris catalog plugin
 - [ ] `floe-storage-minio` — MinIO object storage plugin
-
-### Telemetry plugins (2)
-
-- [ ] `floe-telemetry-console` — Console telemetry backend plugin
+- [ ] `floe-compute-duckdb` — DuckDB compute plugin
+- [ ] `floe-dbt-core` — DBT plugin using dbt-core Python API
+- [ ] `floe-ingestion-dlt` — dlt ingestion plugin
 - [ ] `floe-telemetry-jaeger` — Jaeger telemetry backend plugin (OTLP exporter)
+- [ ] `floe-rbac-k8s` — Kubernetes RBAC plugin
+- [ ] `floe-network-security-k8s` — Kubernetes Network Security plugin
+- [ ] `floe-lineage-marquez` — Marquez lineage backend plugin (OpenLineage)
+- [ ] `floe-quality-gx` — Great Expectations data quality plugin
+- [ ] `floe-storage-aws-s3` — AWS S3 storage plugin
+- [ ] `floe-catalog-glue` — AWS Glue catalog plugin
+
+## Excluded from alpha
+
+These packages are listed under `python_packages.exclude` in
+`release/floe-release.yaml` and must not be registered as alpha pending
+publishers until their composition path is proven.
+
+- `floe-alert-slack`
+- `floe-alert-email`
+- `floe-alert-alertmanager`
+- `floe-alert-webhook`
+- `floe-identity-keycloak`
+- `floe-secrets-infisical`
+- `floe-secrets-k8s`
+- `floe-semantic-cube`
+- `floe-dbt-fusion`
+- `floe-telemetry-console`
+- `floe-quality-dbt`
 
 ## Common fields (copy-paste reference)
 
@@ -110,7 +75,7 @@ Environment:     pypi
 
 ## After all packages are registered
 
-1. Verify all 24 pending publishers appear at <https://pypi.org/manage/account/publishing/>
+1. Verify all 15 alpha pending publishers appear at <https://pypi.org/manage/account/publishing/>
 2. The `pypi-publish.yml` workflow (triggered by version tags) will handle building,
    uploading, and converting each pending publisher into a full trusted publisher
    on first successful publish.

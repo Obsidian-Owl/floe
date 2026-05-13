@@ -4,17 +4,19 @@ Floe separates fast PR confidence from live validation and release confidence.
 The alpha release cutline is declared in `release/floe-release.yaml`, and CI
 validates that manifest before release-specific workflows publish artifacts.
 
-## Topology
+## Quick Reference
 
-| Lane | Workflow | Trigger | Purpose |
-|---|---|---|---|
-| Fast PR | `ci.yml` | PRs and pushes to `main` | Lint, formatting, strict typing, unit tests, contract tests, security, traceability, and release manifest structure. |
-| Chart PR | `helm-ci.yaml` | Chart PRs and pushes to `main` | Merge-confidence Helm linting, rendering, schema, unit, diff, and Kind chart validation. |
-| Live validation | `e2e.yml` | Merge queue, manual dispatch, `run-e2e` label, or infrastructure/release-manifest path changes | Full Kind E2E validation with artifacts uploaded on every run. |
-| Release | `release.yml` | Version tags | Release validation and GitHub Release creation. |
-| Package release | `pypi-publish.yml` | Release/publish trigger | Publish only packages declared by the release manifest. |
-| Helm release | `helm-release.yaml` | Helm release trigger | Publish the chart list/version allowed by the release manifest Helm policy. |
-| Scheduled maintenance | `weekly.yml`, `security.yml`, `codspeed.yml` | Schedules or manual dispatch | Dependency drift, compatibility, security, and performance signals outside default PR CI. |
+| Trigger | Workflow | Purpose |
+|---|---|---|
+| Pull request | `ci.yml` | Fast PR confidence plus release manifest structure |
+| Pull request label `run-e2e` / infra path / manual | `e2e.yml` | Full E2E validation |
+| Tag `v*.*.*` | `release.yml` and `pypi-publish.yml` | Manifest validation, integration, release, package build/publish |
+| Tag `helm-v*` / `charts-v*` / manual | `helm-release.yaml` | Helm chart release when manifest policy allows |
+| Schedule | `weekly.yml`, `security.yml`, `codspeed.yml` | Drift, security, performance maintenance |
+
+`helm-ci.yaml` remains the merge-confidence chart lane for pull requests and
+pushes to `main`; it validates chart linting, rendering, schema, unit, diff,
+and Kind behavior before chart changes reach a release workflow.
 
 ## PR CI (`ci.yml`)
 

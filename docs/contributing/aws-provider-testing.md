@@ -68,3 +68,17 @@ FLOE_PROVIDER_SPIKE_RUN=floe-provider-YYYYMMDDTHHMMSSZ scripts/aws-provider-test
 
 The final report must say whether current-run S3 prefixes and Glue databases
 were removed.
+
+## Release Evidence Requirements
+
+For alpha release validation, AWS provider testing must record:
+
+- `FLOE_PROVIDER_SPIKE_RUN`
+- DevPod workspace name
+- S3 test prefix
+- Glue database prefix
+- pytest result for `tests/integration/test_aws_provider_live.py`
+- cleanup output from `scripts/aws-provider-test-cleanup.sh`
+
+Do not archive AWS access keys, secret access keys, session tokens, or remote
+environment files.
