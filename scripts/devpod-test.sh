@@ -97,7 +97,7 @@ DEVPOD_ENABLE_REMOTE_TUNNELS="${DEVPOD_ENABLE_REMOTE_TUNNELS:-0}"
 REMOTE_RUN_ID="run-$(date -u '+%Y%m%dT%H%M%SZ')-$$"
 REMOTE_RUN_DIR="${DEVPOD_REMOTE_RUN_ROOT}/${REMOTE_RUN_ID}"
 LOCAL_REMOTE_ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts/devpod-${REMOTE_RUN_ID}"
-REMOTE_ENV_FILE="${REMOTE_RUN_DIR}/remote-env.sh"
+REMOTE_ENV_FILE="${REMOTE_RUN_DIR}.remote-env.sh"
 LOCAL_REMOTE_ENV_FILE=""
 
 # Track whether we created the workspace (for cleanup decisions)
@@ -358,6 +358,7 @@ start_remote_e2e_run() {
     local flux_helmreleases_q
     local flux_deployments_q
     local flux_statefulsets_q
+    local remote_env_file_q
     local remote_script
     local start_output=""
     local start_status=0
@@ -372,6 +373,7 @@ start_remote_e2e_run() {
     flux_helmreleases_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_HELMRELEASES}")"
     flux_deployments_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_DEPLOYMENTS}")"
     flux_statefulsets_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_STATEFULSETS}")"
+    remote_env_file_q="$(shell_quote "${REMOTE_ENV_FILE}")"
 
     remote_script=$(cat <<REMOTE_SCRIPT
 set -euo pipefail
@@ -522,10 +524,10 @@ wait_for_flux_settlement() {
     echo "[remote-e2e] started at \$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     echo "[remote-e2e] workdir=\${FLOE_REMOTE_WORKDIR}"
     cd "\${FLOE_REMOTE_WORKDIR}"
-    if [[ -f "\${FLOE_REMOTE_RUN_DIR}/remote-env.sh" ]]; then
+    if [[ -n "\${FLOE_REMOTE_ENV_FILE:-}" && -f "\${FLOE_REMOTE_ENV_FILE}" ]]; then
         echo "[remote-e2e] sourcing remote env allowlist"
         # shellcheck disable=SC1091
-        source "\${FLOE_REMOTE_RUN_DIR}/remote-env.sh"
+        source "\${FLOE_REMOTE_ENV_FILE}"
     fi
     SKIP_MONITORING=\${SKIP_MONITORING:-true} make kind-up
     wait_for_flux_settlement
@@ -545,6 +547,7 @@ exit 0
 REMOTE_RUN
 chmod +x "\${run_dir}/run.sh"
 FLOE_REMOTE_WORKDIR="\${workdir}" FLOE_REMOTE_RUN_DIR="\${run_dir}" FLOE_REMOTE_E2E_MAKE_TARGET="\${make_target}" \
+    FLOE_REMOTE_ENV_FILE=${remote_env_file_q} \
     FLOE_REMOTE_FLUX_SETTLEMENT_TIMEOUT=${flux_settlement_timeout_q} \
     FLOE_REMOTE_FLUX_SETTLEMENT_INTERVAL=${flux_settlement_interval_q} \
     FLOE_REMOTE_FLUX_GITREPOSITORY=${flux_gitrepository_q} \

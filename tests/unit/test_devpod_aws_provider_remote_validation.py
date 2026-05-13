@@ -31,7 +31,10 @@ def test_devpod_wrapper_uploads_allowlisted_remote_env_without_echoing_values() 
     assert 'printf \'export %s=%q\\n\' "${env_name}" "${!env_name}"' in script
     assert 'devpod_remote_bash "umask 077 && cat > ${remote_env_q}' in script
     assert 'chmod 600 ${remote_env_q}" < "${LOCAL_REMOTE_ENV_FILE}"' in script
-    assert 'source "\\${FLOE_REMOTE_RUN_DIR}/remote-env.sh"' in script
+    assert 'REMOTE_ENV_FILE="${REMOTE_RUN_DIR}.remote-env.sh"' in script
+    assert "FLOE_REMOTE_ENV_FILE=${remote_env_file_q}" in script
+    assert 'source "\\${FLOE_REMOTE_ENV_FILE}"' in script
+    assert 'source "\\${FLOE_REMOTE_RUN_DIR}/remote-env.sh"' not in script
     assert 'echo "${!env_name}"' not in script
 
 
@@ -51,7 +54,11 @@ def test_makefile_exposes_devpod_aws_provider_live_target() -> None:
     makefile = _read_makefile()
 
     assert ".PHONY: test-aws-provider-live" in makefile
-    assert "uv run pytest tests/integration/test_aws_provider_live.py -q" in makefile
+    local_target = (
+        "FLOE_RUN_LIVE_AWS_PROVIDER_TESTS=1 "
+        "uv run pytest tests/integration/test_aws_provider_live.py -q"
+    )
+    assert local_target in makefile
     assert ".PHONY: devpod-test-aws-provider" in makefile
     target_env = "DEVPOD_REMOTE_E2E_MAKE_TARGET=" + "test-aws-provider-live"
     assert target_env in makefile

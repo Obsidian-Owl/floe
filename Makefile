@@ -149,7 +149,7 @@ test-e2e-full: ## Run standard + destructive E2E suites sequentially
 .PHONY: test-aws-provider-live
 test-aws-provider-live: ## Run opt-in live AWS S3 + Glue provider tests
 	@echo "Running live AWS provider tests..."
-	@uv run pytest tests/integration/test_aws_provider_live.py -q
+	@FLOE_RUN_LIVE_AWS_PROVIDER_TESTS=1 uv run pytest tests/integration/test_aws_provider_live.py -q
 
 .PHONY: test-e2e-host
 test-e2e-host: ## Run E2E tests via host port-forwards (legacy, requires running services)
