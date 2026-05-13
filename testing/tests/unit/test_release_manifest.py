@@ -10,6 +10,7 @@ from testing.release import cli
 from testing.release.manifest import (
     ReleaseManifestError,
     load_release_manifest,
+    normalize_tag_to_helm_version,
     normalize_tag_to_python_version,
     validate_release_manifest,
 )
@@ -52,6 +53,12 @@ ALPHA_EXCLUDED = {
 
 def test_normalizes_alpha_git_tag_to_pep440() -> None:
     assert normalize_tag_to_python_version("v0.1.0-alpha.1") == "0.1.0a1"
+    assert normalize_tag_to_helm_version("v0.1.0-alpha.1") == "0.1.0-alpha.1"
+
+
+def test_normalizes_non_alpha_git_tag_to_release_versions() -> None:
+    assert normalize_tag_to_python_version("v0.1.1") == "0.1.1"
+    assert normalize_tag_to_helm_version("v0.1.1") == "0.1.1"
 
 
 def test_release_manifest_exists_and_matches_cutline() -> None:
@@ -78,6 +85,29 @@ def test_release_manifest_validates_alpha_release_cutline() -> None:
     assert result.exclude_count == 11
     assert result.python_version == "0.1.0a1"
     assert result.git_tag == "v0.1.0-alpha.1"
+
+
+def test_release_manifest_validates_non_alpha_release_tag(tmp_path: Path) -> None:
+    _write_chart(tmp_path / "charts" / "floe-platform")
+    _write_chart(tmp_path / "charts" / "floe-jobs")
+    manifest_path = _write_manifest(
+        tmp_path,
+        release={
+            "git_tag": "v0.1.1",
+            "python_version": "0.1.1",
+            "helm_version": "0.1.1",
+        },
+    )
+
+    result = validate_release_manifest(
+        load_release_manifest(manifest_path),
+        repo_root=tmp_path,
+        tag="v0.1.1",
+    )
+
+    assert result.python_version == "0.1.1"
+    assert result.helm_version == "0.1.1"
+    assert result.git_tag == "v0.1.1"
 
 
 def test_manifest_declares_helm_alpha_publish_policy() -> None:
@@ -425,7 +455,11 @@ def _write_manifest(
         helm_data.update(helm)
 
     for entry in [*publish_entries, *exclude_entries]:
-        _write_pyproject(repo_root / entry["path"], entry["name"])
+        _write_pyproject(
+            repo_root / entry["path"],
+            entry["name"],
+            version=release_data["python_version"],
+        )
 
     manifest_path = repo_root / "release.yaml"
     manifest_path.write_text(
@@ -452,14 +486,14 @@ def _write_manifest(
     return manifest_path
 
 
-def _write_pyproject(path: Path, name: str) -> None:
+def _write_pyproject(path: Path, name: str, *, version: str = "0.1.0a1") -> None:
     path.mkdir(parents=True, exist_ok=True)
     (path / "pyproject.toml").write_text(
         dedent(
             f"""
             [project]
             name = "{name}"
-            version = "0.1.0a1"
+            version = "{version}"
             """,
         ).strip()
         + "\n",

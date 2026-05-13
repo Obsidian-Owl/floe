@@ -24,7 +24,7 @@ SECRET_VALUE_PATTERNS = (
     re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{36,}\b"),
     re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{20,}\b"),
 )
-ALPHA_TAG_RE = re.compile(r"^v?(\d+\.\d+\.\d+)-alpha\.(\d+)$")
+RELEASE_TAG_RE = re.compile(r"^v?(\d+\.\d+\.\d+)(?:-alpha\.(\d+))?$")
 ALPHA_HELM_PUBLISH_CHART_PATHS = (
     "charts/floe-platform",
     "charts/floe-jobs",
@@ -91,19 +91,21 @@ class ManifestValidationResult:
 
 
 def normalize_tag_to_python_version(tag: str) -> str:
-    match = ALPHA_TAG_RE.fullmatch(tag)
+    match = RELEASE_TAG_RE.fullmatch(tag)
     if not match:
-        raise ReleaseManifestError(f"unsupported alpha tag format: {tag}")
-    version = f"{match.group(1)}a{match.group(2)}"
+        raise ReleaseManifestError(f"unsupported release tag format: {tag}")
+    version = f"{match.group(1)}a{match.group(2)}" if match.group(2) is not None else match.group(1)
     Version(version)
     return version
 
 
 def normalize_tag_to_helm_version(tag: str) -> str:
-    match = ALPHA_TAG_RE.fullmatch(tag)
+    match = RELEASE_TAG_RE.fullmatch(tag)
     if not match:
-        raise ReleaseManifestError(f"unsupported alpha tag format: {tag}")
-    return f"{match.group(1)}-alpha.{match.group(2)}"
+        raise ReleaseManifestError(f"unsupported release tag format: {tag}")
+    if match.group(2) is not None:
+        return f"{match.group(1)}-alpha.{match.group(2)}"
+    return match.group(1)
 
 
 def load_release_manifest(path: Path) -> ReleaseManifest:
