@@ -66,12 +66,29 @@ jobs:
         id: version
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
+          GH_REF_TYPE: ${{ github.ref_type }}
+          GH_REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           if [ -n "${INPUT_VERSION}" ]; then
             VERSION="${INPUT_VERSION}"
           else
             VERSION=$(uv run python -c 'from pathlib import Path; from testing.release.manifest import load_release_manifest; print(load_release_manifest(Path("release/floe-release.yaml")).release.helm_version)')
+          fi
+
+          if [ "${GH_REF_TYPE}" = "tag" ]; then
+            case "${GH_REF_NAME}" in
+              helm-v*) TAG_VERSION="${GH_REF_NAME#helm-v}" ;;
+              charts-v*) TAG_VERSION="${GH_REF_NAME#charts-v}" ;;
+              *)
+                echo "::error::Unsupported Helm release tag '${GH_REF_NAME}'" >&2
+                exit 1
+                ;;
+            esac
+            if [ "${TAG_VERSION}" != "${VERSION}" ]; then
+              echo "::error::Helm release tag version '${TAG_VERSION}' does not match chart version '${VERSION}'" >&2
+              exit 1
+            fi
           fi
 
           CHART_PATHS=$(uv run python -c 'from pathlib import Path; from testing.release.manifest import load_release_manifest; print("\n".join(load_release_manifest(Path("release/floe-release.yaml")).helm.charts))')

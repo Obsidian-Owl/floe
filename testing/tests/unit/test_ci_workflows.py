@@ -171,7 +171,7 @@ class TestPypiPublishWorkflow:
         assert "\n    tags:" not in on_block
 
     def test_pypi_publish_job_uses_release_metadata_instead_of_head_branch(self) -> None:
-        """Publishing resolves the release tag from the completed Release run artifact."""
+        """Publishing resolves immutable release metadata from the Release run artifact."""
         workflow_text = PYPI_WORKFLOW.read_text(encoding="utf-8")
 
         assert "github.event_name == 'workflow_run'" in workflow_text
@@ -181,8 +181,9 @@ class TestPypiPublishWorkflow:
         assert "--name release-metadata" in workflow_text
         assert (
             "ref: ${{ github.event_name == 'workflow_run' && "
-            "steps.release_metadata.outputs.tag || github.ref }}"
+            "steps.release_metadata.outputs.sha || github.ref }}"
         ) in workflow_text
+        assert "steps.release_metadata.outputs.tag || github.ref" not in workflow_text
         assert "startsWith(github.event.workflow_run.head_branch" not in workflow_text
         assert "github.event.workflow_run.head_branch" not in workflow_text
 

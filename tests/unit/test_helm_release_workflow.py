@@ -23,6 +23,17 @@ def _publish_oci_job() -> dict[str, Any]:
     return workflow["jobs"]["publish-oci"]
 
 
+def _build_job() -> dict[str, Any]:
+    """Return the build job configuration."""
+    workflow = _load_workflow()
+    return workflow["jobs"]["build"]
+
+
+def _build_steps() -> list[dict[str, Any]]:
+    """Return the build job steps."""
+    return _build_job()["steps"]
+
+
 def _publish_oci_steps() -> list[dict[str, Any]]:
     """Return the publish-oci steps."""
     return _publish_oci_job()["steps"]
@@ -39,6 +50,29 @@ def _step_index(step_name: str) -> int:
 def _step_named(step_name: str) -> dict[str, Any]:
     """Return a named publish-oci step."""
     return _publish_oci_steps()[_step_index(step_name)]
+
+
+def _build_step_named(step_name: str) -> dict[str, Any]:
+    """Return a named build step."""
+    for step in _build_steps():
+        if step.get("name") == step_name:
+            return step
+    raise AssertionError(f"build step not found: {step_name}")
+
+
+@pytest.mark.requirement("ALPHA-RELEASE")
+def test_build_fails_fast_when_tag_version_and_chart_version_diverge() -> None:
+    """Tag-triggered chart releases must match the resolved chart version."""
+    step = _build_step_named("Extract version and chart list")
+    env = step["env"]
+    run_script = step["run"]
+
+    assert env["GH_REF_TYPE"] == "${{ github.ref_type }}"
+    assert env["GH_REF_NAME"] == "${{ github.ref_name }}"
+    assert 'helm-v*) TAG_VERSION="${GH_REF_NAME#helm-v}" ;;' in run_script
+    assert 'charts-v*) TAG_VERSION="${GH_REF_NAME#charts-v}" ;;' in run_script
+    assert 'if [ "${TAG_VERSION}" != "${VERSION}" ]; then' in run_script
+    assert "does not match chart version" in run_script
 
 
 @pytest.mark.requirement("AC-1")
