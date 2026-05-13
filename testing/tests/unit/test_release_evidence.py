@@ -11,6 +11,8 @@ from testing.release.evidence import (
     write_evidence_summary,
 )
 
+VALID_RELEASE_SHA = "0123456789abcdef0123456789abcdef01234567"  # pragma: allowlist secret
+
 
 def test_classifies_product_validation_failure() -> None:
     assert classify_live_validation_failure("pytest failed: assertion error") == "product"
@@ -44,7 +46,7 @@ def test_write_evidence_summary_records_release_evidence_without_secrets(tmp_pat
 
     write_evidence_summary(
         output_path=output_path,
-        release_sha="release-sha-example",
+        release_sha=VALID_RELEASE_SHA,
         manifest_path=Path("release/floe-release.yaml"),
         package_count=15,
         devpod_artifact="test-artifacts/devpod-run-20260513",
@@ -54,11 +56,35 @@ def test_write_evidence_summary_records_release_evidence_without_secrets(tmp_pat
 
     summary = output_path.read_text(encoding="utf-8")
 
-    assert "release-sha-example" in summary
+    assert VALID_RELEASE_SHA in summary
     assert "release/floe-release.yaml" in summary
     assert "15" in summary
     assert "test-artifacts/devpod-run-20260513" in summary
     assert "passed" in summary
+
+
+@pytest.mark.parametrize(
+    "release_sha",
+    ["", "pre-tag-required", "release-sha-example", "0123456789abcdef"],
+)
+def test_write_evidence_summary_rejects_placeholder_or_invalid_release_sha_by_default(
+    tmp_path: Path,
+    release_sha: str,
+) -> None:
+    output_path = tmp_path / "release-evidence.md"
+
+    with pytest.raises(EvidenceSummaryError, match="release_sha"):
+        write_evidence_summary(
+            output_path=output_path,
+            release_sha=release_sha,
+            manifest_path=Path("release/floe-release.yaml"),
+            package_count=15,
+            devpod_artifact="test-artifacts/devpod-run-20260513",
+            aws_live_result="passed",
+            cleanup_result="passed",
+        )
+
+    assert not output_path.exists()
 
 
 def test_write_evidence_summary_rejects_failed_aws_result_by_default(
@@ -69,7 +95,7 @@ def test_write_evidence_summary_rejects_failed_aws_result_by_default(
     with pytest.raises(EvidenceSummaryError, match="aws_live_result must be passed"):
         write_evidence_summary(
             output_path=output_path,
-            release_sha="release-sha-example",
+            release_sha=VALID_RELEASE_SHA,
             manifest_path=Path("release/floe-release.yaml"),
             package_count=15,
             devpod_artifact="test-artifacts/devpod-run-20260513",
@@ -88,7 +114,7 @@ def test_write_evidence_summary_rejects_failed_cleanup_result_by_default(
     with pytest.raises(EvidenceSummaryError, match="cleanup_result must be passed"):
         write_evidence_summary(
             output_path=output_path,
-            release_sha="release-sha-example",
+            release_sha=VALID_RELEASE_SHA,
             manifest_path=Path("release/floe-release.yaml"),
             package_count=15,
             devpod_artifact="test-artifacts/devpod-run-20260513",
@@ -107,7 +133,7 @@ def test_write_evidence_summary_rejects_fake_devpod_artifact_by_default(
     with pytest.raises(EvidenceSummaryError, match="devpod_artifact"):
         write_evidence_summary(
             output_path=output_path,
-            release_sha="release-sha-example",
+            release_sha=VALID_RELEASE_SHA,
             manifest_path=Path("release/floe-release.yaml"),
             package_count=15,
             devpod_artifact="test-artifacts/not-real-fake-devpod-run",
@@ -126,7 +152,7 @@ def test_write_evidence_summary_rejects_placeholder_evidence_by_default(
     with pytest.raises(EvidenceSummaryError, match="placeholder release evidence"):
         write_evidence_summary(
             output_path=output_path,
-            release_sha="release-sha-example",
+            release_sha=VALID_RELEASE_SHA,
             manifest_path=Path("release/floe-release.yaml"),
             package_count=15,
             devpod_artifact="pre-tag-required",
@@ -229,7 +255,7 @@ def test_write_evidence_summary_records_manifest_cutline_details(tmp_path: Path)
 
     write_evidence_summary(
         output_path=output_path,
-        release_sha="release-sha-example",
+        release_sha=VALID_RELEASE_SHA,
         manifest_path=Path("release/floe-release.yaml"),
         package_count=2,
         devpod_artifact="test-artifacts/devpod-run-20260513",
@@ -257,7 +283,7 @@ def test_evidence_summary_requires_manifest_argument(capsys: pytest.CaptureFixtu
             [
                 "evidence-summary",
                 "--release-sha",
-                "release-sha-example",
+                VALID_RELEASE_SHA,
                 "--devpod-artifact",
                 "test-artifacts/devpod-run-20260513",
                 "--aws-live-result",
@@ -282,7 +308,7 @@ def test_evidence_summary_cli_writes_summary_after_manifest_validation(
         [
             "evidence-summary",
             "--release-sha",
-            "release-sha-example",
+            VALID_RELEASE_SHA,
             "--manifest",
             "release/floe-release.yaml",
             "--devpod-artifact",
@@ -297,7 +323,7 @@ def test_evidence_summary_cli_writes_summary_after_manifest_validation(
     )
 
     summary = output_path.read_text(encoding="utf-8")
-    assert "release-sha-example" in summary
+    assert VALID_RELEASE_SHA in summary
     assert "release/floe-release.yaml" in summary
     assert "Python package publish count | `15`" in summary
     assert "test-artifacts/devpod-run-20260513" in summary

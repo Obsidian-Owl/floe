@@ -1,6 +1,6 @@
 # PyPI Package Publishing - builds and publishes release manifest packages
 #
-# Triggers on version tags (v*.*.*) after the Release workflow validates.
+# Triggers after the Release workflow completes successfully for version tags (v*.*.*).
 # Uses account-scoped PyPI API token stored as PYPI_API_TOKEN secret.
 # Each manifest-published package is built independently and uploaded in a single job.
 #
@@ -8,27 +8,27 @@
 #   - PYPI_API_TOKEN secret configured in GitHub environment "pypi"
 #   - See docs/guides/pypi-trusted-publishers.md for future OIDC migration
 #
-# Security: all run: blocks use static commands. No untrusted interpolation.
-# GITHUB_REF is safe for tag triggers (not user-controlled content).
+# Security: all run: blocks use static commands. Release workflow_run publishes are
+# limited to successful tag-triggered Release runs whose head_branch starts with v.
 
 name: PyPI Publish
 
 permissions: {}
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Build packages without uploading (test mode)'
+        description: 'Build packages without uploading (manual dispatch never publishes)'
         required: false
         default: true
         type: boolean
 
 concurrency:
-  group: pypi-publish-${{ github.ref }}
+  group: pypi-publish-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: false
 
 env:
@@ -38,6 +38,13 @@ env:
 jobs:
   build:
     name: Build Packages
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        startsWith(github.event.workflow_run.head_branch, 'v')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -46,6 +53,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -64,10 +73,14 @@ jobs:
       - name: Extract version from tag
         id: version
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           GH_REF_TYPE: ${{ github.ref_type }}
           GH_REF: ${{ github.ref }}
         run: |
-          if [[ "${GH_REF_TYPE}" == "tag" ]]; then
+          if [[ "${EVENT_NAME}" == "workflow_run" ]]; then
+            VERSION="${WORKFLOW_RUN_HEAD_BRANCH#v}"
+          elif [[ "${GH_REF_TYPE}" == "tag" ]]; then
             VERSION="${GH_REF#refs/tags/v}"
           else
             VERSION="0.0.0.dev0"
@@ -77,11 +90,17 @@ jobs:
 
       - name: Validate release manifest
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           GH_REF_TYPE: ${{ github.ref_type }}
           GH_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-          if [[ "${GH_REF_TYPE}" == "tag" ]]; then
+          if [[ "${EVENT_NAME}" == "workflow_run" ]]; then
+            uv run python -m testing.release.cli validate \
+              --manifest release/floe-release.yaml \
+              --tag "${WORKFLOW_RUN_HEAD_BRANCH}"
+          elif [[ "${GH_REF_TYPE}" == "tag" ]]; then
             uv run python -m testing.release.cli validate \
               --manifest release/floe-release.yaml \
               --tag "${GH_REF#refs/tags/}"
@@ -110,7 +129,11 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build
-    if: github.ref_type == 'tag' && !(inputs.dry_run || false)
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -119,6 +142,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0

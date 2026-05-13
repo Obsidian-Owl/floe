@@ -22,6 +22,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WEEKLY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "weekly.yml"
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+PYPI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pypi-publish.yml"
 UV_SECURITY_ACTION = REPO_ROOT / ".github" / "actions" / "uv-security-audit" / "action.yml"
 PRE_COMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
 SETUP_HOOKS = REPO_ROOT / "scripts" / "setup-hooks.sh"
@@ -152,6 +153,39 @@ class TestWeeklyWorkflow:
         ]
         has_from = any(line.upper().startswith("FROM") for line in lines)
         assert has_from, "Dockerfile missing FROM instruction"
+
+
+class TestPypiPublishWorkflow:
+    """Structural validation of the PyPI publish release gate."""
+
+    def test_pypi_publish_runs_after_release_workflow_success_instead_of_tag_push(self) -> None:
+        """PyPI upload cannot start directly from a pushed release tag."""
+        workflow_text = PYPI_WORKFLOW.read_text(encoding="utf-8")
+        on_block = workflow_text.split("\nconcurrency:", maxsplit=1)[0]
+
+        assert "\n  workflow_run:" in on_block
+        assert "workflows: [Release]" in on_block
+        assert "types: [completed]" in on_block
+        assert "\n  push:" not in on_block
+        assert "\n    tags:" not in on_block
+
+    def test_pypi_publish_job_requires_successful_release_tag_workflow_run(self) -> None:
+        """Publishing is limited to successful Release workflow runs for v-prefixed tags."""
+        workflow_text = PYPI_WORKFLOW.read_text(encoding="utf-8")
+
+        assert "github.event_name == 'workflow_run'" in workflow_text
+        assert "github.event.workflow_run.conclusion == 'success'" in workflow_text
+        assert "github.event.workflow_run.event == 'push'" in workflow_text
+        assert "startsWith(github.event.workflow_run.head_branch, 'v')" in workflow_text
+
+    def test_manual_pypi_dispatch_is_build_only_dry_run(self) -> None:
+        """Manual PyPI dispatch keeps dry-run support but cannot upload artifacts."""
+        workflow_text = PYPI_WORKFLOW.read_text(encoding="utf-8")
+
+        assert "workflow_dispatch:" in workflow_text
+        assert "dry_run:" in workflow_text
+        assert "github.event_name == 'workflow_run'" in workflow_text
+        assert "inputs.dry_run" not in workflow_text
 
 
 class TestValuesTestCubeStore:

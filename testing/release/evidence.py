@@ -85,6 +85,7 @@ _DEVPOD_ARTIFACT_PATH_RE = re.compile(
     r"^test-artifacts/devpod-run-[A-Za-z0-9][A-Za-z0-9._/-]*$",
 )
 _ARTIFACT_URL_RE = re.compile(r"^https?://[^\s`|]+$", re.IGNORECASE)
+_COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 
 PackageCutlineEntry = tuple[str, str]
 
@@ -104,6 +105,7 @@ class ReleaseEvidence:
 
     def validate_publishable(self) -> None:
         """Reject placeholder, failed, or implausible evidence for tagged releases."""
+        _require_publishable_release_sha(self.release_sha)
         _require_publishable_status("aws_live_result", self.aws_live_result)
         _require_publishable_status("cleanup_result", self.cleanup_result)
         _require_publishable_devpod_artifact(self.devpod_artifact)
@@ -215,6 +217,22 @@ def _require_publishable_status(field_name: str, value: str) -> None:
         reason = "unrecognized"
     raise EvidenceSummaryError(
         f"{field_name} must be passed for tagged release evidence; got {reason}",
+    )
+
+
+def _require_publishable_release_sha(value: str) -> None:
+    normalized = value.strip()
+    lower = normalized.lower()
+    if not normalized:
+        reason = "empty"
+    elif lower == EvidenceStatus.PRE_TAG_REQUIRED.value:
+        reason = "pre-tag-required"
+    elif _COMMIT_SHA_RE.fullmatch(normalized):
+        return
+    else:
+        reason = "invalid"
+    raise EvidenceSummaryError(
+        f"release_sha must be a 40-character commit SHA for tagged release evidence; got {reason}",
     )
 
 
