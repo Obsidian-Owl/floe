@@ -20,6 +20,7 @@ help: ## Show this help message
 	@echo "  make test-integration Run integration tests (requires K8s)"
 	@echo "  make test-e2e        Run E2E tests in-cluster (auto-detects Kind/DevPod)"
 	@echo "  make test-e2e-full   Run standard + destructive E2E suites sequentially"
+	@echo "  make test-aws-provider-live Run opt-in live AWS S3 + Glue provider tests"
 	@echo "  make test-e2e-host   Run E2E tests via host port-forwards (legacy)"
 	@echo ""
 	@echo "Cluster Management:"
@@ -62,6 +63,7 @@ help: ## Show this help message
 	@echo "Contributor Remote Validation (DevPod + Hetzner):"
 	@echo "  make devpod-setup    One-time Hetzner provider setup from .env"
 	@echo "  make devpod-test     Run contributor E2E validation on DevPod"
+	@echo "  make devpod-test-aws-provider Run live AWS S3 + Glue provider tests on DevPod"
 	@echo "  make devpod-delete   Delete DevPod workspace (stops billing)"
 	@echo "  make devpod-status   Show workspace status, tunnels, and cluster health"
 	@echo "  make devpod-up       Create/start contributor DevPod workspace"
@@ -143,6 +145,11 @@ test-e2e: ## Run E2E tests in-cluster as K8s Job (auto-detects Kind/DevPod)
 test-e2e-full: ## Run standard + destructive E2E suites sequentially
 	@echo "Running full E2E test suite..."
 	@./testing/ci/test-e2e-full.sh
+
+.PHONY: test-aws-provider-live
+test-aws-provider-live: ## Run opt-in live AWS S3 + Glue provider tests
+	@echo "Running live AWS provider tests..."
+	@FLOE_RUN_LIVE_AWS_PROVIDER_TESTS=1 uv run pytest tests/integration/test_aws_provider_live.py -q
 
 .PHONY: test-e2e-host
 test-e2e-host: ## Run E2E tests via host port-forwards (legacy, requires running services)
@@ -733,6 +740,16 @@ devpod-setup: devpod-check ## One-time Hetzner provider setup from .env
 .PHONY: devpod-test
 devpod-test: devpod-check ## Run contributor E2E validation on DevPod
 	@bash scripts/devpod-test.sh
+
+.PHONY: devpod-test-aws-provider
+devpod-test-aws-provider: devpod-check ## Run live AWS S3 + Glue provider tests on DevPod
+	@FLOE_PROVIDER_SPIKE_RUN="$${FLOE_PROVIDER_SPIKE_RUN:-floe-provider-$$(date -u +%Y%m%dT%H%M%SZ)}"; \
+	export FLOE_PROVIDER_SPIKE_RUN; \
+	export FLOE_RUN_LIVE_AWS_PROVIDER_TESTS=1; \
+	export DEVPOD_REMOTE_E2E_MAKE_TARGET=test-aws-provider-live; \
+	export DEVPOD_REMOTE_ENV_ALLOWLIST="FLOE_RUN_LIVE_AWS_PROVIDER_TESTS FLOE_PROVIDER_SPIKE_RUN FLOE_AWS_REGION FLOE_AWS_TEST_BUCKET FLOE_AWS_TEST_PREFIX FLOE_AWS_GLUE_DATABASE_PREFIX AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_REGION AWS_DEFAULT_REGION"; \
+	echo "Running DevPod live AWS provider validation with FLOE_PROVIDER_SPIKE_RUN=$${FLOE_PROVIDER_SPIKE_RUN}"; \
+	bash scripts/devpod-test.sh
 
 .PHONY: devpod-delete
 devpod-delete: devpod-check ## Delete DevPod workspace (stops billing)
