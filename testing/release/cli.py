@@ -10,6 +10,7 @@ from typing import NoReturn
 import yaml
 
 from testing.release.build_packages import ReleaseBuildError, artifact_counts, build_packages
+from testing.release.evidence import write_evidence_summary
 from testing.release.manifest import (
     ReleaseManifestError,
     load_release_manifest,
@@ -36,6 +37,14 @@ def main(argv: list[str] | None = None) -> None:
     build_parser = subparsers.add_parser("build")
     build_parser.add_argument("--manifest", default="release/floe-release.yaml")
     build_parser.add_argument("--dist-dir", default="dist")
+
+    evidence_parser = subparsers.add_parser("evidence-summary")
+    evidence_parser.add_argument("--release-sha", required=True)
+    evidence_parser.add_argument("--manifest", default="release/floe-release.yaml")
+    evidence_parser.add_argument("--devpod-artifact", required=True)
+    evidence_parser.add_argument("--aws-live-result", required=True)
+    evidence_parser.add_argument("--cleanup-result", required=True)
+    evidence_parser.add_argument("--output", required=True)
 
     args = parser.parse_args(argv)
     repo_root = Path.cwd()
@@ -71,6 +80,19 @@ def main(argv: list[str] | None = None) -> None:
                     f"got {counts['wheels']} wheels and {counts['sdists']} sdists",
                 )
             print(json.dumps(counts, indent=2, sort_keys=True))
+            return
+
+        if args.command == "evidence-summary":
+            result = validate_release_manifest(manifest, repo_root=repo_root)
+            write_evidence_summary(
+                output_path=_resolve_path(repo_root, args.output),
+                release_sha=args.release_sha,
+                manifest_path=manifest_path.relative_to(repo_root),
+                package_count=result.publish_count,
+                devpod_artifact=args.devpod_artifact,
+                aws_live_result=args.aws_live_result,
+                cleanup_result=args.cleanup_result,
+            )
             return
     except (OSError, ReleaseBuildError, ReleaseManifestError, yaml.YAMLError) as exc:
         _fail(str(exc))

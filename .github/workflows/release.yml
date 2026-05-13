@@ -69,6 +69,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
+      - name: Validate release manifest
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            uv run python -m testing.release.cli validate --manifest release/floe-release.yaml --tag "${GITHUB_REF_NAME}"
+          else
+            uv run python -m testing.release.cli validate --manifest release/floe-release.yaml
+          fi
+
       - name: Run quick validation
         run: |
           uv run ruff check .
@@ -149,6 +157,30 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Write release evidence summary
+        run: |
+          uv run python -m testing.release.cli evidence-summary \
+            --release-sha "${GITHUB_SHA}" \
+            --manifest release/floe-release.yaml \
+            --devpod-artifact pre-tag-required \
+            --aws-live-result pre-tag-required \
+            --cleanup-result pre-tag-required \
+            --output release-evidence.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@01570a1f39cb168c169c802c3bceb9e93fb10974  # v2
         with:
@@ -156,5 +188,6 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref, '-') }}
+          files: release-evidence.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
