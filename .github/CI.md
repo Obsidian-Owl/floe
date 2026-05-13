@@ -9,6 +9,7 @@ validates that manifest before release-specific workflows publish artifacts.
 | Lane | Workflow | Trigger | Purpose |
 |---|---|---|---|
 | Fast PR | `ci.yml` | PRs and pushes to `main` | Lint, formatting, strict typing, unit tests, contract tests, security, traceability, and release manifest structure. |
+| Chart PR | `helm-ci.yaml` | Chart PRs and pushes to `main` | Merge-confidence Helm linting, rendering, schema, unit, diff, and Kind chart validation. |
 | Live validation | `e2e.yml` | Merge queue, manual dispatch, `run-e2e` label, or infrastructure/release-manifest path changes | Full Kind E2E validation with artifacts uploaded on every run. |
 | Release | `release.yml` | Version tags | Release validation and GitHub Release creation. |
 | Package release | `pypi-publish.yml` | Release/publish trigger | Publish only packages declared by the release manifest. |
