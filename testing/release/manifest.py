@@ -18,6 +18,12 @@ SECRET_KEY_RE = re.compile(
     r"(secret|access_key|token|password|private_key)",
     re.IGNORECASE,
 )
+SECRET_VALUE_PATTERNS = (
+    re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{36,}\b"),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{20,}\b"),
+)
 ALPHA_TAG_RE = re.compile(r"^v?(\d+\.\d+\.\d+)-alpha\.(\d+)$")
 
 
@@ -89,6 +95,13 @@ def normalize_tag_to_python_version(tag: str) -> str:
     return version
 
 
+def normalize_tag_to_helm_version(tag: str) -> str:
+    match = ALPHA_TAG_RE.fullmatch(tag)
+    if not match:
+        raise ReleaseManifestError(f"unsupported alpha tag format: {tag}")
+    return f"{match.group(1)}-alpha.{match.group(2)}"
+
+
 def load_release_manifest(path: Path) -> ReleaseManifest:
     with path.open(encoding="utf-8") as handle:
         raw = yaml.safe_load(handle)
@@ -114,10 +127,12 @@ def load_release_manifest(path: Path) -> ReleaseManifest:
             publish=_load_package_entries(
                 python_packages.get("publish"),
                 "python_packages.publish",
+                required_detail_field="evidence",
             ),
             exclude=_load_package_entries(
                 python_packages.get("exclude"),
                 "python_packages.exclude",
+                required_detail_field="reason",
             ),
         ),
         helm=HelmInfo(
@@ -166,17 +181,31 @@ def validate_release_manifest(
             "manifest python_version does not match normalized git tag: "
             f"{manifest.release.python_version} != {expected_python_version}",
         )
+    expected_helm_version = normalize_tag_to_helm_version(tag or manifest.release.git_tag)
+    if manifest.release.helm_version != expected_helm_version:
+        raise ReleaseManifestError(
+            "manifest helm_version does not match normalized git tag: "
+            f"{manifest.release.helm_version} != {expected_helm_version}",
+        )
+    if manifest.helm.alpha_policy != "publish":
+        raise ReleaseManifestError(
+            f"unsupported helm.alpha_policy for alpha release: {manifest.helm.alpha_policy}",
+        )
 
     Version(manifest.release.python_version)
     publish_names = tuple(pkg.name for pkg in manifest.python_packages.publish)
     excluded_names = tuple(pkg.name for pkg in manifest.python_packages.exclude)
+    all_packages = (*manifest.python_packages.publish, *manifest.python_packages.exclude)
+    _reject_duplicate_package_fields(all_packages)
     overlap = sorted(set(publish_names).intersection(excluded_names))
     if overlap:
         raise ReleaseManifestError(
             f"packages cannot be both published and excluded: {overlap}",
         )
 
-    for package in (*manifest.python_packages.publish, *manifest.python_packages.exclude):
+    _validate_workspace_package_classification(repo_root, all_packages)
+
+    for package in all_packages:
         project_path = repo_root / package.path
         pyproject_path = project_path / "pyproject.toml"
         if not pyproject_path.exists():
@@ -211,22 +240,68 @@ def validate_release_manifest(
     )
 
 
-def _load_package_entries(value: Any, field_name: str) -> tuple[PackageEntry, ...]:
+def _load_package_entries(
+    value: Any,
+    field_name: str,
+    *,
+    required_detail_field: str,
+) -> tuple[PackageEntry, ...]:
     entries = []
     for index, item in enumerate(_require_list(value, field_name)):
         entry = _require_mapping(item, f"{field_name}[{index}]")
+        detail = _require_non_empty_str(
+            entry.get(required_detail_field),
+            f"{field_name}[{index}].{required_detail_field}",
+        )
         entries.append(
             PackageEntry(
                 path=_require_str(entry.get("path"), f"{field_name}[{index}].path"),
                 name=_require_str(entry.get("name"), f"{field_name}[{index}].name"),
-                evidence=_optional_str(
-                    entry.get("evidence"),
-                    f"{field_name}[{index}].evidence",
-                ),
-                reason=_optional_str(entry.get("reason"), f"{field_name}[{index}].reason"),
+                evidence=detail if required_detail_field == "evidence" else None,
+                reason=detail if required_detail_field == "reason" else None,
             ),
         )
     return tuple(entries)
+
+
+def _reject_duplicate_package_fields(packages: tuple[PackageEntry, ...]) -> None:
+    _reject_duplicate_package_field(packages, field_name="name")
+    _reject_duplicate_package_field(packages, field_name="path")
+
+
+def _reject_duplicate_package_field(
+    packages: tuple[PackageEntry, ...],
+    *,
+    field_name: str,
+) -> None:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for package in packages:
+        value = getattr(package, field_name)
+        if value in seen:
+            duplicates.add(value)
+        seen.add(value)
+    if duplicates:
+        raise ReleaseManifestError(
+            f"duplicate package {field_name}: {sorted(duplicates)}",
+        )
+
+
+def _validate_workspace_package_classification(
+    repo_root: Path,
+    packages: tuple[PackageEntry, ...],
+) -> None:
+    classified_paths = {package.path for package in packages}
+    workspace_paths = {
+        pyproject.parent.relative_to(repo_root).as_posix()
+        for pattern in ("packages/*/pyproject.toml", "plugins/*/pyproject.toml")
+        for pyproject in repo_root.glob(pattern)
+    }
+    unclassified = sorted(workspace_paths - classified_paths)
+    if unclassified:
+        raise ReleaseManifestError(
+            f"unclassified workspace package(s): {unclassified}",
+        )
 
 
 def _read_project_metadata(path: Path) -> dict[str, str]:
@@ -249,6 +324,13 @@ def _reject_secret_like_keys(value: Any, prefix: str = "") -> None:
     elif isinstance(value, list):
         for index, child in enumerate(value):
             _reject_secret_like_keys(child, f"{prefix}[{index}]")
+    elif isinstance(value, str):
+        for pattern in SECRET_VALUE_PATTERNS:
+            if pattern.search(value):
+                location = prefix or "manifest"
+                raise ReleaseManifestError(
+                    f"manifest contains secret-like value: {location}",
+                )
 
 
 def _require_mapping(value: Any, field_name: str) -> dict[str, Any]:
@@ -267,6 +349,13 @@ def _require_str(value: Any, field_name: str) -> str:
     if not isinstance(value, str):
         raise ReleaseManifestError(f"manifest field must be a string: {field_name}")
     return value
+
+
+def _require_non_empty_str(value: Any, field_name: str) -> str:
+    text = _require_str(value, field_name)
+    if not text.strip():
+        raise ReleaseManifestError(f"manifest field {field_name} must be non-empty")
+    return text
 
 
 def _optional_str(value: Any, field_name: str) -> str | None:

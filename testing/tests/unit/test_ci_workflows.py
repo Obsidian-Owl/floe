@@ -25,6 +25,7 @@ CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 UV_SECURITY_ACTION = REPO_ROOT / ".github" / "actions" / "uv-security-audit" / "action.yml"
 PRE_COMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
 SETUP_HOOKS = REPO_ROOT / "scripts" / "setup-hooks.sh"
+PRE_COMMIT_CONSTITUTION = REPO_ROOT / "scripts" / "pre-commit-constitution.sh"
 CUBE_STORE_DOCKERFILE = REPO_ROOT / "docker" / "cube-store" / "Dockerfile"
 VALUES_TEST = REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
 
@@ -343,6 +344,22 @@ class TestLocalHookAlignment:
         assert pre_push_template.index('unset "$git_env_var"') < pre_push_template.index(
             "pre-commit run --hook-stage pre-push",
         )
+
+    @pytest.mark.requirement("VAL-HOOKS")
+    def test_constitution_hook_allows_release_branches(self) -> None:
+        """Release management branches are approved for alpha release work."""
+        hook_text = PRE_COMMIT_CONSTITUTION.read_text()
+
+        assert "release" in hook_text
+        assert "^(epic|feat|fix|chore|docs|release)/" in hook_text
+
+    @pytest.mark.requirement("VAL-HOOKS")
+    def test_constitution_hook_warning_increment_is_set_e_safe(self) -> None:
+        """Warning increments must not make set -e exit on the first warning."""
+        hook_text = PRE_COMMIT_CONSTITUTION.read_text()
+
+        assert "((WARNINGS++))" not in hook_text
+        assert "((++WARNINGS))" in hook_text
 
 
 class TestCubeStoreRollbackPath:

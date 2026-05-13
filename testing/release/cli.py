@@ -7,6 +7,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import NoReturn
 
+import yaml
+
 from testing.release.manifest import (
     ReleaseManifestError,
     load_release_manifest,
@@ -50,7 +52,7 @@ def main() -> None:
             else:
                 print("\n".join(packages))
             return
-    except ReleaseManifestError as exc:
+    except (OSError, ReleaseManifestError, yaml.YAMLError) as exc:
         _fail(str(exc))
 
     _fail(f"unknown command: {args.command}")
@@ -64,7 +66,7 @@ def _resolve_manifest_path(repo_root: Path, manifest_path: str) -> Path:
 
 
 def _fail(message: str) -> NoReturn:
-    print(message, file=sys.stderr)
+    print(f"error: {message}", file=sys.stderr)
     raise SystemExit(1)
 
 
