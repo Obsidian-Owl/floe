@@ -8,8 +8,8 @@
 #   - PYPI_API_TOKEN secret configured in GitHub environment "pypi"
 #   - See docs/guides/pypi-trusted-publishers.md for future OIDC migration
 #
-# Security: all run: blocks use static commands. Release workflow_run publishes are
-# limited to successful tag-triggered Release runs whose head_branch starts with v.
+# Security: all run: blocks use static commands. Release workflow_run publishes use
+# release-metadata from the successful Release run instead of inferring tag refs.
 
 name: PyPI Publish
 
@@ -28,7 +28,7 @@ on:
         type: boolean
 
 concurrency:
-  group: pypi-publish-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
+  group: pypi-publish-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
   cancel-in-progress: false
 
 env:
@@ -42,19 +42,64 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (
         github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        startsWith(github.event.workflow_run.head_branch, 'v')
+        github.event.workflow_run.event == 'push'
       )
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
+      - name: Resolve release metadata
+        id: release_metadata
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          gh run download "${WORKFLOW_RUN_ID}" \
+            --name release-metadata \
+            --dir release-metadata
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          metadata_path = Path("release-metadata/release-metadata.json")
+          metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+          tag = str(metadata.get("tag", ""))
+          sha = str(metadata.get("sha", ""))
+          version = str(metadata.get("version", ""))
+          expected_sha = os.environ["WORKFLOW_RUN_HEAD_SHA"]
+
+          if not tag.startswith("v"):
+              print(f"::error::Release metadata tag must start with 'v': {tag}", file=sys.stderr)
+              sys.exit(1)
+          if sha != expected_sha:
+              print(
+                  f"::error::Release metadata SHA {sha} does not match workflow_run head SHA {expected_sha}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          if not version:
+              print("::error::Release metadata version is empty", file=sys.stderr)
+              sys.exit(1)
+
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write(f"tag={tag}\n")
+              output.write(f"sha={sha}\n")
+              output.write(f"version={version}\n")
+          PY
+
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
+          ref: ${{ github.event_name == 'workflow_run' && steps.release_metadata.outputs.tag || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -74,24 +119,29 @@ jobs:
         id: version
         env:
           EVENT_NAME: ${{ github.event_name }}
-          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RELEASE_TAG: ${{ steps.release_metadata.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release_metadata.outputs.version }}
           GH_REF_TYPE: ${{ github.ref_type }}
           GH_REF: ${{ github.ref }}
         run: |
           if [[ "${EVENT_NAME}" == "workflow_run" ]]; then
-            VERSION="${WORKFLOW_RUN_HEAD_BRANCH#v}"
+            VERSION="${RELEASE_VERSION}"
+            TAG="${RELEASE_TAG}"
           elif [[ "${GH_REF_TYPE}" == "tag" ]]; then
             VERSION="${GH_REF#refs/tags/v}"
+            TAG="${GH_REF#refs/tags/}"
           else
             VERSION="0.0.0.dev0"
+            TAG=""
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Building version: ${VERSION}"
 
       - name: Validate release manifest
         env:
           EVENT_NAME: ${{ github.event_name }}
-          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RELEASE_TAG: ${{ steps.release_metadata.outputs.tag }}
           GH_REF_TYPE: ${{ github.ref_type }}
           GH_REF: ${{ github.ref }}
         run: |
@@ -99,7 +149,7 @@ jobs:
           if [[ "${EVENT_NAME}" == "workflow_run" ]]; then
             uv run python -m testing.release.cli validate \
               --manifest release/floe-release.yaml \
-              --tag "${WORKFLOW_RUN_HEAD_BRANCH}"
+              --tag "${RELEASE_TAG}"
           elif [[ "${GH_REF_TYPE}" == "tag" ]]; then
             uv run python -m testing.release.cli validate \
               --manifest release/floe-release.yaml \
@@ -120,7 +170,7 @@ jobs:
           ls -la dist/
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: python-packages
           path: dist/
@@ -132,8 +182,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      startsWith(github.event.workflow_run.head_branch, 'v')
+      github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -143,7 +192,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ needs.build.outputs.tag }}
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -160,7 +209,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Download build artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-packages
           path: dist/
@@ -208,11 +257,14 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Wait for PyPI index propagation
-        run: sleep 30
-
       - name: Verify core package installable
         run: |
-          pip install "floe-core==${RELEASE_VERSION}" --no-deps --dry-run || {
-            echo "::warning::floe-core not yet available on PyPI (index propagation may take a few minutes)"
-          }
+          for attempt in 1 2 3 4 5 6; do
+            if pip install "floe-core==${RELEASE_VERSION}" --no-deps --dry-run; then
+              exit 0
+            fi
+            echo "::notice::floe-core ${RELEASE_VERSION} not available on PyPI yet; retry ${attempt}/6"
+            sleep 30
+          done
+
+          echo "::warning::floe-core ${RELEASE_VERSION} was not visible on PyPI after retries"

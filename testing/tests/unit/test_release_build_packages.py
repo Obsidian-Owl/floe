@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -92,7 +93,7 @@ def test_build_packages_rejects_external_tmp_dist_dir(
             )
     finally:
         if external_dist.exists() and external_dist.is_dir() and not external_dist.is_symlink():
-            external_dist.rmdir()
+            shutil.rmtree(external_dist, ignore_errors=True)
 
 
 def test_build_packages_rejects_external_dist_dir(
@@ -135,6 +136,35 @@ def test_build_packages_rejects_source_control_dist_dir_without_deleting_sentine
         )
 
     assert sentinel.read_text(encoding="utf-8") == "do-not-delete"
+
+
+@pytest.mark.parametrize(
+    ("package_path", "expected_error"),
+    [
+        ("../outside", "repository-relative"),
+        ("docs/not-a-package", "under packages/ or plugins/"),
+        ("packages/missing", "missing pyproject.toml"),
+    ],
+)
+def test_build_packages_rejects_unsafe_manifest_package_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    package_path: str,
+    expected_error: str,
+) -> None:
+    manifest_path = _write_manifest(tmp_path)
+    manifest_data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest_data["python_packages"]["publish"][0]["path"] = package_path
+    manifest_path.write_text(yaml.safe_dump(manifest_data, sort_keys=False), encoding="utf-8")
+
+    monkeypatch.setattr(subprocess, "run", _successful_build)
+
+    with pytest.raises(ReleaseBuildError, match=expected_error):
+        build_packages(
+            load_release_manifest(manifest_path),
+            repo_root=tmp_path,
+            dist_dir=tmp_path / "dist",
+        )
 
 
 def test_build_packages_wraps_subprocess_failure_in_release_build_error(

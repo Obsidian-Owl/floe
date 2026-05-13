@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from testing.release.manifest import ReleaseManifest
 
@@ -41,8 +41,7 @@ def artifact_counts(dist_dir: Path) -> dict[str, int]:
 def build_packages(manifest: ReleaseManifest, repo_root: Path, dist_dir: Path) -> None:
     _prepare_dist_dir(manifest, repo_root=repo_root, dist_dir=dist_dir)
 
-    for package_path in package_paths_from_manifest(manifest):
-        package_dir = repo_root / package_path
+    for package_path, package_dir in _validated_package_dirs(manifest, repo_root=repo_root):
         try:
             subprocess.run(
                 [
@@ -106,6 +105,34 @@ def _validate_dist_dir(manifest: ReleaseManifest, *, repo_root: Path, dist_dir: 
 
     if dist_dir.exists() and not dist_dir.is_dir():
         raise ReleaseBuildError("dist dir exists and is not a directory")
+
+
+def _validated_package_dirs(
+    manifest: ReleaseManifest,
+    *,
+    repo_root: Path,
+) -> list[tuple[str, Path]]:
+    resolved_repo_root = repo_root.resolve()
+    package_dirs: list[tuple[str, Path]] = []
+
+    for package_path in package_paths_from_manifest(manifest):
+        parsed_path = PurePosixPath(package_path)
+        if parsed_path.is_absolute() or ".." in parsed_path.parts:
+            raise ReleaseBuildError(f"package path must be repository-relative: {package_path}")
+        if not parsed_path.parts or parsed_path.parts[0] not in {"packages", "plugins"}:
+            raise ReleaseBuildError(
+                f"package path must be under packages/ or plugins/: {package_path}",
+            )
+
+        package_dir = (repo_root / package_path).resolve()
+        if not _is_relative_to(package_dir, resolved_repo_root):
+            raise ReleaseBuildError(f"package path escapes repository root: {package_path}")
+        if not (package_dir / "pyproject.toml").is_file():
+            raise ReleaseBuildError(f"package path missing pyproject.toml: {package_path}")
+
+        package_dirs.append((package_path, package_dir))
+
+    return package_dirs
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:

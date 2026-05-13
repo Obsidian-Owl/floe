@@ -127,6 +127,8 @@ def _resolve_manifest_path(repo_root: Path, manifest_path: str) -> Path:
 def _resolve_path(repo_root: Path, path_text: str) -> Path:
     path = Path(path_text)
     if path.is_absolute():
+        # Command handlers own path-safety validation because read and write
+        # targets have different repository-boundary requirements.
         return path
     return repo_root / path
 

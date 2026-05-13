@@ -23,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 WEEKLY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "weekly.yml"
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PYPI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pypi-publish.yml"
+RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 UV_SECURITY_ACTION = REPO_ROOT / ".github" / "actions" / "uv-security-audit" / "action.yml"
 PRE_COMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
 SETUP_HOOKS = REPO_ROOT / "scripts" / "setup-hooks.sh"
@@ -169,14 +170,30 @@ class TestPypiPublishWorkflow:
         assert "\n  push:" not in on_block
         assert "\n    tags:" not in on_block
 
-    def test_pypi_publish_job_requires_successful_release_tag_workflow_run(self) -> None:
-        """Publishing is limited to successful Release workflow runs for v-prefixed tags."""
+    def test_pypi_publish_job_uses_release_metadata_instead_of_head_branch(self) -> None:
+        """Publishing resolves the release tag from the completed Release run artifact."""
         workflow_text = PYPI_WORKFLOW.read_text(encoding="utf-8")
 
         assert "github.event_name == 'workflow_run'" in workflow_text
         assert "github.event.workflow_run.conclusion == 'success'" in workflow_text
         assert "github.event.workflow_run.event == 'push'" in workflow_text
-        assert "startsWith(github.event.workflow_run.head_branch, 'v')" in workflow_text
+        assert "gh run download" in workflow_text
+        assert "--name release-metadata" in workflow_text
+        assert (
+            "ref: ${{ github.event_name == 'workflow_run' && "
+            "steps.release_metadata.outputs.tag || github.ref }}"
+        ) in workflow_text
+        assert "startsWith(github.event.workflow_run.head_branch" not in workflow_text
+        assert "github.event.workflow_run.head_branch" not in workflow_text
+
+    def test_release_workflow_uploads_release_metadata_for_pypi_publish(self) -> None:
+        """The Release workflow publishes tag/SHA metadata consumed by PyPI publish."""
+        workflow_text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+
+        assert "Validate release evidence variables" in workflow_text
+        assert "Repository variable ${var_name} must be configured" in workflow_text
+        assert "release-metadata/release-metadata.json" in workflow_text
+        assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in workflow_text
 
     def test_manual_pypi_dispatch_is_build_only_dry_run(self) -> None:
         """Manual PyPI dispatch keeps dry-run support but cannot upload artifacts."""

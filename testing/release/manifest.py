@@ -261,19 +261,19 @@ def _validate_alpha_helm_publish_charts(chart_paths: tuple[str, ...]) -> None:
         parsed_path = PurePosixPath(chart_path)
         if parsed_path.is_absolute():
             raise ReleaseManifestError(
-                f"unsupported alpha Helm publish chart path: {chart_path}",
+                f"alpha Helm publish chart path must be relative: {chart_path}",
             )
         if ".." in parsed_path.parts:
             raise ReleaseManifestError(
-                f"unsupported alpha Helm publish chart path: {chart_path}",
+                f"alpha Helm publish chart path must not traverse parents: {chart_path}",
             )
         if not parsed_path.parts or parsed_path.parts[0] != "charts":
             raise ReleaseManifestError(
-                f"unsupported alpha Helm publish chart path: {chart_path}",
+                f"alpha Helm publish chart path must be under charts/: {chart_path}",
             )
         if chart_path not in ALPHA_HELM_PUBLISH_CHART_PATHS:
             raise ReleaseManifestError(
-                f"unsupported alpha Helm publish chart path: {chart_path}",
+                f"alpha Helm publish chart path is not in the alpha allowlist: {chart_path}",
             )
         if chart_path in seen_chart_paths:
             duplicate_chart_paths.add(chart_path)

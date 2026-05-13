@@ -249,17 +249,18 @@ def test_release_manifest_rejects_stale_manifest_git_tag(tmp_path: Path) -> None
 
 
 @pytest.mark.parametrize(
-    "chart_path",
+    ("chart_path", "expected_error"),
     [
-        "/outside-chart",
-        "../outside-chart",
-        "outside-chart",
-        "charts/not-alpha",
+        ("/outside-chart", "must be relative"),
+        ("../outside-chart", "must not traverse parents"),
+        ("outside-chart", "must be under charts/"),
+        ("charts/not-alpha", "not in the alpha allowlist"),
     ],
 )
 def test_release_manifest_rejects_unapproved_alpha_helm_chart_paths(
     tmp_path: Path,
     chart_path: str,
+    expected_error: str,
 ) -> None:
     if chart_path.startswith("/"):
         chart_path = str(tmp_path / chart_path.removeprefix("/"))
@@ -272,7 +273,7 @@ def test_release_manifest_rejects_unapproved_alpha_helm_chart_paths(
         helm={"alpha_policy": "publish", "charts": [chart_path]},
     )
 
-    with pytest.raises(ReleaseManifestError, match="unsupported alpha Helm publish chart"):
+    with pytest.raises(ReleaseManifestError, match=expected_error):
         validate_release_manifest(load_release_manifest(manifest_path), repo_root=tmp_path)
 
 

@@ -97,7 +97,7 @@ jobs:
         run: |
           for img in \
             apache/polaris:1.2.0-incubating \
-            bitnami/postgresql:16.3.0-debian-12-r19 \
+            postgres:16-alpine \
             minio/minio:RELEASE.2024-09-13T20-26-02Z \
             jaegertracing/all-in-one:1.60; do
             docker pull "$img"
