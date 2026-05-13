@@ -65,11 +65,19 @@ def test_release_manifest_exists_and_matches_cutline() -> None:
     assert publish_names.isdisjoint(excluded_names)
 
 
-def test_release_manifest_detects_current_version_mismatch() -> None:
+def test_release_manifest_validates_alpha_release_cutline() -> None:
     manifest = load_release_manifest(MANIFEST)
 
-    with pytest.raises(ReleaseManifestError, match="package version mismatch"):
-        validate_release_manifest(manifest, repo_root=REPO_ROOT, tag="v0.1.0-alpha.1")
+    result = validate_release_manifest(
+        manifest,
+        repo_root=REPO_ROOT,
+        tag="v0.1.0-alpha.1",
+    )
+
+    assert result.publish_count == 15
+    assert result.exclude_count == 11
+    assert result.python_version == "0.1.0a1"
+    assert result.git_tag == "v0.1.0-alpha.1"
 
 
 def test_release_manifest_rejects_secret_like_values(tmp_path: Path) -> None:

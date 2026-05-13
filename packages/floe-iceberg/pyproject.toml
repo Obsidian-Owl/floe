@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "floe-iceberg"
-version = "0.1.0"
+version = "0.1.0a1"
 description = "IcebergTableManager utility for PyIceberg table operations in the floe data platform"
 readme = "README.md"
 license = "Apache-2.0"
@@ -33,7 +33,7 @@ dependencies = [
     # PyArrow for data handling; pin upper bound (12B-DEP T048)
     "pyarrow>=14.0,<23.0",
     # floe-core for plugin interfaces (CatalogPlugin, StoragePlugin)
-    "floe-core>=0.1.0",
+    "floe-core>=0.1.0a1,<0.2.0",
 ]
 
 [project.optional-dependencies]

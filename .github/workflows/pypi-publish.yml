@@ -1,8 +1,8 @@
-# PyPI Package Publishing - builds and publishes all floe packages
+# PyPI Package Publishing - builds and publishes release manifest packages
 #
 # Triggers on version tags (v*.*.*) after the Release workflow validates.
 # Uses account-scoped PyPI API token stored as PYPI_API_TOKEN secret.
-# Each package is built independently and uploaded in a single job.
+# Each manifest-published package is built independently and uploaded in a single job.
 #
 # Prerequisites:
 #   - PYPI_API_TOKEN secret configured in GitHub environment "pypi"
@@ -58,8 +58,8 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      - name: Install build tools
-        run: uv pip install --system build
+      - name: Install workspace dependencies
+        run: uv sync --all-extras --dev
 
       - name: Extract version from tag
         id: version
@@ -75,55 +75,30 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Building version: ${VERSION}"
 
-      - name: Build all packages
+      - name: Validate release manifest
+        env:
+          GH_REF_TYPE: ${{ github.ref_type }}
+          GH_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-          mkdir -p dist/
+          if [[ "${GH_REF_TYPE}" == "tag" ]]; then
+            uv run python -m testing.release.cli validate \
+              --manifest release/floe-release.yaml \
+              --tag "${GH_REF#refs/tags/}"
+          else
+            uv run python -m testing.release.cli validate \
+              --manifest release/floe-release.yaml
+          fi
 
-          PACKAGES=(
-            packages/floe-core
-            packages/floe-iceberg
-            plugins/floe-alert-alertmanager
-            plugins/floe-alert-email
-            plugins/floe-alert-slack
-            plugins/floe-alert-webhook
-            plugins/floe-catalog-polaris
-            plugins/floe-compute-duckdb
-            plugins/floe-dbt-core
-            plugins/floe-dbt-fusion
-            plugins/floe-identity-keycloak
-            plugins/floe-ingestion-dlt
-            plugins/floe-lineage-marquez
-            plugins/floe-network-security-k8s
-            plugins/floe-orchestrator-dagster
-            plugins/floe-quality-dbt
-            plugins/floe-quality-gx
-            plugins/floe-rbac-k8s
-            plugins/floe-secrets-infisical
-            plugins/floe-secrets-k8s
-            plugins/floe-semantic-cube
-            plugins/floe-storage-minio
-            plugins/floe-telemetry-console
-            plugins/floe-telemetry-jaeger
-          )
-
-          for pkg in "${PACKAGES[@]}"; do
-            echo "::group::Building ${pkg}"
-            python -m build "${pkg}" --outdir dist/
-            echo "::endgroup::"
-          done
+      - name: Build manifest packages
+        run: |
+          set -euo pipefail
+          uv run python -m testing.release.cli build \
+            --manifest release/floe-release.yaml \
+            --dist-dir dist
 
           echo "=== Built artifacts ==="
           ls -la dist/
-          echo "=== Package count ==="
-          WHEEL_COUNT=$(find dist/ -name '*.whl' | wc -l)
-          SDIST_COUNT=$(find dist/ -name '*.tar.gz' | wc -l)
-          echo "Wheels: ${WHEEL_COUNT}, Sdists: ${SDIST_COUNT}"
-
-          if [[ "${WHEEL_COUNT}" -ne 24 || "${SDIST_COUNT}" -ne 24 ]]; then
-            echo "::error::Expected 24 wheels and 24 sdists, got ${WHEEL_COUNT} wheels and ${SDIST_COUNT} sdists"
-            exit 1
-          fi
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
@@ -142,6 +117,23 @@ jobs:
     environment: pypi
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install workspace dependencies
+        run: uv sync --all-extras --dev
+
       - name: Download build artifacts
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
         with:
@@ -152,10 +144,20 @@ jobs:
         run: |
           echo "=== Artifacts to publish ==="
           ls -la dist/
+          EXPECTED=$(uv run python - <<'PY'
+          from pathlib import Path
+
+          from testing.release.manifest import load_release_manifest
+
+          manifest = load_release_manifest(Path("release/floe-release.yaml"))
+          print(len(manifest.python_packages.publish))
+          PY
+          )
           WHEEL_COUNT=$(find dist/ -name '*.whl' | wc -l)
-          echo "Wheels: ${WHEEL_COUNT}"
-          if [[ "${WHEEL_COUNT}" -ne 24 ]]; then
-            echo "::error::Expected 24 wheels, got ${WHEEL_COUNT}"
+          SDIST_COUNT=$(find dist/ -name '*.tar.gz' | wc -l)
+          echo "Wheels: ${WHEEL_COUNT}, Sdists: ${SDIST_COUNT}, Expected per type: ${EXPECTED}"
+          if [[ "${WHEEL_COUNT}" -ne "${EXPECTED}" || "${SDIST_COUNT}" -ne "${EXPECTED}" ]]; then
+            echo "::error::Expected ${EXPECTED} wheels and ${EXPECTED} sdists, got ${WHEEL_COUNT} wheels and ${SDIST_COUNT} sdists"
             exit 1
           fi
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "floe-orchestrator-dagster"
-version = "0.1.0"
+version = "0.1.0a1"
 description = "Dagster orchestrator plugin for the floe data platform"
 readme = "README.md"
 license = "Apache-2.0"
@@ -23,8 +23,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "floe-core>=0.1.0",
-    "floe-iceberg>=0.1.0",
+    "floe-core>=0.1.0a1,<0.2.0",
+    "floe-iceberg>=0.1.0a1,<0.2.0",
     "dagster>=1.10.0,<2.0.0",
     "dagster-dbt>=0.26.0",
     "openlineage-python>=1.0.0",

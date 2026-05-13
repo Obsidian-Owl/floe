@@ -23,7 +23,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "floe-core>=0.1.0",
+    "floe-core>=0.1.0a1,<0.2.0",
     "pydantic>=2.0,<3.0",
     "structlog>=24.0,<26.0",
     "httpx>=0.25.0,<1.0",

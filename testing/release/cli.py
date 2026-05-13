@@ -9,6 +9,7 @@ from typing import NoReturn
 
 import yaml
 
+from testing.release.build_packages import artifact_counts, build_packages
 from testing.release.manifest import (
     ReleaseManifestError,
     load_release_manifest,
@@ -32,6 +33,10 @@ def main() -> None:
         default="lines",
     )
 
+    build_parser = subparsers.add_parser("build")
+    build_parser.add_argument("--manifest", default="release/floe-release.yaml")
+    build_parser.add_argument("--dist-dir", default="dist")
+
     args = parser.parse_args()
     repo_root = Path.cwd()
     manifest_path = _resolve_manifest_path(repo_root, args.manifest)
@@ -52,6 +57,21 @@ def main() -> None:
             else:
                 print("\n".join(packages))
             return
+
+        if args.command == "build":
+            validate_release_manifest(manifest, repo_root=repo_root)
+            dist_dir = _resolve_path(repo_root, args.dist_dir)
+            build_packages(manifest, repo_root=repo_root, dist_dir=dist_dir)
+            counts = artifact_counts(dist_dir)
+            expected = len(manifest.python_packages.publish)
+            if counts["wheels"] != expected or counts["sdists"] != expected:
+                raise ReleaseManifestError(
+                    "built artifact count mismatch: "
+                    f"expected {expected} wheels and {expected} sdists, "
+                    f"got {counts['wheels']} wheels and {counts['sdists']} sdists",
+                )
+            print(json.dumps(counts, indent=2, sort_keys=True))
+            return
     except (OSError, ReleaseManifestError, yaml.YAMLError) as exc:
         _fail(str(exc))
 
@@ -59,7 +79,11 @@ def main() -> None:
 
 
 def _resolve_manifest_path(repo_root: Path, manifest_path: str) -> Path:
-    path = Path(manifest_path)
+    return _resolve_path(repo_root, manifest_path)
+
+
+def _resolve_path(repo_root: Path, path_text: str) -> Path:
+    path = Path(path_text)
     if path.is_absolute():
         return path
     return repo_root / path

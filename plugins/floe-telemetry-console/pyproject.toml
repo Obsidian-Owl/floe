@@ -23,7 +23,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "floe-core>=0.1.0",
+    "floe-core>=0.1.0a1,<0.2.0",
     "opentelemetry-sdk>=1.20.0",
 ]
 

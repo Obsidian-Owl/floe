@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "floe-catalog-polaris"
-version = "0.1.0"
+version = "0.1.0a1"
 description = "Apache Polaris catalog plugin for the floe data platform"
 readme = "README.md"
 license = "Apache-2.0"
@@ -23,7 +23,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "floe-core>=0.1.0",
+    "floe-core>=0.1.0a1,<0.2.0",
     "pyiceberg>=0.11.1",
     "pydantic>=2.0,<3.0",  # Pin upper bound (12B-DEP)
     "structlog>=24.0,<26.0",  # Pin upper bound (12B-DEP T049)
