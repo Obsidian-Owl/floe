@@ -14,6 +14,7 @@ It does not record a tag cut and does not claim PyPI or Helm publication.
 | Classification | Meaning |
 | --- | --- |
 | Product | Floe product code or product test assertion failed after the lane reached product validation. |
+| Release tooling | A required release gate, Make target, script, or automation entry point is missing or miswired before product validation can run. |
 | Infrastructure | DevPod, Hetzner, Kind, Flux, network, or provider capacity failed before product validation. |
 | Credential/setup | Required AWS, DevPod, Hetzner, or local setup was missing or invalid. |
 | Cleanup | A cleanup command or inventory check failed after a lane attempted to create resources. |
@@ -35,7 +36,7 @@ It does not record a tag cut and does not claim PyPI or Helm publication.
 | Command | Result | Evidence | Classification |
 | --- | --- | --- | --- |
 | `make test-unit` | Exit `0` | `10657 passed, 1 skipped, 1 xfailed, 6 warnings in 184.34s (0:03:04)`; coverage `87.65%`, required coverage `80%` reached | Product pass |
-| `make test-contract` | Exit `2` | `make: *** No rule to make target \`test-contract'. Stop.` | Credential/setup failure: requested target is absent from this branch's `Makefile` |
+| `make test-contract` | Exit `2` | `make: *** No rule to make target \`test-contract'. Stop.` | Release tooling failure: requested product gate target is absent from this branch's `Makefile` |
 | `make lint` | Exit `0` after rerun with a Bash wrapper for exit-code capture | `All checks passed!`; `1284 files already formatted` | Product pass |
 | `make typecheck` | Exit `0` | `Success: no issues found in 371 source files` | Product pass |
 
@@ -128,7 +129,7 @@ Status: `DONE_WITH_CONCERNS`
 Local release-package checks passed, and cleanup completed. The release
 candidate is not fully validated because:
 
-- `make test-contract` is not available in this branch's `Makefile`.
+- Release tooling gap: `make test-contract` is not available in this branch's `Makefile`, so the contract-test product gate could not run.
 - Full DevPod+Hetzner E2E failed during Hetzner server creation before product tests ran.
 - AWS S3+Glue live validation failed during Hetzner server creation before `tests/integration/test_aws_provider_live.py` ran.
 
