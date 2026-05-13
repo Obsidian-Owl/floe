@@ -166,7 +166,8 @@ jobs:
       - name: Update repository index
         run: |
           # Move new charts to root
-          mv -- charts-new/*.tgz . 2>/dev/null || true
+          # shellcheck disable=SC2035
+          mv charts-new/*.tgz . 2>/dev/null || true
           rmdir charts-new 2>/dev/null || true
 
           # Generate/update index.yaml
@@ -178,10 +179,12 @@ jobs:
 
           # List charts
           echo "Charts in repository:"
-          ls -la ./*.tgz 2>/dev/null || echo "No chart packages found"
+          # shellcheck disable=SC2035
+          ls -la *.tgz 2>/dev/null || echo "No chart packages found"
           echo ""
           echo "Index content:"
-          head -50 index.yaml
+          # shellcheck disable=SC2002
+          cat index.yaml | head -50
 
       - name: Commit and push
         env:
