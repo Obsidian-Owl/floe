@@ -73,9 +73,12 @@ Cleanup evidence:
 | Final DevPod inventory | `devpod list` and `devpod machine list` showed no entries. |
 
 Additional cleanup note: an interrupted local probe briefly created default
-workspace resources for `floe` / `floe-734a5`. DevPod deletion ran, and the
-final direct Hetzner inventory above also found no remaining `floe-alpha*` or
-`floe-provi*` current-run resources.
+workspace resources for `floe` / `floe-734a5`. A direct Hetzner inventory after
+review found server `130795698` / `floe-734a5` and volume `105700530` /
+`floe-734a5`; both were deleted directly through the Hetzner API. The final
+direct inventory showed no `floe-734a5`, `floe-alpha*`, or `floe-provi*`
+servers, volumes, SSH keys, load balancers, or floating IPs, and `devpod list`
+plus `devpod machine list` remained empty.
 
 ## AWS S3 And Glue Live Validation Through DevPod
 
