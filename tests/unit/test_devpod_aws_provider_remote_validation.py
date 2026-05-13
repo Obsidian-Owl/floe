@@ -34,6 +34,10 @@ def test_devpod_wrapper_uploads_allowlisted_remote_env_without_echoing_values() 
     assert 'REMOTE_ENV_FILE="${REMOTE_RUN_DIR}.remote-env.sh"' in script
     assert "FLOE_REMOTE_ENV_FILE=${remote_env_file_q}" in script
     assert 'source "\\${FLOE_REMOTE_ENV_FILE}"' in script
+    assert "cleanup_remote_env_file()" in script
+    assert "trap cleanup_remote_env_file EXIT" in script
+    assert 'rm -f "\\${FLOE_REMOTE_ENV_FILE}"' in script
+    assert "delete_remote_env_file()" in script
     assert 'source "\\${FLOE_REMOTE_RUN_DIR}/remote-env.sh"' not in script
     assert 'echo "${!env_name}"' not in script
 

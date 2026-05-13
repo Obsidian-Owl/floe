@@ -347,6 +347,17 @@ upload_remote_env_file() {
     return 1
 }
 
+delete_remote_env_file() {
+    local remote_env_q
+
+    if [[ -z "${REMOTE_ENV_FILE}" ]]; then
+        return 0
+    fi
+
+    remote_env_q="$(shell_quote "${REMOTE_ENV_FILE}")"
+    devpod_remote_bash "rm -f ${remote_env_q}" >/dev/null 2>&1 || true
+}
+
 start_remote_e2e_run() {
     local run_dir_q
     local workdir_q
@@ -386,6 +397,12 @@ cat > "\${run_dir}/run.sh" <<'REMOTE_RUN'
 #!/usr/bin/env bash
 set +e
 mkdir -p "\${FLOE_REMOTE_RUN_DIR}/artifacts"
+cleanup_remote_env_file() {
+    if [[ -n "\${FLOE_REMOTE_ENV_FILE:-}" ]]; then
+        rm -f "\${FLOE_REMOTE_ENV_FILE}" 2>/dev/null || true
+    fi
+}
+trap cleanup_remote_env_file EXIT
 resolve_flux_ref_commit() {
     local ref_type="\${1:?ref type required}"
     local ref_name="\${2:?ref name required}"
@@ -528,6 +545,7 @@ wait_for_flux_settlement() {
         echo "[remote-e2e] sourcing remote env allowlist"
         # shellcheck disable=SC1091
         source "\${FLOE_REMOTE_ENV_FILE}"
+        cleanup_remote_env_file
     fi
     SKIP_MONITORING=\${SKIP_MONITORING:-true} make kind-up
     wait_for_flux_settlement
@@ -686,7 +704,10 @@ run_remote_e2e_detached() {
     upload_remote_env_file || return 1
 
     log "Starting detached remote E2E run in ${REMOTE_RUN_DIR}..."
-    remote_dir="$(start_remote_e2e_run)" || return 1
+    remote_dir="$(start_remote_e2e_run)" || {
+        delete_remote_env_file
+        return 1
+    }
     log "Remote E2E started: ${remote_dir}"
 
     exit_code="$(poll_remote_e2e_run)"
