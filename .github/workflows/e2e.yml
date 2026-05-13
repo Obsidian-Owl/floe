@@ -1,8 +1,5 @@
-# End-to-end validation gate for infrastructure-affecting changes.
-#
-# Phase E1 ships the workflow dormant with `if: false` on the e2e job so
-# GitHub validates the workflow shape without running the expensive Kind path.
-# Phase E2 replaces that guard with the trigger expression recorded below.
+# End-to-end validation gate for infrastructure-affecting changes, merge queue,
+# manual dispatches, and PRs explicitly labeled for live validation.
 
 name: E2E
 
@@ -45,6 +42,8 @@ jobs:
               - 'plugins/**'
               - 'packages/floe-core/**'
               - 'tests/**'
+              - 'release/floe-release.yaml'
+              - 'testing/release/**'
               - 'pyproject.toml'
               - 'uv.lock'
               - 'Makefile'
@@ -56,16 +55,11 @@ jobs:
   e2e:
     name: e2e
     needs: [changed-files]
-    # Phase E1: keep the workflow dormant until Units A-D have landed and the
-    # end-to-end path is ready to serve as a real CI gate.
-    #
-    # Phase E2 activation contract (arm in a follow-on PR):
-    # if: |
-    #   github.event_name == 'merge_group' ||
-    #   github.event_name == 'workflow_dispatch' ||
-    #   contains(github.event.pull_request.labels.*.name, 'run-e2e') ||
-    #   needs.changed-files.outputs.infra == 'true'
-    if: false
+    if: |
+      github.event_name == 'merge_group' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'run-e2e') ||
+      needs.changed-files.outputs.infra == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
