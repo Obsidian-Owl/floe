@@ -178,6 +178,23 @@ def test_release_manifest_rejects_helm_version_mismatch(tmp_path: Path) -> None:
         )
 
 
+def test_release_manifest_rejects_stale_manifest_git_tag(tmp_path: Path) -> None:
+    manifest_path = _write_manifest(
+        tmp_path,
+        release={"git_tag": "v0.1.0-alpha.2"},
+    )
+
+    with pytest.raises(
+        ReleaseManifestError,
+        match="manifest git_tag does not match release tag",
+    ):
+        validate_release_manifest(
+            load_release_manifest(manifest_path),
+            repo_root=tmp_path,
+            tag="v0.1.0-alpha.1",
+        )
+
+
 def test_release_manifest_rejects_publish_entry_without_evidence(tmp_path: Path) -> None:
     manifest_path = _write_manifest(
         tmp_path,

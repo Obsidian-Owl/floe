@@ -173,6 +173,11 @@ def validate_release_manifest(
     repo_root: Path,
     tag: str | None = None,
 ) -> ManifestValidationResult:
+    if tag is not None and tag != manifest.release.git_tag:
+        raise ReleaseManifestError(
+            f"manifest git_tag does not match release tag: {manifest.release.git_tag} != {tag}",
+        )
+
     expected_python_version = normalize_tag_to_python_version(
         tag or manifest.release.git_tag,
     )
@@ -226,6 +231,8 @@ def validate_release_manifest(
                 f"{metadata['version']} != {manifest.release.python_version}",
             )
 
+    # Task 1 validates declared Helm policy/version and chart presence; chart
+    # metadata alignment belongs to the Helm policy task.
     for chart_path in manifest.helm.charts:
         if not (repo_root / chart_path / "Chart.yaml").exists():
             raise ReleaseManifestError(f"chart path missing Chart.yaml: {chart_path}")
@@ -356,12 +363,6 @@ def _require_non_empty_str(value: Any, field_name: str) -> str:
     if not text.strip():
         raise ReleaseManifestError(f"manifest field {field_name} must be non-empty")
     return text
-
-
-def _optional_str(value: Any, field_name: str) -> str | None:
-    if value is None:
-        return None
-    return _require_str(value, field_name)
 
 
 def _require_bool(value: Any, field_name: str) -> bool:
