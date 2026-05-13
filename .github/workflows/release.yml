@@ -173,13 +173,21 @@ jobs:
 
       - name: Write release evidence summary
         run: |
+          : "${RELEASE_DEVPOD_ARTIFACT:?RELEASE_DEVPOD_ARTIFACT is required for tagged releases}"
+          : "${RELEASE_AWS_LIVE_RESULT:?RELEASE_AWS_LIVE_RESULT is required for tagged releases}"
+          : "${RELEASE_CLEANUP_RESULT:?RELEASE_CLEANUP_RESULT is required for tagged releases}"
+
           uv run python -m testing.release.cli evidence-summary \
             --release-sha "${GITHUB_SHA}" \
             --manifest release/floe-release.yaml \
-            --devpod-artifact pre-tag-required \
-            --aws-live-result pre-tag-required \
-            --cleanup-result pre-tag-required \
+            --devpod-artifact "${RELEASE_DEVPOD_ARTIFACT}" \
+            --aws-live-result "${RELEASE_AWS_LIVE_RESULT}" \
+            --cleanup-result "${RELEASE_CLEANUP_RESULT}" \
             --output release-evidence.md
+        env:
+          RELEASE_DEVPOD_ARTIFACT: ${{ vars.RELEASE_DEVPOD_ARTIFACT }}
+          RELEASE_AWS_LIVE_RESULT: ${{ vars.RELEASE_AWS_LIVE_RESULT }}
+          RELEASE_CLEANUP_RESULT: ${{ vars.RELEASE_CLEANUP_RESULT }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@01570a1f39cb168c169c802c3bceb9e93fb10974  # v2

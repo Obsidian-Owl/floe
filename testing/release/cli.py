@@ -10,7 +10,7 @@ from typing import NoReturn
 import yaml
 
 from testing.release.build_packages import ReleaseBuildError, artifact_counts, build_packages
-from testing.release.evidence import write_evidence_summary
+from testing.release.evidence import EvidenceSummaryError, write_evidence_summary
 from testing.release.manifest import (
     ReleaseManifestError,
     load_release_manifest,
@@ -45,6 +45,11 @@ def main(argv: list[str] | None = None) -> None:
     evidence_parser.add_argument("--aws-live-result", required=True)
     evidence_parser.add_argument("--cleanup-result", required=True)
     evidence_parser.add_argument("--output", required=True)
+    evidence_parser.add_argument(
+        "--allow-placeholders",
+        action="store_true",
+        help="Allow pre-tag placeholder evidence for planning runs only.",
+    )
 
     args = parser.parse_args(argv)
     repo_root = Path.cwd()
@@ -92,9 +97,16 @@ def main(argv: list[str] | None = None) -> None:
                 devpod_artifact=args.devpod_artifact,
                 aws_live_result=args.aws_live_result,
                 cleanup_result=args.cleanup_result,
+                allow_placeholders=args.allow_placeholders,
             )
             return
-    except (OSError, ReleaseBuildError, ReleaseManifestError, yaml.YAMLError) as exc:
+    except (
+        EvidenceSummaryError,
+        OSError,
+        ReleaseBuildError,
+        ReleaseManifestError,
+        yaml.YAMLError,
+    ) as exc:
         _fail(str(exc))
 
     _fail(f"unknown command: {args.command}")
