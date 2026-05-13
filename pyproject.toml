@@ -30,6 +30,7 @@ dependencies = [
     "types-requests>=2.31",  # Type stubs for requests
     "requests>=2.31",  # HTTP client for telemetry fixture tests
     "jsonschema>=4.0",  # For JSON Schema validation in tests
+    "tomli>=2.0; python_version < '3.11'",  # TOML reader for release helpers on Python 3.10
     "dagster-graphql",  # GraphQL API for Dagster integration testing
     # Include floe-core for development
     "floe-core",

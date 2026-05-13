@@ -1,0 +1,100 @@
+release:
+  train: alpha
+  git_tag: v0.1.0-alpha.1
+  python_version: 0.1.0a1
+  helm_version: 0.1.0-alpha.1
+
+python_packages:
+  publish:
+    - path: packages/floe-core
+      name: floe-core
+      evidence: current-main
+    - path: packages/floe-iceberg
+      name: floe-iceberg
+      evidence: current-main
+    - path: plugins/floe-orchestrator-dagster
+      name: floe-orchestrator-dagster
+      evidence: current-main
+    - path: plugins/floe-catalog-polaris
+      name: floe-catalog-polaris
+      evidence: current-main
+    - path: plugins/floe-storage-minio
+      name: floe-storage-minio
+      evidence: current-main
+    - path: plugins/floe-compute-duckdb
+      name: floe-compute-duckdb
+      evidence: current-main
+    - path: plugins/floe-dbt-core
+      name: floe-dbt-core
+      evidence: current-main
+    - path: plugins/floe-ingestion-dlt
+      name: floe-ingestion-dlt
+      evidence: current-main
+    - path: plugins/floe-telemetry-jaeger
+      name: floe-telemetry-jaeger
+      evidence: current-main
+    - path: plugins/floe-rbac-k8s
+      name: floe-rbac-k8s
+      evidence: current-main
+    - path: plugins/floe-network-security-k8s
+      name: floe-network-security-k8s
+      evidence: current-main
+    - path: plugins/floe-lineage-marquez
+      name: floe-lineage-marquez
+      evidence: root-e2e-required
+    - path: plugins/floe-quality-gx
+      name: floe-quality-gx
+      evidence: root-e2e-required
+    - path: plugins/floe-storage-aws-s3
+      name: floe-storage-aws-s3
+      evidence: aws-live-required
+    - path: plugins/floe-catalog-glue
+      name: floe-catalog-glue
+      evidence: aws-live-required
+  exclude:
+    - path: plugins/floe-alert-slack
+      name: floe-alert-slack
+      reason: no-composed-alpha-runtime-path
+    - path: plugins/floe-alert-email
+      name: floe-alert-email
+      reason: no-composed-alpha-runtime-path
+    - path: plugins/floe-alert-alertmanager
+      name: floe-alert-alertmanager
+      reason: no-composed-alpha-runtime-path
+    - path: plugins/floe-alert-webhook
+      name: floe-alert-webhook
+      reason: no-composed-alpha-runtime-path
+    - path: plugins/floe-identity-keycloak
+      name: floe-identity-keycloak
+      reason: no-alpha-identity-composition-path
+    - path: plugins/floe-secrets-infisical
+      name: floe-secrets-infisical
+      reason: no-alpha-secret-backend-path
+    - path: plugins/floe-secrets-k8s
+      name: floe-secrets-k8s
+      reason: no-alpha-secret-backend-path
+    - path: plugins/floe-semantic-cube
+      name: floe-semantic-cube
+      reason: no-alpha-semantic-layer-e2e-path
+    - path: plugins/floe-dbt-fusion
+      name: floe-dbt-fusion
+      reason: not-alpha-dbt-runtime-path
+    - path: plugins/floe-telemetry-console
+      name: floe-telemetry-console
+      reason: dev-utility-evidence-only
+    - path: plugins/floe-quality-dbt
+      name: floe-quality-dbt
+      reason: no-composed-alpha-quality-path
+
+helm:
+  alpha_policy: publish
+  charts:
+    - charts/floe-platform
+    - charts/floe-jobs
+
+validation:
+  require_current_main_ci: true
+  require_package_build_dry_run: true
+  require_full_devpod_e2e: true
+  require_aws_provider_live: true
+  allow_accepted_historical_evidence: true

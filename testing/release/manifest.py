@@ -1,0 +1,281 @@
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, cast
+
+import yaml
+from packaging.version import Version
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
+
+SECRET_KEY_RE = re.compile(
+    r"(secret|access_key|token|password|private_key)",
+    re.IGNORECASE,
+)
+ALPHA_TAG_RE = re.compile(r"^v?(\d+\.\d+\.\d+)-alpha\.(\d+)$")
+
+
+class ReleaseManifestError(ValueError):
+    """Raised when the release manifest is invalid."""
+
+
+@dataclass(frozen=True)
+class ReleaseInfo:
+    train: str
+    git_tag: str
+    python_version: str
+    helm_version: str
+
+
+@dataclass(frozen=True)
+class PackageEntry:
+    path: str
+    name: str
+    evidence: str | None = None
+    reason: str | None = None
+
+
+@dataclass(frozen=True)
+class PythonPackages:
+    publish: tuple[PackageEntry, ...]
+    exclude: tuple[PackageEntry, ...]
+
+
+@dataclass(frozen=True)
+class HelmInfo:
+    alpha_policy: str
+    charts: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ValidationPolicy:
+    require_current_main_ci: bool
+    require_package_build_dry_run: bool
+    require_full_devpod_e2e: bool
+    require_aws_provider_live: bool
+    allow_accepted_historical_evidence: bool
+
+
+@dataclass(frozen=True)
+class ReleaseManifest:
+    release: ReleaseInfo
+    python_packages: PythonPackages
+    helm: HelmInfo
+    validation: ValidationPolicy
+
+
+@dataclass(frozen=True)
+class ManifestValidationResult:
+    git_tag: str
+    python_version: str
+    helm_version: str
+    publish_count: int
+    exclude_count: int
+    publish_names: tuple[str, ...]
+
+
+def normalize_tag_to_python_version(tag: str) -> str:
+    match = ALPHA_TAG_RE.fullmatch(tag)
+    if not match:
+        raise ReleaseManifestError(f"unsupported alpha tag format: {tag}")
+    version = f"{match.group(1)}a{match.group(2)}"
+    Version(version)
+    return version
+
+
+def load_release_manifest(path: Path) -> ReleaseManifest:
+    with path.open(encoding="utf-8") as handle:
+        raw = yaml.safe_load(handle)
+    _reject_secret_like_keys(raw)
+    data = _require_mapping(raw, "manifest")
+
+    release = _require_mapping(data.get("release"), "release")
+    python_packages = _require_mapping(data.get("python_packages"), "python_packages")
+    helm = _require_mapping(data.get("helm"), "helm")
+    validation = _require_mapping(data.get("validation"), "validation")
+
+    return ReleaseManifest(
+        release=ReleaseInfo(
+            train=_require_str(release.get("train"), "release.train"),
+            git_tag=_require_str(release.get("git_tag"), "release.git_tag"),
+            python_version=_require_str(
+                release.get("python_version"),
+                "release.python_version",
+            ),
+            helm_version=_require_str(release.get("helm_version"), "release.helm_version"),
+        ),
+        python_packages=PythonPackages(
+            publish=_load_package_entries(
+                python_packages.get("publish"),
+                "python_packages.publish",
+            ),
+            exclude=_load_package_entries(
+                python_packages.get("exclude"),
+                "python_packages.exclude",
+            ),
+        ),
+        helm=HelmInfo(
+            alpha_policy=_require_str(helm.get("alpha_policy"), "helm.alpha_policy"),
+            charts=tuple(
+                _require_str(item, "helm.charts[]")
+                for item in _require_list(helm.get("charts"), "helm.charts")
+            ),
+        ),
+        validation=ValidationPolicy(
+            require_current_main_ci=_require_bool(
+                validation.get("require_current_main_ci"),
+                "validation.require_current_main_ci",
+            ),
+            require_package_build_dry_run=_require_bool(
+                validation.get("require_package_build_dry_run"),
+                "validation.require_package_build_dry_run",
+            ),
+            require_full_devpod_e2e=_require_bool(
+                validation.get("require_full_devpod_e2e"),
+                "validation.require_full_devpod_e2e",
+            ),
+            require_aws_provider_live=_require_bool(
+                validation.get("require_aws_provider_live"),
+                "validation.require_aws_provider_live",
+            ),
+            allow_accepted_historical_evidence=_require_bool(
+                validation.get("allow_accepted_historical_evidence"),
+                "validation.allow_accepted_historical_evidence",
+            ),
+        ),
+    )
+
+
+def validate_release_manifest(
+    manifest: ReleaseManifest,
+    *,
+    repo_root: Path,
+    tag: str | None = None,
+) -> ManifestValidationResult:
+    expected_python_version = normalize_tag_to_python_version(
+        tag or manifest.release.git_tag,
+    )
+    if manifest.release.python_version != expected_python_version:
+        raise ReleaseManifestError(
+            "manifest python_version does not match normalized git tag: "
+            f"{manifest.release.python_version} != {expected_python_version}",
+        )
+
+    Version(manifest.release.python_version)
+    publish_names = tuple(pkg.name for pkg in manifest.python_packages.publish)
+    excluded_names = tuple(pkg.name for pkg in manifest.python_packages.exclude)
+    overlap = sorted(set(publish_names).intersection(excluded_names))
+    if overlap:
+        raise ReleaseManifestError(
+            f"packages cannot be both published and excluded: {overlap}",
+        )
+
+    for package in (*manifest.python_packages.publish, *manifest.python_packages.exclude):
+        project_path = repo_root / package.path
+        pyproject_path = project_path / "pyproject.toml"
+        if not pyproject_path.exists():
+            raise ReleaseManifestError(
+                f"package path missing pyproject.toml: {package.path}",
+            )
+        metadata = _read_project_metadata(pyproject_path)
+        if metadata["name"] != package.name:
+            raise ReleaseManifestError(
+                f"package name mismatch for {package.path}: {metadata['name']} != {package.name}",
+            )
+
+    for package in manifest.python_packages.publish:
+        metadata = _read_project_metadata(repo_root / package.path / "pyproject.toml")
+        if metadata["version"] != manifest.release.python_version:
+            raise ReleaseManifestError(
+                f"package version mismatch for {package.name}: "
+                f"{metadata['version']} != {manifest.release.python_version}",
+            )
+
+    for chart_path in manifest.helm.charts:
+        if not (repo_root / chart_path / "Chart.yaml").exists():
+            raise ReleaseManifestError(f"chart path missing Chart.yaml: {chart_path}")
+
+    return ManifestValidationResult(
+        git_tag=manifest.release.git_tag,
+        python_version=manifest.release.python_version,
+        helm_version=manifest.release.helm_version,
+        publish_count=len(manifest.python_packages.publish),
+        exclude_count=len(manifest.python_packages.exclude),
+        publish_names=publish_names,
+    )
+
+
+def _load_package_entries(value: Any, field_name: str) -> tuple[PackageEntry, ...]:
+    entries = []
+    for index, item in enumerate(_require_list(value, field_name)):
+        entry = _require_mapping(item, f"{field_name}[{index}]")
+        entries.append(
+            PackageEntry(
+                path=_require_str(entry.get("path"), f"{field_name}[{index}].path"),
+                name=_require_str(entry.get("name"), f"{field_name}[{index}].name"),
+                evidence=_optional_str(
+                    entry.get("evidence"),
+                    f"{field_name}[{index}].evidence",
+                ),
+                reason=_optional_str(entry.get("reason"), f"{field_name}[{index}].reason"),
+            ),
+        )
+    return tuple(entries)
+
+
+def _read_project_metadata(path: Path) -> dict[str, str]:
+    with path.open("rb") as handle:
+        project = _require_mapping(tomllib.load(handle).get("project"), "project")
+    return {
+        "name": _require_str(project.get("name"), "project.name"),
+        "version": _require_str(project.get("version"), "project.version"),
+    }
+
+
+def _reject_secret_like_keys(value: Any, prefix: str = "") -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key)
+            current = f"{prefix}.{key_text}" if prefix else key_text
+            if SECRET_KEY_RE.search(key_text):
+                raise ReleaseManifestError(f"manifest contains secret-like key: {current}")
+            _reject_secret_like_keys(child, current)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _reject_secret_like_keys(child, f"{prefix}[{index}]")
+
+
+def _require_mapping(value: Any, field_name: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ReleaseManifestError(f"manifest field must be a mapping: {field_name}")
+    return cast(dict[str, Any], value)
+
+
+def _require_list(value: Any, field_name: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise ReleaseManifestError(f"manifest field must be a list: {field_name}")
+    return value
+
+
+def _require_str(value: Any, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise ReleaseManifestError(f"manifest field must be a string: {field_name}")
+    return value
+
+
+def _optional_str(value: Any, field_name: str) -> str | None:
+    if value is None:
+        return None
+    return _require_str(value, field_name)
+
+
+def _require_bool(value: Any, field_name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ReleaseManifestError(f"manifest field must be a boolean: {field_name}")
+    return value
