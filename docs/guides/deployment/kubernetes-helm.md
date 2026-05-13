@@ -19,6 +19,25 @@ helm upgrade --install floe ./charts/floe-platform \
 
 For published chart validation, use the release artifact path documented in the release checklist for the version you are installing.
 
+## Alpha Chart Publishing Policy
+
+Alpha Helm publishing is governed by `release/floe-release.yaml`. The manifest
+declares the chart publish policy, chart version, and chart paths:
+
+- `helm.alpha_policy: publish`
+- `release.helm_version: 0.1.0-alpha.1`
+- `helm.charts`: `charts/floe-platform` and `charts/floe-jobs`
+
+The Helm release workflow validates that manifest before packaging charts. When
+the workflow is tag-triggered, it packages the manifest-declared chart list with
+the manifest Helm version. A manual workflow dispatch may explicitly override
+the version, but it does not replace the manifest chart list or alpha policy.
+
+Chart CI and chart release are separate lanes. `helm-ci.yaml` provides
+merge-confidence checks for chart changes, including linting, rendering, schema,
+unit, diff, and Kind validation. `helm-release.yaml` publishes the manifest
+approved alpha charts to GitHub Pages and GHCR after release-policy validation.
+
 ## 1. Chart Structure
 
 `charts/floe-platform` is the alpha platform chart. It uses direct Helm values and chart dependencies; this guide does not claim manifest-driven chart assembly.

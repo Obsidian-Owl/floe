@@ -13,7 +13,7 @@ validates that manifest before release-specific workflows publish artifacts.
 | Live validation | `e2e.yml` | Merge queue, manual dispatch, `run-e2e` label, or infrastructure/release-manifest path changes | Full Kind E2E validation with artifacts uploaded on every run. |
 | Release | `release.yml` | Version tags | Release validation and GitHub Release creation. |
 | Package release | `pypi-publish.yml` | Release/publish trigger | Publish only packages declared by the release manifest. |
-| Helm release | `helm-release.yaml` | Helm release trigger | Publish charts according to the release manifest Helm policy. |
+| Helm release | `helm-release.yaml` | Helm release trigger | Publish the chart list/version allowed by the release manifest Helm policy. |
 | Scheduled maintenance | `weekly.yml`, `security.yml`, `codspeed.yml` | Schedules or manual dispatch | Dependency drift, compatibility, security, and performance signals outside default PR CI. |
 
 ## PR CI (`ci.yml`)
@@ -51,6 +51,14 @@ cleanup failures before deciding whether to rerun or block the release.
 confidence lanes. They should fail before publishing when the release manifest,
 package cutline, artifact counts, version normalization, Helm policy, or release
 evidence is invalid.
+
+For the alpha Helm lane, `release/floe-release.yaml` is the publish contract:
+`helm.alpha_policy` must be `publish`, `release.helm_version` supplies the
+default chart package version, and `helm.charts` supplies the exact chart paths.
+Manual Helm release dispatch may explicitly override the version only; it does
+not replace the manifest-declared chart list or policy. Chart metadata is live
+release input for `helm-release.yaml`, while `helm-ci.yaml` remains the
+merge-confidence lane for validating chart changes before they reach release.
 
 `weekly.yml`, `security.yml`, and `codspeed.yml` remain scheduled or manual
 maintenance lanes. They provide drift, security, and performance signal without

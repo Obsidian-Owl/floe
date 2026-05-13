@@ -20,13 +20,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Chart version to release (e.g., 1.0.0)'
-        required: true
-        type: string
-      charts:
-        description: 'Charts to release (comma-separated: floe-platform,floe-jobs)'
-        required: true
-        default: 'floe-platform,floe-jobs'
+        description: 'Optional chart version override (defaults to release/floe-release.yaml)'
+        required: false
         type: string
 
 env:
@@ -53,20 +48,48 @@ jobs:
         with:
           version: v3.14.0
 
-      - name: Extract version
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.10"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Extract version and chart list
         id: version
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
-          REF_NAME: ${{ github.ref_name }}
         run: |
+          set -euo pipefail
           if [ -n "${INPUT_VERSION}" ]; then
             VERSION="${INPUT_VERSION}"
           else
-            # Extract version from tag (helm-v1.0.0 -> 1.0.0)
-            VERSION=$(echo "${REF_NAME}" | sed -E 's/^(helm|charts)-v//')
+            VERSION=$(uv run python -c 'from pathlib import Path; from testing.release.manifest import load_release_manifest; print(load_release_manifest(Path("release/floe-release.yaml")).release.helm_version)')
           fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          CHART_PATHS=$(uv run python -c 'from pathlib import Path; from testing.release.manifest import load_release_manifest; print("\n".join(load_release_manifest(Path("release/floe-release.yaml")).helm.charts))')
+
+          {
+            echo "version=${VERSION}"
+            echo "chart_paths<<EOF"
+            echo "${CHART_PATHS}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
           echo "Chart version: ${VERSION}"
+          echo "Chart paths:"
+          echo "${CHART_PATHS}"
+
+      - name: Validate Helm alpha policy
+        run: |
+          set -euo pipefail
+          uv run python -m testing.release.cli validate --manifest release/floe-release.yaml
 
       - name: Add Helm repositories
         run: |
@@ -76,22 +99,33 @@ jobs:
           helm repo update
 
       - name: Update chart dependencies
+        env:
+          CHART_PATHS: ${{ steps.version.outputs.chart_paths }}
         run: |
-          helm dependency update charts/floe-platform
-          helm dependency update charts/floe-jobs
+          while IFS= read -r chart_path; do
+            [ -n "${chart_path}" ] || continue
+            helm dependency update "${chart_path}"
+          done <<< "${CHART_PATHS}"
 
       - name: Lint charts
+        env:
+          CHART_PATHS: ${{ steps.version.outputs.chart_paths }}
         run: |
-          helm lint charts/floe-platform --values charts/floe-platform/values.yaml
-          helm lint charts/floe-jobs --values charts/floe-jobs/values.yaml
+          while IFS= read -r chart_path; do
+            [ -n "${chart_path}" ] || continue
+            helm lint "${chart_path}" --values "${chart_path}/values.yaml"
+          done <<< "${CHART_PATHS}"
 
       - name: Package charts
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          CHART_PATHS: ${{ steps.version.outputs.chart_paths }}
         run: |
           mkdir -p dist
-          helm package charts/floe-platform --version "${VERSION}" --destination dist/
-          helm package charts/floe-jobs --version "${VERSION}" --destination dist/
+          while IFS= read -r chart_path; do
+            [ -n "${chart_path}" ] || continue
+            helm package "${chart_path}" --version "${VERSION}" --destination dist/
+          done <<< "${CHART_PATHS}"
           ls -la dist/
 
       - name: Upload chart artifacts
@@ -132,7 +166,7 @@ jobs:
       - name: Update repository index
         run: |
           # Move new charts to root
-          mv charts-new/*.tgz . 2>/dev/null || true
+          mv -- charts-new/*.tgz . 2>/dev/null || true
           rmdir charts-new 2>/dev/null || true
 
           # Generate/update index.yaml
@@ -144,10 +178,10 @@ jobs:
 
           # List charts
           echo "Charts in repository:"
-          ls -la *.tgz 2>/dev/null || echo "No chart packages found"
+          ls -la ./*.tgz 2>/dev/null || echo "No chart packages found"
           echo ""
           echo "Index content:"
-          cat index.yaml | head -50
+          head -50 index.yaml
 
       - name: Commit and push
         env:
@@ -210,8 +244,11 @@ jobs:
 
           echo ""
           echo "Charts published to:"
-          echo "  oci://${REGISTRY_PATH}/floe-platform:${VERSION}"
-          echo "  oci://${REGISTRY_PATH}/floe-jobs:${VERSION}"
+          for chart in dist/*.tgz; do
+            base=$(basename "${chart}" .tgz)
+            chart_name=${base%"-${VERSION}"}
+            echo "  oci://${REGISTRY_PATH}/${chart_name}:${VERSION}"
+          done
           echo ""
           echo "Install with:"
           echo "  helm install floe oci://${REGISTRY_PATH}/floe-platform --version ${VERSION}"
@@ -221,7 +258,9 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          for chart_name in floe-platform floe-jobs; do
+          for chart in dist/*.tgz; do
+            base=$(basename "${chart}" .tgz)
+            chart_name=${base%"-${VERSION}"}
             chart_ref="${REGISTRY_PATH}/${chart_name}:${VERSION}"
             echo "Signing ${chart_ref}..."
             if ! cosign sign --yes "${chart_ref}"; then

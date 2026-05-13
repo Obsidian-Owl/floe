@@ -80,6 +80,14 @@ def test_release_manifest_validates_alpha_release_cutline() -> None:
     assert result.git_tag == "v0.1.0-alpha.1"
 
 
+def test_manifest_declares_helm_alpha_publish_policy() -> None:
+    manifest = load_release_manifest(MANIFEST)
+
+    assert manifest.helm.alpha_policy == "publish"
+    assert manifest.helm.charts == ("charts/floe-platform", "charts/floe-jobs")
+    assert manifest.release.helm_version == "0.1.0-alpha.1"
+
+
 def test_release_manifest_rejects_secret_like_values(tmp_path: Path) -> None:
     manifest_path = tmp_path / "floe-release.yaml"
     manifest_path.write_text(
