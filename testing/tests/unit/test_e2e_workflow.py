@@ -307,7 +307,10 @@ class TestE2EWorkflow:
         workflow = _load_workflow()
         e2e = _job(workflow, "e2e")
 
-        assert e2e.get("timeout-minutes") == 30, "e2e job must use timeout-minutes: 30."
+        assert e2e.get("timeout-minutes") == 60, (
+            "e2e job must allow enough time for setup, standard, developer, "
+            "and destructive validation lanes."
+        )
 
         expected_uses = {
             "actions/checkout": CHECKOUT_SHA,

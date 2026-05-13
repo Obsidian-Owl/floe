@@ -61,7 +61,7 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'run-e2e') ||
       needs.changed-files.outputs.infra == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
