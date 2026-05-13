@@ -9,7 +9,7 @@ validates that manifest before release-specific workflows publish artifacts.
 | Trigger | Workflow | Purpose |
 |---|---|---|
 | Pull request | `ci.yml` | Fast PR confidence plus release manifest structure |
-| Pull request label `run-e2e` / infra path / manual | `e2e.yml` | Full E2E validation |
+| `merge_group` / pull request label `run-e2e` / infra path / manual | `e2e.yml` | Full E2E validation |
 | Tag `v*.*.*` | `release.yml` and `pypi-publish.yml` | Manifest validation, integration, release, package build/publish |
 | Tag `helm-v*` / `charts-v*` / manual | `helm-release.yaml` | Helm chart release when manifest policy allows |
 | Schedule | `weekly.yml`, `security.yml`, `codspeed.yml` | Drift, security, performance maintenance |
