@@ -3,7 +3,9 @@
 Date: 2026-05-13
 Repo: `/Users/dmccarthy/Projects/floe/.worktrees/alpha-manifest-validator`
 Branch: `release/alpha-manifest-validator`
-Commit: `d3a30c43b78e4778b85e69d0989810b0358c0fc5`
+Primary validation commit: `d3a30c43b78e4778b85e69d0989810b0358c0fc5`
+Latest branch head after evidence and release-safety fixes:
+`4dd1461ffd0633375fe5bf3d8a1c21daa36e8f12`
 Remote source used by DevPod wrapper: `git:https://github.com/Obsidian-Owl/floe@release/alpha-manifest-validator`
 
 This record captures observed release-candidate validation for `v0.1.0-alpha.1`.
@@ -30,6 +32,16 @@ It does not record a tag cut and does not claim PyPI or Helm publication.
 | `uv run pytest testing/tests/unit/test_release_manifest.py testing/tests/unit/test_release_build_packages.py testing/tests/unit/test_release_evidence.py testing/tests/unit/test_release_ci_inventory.py -q` | Exit `0` | `53 passed in 0.15s` | Product pass |
 | `uv run ruff check testing/release testing/tests/unit/test_release_manifest.py testing/tests/unit/test_release_build_packages.py testing/tests/unit/test_release_evidence.py testing/tests/unit/test_release_ci_inventory.py` | Exit `0` | `All checks passed!` | Product pass |
 | `uv run mypy --strict testing/release` | Exit `0` | `Success: no issues found in 6 source files` | Product pass |
+
+Additional release-safety checks were run after the final PyPI/evidence-gate
+fixes at branch head `4dd1461ffd0633375fe5bf3d8a1c21daa36e8f12`:
+
+| Command | Result | Evidence | Classification |
+| --- | --- | --- | --- |
+| `uv run pytest testing/tests/unit/test_release_evidence.py testing/tests/unit/test_ci_workflows.py testing/ci/tests/test_github_actions_node24_pins.py -q` | Exit `0` | `48 passed in 0.22s` | Product pass |
+| `actionlint .github/workflows/pypi-publish.yml .github/workflows/release.yml` | Exit `0` | No output | Product pass |
+| Positive `evidence-summary` with `git rev-parse HEAD` | Exit `0` | Summary wrote successfully with a 40-character release SHA | Product pass |
+| Negative `evidence-summary` with `--release-sha pre-tag-required` | Exit `1` as expected | `release_sha must be a 40-character commit SHA` | Product pass |
 
 ## Full Repo Validation
 
