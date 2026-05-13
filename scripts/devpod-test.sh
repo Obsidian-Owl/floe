@@ -44,6 +44,11 @@
 #                        after HelmReleases settle.
 #   DEVPOD_REMOTE_FLUX_STATEFULSETS Space-separated StatefulSets to wait for
 #                        after HelmReleases settle.
+#   DEVPOD_REMOTE_ENV_ALLOWLIST Space-separated local environment variable names
+#                        to upload into the detached remote E2E run. Values are
+#                        written through DevPod SSH stdin to a 0600 file and
+#                        sourced by the remote run script. Use for opt-in live
+#                        provider validation only.
 #   DEVPOD_UP_RECOVERY_TIMEOUT Seconds to poll workspace status after a
 #                        transport-level `devpod up` failure (default: 600).
 #   DEVPOD_ENABLE_REMOTE_TUNNELS Set to 1 to establish host service tunnels
@@ -85,12 +90,15 @@ DEVPOD_REMOTE_FLUX_SOURCE_NAMESPACE="${DEVPOD_REMOTE_FLUX_SOURCE_NAMESPACE:-flux
 DEVPOD_REMOTE_FLUX_HELMRELEASES="${DEVPOD_REMOTE_FLUX_HELMRELEASES:-floe-platform floe-jobs-test}"
 DEVPOD_REMOTE_FLUX_DEPLOYMENTS="${DEVPOD_REMOTE_FLUX_DEPLOYMENTS:-floe-platform-dagster-webserver floe-platform-polaris floe-platform-minio floe-platform-jaeger floe-platform-marquez floe-platform-otel}"
 DEVPOD_REMOTE_FLUX_STATEFULSETS="${DEVPOD_REMOTE_FLUX_STATEFULSETS:-floe-platform-postgresql}"
+DEVPOD_REMOTE_ENV_ALLOWLIST="${DEVPOD_REMOTE_ENV_ALLOWLIST:-}"
 DEVPOD_UP_RECOVERY_TIMEOUT="${DEVPOD_UP_RECOVERY_TIMEOUT:-600}"
 DEVPOD_UP_RECOVERY_INTERVAL="${DEVPOD_UP_RECOVERY_INTERVAL:-15}"
 DEVPOD_ENABLE_REMOTE_TUNNELS="${DEVPOD_ENABLE_REMOTE_TUNNELS:-0}"
 REMOTE_RUN_ID="run-$(date -u '+%Y%m%dT%H%M%SZ')-$$"
 REMOTE_RUN_DIR="${DEVPOD_REMOTE_RUN_ROOT}/${REMOTE_RUN_ID}"
 LOCAL_REMOTE_ARTIFACTS_DIR="${PROJECT_ROOT}/test-artifacts/devpod-${REMOTE_RUN_ID}"
+REMOTE_ENV_FILE="${REMOTE_RUN_DIR}/remote-env.sh"
+LOCAL_REMOTE_ENV_FILE=""
 
 # Track whether we created the workspace (for cleanup decisions)
 WORKSPACE_CREATED=false
@@ -151,6 +159,10 @@ cleanup() {
             error "Failed to delete workspace '${WORKSPACE}'!"
             error "MANUAL ACTION REQUIRED: Run 'devpod delete ${WORKSPACE} --force' or delete the VM in Hetzner Cloud Console."
         fi
+    fi
+
+    if [[ -n "${LOCAL_REMOTE_ENV_FILE}" ]]; then
+        rm -f "${LOCAL_REMOTE_ENV_FILE}" 2>/dev/null || true
     fi
 
     # Propagate the test exit code, not the cleanup exit code
@@ -225,6 +237,13 @@ if [[ -z "${DEVPOD_REMOTE_E2E_MAKE_TARGET}" ]]; then
     exit 1
 fi
 
+for env_name in ${DEVPOD_REMOTE_ENV_ALLOWLIST}; do
+    if [[ ! "${env_name}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+        error "Invalid DEVPOD_REMOTE_ENV_ALLOWLIST entry '${env_name}'"
+        exit 1
+    fi
+done
+
 for kube_name in "${DEVPOD_REMOTE_FLUX_GITREPOSITORY}" "${DEVPOD_REMOTE_FLUX_SOURCE_NAMESPACE}"; do
     if [[ ! "${kube_name}" =~ ^[a-zA-Z0-9._-]+$ ]]; then
         error "Invalid Flux resource name '${kube_name}'"
@@ -272,6 +291,60 @@ provision_workspace() {
     fi
 
     recover_workspace_after_up_failure
+}
+
+prepare_remote_run_dir() {
+    local run_dir_q
+    run_dir_q="$(shell_quote "${REMOTE_RUN_DIR}")"
+    devpod_remote_bash "mkdir -p ${run_dir_q}/artifacts && chmod 700 ${run_dir_q}"
+}
+
+build_local_remote_env_file() {
+    local env_file
+    local env_name
+    local uploaded_names=()
+
+    if [[ -z "${DEVPOD_REMOTE_ENV_ALLOWLIST}" ]]; then
+        return 0
+    fi
+
+    env_file="$(mktemp "${TMPDIR:-/tmp}/floe-devpod-remote-env.XXXXXX")"
+    chmod 600 "${env_file}"
+
+    for env_name in ${DEVPOD_REMOTE_ENV_ALLOWLIST}; do
+        if [[ -v "${env_name}" ]]; then
+            printf 'export %s=%q\n' "${env_name}" "${!env_name}" >> "${env_file}"
+            uploaded_names+=("${env_name}")
+        else
+            log "  Remote env allowlist entry '${env_name}' is unset locally; skipping"
+        fi
+    done
+
+    if [[ "${#uploaded_names[@]}" -eq 0 ]]; then
+        rm -f "${env_file}"
+        error "DEVPOD_REMOTE_ENV_ALLOWLIST was set but no listed variables were present locally"
+        return 1
+    fi
+
+    LOCAL_REMOTE_ENV_FILE="${env_file}"
+    log "  Remote env upload prepared for: ${uploaded_names[*]}"
+}
+
+upload_remote_env_file() {
+    local remote_env_q
+
+    if [[ -z "${LOCAL_REMOTE_ENV_FILE}" ]]; then
+        return 0
+    fi
+
+    remote_env_q="$(shell_quote "${REMOTE_ENV_FILE}")"
+    if devpod_remote_bash "umask 077 && cat > ${remote_env_q} && chmod 600 ${remote_env_q}" < "${LOCAL_REMOTE_ENV_FILE}"; then
+        log "  Remote env allowlist uploaded to ${REMOTE_ENV_FILE}"
+        return 0
+    fi
+
+    error "Failed to upload remote env allowlist"
+    return 1
 }
 
 start_remote_e2e_run() {
@@ -449,6 +522,11 @@ wait_for_flux_settlement() {
     echo "[remote-e2e] started at \$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     echo "[remote-e2e] workdir=\${FLOE_REMOTE_WORKDIR}"
     cd "\${FLOE_REMOTE_WORKDIR}"
+    if [[ -f "\${FLOE_REMOTE_RUN_DIR}/remote-env.sh" ]]; then
+        echo "[remote-e2e] sourcing remote env allowlist"
+        # shellcheck disable=SC1091
+        source "\${FLOE_REMOTE_RUN_DIR}/remote-env.sh"
+    fi
     SKIP_MONITORING=\${SKIP_MONITORING:-true} make kind-up
     wait_for_flux_settlement
     flux_rc=\$?
@@ -599,6 +677,10 @@ run_remote_e2e_detached() {
     local remote_dir=""
     local exit_code=""
     local poll_status=0
+
+    prepare_remote_run_dir || return 1
+    build_local_remote_env_file || return 1
+    upload_remote_env_file || return 1
 
     log "Starting detached remote E2E run in ${REMOTE_RUN_DIR}..."
     remote_dir="$(start_remote_e2e_run)" || return 1
