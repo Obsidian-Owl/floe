@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from testing.release.cli import main
 from testing.release.evidence import (
     classify_live_validation_failure,
     write_evidence_summary,
@@ -46,3 +49,25 @@ def test_write_evidence_summary_records_release_evidence_without_secrets(tmp_pat
     assert "credential-setup" in summary
     assert "passed" in summary
     assert "AWS_SECRET_ACCESS_KEY" not in summary
+
+
+def test_evidence_summary_requires_manifest_argument(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "evidence-summary",
+                "--release-sha",
+                "release-sha-example",
+                "--devpod-artifact",
+                "test-artifacts/example",
+                "--aws-live-result",
+                "passed",
+                "--cleanup-result",
+                "passed",
+                "--output",
+                "/tmp/floe-release-evidence.md",
+            ],
+        )
+
+    assert exc_info.value.code != 0
+    assert "--manifest" in capsys.readouterr().err

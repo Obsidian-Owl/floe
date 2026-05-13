@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None) -> None:
 
     evidence_parser = subparsers.add_parser("evidence-summary")
     evidence_parser.add_argument("--release-sha", required=True)
-    evidence_parser.add_argument("--manifest", default="release/floe-release.yaml")
+    evidence_parser.add_argument("--manifest", required=True)
     evidence_parser.add_argument("--devpod-artifact", required=True)
     evidence_parser.add_argument("--aws-live-result", required=True)
     evidence_parser.add_argument("--cleanup-result", required=True)
