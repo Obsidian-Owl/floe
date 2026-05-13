@@ -75,6 +75,94 @@ def test_build_packages_rejects_manifest_package_directory_as_dist_dir(
     assert (package_dir / "pyproject.toml").exists()
 
 
+def test_build_packages_rejects_external_tmp_dist_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path = _write_manifest(tmp_path)
+    external_dist = Path("/tmp/floe-alpha-dist-unit-test")
+
+    monkeypatch.setattr(subprocess, "run", _successful_build)
+    try:
+        with pytest.raises(ReleaseBuildError, match="inside repository root"):
+            build_packages(
+                load_release_manifest(manifest_path),
+                repo_root=tmp_path,
+                dist_dir=external_dist,
+            )
+    finally:
+        if external_dist.exists() and external_dist.is_dir() and not external_dist.is_symlink():
+            external_dist.rmdir()
+
+
+def test_build_packages_rejects_external_dist_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    manifest_path = _write_manifest(repo_root)
+    external_dist = tmp_path / "dist"
+
+    monkeypatch.setattr(subprocess, "run", _successful_build)
+
+    with pytest.raises(ReleaseBuildError, match="inside repository root"):
+        build_packages(
+            load_release_manifest(manifest_path),
+            repo_root=repo_root,
+            dist_dir=external_dist,
+        )
+
+    assert not external_dist.exists()
+
+
+def test_build_packages_rejects_source_control_dist_dir_without_deleting_sentinel(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path = _write_manifest(tmp_path)
+    testing_dir = tmp_path / "testing"
+    testing_dir.mkdir()
+    sentinel = testing_dir / "sentinel.txt"
+    sentinel.write_text("do-not-delete", encoding="utf-8")
+
+    monkeypatch.setattr(subprocess, "run", _successful_build)
+
+    with pytest.raises(ReleaseBuildError, match="source/control directory"):
+        build_packages(
+            load_release_manifest(manifest_path),
+            repo_root=tmp_path,
+            dist_dir=testing_dir,
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == "do-not-delete"
+
+
+def test_build_packages_wraps_subprocess_failure_in_release_build_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path = _write_manifest(tmp_path)
+
+    def fail_build(
+        args: list[str],
+        *,
+        check: bool,
+        cwd: Path,
+    ) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(returncode=7, cmd=args)
+
+    monkeypatch.setattr(subprocess, "run", fail_build)
+
+    with pytest.raises(ReleaseBuildError, match="floe-core.*exit code 7") as exc_info:
+        build_packages(
+            load_release_manifest(manifest_path),
+            repo_root=tmp_path,
+            dist_dir=tmp_path / "dist",
+        )
+
+    assert isinstance(exc_info.value.__cause__, subprocess.CalledProcessError)
+
+
 def test_build_packages_removes_stale_files_from_allowed_dist_dir(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
