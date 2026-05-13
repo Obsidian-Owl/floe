@@ -236,6 +236,25 @@ class TestE2EWorkflow:
             "Preload step must load each heavy image into the floe-test Kind cluster."
         )
 
+    @pytest.mark.requirement("AC-7")
+    def test_e2e_job_installs_flux_before_deploying_platform(self) -> None:
+        """setup-cluster.sh requires the Flux CLI before platform deployment."""
+
+        workflow = _load_workflow()
+        e2e = _job(workflow, "e2e")
+        steps = _job_steps(e2e)
+        step_names = [step.get("name") for step in steps]
+
+        flux_index = step_names.index("Install Flux CLI")
+        deploy_index = step_names.index("Deploy floe-platform")
+        flux_run = steps[flux_index].get("run", "")
+
+        assert flux_index < deploy_index, "Flux CLI must be installed before setup-cluster.sh."
+        assert 'FLUX_VERSION="2.5.1"' in flux_run
+        assert "sha256sum -c -" in flux_run
+        assert "sudo install /tmp/flux /usr/local/bin/flux" in flux_run
+        assert "flux --version" in flux_run
+
     @pytest.mark.requirement("AC-8")
     def test_e2e_job_collects_failure_diagnostics_and_uploads_artifacts(self) -> None:
         """The workflow must collect debug info on failure and upload artifacts always."""
