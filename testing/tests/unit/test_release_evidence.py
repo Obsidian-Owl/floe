@@ -181,6 +181,9 @@ def test_write_evidence_summary_allows_failed_statuses_when_placeholders_enabled
 
 def test_write_evidence_summary_redacts_secret_like_values(tmp_path: Path) -> None:
     output_path = tmp_path / "release-evidence.md"
+    github_token = "ghp_" + "abcdefghijklmnopqrstuvwxyzABCDEFGHIJ"
+    github_pat = "github_pat_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    slack_token = "xoxb-" + "123456789012-abcdefghijkl"
 
     write_evidence_summary(
         output_path=output_path,
@@ -190,6 +193,8 @@ def test_write_evidence_summary_redacts_secret_like_values(tmp_path: Path) -> No
         ),
         package_count=15,
         devpod_artifact=(
+            "https://ci.example.com/artifacts/devpod.log?"
+            f"auth={github_token}&githubPat={github_pat}&slack={slack_token} "
             "https://ci.example.com/artifacts/devpod.log?token=abc123 "
             "Bearer eyJhbGciOiJIUzI1NiJ9.abc.def "
             "password=hunter2 secret=abc access_key="
@@ -205,6 +210,10 @@ def test_write_evidence_summary_redacts_secret_like_values(tmp_path: Path) -> No
     assert "AKIA" not in summary
     assert "ASIA" not in summary
     assert "Bearer" not in summary
+    assert "auth=" not in summary
+    assert "ghp_" not in summary
+    assert "github_pat_" not in summary
+    assert "xoxb-" not in summary
     assert "token=" not in summary
     assert "X-Amz-Signature=" not in summary
     assert "password=" not in summary

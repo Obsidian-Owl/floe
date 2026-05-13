@@ -63,13 +63,17 @@ _SECRET_NAME_RE = re.compile(
 )
 _AWS_ACCESS_KEY_ID_RE = re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")
 _BEARER_TOKEN_RE = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE)
+_GITHUB_TOKEN_RE = re.compile(
+    r"\b(?:(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}|github_pat_[A-Za-z0-9_]{22,})\b",
+)
+_SLACK_TOKEN_RE = re.compile(r"\bxox[A-Za-z0-9-]{20,}\b")
 _SECRET_ASSIGNMENT_RE = re.compile(
     r"\b[A-Za-z0-9_]*(?:SECRET|TOKEN|PASSWORD|ACCESS_KEY)[A-Za-z0-9_]*=[^\s&|;`]+",
     re.IGNORECASE,
 )
 _SENSITIVE_PARAM_RE = re.compile(
     r"(?P<prefix>^|[?&;\s])"
-    r"(?P<name>X-Amz-Signature|AWSAccessKeyId|token|password|secret|access_key)="
+    r"(?P<name>X-Amz-Signature|AWSAccessKeyId|auth|token|password|secret|access_key)="
     r"(?P<value>[^\s&;`]+)",
     re.IGNORECASE,
 )
@@ -247,6 +251,8 @@ def _clean_value(value: str) -> str:
     cleaned = _PRIVATE_KEY_RE.sub("[redacted-private-key]", value)
     cleaned = _BEARER_TOKEN_RE.sub("[redacted-bearer-token]", cleaned)
     cleaned = _AWS_ACCESS_KEY_ID_RE.sub("[redacted-aws-access-key-id]", cleaned)
+    cleaned = _GITHUB_TOKEN_RE.sub("[redacted-github-token]", cleaned)
+    cleaned = _SLACK_TOKEN_RE.sub("[redacted-slack-token]", cleaned)
     cleaned = _SECRET_ASSIGNMENT_RE.sub("[redacted-secret-assignment]", cleaned)
     cleaned = _SENSITIVE_PARAM_RE.sub(_redact_sensitive_param, cleaned)
     cleaned = _SECRET_NAME_RE.sub("[redacted-credential-name]", cleaned)
