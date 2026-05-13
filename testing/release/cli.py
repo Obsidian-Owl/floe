@@ -9,7 +9,7 @@ from typing import NoReturn
 
 import yaml
 
-from testing.release.build_packages import artifact_counts, build_packages
+from testing.release.build_packages import ReleaseBuildError, artifact_counts, build_packages
 from testing.release.manifest import (
     ReleaseManifestError,
     load_release_manifest,
@@ -17,7 +17,7 @@ from testing.release.manifest import (
 )
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Validate Floe release manifest")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -37,7 +37,7 @@ def main() -> None:
     build_parser.add_argument("--manifest", default="release/floe-release.yaml")
     build_parser.add_argument("--dist-dir", default="dist")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     repo_root = Path.cwd()
     manifest_path = _resolve_manifest_path(repo_root, args.manifest)
 
@@ -72,7 +72,7 @@ def main() -> None:
                 )
             print(json.dumps(counts, indent=2, sort_keys=True))
             return
-    except (OSError, ReleaseManifestError, yaml.YAMLError) as exc:
+    except (OSError, ReleaseBuildError, ReleaseManifestError, yaml.YAMLError) as exc:
         _fail(str(exc))
 
     _fail(f"unknown command: {args.command}")
