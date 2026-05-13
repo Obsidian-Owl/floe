@@ -97,6 +97,14 @@ def main(argv: list[str] | None = None) -> None:
                 devpod_artifact=args.devpod_artifact,
                 aws_live_result=args.aws_live_result,
                 cleanup_result=args.cleanup_result,
+                publish_packages=tuple(
+                    (package.name, package.evidence or "")
+                    for package in manifest.python_packages.publish
+                ),
+                exclude_packages=tuple(
+                    (package.name, package.reason or "")
+                    for package in manifest.python_packages.exclude
+                ),
                 allow_placeholders=args.allow_placeholders,
             )
             return
