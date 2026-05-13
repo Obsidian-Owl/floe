@@ -257,6 +257,20 @@ def _write_manifest(repo_root: Path) -> Path:
         + "\n",
         encoding="utf-8",
     )
+    for chart_name in ("floe-platform", "floe-jobs"):
+        chart_dir = repo_root / "charts" / chart_name
+        chart_dir.mkdir(parents=True)
+        (chart_dir / "Chart.yaml").write_text(
+            dedent(
+                f"""
+                apiVersion: v2
+                name: {chart_name}
+                version: 0.1.0-alpha.1
+                """,
+            ).strip()
+            + "\n",
+            encoding="utf-8",
+        )
 
     manifest_path = repo_root / "release.yaml"
     manifest_path.write_text(
@@ -278,7 +292,10 @@ def _write_manifest(repo_root: Path) -> Path:
                     ],
                     "exclude": [],
                 },
-                "helm": {"alpha_policy": "publish", "charts": []},
+                "helm": {
+                    "alpha_policy": "publish",
+                    "charts": ["charts/floe-platform", "charts/floe-jobs"],
+                },
                 "validation": {
                     "require_current_main_ci": True,
                     "require_package_build_dry_run": True,

@@ -70,13 +70,15 @@ def test_publish_oci_installs_cosign_before_signing() -> None:
 @pytest.mark.requirement("AC-4")
 @pytest.mark.requirement("AC-5")
 def test_publish_oci_signs_expected_chart_refs_after_push_as_best_effort() -> None:
-    """Signing runs after helm push, uses the pushed refs, and stays best-effort."""
+    """Signing runs after helm push, uses packaged chart refs, and stays best-effort."""
     sign_step = _step_named("Sign OCI charts")
     assert _step_index("Push charts to OCI registry") < _step_index("Sign OCI charts")
     assert sign_step["continue-on-error"] is True
 
     run_script = sign_step["run"]
+    assert "for chart in dist/*.tgz" in run_script
+    assert 'base=$(basename "${chart}" .tgz)' in run_script
+    assert 'chart_name=${base%"-${VERSION}"}' in run_script
     assert "${REGISTRY_PATH}/${chart_name}:${VERSION}" in run_script
-    assert "floe-platform floe-jobs" in run_script
     assert 'echo "WARNING: Failed to sign ${chart_name}" >&2' in run_script
     assert "${REGISTRY}/${REGISTRY_PATH}" not in run_script
