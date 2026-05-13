@@ -251,6 +251,8 @@ class TestE2EWorkflow:
 
         assert flux_index < deploy_index, "Flux CLI must be installed before setup-cluster.sh."
         assert 'FLUX_VERSION="2.5.1"' in flux_run
+        assert 'FLUX_ARCHIVE="flux_${FLUX_VERSION}_linux_amd64.tar.gz"' in flux_run
+        assert '-o "/tmp/${FLUX_ARCHIVE}"' in flux_run
         assert "sha256sum -c -" in flux_run
         assert "sudo install /tmp/flux /usr/local/bin/flux" in flux_run
         assert "flux --version" in flux_run

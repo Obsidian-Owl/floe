@@ -81,12 +81,13 @@ jobs:
       - name: Install Flux CLI
         run: |
           FLUX_VERSION="2.5.1"
-          curl -fsSL "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/flux_${FLUX_VERSION}_linux_amd64.tar.gz" -o /tmp/flux.tar.gz
+          FLUX_ARCHIVE="flux_${FLUX_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/${FLUX_ARCHIVE}" -o "/tmp/${FLUX_ARCHIVE}"
           curl -fsSL "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/flux_${FLUX_VERSION}_checksums.txt" -o /tmp/flux_checksums.txt
-          grep "flux_${FLUX_VERSION}_linux_amd64.tar.gz" /tmp/flux_checksums.txt | (cd /tmp && sha256sum -c -)
-          tar -xzf /tmp/flux.tar.gz -C /tmp
+          grep " ${FLUX_ARCHIVE}$" /tmp/flux_checksums.txt | (cd /tmp && sha256sum -c -)
+          tar -xzf "/tmp/${FLUX_ARCHIVE}" -C /tmp
           sudo install /tmp/flux /usr/local/bin/flux
-          rm -f /tmp/flux.tar.gz /tmp/flux /tmp/flux_checksums.txt
+          rm -f "/tmp/${FLUX_ARCHIVE}" /tmp/flux /tmp/flux_checksums.txt
           flux --version
 
       - name: Setup Kind cluster and deploy services
@@ -149,12 +150,13 @@ jobs:
       - name: Install Flux CLI
         run: |
           FLUX_VERSION="2.5.1"
-          curl -fsSL "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/flux_${FLUX_VERSION}_linux_amd64.tar.gz" -o /tmp/flux.tar.gz
+          FLUX_ARCHIVE="flux_${FLUX_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/${FLUX_ARCHIVE}" -o "/tmp/${FLUX_ARCHIVE}"
           curl -fsSL "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/flux_${FLUX_VERSION}_checksums.txt" -o /tmp/flux_checksums.txt
-          grep "flux_${FLUX_VERSION}_linux_amd64.tar.gz" /tmp/flux_checksums.txt | (cd /tmp && sha256sum -c -)
-          tar -xzf /tmp/flux.tar.gz -C /tmp
+          grep " ${FLUX_ARCHIVE}$" /tmp/flux_checksums.txt | (cd /tmp && sha256sum -c -)
+          tar -xzf "/tmp/${FLUX_ARCHIVE}" -C /tmp
           sudo install /tmp/flux /usr/local/bin/flux
-          rm -f /tmp/flux.tar.gz /tmp/flux /tmp/flux_checksums.txt
+          rm -f "/tmp/${FLUX_ARCHIVE}" /tmp/flux /tmp/flux_checksums.txt
           flux --version
 
       - name: Setup Kind cluster and deploy services
