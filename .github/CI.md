@@ -9,10 +9,12 @@ validates that manifest before release-specific workflows publish artifacts.
 | Trigger | Workflow | Purpose |
 |---|---|---|
 | Pull request | `ci.yml` | Fast PR confidence plus release manifest structure |
-| `merge_group` / pull request label `run-e2e` / infra path / manual | `e2e.yml` | Full E2E validation |
-| Tag `v*.*.*` | `release.yml` and `pypi-publish.yml` | Manifest validation, integration, release, package build/publish |
+| `merge_group` / pull request label `run-e2e` / infra path / manual | `e2e.yml` | Opt-in full E2E validation |
+| Manual | `prepare-release.yml` | Runs all release gates, creates tag and GitHub Release only on success |
+| Successful Prepare Release | `pypi-publish.yml` | Builds and publishes the manifest package set |
+| Manual | `release.yml` | Release-validation smoke only; does not create tags or GitHub Releases |
 | Tag `helm-v*` / `charts-v*` / manual | `helm-release.yaml` | Helm chart release when manifest policy allows |
-| Schedule | `weekly.yml`, `security.yml`, `codspeed.yml` | Drift, security, performance maintenance |
+| Schedule / manual | `weekly.yml`, `security.yml`, `codspeed.yml` | Drift, security, performance maintenance |
 
 `helm-ci.yaml` remains the merge-confidence chart lane for pull requests and
 pushes to `main`; it validates chart linting, rendering, schema, unit, diff,
@@ -47,12 +49,28 @@ platform change:
 Failures should be classified as product, infrastructure, credential/setup, or
 cleanup failures before deciding whether to rerun or block the release.
 
+## Prepare Release
+
+`prepare-release.yml` is the release authority. Maintainers dispatch it with a
+version. The workflow runs static gates, package build dry-run, Kind
+integration, full DevPod+Hetzner E2E, AWS S3+Glue live validation, cleanup
+verification, and evidence generation. It creates the tag and GitHub Release
+only after all gates pass.
+
+Dry runs execute the same gates without creating a tag, GitHub Release, or PyPI
+publication. Real runs use `dry_run=false`; that successful workflow run uploads
+the release metadata consumed by `pypi-publish.yml`.
+
+If a release gate fails, the workflow creates or updates a GitHub issue and
+records which outputs were skipped. Product, infrastructure, credential/setup,
+and cleanup failures must remain separate in triage.
+
 ## Release Confidence
 
-`release.yml`, `pypi-publish.yml`, and `helm-release.yaml` form the release
-confidence lanes. They should fail before publishing when the release manifest,
-package cutline, artifact counts, version normalization, Helm policy, or release
-evidence is invalid.
+`prepare-release.yml`, `pypi-publish.yml`, and `helm-release.yaml` form the
+release confidence lanes. They should fail before publishing when the release
+manifest, package cutline, artifact counts, version normalization, Helm policy,
+or release evidence is invalid.
 
 For the alpha Helm lane, `release/floe-release.yaml` is the publish contract:
 `helm.alpha_policy` must be `publish`, `release.helm_version` supplies the
@@ -62,9 +80,14 @@ not replace the manifest-declared chart list or policy. Chart metadata is live
 release input for `helm-release.yaml`, while `helm-ci.yaml` remains the
 merge-confidence lane for validating chart changes before they reach release.
 
+`release.yml` remains a manual release-validation smoke workflow for maintainers
+who want a narrower integration check. It does not create release tags, GitHub
+Releases, or PyPI publications.
+
 `weekly.yml`, `security.yml`, and `codspeed.yml` remain scheduled or manual
 maintenance lanes. They provide drift, security, and performance signal without
-turning every PR into an expensive live-validation run.
+turning every PR into an expensive live-validation run. Weekly long-running
+validation failures create or update GitHub issues.
 
 ## Local Checks
 
