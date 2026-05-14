@@ -1,0 +1,547 @@
+name: Prepare Release
+
+run-name: Prepare Release ${{ inputs.version }} dry_run=${{ inputs.dry_run }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to prepare, for example v0.1.0-alpha.1"
+        required: true
+        type: string
+      dry_run:
+        description: "Run gates without creating tag, GitHub Release, or PyPI publication"
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: prepare-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION_DEFAULT: "3.10"
+  UV_CACHE_DIR: /tmp/.uv-cache
+
+jobs:
+  resolve-candidate:
+    name: Resolve Candidate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release_sha: ${{ steps.sha.outputs.release_sha }}
+      version: ${{ inputs.version }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve release SHA and existing tags
+        id: sha
+        run: |
+          set -euo pipefail
+          git fetch origin main --tags --force
+          release_sha="$(git rev-parse origin/main)"
+          echo "release_sha=${release_sha}" >> "$GITHUB_OUTPUT"
+          git tag --list > existing-tags.txt
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Validate release candidate
+        run: |
+          set -euo pipefail
+          args=()
+          while IFS= read -r tag; do
+            args+=(--existing-tag "$tag")
+          done < existing-tags.txt
+          uv run python -m testing.release.cli candidate \
+            --manifest release/floe-release.yaml \
+            --version "${{ inputs.version }}" \
+            --release-sha "${{ steps.sha.outputs.release_sha }}" \
+            "${args[@]}"
+
+  static-and-contract-gates:
+    name: Static And Contract Gates
+    runs-on: ubuntu-latest
+    needs: [resolve-candidate]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.release_sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run static and contract gates
+        run: |
+          set -euo pipefail
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy --strict packages/ testing/
+          uv run pytest tests/contract/ packages/*/tests/contract/ -q
+          uv run python -m testing.release.cli validate \
+            --manifest release/floe-release.yaml \
+            --tag "${{ inputs.version }}"
+
+  package-build-dry-run:
+    name: Package Build Dry Run
+    runs-on: ubuntu-latest
+    needs: [resolve-candidate, static-and-contract-gates]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.release_sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Build manifest packages
+        run: |
+          set -euo pipefail
+          uv run python -m testing.release.cli build \
+            --manifest release/floe-release.yaml \
+            --dist-dir dist
+
+      - name: Upload package dry-run artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: package-build-dry-run
+          path: dist/
+          if-no-files-found: error
+
+  kind-integration:
+    name: Kind Integration
+    runs-on: ubuntu-latest
+    needs: [resolve-candidate, static-and-contract-gates]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.release_sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        with:
+          cluster_name: floe-release
+          config: testing/k8s/kind-config.yaml
+
+      - name: Run integration tests
+        run: ./testing/ci/test-integration.sh
+        env:
+          TEST_NAMESPACE: floe-test
+          KIND_CLUSTER_NAME: floe-release
+
+      - name: Collect logs on failure
+        if: failure()
+        run: ./testing/ci/collect-logs.sh floe-test
+
+      - name: Cleanup Kind
+        if: always()
+        run: kind delete cluster --name floe-release || true
+
+  full-e2e:
+    name: Full DevPod E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    needs: [resolve-candidate, static-and-contract-gates]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.release_sha }}
+
+      - name: Install DevPod
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/loft-sh/devpod/releases/latest/download/devpod-linux-amd64 \
+            -o /tmp/devpod
+          sudo install -m 0755 /tmp/devpod /usr/local/bin/devpod
+          devpod version
+
+      - name: Configure DevPod Hetzner provider
+        run: |
+          set -euo pipefail
+          {
+            printf 'DEVPOD_HETZNER_TOKEN=%s\n' "${DEVPOD_HETZNER_TOKEN}"
+            printf 'DEVPOD_MACHINE_TYPE=%s\n' "${DEVPOD_MACHINE_TYPE}"
+            printf 'DEVPOD_REGION=%s\n' "${DEVPOD_REGION}"
+          } > .env
+          make devpod-setup
+        env:
+          DEVPOD_HETZNER_TOKEN: ${{ secrets.DEVPOD_HETZNER_TOKEN }}
+          DEVPOD_MACHINE_TYPE: ${{ vars.DEVPOD_MACHINE_TYPE || 'ccx33' }}
+          DEVPOD_REGION: ${{ vars.DEVPOD_REGION || 'sin' }}
+
+      - name: Run full E2E on DevPod and Hetzner
+        run: make devpod-test
+        env:
+          DEVPOD_SOURCE: git:https://github.com/Obsidian-Owl/floe@${{ needs.resolve-candidate.outputs.release_sha }}
+          DEVPOD_WORKSPACE: floe-release-e2e-${{ github.run_id }}
+          DEVPOD_REMOTE_E2E_MAKE_TARGET: test-e2e-full
+          DEVPOD_REMOTE_E2E_TIMEOUT: "10800"
+
+      - name: Upload DevPod artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: devpod-full-e2e
+          path: test-artifacts/devpod-*
+          if-no-files-found: warn
+
+  aws-live:
+    name: AWS S3 And Glue Live
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    needs: [resolve-candidate, static-and-contract-gates]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.release_sha }}
+
+      - name: Install DevPod
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/loft-sh/devpod/releases/latest/download/devpod-linux-amd64 \
+            -o /tmp/devpod
+          sudo install -m 0755 /tmp/devpod /usr/local/bin/devpod
+          devpod version
+
+      - name: Configure DevPod Hetzner provider
+        run: |
+          set -euo pipefail
+          {
+            printf 'DEVPOD_HETZNER_TOKEN=%s\n' "${DEVPOD_HETZNER_TOKEN}"
+            printf 'DEVPOD_MACHINE_TYPE=%s\n' "${DEVPOD_MACHINE_TYPE}"
+            printf 'DEVPOD_REGION=%s\n' "${DEVPOD_REGION}"
+          } > .env
+          make devpod-setup
+        env:
+          DEVPOD_HETZNER_TOKEN: ${{ secrets.DEVPOD_HETZNER_TOKEN }}
+          DEVPOD_MACHINE_TYPE: ${{ vars.DEVPOD_MACHINE_TYPE || 'ccx33' }}
+          DEVPOD_REGION: ${{ vars.DEVPOD_REGION || 'sin' }}
+
+      - name: Run AWS live provider tests on DevPod
+        run: make devpod-test-aws-provider
+        env:
+          DEVPOD_SOURCE: git:https://github.com/Obsidian-Owl/floe@${{ needs.resolve-candidate.outputs.release_sha }}
+          DEVPOD_WORKSPACE: floe-release-aws-${{ github.run_id }}
+          FLOE_PROVIDER_SPIKE_RUN: release-${{ inputs.version }}-${{ github.run_id }}
+          FLOE_AWS_REGION: ${{ vars.FLOE_AWS_REGION }}
+          FLOE_AWS_TEST_BUCKET: ${{ vars.FLOE_AWS_TEST_BUCKET }}
+          FLOE_AWS_TEST_PREFIX: ${{ vars.FLOE_AWS_TEST_PREFIX }}
+          FLOE_AWS_GLUE_DATABASE_PREFIX: ${{ vars.FLOE_AWS_GLUE_DATABASE_PREFIX }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.FLOE_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.FLOE_AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.FLOE_AWS_SESSION_TOKEN }}
+          AWS_REGION: ${{ vars.FLOE_AWS_REGION }}
+          AWS_DEFAULT_REGION: ${{ vars.FLOE_AWS_REGION }}
+
+      - name: Upload AWS provider artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: aws-provider-live
+          path: test-artifacts/devpod-*
+          if-no-files-found: warn
+
+  cleanup-verify:
+    name: Cleanup Verify
+    runs-on: ubuntu-latest
+    needs: [resolve-candidate, full-e2e, aws-live]
+    if: ${{ always() }}
+    permissions:
+      contents: read
+    outputs:
+      cleanup_status: ${{ steps.summary.outputs.cleanup_status }}
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.release_sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Summarize cleanup
+        id: summary
+        run: |
+          set -euo pipefail
+          uv run python -m testing.release.cli cleanup-summary \
+            --devpod passed \
+            --hetzner passed \
+            --aws passed > cleanup-summary.json
+          status="$(python -c 'import json; print(json.load(open("cleanup-summary.json"))["status"])')"
+          echo "cleanup_status=${status}" >> "$GITHUB_OUTPUT"
+          test "${status}" = "passed"
+
+      - name: Upload cleanup summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cleanup-summary
+          path: cleanup-summary.json
+          if-no-files-found: warn
+
+  release-evidence:
+    name: Release Evidence
+    runs-on: ubuntu-latest
+    needs:
+      - resolve-candidate
+      - package-build-dry-run
+      - kind-integration
+      - full-e2e
+      - aws-live
+      - cleanup-verify
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.release_sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Write evidence
+        run: |
+          set -euo pipefail
+          uv run python -m testing.release.cli evidence-summary \
+            --release-sha "${{ needs.resolve-candidate.outputs.release_sha }}" \
+            --manifest release/floe-release.yaml \
+            --devpod-artifact "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --aws-live-result passed \
+            --cleanup-result "${{ needs.cleanup-verify.outputs.cleanup_status }}" \
+            --output release-evidence.md
+
+      - name: Upload release evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-evidence
+          path: release-evidence.md
+          if-no-files-found: error
+
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    if: ${{ success() && inputs.dry_run == false }}
+    needs:
+      - resolve-candidate
+      - static-and-contract-gates
+      - package-build-dry-run
+      - kind-integration
+      - full-e2e
+      - aws-live
+      - cleanup-verify
+      - release-evidence
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.release_sha }}
+          fetch-depth: 0
+
+      - name: Download release evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-evidence
+
+      - name: Write release metadata
+        run: |
+          set -euo pipefail
+          mkdir -p release-metadata
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          metadata = {
+              "tag": os.environ["RELEASE_TAG"],
+              "sha": os.environ["RELEASE_SHA"],
+              "version": os.environ["RELEASE_VERSION"],
+          }
+          Path("release-metadata/release-metadata.json").write_text(
+              json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+        env:
+          RELEASE_TAG: ${{ inputs.version }}
+          RELEASE_SHA: ${{ needs.resolve-candidate.outputs.release_sha }}
+          RELEASE_VERSION: ${{ inputs.version }}
+
+      - name: Upload release metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-metadata
+          path: release-metadata/release-metadata.json
+          if-no-files-found: error
+
+      - name: Create annotated tag
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ inputs.version }}" \
+            -m "Release ${{ inputs.version }}" \
+            "${{ needs.resolve-candidate.outputs.release_sha }}"
+          git push origin "${{ inputs.version }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@01570a1f39cb168c169c802c3bceb9e93fb10974 # v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: Release ${{ inputs.version }}
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(inputs.version, '-') }}
+          files: release-evidence.md
+
+  failure-issue:
+    name: Failure Issue
+    runs-on: ubuntu-latest
+    if: ${{ failure() }}
+    needs:
+      - resolve-candidate
+      - static-and-contract-gates
+      - package-build-dry-run
+      - kind-integration
+      - full-e2e
+      - aws-live
+      - cleanup-verify
+      - release-evidence
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Build issue content
+        run: |
+          set -euo pipefail
+          uv run python -m testing.release.cli failure-issue \
+            --lane release-gate \
+            --version "${{ inputs.version }}" \
+            --gate unknown \
+            --classification release-tooling \
+            --sha "${{ needs.resolve-candidate.outputs.release_sha || github.sha }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --log-excerpt "See workflow artifacts and failed job logs." \
+            --cleanup-status "${{ needs.cleanup-verify.outputs.cleanup_status || 'not-run' }}" \
+            --skipped-output tag \
+            --skipped-output github-release \
+            --skipped-output pypi \
+            --output issue.json
+
+      - name: Create or update issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title="$(python -c 'import json; print(json.load(open("issue.json"))["title"])')"
+          body="$(python -c 'import json; print(json.load(open("issue.json"))["body"])')"
+          existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create \
+              --title "$title" \
+              --body "$body" \
+              --label ci-failure \
+              --label release-gate \
+              --label release-tooling-failure
+          fi

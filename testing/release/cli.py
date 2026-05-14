@@ -118,19 +118,23 @@ def main(argv: list[str] | None = None) -> None:
     try:
         manifest = load_release_manifest(manifest_path)
         if args.command == "candidate":
-            result = validate_release_candidate(
+            candidate_result = validate_release_candidate(
                 requested_version=args.version,
                 release_sha=args.release_sha,
                 manifest_path=manifest_path,
                 repo_root=repo_root,
                 existing_tags=tuple(args.existing_tag),
             )
-            print(json.dumps(asdict(result), indent=2, sort_keys=True))
+            print(json.dumps(asdict(candidate_result), indent=2, sort_keys=True))
             return
 
         if args.command == "validate":
-            result = validate_release_manifest(manifest, repo_root=repo_root, tag=args.tag)
-            print(json.dumps(asdict(result), indent=2, sort_keys=True))
+            validation_result = validate_release_manifest(
+                manifest,
+                repo_root=repo_root,
+                tag=args.tag,
+            )
+            print(json.dumps(asdict(validation_result), indent=2, sort_keys=True))
             return
 
         if args.command == "package-list":
@@ -159,12 +163,12 @@ def main(argv: list[str] | None = None) -> None:
             return
 
         if args.command == "evidence-summary":
-            result = validate_release_manifest(manifest, repo_root=repo_root)
+            validation_result = validate_release_manifest(manifest, repo_root=repo_root)
             write_evidence_summary(
                 output_path=_resolve_path(repo_root, args.output),
                 release_sha=args.release_sha,
                 manifest_path=manifest_path.relative_to(repo_root),
-                package_count=result.publish_count,
+                package_count=validation_result.publish_count,
                 devpod_artifact=args.devpod_artifact,
                 aws_live_result=args.aws_live_result,
                 cleanup_result=args.cleanup_result,

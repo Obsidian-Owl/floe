@@ -4,48 +4,45 @@ Guide for maintainers on releasing Floe packages.
 
 The alpha release is manifest-driven. `release/floe-release.yaml` is the
 release contract for the git tag, Python package cutline, Helm chart policy,
-and required validation evidence. Do not push a release tag until the evidence
-bundle for that manifest is complete.
+and required validation evidence. Do not create release tags manually. The
+`Prepare Release` workflow creates tags only after the manifest evidence bundle
+is complete.
 
 ## Alpha Release Flow
 
-1. Sync `main` and verify the release SHA.
+1. Verify `origin/main` contains the intended release SHA.
 2. Validate `release/floe-release.yaml`.
 3. Run package build dry-run for the manifest package set.
 4. Run current-main CI and verify the required release checks.
 5. Run full DevPod+Hetzner E2E from current `main`.
-6. Run AWS S3+Glue live validation or cite accepted historical evidence recorded in the manifest.
-7. Record AWS and Hetzner cleanup evidence.
-8. Push the release tag only after the evidence bundle is complete.
+6. Run AWS S3+Glue live validation through the DevPod+Hetzner lane.
+7. Verify AWS, DevPod, and Hetzner cleanup evidence.
+8. Create the release tag and GitHub Release only from `prepare-release.yml`.
 9. Verify PyPI published exactly the manifest package set.
 10. Verify Helm behavior matches the manifest policy.
 
 ## Quick Start
 
 ```bash
-# 1. Sync main and record the release SHA
-git checkout main
-git pull --ff-only origin main
-git rev-parse HEAD
+# 1. Verify the remote release candidate SHA
+git fetch origin main --tags
+git rev-parse origin/main
 
-# 2. Validate the manifest contract for the intended tag
-uv run python -m testing.release.cli validate \
-  --manifest release/floe-release.yaml \
-  --tag v0.1.0-alpha.1
+# 2. Run release preparation as a dry run
+gh workflow run prepare-release.yml \
+  --repo Obsidian-Owl/floe \
+  -f version=v0.1.0-alpha.1 \
+  -f dry_run=true
 
-# 3. Run the package build dry-run for the manifest package set
-uv run python -m testing.release.cli build \
-  --manifest release/floe-release.yaml \
-  --dist-dir dist/release-dry-run
-
-# 4. After CI, DevPod+Hetzner, AWS, and cleanup evidence are recorded,
-# create the annotated tag
-git tag -a v0.1.0-alpha.1 -m "Release v0.1.0-alpha.1"
-git push origin v0.1.0-alpha.1
+# 3. After the dry run passes, run the real preparation
+gh workflow run prepare-release.yml \
+  --repo Obsidian-Owl/floe \
+  -f version=v0.1.0-alpha.1 \
+  -f dry_run=false
 ```
 
-The release workflows validate the manifest, run release checks, create a
-GitHub Release, and publish only the manifest-declared artifacts.
+If any gate fails, the workflow creates or updates a GitHub issue and does not
+create a tag, GitHub Release, or PyPI publication.
 
 ---
 
@@ -96,15 +93,15 @@ While pre-1.0 (0.x.x):
 
 ## Release Checklist
 
-### Before Tagging
+### Before Release Preparation
 
-- [ ] `main` is up to date and the intended release SHA is recorded
+- [ ] `origin/main` contains the intended release SHA
 - [ ] `release/floe-release.yaml` validates for the intended tag
 - [ ] Package build dry-run passes for the 15 alpha packages
 - [ ] Current-main CI and required release checks pass
 - [ ] Full DevPod+Hetzner E2E evidence is recorded from current `main`
-- [ ] AWS S3+Glue live validation is recorded, or accepted historical evidence is recorded in the manifest
-- [ ] AWS and Hetzner cleanup evidence is recorded
+- [ ] AWS S3+Glue live validation is recorded through the DevPod+Hetzner lane
+- [ ] AWS, DevPod, and Hetzner cleanup evidence is recorded
 - [ ] No critical/high severity security issues
 - [ ] PyPI project access and `PYPI_API_TOKEN` are configured for the 15 alpha packages
 - [ ] Helm manifest policy is correct for the release
@@ -112,14 +109,10 @@ While pre-1.0 (0.x.x):
 ### Creating the Release
 
 ```bash
-# Ensure clean working directory
-git status  # Should show nothing to commit
-
-# Create annotated tag only after the evidence bundle is complete
-git tag -a v0.1.0-alpha.1 -m "Release v0.1.0-alpha.1"
-
-# Push tag to trigger release workflow
-git push origin v0.1.0-alpha.1
+gh workflow run prepare-release.yml \
+  --repo Obsidian-Owl/floe \
+  -f version=v0.1.0-alpha.1 \
+  -f dry_run=false
 ```
 
 ### After Release
@@ -138,8 +131,8 @@ Releases create:
 
 | Artifact | Location | Trigger |
 |----------|----------|---------|
-| GitHub Release | GitHub Releases page | Tag push (`release.yml`) |
-| PyPI packages (15 alpha packages) | pypi.org | Version tag push (`pypi-publish.yml`, `PYPI_API_TOKEN`) |
+| GitHub Release | GitHub Releases page | Successful `prepare-release.yml` with `dry_run=false` |
+| PyPI packages (15 alpha packages) | pypi.org | Successful Prepare Release metadata (`pypi-publish.yml`, `PYPI_API_TOKEN`) |
 | Helm charts | ghcr.io OCI registry | Helm tag/manual workflow when manifest policy allows (`helm-release.yaml`) |
 
 ### Planned Artifacts
@@ -175,23 +168,19 @@ git push origin main
 
 ## Troubleshooting
 
-### Release Workflow Failed
+### Prepare Release Workflow Failed
 
 1. Check the failed job in GitHub Actions
 2. Common causes:
    - Integration tests failed (service issues)
    - Validation failed (lint/type errors)
-3. Fix the issue on main, delete the tag, re-tag
+   - DevPod/Hetzner capacity or network failed before product validation
+   - AWS credentials or provider test variables are missing
+3. Fix the issue on `main` and rerun `prepare-release.yml`.
 
-```bash
-# Delete failed tag
-git tag -d v0.1.0
-git push origin :refs/tags/v0.1.0
-
-# After fix, re-tag
-git tag v0.1.0
-git push origin v0.1.0
-```
+Failed release candidates create no tag, no GitHub Release, and no PyPI
+publication. The workflow creates or updates an issue with the failed gate,
+classification, cleanup status, and run URL.
 
 ### Integration Tests Timeout
 
@@ -206,8 +195,11 @@ If K8s services take too long to start:
 ## Automation Roadmap
 
 Completed:
+- **Prepare Release**: `prepare-release.yml` validates all alpha gates and
+  creates the tag and GitHub Release only after success.
 - **PyPI publish**: `pypi-publish.yml` builds the 15 alpha packages declared in
-  `release/floe-release.yaml` and uploads them with `secrets.PYPI_API_TOKEN`
+  `release/floe-release.yaml` from successful Prepare Release metadata and
+  uploads them with `secrets.PYPI_API_TOKEN`
 - **Helm chart publish**: `helm-release.yaml` publishes the manifest-declared
   chart set when `helm.alpha_policy` allows release
 
