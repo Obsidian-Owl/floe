@@ -208,9 +208,38 @@ def test_kind_gate_installs_test_stack_before_running_in_cluster_tests() -> None
     assert "helm repo add dagster https://dagster-io.github.io/helm" in repo_step["run"]
     assert "helm repo add bitnami https://charts.bitnami.com/bitnami" in repo_step["run"]
     assert "helm repo update" in repo_step["run"]
-    assert install_step["run"] == "make helm-install-test"
+    assert install_step["run"] == "make helm-install-test HELM_TEST_TIMEOUT=20m"
     assert install_step["env"]["KIND_CLUSTER_NAME"] == "floe-release"
     assert install_step["env"]["FLOE_KIND_CLUSTER"] == "floe-release"
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_release_devpod_gates_clone_branch_then_pin_release_sha() -> None:
+    """DevPod source must use a real ref and then detach to the release SHA."""
+    for job_name, step_name in (
+        ("full-e2e", "Run full E2E on DevPod and Hetzner"),
+        ("aws-live", "Run AWS live provider tests on DevPod"),
+    ):
+        steps = _workflow()["jobs"][job_name]["steps"]
+        run_step = next(step for step in steps if step.get("name") == step_name)
+
+        assert "DEVPOD_SOURCE" not in run_step["env"]
+        assert run_step["env"]["DEVPOD_GIT_REF"] == "main"
+        assert run_step["env"]["DEVPOD_REMOTE_GIT_CHECKOUT_SHA"] == (
+            "${{ needs.resolve-candidate.outputs.release_sha }}"
+        )
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_release_devpod_gates_run_serially_to_fit_hetzner_quota() -> None:
+    """The release workflow must not provision two Hetzner DevPods at once."""
+    aws_live = _workflow()["jobs"]["aws-live"]
+
+    assert set(aws_live["needs"]) >= {
+        "resolve-candidate",
+        "static-and-contract-gates",
+        "full-e2e",
+    }
 
 
 @pytest.mark.requirement("REL-GATE-WORKFLOW")

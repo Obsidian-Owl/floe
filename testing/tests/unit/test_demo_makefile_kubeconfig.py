@@ -103,6 +103,18 @@ def test_devpod_script_exits_with_e2e_status() -> None:
 
 
 @pytest.mark.requirement("285")
+def test_devpod_remote_run_can_pin_commit_after_branch_clone() -> None:
+    """Release DevPods clone a branch but still execute the exact release SHA."""
+    test_script = Path("scripts/devpod-test.sh").read_text()
+
+    assert "DEVPOD_REMOTE_GIT_CHECKOUT_SHA" in test_script
+    assert "FLOE_REMOTE_GIT_CHECKOUT_SHA" in test_script
+    assert "git checkout --detach" in test_script
+    assert "git fetch origin" in test_script
+    assert "Invalid DEVPOD_REMOTE_GIT_CHECKOUT_SHA=" in test_script
+
+
+@pytest.mark.requirement("285")
 def test_devpod_successful_remote_run_requires_artifact_fetch() -> None:
     """Release validation success must include fetched remote evidence artifacts."""
     test_script = Path("scripts/devpod-test.sh").read_text()

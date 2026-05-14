@@ -24,6 +24,11 @@
 #   DEVPOD_REMOTE_E2E_MAKE_TARGET Make target to run after Kind bootstrap
 #                        (default: test-e2e). Use test-e2e-full for release
 #                        validation with destructive tests.
+#   DEVPOD_REMOTE_GIT_CHECKOUT_SHA Optional 40-character commit SHA to check out
+#                        inside the DevPod after cloning the configured branch.
+#                        Release workflows use this to keep DevPod sources
+#                        branch-clone compatible while executing the exact
+#                        resolved release candidate.
 #   DEVPOD_REMOTE_E2E_TIMEOUT Remote E2E timeout in seconds (default: 7200).
 #   DEVPOD_REMOTE_POLL_INTERVAL Remote E2E polling interval in seconds
 #                        (default: 20).
@@ -79,6 +84,7 @@ PROVIDER="${DEVPOD_PROVIDER:-hetzner}"
 DEVPOD_E2E_EXECUTION="${DEVPOD_E2E_EXECUTION:-remote}"
 DEVPOD_REMOTE_WORKDIR="${DEVPOD_REMOTE_WORKDIR:-/workspace}"
 DEVPOD_REMOTE_E2E_MAKE_TARGET="${DEVPOD_REMOTE_E2E_MAKE_TARGET:-test-e2e}"
+DEVPOD_REMOTE_GIT_CHECKOUT_SHA="${DEVPOD_REMOTE_GIT_CHECKOUT_SHA:-}"
 DEVPOD_REMOTE_RUN_ROOT="${DEVPOD_REMOTE_RUN_ROOT:-/tmp/floe-devpod-e2e}"
 DEVPOD_REMOTE_E2E_TIMEOUT="${DEVPOD_REMOTE_E2E_TIMEOUT:-7200}"
 DEVPOD_REMOTE_POLL_INTERVAL="${DEVPOD_REMOTE_POLL_INTERVAL:-20}"
@@ -237,6 +243,11 @@ if [[ -z "${DEVPOD_REMOTE_E2E_MAKE_TARGET}" ]]; then
     exit 1
 fi
 
+if [[ -n "${DEVPOD_REMOTE_GIT_CHECKOUT_SHA}" && ! "${DEVPOD_REMOTE_GIT_CHECKOUT_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    error "Invalid DEVPOD_REMOTE_GIT_CHECKOUT_SHA='${DEVPOD_REMOTE_GIT_CHECKOUT_SHA}'"
+    exit 1
+fi
+
 for env_name in ${DEVPOD_REMOTE_ENV_ALLOWLIST}; do
     if [[ ! "${env_name}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
         error "Invalid DEVPOD_REMOTE_ENV_ALLOWLIST entry '${env_name}'"
@@ -362,6 +373,7 @@ start_remote_e2e_run() {
     local run_dir_q
     local workdir_q
     local make_target_q
+    local git_checkout_sha_q
     local flux_settlement_timeout_q
     local flux_settlement_interval_q
     local flux_gitrepository_q
@@ -377,6 +389,7 @@ start_remote_e2e_run() {
     run_dir_q="$(shell_quote "${REMOTE_RUN_DIR}")"
     workdir_q="$(shell_quote "${DEVPOD_REMOTE_WORKDIR}")"
     make_target_q="$(shell_quote "${DEVPOD_REMOTE_E2E_MAKE_TARGET}")"
+    git_checkout_sha_q="$(shell_quote "${DEVPOD_REMOTE_GIT_CHECKOUT_SHA}")"
     flux_settlement_timeout_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_SETTLEMENT_TIMEOUT}")"
     flux_settlement_interval_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_SETTLEMENT_INTERVAL}")"
     flux_gitrepository_q="$(shell_quote "${DEVPOD_REMOTE_FLUX_GITREPOSITORY}")"
@@ -541,6 +554,12 @@ wait_for_flux_settlement() {
     echo "[remote-e2e] started at \$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     echo "[remote-e2e] workdir=\${FLOE_REMOTE_WORKDIR}"
     cd "\${FLOE_REMOTE_WORKDIR}"
+    if [[ -n "\${FLOE_REMOTE_GIT_CHECKOUT_SHA:-}" ]]; then
+        echo "[remote-e2e] checking out release SHA \${FLOE_REMOTE_GIT_CHECKOUT_SHA}"
+        git fetch origin "\${FLOE_REMOTE_GIT_CHECKOUT_SHA}" \
+            || git fetch --tags origin main
+        git checkout --detach "\${FLOE_REMOTE_GIT_CHECKOUT_SHA}"
+    fi
     if [[ -n "\${FLOE_REMOTE_ENV_FILE:-}" && -f "\${FLOE_REMOTE_ENV_FILE}" ]]; then
         echo "[remote-e2e] sourcing remote env allowlist"
         # shellcheck disable=SC1091
@@ -565,6 +584,7 @@ exit 0
 REMOTE_RUN
 chmod +x "\${run_dir}/run.sh"
 FLOE_REMOTE_WORKDIR="\${workdir}" FLOE_REMOTE_RUN_DIR="\${run_dir}" FLOE_REMOTE_E2E_MAKE_TARGET="\${make_target}" \
+    FLOE_REMOTE_GIT_CHECKOUT_SHA=${git_checkout_sha_q} \
     FLOE_REMOTE_ENV_FILE=${remote_env_file_q} \
     FLOE_REMOTE_FLUX_SETTLEMENT_TIMEOUT=${flux_settlement_timeout_q} \
     FLOE_REMOTE_FLUX_SETTLEMENT_INTERVAL=${flux_settlement_interval_q} \

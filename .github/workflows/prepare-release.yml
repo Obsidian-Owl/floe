@@ -238,7 +238,7 @@ jobs:
           config: testing/k8s/kind-config.yaml
 
       - name: Install test infrastructure
-        run: make helm-install-test
+        run: make helm-install-test HELM_TEST_TIMEOUT=20m
         env:
           KIND_CLUSTER_NAME: floe-release
           FLOE_KIND_CLUSTER: floe-release
@@ -315,7 +315,8 @@ jobs:
       - name: Run full E2E on DevPod and Hetzner
         run: make devpod-test
         env:
-          DEVPOD_SOURCE: git:https://github.com/Obsidian-Owl/floe@${{ needs.resolve-candidate.outputs.release_sha }}
+          DEVPOD_GIT_REF: main
+          DEVPOD_REMOTE_GIT_CHECKOUT_SHA: ${{ needs.resolve-candidate.outputs.release_sha }}
           DEVPOD_WORKSPACE: floe-release-e2e-${{ github.run_id }}
           DEVPOD_REMOTE_E2E_MAKE_TARGET: test-e2e-full
           DEVPOD_REMOTE_E2E_TIMEOUT: "10800"
@@ -332,7 +333,7 @@ jobs:
     name: AWS S3 And Glue Live
     runs-on: ubuntu-latest
     timeout-minutes: 180
-    needs: [resolve-candidate, static-and-contract-gates]
+    needs: [resolve-candidate, static-and-contract-gates, full-e2e]
     permissions:
       contents: read
     steps:
@@ -385,7 +386,8 @@ jobs:
       - name: Run AWS live provider tests on DevPod
         run: make devpod-test-aws-provider
         env:
-          DEVPOD_SOURCE: git:https://github.com/Obsidian-Owl/floe@${{ needs.resolve-candidate.outputs.release_sha }}
+          DEVPOD_GIT_REF: main
+          DEVPOD_REMOTE_GIT_CHECKOUT_SHA: ${{ needs.resolve-candidate.outputs.release_sha }}
           DEVPOD_WORKSPACE: floe-release-aws-${{ github.run_id }}
           FLOE_PROVIDER_SPIKE_RUN: release-${{ inputs.version }}-${{ github.run_id }}
           FLOE_AWS_REGION: ${{ vars.FLOE_AWS_REGION }}
