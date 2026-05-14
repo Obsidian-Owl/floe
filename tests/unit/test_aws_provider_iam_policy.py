@@ -23,8 +23,8 @@ def _read_readiness_script() -> str:
 
 
 @pytest.mark.requirement("LIVE-VALIDATION")
-def test_glue_database_delete_policy_covers_child_tables() -> None:
-    """PyIceberg Glue namespace deletion authorizes DeleteDatabase on table ARNs."""
+def test_glue_database_delete_policy_covers_child_resources() -> None:
+    """PyIceberg Glue namespace deletion authorizes DeleteDatabase on child ARNs."""
     iam_tf = _read_iam_tf()
 
     database_statement = re.search(
@@ -40,15 +40,24 @@ def test_glue_database_delete_policy_covers_child_tables() -> None:
         '"arn:aws:glue:${var.aws_region}:${local.account_id}:table/${var.glue_database_prefix}*/*"'
         in body
     )
+    assert (
+        '"arn:aws:glue:${var.aws_region}:${local.account_id}:userDefinedFunction/${var.glue_database_prefix}*/*"'
+        in body
+    )
 
 
 @pytest.mark.requirement("LIVE-VALIDATION")
-def test_readiness_policy_check_requires_delete_database_on_table_resources() -> None:
+def test_readiness_policy_check_requires_delete_database_on_child_resources() -> None:
     """Readiness must catch the IAM gap that only appears on non-empty Glue namespaces."""
     script = _read_readiness_script()
+    expected_udf_resource = (
+        'resources(.) | index("arn:aws:glue:\\($region):\\($account):'
+        'userDefinedFunction/\\($glue_prefix)*/*")'
+    )
 
     assert 'actions(.) | index("glue:DeleteDatabase")' in script
     assert (
         'resources(.) | index("arn:aws:glue:\\($region):\\($account):table/\\($glue_prefix)*/*")'
         in script
     )
+    assert expected_udf_resource in script

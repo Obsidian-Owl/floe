@@ -53,6 +53,7 @@ data "aws_iam_policy_document" "provider_test_permissions" {
       "arn:aws:glue:${var.aws_region}:${local.account_id}:catalog",
       "arn:aws:glue:${var.aws_region}:${local.account_id}:database/${var.glue_database_prefix}*",
       "arn:aws:glue:${var.aws_region}:${local.account_id}:table/${var.glue_database_prefix}*/*",
+      "arn:aws:glue:${var.aws_region}:${local.account_id}:userDefinedFunction/${var.glue_database_prefix}*/*",
     ]
   }
 
