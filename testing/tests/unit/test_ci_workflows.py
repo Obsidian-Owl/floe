@@ -25,6 +25,7 @@ CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PYPI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pypi-publish.yml"
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 PREPARE_RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "prepare-release.yml"
+SECURITY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "security.yml"
 UV_SECURITY_ACTION = REPO_ROOT / ".github" / "actions" / "uv-security-audit" / "action.yml"
 PRE_COMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
 SETUP_HOOKS = REPO_ROOT / "scripts" / "setup-hooks.sh"
@@ -179,6 +180,31 @@ class TestWeeklyWorkflow:
         assert "--label ci-failure" not in workflow_text
         assert "--label weekly-validation" not in workflow_text
         assert "--label product-failure" not in workflow_text
+
+
+class TestSecurityWorkflow:
+    """Structural validation of security.yml workflow."""
+
+    @pytest.mark.requirement("REL-GATE-SECURITY")
+    def test_claude_security_review_is_advisory(self) -> None:
+        """External Claude account failures must not fail deterministic security CI."""
+        workflow = yaml.safe_load(SECURITY_WORKFLOW.read_text(encoding="utf-8"))
+        steps = workflow["jobs"]["security-review"]["steps"]
+        claude_step = next(
+            step for step in steps if step.get("name") == "Run Claude Code Security Review"
+        )
+
+        assert claude_step["continue-on-error"] is True
+
+    @pytest.mark.requirement("REL-GATE-SECURITY")
+    def test_deterministic_security_scans_remain_blocking(self) -> None:
+        """Secrets, dependency, and Bandit scans remain normal blocking jobs."""
+        workflow = yaml.safe_load(SECURITY_WORKFLOW.read_text(encoding="utf-8"))
+        jobs = workflow["jobs"]
+
+        assert "continue-on-error" not in jobs["secrets-scan"]
+        assert "continue-on-error" not in jobs["dependency-audit"]
+        assert "continue-on-error" not in jobs["bandit-scan"]
 
 
 class TestPypiPublishWorkflow:

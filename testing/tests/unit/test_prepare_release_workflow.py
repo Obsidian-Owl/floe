@@ -152,6 +152,7 @@ def test_cleanup_summary_does_not_fail_for_skipped_live_gates() -> None:
     assert 'hetzner_status="not-run"' in text
     assert 'aws_status="not-run"' in text
     assert 'test "${status}" != "failed cleanup"' in text
+    assert 'test "${status}" = "passed"' not in text
     assert "full-e2e job skipped" not in text
     assert "aws-live job skipped" not in text
 
