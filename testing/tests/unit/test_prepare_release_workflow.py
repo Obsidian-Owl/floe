@@ -144,6 +144,24 @@ def test_static_gate_builds_helm_dependencies_before_contract_tests() -> None:
 
 
 @pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_static_gate_adds_helm_repositories_before_dependency_build() -> None:
+    """Release Helm dependency builds must register every remote chart repo."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    dependency_index = text.index("helm dependency build charts/floe-platform")
+
+    for repo in (
+        "helm repo add dagster https://dagster-io.github.io/helm",
+        "helm repo add bitnami https://charts.bitnami.com/bitnami",
+        "helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts",
+        "helm repo add jaegertracing https://jaegertracing.github.io/helm-charts",
+        "helm repo update",
+    ):
+        assert repo in text
+        assert text.index(repo) < dependency_index
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
 def test_cleanup_summary_does_not_fail_for_skipped_live_gates() -> None:
     """Skipped live gates are reported as not-run, not cleanup failures."""
     text = WORKFLOW.read_text(encoding="utf-8")
