@@ -531,20 +531,11 @@ jobs:
           path: release-metadata/release-metadata.json
           if-no-files-found: error
 
-      - name: Create annotated tag
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ inputs.version }}" \
-            -m "Release ${{ inputs.version }}" \
-            "${{ needs.resolve-candidate.outputs.release_sha }}"
-          git push origin "${{ inputs.version }}"
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@01570a1f39cb168c169c802c3bceb9e93fb10974 # v2
         with:
           tag_name: ${{ inputs.version }}
+          target_commitish: ${{ needs.resolve-candidate.outputs.release_sha }}
           name: Release ${{ inputs.version }}
           generate_release_notes: true
           draft: false
@@ -564,6 +555,7 @@ jobs:
       - aws-live
       - cleanup-verify
       - release-evidence
+      - create-release
     permissions:
       contents: read
       issues: write
@@ -588,13 +580,15 @@ jobs:
           failed_gate="unknown"
           failed_result="failure"
           for gate in \
+            resolve-candidate="${RESOLVE_CANDIDATE_RESULT}" \
             static-and-contract-gates="${STATIC_AND_CONTRACT_GATES_RESULT}" \
             package-build-dry-run="${PACKAGE_BUILD_DRY_RUN_RESULT}" \
             kind-integration="${KIND_INTEGRATION_RESULT}" \
             full-e2e="${FULL_E2E_RESULT}" \
             aws-live="${AWS_LIVE_RESULT}" \
             cleanup-verify="${CLEANUP_VERIFY_RESULT}" \
-            release-evidence="${RELEASE_EVIDENCE_RESULT}"; do
+            release-evidence="${RELEASE_EVIDENCE_RESULT}" \
+            create-release="${CREATE_RELEASE_RESULT}"; do
             name="${gate%%=*}"
             result="${gate#*=}"
             if [[ "${result}" != "success" && "${result}" != "skipped" ]]; then
@@ -614,6 +608,9 @@ jobs:
             cleanup-verify)
               classification="cleanup"
               ;;
+            resolve-candidate|create-release)
+              classification="release-tooling"
+              ;;
             static-and-contract-gates|package-build-dry-run|release-evidence)
               classification="product"
               ;;
@@ -632,6 +629,7 @@ jobs:
             --skipped-output pypi \
             --output issue.json
         env:
+          RESOLVE_CANDIDATE_RESULT: ${{ needs.resolve-candidate.result }}
           STATIC_AND_CONTRACT_GATES_RESULT: ${{ needs.static-and-contract-gates.result }}
           PACKAGE_BUILD_DRY_RUN_RESULT: ${{ needs.package-build-dry-run.result }}
           KIND_INTEGRATION_RESULT: ${{ needs.kind-integration.result }}
@@ -639,6 +637,7 @@ jobs:
           AWS_LIVE_RESULT: ${{ needs.aws-live.result }}
           CLEANUP_VERIFY_RESULT: ${{ needs.cleanup-verify.result }}
           RELEASE_EVIDENCE_RESULT: ${{ needs.release-evidence.result }}
+          CREATE_RELEASE_RESULT: ${{ needs.create-release.result }}
 
       - name: Create or update issue
         env:

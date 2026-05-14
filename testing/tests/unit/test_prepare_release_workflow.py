@@ -49,8 +49,8 @@ def test_prepare_release_has_version_and_dry_run_inputs() -> None:
 
 
 @pytest.mark.requirement("REL-GATE-WORKFLOW")
-def test_create_release_job_depends_on_all_gates_and_pushes_tag() -> None:
-    """Release creation depends on every gate and owns tag creation."""
+def test_create_release_job_depends_on_all_gates_and_creates_release() -> None:
+    """Release creation depends on every gate and owns GitHub Release creation."""
     jobs = _workflow()["jobs"]
     create_release = jobs["create-release"]
 
@@ -67,9 +67,26 @@ def test_create_release_job_depends_on_all_gates_and_pushes_tag() -> None:
     }
 
     text = WORKFLOW.read_text(encoding="utf-8")
-    assert "git tag -a" in text
-    assert "git push origin" in text
+    assert "git tag -a" not in text
+    assert "git push origin" not in text
     assert "softprops/action-gh-release" in text
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_github_release_creation_is_tag_authority() -> None:
+    """Release creation must not leave an immutable tag without a release."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+    create_release = _workflow()["jobs"]["create-release"]
+    release_steps = create_release["steps"]
+    github_release_step = next(
+        step for step in release_steps if step.get("name") == "Create GitHub Release"
+    )
+
+    assert "git tag -a" not in text
+    assert "git push origin" not in text
+    assert github_release_step["with"]["target_commitish"] == (
+        "${{ needs.resolve-candidate.outputs.release_sha }}"
+    )
 
 
 @pytest.mark.requirement("REL-GATE-WORKFLOW")
@@ -124,3 +141,17 @@ def test_failure_issue_reports_failed_gate_from_needs_results() -> None:
     assert '--gate "${failed_gate}"' in text
     assert '--classification "${classification}"' in text
     assert "--gate unknown" not in text
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_failure_issue_covers_candidate_and_release_failures() -> None:
+    """Failure issues include pre-gate validation and post-gate release failures."""
+    job = _workflow()["jobs"]["failure-issue"]
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "resolve-candidate" in job["needs"]
+    assert "create-release" in job["needs"]
+    assert 'resolve-candidate="${RESOLVE_CANDIDATE_RESULT}"' in text
+    assert 'create-release="${CREATE_RELEASE_RESULT}"' in text
+    assert "RESOLVE_CANDIDATE_RESULT: ${{ needs.resolve-candidate.result }}" in text
+    assert "CREATE_RELEASE_RESULT: ${{ needs.create-release.result }}" in text
