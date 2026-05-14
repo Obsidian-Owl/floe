@@ -237,6 +237,12 @@ jobs:
           cluster_name: floe-release
           config: testing/k8s/kind-config.yaml
 
+      - name: Build and load Dagster demo image
+        run: make build-demo-image
+        env:
+          KIND_CLUSTER_NAME: floe-release
+          FLOE_KIND_CLUSTER: floe-release
+
       - name: Install test infrastructure
         run: make helm-install-test HELM_TEST_TIMEOUT=20m
         env:
@@ -389,7 +395,6 @@ jobs:
           DEVPOD_GIT_REF: main
           DEVPOD_REMOTE_GIT_CHECKOUT_SHA: ${{ needs.resolve-candidate.outputs.release_sha }}
           DEVPOD_WORKSPACE: floe-release-aws-${{ github.run_id }}
-          FLOE_PROVIDER_SPIKE_RUN: release-${{ inputs.version }}-${{ github.run_id }}
           FLOE_AWS_REGION: ${{ vars.FLOE_AWS_REGION }}
           FLOE_AWS_TEST_BUCKET: ${{ vars.FLOE_AWS_TEST_BUCKET }}
           FLOE_AWS_TEST_PREFIX: ${{ vars.FLOE_AWS_TEST_PREFIX }}
@@ -662,9 +667,21 @@ jobs:
             fi
           done
           log_excerpt="Gate ${failed_gate} completed with result ${failed_result}. See workflow artifacts and failed job logs."
+          : > failed-logs.txt
           if gh run view "${GITHUB_RUN_ID}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --log-failed > failed-logs.txt 2>/dev/null; then
+            --json jobs \
+            --jq '.jobs[] | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped") | .databaseId' \
+            > failed-job-ids.txt 2>/dev/null; then
+            while IFS= read -r job_id; do
+              if [[ -n "${job_id}" ]]; then
+                gh run view "${GITHUB_RUN_ID}" \
+                  --repo "${GITHUB_REPOSITORY}" \
+                  --job "${job_id}" --log >> failed-logs.txt 2>/dev/null || true
+              fi
+            done < failed-job-ids.txt
+          fi
+          if [[ -s failed-logs.txt ]]; then
             log_excerpt="$(tail -c 12000 failed-logs.txt)"
           fi
           uv run python -m testing.release.cli failure-issue \

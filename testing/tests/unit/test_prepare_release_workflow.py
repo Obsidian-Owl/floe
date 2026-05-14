@@ -214,6 +214,26 @@ def test_kind_gate_installs_test_stack_before_running_in_cluster_tests() -> None
 
 
 @pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_kind_gate_builds_demo_image_before_installing_test_stack() -> None:
+    """The Kind release gate must load the local Dagster image before Helm waits."""
+    steps = _workflow()["jobs"]["kind-integration"]["steps"]
+    step_names = [step.get("name") for step in steps]
+
+    assert "Build and load Dagster demo image" in step_names
+    assert step_names.index("Create Kind cluster") < step_names.index(
+        "Build and load Dagster demo image"
+    )
+    assert step_names.index("Build and load Dagster demo image") < step_names.index(
+        "Install test infrastructure"
+    )
+
+    build_step = steps[step_names.index("Build and load Dagster demo image")]
+    assert build_step["run"] == "make build-demo-image"
+    assert build_step["env"]["KIND_CLUSTER_NAME"] == "floe-release"
+    assert build_step["env"]["FLOE_KIND_CLUSTER"] == "floe-release"
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
 def test_release_devpod_gates_clone_branch_then_pin_release_sha() -> None:
     """DevPod source must use a real ref and then detach to the release SHA."""
     for job_name, step_name in (
@@ -240,6 +260,21 @@ def test_release_devpod_gates_run_serially_to_fit_hetzner_quota() -> None:
         "static-and-contract-gates",
         "full-e2e",
     }
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_release_aws_live_uses_cleanup_safe_provider_run_id() -> None:
+    """Release AWS live runs must preserve the cleanup-safe provider id shape."""
+    steps = _workflow()["jobs"]["aws-live"]["steps"]
+    run_step = next(
+        step for step in steps if step.get("name") == "Run AWS live provider tests on DevPod"
+    )
+
+    assert "FLOE_PROVIDER_SPIKE_RUN" not in run_step["env"]
+    assert not any(
+        isinstance(value, str) and value.startswith("release-")
+        for value in run_step["env"].values()
+    )
 
 
 @pytest.mark.requirement("REL-GATE-WORKFLOW")
@@ -282,6 +317,19 @@ def test_failure_issue_reports_failed_gate_from_needs_results() -> None:
 
 
 @pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_failure_issue_collects_completed_failed_job_logs() -> None:
+    """Failure issues must not rely on whole-run logs before the workflow completes."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "--json jobs" in text
+    assert '.jobs[] | select(.status == "completed"' in text
+    assert '.conclusion != "success"' in text
+    assert '.conclusion != "skipped"' in text
+    assert '--job "${job_id}" --log' in text
+    assert "--log-failed" not in text
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
 def test_failure_issue_collects_failed_logs_for_classification() -> None:
     """Failure issue classification must inspect failed job logs."""
     job = _workflow()["jobs"]["failure-issue"]
@@ -289,7 +337,9 @@ def test_failure_issue_collects_failed_logs_for_classification() -> None:
 
     assert job["permissions"]["actions"] == "read"
     assert 'gh run view "${GITHUB_RUN_ID}"' in text
-    assert "--log-failed" in text
+    assert "--json jobs" in text
+    assert ": > failed-logs.txt" in text
+    assert '--job "${job_id}" --log' in text
     assert '--log-excerpt "${log_excerpt}"' in text
 
 
