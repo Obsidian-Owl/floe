@@ -32,7 +32,8 @@ jobs:
     outputs:
       release_sha: ${{ steps.sha.outputs.release_sha }}
       python_version: ${{ steps.candidate.outputs.python_version }}
-      helm_version: ${{ steps.candidate.outputs.helm_version }}
+      helm_chart_version: ${{ steps.candidate.outputs.helm_chart_version }}
+      helm_cli_version: ${{ steps.candidate.outputs.helm_cli_version }}
       version: ${{ inputs.version }}
     steps:
       - name: Checkout main
@@ -93,7 +94,8 @@ jobs:
           candidate = json.loads(Path("candidate.json").read_text(encoding="utf-8"))
           with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
               output.write(f"python_version={candidate['python_version']}\n")
-              output.write(f"helm_version={candidate['helm_version']}\n")
+              output.write(f"helm_chart_version={candidate['helm_chart_version']}\n")
+              output.write(f"helm_cli_version={candidate['helm_cli_version']}\n")
               output.write(f"publish_count={candidate['publish_count']}\n")
           PY
 
@@ -126,7 +128,7 @@ jobs:
       - name: Set up Helm
         uses: Azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
         with:
-          version: ${{ needs.resolve-candidate.outputs.helm_version }}
+          version: ${{ needs.resolve-candidate.outputs.helm_cli_version }}
 
       - name: Add Helm repositories
         run: |
@@ -587,6 +589,7 @@ jobs:
       - release-evidence
       - create-release
     permissions:
+      actions: read
       contents: read
       issues: write
     steps:
@@ -627,32 +630,20 @@ jobs:
               break
             fi
           done
-          classification="release-tooling"
-          case "${failed_gate}" in
-            aws-live)
-              classification="credential-setup"
-              ;;
-            full-e2e|kind-integration)
-              classification="infrastructure"
-              ;;
-            cleanup-verify)
-              classification="cleanup"
-              ;;
-            resolve-candidate|create-release)
-              classification="release-tooling"
-              ;;
-            static-and-contract-gates|package-build-dry-run|release-evidence)
-              classification="product"
-              ;;
-          esac
+          log_excerpt="Gate ${failed_gate} completed with result ${failed_result}. See workflow artifacts and failed job logs."
+          if gh run view "${GITHUB_RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --log-failed > failed-logs.txt 2>/dev/null; then
+            log_excerpt="$(tail -c 12000 failed-logs.txt)"
+          fi
           uv run python -m testing.release.cli failure-issue \
             --lane release-gate \
             --version "${{ inputs.version }}" \
             --gate "${failed_gate}" \
-            --classification "${classification}" \
+            --classification auto \
             --sha "${{ needs.resolve-candidate.outputs.release_sha || github.sha }}" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --log-excerpt "Gate ${failed_gate} completed with result ${failed_result}. See workflow artifacts and failed job logs." \
+            --log-excerpt "${log_excerpt}" \
             --cleanup-status "${{ needs.cleanup-verify.outputs.cleanup_status || 'not-run' }}" \
             --skipped-output tag \
             --skipped-output github-release \
@@ -668,6 +659,7 @@ jobs:
           CLEANUP_VERIFY_RESULT: ${{ needs.cleanup-verify.result }}
           RELEASE_EVIDENCE_RESULT: ${{ needs.release-evidence.result }}
           CREATE_RELEASE_RESULT: ${{ needs.create-release.result }}
+          GH_TOKEN: ${{ github.token }}
 
       - name: Create or update issue
         env:

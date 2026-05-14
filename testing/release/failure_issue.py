@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+TOOLING_FAILURE_MARKERS = (
+    "Failed to download Helm",
+    "Azure/setup-helm",
+    "actions/setup-python",
+    "astral-sh/setup-uv",
+    "helm-v",
+    "No such file or directory",
+)
+
 
 @dataclass(frozen=True)
 class FailureIssue:
@@ -16,6 +25,23 @@ class FailureIssue:
     log_excerpt: str
     cleanup_status: str
     skipped_outputs: tuple[str, ...] = ()
+
+
+def classify_failure(gate: str, log_excerpt: str) -> str:
+    """Classify a failed release gate using the failed gate and logs."""
+    if _contains_any(log_excerpt, TOOLING_FAILURE_MARKERS):
+        return "release-tooling"
+    if gate == "aws-live":
+        return "credential-setup"
+    if gate in {"full-e2e", "kind-integration"}:
+        return "infrastructure"
+    if gate == "cleanup-verify":
+        return "cleanup"
+    if gate in {"resolve-candidate", "create-release"}:
+        return "release-tooling"
+    if gate in {"static-and-contract-gates", "package-build-dry-run", "release-evidence"}:
+        return "product"
+    return "release-tooling"
 
 
 def issue_title(issue: FailureIssue) -> str:
@@ -67,3 +93,8 @@ def issue_comment_body(issue: FailureIssue) -> str:
             "",
         ],
     )
+
+
+def _contains_any(text: str, markers: tuple[str, ...]) -> bool:
+    lowered = text.lower()
+    return any(marker.lower() in lowered for marker in markers)

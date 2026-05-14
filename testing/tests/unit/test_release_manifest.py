@@ -10,7 +10,7 @@ from testing.release import cli
 from testing.release.manifest import (
     ReleaseManifestError,
     load_release_manifest,
-    normalize_tag_to_helm_version,
+    normalize_tag_to_helm_chart_version,
     normalize_tag_to_python_version,
     validate_release_manifest,
 )
@@ -53,12 +53,12 @@ ALPHA_EXCLUDED = {
 
 def test_normalizes_alpha_git_tag_to_pep440() -> None:
     assert normalize_tag_to_python_version("v0.1.0-alpha.1") == "0.1.0a1"
-    assert normalize_tag_to_helm_version("v0.1.0-alpha.1") == "0.1.0-alpha.1"
+    assert normalize_tag_to_helm_chart_version("v0.1.0-alpha.1") == "0.1.0-alpha.1"
 
 
 def test_normalizes_non_alpha_git_tag_to_release_versions() -> None:
     assert normalize_tag_to_python_version("v0.1.1") == "0.1.1"
-    assert normalize_tag_to_helm_version("v0.1.1") == "0.1.1"
+    assert normalize_tag_to_helm_chart_version("v0.1.1") == "0.1.1"
 
 
 def test_release_manifest_exists_and_matches_cutline() -> None:
@@ -87,6 +87,22 @@ def test_release_manifest_validates_alpha_release_cutline() -> None:
     assert result.git_tag == "v0.1.0-alpha.1"
 
 
+def test_release_manifest_separates_helm_chart_and_cli_versions() -> None:
+    """Floe chart release versions must not feed Helm CLI installation."""
+    manifest = load_release_manifest(MANIFEST)
+
+    result = validate_release_manifest(
+        manifest,
+        repo_root=REPO_ROOT,
+        tag="v0.1.0-alpha.1",
+    )
+
+    assert manifest.release.helm_chart_version == "0.1.0-alpha.1"
+    assert manifest.tooling.helm_cli_version == "v4.1.3"
+    assert result.helm_chart_version == "0.1.0-alpha.1"
+    assert result.helm_cli_version == "v4.1.3"
+
+
 def test_release_manifest_validates_non_alpha_release_tag(tmp_path: Path) -> None:
     _write_chart(tmp_path / "charts" / "floe-platform")
     _write_chart(tmp_path / "charts" / "floe-jobs")
@@ -95,7 +111,7 @@ def test_release_manifest_validates_non_alpha_release_tag(tmp_path: Path) -> Non
         release={
             "git_tag": "v0.1.1",
             "python_version": "0.1.1",
-            "helm_version": "0.1.1",
+            "helm_chart_version": "0.1.1",
         },
     )
 
@@ -106,7 +122,7 @@ def test_release_manifest_validates_non_alpha_release_tag(tmp_path: Path) -> Non
     )
 
     assert result.python_version == "0.1.1"
-    assert result.helm_version == "0.1.1"
+    assert result.helm_chart_version == "0.1.1"
     assert result.git_tag == "v0.1.1"
 
 
@@ -115,7 +131,7 @@ def test_manifest_declares_helm_alpha_publish_policy() -> None:
 
     assert manifest.helm.alpha_policy == "publish"
     assert manifest.helm.charts == ("charts/floe-platform", "charts/floe-jobs")
-    assert manifest.release.helm_version == "0.1.0-alpha.1"
+    assert manifest.release.helm_chart_version == "0.1.0-alpha.1"
 
 
 def test_release_manifest_rejects_secret_like_values(tmp_path: Path) -> None:
@@ -126,7 +142,9 @@ release:
   train: alpha
   git_tag: v0.1.0-alpha.1
   python_version: 0.1.0a1
-  helm_version: 0.1.0-alpha.1
+  helm_chart_version: 0.1.0-alpha.1
+tooling:
+  helm_cli_version: v4.1.3
 python_packages:
   publish:
     - path: packages/floe-core
@@ -244,15 +262,15 @@ def test_release_manifest_rejects_duplicate_alpha_helm_chart_entries(
         validate_release_manifest(load_release_manifest(manifest_path), repo_root=tmp_path)
 
 
-def test_release_manifest_rejects_helm_version_mismatch(tmp_path: Path) -> None:
+def test_release_manifest_rejects_helm_chart_version_mismatch(tmp_path: Path) -> None:
     manifest_path = _write_manifest(
         tmp_path,
-        release={"helm_version": "0.1.0-alpha.2"},
+        release={"helm_chart_version": "0.1.0-alpha.2"},
     )
 
     with pytest.raises(
         ReleaseManifestError,
-        match="helm_version does not match normalized git tag",
+        match="helm_chart_version does not match normalized git tag",
     ):
         validate_release_manifest(
             load_release_manifest(manifest_path),
@@ -434,7 +452,7 @@ def _write_manifest(
         "train": "alpha",
         "git_tag": "v0.1.0-alpha.1",
         "python_version": "0.1.0a1",
-        "helm_version": "0.1.0-alpha.1",
+        "helm_chart_version": "0.1.0-alpha.1",
     }
     if release:
         release_data.update(release)
@@ -466,6 +484,9 @@ def _write_manifest(
         yaml.safe_dump(
             {
                 "release": release_data,
+                "tooling": {
+                    "helm_cli_version": "v4.1.3",
+                },
                 "python_packages": {
                     "publish": publish_entries,
                     "exclude": exclude_entries,

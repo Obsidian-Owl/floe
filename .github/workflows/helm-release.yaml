@@ -73,7 +73,7 @@ jobs:
           if [ -n "${INPUT_VERSION}" ]; then
             VERSION="${INPUT_VERSION}"
           else
-            VERSION=$(uv run python -c 'from pathlib import Path; from testing.release.manifest import load_release_manifest; print(load_release_manifest(Path("release/floe-release.yaml")).release.helm_version)')
+            VERSION=$(uv run python -c 'from pathlib import Path; from testing.release.manifest import load_release_manifest; print(load_release_manifest(Path("release/floe-release.yaml")).release.helm_chart_version)')
           fi
 
           if [ "${GH_REF_TYPE}" = "tag" ]; then

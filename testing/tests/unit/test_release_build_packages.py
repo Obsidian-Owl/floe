@@ -310,7 +310,10 @@ def _write_manifest(repo_root: Path) -> Path:
                     "train": "alpha",
                     "git_tag": "v0.1.0-alpha.1",
                     "python_version": "0.1.0a1",
-                    "helm_version": "0.1.0-alpha.1",
+                    "helm_chart_version": "0.1.0-alpha.1",
+                },
+                "tooling": {
+                    "helm_cli_version": "v4.1.3",
                 },
                 "python_packages": {
                     "publish": [

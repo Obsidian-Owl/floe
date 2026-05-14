@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from testing.release.failure_issue import FailureIssue, issue_comment_body, issue_title
+from testing.release.failure_issue import (
+    FailureIssue,
+    classify_failure,
+    issue_comment_body,
+    issue_title,
+)
 
 
 @pytest.mark.requirement("REL-GATE-ISSUE")
@@ -68,3 +73,28 @@ def test_issue_comment_body_contains_release_safety_state() -> None:
     assert "Cleanup status: `passed`" in body
     assert "Skipped outputs: `tag`, `github-release`, `pypi`" in body
     assert "Unable to locate credentials" in body
+
+
+@pytest.mark.requirement("REL-GATE-ISSUE")
+def test_static_gate_setup_action_failures_are_release_tooling() -> None:
+    """Static gate setup/action failures are not product failures."""
+    assert (
+        classify_failure(
+            "static-and-contract-gates",
+            "Error: Failed to download Helm from location "
+            "https://get.helm.sh/helm-v0.1.0-alpha.1-linux-amd64.tar.gz",
+        )
+        == "release-tooling"
+    )
+
+
+@pytest.mark.requirement("REL-GATE-ISSUE")
+def test_static_gate_test_failures_remain_product_failures() -> None:
+    """Actual static or contract test failures stay product-classified."""
+    assert (
+        classify_failure(
+            "static-and-contract-gates",
+            "FAILED tests/contract/test_compilation.py::test_contract_roundtrip",
+        )
+        == "product"
+    )

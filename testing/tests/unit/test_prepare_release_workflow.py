@@ -162,6 +162,25 @@ def test_static_gate_adds_helm_repositories_before_dependency_build() -> None:
 
 
 @pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_static_gate_uses_tooling_helm_cli_version_not_chart_version() -> None:
+    """Helm CLI setup must not consume the Floe chart release version."""
+    workflow = _workflow()
+    resolve_outputs = workflow["jobs"]["resolve-candidate"]["outputs"]
+    setup_step = next(
+        step
+        for step in workflow["jobs"]["static-and-contract-gates"]["steps"]
+        if step.get("name") == "Set up Helm"
+    )
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "helm_cli_version" in resolve_outputs
+    assert "output.write(f\"helm_cli_version={candidate['helm_cli_version']}\\n\")" in text
+    assert setup_step["with"]["version"] == (
+        "${{ needs.resolve-candidate.outputs.helm_cli_version }}"
+    )
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
 def test_cleanup_summary_does_not_fail_for_skipped_live_gates() -> None:
     """Skipped live gates are reported as not-run, not cleanup failures."""
     text = WORKFLOW.read_text(encoding="utf-8")
@@ -182,8 +201,20 @@ def test_failure_issue_reports_failed_gate_from_needs_results() -> None:
 
     assert 'failed_gate="unknown"' in text
     assert '--gate "${failed_gate}"' in text
-    assert '--classification "${classification}"' in text
+    assert "--classification auto" in text
     assert "--gate unknown" not in text
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_failure_issue_collects_failed_logs_for_classification() -> None:
+    """Failure issue classification must inspect failed job logs."""
+    job = _workflow()["jobs"]["failure-issue"]
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert job["permissions"]["actions"] == "read"
+    assert 'gh run view "${GITHUB_RUN_ID}"' in text
+    assert "--log-failed" in text
+    assert '--log-excerpt "${log_excerpt}"' in text
 
 
 @pytest.mark.requirement("REL-GATE-WORKFLOW")
