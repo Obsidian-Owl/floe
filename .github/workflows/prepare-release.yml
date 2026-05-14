@@ -31,20 +31,30 @@ jobs:
       contents: read
     outputs:
       release_sha: ${{ steps.sha.outputs.release_sha }}
+      python_version: ${{ steps.candidate.outputs.python_version }}
+      helm_version: ${{ steps.candidate.outputs.helm_version }}
       version: ${{ inputs.version }}
     steps:
       - name: Checkout main
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Resolve release SHA and existing tags
+      - name: Resolve dispatch SHA and existing tags
         id: sha
         run: |
           set -euo pipefail
+          if [[ "${GITHUB_REF_NAME}" != "main" ]]; then
+            echo "::error::Prepare Release must be dispatched from main; got ${GITHUB_REF_NAME}."
+            exit 1
+          fi
           git fetch origin main --tags --force
-          release_sha="$(git rev-parse origin/main)"
+          release_sha="$(git rev-parse HEAD)"
+          if [[ "${release_sha}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::Checked-out release SHA ${release_sha} does not match dispatch SHA ${GITHUB_SHA}."
+            exit 1
+          fi
           echo "release_sha=${release_sha}" >> "$GITHUB_OUTPUT"
           git tag --list > existing-tags.txt
 
@@ -63,6 +73,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Validate release candidate
+        id: candidate
         run: |
           set -euo pipefail
           args=()
@@ -73,7 +84,18 @@ jobs:
             --manifest release/floe-release.yaml \
             --version "${{ inputs.version }}" \
             --release-sha "${{ steps.sha.outputs.release_sha }}" \
-            "${args[@]}"
+            "${args[@]}" > candidate.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          candidate = json.loads(Path("candidate.json").read_text(encoding="utf-8"))
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write(f"python_version={candidate['python_version']}\n")
+              output.write(f"helm_version={candidate['helm_version']}\n")
+              output.write(f"publish_count={candidate['publish_count']}\n")
+          PY
 
   static-and-contract-gates:
     name: Static And Contract Gates
@@ -222,11 +244,26 @@ jobs:
       - name: Configure DevPod Hetzner provider
         run: |
           set -euo pipefail
+          case "${DEVPOD_HETZNER_TOKEN}" in
+            *$'\n'*|*$'\r'*)
+              echo "::error::DEVPOD_HETZNER_TOKEN must be a single-line token."
+              exit 1
+              ;;
+          esac
+          if [[ ! "${DEVPOD_MACHINE_TYPE}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Invalid DEVPOD_MACHINE_TYPE."
+            exit 1
+          fi
+          if [[ ! "${DEVPOD_REGION}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Invalid DEVPOD_REGION."
+            exit 1
+          fi
           {
             printf 'DEVPOD_HETZNER_TOKEN=%s\n' "${DEVPOD_HETZNER_TOKEN}"
             printf 'DEVPOD_MACHINE_TYPE=%s\n' "${DEVPOD_MACHINE_TYPE}"
             printf 'DEVPOD_REGION=%s\n' "${DEVPOD_REGION}"
           } > .env
+          chmod 0600 .env
           make devpod-setup
         env:
           DEVPOD_HETZNER_TOKEN: ${{ secrets.DEVPOD_HETZNER_TOKEN }}
@@ -273,11 +310,26 @@ jobs:
       - name: Configure DevPod Hetzner provider
         run: |
           set -euo pipefail
+          case "${DEVPOD_HETZNER_TOKEN}" in
+            *$'\n'*|*$'\r'*)
+              echo "::error::DEVPOD_HETZNER_TOKEN must be a single-line token."
+              exit 1
+              ;;
+          esac
+          if [[ ! "${DEVPOD_MACHINE_TYPE}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Invalid DEVPOD_MACHINE_TYPE."
+            exit 1
+          fi
+          if [[ ! "${DEVPOD_REGION}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Invalid DEVPOD_REGION."
+            exit 1
+          fi
           {
             printf 'DEVPOD_HETZNER_TOKEN=%s\n' "${DEVPOD_HETZNER_TOKEN}"
             printf 'DEVPOD_MACHINE_TYPE=%s\n' "${DEVPOD_MACHINE_TYPE}"
             printf 'DEVPOD_REGION=%s\n' "${DEVPOD_REGION}"
           } > .env
+          chmod 0600 .env
           make devpod-setup
         env:
           DEVPOD_HETZNER_TOKEN: ${{ secrets.DEVPOD_HETZNER_TOKEN }}
@@ -338,13 +390,26 @@ jobs:
         id: summary
         run: |
           set -euo pipefail
+          devpod_status="passed"
+          hetzner_status="passed"
+          aws_status="passed"
+          if [[ "${FULL_E2E_RESULT}" != "success" ]]; then
+            devpod_status="failed: full-e2e job ${FULL_E2E_RESULT}"
+            hetzner_status="failed: full-e2e job ${FULL_E2E_RESULT}"
+          fi
+          if [[ "${AWS_LIVE_RESULT}" != "success" ]]; then
+            aws_status="failed: aws-live job ${AWS_LIVE_RESULT}"
+          fi
           uv run python -m testing.release.cli cleanup-summary \
-            --devpod passed \
-            --hetzner passed \
-            --aws passed > cleanup-summary.json
+            --devpod "${devpod_status}" \
+            --hetzner "${hetzner_status}" \
+            --aws "${aws_status}" > cleanup-summary.json
           status="$(python -c 'import json; print(json.load(open("cleanup-summary.json"))["status"])')"
           echo "cleanup_status=${status}" >> "$GITHUB_OUTPUT"
           test "${status}" = "passed"
+        env:
+          FULL_E2E_RESULT: ${{ needs.full-e2e.result }}
+          AWS_LIVE_RESULT: ${{ needs.aws-live.result }}
 
       - name: Upload cleanup summary
         if: always()
@@ -386,13 +451,20 @@ jobs:
       - name: Write evidence
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2153
+          aws_live_result="failed: aws-live job ${AWS_LIVE_RESULT}"
+          if [[ "${AWS_LIVE_RESULT}" == "success" ]]; then
+            aws_live_result="passed"
+          fi
           uv run python -m testing.release.cli evidence-summary \
             --release-sha "${{ needs.resolve-candidate.outputs.release_sha }}" \
             --manifest release/floe-release.yaml \
             --devpod-artifact "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --aws-live-result passed \
+            --aws-live-result "${aws_live_result}" \
             --cleanup-result "${{ needs.cleanup-verify.outputs.cleanup_status }}" \
             --output release-evidence.md
+        env:
+          AWS_LIVE_RESULT: ${{ needs.aws-live.result }}
 
       - name: Upload release evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -450,7 +522,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.version }}
           RELEASE_SHA: ${{ needs.resolve-candidate.outputs.release_sha }}
-          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION: ${{ needs.resolve-candidate.outputs.python_version }}
 
       - name: Upload release metadata
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -513,19 +585,60 @@ jobs:
       - name: Build issue content
         run: |
           set -euo pipefail
+          failed_gate="unknown"
+          failed_result="failure"
+          for gate in \
+            static-and-contract-gates="${STATIC_AND_CONTRACT_GATES_RESULT}" \
+            package-build-dry-run="${PACKAGE_BUILD_DRY_RUN_RESULT}" \
+            kind-integration="${KIND_INTEGRATION_RESULT}" \
+            full-e2e="${FULL_E2E_RESULT}" \
+            aws-live="${AWS_LIVE_RESULT}" \
+            cleanup-verify="${CLEANUP_VERIFY_RESULT}" \
+            release-evidence="${RELEASE_EVIDENCE_RESULT}"; do
+            name="${gate%%=*}"
+            result="${gate#*=}"
+            if [[ "${result}" != "success" && "${result}" != "skipped" ]]; then
+              failed_gate="${name}"
+              failed_result="${result}"
+              break
+            fi
+          done
+          classification="release-tooling"
+          case "${failed_gate}" in
+            aws-live)
+              classification="credential-setup"
+              ;;
+            full-e2e|kind-integration)
+              classification="infrastructure"
+              ;;
+            cleanup-verify)
+              classification="cleanup"
+              ;;
+            static-and-contract-gates|package-build-dry-run|release-evidence)
+              classification="product"
+              ;;
+          esac
           uv run python -m testing.release.cli failure-issue \
             --lane release-gate \
             --version "${{ inputs.version }}" \
-            --gate unknown \
-            --classification release-tooling \
+            --gate "${failed_gate}" \
+            --classification "${classification}" \
             --sha "${{ needs.resolve-candidate.outputs.release_sha || github.sha }}" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --log-excerpt "See workflow artifacts and failed job logs." \
+            --log-excerpt "Gate ${failed_gate} completed with result ${failed_result}. See workflow artifacts and failed job logs." \
             --cleanup-status "${{ needs.cleanup-verify.outputs.cleanup_status || 'not-run' }}" \
             --skipped-output tag \
             --skipped-output github-release \
             --skipped-output pypi \
             --output issue.json
+        env:
+          STATIC_AND_CONTRACT_GATES_RESULT: ${{ needs.static-and-contract-gates.result }}
+          PACKAGE_BUILD_DRY_RUN_RESULT: ${{ needs.package-build-dry-run.result }}
+          KIND_INTEGRATION_RESULT: ${{ needs.kind-integration.result }}
+          FULL_E2E_RESULT: ${{ needs.full-e2e.result }}
+          AWS_LIVE_RESULT: ${{ needs.aws-live.result }}
+          CLEANUP_VERIFY_RESULT: ${{ needs.cleanup-verify.result }}
+          RELEASE_EVIDENCE_RESULT: ${{ needs.release-evidence.result }}
 
       - name: Create or update issue
         env:

@@ -156,6 +156,7 @@ class TestWeeklyWorkflow:
         has_from = any(line.upper().startswith("FROM") for line in lines)
         assert has_from, "Dockerfile missing FROM instruction"
 
+    @pytest.mark.requirement("REL-GATE-WEEKLY")
     def test_weekly_has_failure_issue_job(self) -> None:
         """Weekly long-running validation failures create actionable issues."""
         workflow = yaml.safe_load(WEEKLY_WORKFLOW.read_text(encoding="utf-8"))
@@ -172,6 +173,7 @@ class TestWeeklyWorkflow:
 class TestPypiPublishWorkflow:
     """Structural validation of the PyPI publish release gate."""
 
+    @pytest.mark.requirement("REL-GATE-PUBLISH")
     def test_pypi_publish_runs_after_prepare_release_success_instead_of_tag_push(self) -> None:
         """PyPI upload starts only after Prepare Release completes successfully."""
         workflow_text = PYPI_WORKFLOW.read_text(encoding="utf-8")
@@ -183,6 +185,7 @@ class TestPypiPublishWorkflow:
         assert "\n  push:" not in on_block
         assert "\n    tags:" not in on_block
 
+    @pytest.mark.requirement("REL-GATE-PUBLISH")
     def test_pypi_publish_job_uses_release_metadata_instead_of_head_branch(self) -> None:
         """Publishing resolves immutable release metadata from the Prepare Release run."""
         workflow_text = PYPI_WORKFLOW.read_text(encoding="utf-8")
@@ -191,9 +194,11 @@ class TestPypiPublishWorkflow:
         assert "github.event.workflow_run.conclusion == 'success'" in workflow_text
         assert "github.event.workflow_run.event == 'workflow_dispatch'" in workflow_text
         assert "github.event.workflow_run.name == 'Prepare Release'" in workflow_text
-        assert "contains(github.event.workflow_run.display_title, 'dry_run=false')" in workflow_text
+        assert "github.event.workflow_run.display_title" not in workflow_text
         assert "gh run download" in workflow_text
         assert "--name release-metadata" in workflow_text
+        assert "publish=true" in workflow_text
+        assert "publish=false" in workflow_text
         assert (
             "ref: ${{ github.event_name == 'workflow_run' && "
             "steps.release_metadata.outputs.sha || github.ref }}"
@@ -202,13 +207,18 @@ class TestPypiPublishWorkflow:
         assert "startsWith(github.event.workflow_run.head_branch" not in workflow_text
         assert "github.event.workflow_run.head_branch" not in workflow_text
 
+    @pytest.mark.requirement("REL-GATE-PUBLISH")
     def test_prepare_release_uploads_release_metadata_for_pypi_publish(self) -> None:
         """Prepare Release publishes tag/SHA metadata consumed by PyPI publish."""
         workflow_text = PREPARE_RELEASE_WORKFLOW.read_text(encoding="utf-8")
 
         assert "release-metadata/release-metadata.json" in workflow_text
         assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in workflow_text
+        assert "RELEASE_VERSION: ${{ needs.resolve-candidate.outputs.python_version }}" in (
+            workflow_text
+        )
 
+    @pytest.mark.requirement("REL-GATE-PUBLISH")
     def test_manual_pypi_dispatch_is_build_only_dry_run(self) -> None:
         """Manual PyPI dispatch keeps dry-run support but cannot upload artifacts."""
         workflow_text = PYPI_WORKFLOW.read_text(encoding="utf-8")
@@ -222,14 +232,18 @@ class TestPypiPublishWorkflow:
 class TestReleaseWorkflowAuthority:
     """Release workflow must not create releases directly from tag pushes."""
 
+    @pytest.mark.requirement("REL-GATE-AUTHORITY")
     def test_release_workflow_has_no_push_tag_trigger(self) -> None:
+        """The legacy release smoke workflow has no tag-push trigger."""
         workflow_text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
         on_block = workflow_text.split("\nconcurrency:", maxsplit=1)[0]
 
         assert "\n  push:" not in on_block
         assert "\n    tags:" not in on_block
 
+    @pytest.mark.requirement("REL-GATE-AUTHORITY")
     def test_release_creation_is_owned_by_prepare_release(self) -> None:
+        """GitHub Release creation belongs to Prepare Release only."""
         prepare_text = PREPARE_RELEASE_WORKFLOW.read_text(encoding="utf-8")
         release_text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
 

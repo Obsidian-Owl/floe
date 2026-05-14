@@ -63,7 +63,9 @@ version = "0.1.0a1"
         )
 
 
+@pytest.mark.requirement("REL-GATE-CANDIDATE")
 def test_validate_release_candidate_accepts_matching_manifest_and_sha(tmp_path: Path) -> None:
+    """A matching manifest tag and immutable SHA produce release metadata."""
     manifest = _write_manifest(tmp_path)
     _write_package_and_charts(tmp_path)
 
@@ -82,7 +84,9 @@ def test_validate_release_candidate_accepts_matching_manifest_and_sha(tmp_path: 
     assert result.publish_count == 1
 
 
+@pytest.mark.requirement("REL-GATE-CANDIDATE")
 def test_validate_release_candidate_rejects_manifest_version_mismatch(tmp_path: Path) -> None:
+    """A requested version must match the manifest release tag."""
     manifest = _write_manifest(tmp_path)
     _write_package_and_charts(tmp_path)
 
@@ -96,7 +100,9 @@ def test_validate_release_candidate_rejects_manifest_version_mismatch(tmp_path: 
         )
 
 
+@pytest.mark.requirement("REL-GATE-CANDIDATE")
 def test_validate_release_candidate_rejects_existing_tag(tmp_path: Path) -> None:
+    """Prepare Release must not overwrite an existing release tag."""
     manifest = _write_manifest(tmp_path)
     _write_package_and_charts(tmp_path)
 
@@ -110,7 +116,9 @@ def test_validate_release_candidate_rejects_existing_tag(tmp_path: Path) -> None
         )
 
 
+@pytest.mark.requirement("REL-GATE-CANDIDATE")
 def test_validate_release_candidate_rejects_non_sha_release_ref(tmp_path: Path) -> None:
+    """Release candidates must be pinned to a 40-character commit SHA."""
     manifest = _write_manifest(tmp_path)
     _write_package_and_charts(tmp_path)
 

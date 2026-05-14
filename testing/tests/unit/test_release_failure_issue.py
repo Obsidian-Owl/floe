@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import pytest
+
 from testing.release.failure_issue import FailureIssue, issue_comment_body, issue_title
 
 
+@pytest.mark.requirement("REL-GATE-ISSUE")
 def test_release_gate_issue_title_is_deterministic() -> None:
+    """Release-gate issue titles include version, failed gate, and classification."""
     issue = FailureIssue(
         lane="release-gate",
         version="v0.1.0-alpha.1",
@@ -21,7 +25,9 @@ def test_release_gate_issue_title_is_deterministic() -> None:
     )
 
 
+@pytest.mark.requirement("REL-GATE-ISSUE")
 def test_weekly_issue_title_omits_version() -> None:
+    """Weekly validation issue titles omit release version details."""
     issue = FailureIssue(
         lane="weekly-validation",
         version=None,
@@ -37,7 +43,9 @@ def test_weekly_issue_title_omits_version() -> None:
     assert issue_title(issue) == "Weekly validation failed: e2e-tests product failure"
 
 
+@pytest.mark.requirement("REL-GATE-ISSUE")
 def test_issue_comment_body_contains_release_safety_state() -> None:
+    """Issue bodies record release safety state and skipped outputs."""
     issue = FailureIssue(
         lane="release-gate",
         version="v0.1.0-alpha.1",

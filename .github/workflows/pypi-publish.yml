@@ -1,6 +1,6 @@
 # PyPI Package Publishing - builds and publishes release manifest packages
 #
-# Triggers after the Prepare Release workflow completes successfully with dry_run=false.
+# Triggers after the Prepare Release workflow completes successfully and uploads release metadata.
 # Uses account-scoped PyPI API token stored as PYPI_API_TOKEN secret.
 # Each manifest-published package is built independently and uploaded in a single job.
 #
@@ -9,7 +9,7 @@
 #   - See docs/guides/pypi-trusted-publishers.md for future OIDC migration
 #
 # Security: all run: blocks use static commands. Release workflow_run publishes use
-# release-metadata from the successful Release run instead of inferring tag refs.
+# release-metadata from the successful Prepare Release run instead of inferring tag refs.
 
 name: PyPI Publish
 
@@ -43,8 +43,7 @@ jobs:
       (
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.event == 'workflow_dispatch' &&
-        github.event.workflow_run.name == 'Prepare Release' &&
-        contains(github.event.workflow_run.display_title, 'dry_run=false')
+        github.event.workflow_run.name == 'Prepare Release'
       )
     runs-on: ubuntu-latest
     permissions:
@@ -53,6 +52,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      publish: ${{ steps.release_metadata.outputs.publish }}
     steps:
       - name: Resolve release metadata
         id: release_metadata
@@ -63,9 +63,13 @@ jobs:
           WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           set -euo pipefail
-          gh run download "${WORKFLOW_RUN_ID}" \
+          if ! gh run download "${WORKFLOW_RUN_ID}" \
             --name release-metadata \
-            --dir release-metadata
+            --dir release-metadata; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No release-metadata artifact found; assuming dry-run Prepare Release."
+            exit 0
+          fi
           python - <<'PY'
           import json
           import os
@@ -93,32 +97,38 @@ jobs:
               sys.exit(1)
 
           with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write("publish=true\n")
               output.write(f"tag={tag}\n")
               output.write(f"sha={sha}\n")
               output.write(f"version={version}\n")
           PY
 
       - name: Checkout code
+        if: github.event_name == 'workflow_dispatch' || steps.release_metadata.outputs.publish == 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event_name == 'workflow_run' && steps.release_metadata.outputs.sha || github.ref }}
 
       - name: Set up Python
+        if: github.event_name == 'workflow_dispatch' || steps.release_metadata.outputs.publish == 'true'
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
 
       - name: Install uv
+        if: github.event_name == 'workflow_dispatch' || steps.release_metadata.outputs.publish == 'true'
         uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
       - name: Install workspace dependencies
+        if: github.event_name == 'workflow_dispatch' || steps.release_metadata.outputs.publish == 'true'
         run: uv sync --all-extras --dev
 
       - name: Extract version from tag
         id: version
+        if: github.event_name == 'workflow_dispatch' || steps.release_metadata.outputs.publish == 'true'
         env:
           EVENT_NAME: ${{ github.event_name }}
           RELEASE_TAG: ${{ steps.release_metadata.outputs.tag }}
@@ -141,6 +151,7 @@ jobs:
           echo "Building version: ${VERSION}"
 
       - name: Validate release manifest
+        if: github.event_name == 'workflow_dispatch' || steps.release_metadata.outputs.publish == 'true'
         env:
           EVENT_NAME: ${{ github.event_name }}
           RELEASE_TAG: ${{ steps.release_metadata.outputs.tag }}
@@ -162,6 +173,7 @@ jobs:
           fi
 
       - name: Build manifest packages
+        if: github.event_name == 'workflow_dispatch' || steps.release_metadata.outputs.publish == 'true'
         run: |
           set -euo pipefail
           uv run python -m testing.release.cli build \
@@ -172,6 +184,7 @@ jobs:
           ls -la dist/
 
       - name: Upload build artifacts
+        if: github.event_name == 'workflow_dispatch' || steps.release_metadata.outputs.publish == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: python-packages
@@ -186,7 +199,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'workflow_dispatch' &&
       github.event.workflow_run.name == 'Prepare Release' &&
-      contains(github.event.workflow_run.display_title, 'dry_run=false')
+      needs.build.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
