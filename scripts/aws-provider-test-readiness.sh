@@ -172,6 +172,7 @@ jq -e \
   and any(stmts[]; (actions(.) | index("glue:CreateDatabase")) and (resources(.) | index("arn:aws:glue:\($region):\($account):database/\($glue_prefix)*")))
   and any(stmts[]; (actions(.) | index("glue:CreateTable")) and (resources(.) | index("arn:aws:glue:\($region):\($account):table/\($glue_prefix)*/*")))
   and any(stmts[]; (actions(.) | index("glue:DeleteDatabase")) and (resources(.) | index("arn:aws:glue:\($region):\($account):table/\($glue_prefix)*/*")))
+  and any(stmts[]; (actions(.) | index("glue:DeleteDatabase")) and (resources(.) | index("arn:aws:glue:\($region):\($account):userDefinedFunction/\($glue_prefix)*/*")))
 ' "${policy_payload}" >/dev/null || \
     error "provider test IAM policy does not contain the expected scoped S3 and Glue statements"
 
