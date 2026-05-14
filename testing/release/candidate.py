@@ -20,7 +20,8 @@ class ReleaseCandidate:
     version: str
     release_sha: str
     python_version: str
-    helm_version: str
+    helm_chart_version: str
+    helm_cli_version: str
     publish_count: int
 
 
@@ -56,6 +57,7 @@ def validate_release_candidate(
         version=version,
         release_sha=normalized_sha,
         python_version=result.python_version,
-        helm_version=result.helm_version,
+        helm_chart_version=result.helm_chart_version,
+        helm_cli_version=result.helm_cli_version,
         publish_count=result.publish_count,
     )

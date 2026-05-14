@@ -40,7 +40,12 @@ class ReleaseInfo:
     train: str
     git_tag: str
     python_version: str
-    helm_version: str
+    helm_chart_version: str
+
+
+@dataclass(frozen=True)
+class ToolingInfo:
+    helm_cli_version: str
 
 
 @dataclass(frozen=True)
@@ -75,6 +80,7 @@ class ValidationPolicy:
 @dataclass(frozen=True)
 class ReleaseManifest:
     release: ReleaseInfo
+    tooling: ToolingInfo
     python_packages: PythonPackages
     helm: HelmInfo
     validation: ValidationPolicy
@@ -84,7 +90,8 @@ class ReleaseManifest:
 class ManifestValidationResult:
     git_tag: str
     python_version: str
-    helm_version: str
+    helm_chart_version: str
+    helm_cli_version: str
     publish_count: int
     exclude_count: int
     publish_names: tuple[str, ...]
@@ -99,7 +106,7 @@ def normalize_tag_to_python_version(tag: str) -> str:
     return version
 
 
-def normalize_tag_to_helm_version(tag: str) -> str:
+def normalize_tag_to_helm_chart_version(tag: str) -> str:
     match = RELEASE_TAG_RE.fullmatch(tag)
     if not match:
         raise ReleaseManifestError(f"unsupported release tag format: {tag}")
@@ -115,6 +122,7 @@ def load_release_manifest(path: Path) -> ReleaseManifest:
     data = _require_mapping(raw, "manifest")
 
     release = _require_mapping(data.get("release"), "release")
+    tooling = _require_mapping(data.get("tooling"), "tooling")
     python_packages = _require_mapping(data.get("python_packages"), "python_packages")
     helm = _require_mapping(data.get("helm"), "helm")
     validation = _require_mapping(data.get("validation"), "validation")
@@ -127,7 +135,16 @@ def load_release_manifest(path: Path) -> ReleaseManifest:
                 release.get("python_version"),
                 "release.python_version",
             ),
-            helm_version=_require_str(release.get("helm_version"), "release.helm_version"),
+            helm_chart_version=_require_str(
+                release.get("helm_chart_version"),
+                "release.helm_chart_version",
+            ),
+        ),
+        tooling=ToolingInfo(
+            helm_cli_version=_require_str(
+                tooling.get("helm_cli_version"),
+                "tooling.helm_cli_version",
+            ),
         ),
         python_packages=PythonPackages(
             publish=_load_package_entries(
@@ -192,12 +209,13 @@ def validate_release_manifest(
             "manifest python_version does not match normalized git tag: "
             f"{manifest.release.python_version} != {expected_python_version}",
         )
-    expected_helm_version = normalize_tag_to_helm_version(tag or manifest.release.git_tag)
-    if manifest.release.helm_version != expected_helm_version:
+    expected_helm_version = normalize_tag_to_helm_chart_version(tag or manifest.release.git_tag)
+    if manifest.release.helm_chart_version != expected_helm_version:
         raise ReleaseManifestError(
-            "manifest helm_version does not match normalized git tag: "
-            f"{manifest.release.helm_version} != {expected_helm_version}",
+            "manifest helm_chart_version does not match normalized git tag: "
+            f"{manifest.release.helm_chart_version} != {expected_helm_version}",
         )
+    _validate_helm_cli_version(manifest.tooling.helm_cli_version)
     if manifest.helm.alpha_policy != "publish":
         raise ReleaseManifestError(
             f"unsupported helm.alpha_policy for alpha release: {manifest.helm.alpha_policy}",
@@ -247,11 +265,19 @@ def validate_release_manifest(
     return ManifestValidationResult(
         git_tag=manifest.release.git_tag,
         python_version=manifest.release.python_version,
-        helm_version=manifest.release.helm_version,
+        helm_chart_version=manifest.release.helm_chart_version,
+        helm_cli_version=manifest.tooling.helm_cli_version,
         publish_count=len(manifest.python_packages.publish),
         exclude_count=len(manifest.python_packages.exclude),
         publish_names=publish_names,
     )
+
+
+def _validate_helm_cli_version(version: str) -> None:
+    if not re.fullmatch(r"v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version):
+        raise ReleaseManifestError(
+            "tooling.helm_cli_version must be a pinned Helm CLI version like v4.1.3",
+        )
 
 
 def _validate_alpha_helm_publish_charts(chart_paths: tuple[str, ...]) -> None:

@@ -19,7 +19,9 @@ release:
   train: alpha
   git_tag: {tag}
   python_version: 0.1.0a1
-  helm_version: 0.1.0-alpha.1
+  helm_chart_version: 0.1.0-alpha.1
+tooling:
+  helm_cli_version: v4.1.3
 python_packages:
   publish:
     - path: packages/floe-core
@@ -80,7 +82,8 @@ def test_validate_release_candidate_accepts_matching_manifest_and_sha(tmp_path: 
     assert result.version == "v0.1.0-alpha.1"
     assert result.release_sha == "0000000000000000000000000000000000000000"
     assert result.python_version == "0.1.0a1"
-    assert result.helm_version == "0.1.0-alpha.1"
+    assert result.helm_chart_version == "0.1.0-alpha.1"
+    assert result.helm_cli_version == "v4.1.3"
     assert result.publish_count == 1
 
 

@@ -13,7 +13,12 @@ from testing.release.build_packages import ReleaseBuildError, artifact_counts, b
 from testing.release.candidate import ReleaseCandidateError, validate_release_candidate
 from testing.release.cleanup import CleanupEvidence, cleanup_status, cleanup_summary
 from testing.release.evidence import EvidenceSummaryError, write_evidence_summary
-from testing.release.failure_issue import FailureIssue, issue_comment_body, issue_title
+from testing.release.failure_issue import (
+    FailureIssue,
+    classify_failure,
+    issue_comment_body,
+    issue_title,
+)
 from testing.release.manifest import (
     ReleaseManifestError,
     load_release_manifest,
@@ -95,11 +100,16 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if args.command == "failure-issue":
+        classification = (
+            classify_failure(args.gate, args.log_excerpt)
+            if args.classification == "auto"
+            else args.classification
+        )
         issue = FailureIssue(
             lane=args.lane,
             version=args.version,
             gate=args.gate,
-            classification=args.classification,
+            classification=classification,
             sha=args.sha,
             run_url=args.run_url,
             log_excerpt=args.log_excerpt,
