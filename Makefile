@@ -439,7 +439,7 @@ DOCKER_PLATFORM ?= linux/amd64
 # - Reads plugin selections from the manifest schema
 # - Maps selections through local workspace entry points
 # - Includes local workspace dependency closure because Docker installs with --no-deps
-DEMO_PLUGINS := $(shell .venv/bin/python scripts/resolve-demo-plugins.py --manifest $(DEMO_MANIFEST))
+DEMO_PLUGINS = $(shell uv run python scripts/resolve-demo-plugins.py --manifest $(DEMO_MANIFEST))
 
 build-demo-image: compile-demo ## Build Dagster demo Docker image and load to Kind
 	@echo "Building Dagster demo Docker image..."
