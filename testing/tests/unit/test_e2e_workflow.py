@@ -2,8 +2,8 @@
 
 These tests parse ``.github/workflows/e2e.yml`` directly so the CI gate can be
 validated without needing GitHub Actions infrastructure, Kind, or Helm CLI.
-They also verify that the workflow contract remains wired into the repo's fast
-Specwright unit command.
+They also verify that standalone E2E remains manually dispatched while weekly
+and release workflows own scheduled and release-blocking validation.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ SETUP_PYTHON_SHA = "a309ff8b426b58ec0e2a45f0f869d46889d02405"  # pragma: allowli
 SETUP_UV_SHA = "08807647e7069bb48b6ef5acd8ec9567f424441b"  # pragma: allowlist secret
 SETUP_HELM_SHA = "dda3372f752e03dde6b3237bc9431cdc2f7a02a2"  # pragma: allowlist secret
 KIND_ACTION_SHA = "ef37e7f390d99f746eb8b610417061a60e82a6cc"  # pragma: allowlist secret
-PATHS_FILTER_SHA = "d1c1ffe0248fe513906c8e24db8ea791d46f8590"  # pragma: allowlist secret
 UPLOAD_ARTIFACT_SHA = "ea165f8d65b6e75b540449e92b4886f43607fa02"  # pragma: allowlist secret
 
 
@@ -89,88 +88,43 @@ class TestE2EWorkflow:
     """Static validation for the E2E workflow structure."""
 
     @pytest.mark.requirement("AC-1")
-    def test_workflow_exists_with_required_triggers(self) -> None:
-        """The workflow must exist and declare the E2E trigger surface."""
+    def test_workflow_exists_as_manual_only_trigger(self) -> None:
+        """Standalone E2E must not run automatically for PRs or merge queues."""
 
         workflow = _load_workflow()
         triggers = _workflow_triggers(workflow)
         permissions = workflow.get("permissions")
 
-        pull_request = triggers.get("pull_request")
-        assert isinstance(pull_request, dict), "pull_request trigger must be configured."
-        assert pull_request.get("types") == ["opened", "synchronize", "reopened", "labeled"], (
-            "pull_request trigger must handle opened, synchronize, reopened, and labeled."
-        )
-        assert "merge_group" in triggers, "merge_group trigger must be declared."
         assert "workflow_dispatch" in triggers, "workflow_dispatch trigger must be declared."
-        assert permissions == {"contents": "read", "pull-requests": "read"}, (
-            "Workflow permissions must grant contents: read and pull-requests: read."
-        )
+        assert "pull_request" not in triggers, "PRs must not trigger standalone E2E."
+        assert "merge_group" not in triggers, "Merge queues must not trigger standalone E2E."
+        assert permissions == {"contents": "read"}, "Workflow only needs repository read access."
 
     @pytest.mark.requirement("AC-2")
-    def test_e2e_job_uses_active_release_confidence_condition(self) -> None:
-        """The E2E job must run for merge, manual, label, or infra triggers."""
+    def test_e2e_job_has_no_auto_trigger_condition(self) -> None:
+        """The E2E job must not opt back into PR, label, or path-based runs."""
 
         workflow = _load_workflow()
         e2e = _job(workflow, "e2e")
+        workflow_text = E2E_WORKFLOW.read_text(encoding="utf-8")
 
-        expected_condition = "\n".join(
-            [
-                "github.event_name == 'merge_group' ||",
-                "github.event_name == 'workflow_dispatch' ||",
-                "contains(github.event.pull_request.labels.*.name, 'run-e2e') ||",
-                "needs.changed-files.outputs.infra == 'true'",
-            ]
-        )
-        condition = e2e.get("if")
-
-        assert isinstance(condition, str) and condition.strip() == expected_condition, (
-            "e2e job must run for merge queue, manual dispatch, run-e2e labels, "
-            "and infra path changes."
-        )
+        assert "if" not in e2e
+        assert "github.event_name == 'merge_group'" not in workflow_text
+        assert "contains(github.event.pull_request.labels.*.name, 'run-e2e')" not in workflow_text
+        assert "needs.changed-files.outputs.infra" not in workflow_text
 
     @pytest.mark.requirement("AC-3")
-    def test_changed_files_job_exports_infra_filter_output(self) -> None:
-        """The changed-files job must expose the infra filter output to ``needs``."""
+    def test_workflow_has_no_changed_files_path_filter_gate(self) -> None:
+        """Changed-file filters must not promote PR changes into full E2E."""
 
         workflow = _load_workflow()
-        changed_files = _job(workflow, "changed-files")
-        outputs = changed_files.get("outputs", {})
-
-        assert outputs.get("infra") == "${{ steps.filter.outputs.infra }}", (
-            "changed-files job must export steps.filter.outputs.infra as the infra output."
-        )
-
-        filter_step = _step_by_name(changed_files, "Filter infra changes")
-        assert _uses_ref(filter_step) == f"dorny/paths-filter@{PATHS_FILTER_SHA}", (
-            "changed-files job must pin dorny/paths-filter to a full commit SHA."
-        )
-
-        filters = filter_step.get("with", {}).get("filters")
-        assert isinstance(filters, str) and filters.strip(), (
-            "paths-filter step must define filters."
-        )
-
-        for expected_path in [
-            "charts/**",
-            "testing/**",
-            "plugins/**",
-            "packages/floe-core/**",
-            "tests/**",
-            "release/floe-release.yaml",
-            "testing/release/**",
-            "pyproject.toml",
-            "uv.lock",
-            "Makefile",
-            "Dockerfile*",
-            "**/Dockerfile*",
-            ".github/workflows/ci.yml",
-            ".github/workflows/e2e.yml",
-        ]:
-            assert expected_path in filters, f"Missing infra filter path '{expected_path}'."
-
+        jobs = workflow.get("jobs", {})
+        workflow_text = E2E_WORKFLOW.read_text(encoding="utf-8")
         e2e = _job(workflow, "e2e")
-        assert e2e.get("needs") == ["changed-files"], "e2e job must depend on changed-files."
+
+        assert "changed-files" not in jobs
+        assert "dorny/paths-filter" not in workflow_text
+        assert "needs" not in e2e
 
     @pytest.mark.requirement("AC-5")
     def test_workflow_has_non_cancelling_ref_scoped_concurrency(self) -> None:

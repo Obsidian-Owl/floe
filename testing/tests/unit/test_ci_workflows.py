@@ -25,6 +25,7 @@ CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PYPI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pypi-publish.yml"
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 PREPARE_RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "prepare-release.yml"
+E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e.yml"
 SECURITY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "security.yml"
 UV_SECURITY_ACTION = REPO_ROOT / ".github" / "actions" / "uv-security-audit" / "action.yml"
 PRE_COMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
@@ -205,6 +206,36 @@ class TestSecurityWorkflow:
         assert "continue-on-error" not in jobs["secrets-scan"]
         assert "continue-on-error" not in jobs["dependency-audit"]
         assert "continue-on-error" not in jobs["bandit-scan"]
+
+
+class TestE2EWorkflow:
+    """Release-gate regression checks for standalone E2E workflow triggers.
+
+    These complement the detailed YAML-structure checks in test_e2e_workflow.py
+    by guarding against reintroduced PR, merge-queue, label, or path triggers.
+    """
+
+    @pytest.mark.requirement("REL-GATE-E2E")
+    def test_e2e_workflow_is_manual_only(self) -> None:
+        """Standalone E2E must not run automatically for PRs or merge queues."""
+        workflow = yaml.safe_load(E2E_WORKFLOW.read_text(encoding="utf-8"))
+        triggers = workflow.get("on")
+        if triggers is None:
+            triggers = workflow[True]  # PyYAML 1.1 treats unquoted "on" as a boolean.
+
+        assert "workflow_dispatch" in triggers
+        assert "pull_request" not in triggers
+        assert "merge_group" not in triggers
+
+    @pytest.mark.requirement("REL-GATE-E2E")
+    def test_e2e_workflow_has_no_pr_label_or_path_filter_escape_hatch(self) -> None:
+        """PR labels and changed-file filters must not trigger full E2E."""
+        workflow_text = E2E_WORKFLOW.read_text(encoding="utf-8")
+
+        assert "dorny/paths-filter" not in workflow_text
+        assert "contains(github.event.pull_request.labels.*.name, 'run-e2e')" not in workflow_text
+        assert "needs.changed-files.outputs.infra" not in workflow_text
+        assert "github.event_name == 'merge_group'" not in workflow_text
 
 
 class TestPypiPublishWorkflow:
