@@ -198,6 +198,8 @@ docs-validate: ## Validate docs navigation and build
 # Helm Chart Targets
 # ============================================================
 
+HELM_TEST_TIMEOUT ?= 20m
+
 .PHONY: helm-deps
 helm-deps: ## Update Helm chart dependencies
 	@echo "Updating Helm chart dependencies..."
@@ -322,12 +324,13 @@ helm-integration-test: helm-deps ## Run Helm integration tests in Kind cluster
 helm-install-test: helm-deps ## Install floe-platform with test values (requires Kind cluster)
 	@echo "Installing floe-platform with test configuration..."
 	@uv run floe platform deploy --env test --chart charts/floe-platform \
+		--timeout $(HELM_TEST_TIMEOUT) \
 		$(DEMO_IMAGE_HELM_SET_ARGS)
 	@echo "Installing floe-jobs with test configuration..."
 	@helm upgrade --install floe-jobs-test charts/floe-jobs \
 		--namespace floe-test \
 		--values charts/floe-jobs/values-test.yaml \
-		--wait --timeout 5m
+		--wait --timeout $(HELM_TEST_TIMEOUT)
 	@echo "Test infrastructure installed!"
 
 .PHONY: helm-upgrade-test

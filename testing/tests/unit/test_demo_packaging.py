@@ -1582,6 +1582,15 @@ class TestMakefileDemoChain:
             )
 
     @pytest.mark.requirement("WU11-AC6")
+    def test_helm_install_test_uses_release_sized_timeout(self) -> None:
+        """The test install target must allow slow CI image pulls and rollouts."""
+        content = _read_makefile_content()
+        body = _extract_target_body(content, "helm-install-test")
+
+        assert "HELM_TEST_TIMEOUT ?= 20m" in content
+        assert "--timeout $(HELM_TEST_TIMEOUT)" in body
+
+    @pytest.mark.requirement("WU11-AC6")
     def test_remote_demo_build_passes_same_image_ref_as_deploy(self) -> None:
         """The DevPod demo build must use the same image ref Helm deploys.
 
