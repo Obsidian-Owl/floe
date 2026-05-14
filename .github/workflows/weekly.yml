@@ -327,7 +327,6 @@ jobs:
             gh issue create \
               --title "$title" \
               --body "$body" \
-              --label ci-failure \
-              --label weekly-validation \
-              --label product-failure
+              --label ci \
+              --label weekly-failure
           fi

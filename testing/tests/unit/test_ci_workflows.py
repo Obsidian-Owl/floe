@@ -169,6 +169,17 @@ class TestWeeklyWorkflow:
         assert "--lane weekly-validation" in workflow_text
         assert "gh issue list" in workflow_text
 
+    @pytest.mark.requirement("REL-GATE-WEEKLY")
+    def test_weekly_failure_issue_uses_existing_repository_labels(self) -> None:
+        """Weekly failure issues use labels that exist in the repository."""
+        workflow_text = WEEKLY_WORKFLOW.read_text(encoding="utf-8")
+
+        assert "--label ci" in workflow_text
+        assert "--label weekly-failure" in workflow_text
+        assert "--label ci-failure" not in workflow_text
+        assert "--label weekly-validation" not in workflow_text
+        assert "--label product-failure" not in workflow_text
+
 
 class TestPypiPublishWorkflow:
     """Structural validation of the PyPI publish release gate."""
