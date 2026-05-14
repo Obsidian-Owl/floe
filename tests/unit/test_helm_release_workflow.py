@@ -23,6 +23,17 @@ def _publish_oci_job() -> dict[str, Any]:
     return workflow["jobs"]["publish-oci"]
 
 
+def _build_job() -> dict[str, Any]:
+    """Return the build job configuration."""
+    workflow = _load_workflow()
+    return workflow["jobs"]["build"]
+
+
+def _build_steps() -> list[dict[str, Any]]:
+    """Return the build job steps."""
+    return _build_job()["steps"]
+
+
 def _publish_oci_steps() -> list[dict[str, Any]]:
     """Return the publish-oci steps."""
     return _publish_oci_job()["steps"]
@@ -39,6 +50,29 @@ def _step_index(step_name: str) -> int:
 def _step_named(step_name: str) -> dict[str, Any]:
     """Return a named publish-oci step."""
     return _publish_oci_steps()[_step_index(step_name)]
+
+
+def _build_step_named(step_name: str) -> dict[str, Any]:
+    """Return a named build step."""
+    for step in _build_steps():
+        if step.get("name") == step_name:
+            return step
+    raise AssertionError(f"build step not found: {step_name}")
+
+
+@pytest.mark.requirement("ALPHA-RELEASE")
+def test_build_fails_fast_when_tag_version_and_chart_version_diverge() -> None:
+    """Tag-triggered chart releases must match the resolved chart version."""
+    step = _build_step_named("Extract version and chart list")
+    env = step["env"]
+    run_script = step["run"]
+
+    assert env["GH_REF_TYPE"] == "${{ github.ref_type }}"
+    assert env["GH_REF_NAME"] == "${{ github.ref_name }}"
+    assert 'helm-v*) TAG_VERSION="${GH_REF_NAME#helm-v}" ;;' in run_script
+    assert 'charts-v*) TAG_VERSION="${GH_REF_NAME#charts-v}" ;;' in run_script
+    assert 'if [ "${TAG_VERSION}" != "${VERSION}" ]; then' in run_script
+    assert "does not match chart version" in run_script
 
 
 @pytest.mark.requirement("AC-1")
@@ -70,13 +104,15 @@ def test_publish_oci_installs_cosign_before_signing() -> None:
 @pytest.mark.requirement("AC-4")
 @pytest.mark.requirement("AC-5")
 def test_publish_oci_signs_expected_chart_refs_after_push_as_best_effort() -> None:
-    """Signing runs after helm push, uses the pushed refs, and stays best-effort."""
+    """Signing runs after helm push, uses packaged chart refs, and stays best-effort."""
     sign_step = _step_named("Sign OCI charts")
     assert _step_index("Push charts to OCI registry") < _step_index("Sign OCI charts")
     assert sign_step["continue-on-error"] is True
 
     run_script = sign_step["run"]
+    assert "for chart in dist/*.tgz" in run_script
+    assert 'base=$(basename "${chart}" .tgz)' in run_script
+    assert 'chart_name=${base%"-${VERSION}"}' in run_script
     assert "${REGISTRY_PATH}/${chart_name}:${VERSION}" in run_script
-    assert "floe-platform floe-jobs" in run_script
     assert 'echo "WARNING: Failed to sign ${chart_name}" >&2' in run_script
     assert "${REGISTRY}/${REGISTRY_PATH}" not in run_script

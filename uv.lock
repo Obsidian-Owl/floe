@@ -1539,7 +1539,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "httpx", specifier = ">=0.25.0,<1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.0,<3.0" },
@@ -1564,7 +1564,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aiosmtplib", specifier = ">=3.0,<4.0" },
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.0,<3.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
@@ -1587,7 +1587,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "httpx", specifier = ">=0.25.0,<1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.0,<3.0" },
@@ -1611,7 +1611,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "httpx", specifier = ">=0.25.0,<1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.0,<3.0" },
@@ -1624,7 +1624,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-catalog-glue"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-catalog-glue" }
 dependencies = [
     { name = "floe-core" },
@@ -1634,7 +1634,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.0,<3.0" },
     { name = "pyiceberg", extras = ["glue"], specifier = ">=0.11.1" },
@@ -1645,7 +1645,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-catalog-polaris"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-catalog-polaris" }
 dependencies = [
     { name = "floe-core" },
@@ -1659,7 +1659,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "httpx", specifier = ">=0.25.0,<1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "opentelemetry-api", specifier = ">=1.0,<2.0" },
@@ -1675,7 +1675,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-compute-duckdb"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-compute-duckdb" }
 dependencies = [
     { name = "duckdb" },
@@ -1687,7 +1687,7 @@ dependencies = [
 requires-dist = [
     { name = "dbt-duckdb", marker = "extra == 'dbt'", specifier = ">=1.7.0" },
     { name = "duckdb", specifier = ">=1.4.0" },
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
@@ -1697,7 +1697,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-core"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "packages/floe-core" }
 dependencies = [
     { name = "asyncpg" },
@@ -1749,7 +1749,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-dbt-core"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-dbt-core" }
 dependencies = [
     { name = "dbt-core" },
@@ -1766,7 +1766,7 @@ requires-dist = [
     { name = "dbt-core", specifier = ">=1.6,<2.0" },
     { name = "dbt-duckdb", specifier = ">=1.7.0" },
     { name = "dbt-duckdb", marker = "extra == 'duckdb'", specifier = ">=1.7.0" },
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "opentelemetry-api", specifier = ">=1.20.0" },
     { name = "pydantic", specifier = ">=2.0" },
@@ -1790,8 +1790,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
-    { name = "floe-dbt-core", marker = "extra == 'fallback'", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
+    { name = "floe-dbt-core", marker = "extra == 'fallback'", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "opentelemetry-api", specifier = ">=1.20.0" },
     { name = "pydantic", specifier = ">=2.0" },
@@ -1803,7 +1803,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-iceberg"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "packages/floe-iceberg" }
 dependencies = [
     { name = "floe-core" },
@@ -1817,7 +1817,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "dagster", marker = "extra == 'dagster'", specifier = ">=1.6.0" },
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "floe-iceberg", extras = ["dagster", "dev"], marker = "extra == 'all'" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "opentelemetry-api", specifier = ">=1.39.0,<2.0" },
@@ -1847,7 +1847,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cryptography", specifier = ">=46.0.6" },
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.0" },
@@ -1861,7 +1861,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-ingestion-dlt"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-ingestion-dlt" }
 dependencies = [
     { name = "dlt" },
@@ -1876,7 +1876,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "dlt", extras = ["iceberg"], specifier = ">=1.20.0,<2.0" },
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "httpx", specifier = ">=0.25.0,<1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "opentelemetry-api", specifier = ">=1.0,<2.0" },
@@ -1891,7 +1891,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-lineage-marquez"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-lineage-marquez" }
 dependencies = [
     { name = "floe-core" },
@@ -1899,7 +1899,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
@@ -1908,7 +1908,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-network-security-k8s"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-network-security-k8s" }
 dependencies = [
     { name = "floe-core" },
@@ -1919,7 +1919,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.12.5,<3.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
@@ -1931,7 +1931,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-orchestrator-dagster"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-orchestrator-dagster" }
 dependencies = [
     { name = "dagster" },
@@ -1950,8 +1950,8 @@ requires-dist = [
     { name = "dagster-k8s", marker = "extra == 'docker'", specifier = ">=0.29.0,<1.0.0" },
     { name = "dagster-postgres", marker = "extra == 'docker'", specifier = ">=0.29.0,<1.0.0" },
     { name = "dagster-webserver", marker = "extra == 'docker'", specifier = ">=1.10.0,<2.0.0" },
-    { name = "floe-core", specifier = ">=0.1.0" },
-    { name = "floe-iceberg", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
+    { name = "floe-iceberg", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "httpx", specifier = ">=0.24.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "openlineage-python", specifier = ">=1.0.0" },
@@ -1976,7 +1976,7 @@ dependencies = [
 requires-dist = [
     { name = "dbt-core", marker = "extra == 'dbt'", specifier = ">=1.7.0" },
     { name = "dbt-expectations", marker = "extra == 'dbt'", specifier = ">=0.10.0" },
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "opentelemetry-api", specifier = ">=1.0,<2.0" },
     { name = "pydantic", specifier = ">=2.0,<3.0" },
@@ -1989,7 +1989,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-quality-gx"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-quality-gx" }
 dependencies = [
     { name = "floe-core" },
@@ -2001,7 +2001,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "great-expectations", specifier = ">=1.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "opentelemetry-api", specifier = ">=1.0,<2.0" },
@@ -2015,7 +2015,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-rbac-k8s"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-rbac-k8s" }
 dependencies = [
     { name = "floe-core" },
@@ -2027,7 +2027,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "kubernetes", specifier = ">=35.0.0,<36.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.12.5,<3.0" },
@@ -2050,7 +2050,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.0" },
@@ -2073,7 +2073,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "kubernetes", specifier = ">=35.0.0,<36.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.12.5,<3.0" },
@@ -2098,7 +2098,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "httpx", specifier = ">=0.25.0,<1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "opentelemetry-api", specifier = ">=1.0,<2.0" },
@@ -2113,7 +2113,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-storage-aws-s3"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-storage-aws-s3" }
 dependencies = [
     { name = "floe-core" },
@@ -2123,7 +2123,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.0,<3.0" },
     { name = "pyiceberg", extras = ["s3fs"], specifier = ">=0.11.1" },
@@ -2134,7 +2134,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-storage-minio"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-storage-minio" }
 dependencies = [
     { name = "floe-core" },
@@ -2144,7 +2144,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pydantic", specifier = ">=2.0,<3.0" },
     { name = "pyiceberg", extras = ["s3fs"], specifier = ">=0.11.1" },
@@ -2164,7 +2164,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
@@ -2174,7 +2174,7 @@ requires-dist = [
 
 [[package]]
 name = "floe-telemetry-jaeger"
-version = "0.1.0"
+version = "0.1.0a1"
 source = { editable = "plugins/floe-telemetry-jaeger" }
 dependencies = [
     { name = "floe-core" },
@@ -2184,7 +2184,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "floe-core", specifier = ">=0.1.0" },
+    { name = "floe-core", specifier = ">=0.1.0a1,<0.2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "opentelemetry-exporter-otlp", specifier = ">=1.20.0" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
@@ -2244,6 +2244,7 @@ dependencies = [
     { name = "pytest-timeout" },
     { name = "requests" },
     { name = "ruff" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "types-psycopg2" },
     { name = "types-requests" },
     { name = "uv-secure" },
@@ -2312,6 +2313,7 @@ requires-dist = [
     { name = "pytest-timeout", specifier = ">=2.0" },
     { name = "requests", specifier = ">=2.31" },
     { name = "ruff", specifier = ">=0.3" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "types-psycopg2", specifier = ">=2.9" },
     { name = "types-requests", specifier = ">=2.31" },
     { name = "uv-secure", specifier = ">=0.5.0" },

@@ -1,34 +1,34 @@
-# PyPI Package Publishing - builds and publishes all floe packages
+# PyPI Package Publishing - builds and publishes release manifest packages
 #
-# Triggers on version tags (v*.*.*) after the Release workflow validates.
+# Triggers after the Release workflow completes successfully for version tags (v*.*.*).
 # Uses account-scoped PyPI API token stored as PYPI_API_TOKEN secret.
-# Each package is built independently and uploaded in a single job.
+# Each manifest-published package is built independently and uploaded in a single job.
 #
 # Prerequisites:
 #   - PYPI_API_TOKEN secret configured in GitHub environment "pypi"
 #   - See docs/guides/pypi-trusted-publishers.md for future OIDC migration
 #
-# Security: all run: blocks use static commands. No untrusted interpolation.
-# GITHUB_REF is safe for tag triggers (not user-controlled content).
+# Security: all run: blocks use static commands. Release workflow_run publishes use
+# release-metadata from the successful Release run instead of inferring tag refs.
 
 name: PyPI Publish
 
 permissions: {}
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Build packages without uploading (test mode)'
+        description: 'Build packages without uploading (manual dispatch never publishes)'
         required: false
         default: true
         type: boolean
 
 concurrency:
-  group: pypi-publish-${{ github.ref }}
+  group: pypi-publish-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
   cancel-in-progress: false
 
 env:
@@ -38,14 +38,68 @@ env:
 jobs:
   build:
     name: Build Packages
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push'
+      )
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
+      - name: Resolve release metadata
+        id: release_metadata
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          gh run download "${WORKFLOW_RUN_ID}" \
+            --name release-metadata \
+            --dir release-metadata
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          metadata_path = Path("release-metadata/release-metadata.json")
+          metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+          tag = str(metadata.get("tag", ""))
+          sha = str(metadata.get("sha", ""))
+          version = str(metadata.get("version", ""))
+          expected_sha = os.environ["WORKFLOW_RUN_HEAD_SHA"]
+
+          if not tag.startswith("v"):
+              print(f"::error::Release metadata tag must start with 'v': {tag}", file=sys.stderr)
+              sys.exit(1)
+          if sha != expected_sha:
+              print(
+                  f"::error::Release metadata SHA {sha} does not match workflow_run head SHA {expected_sha}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          if not version:
+              print("::error::Release metadata version is empty", file=sys.stderr)
+              sys.exit(1)
+
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write(f"tag={tag}\n")
+              output.write(f"sha={sha}\n")
+              output.write(f"version={version}\n")
+          PY
+
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && steps.release_metadata.outputs.sha || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -58,75 +112,65 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      - name: Install build tools
-        run: uv pip install --system build
+      - name: Install workspace dependencies
+        run: uv sync --all-extras --dev
 
       - name: Extract version from tag
         id: version
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ steps.release_metadata.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release_metadata.outputs.version }}
           GH_REF_TYPE: ${{ github.ref_type }}
           GH_REF: ${{ github.ref }}
         run: |
-          if [[ "${GH_REF_TYPE}" == "tag" ]]; then
+          if [[ "${EVENT_NAME}" == "workflow_run" ]]; then
+            VERSION="${RELEASE_VERSION}"
+            TAG="${RELEASE_TAG}"
+          elif [[ "${GH_REF_TYPE}" == "tag" ]]; then
             VERSION="${GH_REF#refs/tags/v}"
+            TAG="${GH_REF#refs/tags/}"
           else
             VERSION="0.0.0.dev0"
+            TAG=""
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Building version: ${VERSION}"
 
-      - name: Build all packages
+      - name: Validate release manifest
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ steps.release_metadata.outputs.tag }}
+          GH_REF_TYPE: ${{ github.ref_type }}
+          GH_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-          mkdir -p dist/
+          if [[ "${EVENT_NAME}" == "workflow_run" ]]; then
+            uv run python -m testing.release.cli validate \
+              --manifest release/floe-release.yaml \
+              --tag "${RELEASE_TAG}"
+          elif [[ "${GH_REF_TYPE}" == "tag" ]]; then
+            uv run python -m testing.release.cli validate \
+              --manifest release/floe-release.yaml \
+              --tag "${GH_REF#refs/tags/}"
+          else
+            uv run python -m testing.release.cli validate \
+              --manifest release/floe-release.yaml
+          fi
 
-          PACKAGES=(
-            packages/floe-core
-            packages/floe-iceberg
-            plugins/floe-alert-alertmanager
-            plugins/floe-alert-email
-            plugins/floe-alert-slack
-            plugins/floe-alert-webhook
-            plugins/floe-catalog-polaris
-            plugins/floe-compute-duckdb
-            plugins/floe-dbt-core
-            plugins/floe-dbt-fusion
-            plugins/floe-identity-keycloak
-            plugins/floe-ingestion-dlt
-            plugins/floe-lineage-marquez
-            plugins/floe-network-security-k8s
-            plugins/floe-orchestrator-dagster
-            plugins/floe-quality-dbt
-            plugins/floe-quality-gx
-            plugins/floe-rbac-k8s
-            plugins/floe-secrets-infisical
-            plugins/floe-secrets-k8s
-            plugins/floe-semantic-cube
-            plugins/floe-storage-minio
-            plugins/floe-telemetry-console
-            plugins/floe-telemetry-jaeger
-          )
-
-          for pkg in "${PACKAGES[@]}"; do
-            echo "::group::Building ${pkg}"
-            python -m build "${pkg}" --outdir dist/
-            echo "::endgroup::"
-          done
+      - name: Build manifest packages
+        run: |
+          set -euo pipefail
+          uv run python -m testing.release.cli build \
+            --manifest release/floe-release.yaml \
+            --dist-dir dist
 
           echo "=== Built artifacts ==="
           ls -la dist/
-          echo "=== Package count ==="
-          WHEEL_COUNT=$(find dist/ -name '*.whl' | wc -l)
-          SDIST_COUNT=$(find dist/ -name '*.tar.gz' | wc -l)
-          echo "Wheels: ${WHEEL_COUNT}, Sdists: ${SDIST_COUNT}"
-
-          if [[ "${WHEEL_COUNT}" -ne 24 || "${SDIST_COUNT}" -ne 24 ]]; then
-            echo "::error::Expected 24 wheels and 24 sdists, got ${WHEEL_COUNT} wheels and ${SDIST_COUNT} sdists"
-            exit 1
-          fi
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: python-packages
           path: dist/
@@ -135,15 +179,37 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build
-    if: github.ref_type == 'tag' && !(inputs.dry_run || false)
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
     environment: pypi
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.build.outputs.tag }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install workspace dependencies
+        run: uv sync --all-extras --dev
+
       - name: Download build artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-packages
           path: dist/
@@ -152,10 +218,20 @@ jobs:
         run: |
           echo "=== Artifacts to publish ==="
           ls -la dist/
+          EXPECTED=$(uv run python - <<'PY'
+          from pathlib import Path
+
+          from testing.release.manifest import load_release_manifest
+
+          manifest = load_release_manifest(Path("release/floe-release.yaml"))
+          print(len(manifest.python_packages.publish))
+          PY
+          )
           WHEEL_COUNT=$(find dist/ -name '*.whl' | wc -l)
-          echo "Wheels: ${WHEEL_COUNT}"
-          if [[ "${WHEEL_COUNT}" -ne 24 ]]; then
-            echo "::error::Expected 24 wheels, got ${WHEEL_COUNT}"
+          SDIST_COUNT=$(find dist/ -name '*.tar.gz' | wc -l)
+          echo "Wheels: ${WHEEL_COUNT}, Sdists: ${SDIST_COUNT}, Expected per type: ${EXPECTED}"
+          if [[ "${WHEEL_COUNT}" -ne "${EXPECTED}" || "${SDIST_COUNT}" -ne "${EXPECTED}" ]]; then
+            echo "::error::Expected ${EXPECTED} wheels and ${EXPECTED} sdists, got ${WHEEL_COUNT} wheels and ${SDIST_COUNT} sdists"
             exit 1
           fi
 
@@ -181,11 +257,14 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Wait for PyPI index propagation
-        run: sleep 30
-
       - name: Verify core package installable
         run: |
-          pip install "floe-core==${RELEASE_VERSION}" --no-deps --dry-run || {
-            echo "::warning::floe-core not yet available on PyPI (index propagation may take a few minutes)"
-          }
+          for attempt in 1 2 3 4 5 6; do
+            if pip install "floe-core==${RELEASE_VERSION}" --no-deps --dry-run; then
+              exit 0
+            fi
+            echo "::notice::floe-core ${RELEASE_VERSION} not available on PyPI yet; retry ${attempt}/6"
+            sleep 30
+          done
+
+          echo "::warning::floe-core ${RELEASE_VERSION} was not visible on PyPI after retries"

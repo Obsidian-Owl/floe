@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "floe-core"
-version = "0.1.0"
+version = "0.1.0a1"
 description = "Core plugin registry and interfaces for the floe data platform"
 readme = "README.md"
 license = "Apache-2.0"

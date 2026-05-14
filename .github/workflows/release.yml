@@ -69,6 +69,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
+      - name: Validate release manifest
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            uv run python -m testing.release.cli validate --manifest release/floe-release.yaml --tag "${GITHUB_REF_NAME}"
+          else
+            uv run python -m testing.release.cli validate --manifest release/floe-release.yaml
+          fi
+
       - name: Run quick validation
         run: |
           uv run ruff check .
@@ -149,6 +157,77 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION_DEFAULT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Validate release evidence variables
+        run: |
+          set -euo pipefail
+          for var_name in RELEASE_DEVPOD_ARTIFACT RELEASE_AWS_LIVE_RESULT RELEASE_CLEANUP_RESULT; do
+            if [[ -z "${!var_name}" ]]; then
+              echo "::error::Repository variable ${var_name} must be configured before creating a release."
+              exit 1
+            fi
+          done
+        env:
+          RELEASE_DEVPOD_ARTIFACT: ${{ vars.RELEASE_DEVPOD_ARTIFACT }}
+          RELEASE_AWS_LIVE_RESULT: ${{ vars.RELEASE_AWS_LIVE_RESULT }}
+          RELEASE_CLEANUP_RESULT: ${{ vars.RELEASE_CLEANUP_RESULT }}
+
+      - name: Validate and write release evidence summary
+        run: |
+          uv run python -m testing.release.cli evidence-summary \
+            --release-sha "${GITHUB_SHA}" \
+            --manifest release/floe-release.yaml \
+            --devpod-artifact "${RELEASE_DEVPOD_ARTIFACT}" \
+            --aws-live-result "${RELEASE_AWS_LIVE_RESULT}" \
+            --cleanup-result "${RELEASE_CLEANUP_RESULT}" \
+            --output release-evidence.md
+        env:
+          RELEASE_DEVPOD_ARTIFACT: ${{ vars.RELEASE_DEVPOD_ARTIFACT }}
+          RELEASE_AWS_LIVE_RESULT: ${{ vars.RELEASE_AWS_LIVE_RESULT }}
+          RELEASE_CLEANUP_RESULT: ${{ vars.RELEASE_CLEANUP_RESULT }}
+
+      - name: Write release metadata
+        run: |
+          set -euo pipefail
+          mkdir -p release-metadata
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          metadata = {
+              "tag": os.environ["GITHUB_REF_NAME"],
+              "sha": os.environ["GITHUB_SHA"],
+              "version": os.environ["RELEASE_VERSION"],
+          }
+          Path("release-metadata/release-metadata.json").write_text(
+              json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+
+      - name: Upload release metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-metadata
+          path: release-metadata/release-metadata.json
+          if-no-files-found: error
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@01570a1f39cb168c169c802c3bceb9e93fb10974  # v2
         with:
@@ -156,5 +235,6 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref, '-') }}
+          files: release-evidence.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -3,9 +3,9 @@
 # developer workflow, then destructive validation lanes.
 #
 # Bootstrap runs first and gates in-cluster platform validation. Developer
-# workflow validation always runs. Destructive validation requires bootstrap and
-# platform success unless FORCE_DESTRUCTIVE=true. Artifacts from all lanes are
-# preserved.
+# workflow validation always runs. Destructive validation requires bootstrap,
+# platform, and developer workflow success unless FORCE_DESTRUCTIVE=true.
+# Artifacts from all lanes are preserved.
 #
 # Usage: ./testing/ci/test-e2e-full.sh
 #
@@ -83,8 +83,8 @@ fi
 # Pod cleanup before destructive suite
 # =============================================================================
 
-if [[ ("${BOOTSTRAP_EXIT}" -ne 0 || "${PLATFORM_EXIT}" -ne 0) && "${FORCE_DESTRUCTIVE}" != "true" ]]; then
-    info "Skipping destructive tests (bootstrap and platform must pass). Set FORCE_DESTRUCTIVE=true to override."
+if [[ ("${BOOTSTRAP_EXIT}" -ne 0 || "${PLATFORM_EXIT}" -ne 0 || "${DEVELOPER_EXIT}" -ne 0) && "${FORCE_DESTRUCTIVE}" != "true" ]]; then
+    info "Skipping destructive tests (bootstrap, platform, and developer workflow must pass). Set FORCE_DESTRUCTIVE=true to override."
 else
     if [[ "${CAN_REUSE_PLATFORM_IMAGE}" == "true" ]]; then
         info "Cleaning up platform validation pods before destructive suite..."
@@ -161,7 +161,7 @@ else
     error "  Developer:   FAILED (exit ${DEVELOPER_EXIT})"
 fi
 
-if [[ ("${BOOTSTRAP_EXIT}" -ne 0 || "${PLATFORM_EXIT}" -ne 0) && "${FORCE_DESTRUCTIVE}" != "true" ]]; then
+if [[ ("${BOOTSTRAP_EXIT}" -ne 0 || "${PLATFORM_EXIT}" -ne 0 || "${DEVELOPER_EXIT}" -ne 0) && "${FORCE_DESTRUCTIVE}" != "true" ]]; then
     info "  Destructive: SKIPPED"
 elif [[ "${CLEANUP_FAILED}" == "true" ]]; then
     error "  Destructive: SKIPPED (cleanup failed)"

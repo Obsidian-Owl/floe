@@ -21,12 +21,12 @@ check_branch_naming() {
         return 0
     fi
 
-    # Valid patterns: epic/*, feat/*, fix/*, chore/*, docs/*, or {number}{letter}-*
-    if [[ ! "$branch" =~ ^(epic|feat|fix|chore|docs)/ ]] && [[ ! "$branch" =~ ^[0-9]+[a-z]?- ]]; then
+    # Valid patterns: epic/*, feat/*, fix/*, chore/*, docs/*, release/*, or {number}{letter}-*
+    if [[ ! "$branch" =~ ^(epic|feat|fix|chore|docs|release)/ ]] && [[ ! "$branch" =~ ^[0-9]+[a-z]?- ]]; then
         echo -e "${YELLOW}WARNING: Branch '$branch' doesn't follow convention${NC}" >&2
-        echo "  Expected: epic/*, feat/*, fix/*, chore/*, docs/*, or {epic-id}-*" >&2
+        echo "  Expected: epic/*, feat/*, fix/*, chore/*, docs/*, release/*, or {epic-id}-*" >&2
         echo "  Examples: feat/add-logging, 2a-manifest-validation, epic/plugin-system" >&2
-        ((WARNINGS++))
+        ((++WARNINGS))
     fi
 }
 
@@ -52,7 +52,7 @@ check_quick_architecture() {
         if git show ":$file" 2>/dev/null | grep -E '^[^#]*import (sqlparse|sqlglot)' >/dev/null 2>&1; then
             echo -e "${YELLOW}WARNING: SQL parsing in $file${NC}" >&2
             echo "  Constitution: 'dbt owns SQL' - use dbt for SQL operations" >&2
-            ((WARNINGS++))
+            ((++WARNINGS))
         fi
     done
 }

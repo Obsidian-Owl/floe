@@ -68,6 +68,15 @@ def test_full_runner_only_reuses_platform_image_after_successful_platform_lane()
     assert 'if TEST_SUITE=e2e-destructive "${SCRIPT_DIR}/test-e2e-cluster.sh"; then' in script
 
 
+def test_full_runner_gates_destructive_on_developer_success_by_default() -> None:
+    """Destructive validation should not hide a failed developer workflow lane."""
+    script = (REPO_ROOT / "testing" / "ci" / "test-e2e-full.sh").read_text()
+
+    assert '"${DEVELOPER_EXIT}" -ne 0' in script
+    assert "bootstrap, platform, and developer workflow must pass" in script
+    assert 'FORCE_DESTRUCTIVE}" != "true"' in script
+
+
 def test_full_runner_records_cleanup_failure_without_skipping_summary() -> None:
     """Cleanup failures should still be surfaced in the final summary path."""
     script = (REPO_ROOT / "testing" / "ci" / "test-e2e-full.sh").read_text()

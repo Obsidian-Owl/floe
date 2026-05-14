@@ -22,9 +22,12 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WEEKLY_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "weekly.yml"
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+PYPI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pypi-publish.yml"
+RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 UV_SECURITY_ACTION = REPO_ROOT / ".github" / "actions" / "uv-security-audit" / "action.yml"
 PRE_COMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
 SETUP_HOOKS = REPO_ROOT / "scripts" / "setup-hooks.sh"
+PRE_COMMIT_CONSTITUTION = REPO_ROOT / "scripts" / "pre-commit-constitution.sh"
 CUBE_STORE_DOCKERFILE = REPO_ROOT / "docker" / "cube-store" / "Dockerfile"
 VALUES_TEST = REPO_ROOT / "charts" / "floe-platform" / "values-test.yaml"
 
@@ -151,6 +154,56 @@ class TestWeeklyWorkflow:
         ]
         has_from = any(line.upper().startswith("FROM") for line in lines)
         assert has_from, "Dockerfile missing FROM instruction"
+
+
+class TestPypiPublishWorkflow:
+    """Structural validation of the PyPI publish release gate."""
+
+    def test_pypi_publish_runs_after_release_workflow_success_instead_of_tag_push(self) -> None:
+        """PyPI upload cannot start directly from a pushed release tag."""
+        workflow_text = PYPI_WORKFLOW.read_text(encoding="utf-8")
+        on_block = workflow_text.split("\nconcurrency:", maxsplit=1)[0]
+
+        assert "\n  workflow_run:" in on_block
+        assert "workflows: [Release]" in on_block
+        assert "types: [completed]" in on_block
+        assert "\n  push:" not in on_block
+        assert "\n    tags:" not in on_block
+
+    def test_pypi_publish_job_uses_release_metadata_instead_of_head_branch(self) -> None:
+        """Publishing resolves immutable release metadata from the Release run artifact."""
+        workflow_text = PYPI_WORKFLOW.read_text(encoding="utf-8")
+
+        assert "github.event_name == 'workflow_run'" in workflow_text
+        assert "github.event.workflow_run.conclusion == 'success'" in workflow_text
+        assert "github.event.workflow_run.event == 'push'" in workflow_text
+        assert "gh run download" in workflow_text
+        assert "--name release-metadata" in workflow_text
+        assert (
+            "ref: ${{ github.event_name == 'workflow_run' && "
+            "steps.release_metadata.outputs.sha || github.ref }}"
+        ) in workflow_text
+        assert "steps.release_metadata.outputs.tag || github.ref" not in workflow_text
+        assert "startsWith(github.event.workflow_run.head_branch" not in workflow_text
+        assert "github.event.workflow_run.head_branch" not in workflow_text
+
+    def test_release_workflow_uploads_release_metadata_for_pypi_publish(self) -> None:
+        """The Release workflow publishes tag/SHA metadata consumed by PyPI publish."""
+        workflow_text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+
+        assert "Validate release evidence variables" in workflow_text
+        assert "Repository variable ${var_name} must be configured" in workflow_text
+        assert "release-metadata/release-metadata.json" in workflow_text
+        assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in workflow_text
+
+    def test_manual_pypi_dispatch_is_build_only_dry_run(self) -> None:
+        """Manual PyPI dispatch keeps dry-run support but cannot upload artifacts."""
+        workflow_text = PYPI_WORKFLOW.read_text(encoding="utf-8")
+
+        assert "workflow_dispatch:" in workflow_text
+        assert "dry_run:" in workflow_text
+        assert "github.event_name == 'workflow_run'" in workflow_text
+        assert "inputs.dry_run" not in workflow_text
 
 
 class TestValuesTestCubeStore:
@@ -343,6 +396,22 @@ class TestLocalHookAlignment:
         assert pre_push_template.index('unset "$git_env_var"') < pre_push_template.index(
             "pre-commit run --hook-stage pre-push",
         )
+
+    @pytest.mark.requirement("VAL-HOOKS")
+    def test_constitution_hook_allows_release_branches(self) -> None:
+        """Release management branches are approved for alpha release work."""
+        hook_text = PRE_COMMIT_CONSTITUTION.read_text()
+
+        assert "release" in hook_text
+        assert "^(epic|feat|fix|chore|docs|release)/" in hook_text
+
+    @pytest.mark.requirement("VAL-HOOKS")
+    def test_constitution_hook_warning_increment_is_set_e_safe(self) -> None:
+        """Warning increments must not make set -e exit on the first warning."""
+        hook_text = PRE_COMMIT_CONSTITUTION.read_text()
+
+        assert "((WARNINGS++))" not in hook_text
+        assert "((++WARNINGS))" in hook_text
 
 
 class TestCubeStoreRollbackPath:

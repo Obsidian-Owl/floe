@@ -1,4 +1,4 @@
-"""Structural validation for the dormant Phase E1 E2E workflow.
+"""Structural validation for the active E2E workflow.
 
 These tests parse ``.github/workflows/e2e.yml`` directly so the CI gate can be
 validated without needing GitHub Actions infrastructure, Kind, or Helm CLI.
@@ -34,12 +34,6 @@ def _load_workflow() -> dict[object, Any]:
     workflow = yaml.safe_load(E2E_WORKFLOW.read_text(encoding="utf-8"))
     assert isinstance(workflow, dict), "Workflow YAML must parse to a mapping."
     return cast(dict[object, Any], workflow)
-
-
-def _workflow_text() -> str:
-    """Return the raw workflow text for comment-level contract checks."""
-
-    return E2E_WORKFLOW.read_text(encoding="utf-8")
 
 
 def _workflow_triggers(workflow: dict[object, Any]) -> dict[str, Any]:
@@ -91,12 +85,12 @@ def _uses_ref(step: dict[str, Any]) -> str:
     return uses
 
 
-class TestE2EWorkflowPhaseE1:
-    """Static validation for Unit E Phase E1 workflow structure."""
+class TestE2EWorkflow:
+    """Static validation for the E2E workflow structure."""
 
     @pytest.mark.requirement("AC-1")
     def test_workflow_exists_with_required_triggers(self) -> None:
-        """The workflow must exist and declare the Phase E1 trigger surface."""
+        """The workflow must exist and declare the E2E trigger surface."""
 
         workflow = _load_workflow()
         triggers = _workflow_triggers(workflow)
@@ -114,13 +108,26 @@ class TestE2EWorkflowPhaseE1:
         )
 
     @pytest.mark.requirement("AC-2")
-    def test_e2e_job_is_dormant_in_phase_e1(self) -> None:
-        """Phase E1 must land with the real E2E job disabled."""
+    def test_e2e_job_uses_active_release_confidence_condition(self) -> None:
+        """The E2E job must run for merge, manual, label, or infra triggers."""
 
         workflow = _load_workflow()
         e2e = _job(workflow, "e2e")
 
-        assert e2e.get("if") is False, "Phase E1 must ship with `if: false` on the e2e job."
+        expected_condition = "\n".join(
+            [
+                "github.event_name == 'merge_group' ||",
+                "github.event_name == 'workflow_dispatch' ||",
+                "contains(github.event.pull_request.labels.*.name, 'run-e2e') ||",
+                "needs.changed-files.outputs.infra == 'true'",
+            ]
+        )
+        condition = e2e.get("if")
+
+        assert isinstance(condition, str) and condition.strip() == expected_condition, (
+            "e2e job must run for merge queue, manual dispatch, run-e2e labels, "
+            "and infra path changes."
+        )
 
     @pytest.mark.requirement("AC-3")
     def test_changed_files_job_exports_infra_filter_output(self) -> None:
@@ -150,6 +157,8 @@ class TestE2EWorkflowPhaseE1:
             "plugins/**",
             "packages/floe-core/**",
             "tests/**",
+            "release/floe-release.yaml",
+            "testing/release/**",
             "pyproject.toml",
             "uv.lock",
             "Makefile",
@@ -162,29 +171,6 @@ class TestE2EWorkflowPhaseE1:
 
         e2e = _job(workflow, "e2e")
         assert e2e.get("needs") == ["changed-files"], "e2e job must depend on changed-files."
-
-    @pytest.mark.requirement("AC-4")
-    def test_phase_e2_activation_contract_is_recorded_inline(self) -> None:
-        """Phase E1 must keep the exact future Phase E2 condition discoverable inline."""
-
-        workflow = _load_workflow()
-        e2e = _job(workflow, "e2e")
-        workflow_text = _workflow_text()
-
-        assert e2e.get("if") is False, "Phase E1 must keep the live e2e job dormant."
-        assert "# Phase E2 activation contract (arm in a follow-on PR):" in workflow_text, (
-            "Workflow must explain where the future arming condition lives."
-        )
-        for expected_line in [
-            "# if: |",
-            "#   github.event_name == 'merge_group' ||",
-            "#   github.event_name == 'workflow_dispatch' ||",
-            "#   contains(github.event.pull_request.labels.*.name, 'run-e2e') ||",
-            "#   needs.changed-files.outputs.infra == 'true'",
-        ]:
-            assert expected_line in workflow_text, (
-                f"Workflow must keep the Phase E2 activation line '{expected_line}'."
-            )
 
     @pytest.mark.requirement("AC-5")
     def test_workflow_has_non_cancelling_ref_scoped_concurrency(self) -> None:
@@ -239,7 +225,7 @@ class TestE2EWorkflowPhaseE1:
 
         for image in [
             "apache/polaris:1.2.0-incubating",
-            "bitnami/postgresql:16.3.0-debian-12-r19",
+            "postgres:16-alpine",
             "minio/minio:RELEASE.2024-09-13T20-26-02Z",
             "jaegertracing/all-in-one:1.60",
         ]:
@@ -249,6 +235,27 @@ class TestE2EWorkflowPhaseE1:
         assert 'kind load docker-image "$img" --name floe-test' in run, (
             "Preload step must load each heavy image into the floe-test Kind cluster."
         )
+
+    @pytest.mark.requirement("AC-7")
+    def test_e2e_job_installs_flux_before_deploying_platform(self) -> None:
+        """setup-cluster.sh requires the Flux CLI before platform deployment."""
+
+        workflow = _load_workflow()
+        e2e = _job(workflow, "e2e")
+        steps = _job_steps(e2e)
+        step_names = [step.get("name") for step in steps]
+
+        flux_index = step_names.index("Install Flux CLI")
+        deploy_index = step_names.index("Deploy floe-platform")
+        flux_run = steps[flux_index].get("run", "")
+
+        assert flux_index < deploy_index, "Flux CLI must be installed before setup-cluster.sh."
+        assert 'FLUX_VERSION="2.5.1"' in flux_run
+        assert 'FLUX_ARCHIVE="flux_${FLUX_VERSION}_linux_amd64.tar.gz"' in flux_run
+        assert '-o "/tmp/${FLUX_ARCHIVE}"' in flux_run
+        assert "sha256sum -c -" in flux_run
+        assert "sudo install /tmp/flux /usr/local/bin/flux" in flux_run
+        assert "flux --version" in flux_run
 
     @pytest.mark.requirement("AC-8")
     def test_e2e_job_collects_failure_diagnostics_and_uploads_artifacts(self) -> None:
@@ -300,7 +307,10 @@ class TestE2EWorkflowPhaseE1:
         workflow = _load_workflow()
         e2e = _job(workflow, "e2e")
 
-        assert e2e.get("timeout-minutes") == 30, "e2e job must use timeout-minutes: 30."
+        assert e2e.get("timeout-minutes") == 60, (
+            "e2e job must allow enough time for setup, standard, developer, "
+            "and destructive validation lanes."
+        )
 
         expected_uses = {
             "actions/checkout": CHECKOUT_SHA,
