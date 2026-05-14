@@ -1,17 +1,13 @@
-# End-to-end validation gate for infrastructure-affecting changes, merge queue,
-# manual dispatches, and PRs explicitly labeled for live validation.
+# Manual end-to-end validation. Scheduled E2E runs live in weekly.yml, and
+# release-blocking E2E/live validation lives in prepare-release.yml.
 
 name: E2E
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-  merge_group:
   workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
   group: e2e-${{ github.ref }}
@@ -22,44 +18,8 @@ env:
   UV_CACHE_DIR: /tmp/.uv-cache
 
 jobs:
-  changed-files:
-    name: Changed Files
-    runs-on: ubuntu-latest
-    outputs:
-      infra: ${{ steps.filter.outputs.infra }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Filter infra changes
-        id: filter
-        uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590  # v3.0.3
-        with:
-          filters: |
-            infra:
-              - 'charts/**'
-              - 'testing/**'
-              - 'plugins/**'
-              - 'packages/floe-core/**'
-              - 'tests/**'
-              - 'release/floe-release.yaml'
-              - 'testing/release/**'
-              - 'pyproject.toml'
-              - 'uv.lock'
-              - 'Makefile'
-              - 'Dockerfile*'
-              - '**/Dockerfile*'
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/e2e.yml'
-
   e2e:
     name: e2e
-    needs: [changed-files]
-    if: |
-      github.event_name == 'merge_group' ||
-      github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'run-e2e') ||
-      needs.changed-files.outputs.infra == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
