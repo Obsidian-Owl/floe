@@ -1363,6 +1363,17 @@ class TestMakefileBuildDemoImage:
             "so manifest-selected plugins include local workspace dependencies."
         )
 
+    @pytest.mark.requirement("WU11-AC6")
+    def test_demo_plugins_are_resolved_only_when_demo_image_builds(self) -> None:
+        """Non-demo make targets must not require a local .venv at parse time."""
+        content = _read_makefile_content()
+
+        assert "DEMO_PLUGINS = $(shell uv run python scripts/resolve-demo-plugins.py" in content
+        assert (
+            "DEMO_PLUGINS := $(shell .venv/bin/python scripts/resolve-demo-plugins.py"
+            not in content
+        )
+
 
 class TestDemoPluginResolver:
     """Validate manifest-driven demo image workspace package resolution."""

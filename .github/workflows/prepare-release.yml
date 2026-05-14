@@ -217,17 +217,38 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
+      - name: Set up Helm
+        uses: Azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: ${{ needs.resolve-candidate.outputs.helm_cli_version }}
+
+      - name: Add Helm repositories
+        run: |
+          set -euo pipefail
+          helm repo add dagster https://dagster-io.github.io/helm
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo add jaegertracing https://jaegertracing.github.io/helm-charts
+          helm repo update
+
       - name: Create Kind cluster
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         with:
           cluster_name: floe-release
           config: testing/k8s/kind-config.yaml
 
+      - name: Install test infrastructure
+        run: make helm-install-test
+        env:
+          KIND_CLUSTER_NAME: floe-release
+          FLOE_KIND_CLUSTER: floe-release
+
       - name: Run integration tests
         run: ./testing/ci/test-integration.sh
         env:
           TEST_NAMESPACE: floe-test
           KIND_CLUSTER_NAME: floe-release
+          FLOE_KIND_CLUSTER: floe-release
 
       - name: Collect logs on failure
         if: failure()
@@ -261,6 +282,10 @@ jobs:
       - name: Configure DevPod Hetzner provider
         run: |
           set -euo pipefail
+          if [[ -z "${DEVPOD_HETZNER_TOKEN}" ]]; then
+            echo "::error::DEVPOD_HETZNER_TOKEN GitHub secret is not configured."
+            exit 1
+          fi
           case "${DEVPOD_HETZNER_TOKEN}" in
             *$'\n'*|*$'\r'*)
               echo "::error::DEVPOD_HETZNER_TOKEN must be a single-line token."
@@ -327,6 +352,10 @@ jobs:
       - name: Configure DevPod Hetzner provider
         run: |
           set -euo pipefail
+          if [[ -z "${DEVPOD_HETZNER_TOKEN}" ]]; then
+            echo "::error::DEVPOD_HETZNER_TOKEN GitHub secret is not configured."
+            exit 1
+          fi
           case "${DEVPOD_HETZNER_TOKEN}" in
             *$'\n'*|*$'\r'*)
               echo "::error::DEVPOD_HETZNER_TOKEN must be a single-line token."

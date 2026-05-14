@@ -181,6 +181,53 @@ def test_static_gate_uses_tooling_helm_cli_version_not_chart_version() -> None:
 
 
 @pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_kind_gate_installs_test_stack_before_running_in_cluster_tests() -> None:
+    """The release Kind gate must deploy chart-managed test infrastructure first."""
+    steps = _workflow()["jobs"]["kind-integration"]["steps"]
+    step_names = [step.get("name") for step in steps]
+
+    assert "Set up Helm" in step_names
+    assert "Add Helm repositories" in step_names
+    assert "Install test infrastructure" in step_names
+    assert step_names.index("Set up Helm") < step_names.index("Add Helm repositories")
+    assert step_names.index("Add Helm repositories") < step_names.index(
+        "Install test infrastructure"
+    )
+    assert step_names.index("Create Kind cluster") < step_names.index("Install test infrastructure")
+    assert step_names.index("Install test infrastructure") < step_names.index(
+        "Run integration tests"
+    )
+
+    helm_step = steps[step_names.index("Set up Helm")]
+    repo_step = steps[step_names.index("Add Helm repositories")]
+    install_step = steps[step_names.index("Install test infrastructure")]
+
+    assert helm_step["with"]["version"] == (
+        "${{ needs.resolve-candidate.outputs.helm_cli_version }}"
+    )
+    assert "helm repo add dagster https://dagster-io.github.io/helm" in repo_step["run"]
+    assert "helm repo add bitnami https://charts.bitnami.com/bitnami" in repo_step["run"]
+    assert "helm repo update" in repo_step["run"]
+    assert install_step["run"] == "make helm-install-test"
+    assert install_step["env"]["KIND_CLUSTER_NAME"] == "floe-release"
+    assert install_step["env"]["FLOE_KIND_CLUSTER"] == "floe-release"
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_devpod_release_jobs_fail_fast_when_hetzner_token_missing() -> None:
+    """DevPod release gates must report missing repository secret configuration directly."""
+    for job_name in ("full-e2e", "aws-live"):
+        steps = _workflow()["jobs"][job_name]["steps"]
+        configure_step = next(
+            step for step in steps if step.get("name") == "Configure DevPod Hetzner provider"
+        )
+
+        assert 'if [[ -z "${DEVPOD_HETZNER_TOKEN}" ]]; then' in configure_step["run"]
+        assert "DEVPOD_HETZNER_TOKEN GitHub secret is not configured" in configure_step["run"]
+        assert "make devpod-setup" in configure_step["run"]
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
 def test_cleanup_summary_does_not_fail_for_skipped_live_gates() -> None:
     """Skipped live gates are reported as not-run, not cleanup failures."""
     text = WORKFLOW.read_text(encoding="utf-8")
