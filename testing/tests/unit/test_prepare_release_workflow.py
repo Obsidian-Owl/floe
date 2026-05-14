@@ -133,6 +133,31 @@ def test_cleanup_summary_uses_upstream_job_results() -> None:
 
 
 @pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_static_gate_builds_helm_dependencies_before_contract_tests() -> None:
+    """Release contract tests build chart dependencies before rendering Helm."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    dependency_index = text.index("helm dependency build charts/floe-platform")
+    pytest_index = text.index("uv run pytest tests/contract/")
+
+    assert dependency_index < pytest_index
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_cleanup_summary_does_not_fail_for_skipped_live_gates() -> None:
+    """Skipped live gates are reported as not-run, not cleanup failures."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert 'devpod_status="not-run"' in text
+    assert 'hetzner_status="not-run"' in text
+    assert 'aws_status="not-run"' in text
+    assert 'test "${status}" != "failed cleanup"' in text
+    assert 'test "${status}" = "passed"' not in text
+    assert "full-e2e job skipped" not in text
+    assert "aws-live job skipped" not in text
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
 def test_failure_issue_reports_failed_gate_from_needs_results() -> None:
     """Failure issues classify the actual failed gate instead of a constant."""
     text = WORKFLOW.read_text(encoding="utf-8")
@@ -155,3 +180,16 @@ def test_failure_issue_covers_candidate_and_release_failures() -> None:
     assert 'create-release="${CREATE_RELEASE_RESULT}"' in text
     assert "RESOLVE_CANDIDATE_RESULT: ${{ needs.resolve-candidate.result }}" in text
     assert "CREATE_RELEASE_RESULT: ${{ needs.create-release.result }}" in text
+
+
+@pytest.mark.requirement("REL-GATE-WORKFLOW")
+def test_failure_issue_uses_existing_repository_labels() -> None:
+    """Release failure issues use labels that exist in the repository."""
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "--label ci" in text
+    assert "--label release-review" in text
+    assert "--label alpha-blocker" in text
+    assert "--label ci-failure" not in text
+    assert "--label release-gate" not in text
+    assert "--label release-tooling-failure" not in text

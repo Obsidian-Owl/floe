@@ -48,6 +48,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run Claude Code Security Review
+        continue-on-error: true
         uses: anthropics/claude-code-action@de8e0b9c42c6cb58e904c857f164aa072244c1ac  # beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}

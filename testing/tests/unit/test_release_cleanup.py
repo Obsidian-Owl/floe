@@ -41,3 +41,15 @@ def test_cleanup_status_reports_not_run_before_cleanup_gate() -> None:
     )
 
     assert cleanup_status(evidence) == "not-run"
+
+
+@pytest.mark.requirement("REL-GATE-CLEANUP")
+def test_cleanup_status_reports_skipped_live_gates_as_not_run() -> None:
+    """Skipped live gates are not cleanup failures when an earlier gate failed."""
+    evidence = CleanupEvidence(
+        devpod="skipped",
+        hetzner="skipped",
+        aws="skipped",
+    )
+
+    assert cleanup_status(evidence) == "not-run"

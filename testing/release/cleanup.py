@@ -18,7 +18,7 @@ def cleanup_status(evidence: CleanupEvidence) -> str:
     normalized = tuple(value.strip().lower() for value in values)
     if any(value.startswith("failed") for value in normalized):
         return "failed cleanup"
-    if any(value in {"", "not-run"} for value in normalized):
+    if any(value in {"", "not-run", "skipped"} for value in normalized):
         return "not-run"
     if all(value == "passed" for value in normalized):
         return "passed"

@@ -129,6 +129,7 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
           uv run mypy --strict packages/ testing/
+          helm dependency build charts/floe-platform
           uv run pytest tests/contract/ packages/*/tests/contract/ -q
           uv run python -m testing.release.cli validate \
             --manifest release/floe-release.yaml \
@@ -393,20 +394,35 @@ jobs:
           devpod_status="passed"
           hetzner_status="passed"
           aws_status="passed"
-          if [[ "${FULL_E2E_RESULT}" != "success" ]]; then
-            devpod_status="failed: full-e2e job ${FULL_E2E_RESULT}"
-            hetzner_status="failed: full-e2e job ${FULL_E2E_RESULT}"
-          fi
-          if [[ "${AWS_LIVE_RESULT}" != "success" ]]; then
-            aws_status="failed: aws-live job ${AWS_LIVE_RESULT}"
-          fi
+          case "${FULL_E2E_RESULT}" in
+            success)
+              ;;
+            skipped)
+              devpod_status="not-run"
+              hetzner_status="not-run"
+              ;;
+            *)
+              devpod_status="failed: full-e2e job ${FULL_E2E_RESULT}"
+              hetzner_status="failed: full-e2e job ${FULL_E2E_RESULT}"
+              ;;
+          esac
+          case "${AWS_LIVE_RESULT}" in
+            success)
+              ;;
+            skipped)
+              aws_status="not-run"
+              ;;
+            *)
+              aws_status="failed: aws-live job ${AWS_LIVE_RESULT}"
+              ;;
+          esac
           uv run python -m testing.release.cli cleanup-summary \
             --devpod "${devpod_status}" \
             --hetzner "${hetzner_status}" \
             --aws "${aws_status}" > cleanup-summary.json
           status="$(python -c 'import json; print(json.load(open("cleanup-summary.json"))["status"])')"
           echo "cleanup_status=${status}" >> "$GITHUB_OUTPUT"
-          test "${status}" = "passed"
+          test "${status}" != "failed cleanup"
         env:
           FULL_E2E_RESULT: ${{ needs.full-e2e.result }}
           AWS_LIVE_RESULT: ${{ needs.aws-live.result }}
@@ -653,7 +669,7 @@ jobs:
             gh issue create \
               --title "$title" \
               --body "$body" \
-              --label ci-failure \
-              --label release-gate \
-              --label release-tooling-failure
+              --label ci \
+              --label release-review \
+              --label alpha-blocker
           fi
