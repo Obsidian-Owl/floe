@@ -1,22 +1,23 @@
 <div align="center">
   <img src="floe.png" alt="Floe Runtime" width="600">
 
-  <h3>The Open Platform for building Data Platforms</h3>
+  <h3>The open platform for building internal data platforms</h3>
 
   <p>
-    <strong>Ship faster. Stay compliant. Build toward Data Mesh.</strong>
+    <strong>Ship faster. Preserve governance. Build toward Data Mesh.</strong>
   </p>
 
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License"></a>
     <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
-    <a href="https://github.com/Obsidian-Owl/floe/releases"><img src="https://img.shields.io/badge/version-v0.1.0--alpha.1-orange.svg" alt="v0.1.0-alpha.1 alpha target"></a>
+    <a href="https://github.com/Obsidian-Owl/floe/releases"><img src="https://img.shields.io/badge/version-v0.1.0--alpha.1-orange.svg" alt="v0.1.0-alpha.1"></a>
     <a href="https://deepwiki.com/Obsidian-Owl/floe"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
   </p>
 
   <p>
     <a href="#quick-start">Quick Start</a> •
-    <a href="#features">Features</a> •
+    <a href="#alpha-scope">Alpha Scope</a> •
+    <a href="#vision">Vision</a> •
     <a href="#documentation">Documentation</a> •
     <a href="#contributing">Contributing</a>
   </p>
@@ -40,248 +41,270 @@ evaluating the platform.
 Floe is distributed under the Apache License 2.0 on an "AS IS" basis, without
 warranties or conditions. See [LICENSE](LICENSE) for the full license terms.
 
-**Alpha-supported today:**
-- Customer 360 demo compilation and validation.
-- The 15 Python packages declared in `release/floe-release.yaml`.
-- Local/dev Kubernetes evaluation paths documented in `docs/`.
+## What Is Floe?
 
-**Not alpha-supported today:**
+Floe is an open platform for building internal data platforms.
+
+The long-term goal is a composable platform where platform teams define
+governed infrastructure standards once, and data teams ship data products using
+clear, repeatable workflows. Floe is designed around:
+
+- **Four-layer separation:** foundation code, platform configuration, runtime
+  services, and data workloads have different owners.
+- **Two-file configuration:** `manifest.yaml` defines platform-owned standards;
+  `floe.yaml` defines data-product intent.
+- **Typed plugin contracts:** providers integrate behind capabilities,
+  requirements, bindings, and resolver validation.
+- **Secret-free artifacts:** compiled contracts carry references and deployment
+  bindings, not raw credentials.
+- **Data Mesh direction:** domains can own data products within platform-defined
+  guardrails as the operational model matures.
+
+The alpha release proves a narrow, high-confidence path through that model. It
+does not claim every provider, plugin category, or self-service deployment
+workflow is production-ready.
+
+## Quick Start
+
+### Install Alpha Packages
+
+Install the core alpha package from PyPI:
+
+```bash
+python -m pip install "floe-core==0.1.0a1"
+```
+
+Install the main published alpha runtime surface:
+
+```bash
+python -m pip install \
+  "floe-core==0.1.0a1" \
+  "floe-iceberg==0.1.0a1" \
+  "floe-orchestrator-dagster==0.1.0a1" \
+  "floe-catalog-polaris==0.1.0a1" \
+  "floe-storage-minio==0.1.0a1" \
+  "floe-compute-duckdb==0.1.0a1" \
+  "floe-dbt-core==0.1.0a1" \
+  "floe-ingestion-dlt==0.1.0a1" \
+  "floe-telemetry-jaeger==0.1.0a1" \
+  "floe-lineage-marquez==0.1.0a1" \
+  "floe-quality-gx==0.1.0a1" \
+  "floe-rbac-k8s==0.1.0a1" \
+  "floe-network-security-k8s==0.1.0a1"
+```
+
+AWS provider compatibility packages are also published for live validation
+against isolated AWS test infrastructure:
+
+```bash
+python -m pip install \
+  "floe-storage-aws-s3==0.1.0a1" \
+  "floe-catalog-glue==0.1.0a1"
+```
+
+The complete publish/exclude cutline is in
+[release/floe-release.yaml](release/floe-release.yaml).
+
+### Run The Source-Checkout Alpha Path
+
+The current demo, charts, and contributor validation scripts are repository
+workflows, not a packaged one-command product installer:
+
+```bash
+git clone https://github.com/Obsidian-Owl/floe.git
+cd floe
+git checkout v0.1.0-alpha.1
+uv sync --all-extras --dev
+
+make compile-demo
+make docs-build
+```
+
+For the full Customer 360 release-validation path, start with
+[Customer 360 Golden Demo](docs/demo/customer-360.md). Contributor remote E2E
+validation uses DevPod + Hetzner and is intentionally separate from normal
+package installation.
+
+## Alpha Scope
+
+### Alpha-Supported Today
+
+- Customer 360 demo compilation and validation.
+- Single-platform Kubernetes deployment using the `floe-platform` Helm chart.
+- Manifest-driven platform and data-product configuration for the documented
+  alpha path.
+- Dagster-centered runtime artifact generation for the documented alpha path.
+- OpenTelemetry and OpenLineage evidence through Jaeger and Marquez.
+- MinIO/S3-compatible storage in the demo path.
+- Live AWS S3 + Glue provider compatibility validation in isolated test
+  infrastructure.
+- The 15 Python packages declared in `release/floe-release.yaml`.
+
+### Implemented Primitives
+
+These pieces exist in code, schema, or chart form, but do not yet imply a full
+supported user workflow:
+
+- Data Mesh schema and contract primitives.
+- Manifest inheritance and namespace strategy fields.
+- `charts/floe-jobs` for lower-level Kubernetes Job and CronJob rendering.
+- Semantic-layer primitives such as Cube, which is charted but disabled by
+  default in the Customer 360 alpha gate.
+- Identity, secrets, alerts, additional quality, and alternative dbt runtime
+  plugin primitives that are excluded from the alpha publish set.
+
+### Not Alpha-Supported
+
 - Production data platform operation.
 - Production availability, backup, recovery, migration, or support guarantees.
-- Unbounded cloud-provider, Kubernetes, or data-processing workloads.
+- Planned self-service product registration command `floe product register`.
+- Planned self-service product execution command `floe run`.
+- Planned self-service product deployment command `floe product deploy`.
+- Multi-cluster Data Mesh operations.
+- Provider swaps unless the corresponding plugin and composition contract have
+  been implemented, published, documented, and validated for the target path.
 
-## What is floe?
+See [Capability Status](docs/architecture/capability-status.md) and the
+[Plugin Catalog](docs/reference/plugin-catalog.md) for the current source of
+truth.
 
-**floe** is an open platform for building internal data platforms.
+## Vision
 
-**Platform teams** choose their stack from 14 plugin categories:
-- **Compute:** DuckDB, Snowflake, Databricks, Spark, BigQuery
-- **Orchestrator:** Dagster, Airflow 3.x
-- **Catalog:** Polaris, AWS Glue, Unity Catalog
-- **Observability:** Split into TelemetryBackend (Jaeger alpha reference path; Datadog planned/ecosystem example) + LineageBackend (Marquez alpha reference path; Atlan planned/ecosystem example)
-- **[... 10 more plugin categories]**
+Platform teams should be able to offer an internal data platform that feels
+boring in the right ways: clear standards, explicit approvals, repeatable
+runtime environments, and enough plugin flexibility to avoid bespoke platform
+forks for every team.
 
-**Data teams** get opinionated workflows:
-- ✅ 30 lines replaces 300+ lines of boilerplate
-- ✅ Same data-product config shape across environments; platform bindings supply environment-specific infrastructure
-- ✅ Standards enforced automatically (compile-time validation)
-- ✅ Composition boundaries for the alpha path, with broader provider interchangeability tracked as follow-on work
+Data teams should be able to describe the product they want to build without
+owning every infrastructure detail. Floe's direction is to turn that intent into
+validated artifacts: dbt profiles, orchestration definitions, deployment
+bindings, lineage and telemetry configuration, policy evidence, and runtime
+handoff material.
 
-**Batteries included. Extensible by plugin. Alpha-ready for isolated evaluation of the documented Customer 360 validation path.**
-
----
-
-### The Problem
-
-**Platform engineers** supporting 50+ data teams face:
-- **Integration hell**: Stitching together 15+ tools that don't talk to each other
-- **Exception management**: Every team has a "unicorn use case" that breaks your framework
-- **RBAC sprawl**: Managing 1200+ credentials across teams, environments, services
-- **Security whack-a-mole**: Someone always finds a way to hardcode production secrets
-
-**Data engineers** shipping data products face:
-- **Governance theater**: 3 meetings to approve a pipeline ([64% struggle to embed governance in workflows](https://www.secoda.co/blog/data-governance-survey))
-- **Platform dependency**: Blocked for 2 weeks because "platform team is busy" ([63% say leaders don't understand their pain](https://www.atlassian.com/blog/developer/developer-experience-report-2025))
-- **Framework limitations**: Can't do what you need → shadow IT or 6-month wait
-- **Unclear requirements**: "I thought 80% test coverage was optional?"
-
-**Result**: Governance blocks teams instead of enabling them.
-
----
-
-### The Solution
-
-**For platform teams:**
-- Get a **pre-integrated stack** (DuckDB + Dagster + Polaris + dbt tested together)
-- Say "yes" to edge cases with **plugin architecture** (add Spark? Implement a ComputePlugin. Need Kafka? Add an IngestionPlugin)
-- **Secret-free compiled artifacts** (CredentialRef pattern and deployment bindings keep raw credentials out of generated contracts)
-- **Enforce at compile-time** (violations caught before deployment, not in production)
-
-**For data teams:**
-- **Governance = automatic** (compile checks replace meetings)
-- **Get capabilities instantly** (platform adds plugin, you use it immediately)
-- **Escape hatches built-in** (plugin system extensible for your unicorn use case)
-- **Requirements explicit** (minimum_test_coverage: 80 in manifest.yaml, not tribal knowledge)
-
-**If it compiles, it's compliant.**
-
----
+The end state is a governed, composable platform that can scale from one
+internal platform to federated Data Mesh operations. The alpha is the first
+release gate on that path, not the finish line.
 
 ## How It Works
 
-### 1. Platform Team Chooses Stack (Once)
+### 1. Platform Team Chooses Standards
 
-**Composable architecture:** Mix and match from 14 plugin categories
+Platform-owned `manifest.yaml` selects approved plugins and governance rules:
 
 ```yaml
-# manifest.yaml (50 lines supports 200 pipelines)
 compute:
   approved:
-    - name: duckdb      # Cost-effective analytics
-    - name: spark       # Heavy processing
-    - name: snowflake   # Enterprise warehouse
-  default: duckdb       # Used when transform doesn't specify
-orchestrator: dagster   # Or: airflow
-catalog: polaris        # Or: glue, unity-catalog
+    - name: duckdb
+  default: duckdb
+
+orchestrator: dagster
+catalog: polaris
+storage: minio
 
 governance:
-  naming_pattern: medallion        # bronze/silver/gold layers
-  minimum_test_coverage: 80        # Explicit, not ambiguous
-  block_on_failure: true           # Enforced, not suggested
+  naming_pattern: medallion
+  minimum_test_coverage: 80
+  block_on_failure: true
 ```
 
-### 2. Data Teams Write Business Logic (Always)
+Floe has 14 plugin categories: Compute, Orchestrator, Catalog, Storage,
+TelemetryBackend, LineageBackend, DBT, SemanticLayer, Ingestion, Quality, RBAC,
+AlertChannel, Secrets, and Identity.
 
-**Declarative config:** Same across all 50 teams. Select compute per-step from approved list.
+### 2. Data Teams Describe Product Intent
+
+Data-team `floe.yaml` describes pipeline intent and uses platform-approved
+capabilities:
 
 ```yaml
-# floe.yaml (30 lines replaces 300 lines of boilerplate)
 name: customer-analytics
 version: "0.1.0"
 
 transforms:
   - type: dbt
     path: ./dbt/staging
-    compute: spark      # Heavy processing on Spark
-
-  - type: dbt
-    path: ./dbt/marts
-    compute: duckdb     # Analytics on DuckDB
+    compute: duckdb
 
 schedule:
   cron: "0 6 * * *"
 ```
 
-### 3. floe Generates Everything Else
+### 3. Floe Compiles Reviewable Runtime Artifacts
 
-**Current alpha compilation path** (generates Customer 360 demo artifacts for inspection):
+The alpha compilation path generates artifacts for the documented runtime path:
 
 ```bash
 make compile-demo
-
-[1/3] Loading demo platform manifest
-      ✓ Platform: Customer 360 alpha path
-
-[2/3] Running platform compiler
-      ✓ uv run floe platform compile
-
-[3/3] Writing generated artifacts
-      ✓ Dagster assets (Python)
-      ✓ dbt profiles (YAML)
-      ✓ Floe compiled artifacts (JSON)
-
-Demo compilation SUCCESS - artifacts ready to inspect
 ```
 
-The root data-team compile command is a planned lifecycle entry point and is not the current alpha workflow.
+Generated outputs include:
 
-**What's auto-generated:**
-- ✅ Database connection configs (dbt profiles.yml)
-- ✅ Orchestration code for the alpha Dagster runtime path
-- ✅ Kubernetes manifests (Jobs, Services, ConfigMaps)
-- ✅ Environment-specific settings (dev/staging/prod)
-- ✅ Credential references and Secret-free compiled artifacts
+- dbt profile configuration.
+- Dagster runtime definitions for the alpha path.
+- Floe compiled artifacts as JSON.
+- Credential references and resolved deployment bindings.
 
-**The same data-product intent can be compiled against environment-specific platform bindings.**
-
----
+Compiled artifacts are intended to be reviewable and diffable. Raw secrets must
+remain outside `CompiledArtifacts`.
 
 ## Features
 
-### 🔌 Composable by Design
+### Composable By Design
 
-**Choose from 14 plugin categories.** Swap implementations behind stable contracts as each category reaches the composition level required by your runtime path.
+Floe's plugin model is designed so providers integrate behind contracts rather
+than by reaching into each other's implementation details. Capabilities,
+requirements, typed bindings, and resolver validation own cross-plugin
+contracts.
 
-The alpha-supported runtime path has landed MinIO/S3-compatible storage composition for the documented demo path. Complete provider interchangeability across compute, identity, semantic, RBAC, network, and orchestration/runtime writer surfaces remains planned follow-on work and is tracked in the architecture docs.
+Provider examples:
 
-**Multi-compute pipelines:** Platform teams approve N compute targets. Data engineers select per-step from the approved list. Different steps can use different engines:
+- DuckDB is the alpha compute reference implementation; Snowflake, Spark,
+  Databricks, and BigQuery are future/provider implementation examples.
+- Dagster is the alpha orchestrator reference implementation; Airflow remains a
+  planned/provider path.
+- Polaris and AWS Glue are catalog paths with current alpha evidence in their
+  respective validation surfaces.
+- MinIO/S3-compatible storage and AWS S3 are the current alpha storage paths.
 
-```yaml
-# manifest.yaml (Platform Team)
-compute:
-  approved:
-    - name: spark       # Heavy processing
-    - name: duckdb      # Cost-effective analytics
-    - name: snowflake   # Enterprise warehouse
-  default: duckdb
+### Declarative Configuration
 
-# floe.yaml (Data Engineers)
-transforms:
-  - type: dbt
-    path: models/staging/
-    compute: spark      # Process 10TB raw data
+The platform/data split keeps data-product intent separate from platform-owned
+infrastructure bindings:
 
-  - type: dbt
-    path: models/marts/
-    compute: duckdb     # Build metrics on 100GB result
-```
+| File | Audience | Contains |
+| --- | --- | --- |
+| `manifest.yaml` | Platform Engineers | Infrastructure, credentials, plugin selection, governance policies |
+| `floe.yaml` | Data Engineers | Product logic, transforms, schedules, approved capability selections |
 
-**Environment parity preserved:** Each step uses the SAME compute across dev/staging/prod. No "works in dev, fails in prod" surprises.
+### Validation Before Runtime
 
-**Real-world swap scenarios:**
-- DuckDB (embedded, alpha path) ↔ Snowflake (planned/provider implementation)
-- Dagster (asset-centric, alpha path) ↔ Airflow 3.x (planned/provider implementation)
-- Jaeger (alpha-supported telemetry backend) ↔ Datadog (planned/ecosystem telemetry example)
+Floe validates configured policies and composition contracts before runtime
+handoff. This reduces late failures, but it is not a universal compliance
+guarantee. Organizations still own production controls, audits, data
+classification, access review, and operational approval.
 
-**Plugin categories:** Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend, DBT, SemanticLayer, Ingestion, Quality, RBAC, AlertChannel, Secrets, Identity
+### Security Boundaries
 
-### 📝 Declarative Configuration
+- Platform-owned credentials remain outside data-product config.
+- Deployment bindings resolve infrastructure details for renderers.
+- Helm/renderers consume resolved bindings instead of rediscovering plugin
+  configuration.
+- Compiled artifacts must remain secret-free.
 
-**Two-tier YAML.** Platform team defines infrastructure. Data teams define logic.
+### Data Mesh Direction
 
-**No code generation anxiety:** Compiled artifacts are checked into git. Diff them. Review them. Trust them.
+Floe's architecture includes primitives for federated ownership with
+computational governance:
 
-### ✅ Compile-Time Validation
+- Enterprise policies, domain constraints, and data-product contracts.
+- Data contracts as code.
+- Compile-time and runtime evidence.
+- Domain autonomy within platform guardrails.
 
-**Catch errors before deployment.** No runtime surprises.
-
-**Example:**
-```bash
-make compile-demo
-
-[FAIL] Customer 360 artifact validation failed
-       Evidence key: storage.customer_360_outputs
-
-Fix the demo platform or data-product inputs, then re-run the alpha validator.
-```
-
-**Not documentation governance.** Computational governance.
-
-### 🔐 Security by Default
-
-**Layer boundaries enforce separation:**
-- Credentials in platform config → Data teams **cannot access**
-- Secret references and deployment bindings → raw credentials stay out of compiled artifacts
-- Layer architecture → Data teams **cannot override** platform policies
-- Type-safe schemas → Catch errors at **compile-time**
-
-**Result:** Keep credential ownership in the platform layer instead of spreading raw secrets through product repos.
-
-### ⚡ Environment Parity
-
-**Same data-product intent, environment-specific platform bindings:**
-
-| Environment | Platform Config | Pipeline Config |
-|-------------|-----------------|-----------------|
-| **Dev** | DuckDB + MinIO local evaluation | `floe.yaml` shape is stable |
-| **Staging** | Shared Kubernetes services | `floe.yaml` shape is stable |
-| **Prod** | Organization-approved providers | `floe.yaml` shape is stable, subject to approved plugin support |
-
-Provider swaps require the corresponding plugin and composition contract to be implemented and validated.
-
-**Result:** Data-product intent stays separate from platform-owned infrastructure bindings.
-
-### 🌐 Data Mesh Direction
-
-**Federated ownership with computational governance:**
-- Enterprise policies → Domain constraints → Data products (three-tier hierarchy)
-- Data contracts as code (ODCS standard, auto-validated)
-- Compile-time + runtime enforcement (not meetings)
-- Domain teams have autonomy within guardrails
-
-The current alpha exposes the primitives and current state documented in [Capability Status](docs/architecture/capability-status.md). Multi-cluster operational hardening and validated federated Data Mesh operations remain planned, not alpha-proven.
-
----
+The current alpha exposes the primitives documented in
+[Capability Status](docs/architecture/capability-status.md). Multi-cluster
+operational hardening and validated federated Data Mesh operations remain
+planned.
 
 ## Architecture
 
@@ -290,77 +313,41 @@ The current alpha exposes the primitives and current state documented in [Capabi
 ```mermaid
 %%{init: {'theme':'base', 'themeVariables': { 'fontSize':'16px'}}}%%
 flowchart TB
-    L4["<b>Layer 4: DATA</b><br/>Ephemeral Jobs<br/><br/>Owner: Data Engineers<br/>• Write SQL transforms<br/>• Define schedules<br/>• INHERIT platform constraints"]
+    L4["<b>Layer 4: DATA</b><br/>Ephemeral Jobs<br/><br/>Owner: Data Engineers<br/>- Write SQL transforms<br/>- Define schedules<br/>- Inherit platform constraints"]
 
-    L3["<b>Layer 3: SERVICES</b><br/>Long-lived Infrastructure<br/><br/>Owner: Platform Engineers<br/>• Orchestrator, Catalog<br/>• Observability services<br/>• Always running, health probes"]
+    L3["<b>Layer 3: SERVICES</b><br/>Long-lived Infrastructure<br/><br/>Owner: Platform Engineers<br/>- Orchestrator, Catalog<br/>- Observability services<br/>- Runtime endpoints"]
 
-    L2["<b>Layer 2: CONFIGURATION</b><br/>Immutable Policies<br/><br/>Owner: Platform Engineers<br/>• Plugin selection<br/>• Governance rules<br/>• ENFORCED at compile-time"]
+    L2["<b>Layer 2: CONFIGURATION</b><br/>Immutable Policies<br/><br/>Owner: Platform Engineers<br/>- Plugin selection<br/>- Governance rules<br/>- Environment bindings"]
 
-    L1["<b>Layer 1: FOUNDATION</b><br/>Framework Code<br/><br/>Owner: floe Maintainers<br/>• Schemas, validation engine<br/>• Distributed via PyPI + Helm"]
+    L1["<b>Layer 1: FOUNDATION</b><br/>Framework Code<br/><br/>Owner: Floe Maintainers<br/>- Schemas<br/>- Plugin contracts<br/>- Validation engine"]
 
     L4 -->|Connects to| L3
     L3 -->|Configured by| L2
     L2 -->|Built on| L1
-
-    classDef dataLayer fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
-    classDef serviceLayer fill:#F5A623,stroke:#D68910,stroke-width:3px,color:#fff
-    classDef configLayer fill:#9013FE,stroke:#6B0FBF,stroke-width:3px,color:#fff
-    classDef foundationLayer fill:#50E3C2,stroke:#2EB8A0,stroke-width:3px,color:#fff
-
-    class L4 dataLayer
-    class L3 serviceLayer
-    class L2 configLayer
-    class L1 foundationLayer
 ```
 
-**Key principle**: Configuration flows downward only. Data teams cannot weaken platform policies.
+Configuration flows downward. Data workloads consume approved platform
+capabilities; they do not weaken platform policies.
 
-### Two-Tier Configuration
+## Built On Open Standards
 
-```mermaid
-%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'16px'}}}%%
-flowchart LR
-    PM["<b>manifest.yaml</b><br/><br/>Platform Engineers<br/><br/>Infrastructure<br/>Credentials<br/>Governance policies"]
+Floe integrates with established open-source projects and standards:
 
-    FL["<b>floe.yaml</b><br/><br/>Data Engineers<br/><br/>Pipeline logic<br/>Transforms<br/>Schedules"]
+- [Apache Iceberg](https://iceberg.apache.org/) for table format semantics.
+- [Apache Polaris](https://polaris.apache.org/) for Iceberg REST catalog
+  integration.
+- [DuckDB](https://duckdb.org/) for the alpha compute reference path.
+- [dbt](https://www.getdbt.com/) for SQL transformation workflows.
+- [Dagster](https://dagster.io/) for the alpha orchestration reference path.
+- [OpenTelemetry](https://opentelemetry.io/) and
+  [OpenLineage](https://openlineage.io/) for trace and lineage evidence.
 
-    PM -->|Resolves to| FL
-
-    classDef platformConfig fill:#F5A623,stroke:#D68910,stroke-width:3px,color:#fff
-    classDef dataConfig fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
-
-    class PM platformConfig
-    class FL dataConfig
-```
-
-| File | Audience | Contains |
-|------|----------|----------|
-| `manifest.yaml` | Platform Engineers | Infrastructure, credentials, governance policies |
-| `floe.yaml` | Data Engineers | Pipeline logic, transforms, schedules |
-
-**Benefit**: Data teams never see credentials or infrastructure details. Platform team controls standards centrally.
-
----
-
-## Built on the Shoulders of Giants
-
-floe provides **batteries-included OSS defaults** that run on any Kubernetes cluster:
-
-- **[Apache Iceberg](https://iceberg.apache.org/)**: Open table format with ACID transactions
-- **[Apache Polaris](https://polaris.apache.org/)**: Iceberg REST catalog
-- **[DuckDB](https://duckdb.org/)**: High-performance analytics engine
-- **[dbt](https://www.getdbt.com/)**: SQL transformation framework
-- **[Dagster](https://dagster.io/)**: Asset-centric orchestration
-- **[Cube](https://cube.dev/)**: Semantic layer and headless BI
-- **[OpenTelemetry](https://opentelemetry.io/)** + **[OpenLineage](https://openlineage.io/)**: Observability and lineage standards
-
-**Not "integration hell"**: Pre-configured, tested together, deployable with one command. Or swap any component for your cloud service of choice.
-
----
+Cube and other ecosystem integrations remain important to the platform vision,
+but they should be read through the alpha scope above.
 
 ## Documentation
 
-The alpha documentation site is built from `docs/` with Astro Starlight:
+The documentation site is built from `docs/` with Astro Starlight:
 
 ```bash
 make docs-build
@@ -369,64 +356,63 @@ make docs-serve
 
 Start with [Start Here](docs/start-here/index.md).
 
-- **Platform Engineers**: [Deploy Your First Platform](docs/platform-engineers/first-platform.md) • [Validate Your Platform](docs/platform-engineers/validate-platform.md)
-- **Data Engineers**: [Build Your First Data Product](docs/data-engineers/first-data-product.md) • [Validate Your Data Product](docs/data-engineers/validate-data-product.md)
-- **Configuration**: [Reference Index](docs/reference/index.md) • [floe.yaml Schema](docs/reference/floe-yaml-schema.md) • [Compiled Artifacts](docs/contracts/compiled-artifacts.md)
-- **Architecture**: [Four-Layer Model](docs/architecture/four-layer-overview.md) • [Capability Status](docs/architecture/capability-status.md)
-- **Development**: [Contributing Guide](CONTRIBUTING.md) • [Floe Contributor Docs](docs/contributing/index.md)
-- **ADRs**: [Architecture Decision Records](docs/architecture/adr/index.md)
-
----
+- **Alpha release:** [Release Notes](docs/releases/v0.1.0-alpha.1-release-notes.md) • [Release Checklist](docs/releases/v0.1.0-alpha.1-checklist.md)
+- **Platform Engineers:** [Deploy Your First Platform](docs/platform-engineers/first-platform.md) • [Validate Your Platform](docs/platform-engineers/validate-platform.md)
+- **Data Engineers:** [Build Your First Data Product](docs/data-engineers/first-data-product.md) • [Validate Your Data Product](docs/data-engineers/validate-data-product.md)
+- **Demo:** [Customer 360 Golden Demo](docs/demo/customer-360.md)
+- **Configuration:** [Reference Index](docs/reference/index.md) • [floe.yaml Schema](docs/reference/floe-yaml-schema.md) • [Compiled Artifacts](docs/contracts/compiled-artifacts.md)
+- **Architecture:** [Four-Layer Model](docs/architecture/four-layer-overview.md) • [Capability Status](docs/architecture/capability-status.md) • [Plugin Catalog](docs/reference/plugin-catalog.md)
+- **Development:** [Contributing Guide](CONTRIBUTING.md) • [Floe Contributor Docs](docs/contributing/index.md)
+- **ADRs:** [Architecture Decision Records](docs/architecture/adr/index.md)
 
 ## Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contributor setup and workflow.
 
+Code standards:
 
-### Code Standards
-
-- **Type safety**: All code must pass `mypy --strict`
-- **Formatting**: Black (100 char), enforced by ruff
-- **Testing**: >80% coverage, 100% requirement traceability
-- **Security**: No hardcoded secrets, Pydantic validation
-- **Architecture**: Respect layer boundaries
-
----
+- Type safety: `mypy --strict`.
+- Formatting and linting: Ruff.
+- Testing: focused unit/contract tests locally; integration, E2E, and live
+  provider validation on their documented release lanes.
+- Security: no hardcoded secrets, no raw credentials in compiled artifacts.
+- Architecture: respect layer and plugin-contract boundaries.
 
 ## Roadmap
 
-**Current alpha release (v0.1.0-alpha.1)**:
-- [x] Four-layer architecture
-- [x] Two-tier configuration
-- [x] Kubernetes-native deployment
-- [x] Customer 360 demo artifact compilation and validation path
+**Current alpha release (`v0.1.0-alpha.1`):**
 
-**Next candidate work**:
-- [ ] Complete K8s-native testing
-- [ ] Plugin ecosystem docs
-- [ ] Data-team CLI command suite
-- [ ] External plugin support
+- [x] Four-layer architecture.
+- [x] Two-tier configuration.
+- [x] Manifest-declared package cutline.
+- [x] Kubernetes-native Customer 360 validation path.
+- [x] Live AWS S3 + Glue provider compatibility validation.
 
-**Future production hardening**:
-- [ ] Data Mesh extensions
-- [ ] OCI registry integration
-- [ ] Multi-environment workflows
+**Next candidate work:**
 
----
+- [ ] Improve packaged product lifecycle commands.
+- [ ] Expand plugin ecosystem documentation and compatibility ledgers.
+- [ ] Harden provider-specific managed Kubernetes guides after validation.
+- [ ] Continue integration and E2E coverage uplift on weekly/release lanes.
+
+**Future production hardening:**
+
+- [ ] Federated Data Mesh operations.
+- [ ] OCI registry integration for platform configuration artifacts.
+- [ ] Multi-environment production workflows.
+- [ ] Stable public contracts and upgrade policy.
 
 ## License
 
 Apache License 2.0 - See [LICENSE](LICENSE) for details.
 
----
-
 ## Community
 
-- **Issues**: [GitHub Issues](https://github.com/Obsidian-Owl/floe/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/Obsidian-Owl/floe/discussions)
+- **Issues:** [GitHub Issues](https://github.com/Obsidian-Owl/floe/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/Obsidian-Owl/floe/discussions)
 
 ---
 
 <div align="center">
-  <sub>Built with ❤️ by the floe community</sub>
+  <sub>Built by the Floe community.</sub>
 </div>
