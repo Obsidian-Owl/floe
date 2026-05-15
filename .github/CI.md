@@ -9,9 +9,9 @@ validates that manifest before release-specific workflows publish artifacts.
 | Trigger | Workflow | Purpose |
 |---|---|---|
 | Pull request | `ci.yml` | Fast PR confidence plus release manifest structure |
-| `merge_group` / pull request label `run-e2e` / infra path / manual | `e2e.yml` | Opt-in full E2E validation |
+| Manual | `e2e.yml` | Opt-in full E2E validation outside PR and release lanes |
 | Manual | `prepare-release.yml` | Runs all release gates, creates tag and GitHub Release only on success |
-| Successful Prepare Release | `pypi-publish.yml` | Builds and publishes the manifest package set |
+| Successful Prepare Release / manual `release_tag` backfill | `pypi-publish.yml` | Builds and publishes the manifest package set |
 | Manual | `release.yml` | Release-validation smoke only; does not create tags or GitHub Releases |
 | Tag `helm-v*` / `charts-v*` / manual | `helm-release.yaml` | Helm chart release when manifest policy allows |
 | Schedule / manual | `weekly.yml`, `security.yml`, `codspeed.yml` | Drift, security, performance maintenance |
@@ -37,14 +37,10 @@ PR CI stays fast and structural. It does not run live cloud/provider validation.
 
 ## E2E (`e2e.yml`)
 
-E2E runs only when explicitly requested or when paths that can affect the live
-platform change:
-
-- `merge_group`
-- `workflow_dispatch`
-- PR label `run-e2e`
-- Infra path filter, including charts, tests, packages/plugins, workflow files,
-  `release/floe-release.yaml`, and `testing/release/**`
+E2E runs only when explicitly requested with `workflow_dispatch`. Weekly
+validation owns scheduled long-running coverage, and `prepare-release.yml` owns
+release-blocking E2E/live validation. Pull requests and merge queues do not run
+the long E2E lane automatically.
 
 Failures should be classified as product, infrastructure, credential/setup, or
 cleanup failures before deciding whether to rerun or block the release.
@@ -60,6 +56,11 @@ only after all gates pass.
 Dry runs execute the same gates without creating a tag, GitHub Release, or PyPI
 publication. Real runs use `dry_run=false`; that successful workflow run uploads
 the release metadata consumed by `pypi-publish.yml`.
+
+If a GitHub Release already exists and PyPI publication needs to be retried
+after fixing the publish workflow, maintainers may dispatch `pypi-publish.yml`
+with an existing `release_tag` and `dry_run=false`. The workflow still validates
+the manifest and publishes only `python_packages.publish`.
 
 If a release gate fails, the workflow creates or updates a GitHub issue and
 records which outputs were skipped. Product, infrastructure, credential/setup,

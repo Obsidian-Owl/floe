@@ -261,17 +261,20 @@ class TestPypiPublishWorkflow:
         assert "github.event_name == 'workflow_run'" in workflow_text
         assert "github.event.workflow_run.conclusion == 'success'" in workflow_text
         assert "github.event.workflow_run.event == 'workflow_dispatch'" in workflow_text
-        assert "github.event.workflow_run.name == 'Prepare Release'" in workflow_text
+        assert "github.event.workflow_run.path == '.github/workflows/prepare-release.yml'" in (
+            workflow_text
+        )
+        assert "github.event.workflow_run.name == 'Prepare Release'" not in workflow_text
         assert "github.event.workflow_run.display_title" not in workflow_text
         assert "gh run download" in workflow_text
         assert "--name release-metadata" in workflow_text
+        assert "awk '{print $1}' | head -n 1" in workflow_text
         assert "publish=true" in workflow_text
         assert "publish=false" in workflow_text
         assert (
-            "ref: ${{ github.event_name == 'workflow_run' && "
-            "steps.release_metadata.outputs.sha || github.ref }}"
+            "ref: ${{ steps.release_metadata.outputs.sha || "
+            "steps.release_metadata.outputs.tag || github.ref }}"
         ) in workflow_text
-        assert "steps.release_metadata.outputs.tag || github.ref" not in workflow_text
         assert "startsWith(github.event.workflow_run.head_branch" not in workflow_text
         assert "github.event.workflow_run.head_branch" not in workflow_text
 
@@ -288,13 +291,26 @@ class TestPypiPublishWorkflow:
 
     @pytest.mark.requirement("REL-GATE-PUBLISH")
     def test_manual_pypi_dispatch_is_build_only_dry_run(self) -> None:
-        """Manual PyPI dispatch keeps dry-run support but cannot upload artifacts."""
+        """Manual PyPI dispatch defaults to dry-run and requires a tag to publish."""
         workflow_text = PYPI_WORKFLOW.read_text(encoding="utf-8")
+        publish_job = workflow_text.split("\n  publish:", maxsplit=1)[1].split(
+            "\n  verify:",
+            maxsplit=1,
+        )[0]
 
         assert "workflow_dispatch:" in workflow_text
+        assert "release_tag:" in workflow_text
         assert "dry_run:" in workflow_text
-        assert "github.event_name == 'workflow_run'" in workflow_text
-        assert "inputs.dry_run" not in workflow_text
+        assert "inputs.dry_run == false" in workflow_text
+        assert "inputs.release_tag != ''" in workflow_text
+        assert "(\n        github.event_name == 'workflow_run' &&" in publish_job
+        assert ")\n      ||\n      (" in publish_job
+        assert "MANUAL_RELEASE_TAG" in workflow_text
+        assert "github.com/${GITHUB_REPOSITORY}.git" in workflow_text
+        assert "refs/tags/${MANUAL_RELEASE_TAG}" in workflow_text
+        assert "^v[0-9]+\\.[0-9]+\\.[0-9]+(-alpha\\.[0-9]+)?$" in workflow_text
+        assert "Manual PyPI publish backfill requested" in workflow_text
+        assert '[[ "${EVENT_NAME}" == "workflow_run" || -n "${RELEASE_TAG}" ]]' in workflow_text
 
 
 class TestReleaseWorkflowAuthority:
