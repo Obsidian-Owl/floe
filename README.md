@@ -24,6 +24,32 @@
 
 ---
 
+## Alpha Release Notice
+
+`v0.1.0-alpha.1` is an evaluation release for the documented Customer 360
+validation path and the manifest-declared alpha package cutline. APIs,
+configuration schemas, Helm values, generated artifacts, and plugin contracts
+may change before a stable release.
+
+Do not run Floe alpha releases with production data, production credentials,
+regulated workloads, customer-facing SLAs, or production-scale loads. Use
+isolated test accounts, synthetic or disposable data, scoped credentials,
+separate Kubernetes clusters/namespaces, and explicit cost limits when
+evaluating the platform.
+
+Floe is distributed under the Apache License 2.0 on an "AS IS" basis, without
+warranties or conditions. See [LICENSE](LICENSE) for the full license terms.
+
+**Alpha-supported today:**
+- Customer 360 demo compilation and validation.
+- The 15 Python packages declared in `release/floe-release.yaml`.
+- Local/dev Kubernetes evaluation paths documented in `docs/`.
+
+**Not alpha-supported today:**
+- Production data platform operation.
+- Production availability, backup, recovery, migration, or support guarantees.
+- Unbounded cloud-provider, Kubernetes, or data-processing workloads.
+
 ## What is floe?
 
 **floe** is an open platform for building internal data platforms.
@@ -41,7 +67,7 @@
 - ✅ Standards enforced automatically (compile-time validation)
 - ✅ Composition boundaries for the alpha path, with broader provider interchangeability tracked as follow-on work
 
-**Batteries included. Extensible by plugin. Alpha-ready for the documented Customer 360 validation path.**
+**Batteries included. Extensible by plugin. Alpha-ready for isolated evaluation of the documented Customer 360 validation path.**
 
 ---
 
@@ -369,7 +395,7 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Roadmap
 
-**Current alpha target (v0.1.0-alpha.1 release candidate)**:
+**Current alpha release (v0.1.0-alpha.1)**:
 - [x] Four-layer architecture
 - [x] Two-tier configuration
 - [x] Kubernetes-native deployment

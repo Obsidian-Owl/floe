@@ -71,8 +71,21 @@ Publishing package: pypa/gh-action-pypi-publish
 
 1. Verify all 15 alpha packages are covered by the PyPI account token and
    project ownership.
-2. The `pypi-publish.yml` workflow, triggered by version tags, builds the
-   manifest package set and uploads artifacts with `PYPI_API_TOKEN`.
+2. A successful non-dry-run `prepare-release.yml` run uploads release metadata.
+3. The downstream `pypi-publish.yml` workflow builds only the manifest package
+   set and uploads artifacts with `PYPI_API_TOKEN`.
+
+If the GitHub Release already exists and the downstream publish workflow needs
+to be retried after a workflow fix, dispatch `pypi-publish.yml` manually with:
+
+```bash
+gh workflow run pypi-publish.yml \
+  -f release_tag=v0.1.0-alpha.1 \
+  -f dry_run=false
+```
+
+Manual publishing must always provide an existing `release_tag`; manual runs
+default to `dry_run=true`.
 
 ## Metadata
 

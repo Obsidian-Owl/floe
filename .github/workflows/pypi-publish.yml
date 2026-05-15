@@ -21,14 +21,18 @@ on:
     types: [completed]
   workflow_dispatch:
     inputs:
+      release_tag:
+        description: 'Existing release tag to build or publish, for example v0.1.0-alpha.1'
+        required: false
+        type: string
       dry_run:
-        description: 'Build packages without uploading (manual dispatch never publishes)'
+        description: 'Build packages without uploading; set false with release_tag to publish'
         required: false
         default: true
         type: boolean
 
 concurrency:
-  group: pypi-publish-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+  group: pypi-publish-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.release_tag || github.ref }}
   cancel-in-progress: false
 
 env:
@@ -43,7 +47,7 @@ jobs:
       (
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.event == 'workflow_dispatch' &&
-        github.event.workflow_run.name == 'Prepare Release'
+        github.event.workflow_run.path == '.github/workflows/prepare-release.yml'
       )
     runs-on: ubuntu-latest
     permissions:
@@ -56,13 +60,47 @@ jobs:
     steps:
       - name: Resolve release metadata
         id: release_metadata
-        if: github.event_name == 'workflow_run'
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_DRY_RUN: ${{ inputs.dry_run }}
+          MANUAL_RELEASE_TAG: ${{ inputs.release_tag }}
           WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           set -euo pipefail
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            if [[ "${MANUAL_DRY_RUN}" != "true" && -z "${MANUAL_RELEASE_TAG}" ]]; then
+              echo "::error::Manual PyPI publish requires release_tag when dry_run is false."
+              exit 1
+            fi
+            if [[ -z "${MANUAL_RELEASE_TAG}" ]]; then
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [[ "${MANUAL_RELEASE_TAG}" != v* ]]; then
+              echo "::error::Manual release_tag must start with 'v': ${MANUAL_RELEASE_TAG}"
+              exit 1
+            fi
+            REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
+            TAG_REF="refs/tags/${MANUAL_RELEASE_TAG}"
+            SHA="$(git ls-remote --tags "${REPO_URL}" "${TAG_REF}^{}" | awk '{print $1}')"
+            if [[ -z "${SHA}" ]]; then
+              SHA="$(git ls-remote --tags "${REPO_URL}" "${TAG_REF}" | awk '{print $1}')"
+            fi
+            if [[ -z "${SHA}" ]]; then
+              echo "::error::Release tag does not exist on origin: ${MANUAL_RELEASE_TAG}"
+              exit 1
+            fi
+            {
+              echo "publish=true"
+              echo "tag=${MANUAL_RELEASE_TAG}"
+              echo "sha=${SHA}"
+              echo "version="
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if ! gh run download "${WORKFLOW_RUN_ID}" \
             --name release-metadata \
             --dir release-metadata; then
@@ -107,7 +145,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || steps.release_metadata.outputs.publish == 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event_name == 'workflow_run' && steps.release_metadata.outputs.sha || github.ref }}
+          ref: ${{ steps.release_metadata.outputs.sha || steps.release_metadata.outputs.tag || github.ref }}
 
       - name: Set up Python
         if: github.event_name == 'workflow_dispatch' || steps.release_metadata.outputs.publish == 'true'
@@ -139,6 +177,16 @@ jobs:
           if [[ "${EVENT_NAME}" == "workflow_run" ]]; then
             VERSION="${RELEASE_VERSION}"
             TAG="${RELEASE_TAG}"
+          elif [[ -n "${RELEASE_TAG}" ]]; then
+            VERSION="$(uv run python - <<'PY'
+          import os
+
+          from testing.release.manifest import normalize_tag_to_python_version
+
+          print(normalize_tag_to_python_version(os.environ["RELEASE_TAG"]))
+          PY
+          )"
+            TAG="${RELEASE_TAG}"
           elif [[ "${GH_REF_TYPE}" == "tag" ]]; then
             VERSION="${GH_REF#refs/tags/v}"
             TAG="${GH_REF#refs/tags/}"
@@ -160,6 +208,10 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${EVENT_NAME}" == "workflow_run" ]]; then
+            uv run python -m testing.release.cli validate \
+              --manifest release/floe-release.yaml \
+              --tag "${RELEASE_TAG}"
+          elif [[ -n "${RELEASE_TAG}" ]]; then
             uv run python -m testing.release.cli validate \
               --manifest release/floe-release.yaml \
               --tag "${RELEASE_TAG}"
@@ -198,8 +250,15 @@ jobs:
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'workflow_dispatch' &&
-      github.event.workflow_run.name == 'Prepare Release' &&
       needs.build.outputs.publish == 'true'
+      && github.event.workflow_run.path == '.github/workflows/prepare-release.yml'
+      ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        inputs.dry_run == false &&
+        inputs.release_tag != '' &&
+        needs.build.outputs.publish == 'true'
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
