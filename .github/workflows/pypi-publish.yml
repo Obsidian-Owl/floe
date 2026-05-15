@@ -78,15 +78,16 @@ jobs:
               echo "publish=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            if [[ "${MANUAL_RELEASE_TAG}" != v* ]]; then
-              echo "::error::Manual release_tag must start with 'v': ${MANUAL_RELEASE_TAG}"
+            if [[ ! "${MANUAL_RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-alpha\.[0-9]+)?$ ]]; then
+              echo "::error::Manual release_tag must match the release manifest tag format: ${MANUAL_RELEASE_TAG}"
               exit 1
             fi
+            echo "::notice::Manual PyPI publish backfill requested for ${MANUAL_RELEASE_TAG} by ${GITHUB_ACTOR}; dry_run=${MANUAL_DRY_RUN}"
             REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
             TAG_REF="refs/tags/${MANUAL_RELEASE_TAG}"
-            SHA="$(git ls-remote --tags "${REPO_URL}" "${TAG_REF}^{}" | awk '{print $1}')"
+            SHA="$(git ls-remote --tags "${REPO_URL}" "${TAG_REF}^{}" | awk '{print $1}' | head -n 1)"
             if [[ -z "${SHA}" ]]; then
-              SHA="$(git ls-remote --tags "${REPO_URL}" "${TAG_REF}" | awk '{print $1}')"
+              SHA="$(git ls-remote --tags "${REPO_URL}" "${TAG_REF}" | awk '{print $1}' | head -n 1)"
             fi
             if [[ -z "${SHA}" ]]; then
               echo "::error::Release tag does not exist on origin: ${MANUAL_RELEASE_TAG}"
@@ -207,11 +208,7 @@ jobs:
           GH_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-          if [[ "${EVENT_NAME}" == "workflow_run" ]]; then
-            uv run python -m testing.release.cli validate \
-              --manifest release/floe-release.yaml \
-              --tag "${RELEASE_TAG}"
-          elif [[ -n "${RELEASE_TAG}" ]]; then
+          if [[ "${EVENT_NAME}" == "workflow_run" || -n "${RELEASE_TAG}" ]]; then
             uv run python -m testing.release.cli validate \
               --manifest release/floe-release.yaml \
               --tag "${RELEASE_TAG}"
@@ -247,11 +244,13 @@ jobs:
     name: Publish to PyPI
     needs: build
     if: >-
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'workflow_dispatch' &&
-      needs.build.outputs.publish == 'true'
-      && github.event.workflow_run.path == '.github/workflows/prepare-release.yml'
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'workflow_dispatch' &&
+        needs.build.outputs.publish == 'true' &&
+        github.event.workflow_run.path == '.github/workflows/prepare-release.yml'
+      )
       ||
       (
         github.event_name == 'workflow_dispatch' &&
