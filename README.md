@@ -18,6 +18,7 @@
     <a href="#quick-start">Quick Start</a> •
     <a href="#alpha-scope">Alpha Scope</a> •
     <a href="#vision">Vision</a> •
+    <a href="#features">Features</a> •
     <a href="#documentation">Documentation</a> •
     <a href="#contributing">Contributing</a>
   </p>
@@ -324,6 +325,16 @@ flowchart TB
     L4 -->|Connects to| L3
     L3 -->|Configured by| L2
     L2 -->|Built on| L1
+
+    classDef dataLayer fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    classDef serviceLayer fill:#F5A623,stroke:#D68910,stroke-width:3px,color:#fff
+    classDef configLayer fill:#9013FE,stroke:#6B0FBF,stroke-width:3px,color:#fff
+    classDef foundationLayer fill:#50E3C2,stroke:#2EB8A0,stroke-width:3px,color:#fff
+
+    class L4 dataLayer
+    class L3 serviceLayer
+    class L2 configLayer
+    class L1 foundationLayer
 ```
 
 Configuration flows downward. Data workloads consume approved platform
