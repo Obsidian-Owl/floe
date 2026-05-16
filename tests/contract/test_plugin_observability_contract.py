@@ -34,6 +34,7 @@ def test_alpha_plugin_types_have_observability_categories() -> None:
         "QUALITY",
         "RBAC",
         "ALERT_CHANNEL",
+        "NETWORK_SECURITY",
     }
 
     assert expected.issubset({member.name for member in PluginType})
