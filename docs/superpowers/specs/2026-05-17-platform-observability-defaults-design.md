@@ -167,6 +167,71 @@ The context should be available to:
 - quality/business validation checks;
 - lineage emission.
 
+### Shared Plugin Lifecycle Instrumentation
+
+All plugin categories share lifecycle points through `PluginMetadata` and the
+plugin lifecycle manager:
+
+- configuration validation and `configure()`;
+- plugin activation through `startup()`;
+- dependency-aware activation order;
+- `health_check()`;
+- `shutdown()`;
+- plugin load/discovery failures.
+
+These lifecycle points should emit structured logs, spans, and bounded metrics
+for every plugin type. They should record plugin type, plugin name, version,
+floe API version, lifecycle phase, status, duration, and sanitized error class.
+
+Lifecycle observability is different from product runtime observability. It
+answers whether the platform and selected plugins are deployable and healthy.
+Runtime observability answers what happened during a data product run. Alpha
+validation should cover both where they affect the Customer 360 proof.
+
+### Plugin-Type Observability Requirements
+
+The current `PluginType` enum defines 14 plugin categories. The source tree also
+contains plugin interfaces for network security, secret scanning, and sink
+connectors that are not all first-class `PluginType` enum members. The
+implementation plan must explicitly reconcile that registry surface.
+
+| Plugin category | Lifecycle points requiring observability | Alpha scope |
+| --- | --- | --- |
+| Compute | dbt profile generation, catalog attachment SQL, macro path discovery, connection validation, resource requirement selection, runtime availability checks | Required for active compute plugin; query execution internals only when owned by the plugin |
+| Orchestrator | definition generation, asset/job/sensor/schedule creation, run start/end, asset materialization, retries, failure classification, lineage forwarding | Required |
+| Catalog | connect, namespace create/list/delete, table create/list/load/drop, credential vending, deployment binding generation, health checks | Required for active catalog; credential values must never be emitted |
+| Storage | FileIO creation, warehouse URI resolution, PyIceberg catalog config, dbt profile config, Dagster IO manager config, Helm overrides, deployment binding generation, object read/write/delete where owned by Floe | Required for active storage; low-level library IO may be summarized at Floe wrapper boundaries |
+| Telemetry backend | exporter config generation, Helm values, collector pipeline validation, backend connection validation | Required as platform health evidence; backend internals remain plugin-owned |
+| Lineage backend | transport config generation, namespace strategy, Helm values, connection validation, lineage event send/ack/failure | Required |
+| DBT | compile, run, test, lint, manifest load, run result load, per-node model/test execution, callback event handling | Required for active dbt runtime |
+| Semantic layer | dbt manifest sync, security context generation, datasource config generation, API endpoint exposure, Helm overrides, semantic API health/query readiness | Required when semantic layer is part of alpha demo proof, especially Cube |
+| Ingestion | pipeline creation, source binding, run start/end, source load, destination table write, rows/bytes/duration/failure, deployment binding generation | Required for active ingestion plugin |
+| Secrets | secret reference lookup, secret write if supported, multi-key lookup, pod env spec generation, backend availability, access denied/not found classification | Required for platform health; runtime proof should record only reference identity and outcome, never key values or secret names if they are sensitive |
+| Identity | authentication, token validation, user info lookup, OIDC config discovery, issuer/realm availability, access-denied/token-expired classification | Required for configured identity paths; do not emit tokens or PII |
+| Quality | config validation, quality gate validation, suite/check execution, expectation mapping, quality score calculation, quality lineage facets | Required for active quality checks |
+| RBAC | service account, role, role binding, namespace, and pod security context generation | Required as compile/deploy evidence; not a Customer 360 runtime trace unless invoked during deployment validation |
+| Alert channel | alert config validation, delivery attempt, retry, success/failure, destination type, contract violation correlation | Required for alert plugins selected in alpha; actual destinations may be mocked only in non-live tests |
+
+Additional interfaces and registry gaps:
+
+- Network security plugins expose policy, default-deny, DNS egress, pod security,
+  container security, and writable-volume generation. They have an entry point
+  in existing plugin packages and should be observable as security deployment
+  evidence. The implementation plan should decide whether to add
+  `PluginType.NETWORK_SECURITY` or document a separate extension path.
+- Secret scanner plugins expose file and directory scanning. They should emit
+  scan duration, finding counts by severity/type, and sanitized failure details
+  when enabled. They should not emit file contents or secret material.
+- Sink connectors expose sink discovery, sink creation, writes, and source
+  config generation. When implemented by an ingestion plugin, sink writes should
+  be traced as egress operations with rows, bytes, destination type, and status.
+
+This does not mean every plugin category must receive deep runtime
+instrumentation in the first alpha implementation. It does mean every plugin
+category must have an explicit observability decision: required now, compile or
+deployment evidence only, deferred until the plugin enters the alpha cutline, or
+registry contract cleanup first.
+
 ### Layer 2: Orchestrator Runtime Envelopes
 
 The orchestrator plugin owns the default runtime envelope because it generates
@@ -203,11 +268,13 @@ Required alpha plugin coverage:
   bytes, duration, and failure metadata.
 - Iceberg: table create, load, write, commit, read validation, and failure
   spans.
-- catalog: namespace/table/catalog API operation spans with sanitized endpoint
-  identity.
-- storage: object/prefix operation spans and metrics using logical storage
-  identity, never credentials.
+- catalog: connect, namespace/table/catalog API operation spans, credential
+  vending outcomes, and health checks with sanitized endpoint identity.
+- storage: deployment binding/config generation plus object/prefix operation
+  spans and metrics using logical storage identity, never credentials.
 - lineage: OpenLineage event emission spans and correlation attributes.
+- secrets and identity: security-sensitive lifecycle and access outcomes with
+  no tokens, secret values, or PII.
 - quality/business validation: check-level spans, pass/fail metrics, and
   structured logs.
 
@@ -366,12 +433,16 @@ Docs should clearly distinguish:
 This design should be implemented through separate bounded plans:
 
 1. Observability context and semantic convention cleanup.
-2. Orchestrator runtime envelopes for generated execution units.
-3. Plugin instrumentation uplift for dbt, dlt, Iceberg, catalog, storage,
+2. Plugin registry surface reconciliation for network security, secret
+   scanning, and sink connector observability decisions.
+3. Orchestrator runtime envelopes for generated execution units.
+4. Plugin instrumentation uplift for dbt, dlt, Iceberg, catalog, storage,
    lineage, and validation paths.
-4. OTel collector and backend profile wiring for traces, metrics, and logs.
-5. Customer 360 proof gate and release validation uplift.
-6. Documentation and troubleshooting updates.
+5. Security-sensitive lifecycle instrumentation for secrets, identity, RBAC,
+   alert channels, and network security deployment evidence.
+6. OTel collector and backend profile wiring for traces, metrics, and logs.
+7. Customer 360 proof gate and release validation uplift.
+8. Documentation and troubleshooting updates.
 
 These workstreams should be planned separately before implementation to avoid a
 large, hard-to-review observability rewrite.
