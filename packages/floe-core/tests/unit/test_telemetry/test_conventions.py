@@ -17,14 +17,23 @@ from __future__ import annotations
 import pytest
 
 from floe_core.telemetry.conventions import (
+    FLOE_ASSET_KEY,
     FLOE_DAGSTER_ASSET,
     FLOE_DBT_MODEL,
+    FLOE_ENVIRONMENT,
     FLOE_JOB_TYPE,
+    FLOE_LINEAGE_NAMESPACE,
     FLOE_MODE,
     FLOE_NAMESPACE,
     FLOE_PIPELINE_ID,
+    FLOE_PLUGIN_NAME,
+    FLOE_PLUGIN_TYPE,
     FLOE_PRODUCT_NAME,
     FLOE_PRODUCT_VERSION,
+    FLOE_RUN_ID,
+    FLOE_STAGE,
+    FLOE_STATUS,
+    FLOE_TABLE_NAME,
     FloeSpanAttributes,
 )
 
@@ -73,6 +82,19 @@ class TestFloeSpanAttributesToOtelDict:
         assert FLOE_PRODUCT_NAME in result
         assert FLOE_PRODUCT_VERSION in result
         assert FLOE_MODE in result
+
+    @pytest.mark.requirement("FR-019")
+    def test_observability_context_constants_use_expected_keys(self) -> None:
+        """Test semantic constants used by ObservabilityContext."""
+        assert FLOE_ENVIRONMENT == "floe.environment"
+        assert FLOE_RUN_ID == "floe.run.id"
+        assert FLOE_ASSET_KEY == "floe.asset.key"
+        assert FLOE_STAGE == "floe.stage"
+        assert FLOE_TABLE_NAME == "floe.table.name"
+        assert FLOE_PLUGIN_TYPE == "floe.plugin.type"
+        assert FLOE_PLUGIN_NAME == "floe.plugin.name"
+        assert FLOE_LINEAGE_NAMESPACE == "floe.lineage.namespace"
+        assert FLOE_STATUS == "floe.status"
 
     @pytest.mark.requirement("FR-019")
     def test_to_otel_dict_excludes_none_optionals(self) -> None:

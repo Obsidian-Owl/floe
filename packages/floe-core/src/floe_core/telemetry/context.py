@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, cast
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 from floe_core.telemetry.conventions import (
     FLOE_ASSET_KEY,
@@ -21,8 +22,11 @@ from floe_core.telemetry.conventions import (
 )
 
 _SECRET_KEY_MARKERS = ("secret", "password", "token", "credential", "private_key")
+_REDACTED = "[REDACTED]"
+_SUPPORTED_STATUSES = frozenset(("success", "failure", "error", "skipped"))
 
 AttributeValue = str | int | float | bool
+ObservabilityStatus = Literal["success", "failure", "error", "skipped"]
 
 
 def _is_secret_key(key: str) -> bool:
@@ -31,11 +35,68 @@ def _is_secret_key(key: str) -> bool:
     return any(marker in lowered for marker in _SECRET_KEY_MARKERS)
 
 
+def _contains_unsafe_value(value: Any) -> bool:
+    """Return True when a nested value may contain secret material."""
+    if isinstance(value, dict):
+        return any(
+            _is_secret_key(str(key)) or _contains_unsafe_value(nested_value)
+            for key, nested_value in value.items()
+        )
+    if isinstance(value, list | tuple | set | frozenset):
+        return any(_contains_unsafe_value(item) for item in value)
+    if isinstance(value, str):
+        return _has_url_credentials(value)
+    return False
+
+
+def _has_url_credentials(value: str) -> bool:
+    """Return True when a string URL includes userinfo credentials."""
+    parsed = urlsplit(value)
+    return bool(parsed.scheme and parsed.netloc and (parsed.username or parsed.password))
+
+
+def _redact_url_credentials(value: str) -> str:
+    """Remove userinfo credentials from URL strings."""
+    parsed = urlsplit(value)
+    if not (parsed.scheme and parsed.netloc and (parsed.username or parsed.password)):
+        return value
+
+    hostname = parsed.hostname
+    if hostname is None:
+        return _REDACTED
+
+    host = f"[{hostname}]" if ":" in hostname and not hostname.startswith("[") else hostname
+    netloc = f"{host}:{parsed.port}" if parsed.port is not None else host
+    return urlunsplit(
+        SplitResult(
+            scheme=parsed.scheme,
+            netloc=netloc,
+            path=parsed.path,
+            query=parsed.query,
+            fragment=parsed.fragment,
+        )
+    )
+
+
 def _clean_value(value: Any) -> AttributeValue:
     """Convert arbitrary attribute values to OpenTelemetry-compatible scalars."""
-    if isinstance(value, str | int | float | bool):
+    if isinstance(value, str):
+        return _redact_url_credentials(value)
+    if _contains_unsafe_value(value):
+        return _REDACTED
+    if isinstance(value, int | float | bool):
         return value
     return str(value)
+
+
+def _validate_status(status: str) -> ObservabilityStatus:
+    """Validate metric status labels against the bounded vocabulary."""
+    if status not in _SUPPORTED_STATUSES:
+        supported = ", ".join(sorted(_SUPPORTED_STATUSES))
+        raise ValueError(
+            f"Unsupported observability status {status!r}; expected one of: {supported}"
+        )
+    return cast(ObservabilityStatus, status)
 
 
 @dataclass(frozen=True)
@@ -88,7 +149,11 @@ class ObservabilityContext:
         """Return sanitized structured log fields for this context."""
         return self.to_span_attributes()
 
-    def to_metric_labels(self, *, status: str | None = None) -> dict[str, str]:
+    def to_metric_labels(
+        self,
+        *,
+        status: ObservabilityStatus | str | None = None,
+    ) -> dict[str, str]:
         """Return bounded-cardinality labels safe for metric aggregation."""
         labels: dict[str, str] = {
             FLOE_PRODUCT_NAME: self.product_name,
@@ -100,7 +165,7 @@ class ObservabilityContext:
             FLOE_STAGE: self.stage,
             FLOE_PLUGIN_TYPE: self.plugin_type,
             FLOE_PLUGIN_NAME: self.plugin_name,
-            FLOE_STATUS: status,
+            FLOE_STATUS: _validate_status(status) if status is not None else None,
         }
         labels.update({key: value for key, value in optionals.items() if value is not None})
         return labels

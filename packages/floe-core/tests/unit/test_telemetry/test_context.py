@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from floe_core.telemetry.context import ObservabilityContext
 
 
@@ -85,3 +87,54 @@ def test_observability_context_rejects_secret_like_fields() -> None:
     assert attrs["floe.storage.bucket"] == "warehouse"
     assert "aws.secret_access_key" not in attrs
     assert "password" not in attrs
+
+
+def test_observability_context_redacts_nested_secret_like_values() -> None:
+    """Safe-looking keys do not emit raw nested secret material."""
+    ctx = ObservabilityContext(
+        product_name="customer-360",
+        product_version="0.1.0",
+        environment="demo",
+        namespace="customer_360",
+        extra_attributes={
+            "db.config": {
+                "host": "warehouse.local",
+                "password": "nested-leak",  # pragma: allowlist secret
+            },
+        },
+    )
+
+    attrs = ctx.to_span_attributes()
+
+    assert attrs["db.config"] == "[REDACTED]"
+
+
+def test_observability_context_redacts_url_credentials() -> None:
+    """URL userinfo is removed before attributes are emitted."""
+    ctx = ObservabilityContext(
+        product_name="customer-360",
+        product_version="0.1.0",
+        environment="demo",
+        namespace="customer_360",
+        extra_attributes={
+            # pragma: allowlist nextline secret
+            "floe.endpoint": "https://user:pass@example.com/path?region=us",
+        },
+    )
+
+    attrs = ctx.to_span_attributes()
+
+    assert attrs["floe.endpoint"] == "https://example.com/path?region=us"
+
+
+def test_observability_context_rejects_high_cardinality_status() -> None:
+    """Metric status labels are constrained to a bounded vocabulary."""
+    ctx = ObservabilityContext(
+        product_name="customer-360",
+        product_version="0.1.0",
+        environment="demo",
+        namespace="customer_360",
+    )
+
+    with pytest.raises(ValueError, match="Unsupported observability status"):
+        ctx.to_metric_labels(status="failed because customer 123 broke")
