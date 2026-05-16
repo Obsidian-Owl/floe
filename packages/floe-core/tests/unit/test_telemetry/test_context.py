@@ -127,6 +127,44 @@ def test_observability_context_redacts_url_credentials() -> None:
     assert attrs["floe.endpoint"] == "https://example.com/path?region=us"
 
 
+def test_observability_context_redacts_malformed_credential_url_without_raising() -> None:
+    """Malformed credential-bearing URLs fail closed during sanitization."""
+    ctx = ObservabilityContext(
+        product_name="customer-360",
+        product_version="0.1.0",
+        environment="demo",
+        namespace="customer_360",
+        extra_attributes={
+            # pragma: allowlist nextline secret
+            "floe.endpoint": "https://user:pass@example.com:bad/path",
+        },
+    )
+
+    attrs = ctx.to_span_attributes()
+
+    assert "user:pass" not in attrs["floe.endpoint"]
+
+
+def test_observability_context_extra_attributes_cannot_override_canonical_values() -> None:
+    """Extra attributes cannot replace canonical Floe context values."""
+    ctx = ObservabilityContext(
+        product_name="customer-360",
+        product_version="0.1.0",
+        environment="demo",
+        namespace="customer_360",
+        run_id="run-123",
+        extra_attributes={
+            "floe.product.name": "wrong-product",
+            "floe.run.id": "wrong-run",
+        },
+    )
+
+    attrs = ctx.to_span_attributes()
+
+    assert attrs["floe.product.name"] == "customer-360"
+    assert attrs["floe.run.id"] == "run-123"
+
+
 def test_observability_context_rejects_high_cardinality_status() -> None:
     """Metric status labels are constrained to a bounded vocabulary."""
     ctx = ObservabilityContext(

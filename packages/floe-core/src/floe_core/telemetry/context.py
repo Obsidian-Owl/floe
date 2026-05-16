@@ -61,12 +61,11 @@ def _redact_url_credentials(value: str) -> str:
     if not (parsed.scheme and parsed.netloc and (parsed.username or parsed.password)):
         return value
 
-    hostname = parsed.hostname
-    if hostname is None:
+    try:
+        netloc = _safe_url_netloc(parsed)
+    except ValueError:
         return _REDACTED
 
-    host = f"[{hostname}]" if ":" in hostname and not hostname.startswith("[") else hostname
-    netloc = f"{host}:{parsed.port}" if parsed.port is not None else host
     return urlunsplit(
         SplitResult(
             scheme=parsed.scheme,
@@ -76,6 +75,16 @@ def _redact_url_credentials(value: str) -> str:
             fragment=parsed.fragment,
         )
     )
+
+
+def _safe_url_netloc(parsed: SplitResult) -> str:
+    """Return URL netloc without userinfo, failing closed on malformed ports."""
+    hostname = parsed.hostname
+    if hostname is None:
+        raise ValueError("URL host is required")
+
+    host = f"[{hostname}]" if ":" in hostname and not hostname.startswith("[") else hostname
+    return f"{host}:{parsed.port}" if parsed.port is not None else host
 
 
 def _clean_value(value: Any) -> AttributeValue:
@@ -136,13 +145,10 @@ class ObservabilityContext:
         }
         attrs.update({key: value for key, value in optionals.items() if value is not None})
 
-        attrs.update(
-            {
-                key: _clean_value(value)
-                for key, value in self.extra_attributes.items()
-                if not _is_secret_key(key)
-            }
-        )
+        for key, value in self.extra_attributes.items():
+            if _is_secret_key(key) or key in attrs:
+                continue
+            attrs[key] = _clean_value(value)
         return attrs
 
     def to_log_fields(self) -> dict[str, AttributeValue]:
