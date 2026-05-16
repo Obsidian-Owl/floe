@@ -27,16 +27,20 @@ Requirements Covered:
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from floe_core.plugin_errors import PluginStartupError
 from floe_core.plugin_metadata import HealthState, HealthStatus, PluginMetadata
 from floe_core.plugin_types import PluginType
+from floe_core.telemetry.lifecycle import plugin_lifecycle_attributes
+from floe_core.telemetry.metrics import MetricRecorder
+from floe_core.telemetry.tracing import create_span
 
 if TYPE_CHECKING:
     from floe_core.plugins.loader import PluginLoader
@@ -48,6 +52,17 @@ DEFAULT_LIFECYCLE_TIMEOUT: float = 30.0
 
 # Default timeout for health checks (SC-007: 5 seconds)
 DEFAULT_HEALTH_CHECK_TIMEOUT: float = 5.0
+
+_LIFECYCLE_DURATION_METRIC = "floe.plugin.lifecycle.duration"
+_LIFECYCLE_FAILURES_METRIC = "floe.plugin.lifecycle.failures"
+_STARTUP_SPAN = "floe.plugin.lifecycle.startup"
+_SHUTDOWN_SPAN = "floe.plugin.lifecycle.shutdown"
+_HEALTH_CHECK_SPAN = "floe.plugin.lifecycle.health_check"
+_PHASE_STARTUP = "startup"
+_PHASE_SHUTDOWN = "shutdown"
+_PHASE_HEALTH_CHECK = "health_check"
+_STATUS_SUCCESS = "success"
+_STATUS_FAILURE = "failure"
 
 
 class PluginLifecycle:
@@ -80,6 +95,7 @@ class PluginLifecycle:
             loader: PluginLoader instance to use for accessing plugins.
         """
         self._loader = loader
+        self._metrics = MetricRecorder(name="floe.plugin.lifecycle", version="1.0.0")
 
         # Plugins that have been activated (startup() called)
         # Key: (PluginType, plugin_name)
@@ -133,29 +149,72 @@ class PluginLifecycle:
             timeout=timeout,
         )
 
-        # Run startup() with timeout protection
-        try:
-            self._run_with_timeout(plugin.startup, timeout)
-        except FutureTimeoutError:
-            logger.error(
-                "activate_plugin.timeout",
-                plugin_type=plugin_type.name,
-                name=name,
-                timeout=timeout,
-            )
-            raise PluginStartupError(
+        with create_span(
+            _STARTUP_SPAN,
+            self._lifecycle_attributes(
                 plugin_type,
-                name,
-                TimeoutError(f"startup() timed out after {timeout}s"),
-            ) from None
-        except Exception as e:
-            logger.error(
-                "activate_plugin.failed",
-                plugin_type=plugin_type.name,
-                name=name,
-                error=str(e),
+                plugin,
+                phase=_PHASE_STARTUP,
+                status="started",
+                extra={"timeout": timeout},
+            ),
+        ) as span:
+            started_at = time.perf_counter()
+
+            # Run startup() with timeout protection
+            try:
+                self._run_with_timeout(plugin.startup, timeout)
+            except FutureTimeoutError:
+                duration = time.perf_counter() - started_at
+                self._observe_lifecycle_result(
+                    span,
+                    plugin_type,
+                    plugin,
+                    phase=_PHASE_STARTUP,
+                    status=_STATUS_FAILURE,
+                    duration_seconds=duration,
+                    error_type=TimeoutError.__name__,
+                    extra={"timeout": timeout},
+                )
+                logger.error(
+                    "activate_plugin.timeout",
+                    plugin_type=plugin_type.name,
+                    name=name,
+                    timeout=timeout,
+                )
+                raise PluginStartupError(
+                    plugin_type,
+                    name,
+                    TimeoutError(f"startup() timed out after {timeout}s"),
+                ) from None
+            except Exception as e:
+                duration = time.perf_counter() - started_at
+                self._observe_lifecycle_result(
+                    span,
+                    plugin_type,
+                    plugin,
+                    phase=_PHASE_STARTUP,
+                    status=_STATUS_FAILURE,
+                    duration_seconds=duration,
+                    error_type=type(e).__name__,
+                )
+                logger.error(
+                    "activate_plugin.failed",
+                    plugin_type=plugin_type.name,
+                    name=name,
+                    error=str(e),
+                )
+                raise PluginStartupError(plugin_type, name, e) from e
+
+            duration = time.perf_counter() - started_at
+            self._observe_lifecycle_result(
+                span,
+                plugin_type,
+                plugin,
+                phase=_PHASE_STARTUP,
+                status=_STATUS_SUCCESS,
+                duration_seconds=duration,
             )
-            raise PluginStartupError(plugin_type, name, e) from e
 
         # Mark as activated on success
         self._activated.add(key)
@@ -312,31 +371,73 @@ class PluginLifecycle:
                 )
                 continue
 
-            try:
-                self._run_with_timeout(plugin.shutdown, timeout)
-                results[key_str] = None
-                logger.debug(
-                    "shutdown_all.plugin_success",
-                    plugin_type=plugin_type.name,
-                    name=name,
-                )
-            except FutureTimeoutError:
-                error = TimeoutError(f"shutdown() timed out after {timeout}s")
-                results[key_str] = error
-                logger.error(
-                    "shutdown_all.plugin_timeout",
-                    plugin_type=plugin_type.name,
-                    name=name,
-                    timeout=timeout,
-                )
-            except Exception as e:
-                results[key_str] = e
-                logger.error(
-                    "shutdown_all.plugin_failed",
-                    plugin_type=plugin_type.name,
-                    name=name,
-                    error=str(e),
-                )
+            with create_span(
+                _SHUTDOWN_SPAN,
+                self._lifecycle_attributes(
+                    plugin_type,
+                    plugin,
+                    phase=_PHASE_SHUTDOWN,
+                    status="started",
+                    extra={"timeout": timeout},
+                ),
+            ) as span:
+                started_at = time.perf_counter()
+
+                try:
+                    self._run_with_timeout(plugin.shutdown, timeout)
+                    duration = time.perf_counter() - started_at
+                    self._observe_lifecycle_result(
+                        span,
+                        plugin_type,
+                        plugin,
+                        phase=_PHASE_SHUTDOWN,
+                        status=_STATUS_SUCCESS,
+                        duration_seconds=duration,
+                    )
+                    results[key_str] = None
+                    logger.debug(
+                        "shutdown_all.plugin_success",
+                        plugin_type=plugin_type.name,
+                        name=name,
+                    )
+                except FutureTimeoutError:
+                    duration = time.perf_counter() - started_at
+                    error = TimeoutError(f"shutdown() timed out after {timeout}s")
+                    self._observe_lifecycle_result(
+                        span,
+                        plugin_type,
+                        plugin,
+                        phase=_PHASE_SHUTDOWN,
+                        status=_STATUS_FAILURE,
+                        duration_seconds=duration,
+                        error_type=TimeoutError.__name__,
+                        extra={"timeout": timeout},
+                    )
+                    results[key_str] = error
+                    logger.error(
+                        "shutdown_all.plugin_timeout",
+                        plugin_type=plugin_type.name,
+                        name=name,
+                        timeout=timeout,
+                    )
+                except Exception as e:
+                    duration = time.perf_counter() - started_at
+                    self._observe_lifecycle_result(
+                        span,
+                        plugin_type,
+                        plugin,
+                        phase=_PHASE_SHUTDOWN,
+                        status=_STATUS_FAILURE,
+                        duration_seconds=duration,
+                        error_type=type(e).__name__,
+                    )
+                    results[key_str] = e
+                    logger.error(
+                        "shutdown_all.plugin_failed",
+                        plugin_type=plugin_type.name,
+                        name=name,
+                        error=str(e),
+                    )
 
         # Clear activated set
         self._activated.clear()
@@ -387,46 +488,97 @@ class PluginLifecycle:
         for (plugin_type, name), plugin in loaded.items():
             key_str = f"{plugin_type.name}:{name}"
 
-            try:
-                # Run health_check with timeout protection
-                status = self._run_health_check_with_timeout(
-                    plugin.health_check,
-                    timeout,
-                )
+            with create_span(
+                _HEALTH_CHECK_SPAN,
+                self._lifecycle_attributes(
+                    plugin_type,
+                    plugin,
+                    phase=_PHASE_HEALTH_CHECK,
+                    status="started",
+                    extra={"timeout": timeout},
+                ),
+            ) as span:
+                started_at = time.perf_counter()
+                lifecycle_error_recorded = False
+
+                try:
+                    # Run health_check with timeout protection
+                    status = self._run_health_check_with_timeout(
+                        plugin.health_check,
+                        timeout,
+                    )
+                    duration = time.perf_counter() - started_at
+                    self._observe_lifecycle_result(
+                        span,
+                        plugin_type,
+                        plugin,
+                        phase=_PHASE_HEALTH_CHECK,
+                        status=status.state.value,
+                        duration_seconds=duration,
+                    )
+                except FutureTimeoutError:
+                    # Timeout - return UNHEALTHY
+                    duration = time.perf_counter() - started_at
+                    status = HealthStatus(
+                        state=HealthState.UNHEALTHY,
+                        message=f"health_check() timed out after {timeout}s",
+                    )
+                    self._observe_lifecycle_result(
+                        span,
+                        plugin_type,
+                        plugin,
+                        phase=_PHASE_HEALTH_CHECK,
+                        status=status.state.value,
+                        duration_seconds=duration,
+                        error_type=TimeoutError.__name__,
+                        extra={"timeout": timeout},
+                    )
+                    lifecycle_error_recorded = True
+                    logger.warning(
+                        "health_check_all.plugin_timeout",
+                        plugin_type=plugin_type.name,
+                        name=name,
+                        timeout=timeout,
+                    )
+                except Exception as e:
+                    # Exception - return UNHEALTHY with error details
+                    duration = time.perf_counter() - started_at
+                    status = HealthStatus(
+                        state=HealthState.UNHEALTHY,
+                        message=f"health_check() raised exception: {e}",
+                        details={"exception_type": type(e).__name__},
+                    )
+                    self._observe_lifecycle_result(
+                        span,
+                        plugin_type,
+                        plugin,
+                        phase=_PHASE_HEALTH_CHECK,
+                        status=status.state.value,
+                        duration_seconds=duration,
+                        error_type=type(e).__name__,
+                    )
+                    lifecycle_error_recorded = True
+                    logger.error(
+                        "health_check_all.plugin_error",
+                        plugin_type=plugin_type.name,
+                        name=name,
+                        error=str(e),
+                    )
+
                 results[key_str] = status
+                if status.state != HealthState.HEALTHY and not lifecycle_error_recorded:
+                    self._record_lifecycle_failure(
+                        plugin_type,
+                        name,
+                        phase=_PHASE_HEALTH_CHECK,
+                        status=status.state.value,
+                    )
 
                 logger.debug(
                     "health_check_all.plugin_checked",
                     plugin_type=plugin_type.name,
                     name=name,
                     state=status.state.value,
-                )
-
-            except FutureTimeoutError:
-                # Timeout - return UNHEALTHY
-                results[key_str] = HealthStatus(
-                    state=HealthState.UNHEALTHY,
-                    message=f"health_check() timed out after {timeout}s",
-                )
-                logger.warning(
-                    "health_check_all.plugin_timeout",
-                    plugin_type=plugin_type.name,
-                    name=name,
-                    timeout=timeout,
-                )
-
-            except Exception as e:
-                # Exception - return UNHEALTHY with error details
-                results[key_str] = HealthStatus(
-                    state=HealthState.UNHEALTHY,
-                    message=f"health_check() raised exception: {e}",
-                    details={"exception_type": type(e).__name__},
-                )
-                logger.error(
-                    "health_check_all.plugin_error",
-                    plugin_type=plugin_type.name,
-                    name=name,
-                    error=str(e),
                 )
 
         # Log summary
@@ -439,6 +591,121 @@ class PluginLifecycle:
         )
 
         return results
+
+    def _lifecycle_attributes(
+        self,
+        plugin_type: PluginType,
+        plugin: PluginMetadata,
+        *,
+        phase: str,
+        status: str,
+        error_type: str | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, str | int | float | bool]:
+        """Return sanitized lifecycle attributes for a loaded plugin."""
+        return plugin_lifecycle_attributes(
+            plugin_type=plugin_type.name,
+            plugin_name=plugin.name,
+            plugin_version=plugin.version,
+            floe_api_version=plugin.floe_api_version,
+            phase=phase,
+            status=status,
+            error_type=error_type,
+            extra=extra,
+        )
+
+    def _observe_lifecycle_result(
+        self,
+        span: Any,
+        plugin_type: PluginType,
+        plugin: PluginMetadata,
+        *,
+        phase: str,
+        status: str,
+        duration_seconds: float,
+        error_type: str | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        """Attach final lifecycle telemetry without affecting registry behavior."""
+        attrs = self._lifecycle_attributes(
+            plugin_type,
+            plugin,
+            phase=phase,
+            status=status,
+            error_type=error_type,
+            extra=extra,
+        )
+        for key, value in attrs.items():
+            span.set_attribute(key, value)
+
+        logger.debug(
+            "plugin_lifecycle.observed",
+            **attrs,
+            duration_seconds=duration_seconds,
+        )
+
+        labels = self._lifecycle_metric_labels(
+            plugin_type,
+            plugin.name,
+            phase=phase,
+            status=status,
+        )
+        self._record_lifecycle_duration(duration_seconds, labels)
+        if error_type is not None:
+            self._record_lifecycle_failure(plugin_type, plugin.name, phase=phase, status=status)
+
+    def _lifecycle_metric_labels(
+        self,
+        plugin_type: PluginType,
+        name: str,
+        *,
+        phase: str,
+        status: str,
+    ) -> dict[str, str]:
+        """Return bounded-cardinality labels for plugin lifecycle metrics."""
+        return {
+            "floe.plugin.type": plugin_type.name,
+            "floe.plugin.name": name,
+            "floe.plugin.lifecycle.phase": phase,
+            "floe.plugin.lifecycle.status": status,
+        }
+
+    def _record_lifecycle_duration(
+        self,
+        duration_seconds: float,
+        labels: dict[str, str],
+    ) -> None:
+        """Record lifecycle duration while keeping telemetry non-invasive."""
+        try:
+            self._metrics.record_histogram(
+                _LIFECYCLE_DURATION_METRIC,
+                duration_seconds,
+                labels=labels,
+                description="Plugin lifecycle operation duration",
+                unit="s",
+            )
+        except Exception as e:  # pragma: no cover - defensive telemetry isolation
+            logger.debug("plugin_lifecycle.duration_metric_failed", error=str(e))
+
+    def _record_lifecycle_failure(
+        self,
+        plugin_type: PluginType,
+        name: str,
+        *,
+        phase: str,
+        status: str,
+    ) -> None:
+        """Record lifecycle failure while keeping telemetry non-invasive."""
+        labels = self._lifecycle_metric_labels(plugin_type, name, phase=phase, status=status)
+        try:
+            self._metrics.increment(
+                _LIFECYCLE_FAILURES_METRIC,
+                labels=labels,
+                description="Plugin lifecycle operation failures",
+                unit="1",
+            )
+        except Exception as e:  # pragma: no cover - defensive telemetry isolation
+            logger.debug("plugin_lifecycle.failure_metric_failed", error=str(e))
 
     def is_activated(self, plugin_type: PluginType, name: str) -> bool:
         """Check if a plugin has been activated.

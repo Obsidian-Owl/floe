@@ -1,6 +1,6 @@
 """Plugin type definitions for floe-core.
 
-This module defines the PluginType enum, which enumerates all 14 plugin categories
+This module defines the PluginType enum, which enumerates all 15 plugin categories
 in the floe platform. Each plugin type corresponds to a specific entry point group
 used for plugin discovery.
 
@@ -16,7 +16,7 @@ from enum import Enum
 
 
 class PluginType(Enum):
-    """Enumeration of the 14 plugin categories in the floe platform.
+    """Enumeration of the 15 plugin categories in the floe platform.
 
     Each enum member has a `value` that is the entry point group name used
     for plugin discovery via `importlib.metadata.entry_points()`.
@@ -36,6 +36,7 @@ class PluginType(Enum):
         QUALITY: Data quality validation (Great Expectations, Soda, dbt-expectations)
         RBAC: Kubernetes RBAC manifest generation
         ALERT_CHANNEL: Contract violation alert delivery (Slack, webhook, email)
+        NETWORK_SECURITY: Kubernetes NetworkPolicy and Pod Security generation
 
     Example:
         >>> PluginType.COMPUTE.entry_point_group
@@ -62,6 +63,7 @@ class PluginType(Enum):
     QUALITY = "floe.quality"
     RBAC = "floe.rbac"
     ALERT_CHANNEL = "floe.alert_channels"
+    NETWORK_SECURITY = "floe.network_security"
 
     @property
     def entry_point_group(self) -> str:
@@ -77,7 +79,7 @@ class PluginType(Enum):
         """Return all entry point group names.
 
         Returns:
-            List of all 14 entry point group strings.
+            List of all 15 entry point group strings.
 
         Example:
             >>> PluginType.all_entry_point_groups()
