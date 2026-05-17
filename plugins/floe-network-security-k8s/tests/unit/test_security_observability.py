@@ -108,3 +108,14 @@ def test_generation_failures_are_classified() -> None:
                 action=lambda: (_ for _ in ()).throw(FileNotFoundError("missing")),
             )
     assert tracer.spans[-1].attributes["security.error_type"] == "not_found"
+
+    with patch("floe_network_security_k8s.plugin.get_tracer", return_value=tracer):
+        with pytest.raises(TimeoutError):
+            plugin._record_generation(
+                operation="generate_network_policy",
+                policy_type="NetworkPolicy",
+                resource_kind="NetworkPolicy",
+                namespace="floe-jobs",
+                action=lambda: (_ for _ in ()).throw(TimeoutError("api unavailable")),
+            )
+    assert tracer.spans[-1].attributes["security.error_type"] == "unavailable"

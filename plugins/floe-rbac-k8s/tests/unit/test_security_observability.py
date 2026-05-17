@@ -119,3 +119,14 @@ def test_generation_failures_are_classified() -> None:
                 action=lambda: (_ for _ in ()).throw(ValueError("invalid")),
             )
     assert tracer.spans[-1].attributes["security.error_type"] == "validation"
+
+    with patch("floe_rbac_k8s.plugin.get_tracer", return_value=tracer):
+        with pytest.raises(ConnectionError):
+            plugin._record_generation(
+                operation="generate_role",
+                policy_type="Role",
+                resource_kind="Role",
+                namespace="floe-jobs",
+                action=lambda: (_ for _ in ()).throw(ConnectionError("api unavailable")),
+            )
+    assert tracer.spans[-1].attributes["security.error_type"] == "unavailable"

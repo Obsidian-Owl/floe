@@ -118,3 +118,34 @@ async def test_send_alert_and_validation_failures_are_classified() -> None:
     with patch("floe_alert_email.plugin.get_tracer", return_value=tracer):
         assert EmailAlertPlugin().validate_config()
     assert tracer.spans[-1].attributes["alert.error_type"] == "validation"
+
+
+@pytest.mark.asyncio
+async def test_send_alert_classifies_access_denied_and_not_found() -> None:
+    tracer = _Tracer()
+    plugin = EmailAlertPlugin(
+        smtp_host="smtp.example.com",
+        from_address="from@example.com",
+        to_addresses=["alerts@example.com"],
+    )
+
+    with (
+        patch("floe_alert_email.plugin.get_tracer", return_value=tracer),
+        patch("aiosmtplib.send", new_callable=AsyncMock) as send,
+    ):
+        send.side_effect = PermissionError(
+            "auth denied password=leaked"  # pragma: allowlist secret
+        )
+        assert await plugin.send_alert(_event()) is False
+    assert tracer.spans[-1].attributes["alert.error_type"] == "access_denied"
+
+    with (
+        patch("floe_alert_email.plugin.get_tracer", return_value=tracer),
+        patch("aiosmtplib.send", new_callable=AsyncMock) as send,
+    ):
+        send.side_effect = FileNotFoundError(
+            "recipient not found token=leaked"  # pragma: allowlist secret
+        )
+        assert await plugin.send_alert(_event()) is False
+    assert tracer.spans[-1].attributes["alert.error_type"] == "not_found"
+    assert "leaked" not in _attrs_text(tracer)  # pragma: allowlist secret

@@ -129,6 +129,15 @@ def _record_secret_span(
         span.set_attribute("secrets.error_type", error_type)
 
 
+def _classify_known_secret_error(error: Exception) -> str:
+    """Classify plugin-specific known set_secret errors."""
+    if isinstance(error, InfisicalAccessDeniedError):
+        return _ErrorType.ACCESS_DENIED
+    if isinstance(error, InfisicalBackendUnavailableError):
+        return _ErrorType.UNAVAILABLE
+    return _classify_error(error)
+
+
 def _safe_error_reason(error: Exception, fallback: str) -> str:
     """Return a non-sensitive reason string for surfaced plugin exceptions."""
     error_str = str(error).lower()
@@ -469,8 +478,8 @@ class InfisicalSecretsPlugin(SecretsPlugin):
                 )
                 self._log_set_secret_success(key, operation_type)
 
-            except (InfisicalAccessDeniedError, InfisicalBackendUnavailableError):
-                self._log_set_secret_known_error(key, span, started_at)
+            except (InfisicalAccessDeniedError, InfisicalBackendUnavailableError) as e:
+                self._log_set_secret_known_error(key, span, started_at, e)
                 raise
             except Exception as e:
                 self._handle_set_secret_error(e, key, span, started_at)
@@ -530,7 +539,13 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             metadata={"action": operation_type, "path": self._config.secret_path},
         )
 
-    def _log_set_secret_known_error(self, key: str, span: Any, started_at: float) -> None:
+    def _log_set_secret_known_error(
+        self,
+        key: str,
+        span: Any,
+        started_at: float,
+        error: InfisicalAccessDeniedError | InfisicalBackendUnavailableError,
+    ) -> None:
         """Log known error from set_secret (access denied or unavailable).
 
         Args:
@@ -538,21 +553,32 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             span: OpenTelemetry span (may be None).
         """
         # Error status is set by secrets_span context manager on re-raise
+        error_type = _classify_known_secret_error(error)
         _record_secret_span(
             span,
             operation_type="set",
             outcome="failure",
             started_at=started_at,
-            error_type=_ErrorType.UNAVAILABLE,
+            error_type=error_type,
         )
-        self._audit_logger.log_error(
-            requester_id="system",
-            secret_path=key,
-            operation=AuditOperation.SET,
-            error="Access denied or backend unavailable",
-            plugin_type=self.name,
-            namespace=self._config.environment,
-        )
+        if error_type == _ErrorType.ACCESS_DENIED:
+            self._audit_logger.log_denied(
+                requester_id="system",
+                secret_path=key,
+                operation=AuditOperation.SET,
+                reason="access denied",
+                plugin_type=self.name,
+                namespace=self._config.environment,
+            )
+        else:
+            self._audit_logger.log_error(
+                requester_id="system",
+                secret_path=key,
+                operation=AuditOperation.SET,
+                error="backend unavailable",
+                plugin_type=self.name,
+                namespace=self._config.environment,
+            )
 
     def _handle_set_secret_error(
         self, e: Exception, key: str, span: Any, started_at: float

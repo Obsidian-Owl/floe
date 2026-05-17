@@ -149,3 +149,41 @@ def test_get_secret_classifies_not_found_unavailable_and_validation() -> None:
         with pytest.raises(ValueError):
             plugin.get_secret("")
     assert tracer.spans[-1].attributes["secrets.error_type"] == "validation"
+
+
+def test_set_secret_classifies_access_denied_and_unavailable_known_errors() -> None:
+    tracer = _Tracer()
+    plugin = _plugin()
+
+    with (
+        patch("floe_secrets_infisical.plugin.get_tracer", return_value=tracer),
+        patch.object(
+            plugin,
+            "_create_or_update_secret",
+            side_effect=InfisicalAccessDeniedError(secret_key="<redacted>", reason="403"),
+        ),
+    ):
+        with pytest.raises(InfisicalAccessDeniedError):
+            plugin.set_secret("catalog-ref", "set-secret-value")  # pragma: allowlist secret
+
+    attrs = tracer.spans[-1].attributes
+    assert attrs["secrets.operation_type"] == "set"
+    assert attrs["secrets.outcome"] == "failure"
+    assert attrs["secrets.error_type"] == "access_denied"
+
+    with (
+        patch("floe_secrets_infisical.plugin.get_tracer", return_value=tracer),
+        patch.object(
+            plugin,
+            "_create_or_update_secret",
+            side_effect=InfisicalBackendUnavailableError(reason="503"),
+        ),
+    ):
+        with pytest.raises(InfisicalBackendUnavailableError):
+            plugin.set_secret("catalog-ref", "set-secret-value")  # pragma: allowlist secret
+
+    attrs = tracer.spans[-1].attributes
+    assert attrs["secrets.operation_type"] == "set"
+    assert attrs["secrets.outcome"] == "failure"
+    assert attrs["secrets.error_type"] == "unavailable"
+    assert "set-secret-value" not in _attrs_text(tracer)  # pragma: allowlist secret
