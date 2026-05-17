@@ -67,6 +67,8 @@ def _context() -> ObservabilityContext:
 
 
 class _FakeResponse:
+    status_code = 200
+
     def __init__(self, payload: dict[str, object]) -> None:
         self._payload = payload
 
@@ -355,6 +357,28 @@ def test_customer360_marquez_helper_queries_lineage_by_namespace_job_and_run() -
                     {"name": "model.customer_360.mart_customer_360"},
                 ]
             },
+            (
+                "http://marquez/api/v1/namespaces/customer-360/jobs/"
+                "model.customer_360.mart_customer_360/runs"
+            ): {
+                "runs": [
+                    {
+                        "id": "model-run-1",
+                        "state": "COMPLETED",
+                        "startedAt": "2023-11-14T22:12:31Z",
+                        "endedAt": "2023-11-14T22:12:40Z",
+                        "facets": {
+                            "parent": {
+                                "run": {"runId": "run-123"},
+                                "job": {
+                                    "namespace": "customer-360",
+                                    "name": "customer-360",
+                                },
+                            }
+                        },
+                    }
+                ]
+            },
         }
     )
 
@@ -373,4 +397,147 @@ def test_customer360_marquez_helper_queries_lineage_by_namespace_job_and_run() -
             None,
         ),
         ("http://marquez/api/v1/namespaces/customer-360/jobs", None),
+        (
+            (
+                "http://marquez/api/v1/namespaces/customer-360/jobs/"
+                "model.customer_360.mart_customer_360/runs"
+            ),
+            None,
+        ),
     ]
+
+
+def test_customer360_marquez_helper_rejects_namespace_only_model_jobs() -> None:
+    """Namespace job existence alone is not fresh model/table lineage evidence."""
+    client = _FakeClient(
+        {
+            "http://marquez/api/v1/namespaces/customer-360/jobs/customer-360/runs": {
+                "runs": [
+                    {
+                        "id": "run-123",
+                        "state": "COMPLETED",
+                        "startedAt": "2023-11-14T22:12:30Z",
+                        "facets": {"product": {"name": "customer-360"}},
+                    }
+                ]
+            },
+            "http://marquez/api/v1/namespaces/customer-360/jobs": {
+                "jobs": [{"name": "mart_customer_360"}]
+            },
+            "http://marquez/api/v1/namespaces/customer-360/jobs/mart_customer_360/runs": {
+                "runs": []
+            },
+        }
+    )
+
+    result = query_marquez_lineage(
+        marquez_url="http://marquez",
+        namespace="customer-360",
+        job_name="customer-360",
+        context=_context(),
+        client=client,  # type: ignore[arg-type]
+    )
+
+    assert result.status is EvidenceStatus.NO_FRESH_EVIDENCE
+    assert "model/table" in result.message
+
+
+def test_customer360_marquez_helper_uses_run_facets_for_parent_link() -> None:
+    """Model runs without inline facets can prove lineage via Marquez run facets."""
+    client = _FakeClient(
+        {
+            "http://marquez/api/v1/namespaces/customer-360/jobs/customer-360/runs": {
+                "runs": [
+                    {
+                        "id": "run-123",
+                        "state": "COMPLETED",
+                        "startedAt": "2023-11-14T22:12:30Z",
+                        "facets": {"product": {"name": "customer-360"}},
+                    }
+                ]
+            },
+            "http://marquez/api/v1/namespaces/customer-360/jobs": {
+                "jobs": [{"name": "model.customer_360.mart_customer_360"}]
+            },
+            (
+                "http://marquez/api/v1/namespaces/customer-360/jobs/"
+                "model.customer_360.mart_customer_360/runs"
+            ): {
+                "runs": [
+                    {
+                        "id": "model-run-1",
+                        "state": "COMPLETED",
+                        "startedAt": "2023-11-14T22:12:31Z",
+                        "endedAt": "2023-11-14T22:12:40Z",
+                    }
+                ]
+            },
+            "http://marquez/api/v1/runs/model-run-1/facets": {
+                "facets": {
+                    "parent": {
+                        "run": {"runId": "run-123"},
+                        "job": {"namespace": "customer-360", "name": "customer-360"},
+                    }
+                }
+            },
+        }
+    )
+
+    result = query_marquez_lineage(
+        marquez_url="http://marquez",
+        namespace="customer-360",
+        job_name="customer-360",
+        context=_context(),
+        client=client,  # type: ignore[arg-type]
+    )
+
+    assert result.status is EvidenceStatus.PASS
+    assert (
+        "http://marquez/api/v1/runs/model-run-1/facets",
+        {"type": "run"},
+    ) in client.requests
+
+
+def test_customer360_marquez_helper_rejects_stale_model_run_parent_evidence() -> None:
+    """Model/table lineage must be fresh even when it has the right parent run."""
+    client = _FakeClient(
+        {
+            "http://marquez/api/v1/namespaces/customer-360/jobs/customer-360/runs": {
+                "runs": [
+                    {
+                        "id": "run-123",
+                        "state": "COMPLETED",
+                        "startedAt": "2023-11-14T22:12:30Z",
+                        "facets": {"product": {"name": "customer-360"}},
+                    }
+                ]
+            },
+            "http://marquez/api/v1/namespaces/customer-360/jobs": {
+                "jobs": [{"name": "model.customer_360.mart_customer_360"}]
+            },
+            (
+                "http://marquez/api/v1/namespaces/customer-360/jobs/"
+                "model.customer_360.mart_customer_360/runs"
+            ): {
+                "runs": [
+                    {
+                        "id": "model-run-1",
+                        "state": "COMPLETED",
+                        "startedAt": "2023-11-14T21:55:00Z",
+                        "endedAt": "2023-11-14T21:56:00Z",
+                        "facets": {"parent": {"run": {"runId": "run-123"}}},
+                    }
+                ]
+            },
+        }
+    )
+
+    result = query_marquez_lineage(
+        marquez_url="http://marquez",
+        namespace="customer-360",
+        job_name="customer-360",
+        context=_context(),
+        client=client,  # type: ignore[arg-type]
+    )
+
+    assert result.status is EvidenceStatus.STALE_EVIDENCE

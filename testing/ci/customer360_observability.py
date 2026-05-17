@@ -533,6 +533,29 @@ def query_marquez_lineage(
         jobs_response = http_client.get(jobs_url)
         jobs_response.raise_for_status()
         job_records = _marquez_job_records(jobs_response.json(), namespace=namespace)
+        model_run_records: list[EvidenceRecord] = []
+        for model_job_name in _marquez_model_table_job_names(job_records, context):
+            model_runs_url = _join_url(
+                marquez_url,
+                (
+                    f"api/v1/namespaces/{encoded_namespace}/jobs/"
+                    f"{quote(model_job_name, safe='')}/runs"
+                ),
+            )
+            model_runs_response = http_client.get(model_runs_url)
+            model_runs_response.raise_for_status()
+            for record in _marquez_records(
+                model_runs_response.json(),
+                namespace=namespace,
+                job_name=model_job_name,
+            ):
+                model_run_records.append(
+                    _marquez_model_record_with_parent_run(
+                        record,
+                        http_client=http_client,
+                        marquez_url=marquez_url,
+                    )
+                )
     except Exception as exc:  # noqa: BLE001
         return classify_evidence_records(
             backend="lineage",
@@ -550,7 +573,7 @@ def query_marquez_lineage(
         query=query,
         context=context,
         run_records=run_records,
-        job_records=job_records,
+        model_run_records=model_run_records,
         url=runs_url,
     )
 
@@ -768,7 +791,7 @@ def _classify_marquez_lineage_records(
     query: str,
     context: ObservabilityContext,
     run_records: Sequence[EvidenceRecord],
-    job_records: Sequence[EvidenceRecord],
+    model_run_records: Sequence[EvidenceRecord],
     url: str,
 ) -> EvidenceResult:
     product_context = ObservabilityContext(
@@ -787,18 +810,10 @@ def _classify_marquez_lineage_records(
     if not product_result.ok:
         return product_result
 
-    table_context = ObservabilityContext(
-        product=context.product,
-        run_id="<unknown>",
-        table=context.table,
-        freshness_window_seconds=context.freshness_window_seconds,
-        now_epoch_seconds=context.now_epoch_seconds,
-    )
-    table_result = classify_evidence_records(
-        backend="lineage",
+    table_result = _classify_marquez_model_table_run_records(
         query=f"{query} table={context.table or '<none>'}",
-        context=table_context,
-        records=job_records,
+        context=context,
+        records=model_run_records,
         url=url,
     )
     if not table_result.ok:
@@ -818,6 +833,102 @@ def _classify_marquez_lineage_records(
             "product_run_count": str(product_result.evidence_count),
             "model_table_count": str(table_result.evidence_count),
         },
+    )
+
+
+def _classify_marquez_model_table_run_records(
+    *,
+    query: str,
+    context: ObservabilityContext,
+    records: Sequence[EvidenceRecord],
+    url: str,
+) -> EvidenceResult:
+    record_tuple = tuple(records)
+    if not record_tuple:
+        return EvidenceResult(
+            backend="lineage",
+            status=EvidenceStatus.NO_FRESH_EVIDENCE,
+            query=query,
+            url=url,
+            message=(
+                "lineage backend returned no fresh model/table run evidence linked to "
+                f"{context.product}/{context.run_id}/{context.table or '<none>'}"
+            ),
+        )
+
+    matching_context = [
+        record
+        for record in record_tuple
+        if _marquez_model_table_record_matches_context(record, context)
+    ]
+    if not matching_context:
+        expected = f"{context.product} / {context.run_id} / {context.table or '<none>'}"
+        return EvidenceResult(
+            backend="lineage",
+            status=EvidenceStatus.WRONG_CONTEXT,
+            query=query,
+            url=url,
+            message=(
+                "lineage backend returned model/table run evidence, but none matched "
+                f"parent run context {expected}"
+            ),
+            records=record_tuple,
+            diagnostics={"expected_context": expected},
+        )
+
+    failed_records = [record for record in matching_context if _record_has_failure_status(record)]
+    if failed_records:
+        return EvidenceResult(
+            backend="lineage",
+            status=EvidenceStatus.PRODUCT_FAILURE,
+            query=query,
+            url=url,
+            message="Product execution failed according to lineage model/table evidence",
+            records=tuple(failed_records),
+        )
+
+    fresh_records = [
+        record
+        for record in matching_context
+        if record.timestamp_epoch_seconds is not None
+        and record.timestamp_epoch_seconds >= context.freshness_cutoff_epoch_seconds
+    ]
+    if not fresh_records:
+        newest = max(
+            (
+                record.timestamp_epoch_seconds
+                for record in matching_context
+                if record.timestamp_epoch_seconds is not None
+            ),
+            default=None,
+        )
+        diagnostics = {}
+        if newest is not None:
+            diagnostics["newest_epoch_seconds"] = f"{newest:.3f}"
+            diagnostics["freshness_cutoff_epoch_seconds"] = (
+                f"{context.freshness_cutoff_epoch_seconds:.3f}"
+            )
+        return EvidenceResult(
+            backend="lineage",
+            status=EvidenceStatus.STALE_EVIDENCE,
+            query=query,
+            url=url,
+            message=(
+                f"lineage backend returned only stale model/table run evidence for {context.run_id}"
+            ),
+            records=tuple(matching_context),
+            diagnostics=diagnostics,
+        )
+
+    return EvidenceResult(
+        backend="lineage",
+        status=EvidenceStatus.PASS,
+        query=query,
+        url=url,
+        message=(
+            f"lineage backend returned fresh model/table run evidence linked to {context.run_id}"
+        ),
+        records=tuple(fresh_records),
     )
 
 
@@ -886,6 +997,144 @@ def _metric_record_has_positive_value(record: EvidenceRecord) -> bool:
         return True
     sample = _parse_float(value[1])
     return sample is None or sample > 0
+
+
+def _marquez_model_table_job_names(
+    job_records: Sequence[EvidenceRecord],
+    context: ObservabilityContext,
+) -> tuple[str, ...]:
+    if not context.table:
+        return ()
+    job_names: set[str] = set()
+    for record in job_records:
+        name = record.payload.get("name") or record.payload.get("job_name")
+        if not name:
+            continue
+        job_name = str(name)
+        if _contains_value(job_name.lower(), context.table):
+            job_names.add(job_name)
+    return tuple(sorted(job_names))
+
+
+def _marquez_model_record_with_parent_run(
+    record: EvidenceRecord,
+    *,
+    http_client: httpx.Client,
+    marquez_url: str,
+) -> EvidenceRecord:
+    parent_run_id = _parent_run_id_from_marquez_payload(record.payload)
+    if parent_run_id is None:
+        parent_run_id = _parent_run_id_from_marquez_run_facets(
+            http_client=http_client,
+            marquez_url=marquez_url,
+            run_payload=record.payload,
+        )
+    if parent_run_id is None:
+        return record
+    enriched = dict(record.payload)
+    enriched["parent_run_id"] = parent_run_id
+    return EvidenceRecord(
+        payload=enriched,
+        timestamp_epoch_seconds=record.timestamp_epoch_seconds,
+    )
+
+
+def _marquez_model_table_record_matches_context(
+    record: EvidenceRecord,
+    context: ObservabilityContext,
+) -> bool:
+    payload_text = _payload_text(record.payload)
+    if not _contains_value(payload_text, context.product):
+        return False
+    if context.table and not _contains_value(payload_text, context.table):
+        return False
+    if _parent_run_id_from_marquez_payload(record.payload) != context.run_id:
+        return False
+    return _marquez_record_is_completed(record)
+
+
+def _marquez_record_is_completed(record: EvidenceRecord) -> bool:
+    statuses = [status.upper() for status in _iter_status_values(record.payload)]
+    if not statuses:
+        return False
+    return any(status in SUCCESS_STATUSES for status in statuses)
+
+
+def _parent_run_id_from_marquez_payload(payload: Mapping[str, Any]) -> str | None:
+    for key in ("parent_run_id", "parentRunId", "parent_runId"):
+        value = payload.get(key)
+        if value:
+            return str(value)
+
+    facets = payload.get("facets")
+    if not isinstance(facets, Mapping):
+        return None
+
+    parent_facet = _parent_facet_from_facets(facets)
+    if not isinstance(parent_facet, Mapping):
+        return None
+
+    parent_run = parent_facet.get("run")
+    if isinstance(parent_run, Mapping):
+        parent_run_id = parent_run.get("runId") or parent_run.get("id")
+        if parent_run_id:
+            return str(parent_run_id)
+
+    parent_run_id = parent_facet.get("runId") or parent_facet.get("id")
+    return str(parent_run_id) if parent_run_id else None
+
+
+def _parent_facet_from_facets(facets: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    for key in ("parentRun", "parent"):
+        value = facets.get(key)
+        if isinstance(value, Mapping):
+            return value
+
+    run_facets = facets.get("run")
+    if isinstance(run_facets, Mapping):
+        for key in ("parentRun", "parent"):
+            value = run_facets.get(key)
+            if isinstance(value, Mapping):
+                return value
+    return None
+
+
+def _parent_run_id_from_marquez_run_facets(
+    *,
+    http_client: httpx.Client,
+    marquez_url: str,
+    run_payload: Mapping[str, Any],
+) -> str | None:
+    for run_id in sorted(_marquez_run_identity_candidates(run_payload)):
+        response = http_client.get(
+            _join_url(marquez_url, f"api/v1/runs/{quote(run_id, safe='')}/facets"),
+            params={"type": "run"},
+        )
+        response.raise_for_status()
+        facets = response.json().get("facets")
+        if not isinstance(facets, Mapping):
+            continue
+        parent_run_id = _parent_run_id_from_marquez_payload({"facets": facets})
+        if parent_run_id:
+            return parent_run_id
+    return None
+
+
+def _marquez_run_identity_candidates(run_payload: Mapping[str, Any]) -> set[str]:
+    candidates: set[str] = set()
+    for key in ("id", "runId", "run_id"):
+        value = run_payload.get(key)
+        if value:
+            candidates.add(str(value))
+
+    nested_run = run_payload.get("run")
+    if isinstance(nested_run, Mapping):
+        for key in ("id", "runId", "run_id"):
+            value = nested_run.get(key)
+            if value:
+                candidates.add(str(value))
+
+    return candidates
 
 
 def _record_has_failure_status(record: EvidenceRecord) -> bool:
