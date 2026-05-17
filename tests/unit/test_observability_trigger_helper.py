@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import importlib
 import json
+from collections.abc import Mapping
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -18,7 +21,8 @@ from testing.ci.customer360_observability import (
     query_prometheus_metrics,
     query_trace_backend,
 )
-from tests.e2e import conftest as e2e_conftest
+
+e2e_conftest = cast(Any, importlib.import_module("tests.e2e.conftest"))
 
 
 def test_trigger_lineage_run_waits_for_marquez_after_launch_timeout() -> None:
@@ -66,35 +70,59 @@ def _context() -> ObservabilityContext:
     )
 
 
-class _FakeResponse:
-    status_code = 200
+JsonObject = dict[str, Any]
+HttpParams = Mapping[str, object] | None
 
-    def __init__(self, payload: dict[str, object]) -> None:
+
+class _FakeResponse:
+    def __init__(
+        self,
+        payload: JsonObject,
+        *,
+        status_code: int = 200,
+        error: Exception | None = None,
+    ) -> None:
         self._payload = payload
+        self.status_code = status_code
+        self._error = error
 
     def raise_for_status(self) -> None:
+        if self._error is not None:
+            raise self._error
         return None
 
-    def json(self) -> dict[str, object]:
+    def json(self) -> JsonObject:
         return self._payload
 
 
 class _FakeClient:
-    def __init__(self, payload: dict[str, object] | dict[str, dict[str, object]]) -> None:
+    def __init__(
+        self,
+        payload: JsonObject | Mapping[str, JsonObject | _FakeResponse],
+    ) -> None:
         self.payload = payload
-        self.requests: list[tuple[str, dict[str, object] | None]] = []
+        self.requests: list[tuple[str, HttpParams]] = []
 
     def get(
         self,
         url: str,
-        params: dict[str, object] | None = None,
+        params: Mapping[str, object] | None = None,
     ) -> _FakeResponse:
         self.requests.append((url, params))
-        if url in self.payload:
-            payload = self.payload[url]  # type: ignore[index]
-            if isinstance(payload, dict):
-                return _FakeResponse(payload)
-        return _FakeResponse(self.payload)  # type: ignore[arg-type]
+        if _is_url_payload_map(self.payload) and url in self.payload:
+            payload = self.payload[url]
+            if isinstance(payload, _FakeResponse):
+                return payload
+            return _FakeResponse(payload)
+        if isinstance(self.payload, dict):
+            return _FakeResponse(self.payload)
+        raise AssertionError(f"No fake response configured for {url}")
+
+
+def _is_url_payload_map(
+    payload: JsonObject | Mapping[str, JsonObject | _FakeResponse],
+) -> bool:
+    return all(isinstance(value, (dict, _FakeResponse)) for value in payload.values())
 
 
 def test_customer360_observability_classifies_backend_unreachable() -> None:
@@ -229,11 +257,15 @@ def test_customer360_trace_helper_queries_jaeger_by_service_product_and_run() ->
         jaeger_url="http://jaeger",
         service="customer-360",
         context=_context(),
-        client=client,  # type: ignore[arg-type]
+        client=cast(httpx.Client, client),
     )
 
     assert result.status is EvidenceStatus.PASS
-    tags = json.loads(client.requests[0][1]["tags"])  # type: ignore[index]
+    params = client.requests[0][1]
+    assert isinstance(params, Mapping)
+    tag_value = params["tags"]
+    assert isinstance(tag_value, str)
+    tags = json.loads(tag_value)
     assert tags == {"floe.product.name": "customer-360", "floe.run.id": "run-123"}
     assert client.requests == [
         (
@@ -278,7 +310,7 @@ def test_customer360_loki_helper_queries_logs_by_product_and_run() -> None:
         product="customer-360",
         run_id="run-123",
         context=context,
-        client=client,  # type: ignore[arg-type]
+        client=cast(httpx.Client, client),
     )
 
     assert result.status is EvidenceStatus.PASS
@@ -320,7 +352,7 @@ def test_customer360_prometheus_helper_queries_metrics_by_product_status_and_plu
         status="success",
         plugin="dagster",
         context=context,
-        client=client,  # type: ignore[arg-type]
+        client=cast(httpx.Client, client),
     )
 
     assert result.status is EvidenceStatus.PASS
@@ -335,6 +367,72 @@ def test_customer360_prometheus_helper_queries_metrics_by_product_status_and_plu
             },
         )
     ]
+
+
+def test_customer360_prometheus_helper_matches_plugin_regex() -> None:
+    """Metric classification uses the same regex plugin semantics as Prometheus."""
+    client = _FakeClient(
+        {
+            "data": {
+                "result": [
+                    {
+                        "metric": {
+                            "__name__": "floe_asset_materializations_total",
+                            "floe_product_name": "customer-360",
+                            "floe_status": "success",
+                            "floe_plugin_name": "dagster",
+                            "floe_asset_key": "mart_customer_360",
+                        },
+                        "value": [1_699_999_950.0, "1"],
+                    }
+                ]
+            }
+        }
+    )
+
+    result = query_prometheus_metrics(
+        prometheus_url="http://prometheus",
+        product="customer-360",
+        status="success",
+        plugin="dagster|dbt",
+        context=_context(),
+        client=cast(httpx.Client, client),
+    )
+
+    assert result.status is EvidenceStatus.PASS
+
+
+def test_customer360_prometheus_helper_rejects_invalid_plugin_regex_without_crashing() -> None:
+    """Invalid plugin regexes classify as wrong context instead of crashing."""
+    client = _FakeClient(
+        {
+            "data": {
+                "result": [
+                    {
+                        "metric": {
+                            "__name__": "floe_asset_materializations_total",
+                            "floe_product_name": "customer-360",
+                            "floe_status": "success",
+                            "floe_plugin_name": "dagster",
+                            "floe_asset_key": "mart_customer_360",
+                        },
+                        "value": [1_699_999_950.0, "1"],
+                    }
+                ]
+            }
+        }
+    )
+
+    result = query_prometheus_metrics(
+        prometheus_url="http://prometheus",
+        product="customer-360",
+        status="success",
+        plugin="[",
+        context=_context(),
+        client=cast(httpx.Client, client),
+    )
+
+    assert result.status is EvidenceStatus.WRONG_CONTEXT
 
 
 def test_customer360_marquez_helper_queries_lineage_by_namespace_job_and_run() -> None:
@@ -387,7 +485,7 @@ def test_customer360_marquez_helper_queries_lineage_by_namespace_job_and_run() -
         namespace="customer-360",
         job_name="customer-360",
         context=_context(),
-        client=client,  # type: ignore[arg-type]
+        client=cast(httpx.Client, client),
     )
 
     assert result.status is EvidenceStatus.PASS
@@ -435,7 +533,7 @@ def test_customer360_marquez_helper_rejects_namespace_only_model_jobs() -> None:
         namespace="customer-360",
         job_name="customer-360",
         context=_context(),
-        client=client,  # type: ignore[arg-type]
+        client=cast(httpx.Client, client),
     )
 
     assert result.status is EvidenceStatus.NO_FRESH_EVIDENCE
@@ -488,7 +586,7 @@ def test_customer360_marquez_helper_uses_run_facets_for_parent_link() -> None:
         namespace="customer-360",
         job_name="customer-360",
         context=_context(),
-        client=client,  # type: ignore[arg-type]
+        client=cast(httpx.Client, client),
     )
 
     assert result.status is EvidenceStatus.PASS
@@ -496,6 +594,60 @@ def test_customer360_marquez_helper_uses_run_facets_for_parent_link() -> None:
         "http://marquez/api/v1/runs/model-run-1/facets",
         {"type": "run"},
     ) in client.requests
+
+
+def test_customer360_marquez_helper_treats_optional_facet_failure_as_wrong_context() -> None:
+    """Optional run facet lookup failures do not make reachable Marquez unreachable."""
+    facets_url = "http://marquez/api/v1/runs/model-run-1/facets"
+    client = _FakeClient(
+        {
+            "http://marquez/api/v1/namespaces/customer-360/jobs/customer-360/runs": {
+                "runs": [
+                    {
+                        "id": "run-123",
+                        "state": "COMPLETED",
+                        "startedAt": "2023-11-14T22:12:30Z",
+                        "facets": {"product": {"name": "customer-360"}},
+                    }
+                ]
+            },
+            "http://marquez/api/v1/namespaces/customer-360/jobs": {
+                "jobs": [{"name": "model.customer_360.mart_customer_360"}]
+            },
+            (
+                "http://marquez/api/v1/namespaces/customer-360/jobs/"
+                "model.customer_360.mart_customer_360/runs"
+            ): {
+                "runs": [
+                    {
+                        "id": "model-run-1",
+                        "state": "COMPLETED",
+                        "startedAt": "2023-11-14T22:12:31Z",
+                        "endedAt": "2023-11-14T22:12:40Z",
+                    }
+                ]
+            },
+            facets_url: _FakeResponse(
+                {},
+                status_code=404,
+                error=httpx.HTTPStatusError(
+                    "not found",
+                    request=httpx.Request("GET", facets_url),
+                    response=httpx.Response(404),
+                ),
+            ),
+        }
+    )
+
+    result = query_marquez_lineage(
+        marquez_url="http://marquez",
+        namespace="customer-360",
+        job_name="customer-360",
+        context=_context(),
+        client=cast(httpx.Client, client),
+    )
+
+    assert result.status is EvidenceStatus.WRONG_CONTEXT
 
 
 def test_customer360_marquez_helper_rejects_stale_model_run_parent_evidence() -> None:
@@ -537,7 +689,7 @@ def test_customer360_marquez_helper_rejects_stale_model_run_parent_evidence() ->
         namespace="customer-360",
         job_name="customer-360",
         context=_context(),
-        client=client,  # type: ignore[arg-type]
+        client=cast(httpx.Client, client),
     )
 
     assert result.status is EvidenceStatus.STALE_EVIDENCE

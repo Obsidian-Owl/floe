@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -976,8 +977,8 @@ def _metric_record_matches_context(
         return False
     if str(metric.get(METRIC_STATUS_LABEL, "")).lower() != status.lower():
         return False
-    plugin_name = str(metric.get(METRIC_PLUGIN_NAME_LABEL, "")).lower()
-    if plugin != ".+" and not _contains_value(plugin_name, plugin):
+    plugin_name = str(metric.get(METRIC_PLUGIN_NAME_LABEL, ""))
+    if not _regex_fullmatch(plugin, plugin_name):
         return False
     if (
         context.table
@@ -1106,11 +1107,14 @@ def _parent_run_id_from_marquez_run_facets(
     run_payload: Mapping[str, Any],
 ) -> str | None:
     for run_id in sorted(_marquez_run_identity_candidates(run_payload)):
-        response = http_client.get(
-            _join_url(marquez_url, f"api/v1/runs/{quote(run_id, safe='')}/facets"),
-            params={"type": "run"},
-        )
-        response.raise_for_status()
+        try:
+            response = http_client.get(
+                _join_url(marquez_url, f"api/v1/runs/{quote(run_id, safe='')}/facets"),
+                params={"type": "run"},
+            )
+            response.raise_for_status()
+        except Exception:  # noqa: BLE001 - facets are optional enrichment.
+            continue
         facets = response.json().get("facets")
         if not isinstance(facets, Mapping):
             continue
@@ -1135,6 +1139,13 @@ def _marquez_run_identity_candidates(run_payload: Mapping[str, Any]) -> set[str]
                 candidates.add(str(value))
 
     return candidates
+
+
+def _regex_fullmatch(pattern: str, value: str) -> bool:
+    try:
+        return re.fullmatch(pattern, value) is not None
+    except re.error:
+        return False
 
 
 def _record_has_failure_status(record: EvidenceRecord) -> bool:
