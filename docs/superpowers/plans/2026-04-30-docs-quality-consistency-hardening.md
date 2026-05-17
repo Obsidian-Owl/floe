@@ -238,6 +238,7 @@ Create `docs/reference/plugin-catalog.md` with:
   - Identity: `floe.identity`
   - Quality: `floe.quality`
   - RBAC: `floe.rbac`
+  - Network security: `floe.network_security`
   - Alert channel: `floe.alert_channels`
 - Note that `PluginType.LINEAGE` is a code alias for `LINEAGE_BACKEND` and is not an additional category.
 
