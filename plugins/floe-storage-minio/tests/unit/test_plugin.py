@@ -11,7 +11,7 @@ import pytest
 from pydantic import SecretStr, ValidationError
 
 from floe_storage_minio.config import MinIOStorageConfig
-from floe_storage_minio.plugin import MinIOStoragePlugin
+from floe_storage_minio.plugin import MinIOStoragePlugin, _safe_endpoint_identity
 
 # ---------------------------------------------------------------------------
 # AC-1: MinIOStoragePlugin exists and implements StoragePlugin ABC
@@ -325,6 +325,27 @@ class TestStoragePluginMethods:
         assert attrs["storage.endpoint"] == "http://minio:9000"
         assert "AKID" not in str(attrs)
         assert "SUPERSECRET" not in str(attrs)
+
+    @pytest.mark.requirement("OBS-T4")
+    def test_endpoint_identity_strips_userinfo_query_and_fragment(self) -> None:
+        """Endpoint telemetry cannot preserve presigned query or userinfo values."""
+        endpoint = (
+            "https://user:"
+            "super-secret@minio.example.com:9000/floe-warehouse"
+            "?X-Amz-Signature=credential-signature&X-Amz-Credential=access-key#frag"
+        )
+        config = MinIOStorageConfig(endpoint=endpoint, bucket="floe-data")
+        plugin = MinIOStoragePlugin(config=config)
+
+        with patch("floe_storage_minio.plugin.get_tracer") as mock_get_tracer:
+            plugin.get_warehouse_uri("bronze")
+
+        attrs = mock_get_tracer.return_value.start_as_current_span.call_args.kwargs["attributes"]
+        assert _safe_endpoint_identity(endpoint) == "https://minio.example.com:9000"
+        assert attrs["storage.endpoint"] == "https://minio.example.com:9000"
+        assert "super-secret" not in str(attrs)
+        assert "X-Amz-Signature" not in str(attrs)
+        assert "credential-signature" not in str(attrs)
 
     @pytest.mark.requirement("AC-2")
     def test_pyiceberg_catalog_config_prefers_minio_env_credentials(

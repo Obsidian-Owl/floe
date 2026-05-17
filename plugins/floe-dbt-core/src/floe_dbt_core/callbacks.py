@@ -22,16 +22,20 @@ Requirements:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 import structlog
+from floe_core.telemetry.sanitization import sanitize_error_message
 
 if TYPE_CHECKING:
     pass
 
 logger = structlog.get_logger(__name__)
+_SAFE_ERROR_TYPE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,63}$")
+_DBT_NODE_FAILURE = "DbtNodeFailure"
 
 
 class DBTEventLevel(str, Enum):
@@ -135,13 +139,13 @@ class DBTNodeRecord:
         status = _string_value(event.data.get("status")) or (
             "error" if event.level is DBTEventLevel.ERROR else "unknown"
         )
-        error_type = (
-            _string_value(event.data.get("error_type"))
-            if event.level is DBTEventLevel.ERROR
-            else None
-        )
-        if error_type is None and event.level is DBTEventLevel.ERROR:
-            error_type = event.name
+        error_type = None
+        if event.level is DBTEventLevel.ERROR:
+            explicit_error_type = _string_value(event.data.get("error_type"))
+            if explicit_error_type is not None:
+                error_type = _safe_error_type(explicit_error_type, fallback=_DBT_NODE_FAILURE)
+            else:
+                error_type = _safe_error_type(event.name, fallback=_DBT_NODE_FAILURE)
 
         return cls(
             unique_id=event.node_id,
@@ -374,7 +378,18 @@ def _node_name_from_unique_id(unique_id: str) -> str:
 def _error_type(result: dict[str, Any], status: str) -> str | None:
     explicit = _string_value(result.get("error_type"))
     if explicit is not None:
-        return explicit
-    if status in {"error", "fail", "failed"}:
-        return "DbtNodeFailure"
+        return _safe_error_type(explicit, fallback=_DBT_NODE_FAILURE)
+    if status.lower() in {"error", "fail", "failed"}:
+        return _DBT_NODE_FAILURE
     return None
+
+
+def _safe_error_type(value: str, *, fallback: str) -> str:
+    sanitized = sanitize_error_message(value, max_length=128).strip()
+    if sanitized != value:
+        return fallback
+    if _SAFE_ERROR_TYPE_RE.fullmatch(sanitized) is None:
+        return fallback
+    if "://" in sanitized or "@" in sanitized or "/" in sanitized or "?" in sanitized:
+        return fallback
+    return sanitized

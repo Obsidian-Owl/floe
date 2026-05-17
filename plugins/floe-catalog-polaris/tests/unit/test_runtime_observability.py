@@ -20,7 +20,8 @@ from floe_core.schemas.compiled_artifacts import (
 from pydantic import SecretStr
 
 from floe_catalog_polaris.config import OAuth2Config, PolarisCatalogConfig
-from floe_catalog_polaris.plugin import PolarisCatalogPlugin
+from floe_catalog_polaris.plugin import PolarisCatalogPlugin, _safe_endpoint_identity
+from floe_catalog_polaris.tracing import _sanitize_uri
 
 
 def _plugin_with_secret_url() -> PolarisCatalogPlugin:
@@ -108,11 +109,49 @@ def test_connect_emits_sanitized_endpoint_identity() -> None:
         plugin.connect({})
 
     attrs = mock_tracer.start_as_current_span.call_args.kwargs["attributes"]
-    assert attrs["catalog.uri"] == "https://polaris.example.com/api/catalog"
+    assert attrs["catalog.uri"] == "https://polaris.example.com"
     assert attrs["catalog.name"] == "polaris"
     assert attrs["catalog.warehouse"] == "floe"
     assert "super-secret" not in str(attrs)
     assert "oauth-secret" not in str(mock_logger.method_calls)
+
+
+def test_endpoint_identity_strips_userinfo_query_and_fragment() -> None:
+    """Endpoint identity used by telemetry never includes presigned query material."""
+    uri = (
+        "https://user:"
+        "super-secret@polaris.example.com:8181/api/catalog"
+        "?X-Amz-Signature=credential-signature&token=super-token#frag"
+    )
+
+    assert _safe_endpoint_identity(uri) == "https://polaris.example.com:8181"
+    assert _sanitize_uri(uri) == "https://polaris.example.com:8181"
+    assert "super-secret" not in _safe_endpoint_identity(uri)
+    assert "X-Amz-Signature" not in _sanitize_uri(uri)
+
+
+def test_connect_failure_logs_sanitized_error_message() -> None:
+    """connect() failure logs sanitize exception messages before recording them."""
+    plugin = _plugin_with_secret_url()
+
+    with (
+        patch(
+            "floe_catalog_polaris.plugin.load_catalog",
+            side_effect=RuntimeError("failed password=super-secret token=super-token"),
+        ),
+        patch("floe_catalog_polaris.plugin.logger") as mock_logger,
+    ):
+        with patch("floe_catalog_polaris.plugin.get_tracer"):
+            try:
+                plugin.connect({})
+            except RuntimeError:
+                pass
+
+    log_kwargs = mock_logger.bind.return_value.error.call_args.kwargs
+    assert log_kwargs["error_type"] == "RuntimeError"
+    assert log_kwargs["error_message"] == "failed password=<REDACTED> token=<REDACTED>"
+    assert "super-secret" not in str(mock_logger.method_calls)
+    assert "super-token" not in str(mock_logger.method_calls)
 
 
 def test_build_catalog_deployment_emits_secret_free_storage_context() -> None:
@@ -126,7 +165,7 @@ def test_build_catalog_deployment_emits_secret_free_storage_context() -> None:
     attrs = mock_tracer.start_as_current_span.call_args.kwargs["attributes"]
     assert binding.provider == "polaris"
     assert attrs["catalog.operation"] == "build_catalog_deployment"
-    assert attrs["catalog.uri"] == "https://polaris.example.com/api/catalog"
+    assert attrs["catalog.uri"] == "https://polaris.example.com"
     assert attrs["storage.provider"] == "minio"
     assert attrs["storage.protocol"] == "s3-compatible"
     assert attrs["storage.bucket"] == "floe-warehouse"
@@ -146,5 +185,5 @@ def test_health_check_emits_status_for_unconnected_plugin() -> None:
     span = mock_tracer.start_as_current_span.return_value.__enter__.return_value
     span.set_attribute.assert_any_call("health.status", "unhealthy")
     attrs = mock_tracer.start_as_current_span.call_args.kwargs["attributes"]
-    assert attrs["catalog.uri"] == "https://polaris.example.com/api/catalog"
+    assert attrs["catalog.uri"] == "https://polaris.example.com"
     assert "super-secret" not in str(attrs)

@@ -47,6 +47,7 @@ from floe_core.schemas.compiled_artifacts import (
     PolarisCatalogDeploymentBinding,
     StorageDeploymentBinding,
 )
+from floe_core.telemetry.sanitization import sanitize_error_message
 from pyiceberg.catalog import load_catalog
 from pyiceberg.schema import Schema as IcebergSchema
 
@@ -337,7 +338,11 @@ class PolarisCatalogPlugin(CatalogPlugin):
             except PYICEBERG_EXCEPTION_TYPES as e:
                 # Map PyIceberg exceptions to floe errors
                 set_error_attributes(span, e)
-                log.error("polaris_catalog_connection_failed", error=str(e))
+                log.error(
+                    "polaris_catalog_connection_failed",
+                    error_type=type(e).__name__,
+                    error_message=sanitize_error_message(str(e)),
+                )
                 raise map_pyiceberg_error(
                     e,
                     catalog_uri=cfg.uri,
@@ -347,7 +352,11 @@ class PolarisCatalogPlugin(CatalogPlugin):
             except Exception as e:
                 # Catch any other unexpected exceptions
                 set_error_attributes(span, e)
-                log.error("polaris_catalog_connection_failed", error=str(e))
+                log.error(
+                    "polaris_catalog_connection_failed",
+                    error_type=type(e).__name__,
+                    error_message=sanitize_error_message(str(e)),
+                )
                 raise
 
     def load_table_with_client_endpoint(self, identifier: str) -> Table:
@@ -1222,11 +1231,9 @@ class PolarisCatalogPlugin(CatalogPlugin):
 def _safe_endpoint_identity(uri: str) -> str:
     """Return a credential-free endpoint identity for telemetry and logs."""
     parsed = urlsplit(uri)
-    if not (parsed.scheme and parsed.netloc and (parsed.username or parsed.password)):
-        return uri
-    hostname = parsed.hostname
-    if hostname is None:
+    if not (parsed.scheme and parsed.hostname):
         return "[REDACTED]"
+    hostname = parsed.hostname
     host = f"[{hostname}]" if ":" in hostname and not hostname.startswith("[") else hostname
     try:
         netloc = f"{host}:{parsed.port}" if parsed.port is not None else host
@@ -1236,8 +1243,8 @@ def _safe_endpoint_identity(uri: str) -> str:
         SplitResult(
             scheme=parsed.scheme,
             netloc=netloc,
-            path=parsed.path,
-            query=parsed.query,
-            fragment=parsed.fragment,
+            path="",
+            query="",
+            fragment="",
         )
     )

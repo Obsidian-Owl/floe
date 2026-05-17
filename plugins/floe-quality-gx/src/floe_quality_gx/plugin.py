@@ -29,6 +29,8 @@ SUPPORTED_DIALECTS = {"duckdb", "postgresql", "snowflake"}
 GX_SUITE_RUNS_METRIC = "floe.quality.gx.suite_runs"
 GX_SUITE_DURATION_METRIC = "floe.quality.gx.suite_duration"
 GX_SUITE_FAILURES_METRIC = "floe.quality.gx.suite_failures"
+GX_CHECK_RESULTS_METRIC = "floe.quality.gx.check_results"
+GX_CHECK_FAILURES_METRIC = "floe.quality.gx.check_failures"
 
 logger = structlog.get_logger(__name__)
 
@@ -271,6 +273,7 @@ class GreatExpectationsPlugin(QualityPlugin):
             status=status,
             duration_seconds=duration_seconds,
         )
+        self._record_check_results(metrics, result)
         logger.info(
             "gx_suite_completed",
             suite_name=result.suite_name,
@@ -309,6 +312,94 @@ class GreatExpectationsPlugin(QualityPlugin):
             error_type=error_type,
             error_message=sanitize_error_message(str(exc)),
         )
+
+    def _record_check_results(
+        self,
+        metrics: MetricRecorder,
+        result: QualitySuiteResult,
+    ) -> None:
+        tracer = get_tracer()
+        for check in result.checks:
+            status = "success" if check.passed else "failure"
+            error_type = None if check.passed else "QualityCheckFailed"
+            attrs: dict[str, str | int | float] = {
+                "quality.check_name": check.check_name,
+                "quality.status": status,
+                "quality.dimension": check.dimension.value,
+                "quality.severity": check.severity.value,
+                "quality.records_checked": check.records_checked,
+                "quality.records_failed": check.records_failed,
+                "quality.check_duration_ms": check.execution_time_ms,
+            }
+            if error_type is not None:
+                attrs["quality.error_type"] = error_type
+
+            with quality_span(
+                tracer,
+                "check_result",
+                suite_name=result.suite_name,
+                data_source=result.model_name,
+                extra_attributes=attrs,
+            ) as check_span:
+                check_span.set_attribute("quality.status", status)
+                check_span.set_attribute("quality.records_checked", check.records_checked)
+                check_span.set_attribute("quality.records_failed", check.records_failed)
+                if error_type is not None:
+                    check_span.set_attribute("quality.error_type", error_type)
+
+            self._record_check_metrics(
+                metrics,
+                status=status,
+                dimension=check.dimension.value,
+                severity=check.severity.value,
+                error_type=error_type,
+            )
+            logger.info(
+                "gx_check_completed",
+                suite_name=result.suite_name,
+                model_name=result.model_name,
+                check_name=check.check_name,
+                dimension=check.dimension.value,
+                severity=check.severity.value,
+                status=status,
+                error_type=error_type,
+                records_checked=check.records_checked,
+                records_failed=check.records_failed,
+            )
+
+    @staticmethod
+    def _record_check_metrics(
+        metrics: MetricRecorder,
+        *,
+        status: str,
+        dimension: str,
+        severity: str,
+        error_type: str | None = None,
+    ) -> None:
+        labels = {
+            "quality.provider": "great_expectations",
+            "quality.status": status,
+            "quality.dimension": dimension,
+            "quality.severity": severity,
+        }
+        if error_type is not None:
+            labels["quality.error_type"] = error_type
+        try:
+            metrics.increment(
+                GX_CHECK_RESULTS_METRIC,
+                labels=labels,
+                description="Great Expectations check results",
+                unit="1",
+            )
+            if error_type is not None or status != "success":
+                metrics.increment(
+                    GX_CHECK_FAILURES_METRIC,
+                    labels=labels,
+                    description="Great Expectations check failures",
+                    unit="1",
+                )
+        except Exception as exc:  # pragma: no cover - defensive telemetry isolation
+            logger.debug("gx_check_metric_failed", error_type=type(exc).__name__)
 
     @staticmethod
     def _record_quality_metrics(

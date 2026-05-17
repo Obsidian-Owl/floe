@@ -159,6 +159,127 @@ class TestRunChecksBasicExecution:
             status="success",
         )
 
+    @pytest.mark.requirement("OBS-T4")
+    def test_run_suite_records_per_check_spans_metrics_and_logs(
+        self, gx_plugin: GreatExpectationsPlugin
+    ) -> None:
+        """Suite execution emits per-check status and failure type telemetry."""
+        metric_calls: list[tuple[str, float | int, dict[str, str]]] = []
+
+        class FakeMetricRecorder:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                pass
+
+            def increment(
+                self,
+                name: str,
+                value: int = 1,
+                *,
+                labels: dict[str, str] | None = None,
+                **kwargs: object,
+            ) -> None:
+                metric_calls.append((name, value, labels or {}))
+
+            def record_histogram(
+                self,
+                name: str,
+                value: float,
+                *,
+                labels: dict[str, str] | None = None,
+                **kwargs: object,
+            ) -> None:
+                metric_calls.append((name, value, labels or {}))
+
+        suite = QualitySuite(
+            model_name="orders",
+            checks=[
+                QualityCheck(
+                    name="id_not_null",
+                    type="not_null",
+                    column="id",
+                    dimension=Dimension.COMPLETENESS,
+                ),
+                QualityCheck(
+                    name="amount_positive",
+                    type="between",
+                    column="amount",
+                    dimension=Dimension.ACCURACY,
+                ),
+            ],
+        )
+        result = QualitySuiteResult(
+            suite_name="orders_suite",
+            model_name="orders",
+            passed=False,
+            checks=[
+                QualityCheckResult(
+                    check_name="id_not_null",
+                    passed=True,
+                    dimension=Dimension.COMPLETENESS,
+                    severity=SeverityLevel.WARNING,
+                    records_checked=10,
+                    records_failed=0,
+                    execution_time_ms=12.5,
+                ),
+                QualityCheckResult(
+                    check_name="amount_positive",
+                    passed=False,
+                    dimension=Dimension.ACCURACY,
+                    severity=SeverityLevel.CRITICAL,
+                    records_checked=10,
+                    records_failed=2,
+                    execution_time_ms=18.5,
+                    error_message="password=super-secret leaked in GX details",
+                ),
+            ],
+            summary={"total": 2, "passed": 1, "failed": 1},
+        )
+
+        with (
+            patch("floe_quality_gx.plugin.MetricRecorder", FakeMetricRecorder),
+            patch("floe_quality_gx.plugin.get_tracer") as mock_get_tracer,
+            patch("floe_quality_gx.plugin.logger") as mock_logger,
+            patch("floe_quality_gx.executor.create_dataframe_from_connection", return_value=[]),
+            patch("floe_quality_gx.executor.run_validation_with_timeout", return_value=result),
+        ):
+            mock_tracer = MagicMock()
+            mock_get_tracer.return_value = mock_tracer
+            gx_plugin.run_suite(suite, {"dialect": "duckdb"})
+
+        span_calls = mock_tracer.start_as_current_span.call_args_list
+        check_span_attrs = [
+            call.kwargs["attributes"]
+            for call in span_calls
+            if call.args and call.args[0] == "quality.check_result"
+        ]
+        assert len(check_span_attrs) == 2
+        assert check_span_attrs[0]["quality.check_name"] == "id_not_null"
+        assert check_span_attrs[0]["quality.status"] == "success"
+        assert check_span_attrs[1]["quality.check_name"] == "amount_positive"
+        assert check_span_attrs[1]["quality.status"] == "failure"
+        assert check_span_attrs[1]["quality.error_type"] == "QualityCheckFailed"
+        assert "super-secret" not in str(check_span_attrs)
+        assert any(
+            name == "floe.quality.gx.check_results"
+            and labels["quality.status"] == "failure"
+            and labels["quality.error_type"] == "QualityCheckFailed"
+            for name, _value, labels in metric_calls
+        )
+        mock_logger.info.assert_any_call(
+            "gx_check_completed",
+            suite_name="orders_suite",
+            model_name="orders",
+            check_name="amount_positive",
+            dimension="accuracy",
+            severity="critical",
+            status="failure",
+            error_type="QualityCheckFailed",
+            records_checked=10,
+            records_failed=2,
+        )
+        assert "super-secret" not in str(metric_calls)
+        assert "super-secret" not in str(mock_logger.method_calls)
+
 
 class TestRunChecksFailures:
     """Tests for FLOE-DQ102 check failure handling (T049)."""

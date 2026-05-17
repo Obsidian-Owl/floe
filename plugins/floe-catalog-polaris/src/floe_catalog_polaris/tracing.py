@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
@@ -140,10 +141,10 @@ def catalog_span(
 
 
 def _sanitize_uri(uri: str) -> str:
-    """Remove credentials from URI for safe logging/tracing.
+    """Return a credential-free endpoint identity for tracing.
 
-    Removes userinfo (username:password@) from URIs to prevent
-    accidental credential exposure in traces.
+    Removes userinfo, query strings, fragments, and paths so presigned
+    URLs or credential-bearing query parameters cannot enter spans.
 
     Args:
         uri: URI that may contain credentials.
@@ -153,18 +154,26 @@ def _sanitize_uri(uri: str) -> str:
 
     Example:
         >>> _sanitize_uri("https://user:pass@example.com/api")
-        'https://example.com/api'
+        'https://example.com'
     """
-    # Simple sanitization - remove userinfo from URI
-    # Format: scheme://[userinfo@]host[:port]/path
-    if "@" in uri and "://" in uri:
-        scheme_end = uri.index("://") + 3
-        at_pos = uri.index("@")
-        # Only sanitize if @ is in the authority section (before first /)
-        slash_pos = uri.find("/", scheme_end)
-        if slash_pos == -1 or at_pos < slash_pos:
-            return uri[:scheme_end] + uri[at_pos + 1 :]
-    return uri
+    parsed = urlsplit(uri)
+    if not (parsed.scheme and parsed.hostname):
+        return "[REDACTED]"
+    hostname = parsed.hostname
+    host = f"[{hostname}]" if ":" in hostname and not hostname.startswith("[") else hostname
+    try:
+        netloc = f"{host}:{parsed.port}" if parsed.port is not None else host
+    except ValueError:
+        return "[REDACTED]"
+    return urlunsplit(
+        SplitResult(
+            scheme=parsed.scheme,
+            netloc=netloc,
+            path="",
+            query="",
+            fragment="",
+        )
+    )
 
 
 def set_error_attributes(

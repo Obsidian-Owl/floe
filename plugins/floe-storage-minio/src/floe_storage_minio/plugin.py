@@ -536,11 +536,9 @@ def _record_storage_metric(
 
 def _safe_endpoint_identity(uri: str) -> str:
     parsed = urlsplit(uri)
-    if not (parsed.scheme and parsed.netloc and (parsed.username or parsed.password)):
-        return uri
-    hostname = parsed.hostname
-    if hostname is None:
+    if not (parsed.scheme and parsed.hostname):
         return "[REDACTED]"
+    hostname = parsed.hostname
     host = f"[{hostname}]" if ":" in hostname and not hostname.startswith("[") else hostname
     try:
         netloc = f"{host}:{parsed.port}" if parsed.port is not None else host
@@ -550,8 +548,8 @@ def _safe_endpoint_identity(uri: str) -> str:
         SplitResult(
             scheme=parsed.scheme,
             netloc=netloc,
-            path=parsed.path,
-            query=parsed.query,
-            fragment=parsed.fragment,
+            path="",
+            query="",
+            fragment="",
         )
     )
