@@ -20,6 +20,14 @@ from typing import Any
 from urllib.parse import quote
 
 import httpx
+from floe_core.telemetry.conventions import FLOE_PRODUCT_NAME, FLOE_RUN_ID
+
+ASSET_MATERIALIZATIONS_METRIC = "floe_asset_materializations_total"
+ASSET_FAILURES_METRIC = "floe_asset_failures_total"
+METRIC_ASSET_KEY_LABEL = "floe_asset_key"
+METRIC_PLUGIN_NAME_LABEL = "floe_plugin_name"
+METRIC_PRODUCT_NAME_LABEL = "floe_product_name"
+METRIC_STATUS_LABEL = "floe_status"
 
 
 class EvidenceStatus(str, Enum):
@@ -368,7 +376,12 @@ def query_trace_backend(
     client: httpx.Client | None = None,
 ) -> EvidenceResult:
     """Query Jaeger traces by service/product/run context."""
-    params = {"service": service, "limit": "50"}
+    tags = {
+        FLOE_PRODUCT_NAME: context.product,
+        FLOE_RUN_ID: context.run_id,
+    }
+    tags_json = json.dumps(tags, separators=(",", ":"))
+    params = {"service": service, "limit": "50", "tags": tags_json}
     url = _join_url(jaeger_url, "api/traces")
     query = f"service={service} product={context.product} run_id={context.run_id}"
     owns_client = client is None
@@ -450,8 +463,14 @@ def query_prometheus_metrics(
     client: httpx.Client | None = None,
 ) -> EvidenceResult:
     """Query Prometheus metrics by product/status/plugin context."""
+    metric_name = (
+        ASSET_FAILURES_METRIC
+        if status.lower() in {"failure", "error"}
+        else ASSET_MATERIALIZATIONS_METRIC
+    )
     prom_query = (
-        f'floe_product_run_status{{product="{product}",status="{status}",plugin=~"{plugin}"}}'
+        f'{metric_name}{{{METRIC_PRODUCT_NAME_LABEL}="{product}",'
+        f'{METRIC_STATUS_LABEL}="{status}",{METRIC_PLUGIN_NAME_LABEL}=~"{plugin}"}}'
     )
     url = _join_url(prometheus_url, "api/v1/query")
     owns_client = client is None
@@ -473,11 +492,12 @@ def query_prometheus_metrics(
         if owns_client:
             http_client.close()
 
-    return classify_evidence_records(
-        backend="metrics",
+    return _classify_metric_records(
         query=prom_query,
         context=context,
         records=records,
+        status=status,
+        plugin=plugin,
         url=url,
     )
 
@@ -494,14 +514,25 @@ def query_marquez_lineage(
     """Query Marquez lineage by namespace/job/run context."""
     encoded_namespace = quote(namespace, safe="")
     encoded_job = quote(job_name, safe="")
-    url = _join_url(marquez_url, f"api/v1/namespaces/{encoded_namespace}/jobs/{encoded_job}/runs")
+    runs_url = _join_url(
+        marquez_url,
+        f"api/v1/namespaces/{encoded_namespace}/jobs/{encoded_job}/runs",
+    )
+    jobs_url = _join_url(marquez_url, f"api/v1/namespaces/{encoded_namespace}/jobs")
     query = f"namespace={namespace} job={job_name} run_id={context.run_id}"
     owns_client = client is None
     http_client = client or httpx.Client(timeout=timeout_seconds)
     try:
-        response = http_client.get(url)
-        response.raise_for_status()
-        records = _marquez_records(response.json(), namespace=namespace, job_name=job_name)
+        runs_response = http_client.get(runs_url)
+        runs_response.raise_for_status()
+        run_records = _marquez_records(
+            runs_response.json(),
+            namespace=namespace,
+            job_name=job_name,
+        )
+        jobs_response = http_client.get(jobs_url)
+        jobs_response.raise_for_status()
+        job_records = _marquez_job_records(jobs_response.json(), namespace=namespace)
     except Exception as exc:  # noqa: BLE001
         return classify_evidence_records(
             backend="lineage",
@@ -509,18 +540,18 @@ def query_marquez_lineage(
             context=context,
             records=None,
             backend_error=str(exc),
-            url=url,
+            url=runs_url,
         )
     finally:
         if owns_client:
             http_client.close()
 
-    return classify_evidence_records(
-        backend="lineage",
+    return _classify_marquez_lineage_records(
         query=query,
         context=context,
-        records=records,
-        url=url,
+        run_records=run_records,
+        job_records=job_records,
+        url=runs_url,
     )
 
 
@@ -573,6 +604,12 @@ def validate_customer360_observability(
         run_id=resolved_run_id,
         freshness_window_seconds=config.freshness_window_seconds,
     )
+    metric_context = ObservabilityContext(
+        product=config.product,
+        run_id=resolved_run_id,
+        table=config.table,
+        freshness_window_seconds=config.freshness_window_seconds,
+    )
     backend_results = (
         dagster_result,
         query_trace_backend(
@@ -593,7 +630,7 @@ def validate_customer360_observability(
             product=config.product,
             status=config.metric_status,
             plugin=config.metric_plugin,
-            context=run_context,
+            context=metric_context,
             timeout_seconds=config.timeout_seconds,
         ),
         query_marquez_lineage(
@@ -644,6 +681,146 @@ def _result_failures(result: EvidenceResult) -> list[str]:
     ]
 
 
+def _classify_metric_records(
+    *,
+    query: str,
+    context: ObservabilityContext,
+    records: Sequence[EvidenceRecord],
+    status: str,
+    plugin: str,
+    url: str,
+) -> EvidenceResult:
+    record_tuple = tuple(records)
+    if not record_tuple:
+        return EvidenceResult(
+            backend="metrics",
+            status=EvidenceStatus.NO_FRESH_EVIDENCE,
+            query=query,
+            url=url,
+            message=f"metrics backend returned no evidence for {context.product}/{status}/{plugin}",
+        )
+
+    matching_context = [
+        record
+        for record in record_tuple
+        if _metric_record_matches_context(record, context, status=status, plugin=plugin)
+    ]
+    if not matching_context:
+        expected = f"{context.product} / {status} / {plugin}"
+        if context.table:
+            expected = f"{expected} / {context.table}"
+        return EvidenceResult(
+            backend="metrics",
+            status=EvidenceStatus.WRONG_CONTEXT,
+            query=query,
+            url=url,
+            message=(
+                "metrics backend returned evidence, but none matched bounded-cardinality "
+                f"metric context {expected}"
+            ),
+            records=record_tuple,
+            diagnostics={"expected_context": expected},
+        )
+
+    fresh_records = [
+        record
+        for record in matching_context
+        if record.timestamp_epoch_seconds is None
+        or record.timestamp_epoch_seconds >= context.freshness_cutoff_epoch_seconds
+    ]
+    if not fresh_records:
+        newest = max(
+            (
+                record.timestamp_epoch_seconds
+                for record in matching_context
+                if record.timestamp_epoch_seconds is not None
+            ),
+            default=None,
+        )
+        diagnostics = {}
+        if newest is not None:
+            diagnostics["newest_epoch_seconds"] = f"{newest:.3f}"
+            diagnostics["freshness_cutoff_epoch_seconds"] = (
+                f"{context.freshness_cutoff_epoch_seconds:.3f}"
+            )
+        return EvidenceResult(
+            backend="metrics",
+            status=EvidenceStatus.STALE_EVIDENCE,
+            query=query,
+            url=url,
+            message=f"metrics backend returned only stale evidence for {context.product}/{status}",
+            records=tuple(matching_context),
+            diagnostics=diagnostics,
+        )
+
+    return EvidenceResult(
+        backend="metrics",
+        status=EvidenceStatus.PASS,
+        query=query,
+        url=url,
+        message=f"metrics backend returned fresh evidence for {context.product}/{status}",
+        records=tuple(fresh_records),
+    )
+
+
+def _classify_marquez_lineage_records(
+    *,
+    query: str,
+    context: ObservabilityContext,
+    run_records: Sequence[EvidenceRecord],
+    job_records: Sequence[EvidenceRecord],
+    url: str,
+) -> EvidenceResult:
+    product_context = ObservabilityContext(
+        product=context.product,
+        run_id=context.run_id,
+        freshness_window_seconds=context.freshness_window_seconds,
+        now_epoch_seconds=context.now_epoch_seconds,
+    )
+    product_result = classify_evidence_records(
+        backend="lineage",
+        query=query,
+        context=product_context,
+        records=run_records,
+        url=url,
+    )
+    if not product_result.ok:
+        return product_result
+
+    table_context = ObservabilityContext(
+        product=context.product,
+        run_id="<unknown>",
+        table=context.table,
+        freshness_window_seconds=context.freshness_window_seconds,
+        now_epoch_seconds=context.now_epoch_seconds,
+    )
+    table_result = classify_evidence_records(
+        backend="lineage",
+        query=f"{query} table={context.table or '<none>'}",
+        context=table_context,
+        records=job_records,
+        url=url,
+    )
+    if not table_result.ok:
+        return table_result
+
+    return EvidenceResult(
+        backend="lineage",
+        status=EvidenceStatus.PASS,
+        query=query,
+        url=url,
+        message=(
+            f"lineage backend returned product run evidence for {context.run_id} "
+            f"and model/table evidence for {context.table}"
+        ),
+        records=(*product_result.records, *table_result.records),
+        diagnostics={
+            "product_run_count": str(product_result.evidence_count),
+            "model_table_count": str(table_result.evidence_count),
+        },
+    )
+
+
 def _trace_category_failures(
     trace_result: EvidenceResult,
     evidence: dict[str, str],
@@ -672,6 +849,43 @@ def _record_matches_context(record: EvidenceRecord, context: ObservabilityContex
     if context.table and not _contains_value(payload_text, context.table):
         return False
     return True
+
+
+def _metric_record_matches_context(
+    record: EvidenceRecord,
+    context: ObservabilityContext,
+    *,
+    status: str,
+    plugin: str,
+) -> bool:
+    metric = record.payload.get("metric")
+    if not isinstance(metric, Mapping):
+        return False
+    if not _contains_value(str(metric.get(METRIC_PRODUCT_NAME_LABEL, "")).lower(), context.product):
+        return False
+    if str(metric.get(METRIC_STATUS_LABEL, "")).lower() != status.lower():
+        return False
+    plugin_name = str(metric.get(METRIC_PLUGIN_NAME_LABEL, "")).lower()
+    if plugin != ".+" and not _contains_value(plugin_name, plugin):
+        return False
+    if (
+        context.table
+        and METRIC_ASSET_KEY_LABEL in metric
+        and not _contains_value(
+            str(metric.get(METRIC_ASSET_KEY_LABEL, "")).lower(),
+            context.table,
+        )
+    ):
+        return False
+    return _metric_record_has_positive_value(record)
+
+
+def _metric_record_has_positive_value(record: EvidenceRecord) -> bool:
+    value = record.payload.get("value")
+    if not isinstance(value, list) or len(value) < 2:
+        return True
+    sample = _parse_float(value[1])
+    return sample is None or sample > 0
 
 
 def _record_has_failure_status(record: EvidenceRecord) -> bool:
@@ -799,6 +1013,24 @@ def _marquez_records(
                 ),
             )
         )
+    return records
+
+
+def _marquez_job_records(
+    payload: Mapping[str, Any],
+    *,
+    namespace: str,
+) -> list[EvidenceRecord]:
+    jobs = payload.get("jobs", [])
+    if not isinstance(jobs, list):
+        return []
+    records: list[EvidenceRecord] = []
+    for job in jobs:
+        if not isinstance(job, Mapping):
+            continue
+        enriched = dict(job)
+        enriched.setdefault("namespace", namespace)
+        records.append(EvidenceRecord(payload=enriched))
     return records
 
 

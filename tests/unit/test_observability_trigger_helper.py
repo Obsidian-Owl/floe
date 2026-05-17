@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -77,7 +78,7 @@ class _FakeResponse:
 
 
 class _FakeClient:
-    def __init__(self, payload: dict[str, object]) -> None:
+    def __init__(self, payload: dict[str, object] | dict[str, dict[str, object]]) -> None:
         self.payload = payload
         self.requests: list[tuple[str, dict[str, object] | None]] = []
 
@@ -87,7 +88,11 @@ class _FakeClient:
         params: dict[str, object] | None = None,
     ) -> _FakeResponse:
         self.requests.append((url, params))
-        return _FakeResponse(self.payload)
+        if url in self.payload:
+            payload = self.payload[url]  # type: ignore[index]
+            if isinstance(payload, dict):
+                return _FakeResponse(payload)
+        return _FakeResponse(self.payload)  # type: ignore[arg-type]
 
 
 def test_customer360_observability_classifies_backend_unreachable() -> None:
@@ -196,7 +201,7 @@ def test_customer360_observability_classifies_product_execution_failure(status: 
 
 
 def test_customer360_trace_helper_queries_jaeger_by_service_product_and_run() -> None:
-    """Trace helper queries Jaeger and classifies exact run/table context."""
+    """Trace helper queries Jaeger with actual OTel product/run tags."""
     client = _FakeClient(
         {
             "data": [
@@ -207,9 +212,9 @@ def test_customer360_trace_helper_queries_jaeger_by_service_product_and_run() ->
                             "operationName": "customer-360 run root",
                             "startTime": 1_699_999_950_000_000,
                             "tags": [
-                                {"key": "product", "value": "customer-360"},
-                                {"key": "dagster.run_id", "value": "run-123"},
-                                {"key": "table", "value": "mart_customer_360"},
+                                {"key": "floe.product.name", "value": "customer-360"},
+                                {"key": "floe.run.id", "value": "run-123"},
+                                {"key": "floe.table.name", "value": "mart_customer_360"},
                             ],
                         }
                     ],
@@ -226,8 +231,17 @@ def test_customer360_trace_helper_queries_jaeger_by_service_product_and_run() ->
     )
 
     assert result.status is EvidenceStatus.PASS
+    tags = json.loads(client.requests[0][1]["tags"])  # type: ignore[index]
+    assert tags == {"floe.product.name": "customer-360", "floe.run.id": "run-123"}
     assert client.requests == [
-        ("http://jaeger/api/traces", {"service": "customer-360", "limit": "50"})
+        (
+            "http://jaeger/api/traces",
+            {
+                "service": "customer-360",
+                "limit": "50",
+                "tags": '{"floe.product.name":"customer-360","floe.run.id":"run-123"}',
+            },
+        )
     ]
 
 
@@ -271,17 +285,18 @@ def test_customer360_loki_helper_queries_logs_by_product_and_run() -> None:
 
 
 def test_customer360_prometheus_helper_queries_metrics_by_product_status_and_plugin() -> None:
-    """Prometheus helper queries product/status/plugin labels."""
+    """Prometheus helper uses actual runtime metric names and bounded labels."""
     client = _FakeClient(
         {
             "data": {
                 "result": [
                     {
                         "metric": {
-                            "product": "customer-360",
-                            "run_id": "run-123",
-                            "status": "success",
-                            "plugin": "dagster",
+                            "__name__": "floe_asset_materializations_total",
+                            "floe_product_name": "customer-360",
+                            "floe_status": "success",
+                            "floe_plugin_name": "dagster",
+                            "floe_asset_key": "mart_customer_360",
                         },
                         "value": [1_699_999_950.0, "1"],
                     }
@@ -292,6 +307,7 @@ def test_customer360_prometheus_helper_queries_metrics_by_product_status_and_plu
     context = ObservabilityContext(
         product="customer-360",
         run_id="run-123",
+        table="mart_customer_360",
         freshness_window_seconds=300,
         now_epoch_seconds=1_700_000_000.0,
     )
@@ -311,8 +327,8 @@ def test_customer360_prometheus_helper_queries_metrics_by_product_status_and_plu
             "http://prometheus/api/v1/query",
             {
                 "query": (
-                    'floe_product_run_status{product="customer-360",'
-                    'status="success",plugin=~"dagster"}'
+                    'floe_asset_materializations_total{floe_product_name="customer-360",'
+                    'floe_status="success",floe_plugin_name=~"dagster"}'
                 )
             },
         )
@@ -320,18 +336,25 @@ def test_customer360_prometheus_helper_queries_metrics_by_product_status_and_plu
 
 
 def test_customer360_marquez_helper_queries_lineage_by_namespace_job_and_run() -> None:
-    """Marquez helper queries namespace/job runs and classifies the run context."""
+    """Marquez helper accepts product-run and model/table evidence as separate records."""
     client = _FakeClient(
         {
-            "runs": [
-                {
-                    "id": "run-123",
-                    "state": "COMPLETED",
-                    "startedAt": "2023-11-14T22:12:30Z",
-                    "outputs": [{"name": "mart_customer_360"}],
-                    "facets": {"product": {"name": "customer-360"}},
-                }
-            ]
+            "http://marquez/api/v1/namespaces/customer-360/jobs/customer-360/runs": {
+                "runs": [
+                    {
+                        "id": "run-123",
+                        "state": "COMPLETED",
+                        "startedAt": "2023-11-14T22:12:30Z",
+                        "facets": {"product": {"name": "customer-360"}},
+                    }
+                ]
+            },
+            "http://marquez/api/v1/namespaces/customer-360/jobs": {
+                "jobs": [
+                    {"name": "customer-360"},
+                    {"name": "model.customer_360.mart_customer_360"},
+                ]
+            },
         }
     )
 
@@ -348,5 +371,6 @@ def test_customer360_marquez_helper_queries_lineage_by_namespace_job_and_run() -
         (
             "http://marquez/api/v1/namespaces/customer-360/jobs/customer-360/runs",
             None,
-        )
+        ),
+        ("http://marquez/api/v1/namespaces/customer-360/jobs", None),
     ]
