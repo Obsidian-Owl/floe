@@ -17,70 +17,10 @@ from typing import Any
 
 import httpx
 import pytest
-import yaml
 
 from testing.base_classes.integration_test_base import IntegrationTestBase
 from testing.fixtures.kubernetes import run_helm_template
 from testing.fixtures.polling import wait_for_condition
-
-
-@pytest.mark.e2e
-@pytest.mark.developer_workflow
-@pytest.mark.requirement("FR-044")
-def test_demo_observability_backend_profile_rendered() -> None:
-    """Demo Helm profile renders queryable logs, metrics, and trace datasources."""
-    from pathlib import Path
-
-    project_root = Path(__file__).parent.parent.parent
-    chart_path = project_root / "charts" / "floe-platform"
-    values_path = chart_path / "values-demo.yaml"
-
-    result = run_helm_template("test-release", chart_path, values_path=values_path, timeout=60)
-
-    assert result.returncode == 0, (
-        f"Helm template rendering failed: {result.returncode}\nstderr: {result.stderr}"
-    )
-
-    rendered = result.stdout
-    documents = [
-        doc for doc in yaml.safe_load_all(rendered) if isinstance(doc, dict) and doc.get("kind")
-    ]
-    names_by_kind = {(doc.get("kind"), doc.get("metadata", {}).get("name")) for doc in documents}
-
-    assert ("ConfigMap", "floe-platform-loki") in names_by_kind
-    assert ("Deployment", "floe-platform-loki") in names_by_kind
-    assert ("Service", "floe-platform-loki") in names_by_kind
-
-    assert "otlphttp/loki" in rendered, (
-        "LOG BACKEND GAP: Demo OTel logs pipeline must export to Loki via OTLP HTTP."
-    )
-    assert "- otlphttp/loki" in rendered, (
-        "LOG BACKEND GAP: Demo logs pipeline must not be debug-only."
-    )
-    assert "endpoint: http://floe-platform-loki:3100/otlp" in rendered
-    assert "endpoint: 0.0.0.0:9464" in rendered, (
-        "METRICS GAP: Demo OTel metrics pipeline must expose a Prometheus scrape path."
-    )
-    assert "- prometheus" in rendered, (
-        "METRICS GAP: Demo metrics pipeline must export to Prometheus-compatible output."
-    )
-
-    datasource_configmaps = [
-        doc
-        for doc in documents
-        if doc.get("kind") == "ConfigMap"
-        and "grafana-datasources" in doc.get("metadata", {}).get("name", "")
-    ]
-    assert datasource_configmaps, "Grafana datasource provisioning ConfigMap not rendered"
-
-    datasource_payload = yaml.safe_dump(datasource_configmaps)
-    assert "type: loki" in datasource_payload
-    assert "type: prometheus" in datasource_payload
-    assert "type: jaeger" in datasource_payload
-
-    assert "floe_asset_materializations" in rendered
-    assert "floe_asset_failures" in rendered
-    assert "floe_lineage_marquez_event_sends" in rendered
 
 
 class TestDemoMode(IntegrationTestBase):

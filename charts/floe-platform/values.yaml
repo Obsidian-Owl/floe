@@ -601,6 +601,51 @@ loki:
       delete_request_store: filesystem
 
 # =============================================================================
+# Prometheus Configuration (Queryable Metrics)
+# =============================================================================
+prometheus:
+  # Disabled by default; values-demo.yaml enables this low-cost alpha backend.
+  enabled: false
+
+  # Optional name override for the Prometheus resources.
+  fullnameOverride: ""
+
+  # Image configuration.
+  image:
+    repository: prom/prometheus
+    tag: "v2.55.1"
+    pullPolicy: IfNotPresent
+
+  # Replica count.
+  replicaCount: 1
+
+  # Service configuration.
+  service:
+    type: ClusterIP
+    port: 9090
+
+  # Resource limits.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Single-binary scrape config for local alpha/demo deployments.
+  config:
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    scrape_configs:
+      - job_name: floe-otel-collector
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              - floe-platform-otel:9464
+
+# =============================================================================
 # PostgreSQL Configuration (Metadata Store)
 # =============================================================================
 postgresql:
@@ -1090,7 +1135,7 @@ observability:
         uid: prometheus
         type: prometheus
         access: proxy
-        url: http://prometheus-server:80
+        url: http://floe-platform-prometheus:9090
         isDefault: true
         editable: true
       - name: Jaeger

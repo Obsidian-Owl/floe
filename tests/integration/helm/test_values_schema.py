@@ -15,6 +15,8 @@ from typing import Any
 import pytest
 import yaml
 
+from testing.fixtures.kubernetes import run_helm_template
+
 # Try to import jsonschema, skip tests if not available
 try:
     import jsonschema
@@ -54,6 +56,18 @@ def load_values_file(chart: str, filename: str = "values.yaml") -> dict[str, Any
         pytest.fail(f"Values file not found: {values_path}")
     with values_path.open() as f:
         return yaml.safe_load(f) or {}
+
+
+def deep_merge_values(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Merge Helm values maps the same way layered values files are resolved."""
+    merged = dict(base)
+    for key, value in override.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = deep_merge_values(existing, value)
+        else:
+            merged[key] = value
+    return merged
 
 
 @pytest.mark.skipif(not HAS_JSONSCHEMA, reason="jsonschema not installed")
@@ -105,7 +119,10 @@ class TestFloePlatformSchema:
     @pytest.mark.requirement("FR-044")
     def test_demo_values_wire_queryable_observability_backends(self) -> None:
         """Demo profile must send logs and metrics to queryable backends."""
-        values = load_values_file("floe-platform", "values-demo.yaml")
+        values = deep_merge_values(
+            load_values_file("floe-platform"),
+            load_values_file("floe-platform", "values-demo.yaml"),
+        )
 
         otel_config = values["otel"]["config"]
         exporters = otel_config["exporters"]
@@ -124,6 +141,13 @@ class TestFloePlatformSchema:
             "Demo metrics pipeline must expose a Prometheus-compatible scrape path"
         )
         assert exporters["prometheus"]["endpoint"].endswith(":9464")
+        assert values["prometheus"]["enabled"] is True
+        scrape_configs = values["prometheus"]["config"]["scrape_configs"]
+        otel_scrape_jobs = [
+            job for job in scrape_configs if job.get("job_name") == "floe-otel-collector"
+        ]
+        assert otel_scrape_jobs, "Prometheus must scrape OTel collector metrics"
+        assert "floe-platform-otel:9464" in otel_scrape_jobs[0]["static_configs"][0]["targets"]
 
         datasources = values["observability"]["grafana"]["datasources"]
         datasource_types = {
@@ -132,8 +156,69 @@ class TestFloePlatformSchema:
             if isinstance(datasource, dict) and "type" in datasource
         }
         assert datasource_types["loki"]["url"], "Grafana logs datasource must be wired"
-        assert datasource_types["prometheus"]["url"], "Grafana metrics datasource must be wired"
+        metrics_url = datasource_types["prometheus"]["url"]
+        assert metrics_url == "http://floe-platform-prometheus:9090", (
+            "Grafana metrics datasource must point at the Prometheus query API, "
+            "not the OTel collector scrape endpoint"
+        )
         assert datasource_types["jaeger"]["url"], "Grafana trace datasource must remain wired"
+
+    @pytest.mark.requirement("FR-044")
+    def test_demo_observability_backend_profile_renders_query_backends(self) -> None:
+        """Demo Helm profile renders Loki, Prometheus query, and Grafana datasources."""
+        chart_path = CHARTS_DIR / "floe-platform"
+        result = run_helm_template(
+            "test-release",
+            chart_path,
+            values_path=chart_path / "values-demo.yaml",
+            timeout=60,
+        )
+
+        assert result.returncode == 0, (
+            f"Helm template rendering failed: {result.returncode}\nstderr: {result.stderr}"
+        )
+
+        rendered = result.stdout
+        documents = [
+            doc for doc in yaml.safe_load_all(rendered) if isinstance(doc, dict) and doc.get("kind")
+        ]
+        names_by_kind = {
+            (doc.get("kind"), doc.get("metadata", {}).get("name")) for doc in documents
+        }
+
+        assert ("ConfigMap", "floe-platform-loki") in names_by_kind
+        assert ("Deployment", "floe-platform-loki") in names_by_kind
+        assert ("Service", "floe-platform-loki") in names_by_kind
+        assert ("ConfigMap", "floe-platform-prometheus") in names_by_kind
+        assert ("Deployment", "floe-platform-prometheus") in names_by_kind
+        assert ("Service", "floe-platform-prometheus") in names_by_kind
+
+        assert "otlphttp/loki" in rendered
+        assert "- otlphttp/loki" in rendered
+        assert "endpoint: http://floe-platform-loki:3100/otlp" in rendered
+        assert "endpoint: 0.0.0.0:9464" in rendered
+        assert "- prometheus" in rendered
+        assert "targets:" in rendered
+        assert "- floe-platform-otel:9464" in rendered
+
+        datasource_configmaps = [
+            doc
+            for doc in documents
+            if doc.get("kind") == "ConfigMap"
+            and "grafana-datasources" in doc.get("metadata", {}).get("name", "")
+        ]
+        assert datasource_configmaps, "Grafana datasource provisioning ConfigMap not rendered"
+
+        datasource_payload = yaml.safe_dump(datasource_configmaps)
+        assert "type: loki" in datasource_payload
+        assert "type: prometheus" in datasource_payload
+        assert "type: jaeger" in datasource_payload
+        assert "url: http://floe-platform-prometheus:9090" in datasource_payload
+        assert "url: http://floe-platform-otel:9464" not in datasource_payload
+
+        assert "floe_asset_materializations" in rendered
+        assert "floe_asset_failures" in rendered
+        assert "floe_lineage_marquez_event_sends" in rendered
 
     @pytest.mark.requirement("9b-FR-004")
     def test_invalid_environment_rejected(self, floe_platform_schema: dict[str, Any]) -> None:

@@ -1,0 +1,13 @@
+{{- if .Values.prometheus.enabled }}
+{{- $prometheusName := default (printf "%s-prometheus" (include "floe-platform.fullname" .)) .Values.prometheus.fullnameOverride }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $prometheusName | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+data:
+  prometheus.yml: |
+{{ toYaml .Values.prometheus.config | indent 4 }}
+{{- end }}

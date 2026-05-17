@@ -273,6 +273,12 @@ loki:
   enabled: true
 
 # =============================================================================
+# Prometheus Configuration (Queryable Metrics - Demo)
+# =============================================================================
+prometheus:
+  enabled: true
+
+# =============================================================================
 # PostgreSQL Configuration (Metadata Store)
 # =============================================================================
 postgresql:
@@ -399,7 +405,7 @@ observability:
         uid: prometheus
         type: prometheus
         access: proxy
-        url: http://floe-platform-otel:9464
+        url: http://floe-platform-prometheus:9090
         isDefault: true
         editable: true
       - name: Jaeger
