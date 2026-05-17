@@ -30,7 +30,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import structlog
@@ -89,7 +89,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
         ...     plugin.shutdown()
     """
 
-    def __init__(self, config: PolarisCatalogConfig) -> None:
+    def __init__(self, config: PolarisCatalogConfig | None = None) -> None:
         """Initialize the Polaris catalog plugin.
 
         Args:
@@ -111,7 +111,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
         cfg = self._config
         if cfg is None:
             return None
-        return cfg  # type: ignore[return-value]
+        return cast(PolarisCatalogConfig, cfg)
 
     def _require_config(self) -> PolarisCatalogConfig:
         """Return config or raise PluginConfigurationError if unconfigured.
@@ -129,7 +129,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
                 "polaris",
                 [{"field": "_config", "message": "Plugin 'polaris' not configured"}],
             )
-        return self._config  # type: ignore[return-value]
+        return cast(PolarisCatalogConfig, self._config)
 
     # =========================================================================
     # PluginMetadata abstract properties
@@ -1161,6 +1161,19 @@ class PolarisCatalogPlugin(CatalogPlugin):
             timeout = 1.0
         if not (0.1 <= timeout <= 10.0):
             raise ValueError(f"timeout must be between 0.1 and 10.0 seconds, got {timeout}")
+
+        if self._config is None:
+            checked_at = datetime.now(timezone.utc)
+            return HealthStatus(
+                state=HealthState.UNHEALTHY,
+                message="Polaris catalog not configured",
+                details={
+                    "reason": "not_configured",
+                    "response_time_ms": 0.0,
+                    "checked_at": checked_at,
+                    "timeout": timeout,
+                },
+            )
 
         cfg = self._require_config()
         log = logger.bind(

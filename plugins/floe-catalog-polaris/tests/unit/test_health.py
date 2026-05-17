@@ -179,6 +179,16 @@ class TestHealthCheckBasic:
         # Error details should be in message or details
         assert "Connection refused" in result.message or "Connection refused" in str(result.details)
 
+    def test_health_check_unhealthy_when_not_configured(self) -> None:
+        """Plugin discovery health checks must not require runtime config."""
+        plugin = PolarisCatalogPlugin()
+
+        result = plugin.health_check(timeout=1.0)
+
+        assert result.state == HealthState.UNHEALTHY
+        assert result.details["reason"] == "not_configured"
+        assert result.details["timeout"] == pytest.approx(1.0)
+
 
 class TestHealthCheckResponseTime:
     """Tests for response time measurement in health_check()."""

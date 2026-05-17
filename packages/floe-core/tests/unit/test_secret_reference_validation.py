@@ -16,19 +16,33 @@ from unittest.mock import MagicMock
 
 import pytest
 
+_MISSING_MODULE = object()
 
-def _install_fake_floe_rbac_k8s(mock_plugin_cls: MagicMock) -> dict[str, ModuleType]:
+
+def _install_fake_floe_rbac_k8s(mock_plugin_cls: MagicMock) -> dict[str, ModuleType | object]:
     """Install a fake ``floe_rbac_k8s.plugin`` into ``sys.modules``.
 
-    Returns the mapping of injected module names so the caller can clean up.
+    Returns the previous module mapping so the caller can restore import state.
     """
+    module_names = ("floe_rbac_k8s", "floe_rbac_k8s.plugin")
+    previous_modules: dict[str, ModuleType | object] = {
+        name: sys.modules.get(name, _MISSING_MODULE) for name in module_names
+    }
     pkg = ModuleType("floe_rbac_k8s")
     sub = ModuleType("floe_rbac_k8s.plugin")
     sub.K8sRBACPlugin = mock_plugin_cls  # type: ignore[attr-defined]
     pkg.plugin = sub  # type: ignore[attr-defined]
-    modules = {"floe_rbac_k8s": pkg, "floe_rbac_k8s.plugin": sub}
-    sys.modules.update(modules)
-    return modules
+    sys.modules.update({"floe_rbac_k8s": pkg, "floe_rbac_k8s.plugin": sub})
+    return previous_modules
+
+
+def _restore_modules(previous_modules: dict[str, ModuleType | object]) -> None:
+    """Restore modules replaced by ``_install_fake_floe_rbac_k8s``."""
+    for mod_name, module in previous_modules.items():
+        if module is _MISSING_MODULE:
+            sys.modules.pop(mod_name, None)
+        else:
+            sys.modules[mod_name] = module
 
 
 class TestSecretReferenceValidationBasics:
@@ -189,7 +203,7 @@ class TestSecretReferenceValidationIntegration:
         mock_plugin = MagicMock()
         MockK8sRBACPlugin.return_value = mock_plugin
 
-        fake_mods = _install_fake_floe_rbac_k8s(MockK8sRBACPlugin)
+        previous_modules = _install_fake_floe_rbac_k8s(MockK8sRBACPlugin)
         try:
             from floe_rbac_k8s.plugin import K8sRBACPlugin
 
@@ -198,8 +212,7 @@ class TestSecretReferenceValidationIntegration:
             assert hasattr(generator, "validate_secret_references")
             assert callable(generator.validate_secret_references)
         finally:
-            for mod_name in fake_mods:
-                sys.modules.pop(mod_name, None)
+            _restore_modules(previous_modules)
 
     @pytest.mark.requirement("FR-073")
     def test_generator_validate_returns_tuple(self) -> None:
@@ -210,7 +223,7 @@ class TestSecretReferenceValidationIntegration:
         mock_plugin = MagicMock()
         MockK8sRBACPlugin.return_value = mock_plugin
 
-        fake_mods = _install_fake_floe_rbac_k8s(MockK8sRBACPlugin)
+        previous_modules = _install_fake_floe_rbac_k8s(MockK8sRBACPlugin)
         try:
             from floe_rbac_k8s.plugin import K8sRBACPlugin
 
@@ -226,5 +239,4 @@ class TestSecretReferenceValidationIntegration:
             assert isinstance(result[0], bool)
             assert isinstance(result[1], list)
         finally:
-            for mod_name in fake_mods:
-                sys.modules.pop(mod_name, None)
+            _restore_modules(previous_modules)
