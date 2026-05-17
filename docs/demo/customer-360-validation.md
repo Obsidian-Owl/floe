@@ -40,7 +40,7 @@ Expected successful runner evidence:
 ```text
 status=PASS
 dagster.run_id=<run-id>
-dagster.job_name=customer-360
+dagster.job_name=customer_360
 ```
 
 Expected successful validation evidence:
