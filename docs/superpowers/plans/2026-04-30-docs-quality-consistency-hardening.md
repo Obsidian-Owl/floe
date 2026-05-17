@@ -219,7 +219,7 @@ Expected: FAIL because `plugin-catalog.md` is missing and stale counts exist.
 Create `docs/reference/plugin-catalog.md` with:
 
 - Current implementation source: `floe_core.plugin_types.PluginType`.
-- Current count: `14 plugin categories`.
+- Current count: `15 plugin categories`.
 - Clear distinction between `PluginType` categories and public plugin ABC reference pages.
 - Table with category, entry point group, current alpha status, and owner:
   - Compute: `floe.computes`
@@ -240,15 +240,15 @@ Create `docs/reference/plugin-catalog.md` with:
 
 - [ ] **Step 3: Replace stale concept counts**
 
-Update public docs to avoid stale counts or use the canonical phrase `14 plugin categories`:
+Update public docs to avoid stale counts or use the canonical phrase `15 plugin categories`:
 
 ```bash
-rg -n "11 plugin|12 plugin|13 plugin|14 plugin|plugin types|plugin categories" README.md docs
+rg -n "11 plugin|12 plugin|13 plugin|15 plugin|plugin types|plugin categories" README.md docs
 ```
 
 Expected after edits:
 
-- `README.md` aligns to `14 plugin categories`.
+- `README.md` aligns to `15 plugin categories`.
 - `docs/architecture/plugin-system/index.md` links to `docs/reference/plugin-catalog.md`.
 - `docs/architecture/interfaces/index.md` says public ABC coverage is a subset/reference surface, not the canonical category count.
 - `docs/architecture/ARCHITECTURE-SUMMARY.md` stops claiming stale counts.

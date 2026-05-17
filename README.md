@@ -208,9 +208,9 @@ governance:
   block_on_failure: true
 ```
 
-Floe has 14 plugin categories: Compute, Orchestrator, Catalog, Storage,
+Floe has 15 plugin categories: Compute, Orchestrator, Catalog, Storage,
 TelemetryBackend, LineageBackend, DBT, SemanticLayer, Ingestion, Quality, RBAC,
-AlertChannel, Secrets, and Identity.
+AlertChannel, Secrets, Identity, and NetworkSecurity.
 
 ### 2. Data Teams Describe Product Intent
 

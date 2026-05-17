@@ -22,8 +22,9 @@ floe uses a plugin architecture for all configurable components. The implementat
 | **Alert Channel** | Webhook / Slack / email primitives | Contract violation alert delivery | Epic 15 |
 | **Secrets** | Kubernetes Secrets and Infisical plugin primitives | Credential management | ADR-0023/0031 |
 | **Identity** | Keycloak reference implementation | Authentication provider | ADR-0024 |
+| **Network Security** | Kubernetes NetworkPolicy and Pod Security generation | Network isolation and pod security policy | Epic 7C |
 
-**Total:** 14 plugin categories, based on `floe_core.plugin_types.PluginType`.
+**Total:** 15 plugin categories, based on `floe_core.plugin_types.PluginType`.
 
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins. Policy enforcement tooling is provided via DBTPlugin, and rules are configured via manifest.yaml. Data contracts use ODCS v3 as an enforced standard.
 
@@ -33,7 +34,7 @@ floe uses a plugin architecture for all configurable components. The implementat
 
 | Version | Count | Changes |
 |---------|-------|---------|
-| current | 14 | Added Quality, RBAC, and Alert Channel categories to `PluginType`; `LINEAGE` remains an alias for `LINEAGE_BACKEND` |
+| current | 15 | Added Quality, RBAC, Alert Channel, and Network Security categories to `PluginType`; `LINEAGE` remains an alias for `LINEAGE_BACKEND` |
 | floe-core 2.1 | 11 | Moved PolicyEnforcer + DataContract to core modules (not plugins) |
 | floe-core 2.0 | 13 | Split ObservabilityPlugin -> TelemetryBackendPlugin + LineageBackendPlugin (ADR-0035) |
 | floe-core 1.5 | 12 | Added DBTPlugin (ADR-0043) |

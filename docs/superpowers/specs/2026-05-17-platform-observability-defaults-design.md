@@ -190,9 +190,10 @@ validation should cover both where they affect the Customer 360 proof.
 
 ### Plugin-Type Observability Requirements
 
-The current `PluginType` enum defines 14 plugin categories. The source tree also
-contains plugin interfaces for network security, secret scanning, and sink
-connectors that are not all first-class `PluginType` enum members. The
+The current `PluginType` enum defines 15 plugin categories. Network security is
+now a first-class `PluginType`; the source tree also contains plugin interfaces
+for secret scanning and sink connectors that are not all first-class `PluginType`
+enum members. The
 implementation plan must explicitly reconcile that registry surface.
 
 | Plugin category | Lifecycle points requiring observability | Alpha scope |
