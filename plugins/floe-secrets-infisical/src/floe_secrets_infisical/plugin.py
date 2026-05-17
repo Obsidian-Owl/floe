@@ -27,6 +27,7 @@ Example:
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from floe_core.audit import AuditLogger, AuditOperation
@@ -54,13 +55,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_SECRET_REFERENCE_MARKERS = ("secret", "password", "token", "credential", "private_key")
+
 
 class _ErrorType:
     """Error classification for Infisical API responses."""
 
     NOT_FOUND = "not_found"
     ACCESS_DENIED = "access_denied"
-    CONNECTION_ERROR = "connection"
+    UNAVAILABLE = "unavailable"
+    VALIDATION = "validation"
     UNKNOWN = "unknown"
 
 
@@ -81,10 +85,48 @@ def _classify_error(error: Exception) -> str:
     if "forbidden" in error_str or "403" in error_str or "permission" in error_str:
         return _ErrorType.ACCESS_DENIED
 
-    if "connection" in error_str or "timeout" in error_str:
-        return _ErrorType.CONNECTION_ERROR
+    if (
+        "connection" in error_str
+        or "timeout" in error_str
+        or "unavailable" in error_str
+        or "503" in error_str
+    ):
+        return _ErrorType.UNAVAILABLE
+
+    if isinstance(error, ValueError) or "validation" in error_str or "400" in error_str:
+        return _ErrorType.VALIDATION
 
     return _ErrorType.UNKNOWN
+
+
+def _safe_secret_reference_identity(reference: str | None) -> str | None:
+    """Return a secret reference only when it is safe operational metadata."""
+    if not reference:
+        return None
+    lowered = reference.lower()
+    if any(marker in lowered for marker in _SECRET_REFERENCE_MARKERS):
+        return None
+    if any(part in lowered for part in ("://", "=", "?", "#", "@")):
+        return None
+    return reference
+
+
+def _record_secret_span(
+    span: Any,
+    *,
+    operation_type: str,
+    outcome: str,
+    started_at: float,
+    found: bool | None = None,
+    count: int | None = None,
+    error_type: str | None = None,
+) -> None:
+    """Attach secret operation metadata without recording secret material."""
+    record_result(span, found=found, count=count, operation_type=operation_type)
+    span.set_attribute("secrets.outcome", outcome)
+    span.set_attribute("secrets.duration_ms", (time.perf_counter() - started_at) * 1000)
+    if error_type is not None:
+        span.set_attribute("secrets.error_type", error_type)
 
 
 def _safe_error_reason(error: Exception, fallback: str) -> str:
@@ -341,10 +383,13 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             tracer,
             "get_secret",
             provider="infisical",
-            key_name=key,
+            key_name=_safe_secret_reference_identity(key),
             extra_attributes={ATTR_PATH: self._config.secret_path},
         ) as span:
+            started_at = time.perf_counter()
             try:
+                if not key:
+                    raise ValueError("Secret reference must not be empty")
                 from infisical_client import GetSecretOptions
 
                 options = GetSecretOptions(
@@ -356,7 +401,13 @@ class InfisicalSecretsPlugin(SecretsPlugin):
 
                 secret = self._client.getSecret(options)
 
-                record_result(span, found=True)
+                _record_secret_span(
+                    span,
+                    operation_type="get",
+                    outcome="success",
+                    started_at=started_at,
+                    found=bool(secret.secret_value),
+                )
 
                 self._audit_logger.log_success(
                     requester_id="system",
@@ -371,7 +422,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
 
             except Exception as e:
                 error_type = _classify_error(e)
-                return self._handle_get_secret_error(e, error_type, key, span)
+                return self._handle_get_secret_error(e, error_type, key, span, started_at)
 
     def set_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
         """Store a secret value.
@@ -402,18 +453,27 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             tracer,
             "set_secret",
             provider="infisical",
-            key_name=key,
+            key_name=_safe_secret_reference_identity(key),
             extra_attributes={ATTR_PATH: self._config.secret_path},
         ) as span:
+            started_at = time.perf_counter()
             try:
+                if not key:
+                    raise ValueError("Secret reference must not be empty")
                 operation_type = self._create_or_update_secret(key, value, metadata, span)
+                _record_secret_span(
+                    span,
+                    operation_type=operation_type,
+                    outcome="success",
+                    started_at=started_at,
+                )
                 self._log_set_secret_success(key, operation_type)
 
             except (InfisicalAccessDeniedError, InfisicalBackendUnavailableError):
-                self._log_set_secret_known_error(key, span)
+                self._log_set_secret_known_error(key, span, started_at)
                 raise
             except Exception as e:
-                self._handle_set_secret_error(e, key, span)
+                self._handle_set_secret_error(e, key, span, started_at)
 
     def _create_or_update_secret(
         self,
@@ -470,7 +530,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             metadata={"action": operation_type, "path": self._config.secret_path},
         )
 
-    def _log_set_secret_known_error(self, key: str, span: Any) -> None:
+    def _log_set_secret_known_error(self, key: str, span: Any, started_at: float) -> None:
         """Log known error from set_secret (access denied or unavailable).
 
         Args:
@@ -478,6 +538,13 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             span: OpenTelemetry span (may be None).
         """
         # Error status is set by secrets_span context manager on re-raise
+        _record_secret_span(
+            span,
+            operation_type="set",
+            outcome="failure",
+            started_at=started_at,
+            error_type=_ErrorType.UNAVAILABLE,
+        )
         self._audit_logger.log_error(
             requester_id="system",
             secret_path=key,
@@ -487,7 +554,9 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             namespace=self._config.environment,
         )
 
-    def _handle_set_secret_error(self, e: Exception, key: str, span: Any) -> None:
+    def _handle_set_secret_error(
+        self, e: Exception, key: str, span: Any, started_at: float
+    ) -> None:
         """Handle unknown errors from set_secret.
 
         Args:
@@ -501,6 +570,15 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         """
         # Error status is set by secrets_span context manager on re-raise
         error_type = _classify_error(e)
+        _record_secret_span(
+            span,
+            operation_type="set",
+            outcome="failure",
+            started_at=started_at,
+            error_type=error_type,
+        )
+        if error_type == _ErrorType.VALIDATION:
+            raise ValueError(str(e)) from e
         if error_type == _ErrorType.ACCESS_DENIED:
             self._audit_logger.log_denied(
                 requester_id="system",
@@ -597,10 +675,13 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             tracer,
             "delete_secret",
             provider="infisical",
-            key_name=key,
+            key_name=_safe_secret_reference_identity(key),
             extra_attributes={ATTR_PATH: self._config.secret_path},
-        ):
+        ) as span:
+            started_at = time.perf_counter()
             try:
+                if not key:
+                    raise ValueError("Secret reference must not be empty")
                 from infisical_client import DeleteSecretOptions
 
                 options = DeleteSecretOptions(
@@ -620,10 +701,25 @@ class InfisicalSecretsPlugin(SecretsPlugin):
                     namespace=self._config.environment,
                     metadata={"path": self._config.secret_path},
                 )
+                _record_secret_span(
+                    span,
+                    operation_type="delete",
+                    outcome="success",
+                    started_at=started_at,
+                )
 
             except Exception as e:
-                error_str = str(e).lower()
-                if "not found" in error_str or "404" in error_str:
+                error_type = _classify_error(e)
+                _record_secret_span(
+                    span,
+                    operation_type="delete",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=error_type,
+                )
+                if error_type == _ErrorType.VALIDATION:
+                    raise ValueError(str(e)) from e
+                if error_type == _ErrorType.NOT_FOUND:
                     self._audit_logger.log_error(
                         requester_id="system",
                         secret_path=key,
@@ -637,7 +733,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
                         path=self._config.secret_path,
                         environment=self._config.environment,
                     ) from e
-                if "forbidden" in error_str or "403" in error_str:
+                if error_type == _ErrorType.ACCESS_DENIED:
                     self._audit_logger.log_denied(
                         requester_id="system",
                         secret_path=key,
@@ -694,19 +790,20 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             provider="infisical",
             extra_attributes={
                 ATTR_PATH: self._config.secret_path,
-                "secrets.prefix": prefix,
+                "secrets.prefix": _safe_secret_reference_identity(prefix) or "",
             },
         ) as span:
+            started_at = time.perf_counter()
             try:
                 secrets = self._list_secrets_with_filter(prefix)
-                self._log_list_secrets_success(prefix, len(secrets), span)
+                self._log_list_secrets_success(prefix, len(secrets), span, started_at)
                 return secrets
 
             except (InfisicalAccessDeniedError, InfisicalBackendUnavailableError):
-                self._log_list_secrets_known_error(prefix, span)
+                self._log_list_secrets_known_error(prefix, span, started_at)
                 raise
             except Exception as e:
-                self._handle_list_secrets_error(e, prefix, span)
+                self._handle_list_secrets_error(e, prefix, span, started_at)
 
     def _list_secrets_with_filter(self, prefix: str) -> list[str]:
         """List secrets and filter by prefix.
@@ -722,7 +819,9 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             secrets = [s for s in secrets if s.startswith(prefix)]
         return sorted(secrets)
 
-    def _log_list_secrets_success(self, prefix: str, count: int, span: Any) -> None:
+    def _log_list_secrets_success(
+        self, prefix: str, count: int, span: Any, started_at: float
+    ) -> None:
         """Log successful list_secrets operation.
 
         Args:
@@ -730,7 +829,13 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             count: Number of secrets found.
             span: OpenTelemetry span (may be None).
         """
-        record_result(span, count=count)
+        _record_secret_span(
+            span,
+            operation_type="list",
+            outcome="success",
+            started_at=started_at,
+            count=count,
+        )
 
         self._audit_logger.log_success(
             requester_id="system",
@@ -741,7 +846,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             metadata={"count": count, "path": self._config.secret_path},
         )
 
-    def _log_list_secrets_known_error(self, prefix: str, span: Any) -> None:
+    def _log_list_secrets_known_error(self, prefix: str, span: Any, started_at: float) -> None:
         """Log known error from list_secrets (access denied or unavailable).
 
         Args:
@@ -749,6 +854,13 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             span: OpenTelemetry span (may be None).
         """
         # Error status is set by secrets_span context manager on re-raise
+        _record_secret_span(
+            span,
+            operation_type="list",
+            outcome="failure",
+            started_at=started_at,
+            error_type=_ErrorType.UNAVAILABLE,
+        )
         self._audit_logger.log_error(
             requester_id="system",
             secret_path=prefix or "*",
@@ -758,7 +870,9 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             namespace=self._config.environment,
         )
 
-    def _handle_list_secrets_error(self, e: Exception, prefix: str, span: Any) -> None:
+    def _handle_list_secrets_error(
+        self, e: Exception, prefix: str, span: Any, started_at: float
+    ) -> None:
         """Handle unknown errors from list_secrets.
 
         Args:
@@ -772,6 +886,15 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         """
         # Error status is set by secrets_span context manager on re-raise
         error_type = _classify_error(e)
+        _record_secret_span(
+            span,
+            operation_type="list",
+            outcome="failure",
+            started_at=started_at,
+            error_type=error_type,
+        )
+        if error_type == _ErrorType.VALIDATION:
+            raise ValueError(str(e)) from e
         if error_type == _ErrorType.ACCESS_DENIED:
             self._audit_logger.log_denied(
                 requester_id="system",
@@ -837,6 +960,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         error_type: str,
         key: str,
         span: Any,
+        started_at: float,
     ) -> str | None:
         """Handle errors from get_secret operation.
 
@@ -854,7 +978,14 @@ class InfisicalSecretsPlugin(SecretsPlugin):
             InfisicalBackendUnavailableError: If connection failed.
         """
         if error_type == _ErrorType.NOT_FOUND:
-            record_result(span, found=False)
+            _record_secret_span(
+                span,
+                operation_type="get",
+                outcome="failure",
+                started_at=started_at,
+                found=False,
+                error_type=error_type,
+            )
             self._audit_logger.log_success(
                 requester_id="system",
                 secret_path=key,
@@ -867,6 +998,13 @@ class InfisicalSecretsPlugin(SecretsPlugin):
 
         if error_type == _ErrorType.ACCESS_DENIED:
             # Error status is set by secrets_span context manager on re-raise
+            _record_secret_span(
+                span,
+                operation_type="get",
+                outcome="failure",
+                started_at=started_at,
+                error_type=error_type,
+            )
             self._audit_logger.log_denied(
                 requester_id="system",
                 secret_path=key,
@@ -876,13 +1014,20 @@ class InfisicalSecretsPlugin(SecretsPlugin):
                 namespace=self._config.environment,
             )
             raise InfisicalAccessDeniedError(
-                secret_key=key,
+                secret_key=_safe_secret_reference_identity(key) or "<redacted>",
                 project_id=self._config.project_id or "",
                 reason=str(e),
             ) from e
 
-        if error_type == _ErrorType.CONNECTION_ERROR:
+        if error_type == _ErrorType.UNAVAILABLE:
             # Error status is set by secrets_span context manager on re-raise
+            _record_secret_span(
+                span,
+                operation_type="get",
+                outcome="failure",
+                started_at=started_at,
+                error_type=error_type,
+            )
             self._audit_logger.log_error(
                 requester_id="system",
                 secret_path=key,
@@ -896,12 +1041,29 @@ class InfisicalSecretsPlugin(SecretsPlugin):
                 reason=str(e),
             ) from e
 
+        if error_type == _ErrorType.VALIDATION:
+            _record_secret_span(
+                span,
+                operation_type="get",
+                outcome="failure",
+                started_at=started_at,
+                error_type=error_type,
+            )
+            raise ValueError(str(e)) from e
+
         # UNKNOWN error - treat as not found (per CR-004)
         logger.debug(
             "Secret not found or error retrieving",
             extra={"key": key, "error": str(e)},
         )
-        record_result(span, found=False)
+        _record_secret_span(
+            span,
+            operation_type="get",
+            outcome="failure",
+            started_at=started_at,
+            found=False,
+            error_type=error_type,
+        )
         self._audit_logger.log_success(
             requester_id="system",
             secret_path=key,

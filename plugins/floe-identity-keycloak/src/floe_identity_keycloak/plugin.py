@@ -14,6 +14,7 @@ Implements:
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import httpx
@@ -33,6 +34,50 @@ from .tracing import TRACER_NAME, get_tracer, identity_span
 
 # Error messages (avoid S1192 duplicate string literals)
 _NOT_STARTED_ERROR = "Plugin not started. Call startup() first."
+
+
+class _ErrorType:
+    ACCESS_DENIED = "access_denied"
+    NOT_FOUND = "not_found"
+    UNAVAILABLE = "unavailable"
+    VALIDATION = "validation"
+    UNKNOWN = "unknown"
+
+
+def _classify_status(status_code: int) -> str:
+    if status_code in {401, 403}:
+        return _ErrorType.ACCESS_DENIED
+    if status_code == 404:
+        return _ErrorType.NOT_FOUND
+    if status_code in {408, 429, 500, 502, 503, 504}:
+        return _ErrorType.UNAVAILABLE
+    if status_code == 400:
+        return _ErrorType.VALIDATION
+    return _ErrorType.UNKNOWN
+
+
+def _classify_exception(exc: Exception) -> str:
+    if isinstance(exc, ValueError):
+        return _ErrorType.VALIDATION
+    if isinstance(exc, httpx.TimeoutException | httpx.ConnectError):
+        return _ErrorType.UNAVAILABLE
+    return _ErrorType.UNKNOWN
+
+
+def _record_identity_span(
+    span: Any,
+    *,
+    operation_type: str,
+    outcome: str,
+    started_at: float,
+    error_type: str | None = None,
+) -> None:
+    """Attach identity operation metadata without tokens, credentials, or PII."""
+    span.set_attribute("identity.operation_type", operation_type)
+    span.set_attribute("identity.outcome", outcome)
+    span.set_attribute("identity.duration_ms", (time.perf_counter() - started_at) * 1000)
+    if error_type is not None:
+        span.set_attribute("identity.error_type", error_type)
 
 
 class KeycloakIdentityPlugin(IdentityPlugin):
@@ -235,11 +280,34 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             realm=self._config.realm,
             extra_attributes={"identity.grant_type": grant_type},
         ) as span:
-            result = self._do_authenticate(data)
+            started_at = time.perf_counter()
+            try:
+                if grant_type == "password" and (
+                    not credentials.get("username") or not credentials.get("password")
+                ):
+                    raise ValueError("username and password are required")
+                result, error_type = self._do_authenticate(data)
+            except Exception as exc:
+                error_type = _classify_exception(exc)
+                _record_identity_span(
+                    span,
+                    operation_type="auth",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=error_type,
+                )
+                raise
             span.set_attribute("identity.auth.success", result is not None)
+            _record_identity_span(
+                span,
+                operation_type="auth",
+                outcome="success" if result is not None else "failure",
+                started_at=started_at,
+                error_type=error_type,
+            )
             return result
 
-    def _do_authenticate(self, data: dict[str, Any]) -> str | None:
+    def _do_authenticate(self, data: dict[str, Any]) -> tuple[str | None, str | None]:
         """Execute authentication request.
 
         Args:
@@ -257,12 +325,12 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             if response.status_code == 200:
                 token_data = response.json()
                 access_token = token_data.get("access_token")
-                return str(access_token) if access_token else None
+                return (str(access_token), None) if access_token else (None, _ErrorType.UNKNOWN)
 
-            return None
+            return None, _classify_status(response.status_code)
 
-        except httpx.HTTPError:
-            return None
+        except httpx.HTTPError as exc:
+            return None, _classify_exception(exc)
 
     def get_user_info(self, token: str) -> UserInfo | None:
         """Retrieve user information from token.
@@ -281,29 +349,55 @@ class KeycloakIdentityPlugin(IdentityPlugin):
         if not self._started or not self._client:
             raise RuntimeError(_NOT_STARTED_ERROR)
 
-        try:
-            response = self._client.get(
-                self._config.userinfo_url,
-                headers={"Authorization": f"Bearer {token}"},
-            )
+        tracer = get_tracer()
+        with identity_span(
+            tracer,
+            "get_user_info",
+            realm=self._config.realm,
+        ) as span:
+            started_at = time.perf_counter()
+            try:
+                response = self._client.get(
+                    self._config.userinfo_url,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
 
-            if response.status_code != 200:
+                if response.status_code != 200:
+                    _record_identity_span(
+                        span,
+                        operation_type="user_info",
+                        outcome="failure",
+                        started_at=started_at,
+                        error_type=_classify_status(response.status_code),
+                    )
+                    return None
+
+                data = response.json()
+                _record_identity_span(
+                    span,
+                    operation_type="user_info",
+                    outcome="success",
+                    started_at=started_at,
+                )
+
+                return UserInfo(
+                    subject=data.get("sub", ""),
+                    email=data.get("email", ""),
+                    name=data.get("name", ""),
+                    roles=self._extract_roles(data),
+                    groups=data.get("groups", []),
+                    claims=data,
+                )
+
+            except httpx.HTTPError as exc:
+                _record_identity_span(
+                    span,
+                    operation_type="user_info",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=_classify_exception(exc),
+                )
                 return None
-
-            data = response.json()
-
-            # Map Keycloak userinfo to UserInfo dataclass
-            return UserInfo(
-                subject=data.get("sub", ""),
-                email=data.get("email", ""),
-                name=data.get("name", ""),
-                roles=self._extract_roles(data),
-                groups=data.get("groups", []),
-                claims=data,
-            )
-
-        except httpx.HTTPError:
-            return None
 
     def validate_token(self, token: str) -> TokenValidationResult:
         """Validate an access token.
@@ -329,10 +423,16 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             "validate_token",
             realm=self._config.realm,
         ) as span:
+            started_at = time.perf_counter()
             result = self._validate_and_convert(token, self._token_validator)
             span.set_attribute("identity.token.valid", result.valid)
-            if result.valid and result.user_info:
-                span.set_attribute("identity.user.subject", result.user_info.subject)
+            _record_identity_span(
+                span,
+                operation_type="token",
+                outcome="success" if result.valid else "failure",
+                started_at=started_at,
+                error_type=None if result.valid else _ErrorType.ACCESS_DENIED,
+            )
             return result
 
     def _validate_and_convert(self, token: str, validator: TokenValidator) -> TokenValidationResult:
@@ -432,10 +532,16 @@ class KeycloakIdentityPlugin(IdentityPlugin):
             realm=realm,
             multi_tenant=True,
         ) as span:
+            started_at = time.perf_counter()
             result = self._validate_and_convert(token, validator)
             span.set_attribute("identity.token.valid", result.valid)
-            if result.valid and result.user_info:
-                span.set_attribute("identity.user.subject", result.user_info.subject)
+            _record_identity_span(
+                span,
+                operation_type="token",
+                outcome="success" if result.valid else "failure",
+                started_at=started_at,
+                error_type=None if result.valid else _ErrorType.ACCESS_DENIED,
+            )
             return result
 
     def authenticate_for_realm(
@@ -504,15 +610,46 @@ class KeycloakIdentityPlugin(IdentityPlugin):
                 "scope": " ".join(self._config.scopes),
             }
 
-        try:
-            response = self._client.post(token_url, data=data)
-            if response.status_code == 200:
-                token_data = response.json()
-                access_token = token_data.get("access_token")
-                return str(access_token) if access_token else None
-            return None
-        except httpx.HTTPError:
-            return None
+        tracer = get_tracer()
+        with identity_span(
+            tracer,
+            "authenticate_for_realm",
+            realm=realm,
+            multi_tenant=True,
+            extra_attributes={"identity.grant_type": data["grant_type"]},
+        ) as span:
+            started_at = time.perf_counter()
+            try:
+                response = self._client.post(token_url, data=data)
+                if response.status_code == 200:
+                    token_data = response.json()
+                    access_token = token_data.get("access_token")
+                    result = str(access_token) if access_token else None
+                    _record_identity_span(
+                        span,
+                        operation_type="auth",
+                        outcome="success" if result is not None else "failure",
+                        started_at=started_at,
+                        error_type=None if result is not None else _ErrorType.UNKNOWN,
+                    )
+                    return result
+                _record_identity_span(
+                    span,
+                    operation_type="auth",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=_classify_status(response.status_code),
+                )
+                return None
+            except httpx.HTTPError as exc:
+                _record_identity_span(
+                    span,
+                    operation_type="auth",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=_classify_exception(exc),
+                )
+                return None
 
     def get_available_realms(self) -> list[str]:
         """Get list of realms the plugin has validators for.

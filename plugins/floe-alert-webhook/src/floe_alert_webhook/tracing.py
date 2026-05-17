@@ -121,9 +121,9 @@ def alert_span(
         set_status_on_exception=False,
     ) as span:
         try:
+            span.set_attribute(ATTR_DELIVERY_STATUS, "success")
             yield span
             span.set_status(Status(StatusCode.OK))
-            span.set_attribute(ATTR_DELIVERY_STATUS, "success")
         except Exception as e:
             sanitized = sanitize_error_message(str(e))
             span.set_status(Status(StatusCode.ERROR, type(e).__name__))

@@ -8,6 +8,7 @@ Requirements: FR-026, FR-027
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import httpx
@@ -23,6 +24,50 @@ from floe_alert_alertmanager.tracing import (
 )
 
 logger = structlog.get_logger(__name__)
+
+
+def _violation_id(event: ContractViolationEvent) -> str:
+    return f"{event.contract_name}:{event.contract_version}:{event.violation_type.value}"
+
+
+def _classify_status(status_code: int) -> str:
+    if status_code in {401, 403}:
+        return "access_denied"
+    if status_code == 404:
+        return "not_found"
+    if status_code in {408, 429, 500, 502, 503, 504}:
+        return "unavailable"
+    if status_code == 400:
+        return "validation"
+    return "unknown"
+
+
+def _classify_exception(exc: Exception) -> str:
+    if isinstance(exc, ValueError):
+        return "validation"
+    if isinstance(exc, httpx.ConnectError | httpx.TimeoutException):
+        return "unavailable"
+    return "unknown"
+
+
+def _record_alert_span(
+    span: Any,
+    *,
+    destination_type: str,
+    delivery_status: str,
+    retry_count: int,
+    started_at: float,
+    violation_id: str | None = None,
+    error_type: str | None = None,
+) -> None:
+    span.set_attribute("alert.destination_type", destination_type)
+    span.set_attribute(ATTR_DELIVERY_STATUS, delivery_status)
+    span.set_attribute("alert.retry_count", retry_count)
+    span.set_attribute("alert.duration_ms", (time.perf_counter() - started_at) * 1000)
+    if violation_id is not None:
+        span.set_attribute("contract.violation_id", violation_id)
+    if error_type is not None:
+        span.set_attribute("alert.error_type", error_type)
 
 
 class AlertmanagerPlugin(AlertChannelPlugin):
@@ -61,11 +106,20 @@ class AlertmanagerPlugin(AlertChannelPlugin):
             tracer,
             "validate_config",
             channel="alertmanager",
-            destination=self._api_url,
-        ):
+            destination="alertmanager",
+        ) as span:
+            started_at = time.perf_counter()
             errors: list[str] = []
             if not self._api_url:
                 errors.append("api_url is required")
+            _record_alert_span(
+                span,
+                destination_type="alertmanager",
+                delivery_status="validation_failed" if errors else "validated",
+                retry_count=0,
+                started_at=started_at,
+                error_type="validation" if errors else None,
+            )
             return errors
 
     async def send_alert(self, event: ContractViolationEvent) -> bool:
@@ -74,9 +128,11 @@ class AlertmanagerPlugin(AlertChannelPlugin):
             tracer,
             "send_alert",
             channel="alertmanager",
-            destination=self._api_url,
+            destination="alertmanager",
             severity=event.severity.value,
         ) as span:
+            started_at = time.perf_counter()
+            violation_id = _violation_id(event)
             alerts = self._build_alerts(event)
             url = f"{self._api_url}/api/v2/alerts"
             try:
@@ -92,17 +148,48 @@ class AlertmanagerPlugin(AlertChannelPlugin):
                             status_code=response.status_code,
                             contract_name=event.contract_name,
                         )
-                        span.set_attribute(ATTR_DELIVERY_STATUS, "failed")
+                        _record_alert_span(
+                            span,
+                            destination_type="alertmanager",
+                            delivery_status="failed",
+                            retry_count=0,
+                            started_at=started_at,
+                            violation_id=violation_id,
+                            error_type=_classify_status(response.status_code),
+                        )
                         return False
-                    span.set_attribute(ATTR_DELIVERY_STATUS, "delivered")
+                    _record_alert_span(
+                        span,
+                        destination_type="alertmanager",
+                        delivery_status="delivered",
+                        retry_count=0,
+                        started_at=started_at,
+                        violation_id=violation_id,
+                    )
                     return True
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 self._log.warning("alertmanager_connection_error", error=str(e))
-                span.set_attribute(ATTR_DELIVERY_STATUS, "failed")
+                _record_alert_span(
+                    span,
+                    destination_type="alertmanager",
+                    delivery_status="failed",
+                    retry_count=0,
+                    started_at=started_at,
+                    violation_id=violation_id,
+                    error_type=_classify_exception(e),
+                )
                 return False
             except Exception as e:
                 self._log.error("alertmanager_unexpected_error", error=str(e))
-                span.set_attribute(ATTR_DELIVERY_STATUS, "failed")
+                _record_alert_span(
+                    span,
+                    destination_type="alertmanager",
+                    delivery_status="failed",
+                    retry_count=0,
+                    started_at=started_at,
+                    violation_id=violation_id,
+                    error_type=_classify_exception(e),
+                )
                 return False
 
     def _build_alerts(self, event: ContractViolationEvent) -> list[dict[str, Any]]:

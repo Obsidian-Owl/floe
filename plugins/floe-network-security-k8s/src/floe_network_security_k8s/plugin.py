@@ -7,6 +7,8 @@ the NetworkSecurityPlugin ABC from floe-core.
 from __future__ import annotations
 
 import re
+import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
 
 from floe_core.network.schemas import _validate_namespace
@@ -21,6 +23,26 @@ PSSLevel = Literal["privileged", "baseline", "restricted"]
 NetworkProtocol = Literal["TCP", "UDP"]
 
 _VALID_PSS_LEVELS: frozenset[str] = frozenset({"privileged", "baseline", "restricted"})
+
+
+class _ErrorType:
+    ACCESS_DENIED = "access_denied"
+    NOT_FOUND = "not_found"
+    UNAVAILABLE = "unavailable"
+    VALIDATION = "validation"
+    UNKNOWN = "unknown"
+
+
+def _classify_generation_error(error: Exception) -> str:
+    if isinstance(error, PermissionError):
+        return _ErrorType.ACCESS_DENIED
+    if isinstance(error, FileNotFoundError):
+        return _ErrorType.NOT_FOUND
+    if isinstance(error, ValueError):
+        return _ErrorType.VALIDATION
+    if isinstance(error, ConnectionError | TimeoutError):
+        return _ErrorType.UNAVAILABLE
+    return _ErrorType.UNKNOWN
 
 
 class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
@@ -57,6 +79,42 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         """OpenTelemetry tracer name for this plugin."""
         return TRACER_NAME
 
+    def _record_generation(
+        self,
+        *,
+        operation: str,
+        policy_type: str,
+        resource_kind: str,
+        namespace: str | None,
+        action: Callable[[], Any],
+        resource_count: int | None = None,
+    ) -> Any:
+        """Run a generator and record secret-free lifecycle metadata."""
+        tracer = get_tracer()
+        with security_span(
+            tracer,
+            operation,
+            policy_type=policy_type,
+            namespace=namespace,
+            resource_count=resource_count,
+            extra_attributes={"security.resource_kind": resource_kind},
+        ) as span:
+            started_at = time.perf_counter()
+            try:
+                result = action()
+                span.set_attribute("security.status", "success")
+                span.set_attribute(
+                    "security.duration_ms", (time.perf_counter() - started_at) * 1000
+                )
+                return result
+            except Exception as exc:
+                span.set_attribute("security.status", "failure")
+                span.set_attribute(
+                    "security.duration_ms", (time.perf_counter() - started_at) * 1000
+                )
+                span.set_attribute("security.error_type", _classify_generation_error(exc))
+                raise
+
     def generate_network_policy(self, config: NetworkPolicyConfig) -> dict[str, Any]:
         """Generate a single K8s NetworkPolicy manifest.
 
@@ -66,13 +124,8 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             Dictionary representing K8s NetworkPolicy YAML.
         """
-        tracer = get_tracer()
-        with security_span(
-            tracer,
-            "generate_network_policy",
-            policy_type="NetworkPolicy",
-            namespace=config.namespace,
-        ):
+
+        def _generate() -> dict[str, Any]:
             manifest: dict[str, Any] = {
                 "apiVersion": "networking.k8s.io/v1",
                 "kind": "NetworkPolicy",
@@ -104,6 +157,14 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
                 ]
 
             return manifest
+
+        return self._record_generation(
+            operation="generate_network_policy",
+            policy_type="NetworkPolicy",
+            resource_kind="NetworkPolicy",
+            namespace=config.namespace,
+            action=_generate,
+        )
 
     def _convert_ingress_rule(self, rule: Any) -> dict[str, Any]:
         """Convert an IngressRule to K8s manifest format."""
@@ -160,15 +221,9 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             List of NetworkPolicy manifests (ingress-deny, egress-deny).
         """
-        _validate_namespace(namespace)
-        tracer = get_tracer()
-        with security_span(
-            tracer,
-            "generate_default_deny_policies",
-            policy_type="NetworkPolicy",
-            namespace=namespace,
-            resource_count=1,
-        ):
+
+        def _generate() -> list[dict[str, Any]]:
+            _validate_namespace(namespace)
             return [
                 {
                     "apiVersion": "networking.k8s.io/v1",
@@ -188,6 +243,15 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
                     },
                 }
             ]
+
+        return self._record_generation(
+            operation="generate_default_deny_policies",
+            policy_type="NetworkPolicy",
+            resource_kind="NetworkPolicy",
+            namespace=namespace or None,
+            resource_count=1,
+            action=_generate,
+        )
 
     def generate_dns_egress_rule(self) -> dict[str, Any]:
         """Generate DNS egress rule (always required).
@@ -362,40 +426,49 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         import logging
         import os
 
-        cidr = k8s_api_cidr
-        if cidr is None:
-            k8s_service_host = os.environ.get("KUBERNETES_SERVICE_HOST")
-            if k8s_service_host:
-                cidr = f"{k8s_service_host}/32"
-            elif strict_mode:
-                raise ValueError(
-                    "K8s API CIDR not specified and KUBERNETES_SERVICE_HOST not set. "
-                    "Either set k8s_api_cidr explicitly, run in-cluster, or use "
-                    "strict_mode=False to allow permissive 0.0.0.0/0 fallback."
-                )
-            else:
-                logging.warning(
-                    "K8s API CIDR not specified (strict_mode=False). "
-                    "Using 0.0.0.0/0 which allows egress to ANY destination."
-                )
-                cidr = "0.0.0.0/0"
+        def _generate() -> dict[str, Any]:
+            cidr = k8s_api_cidr
+            if cidr is None:
+                k8s_service_host = os.environ.get("KUBERNETES_SERVICE_HOST")
+                if k8s_service_host:
+                    cidr = f"{k8s_service_host}/32"
+                elif strict_mode:
+                    raise ValueError(
+                        "K8s API CIDR not specified and KUBERNETES_SERVICE_HOST not set. "
+                        "Either set k8s_api_cidr explicitly, run in-cluster, or use "
+                        "strict_mode=False to allow permissive 0.0.0.0/0 fallback."
+                    )
+                else:
+                    logging.warning(
+                        "K8s API CIDR not specified (strict_mode=False). "
+                        "Using 0.0.0.0/0 which allows egress to ANY destination."
+                    )
+                    cidr = "0.0.0.0/0"
 
-        if cidr != "0.0.0.0/0":
-            self._validate_cidr(cidr)
+            if cidr != "0.0.0.0/0":
+                self._validate_cidr(cidr)
 
-        return {
-            "to": [
-                {
-                    "ipBlock": {
-                        "cidr": cidr,
+            return {
+                "to": [
+                    {
+                        "ipBlock": {
+                            "cidr": cidr,
+                        },
                     },
-                },
-            ],
-            "ports": [
-                {"port": 443, "protocol": "TCP"},
-                {"port": 6443, "protocol": "TCP"},
-            ],
-        }
+                ],
+                "ports": [
+                    {"port": 443, "protocol": "TCP"},
+                    {"port": 6443, "protocol": "TCP"},
+                ],
+            }
+
+        return self._record_generation(
+            operation="generate_k8s_api_egress_rule",
+            policy_type="Egress",
+            resource_kind="NetworkPolicyRule",
+            namespace=None,
+            action=_generate,
+        )
 
     def generate_external_https_egress_rule(self, enabled: bool = True) -> dict[str, Any] | None:
         """Generate egress rule for external HTTPS access.

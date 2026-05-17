@@ -8,8 +8,10 @@ Requirements: FR-026, FR-027
 
 from __future__ import annotations
 
+import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import Any
 
 import aiosmtplib
 import structlog
@@ -26,6 +28,45 @@ from floe_alert_email.tracing import (
 )
 
 logger = structlog.get_logger(__name__)
+
+
+def _violation_id(event: ContractViolationEvent) -> str:
+    return f"{event.contract_name}:{event.contract_version}:{event.violation_type.value}"
+
+
+def _classify_exception(exc: Exception) -> str:
+    if isinstance(exc, ValueError):
+        return "validation"
+    if isinstance(exc, TimeoutError | ConnectionError):
+        return "unavailable"
+    lowered = str(exc).lower()
+    if "timeout" in lowered or "connect" in lowered or "unavailable" in lowered:
+        return "unavailable"
+    if "forbidden" in lowered or "denied" in lowered or "auth" in lowered:
+        return "access_denied"
+    if "not found" in lowered:
+        return "not_found"
+    return "unknown"
+
+
+def _record_alert_span(
+    span: Any,
+    *,
+    destination_type: str,
+    delivery_status: str,
+    retry_count: int,
+    started_at: float,
+    violation_id: str | None = None,
+    error_type: str | None = None,
+) -> None:
+    span.set_attribute("alert.destination_type", destination_type)
+    span.set_attribute(ATTR_DELIVERY_STATUS, delivery_status)
+    span.set_attribute("alert.retry_count", retry_count)
+    span.set_attribute("alert.duration_ms", (time.perf_counter() - started_at) * 1000)
+    if violation_id is not None:
+        span.set_attribute("contract.violation_id", violation_id)
+    if error_type is not None:
+        span.set_attribute("alert.error_type", error_type)
 
 
 class EmailAlertPlugin(AlertChannelPlugin):
@@ -72,13 +113,13 @@ class EmailAlertPlugin(AlertChannelPlugin):
 
     def validate_config(self) -> list[str]:
         tracer = get_tracer()
-        destination = ", ".join(self._to_addresses) if self._to_addresses else ""
         with alert_span(
             tracer,
             "validate_config",
             channel="email",
-            destination=destination,
-        ):
+            destination="email",
+        ) as span:
+            started_at = time.perf_counter()
             errors: list[str] = []
             if not self._smtp_host:
                 errors.append("smtp_host is required")
@@ -86,17 +127,26 @@ class EmailAlertPlugin(AlertChannelPlugin):
                 errors.append("from_address is required")
             if not self._to_addresses:
                 errors.append("to_addresses is required (at least one recipient)")
+            _record_alert_span(
+                span,
+                destination_type="email",
+                delivery_status="validation_failed" if errors else "validated",
+                retry_count=0,
+                started_at=started_at,
+                error_type="validation" if errors else None,
+            )
             return errors
 
     async def send_alert(self, event: ContractViolationEvent) -> bool:
         tracer = get_tracer()
-        destination = ", ".join(self._to_addresses)
         with alert_span(
             tracer,
             "send_alert",
             channel="email",
-            destination=destination,
+            destination="email",
         ) as span:
+            started_at = time.perf_counter()
+            violation_id = _violation_id(event)
             message = self._build_message(event)
             try:
                 await aiosmtplib.send(
@@ -108,7 +158,14 @@ class EmailAlertPlugin(AlertChannelPlugin):
                     use_tls=self._use_tls,
                     timeout=self._timeout_seconds,
                 )
-                span.set_attribute(ATTR_DELIVERY_STATUS, "delivered")
+                _record_alert_span(
+                    span,
+                    destination_type="email",
+                    delivery_status="delivered",
+                    retry_count=0,
+                    started_at=started_at,
+                    violation_id=violation_id,
+                )
                 return True
             except Exception as e:
                 self._log.error(
@@ -116,7 +173,15 @@ class EmailAlertPlugin(AlertChannelPlugin):
                     error=str(e),
                     contract_name=event.contract_name,
                 )
-                span.set_attribute(ATTR_DELIVERY_STATUS, "failed")
+                _record_alert_span(
+                    span,
+                    destination_type="email",
+                    delivery_status="failed",
+                    retry_count=0,
+                    started_at=started_at,
+                    violation_id=violation_id,
+                    error_type=_classify_exception(e),
+                )
                 return False
 
     def _build_message(self, event: ContractViolationEvent) -> MIMEMultipart:

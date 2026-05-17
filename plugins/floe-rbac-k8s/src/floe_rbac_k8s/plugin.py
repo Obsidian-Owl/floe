@@ -15,6 +15,8 @@ Example:
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from typing import Any
 
 from floe_core.plugins.rbac import RBACPlugin
@@ -27,6 +29,26 @@ from floe_core.schemas.rbac import (
 )
 
 from floe_rbac_k8s.tracing import get_tracer, security_span
+
+
+class _ErrorType:
+    ACCESS_DENIED = "access_denied"
+    NOT_FOUND = "not_found"
+    UNAVAILABLE = "unavailable"
+    VALIDATION = "validation"
+    UNKNOWN = "unknown"
+
+
+def _classify_generation_error(error: Exception) -> str:
+    if isinstance(error, PermissionError):
+        return _ErrorType.ACCESS_DENIED
+    if isinstance(error, FileNotFoundError):
+        return _ErrorType.NOT_FOUND
+    if isinstance(error, ValueError):
+        return _ErrorType.VALIDATION
+    if isinstance(error, ConnectionError | TimeoutError):
+        return _ErrorType.UNAVAILABLE
+    return _ErrorType.UNKNOWN
 
 
 class K8sRBACPlugin(RBACPlugin):
@@ -73,6 +95,42 @@ class K8sRBACPlugin(RBACPlugin):
         """
         return "floe.security.rbac"
 
+    def _record_generation(
+        self,
+        *,
+        operation: str,
+        policy_type: str,
+        resource_kind: str,
+        namespace: str | None,
+        action: Callable[[], dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Run a manifest generator and record secret-free lifecycle metadata."""
+        tracer = get_tracer()
+        with security_span(
+            tracer,
+            operation,
+            policy_type=policy_type,
+            extra_attributes={
+                "security.resource_kind": resource_kind,
+                **({"security.namespace": namespace} if namespace is not None else {}),
+            },
+        ) as span:
+            started_at = time.perf_counter()
+            try:
+                manifest = action()
+                span.set_attribute("security.status", "success")
+                span.set_attribute(
+                    "security.duration_ms", (time.perf_counter() - started_at) * 1000
+                )
+                return manifest
+            except Exception as exc:
+                span.set_attribute("security.status", "failure")
+                span.set_attribute(
+                    "security.duration_ms", (time.perf_counter() - started_at) * 1000
+                )
+                span.set_attribute("security.error_type", _classify_generation_error(exc))
+                raise
+
     def generate_service_account(
         self,
         config: ServiceAccountConfig,
@@ -102,9 +160,13 @@ class K8sRBACPlugin(RBACPlugin):
             >>> manifest["automountServiceAccountToken"]
             False
         """
-        tracer = get_tracer()
-        with security_span(tracer, "generate_service_account", policy_type="ServiceAccount"):
-            return config.to_k8s_manifest()
+        return self._record_generation(
+            operation="generate_service_account",
+            policy_type="ServiceAccount",
+            resource_kind="ServiceAccount",
+            namespace=config.namespace,
+            action=config.to_k8s_manifest,
+        )
 
     def generate_role(
         self,
@@ -135,9 +197,13 @@ class K8sRBACPlugin(RBACPlugin):
             >>> manifest["kind"]
             'Role'
         """
-        tracer = get_tracer()
-        with security_span(tracer, "generate_role", policy_type="Role"):
-            return config.to_k8s_manifest()
+        return self._record_generation(
+            operation="generate_role",
+            policy_type="Role",
+            resource_kind="Role",
+            namespace=config.namespace,
+            action=config.to_k8s_manifest,
+        )
 
     def generate_role_binding(
         self,
@@ -174,9 +240,13 @@ class K8sRBACPlugin(RBACPlugin):
             >>> manifest["kind"]
             'RoleBinding'
         """
-        tracer = get_tracer()
-        with security_span(tracer, "generate_role_binding", policy_type="RoleBinding"):
-            return config.to_k8s_manifest()
+        return self._record_generation(
+            operation="generate_role_binding",
+            policy_type="RoleBinding",
+            resource_kind="RoleBinding",
+            namespace=config.namespace,
+            action=config.to_k8s_manifest,
+        )
 
     def generate_namespace(
         self,
@@ -205,9 +275,13 @@ class K8sRBACPlugin(RBACPlugin):
             >>> manifest["kind"]
             'Namespace'
         """
-        tracer = get_tracer()
-        with security_span(tracer, "generate_namespace", policy_type="Namespace"):
-            return config.to_k8s_manifest()
+        return self._record_generation(
+            operation="generate_namespace",
+            policy_type="Namespace",
+            resource_kind="Namespace",
+            namespace=config.name,
+            action=config.to_k8s_manifest,
+        )
 
     def generate_pod_security_context(
         self,
@@ -240,15 +314,15 @@ class K8sRBACPlugin(RBACPlugin):
             >>> len(contexts["volumes"]) > 0  # Default includes /tmp
             True
         """
-        tracer = get_tracer()
-        with security_span(
-            tracer,
-            "generate_pod_security_context",
+        return self._record_generation(
+            operation="generate_pod_security_context",
             policy_type="PodSecurityContext",
-        ):
-            return {
+            resource_kind="PodSecurityContext",
+            namespace=None,
+            action=lambda: {
                 "pod": config.to_pod_security_context(),
                 "container": config.to_container_security_context(),
                 "volumes": config.to_volumes(),
                 "volumeMounts": config.to_volume_mounts(),
-            }
+            },
+        )

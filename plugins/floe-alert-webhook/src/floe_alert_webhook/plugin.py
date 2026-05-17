@@ -9,6 +9,7 @@ Requirements: FR-026, FR-027
 
 from __future__ import annotations
 
+import time
 import uuid
 from typing import Any
 
@@ -22,6 +23,50 @@ from .tracing import TRACER_NAME, alert_span, get_tracer
 logger = structlog.get_logger(__name__)
 
 CLOUDEVENTS_CONTENT_TYPE = "application/cloudevents+json"
+
+
+def _violation_id(event: ContractViolationEvent) -> str:
+    return f"{event.contract_name}:{event.contract_version}:{event.violation_type.value}"
+
+
+def _classify_status(status_code: int) -> str:
+    if status_code in {401, 403}:
+        return "access_denied"
+    if status_code == 404:
+        return "not_found"
+    if status_code in {408, 429, 500, 502, 503, 504}:
+        return "unavailable"
+    if status_code == 400:
+        return "validation"
+    return "unknown"
+
+
+def _classify_exception(exc: Exception) -> str:
+    if isinstance(exc, ValueError):
+        return "validation"
+    if isinstance(exc, httpx.ConnectError | httpx.TimeoutException):
+        return "unavailable"
+    return "unknown"
+
+
+def _record_alert_span(
+    span: Any,
+    *,
+    destination_type: str,
+    delivery_status: str,
+    retry_count: int,
+    started_at: float,
+    violation_id: str | None = None,
+    error_type: str | None = None,
+) -> None:
+    span.set_attribute("alert.destination_type", destination_type)
+    span.set_attribute("alert.delivery_status", delivery_status)
+    span.set_attribute("alert.retry_count", retry_count)
+    span.set_attribute("alert.duration_ms", (time.perf_counter() - started_at) * 1000)
+    if violation_id is not None:
+        span.set_attribute("contract.violation_id", violation_id)
+    if error_type is not None:
+        span.set_attribute("alert.error_type", error_type)
 
 
 class WebhookAlertPlugin(AlertChannelPlugin):
@@ -82,10 +127,19 @@ class WebhookAlertPlugin(AlertChannelPlugin):
             self._tracer,
             "validate_config",
             channel="webhook",
-        ):
+        ) as span:
+            started_at = time.perf_counter()
             errors: list[str] = []
             if not self._webhook_url:
                 errors.append("webhook_url is required")
+            _record_alert_span(
+                span,
+                destination_type="webhook",
+                delivery_status="validation_failed" if errors else "validated",
+                retry_count=0,
+                started_at=started_at,
+                error_type="validation" if errors else None,
+            )
             return errors
 
     async def send_alert(self, event: ContractViolationEvent) -> bool:
@@ -101,9 +155,10 @@ class WebhookAlertPlugin(AlertChannelPlugin):
             self._tracer,
             "send",
             channel="webhook",
-            destination=self._webhook_url,
-            extra_attributes={"contract.name": event.contract_name},
-        ):
+            destination="webhook",
+        ) as span:
+            started_at = time.perf_counter()
+            violation_id = _violation_id(event)
             cloudevent = self._build_cloudevent(event)
 
             try:
@@ -121,8 +176,25 @@ class WebhookAlertPlugin(AlertChannelPlugin):
                             status_code=response.status_code,
                             contract_name=event.contract_name,
                         )
+                        _record_alert_span(
+                            span,
+                            destination_type="webhook",
+                            delivery_status="failed",
+                            retry_count=0,
+                            started_at=started_at,
+                            violation_id=violation_id,
+                            error_type=_classify_status(response.status_code),
+                        )
                         return False
 
+                    _record_alert_span(
+                        span,
+                        destination_type="webhook",
+                        delivery_status="delivered",
+                        retry_count=0,
+                        started_at=started_at,
+                        violation_id=violation_id,
+                    )
                     return True
 
             except (httpx.ConnectError, httpx.TimeoutException) as e:
@@ -131,12 +203,30 @@ class WebhookAlertPlugin(AlertChannelPlugin):
                     error=str(e),
                     contract_name=event.contract_name,
                 )
+                _record_alert_span(
+                    span,
+                    destination_type="webhook",
+                    delivery_status="failed",
+                    retry_count=0,
+                    started_at=started_at,
+                    violation_id=violation_id,
+                    error_type=_classify_exception(e),
+                )
                 return False
             except Exception as e:
                 self._log.error(
                     "webhook_unexpected_error",
                     error=str(e),
                     contract_name=event.contract_name,
+                )
+                _record_alert_span(
+                    span,
+                    destination_type="webhook",
+                    delivery_status="failed",
+                    retry_count=0,
+                    started_at=started_at,
+                    violation_id=violation_id,
+                    error_type=_classify_exception(e),
                 )
                 return False
 
