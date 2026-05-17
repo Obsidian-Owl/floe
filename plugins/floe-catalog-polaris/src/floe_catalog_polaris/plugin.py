@@ -31,6 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 import structlog
 from floe_core import HealthState, HealthStatus
@@ -265,7 +266,7 @@ class PolarisCatalogPlugin(CatalogPlugin):
             warehouse=cfg.warehouse,
         ) as span:
             log = logger.bind(
-                uri=cfg.uri,
+                uri=_safe_endpoint_identity(cfg.uri),
                 warehouse=cfg.warehouse,
             )
             log.info("connecting_to_polaris_catalog")
@@ -410,51 +411,66 @@ class PolarisCatalogPlugin(CatalogPlugin):
         storage: StorageDeploymentBinding,
     ) -> CatalogDeploymentBinding:
         """Translate neutral storage state into Polaris deployment config."""
-        if storage.warehouse is None:
-            msg = "Polaris catalog deployment requires storage warehouse binding"
-            raise ValueError(msg)
-
-        access_ref = storage.credentials.as_credential_ref("accessKeyId")
-        secret_ref = storage.credentials.as_credential_ref("secretAccessKey")
         config = self._require_config()
-        runtime_iceberg_rest = IcebergRestCatalogBinding(
+        tracer = get_tracer()
+        extra = {
+            "storage.provider": storage.provider,
+            "storage.protocol": storage.protocol,
+            "storage.bucket": storage.warehouse.bucket if storage.warehouse else "unknown",
+            "storage.endpoint": _safe_endpoint_identity(storage.endpoint.internal_url),
+        }
+        with catalog_span(
+            tracer,
+            "build_catalog_deployment",
             catalog_name="polaris",
-            uri=config.uri,
+            catalog_uri=config.uri,
             warehouse=config.warehouse,
-        )
-        dbt_iceberg_rest = IcebergRestCatalogBinding(
-            catalog_name="iceberg",
-            uri=config.uri,
-            warehouse=config.warehouse,
-            oauth2=IcebergRestOAuth2Binding(
-                secret_name="polaris",  # pragma: allowlist secret
-                client_id_env="POLARIS_CLIENT_ID",
-                client_secret_env="POLARIS_CLIENT_SECRET",  # pragma: allowlist secret
-                oauth2_server_uri_env="POLARIS_OAUTH2_SERVER_URI",
-                oauth2_scope_env="POLARIS_SCOPE",
-                oauth2_scope_default="PRINCIPAL_ROLE:ALL",
-            ),
-        )
-        return CatalogDeploymentBinding(
-            provider="polaris",
-            polaris=PolarisCatalogDeploymentBinding(
-                storage_type="S3",
+            extra_attributes=extra,
+        ):
+            if storage.warehouse is None:
+                msg = "Polaris catalog deployment requires storage warehouse binding"
+                raise ValueError(msg)
+
+            access_ref = storage.credentials.as_credential_ref("accessKeyId")
+            secret_ref = storage.credentials.as_credential_ref("secretAccessKey")
+            runtime_iceberg_rest = IcebergRestCatalogBinding(
+                catalog_name="polaris",
+                uri=config.uri,
                 warehouse=config.warehouse,
-                default_base_location=storage.warehouse.uri,
-                allowed_locations=storage.allowed_locations,
-                endpoint=storage.endpoint.external_url,
-                endpoint_internal=storage.endpoint.internal_url,
-                catalog_uri=config.uri,
-                path_style_access=storage.endpoint.path_style_access,
-                sts_unavailable=not storage.capabilities.sts_supported,
-                credential_refs={
-                    "accessKeyId": access_ref,
-                    "secretAccessKey": secret_ref,
-                },
-            ),
-            iceberg_rest=runtime_iceberg_rest,
-            dbt=DbtCatalogBinding(iceberg_rest=dbt_iceberg_rest),
-        )
+            )
+            dbt_iceberg_rest = IcebergRestCatalogBinding(
+                catalog_name="iceberg",
+                uri=config.uri,
+                warehouse=config.warehouse,
+                oauth2=IcebergRestOAuth2Binding(
+                    secret_name="polaris",  # pragma: allowlist secret
+                    client_id_env="POLARIS_CLIENT_ID",
+                    client_secret_env="POLARIS_CLIENT_SECRET",  # pragma: allowlist secret
+                    oauth2_server_uri_env="POLARIS_OAUTH2_SERVER_URI",
+                    oauth2_scope_env="POLARIS_SCOPE",
+                    oauth2_scope_default="PRINCIPAL_ROLE:ALL",
+                ),
+            )
+            return CatalogDeploymentBinding(
+                provider="polaris",
+                polaris=PolarisCatalogDeploymentBinding(
+                    storage_type="S3",
+                    warehouse=config.warehouse,
+                    default_base_location=storage.warehouse.uri,
+                    allowed_locations=storage.allowed_locations,
+                    endpoint=storage.endpoint.external_url,
+                    endpoint_internal=storage.endpoint.internal_url,
+                    catalog_uri=config.uri,
+                    path_style_access=storage.endpoint.path_style_access,
+                    sts_unavailable=not storage.capabilities.sts_supported,
+                    credential_refs={
+                        "accessKeyId": access_ref,
+                        "secretAccessKey": secret_ref,
+                    },
+                ),
+                iceberg_rest=runtime_iceberg_rest,
+                dbt=DbtCatalogBinding(iceberg_rest=dbt_iceberg_rest),
+            )
 
     def create_namespace(
         self,
@@ -1141,28 +1157,31 @@ class PolarisCatalogPlugin(CatalogPlugin):
         checked_at = datetime.now(timezone.utc)
         start_time = time.perf_counter()
 
-        # Check if plugin is connected
-        if self._catalog is None:
-            elapsed_ms = (time.perf_counter() - start_time) * 1000
-            log.warning("health_check_not_connected")
-            return HealthStatus(
-                state=HealthState.UNHEALTHY,
-                message="Polaris catalog not connected",
-                details={
-                    "reason": "Plugin not yet connected to catalog",
-                    "response_time_ms": elapsed_ms,
-                    "checked_at": checked_at,
-                    "timeout": timeout,
-                },
-            )
-
+        cfg = self._require_config()
         tracer = get_tracer()
         with catalog_span(
             tracer,
             "health_check",
             catalog_name="polaris",
-            warehouse=self._require_config().warehouse,
+            catalog_uri=cfg.uri,
+            warehouse=cfg.warehouse,
         ) as span:
+            # Check if plugin is connected
+            if self._catalog is None:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                log.warning("health_check_not_connected")
+                span.set_attribute("health.status", "unhealthy")
+                span.set_attribute("health.response_time_ms", elapsed_ms)
+                return HealthStatus(
+                    state=HealthState.UNHEALTHY,
+                    message="Polaris catalog not connected",
+                    details={
+                        "reason": "Plugin not yet connected to catalog",
+                        "response_time_ms": elapsed_ms,
+                        "checked_at": checked_at,
+                        "timeout": timeout,
+                    },
+                )
             try:
                 # Execute probe with timeout handling
                 timeout_status = self._execute_health_probe(
@@ -1198,3 +1217,27 @@ class PolarisCatalogPlugin(CatalogPlugin):
                     set_error_attributes(span, e)
 
                 return self._build_error_status(error_message, elapsed_ms, checked_at, timeout)
+
+
+def _safe_endpoint_identity(uri: str) -> str:
+    """Return a credential-free endpoint identity for telemetry and logs."""
+    parsed = urlsplit(uri)
+    if not (parsed.scheme and parsed.netloc and (parsed.username or parsed.password)):
+        return uri
+    hostname = parsed.hostname
+    if hostname is None:
+        return "[REDACTED]"
+    host = f"[{hostname}]" if ":" in hostname and not hostname.startswith("[") else hostname
+    try:
+        netloc = f"{host}:{parsed.port}" if parsed.port is not None else host
+    except ValueError:
+        return "[REDACTED]"
+    return urlunsplit(
+        SplitResult(
+            scheme=parsed.scheme,
+            netloc=netloc,
+            path=parsed.path,
+            query=parsed.query,
+            fragment=parsed.fragment,
+        )
+    )

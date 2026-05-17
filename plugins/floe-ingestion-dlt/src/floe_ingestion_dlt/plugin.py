@@ -46,6 +46,8 @@ from floe_core.schemas.compiled_artifacts import (
     IngestionDeploymentBinding,
     StorageDeploymentBinding,
 )
+from floe_core.telemetry.context import ObservabilityContext
+from floe_core.telemetry.metrics import MetricRecorder
 from floe_core.telemetry.sanitization import sanitize_error_message
 
 from floe_ingestion_dlt.config import (
@@ -85,6 +87,9 @@ _DEFAULT_TIMEOUT: float = 5.0
 
 # Supported sink types for reverse ETL (FR-006)
 _SUPPORTED_SINKS: list[str] = ["rest_api", "sql_database"]
+DLT_RUNS_METRIC = "floe.ingestion.dlt.runs"
+DLT_DURATION_METRIC = "floe.ingestion.dlt.duration"
+DLT_FAILURES_METRIC = "floe.ingestion.dlt.failures"
 
 
 class DltIngestionPlugin(IngestionPlugin, SinkConnector):
@@ -589,6 +594,13 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         source_name = kwargs.get("source_name")
         source_path = kwargs.get("source_path")
         source_type = kwargs.get("source_type")
+        destination_table = table_name
+        observability_context = self._observability_context(
+            kwargs.get("observability_context"),
+            source_type=source_type,
+            source_name=source_name,
+            destination_table=destination_table,
+        )
 
         # Map schema_contract string to dlt's expected format
         if schema_contract_mode == "evolve":
@@ -643,8 +655,11 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         with ingestion_span(
             tracer,
             "run",
+            source_type=_safe_optional_string(source_type),
+            destination_table=_safe_optional_string(destination_table),
             pipeline_name=getattr(pipeline, "pipeline_name", None),
             write_mode=write_disposition,
+            extra_attributes=observability_context.to_span_attributes(),
         ) as span:
             try:
                 if source_type == "filesystem" and self._filesystem_source_matched(source) is False:
@@ -656,6 +671,14 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                         source_path=source_path,
                     )
                     record_ingestion_error(span, empty_source_error, category="permanent")
+                    self._record_runtime_observation(
+                        observability_context,
+                        status="failure",
+                        rows_loaded=0,
+                        bytes_written=0,
+                        duration_seconds=elapsed,
+                        error_type=type(empty_source_error).__name__,
+                    )
                     logger.error(
                         "pipeline_run_empty_filesystem_source",
                         pipeline_name=getattr(pipeline, "pipeline_name", "unknown"),
@@ -722,6 +745,14 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 )
 
                 record_ingestion_result(span, result)
+                span.set_attribute("ingestion.status", "success")
+                self._record_runtime_observation(
+                    observability_context,
+                    status="success",
+                    rows_loaded=result.rows_loaded,
+                    bytes_written=result.bytes_written,
+                    duration_seconds=result.duration_seconds,
+                )
 
                 logger.info(
                     "pipeline_run_completed",
@@ -729,6 +760,13 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                     rows_loaded=result.rows_loaded,
                     bytes_written=result.bytes_written,
                     duration_seconds=result.duration_seconds,
+                    **observability_context.to_log_fields(),
+                    **{
+                        "ingestion.rows_loaded": result.rows_loaded,
+                        "ingestion.bytes_written": result.bytes_written,
+                        "ingestion.duration_seconds": result.duration_seconds,
+                        "ingestion.status": "success",
+                    },
                 )
 
                 return result
@@ -748,6 +786,15 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 if "schema" in error_lower and "contract" in error_lower:
                     # This is a schema contract violation
                     record_ingestion_error(span, e, category="permanent")
+                    span.set_attribute("ingestion.status", "failure")
+                    self._record_runtime_observation(
+                        observability_context,
+                        status="failure",
+                        rows_loaded=0,
+                        bytes_written=0,
+                        duration_seconds=elapsed,
+                        error_type=type(e).__name__,
+                    )
 
                     logger.error(
                         "schema_contract_violation",
@@ -778,6 +825,15 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
                 category = categorize_error(e)
 
                 record_ingestion_error(span, e, category=category.value)
+                span.set_attribute("ingestion.status", "failure")
+                self._record_runtime_observation(
+                    observability_context,
+                    status="failure",
+                    rows_loaded=0,
+                    bytes_written=0,
+                    duration_seconds=elapsed,
+                    error_type=type(e).__name__,
+                )
 
                 logger.error(
                     "pipeline_run_failed",
@@ -812,6 +868,92 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
         if not context:
             return sanitize_error_message(error_msg, max_length=max_length)
         return sanitize_error_message(f"{', '.join(context)}: {error_msg}", max_length=max_length)
+
+    def _observability_context(
+        self,
+        context: Any,
+        *,
+        source_type: Any,
+        source_name: Any,
+        destination_table: Any,
+    ) -> ObservabilityContext:
+        """Return secret-free runtime context for dlt execution."""
+        if isinstance(context, ObservabilityContext):
+            base = context
+        else:
+            base = ObservabilityContext(
+                product_name="unknown",
+                product_version="unknown",
+                environment="dev",
+                namespace="default",
+                stage="ingestion",
+                table_name=_safe_optional_string(destination_table),
+                plugin_type="ingestion",
+                plugin_name=self.name,
+            )
+        extra = dict(base.extra_attributes)
+        extra.update(
+            {
+                "ingestion.source_type": _safe_optional_string(source_type) or "unknown",
+                "ingestion.source_name": _safe_optional_string(source_name) or "unknown",
+                "ingestion.destination_table": _safe_optional_string(destination_table)
+                or "unknown",
+            }
+        )
+        return ObservabilityContext(
+            product_name=base.product_name,
+            product_version=base.product_version,
+            environment=base.environment,
+            namespace=base.namespace,
+            run_id=base.run_id,
+            asset_key=base.asset_key,
+            stage=base.stage or "ingestion",
+            table_name=base.table_name or _safe_optional_string(destination_table),
+            plugin_type=base.plugin_type or "ingestion",
+            plugin_name=base.plugin_name or self.name,
+            lineage_namespace=base.lineage_namespace,
+            extra_attributes=extra,
+        )
+
+    def _record_runtime_observation(
+        self,
+        context: ObservabilityContext,
+        *,
+        status: str,
+        rows_loaded: int,
+        bytes_written: int,
+        duration_seconds: float,
+        error_type: str | None = None,
+    ) -> None:
+        """Record dlt runtime metrics without letting telemetry affect ingestion."""
+        labels = context.to_metric_labels(status=status)
+        labels["ingestion.source_type"] = str(
+            context.extra_attributes.get("ingestion.source_type", "unknown")
+        )
+        metrics = MetricRecorder(name="floe.ingestion.dlt.runtime", version=self.version)
+        try:
+            metrics.increment(
+                DLT_RUNS_METRIC,
+                labels=labels,
+                description="dlt ingestion runs",
+                unit="1",
+            )
+            metrics.record_histogram(
+                DLT_DURATION_METRIC,
+                duration_seconds,
+                labels=labels,
+                description="dlt ingestion run duration",
+                unit="s",
+            )
+            if error_type is not None or status != "success":
+                metrics.increment(
+                    DLT_FAILURES_METRIC,
+                    labels={**labels, "error.type": error_type or "Unknown"},
+                    description="dlt ingestion failures",
+                    unit="1",
+                )
+        except Exception as exc:  # pragma: no cover - defensive telemetry isolation
+            logger.debug("dlt_runtime_metric_failed", error_type=type(exc).__name__)
 
     @staticmethod
     def _filesystem_source_matched(source: Any) -> bool | None:
@@ -1226,3 +1368,9 @@ class DltIngestionPlugin(IngestionPlugin, SinkConnector):
             )
 
             return source_config
+
+
+def _safe_optional_string(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    return sanitize_error_message(str(value))

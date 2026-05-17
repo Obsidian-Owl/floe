@@ -24,9 +24,25 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 if TYPE_CHECKING:
     from tests.conftest import MockCatalogPlugin, MockStoragePlugin
+
+
+@pytest.fixture
+def iceberg_span_exporter() -> InMemorySpanExporter:
+    """Capture spans emitted through the floe-core traced helper."""
+    from floe_core.telemetry.tracing import reset_tracer, set_tracer
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    set_tracer(provider.get_tracer("floe-iceberg-test"))
+    yield exporter
+    reset_tracer()
 
 
 # =============================================================================
@@ -124,6 +140,13 @@ class _StaleLoadCatalog:
             "NotFoundException: Location does not exist: "
             "s3://floe-iceberg/customer_360/int_customer_orders/metadata/00001.metadata.json"
         )
+
+
+def _span_by_name(exporter: InMemorySpanExporter, name: str) -> Any:
+    matches = [span for span in exporter.get_finished_spans() if span.name == name]
+    observed_names = [span.name for span in exporter.get_finished_spans()]
+    assert matches, f"Expected span {name!r}, got {observed_names}"
+    return matches[-1]
 
 
 # =============================================================================
@@ -607,10 +630,64 @@ class TestIcebergTableLifecycleEdgeCases:
             )
 
 
+class TestIcebergTableLifecycleObservability:
+    """Focused tests for table lifecycle runtime spans."""
+
+    def test_load_table_emits_namespace_table_and_status_span(
+        self,
+        lifecycle_manager: Any,
+        sample_table_config: Any,
+        iceberg_span_exporter: InMemorySpanExporter,
+    ) -> None:
+        """load_table() emits logical table identity and success status."""
+        lifecycle_manager.create_table(sample_table_config)
+        iceberg_span_exporter.clear()
+
+        lifecycle_manager.load_table("bronze.customers")
+
+        span = _span_by_name(iceberg_span_exporter, "iceberg.lifecycle.load_table")
+        assert span.attributes["table.namespace"] == "bronze"
+        assert span.attributes["table.name"] == "customers"
+        assert span.attributes["table.identifier"] == "bronze.customers"
+        assert span.attributes["table.status"] == "success"
+
+    def test_table_exists_emits_namespace_table_and_missing_status_span(
+        self,
+        lifecycle_manager: Any,
+        iceberg_span_exporter: InMemorySpanExporter,
+    ) -> None:
+        """table_exists() emits logical table identity and not_found status."""
+        assert lifecycle_manager.table_exists("bronze.missing") is False
+
+        span = _span_by_name(iceberg_span_exporter, "iceberg.lifecycle.table_exists")
+        assert span.attributes["table.namespace"] == "bronze"
+        assert span.attributes["table.name"] == "missing"
+        assert span.attributes["table.identifier"] == "bronze.missing"
+        assert span.attributes["table.status"] == "not_found"
+
+    def test_load_table_failure_span_records_namespace_table_and_status(
+        self,
+        lifecycle_manager: Any,
+        iceberg_span_exporter: InMemorySpanExporter,
+    ) -> None:
+        """load_table() failure spans still carry table identity and status."""
+        from floe_iceberg.errors import NoSuchTableError
+
+        with pytest.raises(NoSuchTableError):
+            lifecycle_manager.load_table("bronze.missing")
+
+        span = _span_by_name(iceberg_span_exporter, "iceberg.lifecycle.load_table")
+        assert span.attributes["table.namespace"] == "bronze"
+        assert span.attributes["table.name"] == "missing"
+        assert span.attributes["table.status"] == "error"
+        assert span.attributes["exception.type"] == "NoSuchTableError"
+
+
 __all__ = [
     "TestIcebergTableLifecycleCreate",
     "TestIcebergTableLifecycleExists",
     "TestIcebergTableLifecycleLoad",
     "TestIcebergTableLifecycleDrop",
     "TestIcebergTableLifecycleEdgeCases",
+    "TestIcebergTableLifecycleObservability",
 ]

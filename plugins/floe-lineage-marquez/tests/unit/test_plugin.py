@@ -200,6 +200,127 @@ def test_validate_connection_failure_no_server() -> None:
     assert result is False
 
 
+@pytest.mark.requirement("OBS-T4")
+def test_validate_connection_records_metrics_logs_and_failure_type() -> None:
+    """Connection validation records status and failure type without secrets."""
+    metric_calls: list[tuple[str, int, dict[str, str]]] = []
+
+    class FakeMetricRecorder:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def increment(
+            self,
+            name: str,
+            value: int = 1,
+            *,
+            labels: dict[str, str] | None = None,
+            **kwargs: object,
+        ) -> None:
+            metric_calls.append((name, value, labels or {}))
+
+    plugin = MarquezLineageBackendPlugin(url="http://localhost:5000")
+    mock_tracer = MagicMock()
+    plugin._tracer = mock_tracer
+
+    with (
+        patch("floe_lineage_marquez.MetricRecorder", FakeMetricRecorder),
+        patch("floe_lineage_marquez.logger") as mock_logger,
+        patch(
+            "urllib.request.urlopen",
+            side_effect=OSError("token=super-secret connection refused"),
+        ),
+    ):
+        result = plugin.validate_connection()
+
+    assert result is False
+    span = mock_tracer.start_as_current_span.return_value.__enter__.return_value
+    span.set_attribute.assert_any_call("lineage.status", "failure")
+    span.set_attribute.assert_any_call("lineage.error_type", "OSError")
+    assert any(
+        name == "floe.lineage.marquez.connection_validations"
+        and labels["lineage.status"] == "failure"
+        and labels["lineage.error_type"] == "OSError"
+        for name, _value, labels in metric_calls
+    )
+    mock_logger.info.assert_any_call(
+        "marquez_connection_validation",
+        extra={
+            "lineage.backend": "marquez",
+            "lineage.endpoint": "http://localhost:5000",
+            "lineage.environment": "prod",
+            "lineage.status": "failure",
+            "lineage.error_type": "OSError",
+        },
+    )
+    assert "super-secret" not in str(span.set_attribute.call_args_list)
+    assert "super-secret" not in str(metric_calls)
+    assert "super-secret" not in str(mock_logger.info.call_args_list)
+
+
+@pytest.mark.requirement("OBS-T4")
+def test_record_event_send_records_correlation_context_without_payload() -> None:
+    """Event-send telemetry records status/correlation but not OpenLineage payloads."""
+    metric_calls: list[tuple[str, int, dict[str, str]]] = []
+
+    class FakeMetricRecorder:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def increment(
+            self,
+            name: str,
+            value: int = 1,
+            *,
+            labels: dict[str, str] | None = None,
+            **kwargs: object,
+        ) -> None:
+            metric_calls.append((name, value, labels or {}))
+
+    plugin = MarquezLineageBackendPlugin(url="http://localhost:5000")
+    mock_tracer = MagicMock()
+    plugin._tracer = mock_tracer
+
+    with (
+        patch("floe_lineage_marquez.MetricRecorder", FakeMetricRecorder),
+        patch("floe_lineage_marquez.logger") as mock_logger,
+    ):
+        plugin.record_event_send(
+            status="success",
+            job_name="customer_360",
+            event_type="COMPLETE",
+            namespace="dev.floe",
+            run_id="run-123",
+        )
+
+    attrs = mock_tracer.start_as_current_span.call_args.kwargs["attributes"]
+    assert attrs["lineage.job_name"] == "customer_360"
+    assert attrs["lineage.event_type"] == "COMPLETE"
+    assert attrs["lineage.namespace"] == "dev.floe"
+    assert attrs["lineage.run_id"] == "run-123"
+    span = mock_tracer.start_as_current_span.return_value.__enter__.return_value
+    span.set_attribute.assert_any_call("lineage.status", "success")
+    assert any(
+        name == "floe.lineage.marquez.event_sends"
+        and labels["lineage.status"] == "success"
+        and labels["lineage.event_type"] == "COMPLETE"
+        for name, _value, labels in metric_calls
+    )
+    mock_logger.info.assert_any_call(
+        "marquez_event_send_observed",
+        extra={
+            "lineage.backend": "marquez",
+            "lineage.endpoint": "http://localhost:5000",
+            "lineage.environment": "prod",
+            "lineage.status": "success",
+            "lineage.job_name": "customer_360",
+            "lineage.event_type": "COMPLETE",
+            "lineage.namespace": "dev.floe",
+            "lineage.run_id": "run-123",
+        },
+    )
+
+
 @pytest.mark.requirement("REQ-527")
 def test_validate_connection_failure_timeout() -> None:
     """Test that validate_connection returns False on timeout.

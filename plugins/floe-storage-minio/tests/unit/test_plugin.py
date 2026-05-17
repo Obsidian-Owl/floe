@@ -222,6 +222,22 @@ class TestStoragePluginMethods:
         """get_warehouse_uri must work for any namespace."""
         assert configured_plugin.get_warehouse_uri("silver") == "s3://floe-data/silver/"
 
+    @pytest.mark.requirement("OBS-T4")
+    def test_get_warehouse_uri_emits_logical_storage_span(
+        self,
+        configured_plugin: MinIOStoragePlugin,
+    ) -> None:
+        """Logical storage operations emit safe bucket/namespace identity."""
+        with patch("floe_storage_minio.plugin.get_tracer") as mock_get_tracer:
+            configured_plugin.get_warehouse_uri("bronze")
+
+        attrs = mock_get_tracer.return_value.start_as_current_span.call_args.kwargs["attributes"]
+        assert attrs["storage.operation"] == "get_warehouse_uri"
+        assert attrs["storage.provider"] == "minio"
+        assert attrs["storage.bucket"] == "floe-data"
+        assert attrs["storage.namespace"] == "bronze"
+        assert "secret" not in str(attrs).lower()
+
     @pytest.mark.requirement("AC-1")
     def test_get_dbt_profile_config(self, configured_plugin: MinIOStoragePlugin) -> None:
         """get_dbt_profile_config must return S3-compatible dbt config."""
@@ -288,6 +304,27 @@ class TestStoragePluginMethods:
         }
         assert "s3.path_style_access" not in config
         assert "path_style_access" not in config
+
+    @pytest.mark.requirement("OBS-T4")
+    def test_catalog_config_generation_emits_endpoint_without_credentials(self) -> None:
+        """Config generation spans expose endpoint identity but not credential material."""
+        config = MinIOStorageConfig(
+            endpoint="http://minio:9000",
+            bucket="floe-data",
+            access_key_id=SecretStr("AKID"),  # pragma: allowlist secret
+            secret_access_key=SecretStr("SUPERSECRET"),  # pragma: allowlist secret
+        )
+        plugin = MinIOStoragePlugin(config=config)
+
+        with patch("floe_storage_minio.plugin.get_tracer") as mock_get_tracer:
+            catalog_config = plugin.get_pyiceberg_catalog_config()
+
+        attrs = mock_get_tracer.return_value.start_as_current_span.call_args.kwargs["attributes"]
+        assert catalog_config["s3.access-key-id"] == "AKID"
+        assert attrs["storage.operation"] == "get_pyiceberg_catalog_config"
+        assert attrs["storage.endpoint"] == "http://minio:9000"
+        assert "AKID" not in str(attrs)
+        assert "SUPERSECRET" not in str(attrs)
 
     @pytest.mark.requirement("AC-2")
     def test_pyiceberg_catalog_config_prefers_minio_env_credentials(
@@ -412,6 +449,30 @@ class TestMinIODeploymentBinding:
         assert "INLINE_ACCESS_VALUE" not in helm_payload
         assert "INLINE_CREDENTIAL_VALUE" not in payload
         assert "INLINE_CREDENTIAL_VALUE" not in helm_payload
+
+    @pytest.mark.requirement("OBS-T4")
+    def test_get_deployment_binding_emits_secret_free_span(self) -> None:
+        """Deployment binding spans exclude credential keys and values."""
+        config = MinIOStorageConfig(
+            endpoint="http://minio:9000",
+            bucket="floe-data",
+            access_key_id=SecretStr("INLINE_ACCESS_VALUE"),  # pragma: allowlist secret
+            secret_access_key=SecretStr("INLINE_CREDENTIAL_VALUE"),  # pragma: allowlist secret
+        )
+        plugin = MinIOStoragePlugin(config=config)
+
+        with patch("floe_storage_minio.plugin.get_tracer") as mock_get_tracer:
+            binding = plugin.get_deployment_binding()
+
+        attrs = mock_get_tracer.return_value.start_as_current_span.call_args.kwargs["attributes"]
+        assert binding.provider == "minio"
+        assert attrs["storage.operation"] == "get_deployment_binding"
+        assert attrs["storage.provider"] == "minio"
+        assert attrs["storage.bucket"] == "floe-data"
+        assert attrs["storage.artifact_bucket"] == "floe-artifacts"
+        assert "INLINE_ACCESS_VALUE" not in str(attrs)
+        assert "INLINE_CREDENTIAL_VALUE" not in str(attrs)
+        assert "access-key" not in str(attrs).lower()
 
     @pytest.mark.requirement("AC-4")
     def test_minio_binding_uses_configured_artifact_bucket_in_helm_values(self) -> None:

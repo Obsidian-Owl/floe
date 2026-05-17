@@ -26,8 +26,9 @@ from typing import Any
 
 import structlog
 from floe_core.plugins.dbt import DBTPlugin, DBTRunResult, LintResult
+from floe_core.telemetry.metrics import MetricRecorder
 
-from .callbacks import create_event_collector
+from .callbacks import DBTNodeRecord, create_event_collector, dbt_node_records_from_run_results
 from .errors import (
     DBTCompilationError,
     DBTConfigurationError,
@@ -55,6 +56,9 @@ except ImportError:
 
 
 logger = structlog.get_logger(__name__)
+
+DBT_NODE_DURATION_METRIC = "floe.dbt.node.duration"
+DBT_NODE_FAILURES_METRIC = "floe.dbt.node.failures"
 
 
 class DBTCorePlugin(DBTPlugin):
@@ -306,6 +310,7 @@ class DBTCorePlugin(DBTPlugin):
                     warning_count=len(collector.warnings),
                     failed_nodes=collector.get_failed_nodes(),
                 )
+                self._emit_dbt_node_observability(tracer, collector.node_records)
 
                 raise DBTExecutionError(
                     message=error_msg,
@@ -316,6 +321,10 @@ class DBTCorePlugin(DBTPlugin):
 
             # Parse run results for model count
             run_results = self._load_run_results(project_dir)
+            self._emit_dbt_node_observability(
+                tracer,
+                dbt_node_records_from_run_results(run_results),
+            )
             models_run = len(run_results.get("results", []))
             failures = sum(1 for r in run_results.get("results", []) if r.get("status") == "error")
 
@@ -427,6 +436,7 @@ class DBTCorePlugin(DBTPlugin):
                     warning_count=len(collector.warnings),
                     failed_nodes=collector.get_failed_nodes(),
                 )
+                self._emit_dbt_node_observability(tracer, collector.node_records)
 
                 raise DBTExecutionError(
                     message=error_msg,
@@ -435,6 +445,10 @@ class DBTCorePlugin(DBTPlugin):
 
             # Parse run results for test count
             run_results = self._load_run_results(project_dir)
+            self._emit_dbt_node_observability(
+                tracer,
+                dbt_node_records_from_run_results(run_results),
+            )
             tests_run = len(run_results.get("results", []))
             failures = sum(1 for r in run_results.get("results", []) if r.get("status") == "fail")
 
@@ -630,6 +644,59 @@ class DBTCorePlugin(DBTPlugin):
             )
 
         return json.loads(run_results_path.read_text())
+
+    def _emit_dbt_node_observability(
+        self,
+        tracer: Any,
+        records: list[DBTNodeRecord],
+    ) -> None:
+        """Emit per-node spans, metrics, and logs without failing dbt work."""
+        if not records:
+            return
+        metrics = MetricRecorder(name="floe.dbt.core.runtime", version=self.version)
+        for record in records:
+            attrs = record.to_span_attributes()
+            with tracer.start_as_current_span("dbt.node", attributes=attrs):
+                pass
+            labels = record.to_metric_labels()
+            self._record_node_duration(metrics, record, labels)
+            if record.error_type is not None or record.status in {"error", "fail", "failed"}:
+                self._record_node_failure(metrics, labels)
+            logger.info("dbt_node_observed", **attrs)
+
+    @staticmethod
+    def _record_node_duration(
+        metrics: MetricRecorder,
+        record: DBTNodeRecord,
+        labels: dict[str, str],
+    ) -> None:
+        if record.duration_seconds is None:
+            return
+        try:
+            metrics.record_histogram(
+                DBT_NODE_DURATION_METRIC,
+                record.duration_seconds,
+                labels=labels,
+                description="dbt node execution duration",
+                unit="s",
+            )
+        except Exception as exc:  # pragma: no cover - defensive telemetry isolation
+            logger.debug("dbt_node_duration_metric_failed", error_type=type(exc).__name__)
+
+    @staticmethod
+    def _record_node_failure(
+        metrics: MetricRecorder,
+        labels: dict[str, str],
+    ) -> None:
+        try:
+            metrics.increment(
+                DBT_NODE_FAILURES_METRIC,
+                labels=labels,
+                description="dbt node failures",
+                unit="1",
+            )
+        except Exception as exc:  # pragma: no cover - defensive telemetry isolation
+            logger.debug("dbt_node_failure_metric_failed", error_type=type(exc).__name__)
 
     def _get_profile_name(self, project_dir: Path) -> str:
         """Get profile name from dbt_project.yml.

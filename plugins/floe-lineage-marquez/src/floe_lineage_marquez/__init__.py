@@ -18,6 +18,8 @@ from typing import Any
 from urllib.parse import urlparse
 
 from floe_core.plugins.lineage import LineageBackendPlugin
+from floe_core.telemetry.metrics import MetricRecorder
+from floe_core.telemetry.sanitization import sanitize_error_message
 from pydantic import BaseModel, Field, model_validator
 
 from .tracing import TRACER_NAME, get_tracer, lineage_span
@@ -25,6 +27,8 @@ from .tracing import TRACER_NAME, get_tracer, lineage_span
 __all__ = ["MarquezLineageBackendPlugin", "MarquezConfig"]
 
 logger = logging.getLogger(__name__)
+MARQUEZ_CONNECTION_VALIDATIONS_METRIC = "floe.lineage.marquez.connection_validations"
+MARQUEZ_EVENT_SENDS_METRIC = "floe.lineage.marquez.event_sends"
 
 # SECURITY: Known localhost hostnames (exact match only)
 _LOCALHOST_HOSTNAMES: frozenset[str] = frozenset(
@@ -501,6 +505,7 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
             ... else:
             ...     print("Marquez is unreachable")
         """
+        metrics = MetricRecorder(name="floe.lineage.marquez.runtime", version=self.version)
         with lineage_span(self._tracer, "validate_connection") as span:
             try:
                 url = f"{self._url}/api/v1/namespaces"
@@ -512,10 +517,133 @@ class MarquezLineageBackendPlugin(LineageBackendPlugin):
                 with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310  # nosec B310
                     is_valid = bool(response.status == 200)
                     span.set_attribute("connection.valid", is_valid)
+                    status = "success" if is_valid else "failure"
+                    span.set_attribute("lineage.status", status)
+                    self._record_lineage_metric(
+                        metrics,
+                        MARQUEZ_CONNECTION_VALIDATIONS_METRIC,
+                        status=status,
+                    )
+                    logger.info(
+                        "marquez_connection_validation",
+                        extra=self._lineage_log_context(status=status),
+                    )
                     return is_valid
-            except Exception:
+            except Exception as exc:
                 span.set_attribute("connection.valid", False)
+                span.set_attribute("lineage.status", "failure")
+                span.set_attribute("lineage.error_type", type(exc).__name__)
+                self._record_lineage_metric(
+                    metrics,
+                    MARQUEZ_CONNECTION_VALIDATIONS_METRIC,
+                    status="failure",
+                    error_type=type(exc).__name__,
+                )
+                logger.info(
+                    "marquez_connection_validation",
+                    extra=self._lineage_log_context(
+                        status="failure",
+                        error_type=type(exc).__name__,
+                    ),
+                )
                 return False
+
+    def record_event_send(
+        self,
+        *,
+        status: str,
+        job_name: str | None = None,
+        event_type: str | None = None,
+        namespace: str | None = None,
+        run_id: str | None = None,
+        error_type: str | None = None,
+    ) -> None:
+        """Record OpenLineage event-send telemetry without payload content."""
+        metrics = MetricRecorder(name="floe.lineage.marquez.runtime", version=self.version)
+        with lineage_span(
+            self._tracer,
+            "event_send",
+            job_name=job_name,
+            event_type=event_type,
+            namespace=namespace,
+            run_id=run_id,
+        ) as span:
+            span.set_attribute("lineage.status", status)
+            if error_type is not None:
+                span.set_attribute("lineage.error_type", error_type)
+            self._record_lineage_metric(
+                metrics,
+                MARQUEZ_EVENT_SENDS_METRIC,
+                status=status,
+                event_type=event_type,
+                error_type=error_type,
+            )
+            logger.info(
+                "marquez_event_send_observed",
+                extra=self._lineage_log_context(
+                    status=status,
+                    job_name=job_name,
+                    event_type=event_type,
+                    namespace=namespace,
+                    run_id=run_id,
+                    error_type=error_type,
+                ),
+            )
+
+    def _lineage_log_context(
+        self,
+        *,
+        status: str,
+        job_name: str | None = None,
+        event_type: str | None = None,
+        namespace: str | None = None,
+        run_id: str | None = None,
+        error_type: str | None = None,
+    ) -> dict[str, str]:
+        fields = {
+            "lineage.backend": "marquez",
+            "lineage.endpoint": self._url,
+            "lineage.environment": self._environment,
+            "lineage.status": status,
+        }
+        optional = {
+            "lineage.job_name": job_name,
+            "lineage.event_type": event_type,
+            "lineage.namespace": namespace,
+            "lineage.run_id": run_id,
+            "lineage.error_type": error_type,
+        }
+        fields.update(
+            {key: sanitize_error_message(value) for key, value in optional.items() if value}
+        )
+        return fields
+
+    @staticmethod
+    def _record_lineage_metric(
+        metrics: MetricRecorder,
+        name: str,
+        *,
+        status: str,
+        event_type: str | None = None,
+        error_type: str | None = None,
+    ) -> None:
+        labels = {
+            "lineage.backend": "marquez",
+            "lineage.status": status,
+        }
+        if event_type is not None:
+            labels["lineage.event_type"] = event_type
+        if error_type is not None:
+            labels["lineage.error_type"] = error_type
+        try:
+            metrics.increment(
+                name,
+                labels=labels,
+                description="Marquez lineage backend runtime events",
+                unit="1",
+            )
+        except Exception as exc:  # pragma: no cover - defensive telemetry isolation
+            logger.debug("marquez_metric_failed", extra={"error_type": type(exc).__name__})
 
     def get_config_schema(self) -> type[MarquezConfig]:
         """Return the Pydantic configuration schema for this plugin."""

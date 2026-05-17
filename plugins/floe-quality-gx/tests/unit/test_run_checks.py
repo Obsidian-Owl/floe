@@ -10,6 +10,7 @@ Tests for US3 - Runtime quality check execution:
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 from floe_core.quality_errors import QualityTimeoutError
@@ -94,6 +95,70 @@ class TestRunChecksBasicExecution:
         assert result.passed is True
         assert len(result.checks) == 0
 
+    @pytest.mark.requirement("OBS-T4")
+    def test_run_suite_records_spans_metrics_and_logs(
+        self, gx_plugin: GreatExpectationsPlugin
+    ) -> None:
+        """Suite execution records status, check counts, metrics, and logs."""
+        metric_calls: list[tuple[str, float | int, dict[str, str]]] = []
+
+        class FakeMetricRecorder:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                pass
+
+            def increment(
+                self,
+                name: str,
+                value: int = 1,
+                *,
+                labels: dict[str, str] | None = None,
+                **kwargs: object,
+            ) -> None:
+                metric_calls.append((name, value, labels or {}))
+
+            def record_histogram(
+                self,
+                name: str,
+                value: float,
+                *,
+                labels: dict[str, str] | None = None,
+                **kwargs: object,
+            ) -> None:
+                metric_calls.append((name, value, labels or {}))
+
+        suite = QualitySuite(model_name="orders", checks=[])
+        with (
+            patch("floe_quality_gx.plugin.MetricRecorder", FakeMetricRecorder),
+            patch("floe_quality_gx.plugin.get_tracer") as mock_get_tracer,
+            patch("floe_quality_gx.plugin.logger") as mock_logger,
+        ):
+            mock_tracer = MagicMock()
+            mock_get_tracer.return_value = mock_tracer
+            result = gx_plugin.run_suite(suite, {"dialect": "duckdb"})
+
+        assert result.passed is True
+        attrs = mock_tracer.start_as_current_span.call_args.kwargs["attributes"]
+        assert attrs["quality.suite_name"] == "orders"
+        assert attrs["quality.checks_count"] == 0
+        span = mock_tracer.start_as_current_span.return_value.__enter__.return_value
+        span.set_attribute.assert_any_call("quality.status", "success")
+        span.set_attribute.assert_any_call("quality.pass_count", 0)
+        span.set_attribute.assert_any_call("quality.fail_count", 0)
+        assert any(
+            name == "floe.quality.gx.suite_runs" and labels["quality.status"] == "success"
+            for name, _value, labels in metric_calls
+        )
+        mock_logger.info.assert_any_call(
+            "gx_suite_completed",
+            suite_name="orders_suite",
+            model_name="orders",
+            checks_count=0,
+            passed=True,
+            pass_count=0,
+            fail_count=0,
+            status="success",
+        )
+
 
 class TestRunChecksFailures:
     """Tests for FLOE-DQ102 check failure handling (T049)."""
@@ -165,6 +230,78 @@ class TestRunChecksFailures:
             assert isinstance(check, QualityCheckResult)
             assert check.dimension in Dimension
             assert check.severity in SeverityLevel
+
+    @pytest.mark.requirement("OBS-T4")
+    def test_run_suite_records_failure_type_without_secret_values(
+        self, gx_plugin: GreatExpectationsPlugin
+    ) -> None:
+        """Suite execution failures record type, metrics, and sanitized logs."""
+        metric_calls: list[tuple[str, int, dict[str, str]]] = []
+
+        class FakeMetricRecorder:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                pass
+
+            def increment(
+                self,
+                name: str,
+                value: int = 1,
+                *,
+                labels: dict[str, str] | None = None,
+                **kwargs: object,
+            ) -> None:
+                metric_calls.append((name, value, labels or {}))
+
+            def record_histogram(self, *args: object, **kwargs: object) -> None:
+                pass
+
+        suite = QualitySuite(
+            model_name="orders",
+            checks=[
+                QualityCheck(
+                    name="id_not_null",
+                    type="not_null",
+                    column="id",
+                    dimension=Dimension.COMPLETENESS,
+                )
+            ],
+        )
+
+        with (
+            patch("floe_quality_gx.plugin.MetricRecorder", FakeMetricRecorder),
+            patch("floe_quality_gx.plugin.get_tracer") as mock_get_tracer,
+            patch("floe_quality_gx.plugin.logger") as mock_logger,
+            patch(
+                "floe_quality_gx.executor.create_dataframe_from_connection",
+                side_effect=RuntimeError("password=super-secret failed"),
+            ),
+        ):
+            mock_tracer = MagicMock()
+            mock_get_tracer.return_value = mock_tracer
+            with pytest.raises(RuntimeError):
+                gx_plugin.run_suite(suite, {"dialect": "duckdb"})
+
+        span = mock_tracer.start_as_current_span.return_value.__enter__.return_value
+        span.set_attribute.assert_any_call("quality.status", "failure")
+        span.set_attribute.assert_any_call("quality.error_type", "RuntimeError")
+        assert any(
+            name == "floe.quality.gx.suite_failures"
+            and labels["quality.status"] == "failure"
+            and labels["quality.error_type"] == "RuntimeError"
+            for name, _value, labels in metric_calls
+        )
+        mock_logger.error.assert_any_call(
+            "gx_suite_failed",
+            suite_name="orders_suite",
+            model_name="orders",
+            checks_count=1,
+            status="failure",
+            error_type="RuntimeError",
+            error_message="password=<REDACTED> failed",
+        )
+        assert "super-secret" not in str(span.set_attribute.call_args_list)
+        assert "super-secret" not in str(metric_calls)
+        assert "super-secret" not in str(mock_logger.error.call_args_list)
 
 
 class TestTimeoutHandling:
