@@ -175,8 +175,9 @@ See **ADR-0043: dbt Runtime Abstraction Layer** for details.
 - **Ingestion**: dlt implementation primitive, Airbyte
 - **Secrets**: K8s Secrets, ESO, Vault, Infisical
 - **Identity**: Keycloak, Dex, Okta, Auth0
+- **Network Security**: Kubernetes NetworkPolicy, pod/container security, egress controls
 
-**Total Plugin Categories**: 14, based on `floe_core.plugin_types.PluginType`. See the Plugin Catalog for the current implementation truth.
+**Total Plugin Categories**: 15, based on `floe_core.plugin_types.PluginType`. See the Plugin Catalog for the current implementation truth.
 ```
 
 ---

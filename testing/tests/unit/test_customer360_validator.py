@@ -16,6 +16,7 @@ import duckdb
 import pytest
 import yaml
 
+from testing.ci.customer360_observability import Customer360ObservabilityConfig
 from testing.demo.customer360_validator import (
     Customer360Config,
     Customer360Validator,
@@ -579,6 +580,11 @@ validation:
     monkeypatch.setenv("FLOE_DEMO_VALIDATION_MANIFEST", str(manifest))
     monkeypatch.setattr("sys.argv", ["validate_customer_360_demo"])
     monkeypatch.setattr(module, "Customer360Validator", FakeValidator)
+    monkeypatch.setattr(
+        module,
+        "validate_customer360_observability",
+        lambda _config: SimpleNamespace(evidence={}, failures=[]),
+    )
 
     exit_code = module.main()
 
@@ -586,6 +592,74 @@ validation:
     assert captured["config"].namespace == "manifest-ns"
     assert captured["config"].dagster_run_check_command == ["dagster", "runs", "list"]
     assert captured["config"].storage_check_command == ["storage", "list"]
+
+
+@pytest.mark.requirement("alpha-demo")
+def test_cli_preserves_observability_context_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Integrated validation preserves the observability proof context from the environment."""
+    module = importlib.import_module("testing.ci.validate_customer_360_demo")
+    manifest = tmp_path / "validation.yaml"
+    manifest.write_text("validation:\n  namespace: manifest-ns\n", encoding="utf-8")
+    captured: dict[str, Customer360ObservabilityConfig] = {}
+
+    class FakeValidator:
+        def __init__(self, *, config: Customer360Config) -> None:
+            self.config = config
+
+        def validate(self) -> ValidationResult:
+            return ValidationResult(status="PASS")
+
+    def fake_observability(
+        config: Customer360ObservabilityConfig,
+    ) -> SimpleNamespace:
+        captured["config"] = config
+        return SimpleNamespace(evidence={}, failures=[])
+
+    monkeypatch.setenv("FLOE_DEMO_VALIDATION_MANIFEST", str(manifest))
+    monkeypatch.setenv("FLOE_DEMO_PRODUCT", "retail-360")
+    monkeypatch.setenv("FLOE_DEMO_TRACE_SERVICE", "floe-runtime")
+    monkeypatch.setenv("FLOE_DEMO_CUSTOMER360_TABLE", "mart_retail_360")
+    monkeypatch.setenv("FLOE_DEMO_LINEAGE_NAMESPACE", "retail-lineage")
+    monkeypatch.setenv("FLOE_DEMO_LINEAGE_JOB", "retail-job")
+    monkeypatch.setenv("FLOE_DEMO_METRIC_STATUS", "completed")
+    monkeypatch.setenv("FLOE_DEMO_METRIC_PLUGIN", "floe\\.dbt")
+    monkeypatch.setenv("FLOE_DEMO_LOKI_URL", "http://env-loki:3100")
+    monkeypatch.setenv("FLOE_DEMO_PROMETHEUS_URL", "http://env-prometheus:9090")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "validate_customer_360_demo",
+            "--dagster-url",
+            "http://cli-dagster:3000",
+            "--jaeger-url",
+            "http://cli-jaeger:16686",
+            "--marquez-url",
+            "http://cli-marquez:5000",
+            "--loki-url",
+            "http://cli-loki:3100",
+        ],
+    )
+    monkeypatch.setattr(module, "Customer360Validator", FakeValidator)
+    monkeypatch.setattr(module, "validate_customer360_observability", fake_observability)
+
+    exit_code = module.main()
+
+    assert exit_code == 0
+    assert captured["config"].product == "retail-360"
+    assert captured["config"].service == "floe-runtime"
+    assert captured["config"].table == "mart_retail_360"
+    assert captured["config"].namespace == "retail-lineage"
+    assert captured["config"].job_name == "retail-job"
+    assert captured["config"].metric_status == "completed"
+    assert captured["config"].metric_plugin == "floe\\.dbt"
+    assert captured["config"].dagster_url == "http://cli-dagster:3000"
+    assert captured["config"].jaeger_url == "http://cli-jaeger:16686"
+    assert captured["config"].marquez_url == "http://cli-marquez:5000"
+    assert captured["config"].loki_url == "http://cli-loki:3100"
+    assert captured["config"].prometheus_url == "http://env-prometheus:9090"
 
 
 @pytest.mark.requirement("alpha-demo")

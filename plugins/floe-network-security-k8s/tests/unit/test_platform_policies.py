@@ -345,6 +345,20 @@ class TestPlatformEgressRules:
         assert 443 in ports or 6443 in ports
 
     @pytest.mark.requirement("FR-023")
+    def test_platform_egress_rejects_invalid_k8s_service_host(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Environment-derived K8s API CIDRs must validate the host IP first."""
+        from floe_network_security_k8s import K8sNetworkSecurityPlugin
+
+        plugin = K8sNetworkSecurityPlugin()
+        monkeypatch.setenv("KUBERNETES_SERVICE_HOST", "not-an-ip")
+
+        with pytest.raises(ValueError, match="KUBERNETES_SERVICE_HOST"):
+            plugin.generate_k8s_api_egress_rule(strict_mode=True)
+
+    @pytest.mark.requirement("FR-023")
     def test_platform_egress_external_https_configurable(self) -> None:
         """Test that external HTTPS egress is configurable."""
         from floe_network_security_k8s import K8sNetworkSecurityPlugin

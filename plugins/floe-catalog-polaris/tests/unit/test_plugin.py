@@ -520,7 +520,7 @@ class TestPolarisCatalogPluginTracing:
             # Verify span attributes
             call_kwargs = mock_catalog_span.call_args[1]
             assert call_kwargs["catalog_name"] == "polaris"
-            assert call_kwargs["catalog_uri"] == "https://polaris.example.com/api/catalog"
+            assert call_kwargs["catalog_uri"] == "https://polaris.example.com"
             assert call_kwargs["warehouse"] == "test_warehouse"
 
     @pytest.mark.requirement("FR-031")
@@ -628,7 +628,8 @@ class TestPolarisCatalogPluginLogging:
             mock_logger.error.assert_called_once()
             call_args = mock_logger.error.call_args
             assert call_args[0][0] == "polaris_catalog_connection_failed"
-            assert "error" in call_args[1]
+            assert call_args[1]["error_type"] == "ConnectionError"
+            assert call_args[1]["error_message"] == "Connection refused"
 
     @pytest.mark.requirement("FR-032")
     def test_connect_does_not_log_credentials(self, plugin: CatalogPlugin) -> None:

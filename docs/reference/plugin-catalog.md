@@ -2,7 +2,7 @@
 
 This page is the canonical public reference for Floe plugin categories.
 
-Implementation truth comes from `floe_core.plugin_types.PluginType`. The current implementation defines 14 plugin categories. `PluginType.LINEAGE` is a code alias for `PluginType.LINEAGE_BACKEND` and is not an extra category.
+Implementation truth comes from `floe_core.plugin_types.PluginType`. The current implementation defines 15 plugin categories. `PluginType.LINEAGE` is a code alias for `PluginType.LINEAGE_BACKEND` and is not an extra category.
 
 | Category | Entry point group | Current alpha status | Owner |
 | --- | --- | --- | --- |
@@ -20,5 +20,6 @@ Implementation truth comes from `floe_core.plugin_types.PluginType`. The current
 | `QUALITY` | `floe.quality` | dbt expectations and Great Expectations plugin primitives. | Platform team sets standards; data products attach checks. |
 | `RBAC` | `floe.rbac` | Namespace and service-account isolation for platform workloads. | Platform team owns generated access-control policy. |
 | `ALERT_CHANNEL` | `floe.alert_channels` | Slack, webhook, and email-style delivery targets. | Platform team owns delivery backends; policy events trigger alerts. |
+| `NETWORK_SECURITY` | `floe.network_security` | Kubernetes NetworkPolicy and Pod Security generation. | Platform team owns generated network isolation and pod security policy. |
 
 Use this page when writing public documentation about plugin counts. Architecture decision records may preserve historical counts in version or history sections, but current product docs should refer to the implementation truth here.

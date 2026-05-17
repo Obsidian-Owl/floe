@@ -97,13 +97,20 @@ class TestAlertSpan:
         provider, exporter = tracer_with_exporter
         tracer = provider.get_tracer(TRACER_NAME)
 
-        with alert_span(tracer, "send", destination="https://example.com/hook"):
+        destination = (
+            "https://user:password@example.com/hook?token=leaked"  # pragma: allowlist secret
+        )
+
+        with alert_span(tracer, "send", channel="webhook", destination=destination):
             pass
 
         spans = exporter.get_finished_spans()
         assert len(spans) == 1
         attributes = dict(spans[0].attributes or {})
-        assert attributes[ATTR_DESTINATION] == "https://example.com/hook"
+        assert attributes[ATTR_DESTINATION] == "webhook"
+        text = repr(attributes)
+        assert "example.com" not in text
+        assert "leaked" not in text  # pragma: allowlist secret
 
     @pytest.mark.requirement("6C-FR-021")
     def test_alert_span_sets_delivery_status_on_success(
@@ -186,7 +193,7 @@ class TestAlertSpan:
 
         # Verify expected attributes are present without credentials
         assert attributes.get(ATTR_CHANNEL) == "webhook"
-        assert attributes.get(ATTR_DESTINATION) == "https://example.com/hook"
+        assert attributes.get(ATTR_DESTINATION) == "webhook"
 
     @pytest.mark.requirement("6C-FR-021")
     def test_alert_span_error_sanitized(

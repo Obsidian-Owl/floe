@@ -1,0 +1,19 @@
+{{- if .Values.loki.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "floe-platform.loki.fullname" . }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loki
+spec:
+  type: {{ .Values.loki.service.type | default "ClusterIP" }}
+  ports:
+    - name: http
+      port: {{ .Values.loki.service.port | default 3100 }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "floe-platform.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: loki
+{{- end }}

@@ -1,1 +1,25 @@
 {{- include "floe-platform.validateDagsterOtelEndpoints" . -}}
+{{- if .Values.otel.enabled -}}
+{{- $pipelines := default dict .Values.otel.config.service.pipelines -}}
+{{- $metricsPipeline := default dict (get $pipelines "metrics") -}}
+{{- $logsPipeline := default dict (get $pipelines "logs") -}}
+{{- $metricsExporters := default list (get $metricsPipeline "exporters") -}}
+{{- $logsExporters := default list (get $logsPipeline "exporters") -}}
+{{- if and (has "prometheus" $metricsExporters) (not (default false .Values.otel.ports.prometheus.enabled)) -}}
+{{- fail "otel.ports.prometheus.enabled must be true when the OTel metrics pipeline exports to prometheus" -}}
+{{- end -}}
+{{- if .Values.loki.enabled -}}
+{{- if not (has "otlphttp/loki" $logsExporters) -}}
+{{- fail "loki.enabled=true requires the OTel logs pipeline to export to otlphttp/loki" -}}
+{{- end -}}
+{{- if not (hasKey .Values.otel.config.exporters "otlphttp/loki") -}}
+{{- fail "loki.enabled=true requires otel.config.exporters.otlphttp/loki" -}}
+{{- end -}}
+{{- $lokiExporter := get .Values.otel.config.exporters "otlphttp/loki" -}}
+{{- $lokiEndpoint := tpl (get $lokiExporter "endpoint") . -}}
+{{- $expectedLokiEndpoint := printf "http://%s:%v/otlp" (include "floe-platform.loki.fullname" .) (.Values.loki.service.port | default 3100) -}}
+{{- if ne $lokiEndpoint $expectedLokiEndpoint -}}
+{{- fail (printf "loki.enabled=true requires otel.config.exporters.otlphttp/loki.endpoint to be %q to match Loki service %q; got %q. If loki.fullnameOverride or loki.service.port is set, override the OTel Loki exporter endpoint to match." $expectedLokiEndpoint (include "floe-platform.loki.fullname" .) $lokiEndpoint) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}

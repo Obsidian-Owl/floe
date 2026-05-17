@@ -26,6 +26,10 @@ from dagster import AssetKey, asset
 from floe_core.plugins.ingestion import IngestionConfig
 
 from floe_orchestrator_dagster.ingestion import build_dlt_source
+from floe_orchestrator_dagster.runtime_observability import (
+    observability_context_from_dagster,
+    run_observed_asset,
+)
 
 if TYPE_CHECKING:
     from dagster import AssetsDefinition
@@ -117,6 +121,7 @@ def create_ingestion_assets(
     *,
     project_dir: Path,
     runtime_binding: Mapping[str, Any] | None = None,
+    observability_context: Mapping[str, str | None] | None = None,
 ) -> list[AssetsDefinition]:
     """Create Dagster asset definitions for ingestion pipelines.
 
@@ -181,6 +186,7 @@ def create_ingestion_assets(
                 project_dir=project_dir,
                 filesystem_config=filesystem_config,
                 runtime_binding=runtime_binding,
+                observability_context=observability_context,
             )
         )
 
@@ -270,6 +276,7 @@ def _create_ingestion_asset(
     project_dir: Path,
     filesystem_config: Mapping[str, Any],
     runtime_binding: Mapping[str, Any] | None,
+    observability_context: Mapping[str, str | None] | None,
 ) -> AssetsDefinition:
     source_name = str(source_config["name"])
 
@@ -290,47 +297,79 @@ def _create_ingestion_asset(
     )
     def _run_ingestion_source(context) -> Any:  # type: ignore[no-untyped-def]  # noqa: ANN001
         """Execute one configured ingestion source via the ingestion plugin resource."""
-        ingestion_plugin = context.resources.ingestion
-        context.log.info(
-            f"Ingestion asset {asset_name} triggered via "
-            f"{ingestion_plugin.name} v{ingestion_plugin.version}"
+        return run_observed_asset(
+            observability_context_from_dagster(
+                context,
+                asset_key=asset_name,
+                stage="ingestion",
+                table_name=str(source_config["destination_table"]),
+                **dict(observability_context or {}),
+            ),
+            f"floe.orchestrator.dagster.asset.{asset_name}",
+            lambda: _run_ingestion_source_body(
+                context=context,
+                asset_name=asset_name,
+                source_name=source_name,
+                source_config=source_config,
+                project_dir=project_dir,
+                filesystem_config=filesystem_config,
+                runtime_binding=runtime_binding,
+            ),
         )
-        config = IngestionConfig(
-            source_type=source_config["source_type"],
-            source_config=source_config.get("source_config") or {},
-            destination_table=source_config["destination_table"],
-            write_mode=source_config.get("write_mode", "append"),
-            schema_contract=source_config.get("schema_contract", "evolve"),
-            runtime_binding=runtime_binding,
-        )
-        dlt_source = _source_from_config(
-            source_config,
-            config,
-            project_dir=project_dir,
-            filesystem_config=filesystem_config,
-        )
-        pipeline = ingestion_plugin.create_pipeline(config)
-        run_kwargs = {
-            "write_disposition": config.write_mode,
-            "table_name": _table_name(config.destination_table),
-            "schema_contract": config.schema_contract,
-            "cursor_field": source_config.get("cursor_field"),
-            "primary_key": source_config.get("primary_key"),
-            "source_type": config.source_type,
-            "source_name": source_name,
-            "source_path": _source_path(source_config.get("source_config") or {}),
-            "source": dlt_source,
-        }
-
-        result = ingestion_plugin.run(pipeline, **run_kwargs)
-
-        if not result.success:
-            errors = ", ".join(str(error) for error in getattr(result, "errors", []))
-            raise RuntimeError(f"Ingestion pipeline failed: {errors or 'unknown error'}")
-
-        return result
 
     return _run_ingestion_source
+
+
+def _run_ingestion_source_body(
+    *,
+    context: Any,
+    asset_name: str,
+    source_name: str,
+    source_config: dict[str, Any],
+    project_dir: Path,
+    filesystem_config: Mapping[str, Any],
+    runtime_binding: Mapping[str, Any] | None,
+) -> Any:
+    """Execute one ingestion source while preserving plugin delegation."""
+    ingestion_plugin = context.resources.ingestion
+    context.log.info(
+        f"Ingestion asset {asset_name} triggered via "
+        f"{ingestion_plugin.name} v{ingestion_plugin.version}"
+    )
+    config = IngestionConfig(
+        source_type=source_config["source_type"],
+        source_config=source_config.get("source_config") or {},
+        destination_table=source_config["destination_table"],
+        write_mode=source_config.get("write_mode", "append"),
+        schema_contract=source_config.get("schema_contract", "evolve"),
+        runtime_binding=runtime_binding,
+    )
+    dlt_source = _source_from_config(
+        source_config,
+        config,
+        project_dir=project_dir,
+        filesystem_config=filesystem_config,
+    )
+    pipeline = ingestion_plugin.create_pipeline(config)
+    run_kwargs = {
+        "write_disposition": config.write_mode,
+        "table_name": _table_name(config.destination_table),
+        "schema_contract": config.schema_contract,
+        "cursor_field": source_config.get("cursor_field"),
+        "primary_key": source_config.get("primary_key"),
+        "source_type": config.source_type,
+        "source_name": source_name,
+        "source_path": _source_path(source_config.get("source_config") or {}),
+        "source": dlt_source,
+    }
+
+    result = ingestion_plugin.run(pipeline, **run_kwargs)
+
+    if not result.success:
+        errors = ", ".join(str(error) for error in getattr(result, "errors", []))
+        raise RuntimeError(f"Ingestion pipeline failed: {errors or 'unknown error'}")
+
+    return result
 
 
 def _source_from_config(

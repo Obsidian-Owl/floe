@@ -20,12 +20,14 @@ from __future__ import annotations
 
 import base64
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from floe_core.audit import AuditLogger, AuditOperation
 from floe_core.composition.models import CapabilitySet, PluginCapabilities
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.secrets import SecretsPlugin
+from floe_core.telemetry.sanitization import sanitize_error_message
 
 from floe_secrets_k8s.config import K8sSecretsConfig
 from floe_secrets_k8s.errors import (
@@ -38,6 +40,98 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+_SECRET_REFERENCE_MARKERS = ("secret", "password", "token", "credential", "private_key")
+_REDACTED_SECRET_REFERENCE = "<redacted>"
+
+
+class _ErrorType:
+    ACCESS_DENIED = "access_denied"
+    NOT_FOUND = "not_found"
+    UNAVAILABLE = "unavailable"
+    VALIDATION = "validation"
+    UNKNOWN = "unknown"
+
+
+def _safe_secret_reference_identity(reference: str | None) -> str | None:
+    """Return a secret reference only when it is safe operational metadata."""
+    if not reference:
+        return None
+    lowered = reference.lower()
+    if any(marker in lowered for marker in _SECRET_REFERENCE_MARKERS):
+        return None
+    if any(part in lowered for part in ("://", "=", "?", "#", "@")):
+        return None
+    return reference
+
+
+def _classify_k8s_error(error: Exception) -> str:
+    """Classify Kubernetes secret backend errors for low-cardinality telemetry."""
+    status = getattr(error, "status", None)
+    error_str = str(error).lower()
+    if status in {401, 403} or any(
+        marker in error_str for marker in ("401", "403", "unauthorized", "forbidden", "permission")
+    ):
+        return _ErrorType.ACCESS_DENIED
+    if status == 404 or "404" in error_str or "not found" in error_str:
+        return _ErrorType.NOT_FOUND
+    if status in {408, 429, 500, 502, 503, 504} or any(
+        marker in error_str
+        for marker in (
+            "408",
+            "429",
+            "500",
+            "502",
+            "503",
+            "504",
+            "connection",
+            "timeout",
+            "unavailable",
+        )
+    ):
+        return _ErrorType.UNAVAILABLE
+    if isinstance(error, ValueError) or "400" in error_str or "validation" in error_str:
+        return _ErrorType.VALIDATION
+    return _ErrorType.UNKNOWN
+
+
+def _safe_audit_secret_path(reference: str | None) -> str:
+    """Return safe secret identity for audit records."""
+    return _safe_secret_reference_identity(reference) or _REDACTED_SECRET_REFERENCE
+
+
+def _safe_error_reason(error: Exception, fallback: str) -> str:
+    """Return a sanitized, low-cardinality error reason for public/audit paths."""
+    status = getattr(error, "status", None)
+    if status in {400, 401, 403, 404, 408, 429, 500, 502, 503, 504}:
+        return f"{fallback} ({status})"
+    sanitized = sanitize_error_message(str(error)).lower()
+    for status_code in ("400", "401", "403", "404", "408", "429", "500", "502", "503", "504"):
+        if status_code in sanitized:
+            return f"{fallback} ({status_code})"
+    return fallback
+
+
+def _record_secret_span(
+    span: Any,
+    *,
+    operation_type: str,
+    outcome: str,
+    started_at: float,
+    found: bool | None = None,
+    count: int | None = None,
+    error_type: str | None = None,
+) -> None:
+    """Attach secret operation metadata without recording secret material."""
+    span.set_attribute("secrets.operation_type", operation_type)
+    span.set_attribute("secrets.outcome", outcome)
+    span.set_attribute("secrets.duration_ms", (time.perf_counter() - started_at) * 1000)
+    if found is not None:
+        span.set_attribute("secrets.found", found)
+    if count is not None:
+        span.set_attribute("secrets.count", count)
+    if error_type is not None:
+        span.set_attribute("secrets.error_type", error_type)
 
 
 class K8sSecretsPlugin(SecretsPlugin):
@@ -189,8 +283,19 @@ class K8sSecretsPlugin(SecretsPlugin):
             self._api = client.CoreV1Api()
 
         except Exception as e:
-            logger.exception("Failed to initialize Kubernetes client")
-            raise SecretBackendUnavailableError(reason=str(e)) from e
+            error_type = _classify_k8s_error(e)
+            if error_type == _ErrorType.UNKNOWN:
+                error_type = _ErrorType.UNAVAILABLE
+            logger.error(
+                "Failed to initialize Kubernetes client",
+                extra={
+                    "error_type": error_type,
+                    "error_message": _safe_error_reason(e, "backend unavailable"),
+                },
+            )
+            raise SecretBackendUnavailableError(
+                reason=_safe_error_reason(e, "backend unavailable")
+            ) from e
 
     def shutdown(self) -> None:
         """Clean up resources."""
@@ -226,9 +331,10 @@ class K8sSecretsPlugin(SecretsPlugin):
                     message=f"Connected to K8s API, namespace: {self.config.namespace}",
                 )
             except Exception as e:
+                error_type = _classify_k8s_error(e)
                 return HealthStatus(
                     state=HealthState.UNHEALTHY,
-                    message=f"K8s API check failed: {e}",
+                    message=f"K8s API check failed: {error_type}",
                 )
 
     # =========================================================================
@@ -257,15 +363,13 @@ class K8sSecretsPlugin(SecretsPlugin):
             tracer,
             "get_secret",
             provider="k8s",
-            key_name=key,
+            key_name=_safe_secret_reference_identity(key),
             namespace=self.config.namespace,
-        ):
-            self._ensure_initialized()
-
-            # Parse key format
-            secret_name, secret_key = self._parse_key(key)
-
+        ) as span:
+            started_at = time.perf_counter()
             try:
+                self._ensure_initialized()
+                secret_name, secret_key = self._parse_key(key)
                 secret = self._api.read_namespaced_secret(
                     name=secret_name,
                     namespace=self.config.namespace,
@@ -274,22 +378,36 @@ class K8sSecretsPlugin(SecretsPlugin):
                 if secret.data is None:
                     self._audit_logger.log_success(
                         requester_id="system",
-                        secret_path=key,
+                        secret_path=_safe_audit_secret_path(key),
                         operation=AuditOperation.GET,
                         plugin_type=self.name,
                         namespace=self.config.namespace,
                         metadata={"found": False},
+                    )
+                    _record_secret_span(
+                        span,
+                        operation_type="get",
+                        outcome="success",
+                        started_at=started_at,
+                        found=False,
                     )
                     return None
 
                 if secret_key not in secret.data:
                     self._audit_logger.log_success(
                         requester_id="system",
-                        secret_path=key,
+                        secret_path=_safe_audit_secret_path(key),
                         operation=AuditOperation.GET,
                         plugin_type=self.name,
                         namespace=self.config.namespace,
                         metadata={"found": False},
+                    )
+                    _record_secret_span(
+                        span,
+                        operation_type="get",
+                        outcome="success",
+                        started_at=started_at,
+                        found=False,
                     )
                     return None
 
@@ -300,49 +418,99 @@ class K8sSecretsPlugin(SecretsPlugin):
                 # Log successful access
                 self._audit_logger.log_success(
                     requester_id="system",
-                    secret_path=key,
+                    secret_path=_safe_audit_secret_path(key),
                     operation=AuditOperation.GET,
                     plugin_type=self.name,
                     namespace=self.config.namespace,
                     metadata={"found": True},
                 )
+                _record_secret_span(
+                    span,
+                    operation_type="get",
+                    outcome="success",
+                    started_at=started_at,
+                    found=True,
+                )
 
                 return result
 
+            except SecretBackendUnavailableError:
+                _record_secret_span(
+                    span,
+                    operation_type="get",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=_ErrorType.UNAVAILABLE,
+                )
+                raise
             except self._client.rest.ApiException as e:
+                error_type = _classify_k8s_error(e)
                 if e.status == 404:
                     self._audit_logger.log_success(
                         requester_id="system",
-                        secret_path=key,
+                        secret_path=_safe_audit_secret_path(key),
                         operation=AuditOperation.GET,
                         plugin_type=self.name,
                         namespace=self.config.namespace,
                         metadata={"found": False},
                     )
+                    _record_secret_span(
+                        span,
+                        operation_type="get",
+                        outcome="failure",
+                        started_at=started_at,
+                        found=False,
+                        error_type=error_type,
+                    )
                     return None
-                if e.status == 403:
+                if error_type == _ErrorType.ACCESS_DENIED:
                     self._audit_logger.log_denied(
                         requester_id="system",
-                        secret_path=key,
+                        secret_path=_safe_audit_secret_path(key),
                         operation=AuditOperation.GET,
-                        reason=str(e),
+                        reason=_safe_error_reason(e, "access denied"),
                         plugin_type=self.name,
                         namespace=self.config.namespace,
                     )
+                    _record_secret_span(
+                        span,
+                        operation_type="get",
+                        outcome="failure",
+                        started_at=started_at,
+                        error_type=error_type,
+                    )
                     raise SecretAccessDeniedError(
-                        secret_name,
+                        _safe_audit_secret_path(secret_name),
                         namespace=self.config.namespace,
-                        reason=str(e),
+                        reason=_safe_error_reason(e, "access denied"),
                     ) from e
                 self._audit_logger.log_error(
                     requester_id="system",
-                    secret_path=key,
+                    secret_path=_safe_audit_secret_path(key),
                     operation=AuditOperation.GET,
-                    error=str(e),
+                    error=_safe_error_reason(e, "backend unavailable"),
                     plugin_type=self.name,
                     namespace=self.config.namespace,
                 )
-                raise SecretBackendUnavailableError(reason=str(e)) from e
+                _record_secret_span(
+                    span,
+                    operation_type="get",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=error_type,
+                )
+                raise SecretBackendUnavailableError(
+                    reason=_safe_error_reason(e, "backend unavailable")
+                ) from e
+            except ValueError as e:
+                _record_secret_span(
+                    span,
+                    operation_type="get",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=_classify_k8s_error(e),
+                )
+                raise
 
     def set_secret(self, key: str, value: str, metadata: dict[str, Any] | None = None) -> None:
         """Store a secret value.
@@ -366,25 +534,22 @@ class K8sSecretsPlugin(SecretsPlugin):
             tracer,
             "set_secret",
             provider="k8s",
-            key_name=key,
+            key_name=_safe_secret_reference_identity(key),
             namespace=self.config.namespace,
-        ):
-            self._ensure_initialized()
-
-            secret_name, secret_key = self._parse_key(key)
-
-            # Prepare secret data
-            encoded_value = base64.b64encode(value.encode("utf-8")).decode("utf-8")
-
-            # Prepare labels and annotations
-            labels = dict(self.config.labels)
-            annotations: dict[str, str] = {}
-            if metadata:
-                # Store metadata as annotations
-                for k, v in metadata.items():
-                    annotations[f"floe.dev/{k}"] = str(v)
-
+        ) as span:
+            started_at = time.perf_counter()
             try:
+                self._ensure_initialized()
+                secret_name, secret_key = self._parse_key(key)
+
+                encoded_value = base64.b64encode(value.encode("utf-8")).decode("utf-8")
+
+                labels = dict(self.config.labels)
+                annotations: dict[str, str] = {}
+                if metadata:
+                    for k, v in metadata.items():
+                        annotations[f"floe.dev/{k}"] = str(v)
+
                 # Try to read existing secret
                 try:
                     existing = self._api.read_namespaced_secret(
@@ -406,15 +571,21 @@ class K8sSecretsPlugin(SecretsPlugin):
                     )
                     logger.info(
                         "Updated secret",
-                        extra={"secret_name": secret_name, "key": secret_key},
+                        extra={"operation": "update"},
                     )
                     self._audit_logger.log_success(
                         requester_id="system",
-                        secret_path=key,
+                        secret_path=_safe_audit_secret_path(key),
                         operation=AuditOperation.SET,
                         plugin_type=self.name,
                         namespace=self.config.namespace,
                         metadata={"action": "updated"},
+                    )
+                    _record_secret_span(
+                        span,
+                        operation_type="update",
+                        outcome="success",
+                        started_at=started_at,
                     )
 
                 except self._client.rest.ApiException as e:
@@ -438,41 +609,82 @@ class K8sSecretsPlugin(SecretsPlugin):
                     )
                     logger.info(
                         "Created secret",
-                        extra={"secret_name": secret_name, "key": secret_key},
+                        extra={"operation": "create"},
                     )
                     self._audit_logger.log_success(
                         requester_id="system",
-                        secret_path=key,
+                        secret_path=_safe_audit_secret_path(key),
                         operation=AuditOperation.SET,
                         plugin_type=self.name,
                         namespace=self.config.namespace,
                         metadata={"action": "created"},
                     )
+                    _record_secret_span(
+                        span,
+                        operation_type="create",
+                        outcome="success",
+                        started_at=started_at,
+                    )
 
+            except SecretBackendUnavailableError:
+                _record_secret_span(
+                    span,
+                    operation_type="set",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=_ErrorType.UNAVAILABLE,
+                )
+                raise
             except self._client.rest.ApiException as e:
-                if e.status == 403:
+                error_type = _classify_k8s_error(e)
+                if error_type == _ErrorType.ACCESS_DENIED:
                     self._audit_logger.log_denied(
                         requester_id="system",
-                        secret_path=key,
+                        secret_path=_safe_audit_secret_path(key),
                         operation=AuditOperation.SET,
-                        reason=str(e),
+                        reason=_safe_error_reason(e, "access denied"),
                         plugin_type=self.name,
                         namespace=self.config.namespace,
                     )
+                    _record_secret_span(
+                        span,
+                        operation_type="set",
+                        outcome="failure",
+                        started_at=started_at,
+                        error_type=error_type,
+                    )
                     raise SecretAccessDeniedError(
-                        secret_name,
+                        _safe_audit_secret_path(secret_name),
                         namespace=self.config.namespace,
-                        reason=str(e),
+                        reason=_safe_error_reason(e, "access denied"),
                     ) from e
                 self._audit_logger.log_error(
                     requester_id="system",
-                    secret_path=key,
+                    secret_path=_safe_audit_secret_path(key),
                     operation=AuditOperation.SET,
-                    error=str(e),
+                    error=_safe_error_reason(e, "backend unavailable"),
                     plugin_type=self.name,
                     namespace=self.config.namespace,
                 )
-                raise SecretBackendUnavailableError(reason=str(e)) from e
+                _record_secret_span(
+                    span,
+                    operation_type="set",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=error_type,
+                )
+                raise SecretBackendUnavailableError(
+                    reason=_safe_error_reason(e, "backend unavailable")
+                ) from e
+            except ValueError as e:
+                _record_secret_span(
+                    span,
+                    operation_type="set",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=_classify_k8s_error(e),
+                )
+                raise
 
     def list_secrets(self, prefix: str = "") -> list[str]:
         """List available secrets.
@@ -495,10 +707,10 @@ class K8sSecretsPlugin(SecretsPlugin):
             "list_secrets",
             provider="k8s",
             namespace=self.config.namespace,
-        ):
-            self._ensure_initialized()
-
+        ) as span:
+            started_at = time.perf_counter()
             try:
+                self._ensure_initialized()
                 # List secrets with our managed-by label
                 label_selector = ",".join(f"{k}={v}" for k, v in self.config.labels.items())
 
@@ -521,39 +733,72 @@ class K8sSecretsPlugin(SecretsPlugin):
 
                 self._audit_logger.log_success(
                     requester_id="system",
-                    secret_path=prefix or "*",
+                    secret_path=_safe_audit_secret_path(prefix) if prefix else "*",
                     operation=AuditOperation.LIST,
                     plugin_type=self.name,
                     namespace=self.config.namespace,
                     metadata={"count": len(result)},
                 )
+                _record_secret_span(
+                    span,
+                    operation_type="list",
+                    outcome="success",
+                    started_at=started_at,
+                    count=len(result),
+                )
 
                 return sorted(result)
 
+            except SecretBackendUnavailableError:
+                _record_secret_span(
+                    span,
+                    operation_type="list",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=_ErrorType.UNAVAILABLE,
+                )
+                raise
             except self._client.rest.ApiException as e:
-                if e.status == 403:
+                error_type = _classify_k8s_error(e)
+                if error_type == _ErrorType.ACCESS_DENIED:
                     self._audit_logger.log_denied(
                         requester_id="system",
-                        secret_path=prefix or "*",
+                        secret_path=_safe_audit_secret_path(prefix) if prefix else "*",
                         operation=AuditOperation.LIST,
-                        reason=str(e),
+                        reason=_safe_error_reason(e, "access denied"),
                         plugin_type=self.name,
                         namespace=self.config.namespace,
+                    )
+                    _record_secret_span(
+                        span,
+                        operation_type="list",
+                        outcome="failure",
+                        started_at=started_at,
+                        error_type=error_type,
                     )
                     raise SecretAccessDeniedError(
                         "",
                         namespace=self.config.namespace,
-                        reason=str(e),
+                        reason=_safe_error_reason(e, "access denied"),
                     ) from e
                 self._audit_logger.log_error(
                     requester_id="system",
-                    secret_path=prefix or "*",
+                    secret_path=_safe_audit_secret_path(prefix) if prefix else "*",
                     operation=AuditOperation.LIST,
-                    error=str(e),
+                    error=_safe_error_reason(e, "backend unavailable"),
                     plugin_type=self.name,
                     namespace=self.config.namespace,
                 )
-                raise SecretBackendUnavailableError(reason=str(e)) from e
+                _record_secret_span(
+                    span,
+                    operation_type="list",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=error_type,
+                )
+                raise SecretBackendUnavailableError(
+                    reason=_safe_error_reason(e, "backend unavailable")
+                ) from e
 
     def generate_pod_env_spec(self, secret_name: str) -> dict[str, Any]:
         """Generate K8s pod spec fragment for secret injection.
@@ -595,12 +840,12 @@ class K8sSecretsPlugin(SecretsPlugin):
             tracer,
             "get_multi_key_secret",
             provider="k8s",
-            key_name=name,
+            key_name=_safe_secret_reference_identity(name),
             namespace=self.config.namespace,
-        ):
-            self._ensure_initialized()
-
+        ) as span:
+            started_at = time.perf_counter()
             try:
+                self._ensure_initialized()
                 secret = self._api.read_namespaced_secret(
                     name=name,
                     namespace=self.config.namespace,
@@ -609,11 +854,19 @@ class K8sSecretsPlugin(SecretsPlugin):
                 if secret.data is None:
                     self._audit_logger.log_success(
                         requester_id="system",
-                        secret_path=name,
+                        secret_path=_safe_audit_secret_path(name),
                         operation=AuditOperation.GET,
                         plugin_type=self.name,
                         namespace=self.config.namespace,
                         metadata={"found": False, "multi_key": True},
+                    )
+                    _record_secret_span(
+                        span,
+                        operation_type="get_multi",
+                        outcome="success",
+                        started_at=started_at,
+                        found=False,
+                        count=0,
                     )
                     return {}
 
@@ -623,48 +876,100 @@ class K8sSecretsPlugin(SecretsPlugin):
 
                 self._audit_logger.log_success(
                     requester_id="system",
-                    secret_path=name,
+                    secret_path=_safe_audit_secret_path(name),
                     operation=AuditOperation.GET,
                     plugin_type=self.name,
                     namespace=self.config.namespace,
                     metadata={"found": True, "multi_key": True, "key_count": len(result)},
                 )
+                _record_secret_span(
+                    span,
+                    operation_type="get_multi",
+                    outcome="success",
+                    started_at=started_at,
+                    found=True,
+                    count=len(result),
+                )
                 return result
 
+            except SecretBackendUnavailableError:
+                _record_secret_span(
+                    span,
+                    operation_type="get_multi",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=_ErrorType.UNAVAILABLE,
+                )
+                raise
             except self._client.rest.ApiException as e:
+                error_type = _classify_k8s_error(e)
                 if e.status == 404:
                     self._audit_logger.log_success(
                         requester_id="system",
-                        secret_path=name,
+                        secret_path=_safe_audit_secret_path(name),
                         operation=AuditOperation.GET,
                         plugin_type=self.name,
                         namespace=self.config.namespace,
                         metadata={"found": False, "multi_key": True},
                     )
+                    _record_secret_span(
+                        span,
+                        operation_type="get_multi",
+                        outcome="failure",
+                        started_at=started_at,
+                        found=False,
+                        count=0,
+                        error_type=error_type,
+                    )
                     return {}
-                if e.status == 403:
+                if error_type == _ErrorType.ACCESS_DENIED:
                     self._audit_logger.log_denied(
                         requester_id="system",
-                        secret_path=name,
+                        secret_path=_safe_audit_secret_path(name),
                         operation=AuditOperation.GET,
-                        reason=str(e),
+                        reason=_safe_error_reason(e, "access denied"),
                         plugin_type=self.name,
                         namespace=self.config.namespace,
                     )
+                    _record_secret_span(
+                        span,
+                        operation_type="get_multi",
+                        outcome="failure",
+                        started_at=started_at,
+                        error_type=error_type,
+                    )
                     raise SecretAccessDeniedError(
-                        name,
+                        _safe_audit_secret_path(name),
                         namespace=self.config.namespace,
-                        reason=str(e),
+                        reason=_safe_error_reason(e, "access denied"),
                     ) from e
                 self._audit_logger.log_error(
                     requester_id="system",
-                    secret_path=name,
+                    secret_path=_safe_audit_secret_path(name),
                     operation=AuditOperation.GET,
-                    error=str(e),
+                    error=_safe_error_reason(e, "backend unavailable"),
                     plugin_type=self.name,
                     namespace=self.config.namespace,
                 )
-                raise SecretBackendUnavailableError(reason=str(e)) from e
+                _record_secret_span(
+                    span,
+                    operation_type="get_multi",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=error_type,
+                )
+                raise SecretBackendUnavailableError(
+                    reason=_safe_error_reason(e, "backend unavailable")
+                ) from e
+            except ValueError as e:
+                _record_secret_span(
+                    span,
+                    operation_type="get_multi",
+                    outcome="failure",
+                    started_at=started_at,
+                    error_type=_classify_k8s_error(e),
+                )
+                raise
 
     # =========================================================================
     # Helper Methods
@@ -690,8 +995,12 @@ class K8sSecretsPlugin(SecretsPlugin):
         Returns:
             Tuple of (secret_name, secret_key).
         """
+        if not key:
+            raise ValueError("Secret reference must not be empty")
         if "/" in key:
             parts = key.split("/", 1)
+            if not parts[0] or not parts[1]:
+                raise ValueError("Secret reference must include name and key")
             return parts[0], parts[1]
         return key, "value"
 

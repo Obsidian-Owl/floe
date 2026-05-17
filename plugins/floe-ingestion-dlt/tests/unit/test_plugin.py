@@ -746,6 +746,121 @@ class TestOTelSpanEmission:
             span_name = call_args[0][0]
             assert "run" in span_name
 
+    @pytest.mark.requirement("OBS-T4")
+    def test_run_records_context_metrics_and_logs_without_secrets(
+        self, dlt_plugin: DltIngestionPlugin
+    ) -> None:
+        """run() records source/destination context, result metrics, and safe logs."""
+        from unittest.mock import patch
+
+        metric_calls: list[tuple[str, float | int, dict[str, str]]] = []
+
+        class FakeMetricRecorder:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                pass
+
+            def increment(
+                self,
+                name: str,
+                value: int = 1,
+                *,
+                labels: dict[str, str] | None = None,
+                **kwargs: object,
+            ) -> None:
+                metric_calls.append((name, value, labels or {}))
+
+            def record_histogram(
+                self,
+                name: str,
+                value: float,
+                *,
+                labels: dict[str, str] | None = None,
+                **kwargs: object,
+            ) -> None:
+                metric_calls.append((name, value, labels or {}))
+
+        mock_pipeline = _bound_mock_pipeline()
+        mock_pipeline.pipeline_name = "customers"
+        mock_pipeline.run.return_value = SimpleNamespace(
+            metrics={
+                "load-1": [
+                    SimpleNamespace(
+                        started_at="2026-05-17T00:00:00Z",
+                        job_metrics={
+                            "job-1": SimpleNamespace(
+                                table_metrics={
+                                    "bronze.customers": SimpleNamespace(
+                                        items_count=12,
+                                        file_size=4096,
+                                    )
+                                }
+                            )
+                        },
+                    )
+                ]
+            }
+        )
+
+        with (
+            patch("floe_ingestion_dlt.plugin.MetricRecorder", FakeMetricRecorder),
+            patch("floe_ingestion_dlt.plugin.logger") as mock_logger,
+            patch("floe_ingestion_dlt.plugin.get_tracer") as mock_get_tracer,
+        ):
+            mock_tracer = MagicMock()
+            mock_get_tracer.return_value = mock_tracer
+            result = dlt_plugin.run(
+                mock_pipeline,
+                source=[],
+                source_type="rest_api",
+                source_name="https://user:" + "super-secret@api.example.com/customers",
+                table_name="bronze.customers",
+                write_disposition="append",
+            )
+
+        assert result.rows_loaded == 12
+        assert result.bytes_written == 4096
+        span_call = mock_tracer.start_as_current_span.call_args
+        span_attrs = span_call.kwargs["attributes"]
+        assert span_attrs["ingestion.source_type"] == "rest_api"
+        assert span_attrs["ingestion.source_name"] == "https://api.example.com/customers"
+        assert span_attrs["ingestion.destination_table"] == "bronze.customers"
+        span = mock_tracer.start_as_current_span.return_value.__enter__.return_value
+        span.set_attribute.assert_any_call("ingestion.status", "success")
+        span.set_attribute.assert_any_call("ingestion.rows_loaded", 12)
+        span.set_attribute.assert_any_call("ingestion.bytes_written", 4096)
+        assert any(name == "floe.ingestion.dlt.runs" for name, _value, _labels in metric_calls)
+        assert any(
+            name == "floe.ingestion.dlt.duration" and value == result.duration_seconds
+            for name, value, _labels in metric_calls
+        )
+        mock_logger.info.assert_any_call(
+            "pipeline_run_completed",
+            pipeline_name="customers",
+            rows_loaded=12,
+            bytes_written=4096,
+            duration_seconds=result.duration_seconds,
+            **{
+                "floe.product.name": "unknown",
+                "floe.product.version": "unknown",
+                "floe.environment": "dev",
+                "floe.namespace": "default",
+                "floe.stage": "ingestion",
+                "floe.table.name": "bronze.customers",
+                "floe.plugin.type": "ingestion",
+                "floe.plugin.name": "dlt",
+                "ingestion.source_type": "rest_api",
+                "ingestion.source_name": "https://api.example.com/customers",
+                "ingestion.destination_table": "bronze.customers",
+                "ingestion.rows_loaded": 12,
+                "ingestion.bytes_written": 4096,
+                "ingestion.duration_seconds": result.duration_seconds,
+                "ingestion.status": "success",
+            },
+        )
+        assert "super-secret" not in str(span_attrs)
+        assert "super-secret" not in str(metric_calls)
+        assert "super-secret" not in str(mock_logger.info.call_args_list)
+
     @pytest.mark.requirement("4F-FR-046")
     def test_run_span_records_result_attributes(self, dlt_plugin: DltIngestionPlugin) -> None:
         """Test run() calls record_ingestion_result with span and result.

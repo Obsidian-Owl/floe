@@ -28,11 +28,17 @@ See Also:
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from dagster import AssetKey, asset
 from floe_core.telemetry.tracer_factory import get_tracer as _get_tracer
+
+from floe_orchestrator_dagster.runtime_observability import (
+    observability_context_from_dagster,
+    run_observed_asset,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +123,7 @@ def create_sync_semantic_schemas_asset(
     manifest_path: Path,
     output_dir: Path,
     deps: list[AssetKey] | None = None,
+    observability_context: Mapping[str, str | None] | None = None,
 ) -> Any:
     """Create a semantic schema sync asset bound to product runtime paths.
 
@@ -137,10 +144,19 @@ def create_sync_semantic_schemas_asset(
         deps=deps or [],
     )
     def _sync_semantic_schemas_asset(context) -> list[str]:  # type: ignore[no-untyped-def] # noqa: ANN001
-        return _sync_semantic_schemas(
-            context,
-            default_manifest_path=manifest_path,
-            default_output_dir=output_dir,
+        return run_observed_asset(
+            observability_context_from_dagster(
+                context,
+                asset_key="sync_semantic_schemas",
+                stage="semantic_sync",
+                **dict(observability_context or {}),
+            ),
+            "floe.orchestrator.dagster.asset.sync_semantic_schemas",
+            lambda: _sync_semantic_schemas(
+                context,
+                default_manifest_path=manifest_path,
+                default_output_dir=output_dir,
+            ),
         )
 
     return _sync_semantic_schemas_asset

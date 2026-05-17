@@ -26,6 +26,41 @@ class TestSanitizeErrorMessage:
         assert "secret123" not in result
 
     @pytest.mark.requirement("6C-FR-014")
+    def test_url_userinfo_token_redaction(self) -> None:
+        """URL userinfo without a colon is redacted."""
+        msg = "Connection failed to https://api-token@example.com/path"
+
+        result = sanitize_error_message(msg)
+
+        assert result == "Connection failed to https://<REDACTED>@example.com/path"
+        assert "api-token" not in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_url_userinfo_username_redaction(self) -> None:
+        """Database URL userinfo without a password is redacted."""
+        msg = "Connection failed to postgresql://user@db.example.com/db"
+
+        result = sanitize_error_message(msg)
+
+        assert result == "Connection failed to postgresql://<REDACTED>@db.example.com/db"
+        assert "user@db" not in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_url_userinfo_and_query_credentials_are_redacted(self) -> None:
+        """URL userinfo and presigned query credentials are both redacted."""
+        msg = "Fetch failed for https://api-token@example.com/path?X-Amz-Signature=abc&safe=value"
+
+        result = sanitize_error_message(msg)
+
+        assert result == (
+            "Fetch failed for "
+            "https://<REDACTED>@example.com/path?X-Amz-Signature=<REDACTED>&safe=value"
+        )
+        assert "api-token" not in result
+        assert "X-Amz-Signature=abc" not in result
+        assert "safe=value" in result
+
+    @pytest.mark.requirement("6C-FR-014")
     def test_password_key_value_redaction(self) -> None:
         """Test key-value redaction for password field.
 
@@ -59,24 +94,47 @@ class TestSanitizeErrorMessage:
 
     @pytest.mark.requirement("6C-FR-014")
     def test_authorization_colon_separator(self) -> None:
-        r"""Test key with colon separator is redacted.
-
-        Validates that authorization: Bearer token patterns are replaced
-        with authorization: <REDACTED> (the regex matches both = and :
-        separators). Note: The regex \S+ only captures the first
-        non-whitespace token after the separator, so "Bearer" is redacted
-        but subsequent space-separated tokens remain.
-        """
+        """Test key with colon separator redacts the full authorization value."""
         # pragma: allowlist secret
         msg = "HTTP error: authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
         result = sanitize_error_message(msg)
 
-        # The regex only captures "Bearer" (first \S+ after colon),
-        # not the full token
-        assert (
-            result == "HTTP error: authorization: <REDACTED> eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-        )
+        assert result == "HTTP error: authorization: <REDACTED>"
         assert "Bearer" not in result
+        assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_authorization_equals_bearer_redacts_full_value(self) -> None:
+        """Authorization=Bearer values redact both auth scheme and token."""
+        # pragma: allowlist secret
+        msg = "HTTP error: Authorization=Bearer eyJhbGciOiJIUzI1NiJ9 retrying"
+
+        result = sanitize_error_message(msg)
+
+        assert result == "HTTP error: Authorization=<REDACTED> retrying"
+        assert "Bearer" not in result
+        assert "eyJhbGciOiJIUzI1NiJ9" not in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_token_bearer_value_redacts_full_value(self) -> None:
+        """token=Bearer values redact both auth scheme and token."""
+        msg = "Auth failed: token=Bearer abc.def user=testuser"  # pragma: allowlist secret
+
+        result = sanitize_error_message(msg)
+
+        assert result == "Auth failed: token=<REDACTED> user=testuser"
+        assert "Bearer" not in result
+        assert "abc.def" not in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_session_token_redaction(self) -> None:
+        """Session token aliases are treated as sensitive keys."""
+        msg = "S3 failed: session_token=abc.def status=403"  # pragma: allowlist secret
+
+        result = sanitize_error_message(msg)
+
+        assert result == "S3 failed: session_token=<REDACTED> status=403"
+        assert "abc.def" not in result
 
     @pytest.mark.requirement("6C-FR-014")
     def test_truncation_to_max_length(self) -> None:
@@ -236,3 +294,53 @@ class TestSanitizeErrorMessage:
         assert result_colon == "Header: token : <REDACTED>"
         assert "secret123" not in result_equals
         assert "bearer-token-xyz" not in result_colon
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_presigned_https_query_parameters_are_redacted(self) -> None:
+        """Presigned HTTPS URL query credentials are redacted but safe context remains."""
+        msg = (
+            "S3 fetch failed for "
+            "https://bucket.s3.amazonaws.com/key?"
+            "X-Amz-Signature=abc&X-Amz-Credential=cred&safe=value"
+        )
+
+        result = sanitize_error_message(msg)
+
+        assert result == (
+            "S3 fetch failed for "
+            "https://bucket.s3.amazonaws.com/key?"
+            "X-Amz-Signature=<REDACTED>&X-Amz-Credential=<REDACTED>&safe=value"
+        )
+        assert "abc" not in result
+        assert "cred" not in result
+        assert "safe=value" in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_presigned_s3_query_parameters_are_redacted(self) -> None:
+        """S3 URI presign query credentials are redacted."""
+        msg = "Load failed for s3://bucket/key?AWSAccessKeyId=abc&Signature=def"
+
+        result = sanitize_error_message(msg)
+
+        assert result == (
+            "Load failed for s3://bucket/key?AWSAccessKeyId=<REDACTED>&Signature=<REDACTED>"
+        )
+        assert "abc" not in result
+        assert "def" not in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_fragment_signature_parameters_are_redacted(self) -> None:
+        """Credential-bearing fragment parameters are redacted."""
+        msg = (
+            "Redirect failed for "
+            "https://bucket.s3.amazonaws.com/key#token=abc&signature=def&safe=value"
+        )
+
+        result = sanitize_error_message(msg)
+
+        assert result == (
+            "Redirect failed for "
+            "https://bucket.s3.amazonaws.com/key#token=<REDACTED>&signature=<REDACTED>&safe=value"
+        )
+        assert "abc" not in result
+        assert "def" not in result

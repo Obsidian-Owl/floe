@@ -1,7 +1,7 @@
 """Unit tests for plugin system architecture.
 
 This test validates the plugin system's ability to discover, load, swap, and
-validate plugins across all 14 plugin types in the floe platform.
+validate plugins across all 15 plugin types in the floe platform.
 
 No external infrastructure required — all tests run in-process against
 the plugin registry and ABC interfaces.
@@ -37,6 +37,7 @@ from floe_core.plugins import (
     IdentityPlugin,
     IngestionPlugin,
     LineageBackendPlugin,
+    NetworkSecurityPlugin,
     OrchestratorPlugin,
     QualityPlugin,
     SecretsPlugin,
@@ -68,7 +69,7 @@ class TestPluginSystem:
     """Unit tests for the plugin system architecture.
 
     These tests validate the complete plugin system functionality:
-    1. Discovery of all 14 plugin types via Python entry points
+    1. Discovery of all 15 plugin types via Python entry points
     2. ABC compliance validation for each plugin
     3. Plugin swapping via floe.yaml configuration
     4. Third-party plugin discovery via pip install
@@ -102,6 +103,7 @@ class TestPluginSystem:
         PluginType.QUALITY: QualityPlugin,
         PluginType.RBAC: RBACPlugin,
         PluginType.ALERT_CHANNEL: AlertChannelPlugin,
+        PluginType.NETWORK_SECURITY: NetworkSecurityPlugin,
     }
 
     @pytest.mark.requirement("FR-050")
@@ -121,8 +123,8 @@ class TestPluginSystem:
         all_plugins = registry.list_all()
 
         # Verify plugin type count matches enum (dynamic, not hardcoded)
-        assert len(PluginType) >= 14, (
-            f"Expected at least 14 plugin types, found {len(PluginType)}. "
+        assert len(PluginType) >= 15, (
+            f"Expected at least 15 plugin types, found {len(PluginType)}. "
             "PluginType enum may have been reduced."
         )
 

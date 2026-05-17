@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import time
 from typing import TYPE_CHECKING, Any
 
+import structlog
 from floe_core.plugin_metadata import HealthState, HealthStatus
 from floe_core.plugins.quality import (
     OpenLineageEmitter,
@@ -15,13 +17,22 @@ from floe_core.plugins.quality import (
     QualitySuiteResult,
 )
 from floe_core.schemas.quality_config import Dimension, QualityConfig
+from floe_core.telemetry.metrics import MetricRecorder
+from floe_core.telemetry.sanitization import sanitize_error_message
 
-from floe_quality_gx.tracing import TRACER_NAME, get_tracer, quality_span
+from floe_quality_gx.tracing import TRACER_NAME, get_tracer, quality_span, record_result
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
 SUPPORTED_DIALECTS = {"duckdb", "postgresql", "snowflake"}
+GX_SUITE_RUNS_METRIC = "floe.quality.gx.suite_runs"
+GX_SUITE_DURATION_METRIC = "floe.quality.gx.suite_duration"
+GX_SUITE_FAILURES_METRIC = "floe.quality.gx.suite_failures"
+GX_CHECK_RESULTS_METRIC = "floe.quality.gx.check_results"
+GX_CHECK_FAILURES_METRIC = "floe.quality.gx.check_failures"
+
+logger = structlog.get_logger(__name__)
 
 
 class GreatExpectationsPlugin(QualityPlugin):
@@ -121,18 +132,22 @@ class GreatExpectationsPlugin(QualityPlugin):
             "run_suite",
             suite_name=suite.model_name,
             checks_count=len(suite.checks),
-        ) as _span:
-            # Handle empty checks case
-            if not suite.checks:
-                return QualitySuiteResult(
-                    suite_name=f"{suite.model_name}_suite",
-                    model_name=suite.model_name,
-                    passed=True,
-                    checks=[],
-                    summary={"total": 0, "passed": 0, "failed": 0},
-                )
-
+        ) as span:
+            started_at = time.perf_counter()
+            metrics = MetricRecorder(name="floe.quality.gx.runtime", version=self.version)
             try:
+                # Handle empty checks case
+                if not suite.checks:
+                    result = QualitySuiteResult(
+                        suite_name=f"{suite.model_name}_suite",
+                        model_name=suite.model_name,
+                        passed=True,
+                        checks=[],
+                        summary={"total": 0, "passed": 0, "failed": 0},
+                    )
+                    self._record_suite_success(span, metrics, suite, result, started_at)
+                    return result
+
                 from floe_quality_gx.executor import (
                     create_dataframe_from_connection,
                     run_validation_with_timeout,
@@ -142,20 +157,27 @@ class GreatExpectationsPlugin(QualityPlugin):
                 dataframe = create_dataframe_from_connection(connection_config, suite.model_name)
 
                 # Run validation with timeout
-                return run_validation_with_timeout(
+                result = run_validation_with_timeout(
                     suite=suite,
                     dataframe=dataframe,
                     timeout_seconds=suite.timeout_seconds,
                 )
+                self._record_suite_success(span, metrics, suite, result, started_at)
+                return result
             except ImportError:
                 # GX not available, return empty result
-                return QualitySuiteResult(
+                result = QualitySuiteResult(
                     suite_name=f"{suite.model_name}_suite",
                     model_name=suite.model_name,
                     passed=True,
                     checks=[],
                     summary={"total": 0, "passed": 0, "failed": 0},
                 )
+                self._record_suite_success(span, metrics, suite, result, started_at)
+                return result
+            except Exception as exc:
+                self._record_suite_failure(span, metrics, suite, exc, started_at)
+                raise
 
     def validate_expectations(
         self,
@@ -232,3 +254,198 @@ class GreatExpectationsPlugin(QualityPlugin):
     def get_config_schema(self) -> type[BaseModel]:
         """Return QualityConfig as the configuration schema (FR-010)."""
         return QualityConfig
+
+    def _record_suite_success(
+        self,
+        span: Any,
+        metrics: MetricRecorder,
+        suite: QualitySuite,
+        result: QualitySuiteResult,
+        started_at: float,
+    ) -> None:
+        pass_count, fail_count = _quality_counts(result)
+        status = "success" if result.passed else "failure"
+        duration_seconds = time.perf_counter() - started_at
+        span.set_attribute("quality.status", status)
+        record_result(span, pass_count=pass_count, fail_count=fail_count)
+        self._record_quality_metrics(
+            metrics,
+            status=status,
+            duration_seconds=duration_seconds,
+        )
+        self._record_check_results(metrics, result)
+        logger.info(
+            "gx_suite_completed",
+            suite_name=result.suite_name,
+            model_name=result.model_name,
+            checks_count=len(suite.checks),
+            passed=result.passed,
+            pass_count=pass_count,
+            fail_count=fail_count,
+            status=status,
+        )
+
+    def _record_suite_failure(
+        self,
+        span: Any,
+        metrics: MetricRecorder,
+        suite: QualitySuite,
+        exc: Exception,
+        started_at: float,
+    ) -> None:
+        duration_seconds = time.perf_counter() - started_at
+        error_type = type(exc).__name__
+        span.set_attribute("quality.status", "failure")
+        span.set_attribute("quality.error_type", error_type)
+        self._record_quality_metrics(
+            metrics,
+            status="failure",
+            duration_seconds=duration_seconds,
+            error_type=error_type,
+        )
+        logger.error(
+            "gx_suite_failed",
+            suite_name=f"{suite.model_name}_suite",
+            model_name=suite.model_name,
+            checks_count=len(suite.checks),
+            status="failure",
+            error_type=error_type,
+            error_message=sanitize_error_message(str(exc)),
+        )
+
+    def _record_check_results(
+        self,
+        metrics: MetricRecorder,
+        result: QualitySuiteResult,
+    ) -> None:
+        tracer = get_tracer()
+        for check in result.checks:
+            status = "success" if check.passed else "failure"
+            error_type = None if check.passed else "QualityCheckFailed"
+            attrs: dict[str, str | int | float] = {
+                "quality.check_name": check.check_name,
+                "quality.status": status,
+                "quality.dimension": check.dimension.value,
+                "quality.severity": check.severity.value,
+                "quality.records_checked": check.records_checked,
+                "quality.records_failed": check.records_failed,
+                "quality.check_duration_ms": check.execution_time_ms,
+            }
+            if error_type is not None:
+                attrs["quality.error_type"] = error_type
+
+            with quality_span(
+                tracer,
+                "check_result",
+                suite_name=result.suite_name,
+                data_source=result.model_name,
+                extra_attributes=attrs,
+            ) as check_span:
+                check_span.set_attribute("quality.status", status)
+                check_span.set_attribute("quality.records_checked", check.records_checked)
+                check_span.set_attribute("quality.records_failed", check.records_failed)
+                if error_type is not None:
+                    check_span.set_attribute("quality.error_type", error_type)
+
+            self._record_check_metrics(
+                metrics,
+                status=status,
+                dimension=check.dimension.value,
+                severity=check.severity.value,
+                error_type=error_type,
+            )
+            logger.info(
+                "gx_check_completed",
+                suite_name=result.suite_name,
+                model_name=result.model_name,
+                check_name=check.check_name,
+                dimension=check.dimension.value,
+                severity=check.severity.value,
+                status=status,
+                error_type=error_type,
+                records_checked=check.records_checked,
+                records_failed=check.records_failed,
+            )
+
+    @staticmethod
+    def _record_check_metrics(
+        metrics: MetricRecorder,
+        *,
+        status: str,
+        dimension: str,
+        severity: str,
+        error_type: str | None = None,
+    ) -> None:
+        labels = {
+            "quality.provider": "great_expectations",
+            "quality.status": status,
+            "quality.dimension": dimension,
+            "quality.severity": severity,
+        }
+        if error_type is not None:
+            labels["quality.error_type"] = error_type
+        try:
+            metrics.increment(
+                GX_CHECK_RESULTS_METRIC,
+                labels=labels,
+                description="Great Expectations check results",
+                unit="1",
+            )
+            if error_type is not None or status != "success":
+                metrics.increment(
+                    GX_CHECK_FAILURES_METRIC,
+                    labels=labels,
+                    description="Great Expectations check failures",
+                    unit="1",
+                )
+        except Exception as exc:  # pragma: no cover - defensive telemetry isolation
+            logger.debug("gx_check_metric_failed", error_type=type(exc).__name__)
+
+    @staticmethod
+    def _record_quality_metrics(
+        metrics: MetricRecorder,
+        *,
+        status: str,
+        duration_seconds: float,
+        error_type: str | None = None,
+    ) -> None:
+        labels = {
+            "quality.provider": "great_expectations",
+            "quality.status": status,
+        }
+        if error_type is not None:
+            labels["quality.error_type"] = error_type
+        try:
+            metrics.increment(
+                GX_SUITE_RUNS_METRIC,
+                labels=labels,
+                description="Great Expectations suite executions",
+                unit="1",
+            )
+            metrics.record_histogram(
+                GX_SUITE_DURATION_METRIC,
+                duration_seconds,
+                labels=labels,
+                description="Great Expectations suite execution duration",
+                unit="s",
+            )
+            if error_type is not None or status != "success":
+                metrics.increment(
+                    GX_SUITE_FAILURES_METRIC,
+                    labels=labels,
+                    description="Great Expectations suite failures",
+                    unit="1",
+                )
+        except Exception as exc:  # pragma: no cover - defensive telemetry isolation
+            logger.debug("gx_quality_metric_failed", error_type=type(exc).__name__)
+
+
+def _quality_counts(result: QualitySuiteResult) -> tuple[int, int]:
+    summary = result.summary or {}
+    passed = summary.get("passed")
+    failed = summary.get("failed")
+    if isinstance(passed, int) and isinstance(failed, int):
+        return passed, failed
+    pass_count = sum(1 for check in result.checks if check.passed)
+    fail_count = len(result.checks) - pass_count
+    return pass_count, fail_count

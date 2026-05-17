@@ -100,6 +100,7 @@ class TestAlertSpan:
         with alert_span(
             tracer,
             "send_alert",
+            channel="email",
             destination="alerts@example.com",
         ):
             pass
@@ -107,7 +108,8 @@ class TestAlertSpan:
         spans = exporter.get_finished_spans()
         assert len(spans) == 1
         attributes = dict(spans[0].attributes or {})
-        assert attributes[ATTR_DESTINATION] == "alerts@example.com"
+        assert attributes[ATTR_DESTINATION] == "email"
+        assert "alerts@example.com" not in repr(attributes)
 
     @pytest.mark.requirement("6C-FR-021")
     def test_alert_span_no_alert_content_in_attributes(
@@ -145,7 +147,7 @@ class TestAlertSpan:
 
         # Verify expected attributes are metadata only
         assert attributes.get(ATTR_CHANNEL) == "email"
-        assert attributes.get(ATTR_DESTINATION) == "alerts@example.com"
+        assert attributes.get(ATTR_DESTINATION) == "email"
 
     @pytest.mark.requirement("6C-FR-021")
     def test_alert_span_error_sanitized(

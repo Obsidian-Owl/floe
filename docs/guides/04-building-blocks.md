@@ -39,9 +39,9 @@ floe uses a four-layer architecture separating framework code, platform configur
 │  LAYER 1: FOUNDATION (Framework Code - Open Source)                          │
 │  Owner: floe Maintainers | Lifecycle: PyPI/Helm releases            │
 │  • floe-core, floe-cli, floe-dbt, floe-iceberg                              │
-│  • plugins/* (14 plugin categories: compute, orchestrator, catalog, storage,│
+│  • plugins/* (15 plugin categories: compute, orchestrator, catalog, storage,│
 │              telemetry, lineage, dbt, semantic layer, ingestion, quality,   │
-│              rbac, alert channel, secrets, identity - ADR-0037)             │
+│              rbac, alert channel, secrets, identity, network security)      │
 │  • charts/* (Helm charts for platform deployment)                           │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -165,7 +165,7 @@ See [ADR-0021](../architecture/adr/0021-data-architecture-patterns.md) and [Cont
 
 ### 3.3 Plugin Interfaces (ABCs)
 
-floe documents **14 plugin categories** for extensibility (see [plugin-system/index.md](../architecture/plugin-system/index.md) for the canonical registry and implemented ABCs):
+floe documents **15 plugin categories** for extensibility (see [plugin-system/index.md](../architecture/plugin-system/index.md) for the canonical registry and implemented ABCs):
 
 | Plugin Type | Entry Point | Purpose | ADR |
 |-------------|-------------|---------|-----|
@@ -183,6 +183,7 @@ floe documents **14 plugin categories** for extensibility (see [plugin-system/in
 | DataQualityPlugin | `floe.quality` | Data quality validation frameworks | ADR-0044 |
 | RBACPlugin | `floe.rbac` | Namespace and service-account isolation | Epic 7B |
 | AlertChannelPlugin | `floe.alert_channels` | Contract violation alert delivery | Epic 15 |
+| NetworkSecurityPlugin | `floe.network_security` | Network isolation and pod security policy | Epic 7C |
 
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins.
 
@@ -362,7 +363,7 @@ dagster = "floe_orchestrator_dagster:chart"
 
 ### 6.3 Available Plugins
 
-floe supports **14 plugin categories** (see the [Plugin Catalog](../reference/plugin-catalog.md) for implementation truth):
+floe supports **15 plugin categories** (see the [Plugin Catalog](../reference/plugin-catalog.md) for implementation truth):
 
 | Category | Default | Alternatives | ADR |
 |----------|---------|--------------|-----|
@@ -380,6 +381,7 @@ floe supports **14 plugin categories** (see the [Plugin Catalog](../reference/pl
 | **Alert Channel** | Webhook / Slack / email | PagerDuty, Teams | Epic 15 |
 | **Secrets** | K8s Secrets | External Secrets Operator, Vault, Infisical | ADR-0023/0031 |
 | **Identity** | Keycloak | Dex, Authentik, Okta, Auth0, Azure AD | ADR-0024 |
+| **Network Security** | Kubernetes NetworkPolicy and Pod Security | Cloud network-policy integrations | Epic 7C |
 
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins. DataQualityPlugin (Great Expectations, Soda) is documented in ADR-0044.
 

@@ -41,6 +41,10 @@ from pydantic import ValidationError as PydanticValidationError
 
 from floe_orchestrator_dagster.lineage_extraction import extract_dbt_model_lineage
 from floe_orchestrator_dagster.runtime import build_product_definitions
+from floe_orchestrator_dagster.runtime_observability import (
+    observability_context_from_dagster,
+    run_observed_asset,
+)
 from floe_orchestrator_dagster.tracing import (
     ATTR_ASSET_COUNT,
     TRACER_NAME,
@@ -517,74 +521,87 @@ class DagsterOrchestratorPlugin(OrchestratorPlugin):
                 FR-030: Delegate to DBTPlugin, never invoke dbtRunner directly
                 FR-031: Use DBTRunResult for metadata
             """
-            lineage = context.resources.lineage
-            run_id = None
-
-            # 1. Emit START (with trace correlation) — never blocks dbt execution
-            run_facets: dict[str, object] = {}
-            try:
-                trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
-                if trace_facet is not None:
-                    run_facets["traceCorrelation"] = trace_facet
-            except Exception:
-                logger.warning("lineage_trace_facet_failed", exc_info=True)
-            try:
-                run_id = lineage.emit_start(model_name, run_facets=run_facets or None)
-            except Exception:
-                logger.warning("lineage_emit_start_failed", exc_info=True)
-                run_id = uuid4()  # fallback so downstream calls have a valid ID
-
-            # 2. Run dbt — on throw: emit FAIL, re-raise
-            try:
-                result = dbt.run_models(select=model_name)
-            except Exception as exc:
-                try:
-                    lineage.emit_fail(run_id, model_name, error_message=type(exc).__name__)
-                except Exception:
-                    logger.warning("lineage_emit_fail_failed", exc_info=True)
-                raise
-
-            # 3. Extract per-model lineage (after dbt returns, before success check — AC-8)
-            # Dual-ID pattern: run_id (from emit_start) tracks the asset-level
-            # OL lifecycle (start/fail/complete). Per-model events use the Dagster
-            # orchestrator run as their parent per OpenLineage ParentRunFacet spec.
-            try:
-                dagster_parent_id = UUID(context.run.run_id)
-                events = extract_dbt_model_lineage(
-                    result.project_dir,
-                    dagster_parent_id,
-                    model_name,
-                    lineage.namespace,
-                )
-                for event in events:
-                    lineage.emit_event(event)
-            except Exception:
-                logger.warning("lineage_extraction_failed", exc_info=True)
-
-            # 4. Log execution results (FR-031: use DBTRunResult for metadata)
-            context.log.info(
-                f"dbt model '{model_name}' completed: "
-                f"success={result.success}, "
-                f"models_run={result.models_run}, "
-                f"failures={result.failures}"
+            return run_observed_asset(
+                observability_context_from_dagster(
+                    context,
+                    asset_key=model_name,
+                    stage="transform",
+                    table_name=model_name,
+                ),
+                f"floe.orchestrator.dagster.asset.{model_name}",
+                lambda: self._run_transform_asset(context, dbt, model_name),
             )
 
-            # 5. Check success — emit FAIL on dbt-reported failure, then raise
-            if not result.success:
-                msg = f"dbt model '{model_name}' failed with {result.failures} failures"
-                try:
-                    lineage.emit_fail(run_id, model_name, error_message=msg)
-                except Exception:
-                    logger.warning("lineage_emit_fail_failed", exc_info=True)
-                raise RuntimeError(msg)
-
-            # 6. Emit COMPLETE — never blocks the asset return
-            try:
-                lineage.emit_complete(run_id, model_name)
-            except Exception:
-                logger.warning("lineage_emit_complete_failed", exc_info=True)
-
         return _asset_fn
+
+    def _run_transform_asset(self, context: Any, dbt: Any, model_name: str) -> None:
+        """Execute a transform asset body while preserving dbt ownership."""
+        lineage = context.resources.lineage
+        run_id = None
+
+        # 1. Emit START (with trace correlation) — never blocks dbt execution
+        run_facets: dict[str, object] = {}
+        try:
+            trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
+            if trace_facet is not None:
+                run_facets["traceCorrelation"] = trace_facet
+        except Exception:
+            logger.warning("lineage_trace_facet_failed", exc_info=True)
+        try:
+            run_id = lineage.emit_start(model_name, run_facets=run_facets or None)
+        except Exception:
+            logger.warning("lineage_emit_start_failed", exc_info=True)
+            run_id = uuid4()  # fallback so downstream calls have a valid ID
+
+        # 2. Run dbt — on throw: emit FAIL, re-raise
+        try:
+            result = dbt.run_models(select=model_name)
+        except Exception as exc:
+            try:
+                lineage.emit_fail(run_id, model_name, error_message=type(exc).__name__)
+            except Exception:
+                logger.warning("lineage_emit_fail_failed", exc_info=True)
+            raise
+
+        # 3. Extract per-model lineage (after dbt returns, before success check — AC-8)
+        # Dual-ID pattern: run_id (from emit_start) tracks the asset-level
+        # OL lifecycle (start/fail/complete). Per-model events use the Dagster
+        # orchestrator run as their parent per OpenLineage ParentRunFacet spec.
+        try:
+            dagster_parent_id = UUID(context.run.run_id)
+            events = extract_dbt_model_lineage(
+                result.project_dir,
+                dagster_parent_id,
+                model_name,
+                lineage.namespace,
+            )
+            for event in events:
+                lineage.emit_event(event)
+        except Exception:
+            logger.warning("lineage_extraction_failed", exc_info=True)
+
+        # 4. Log execution results (FR-031: use DBTRunResult for metadata)
+        context.log.info(
+            f"dbt model '{model_name}' completed: "
+            f"success={result.success}, "
+            f"models_run={result.models_run}, "
+            f"failures={result.failures}"
+        )
+
+        # 5. Check success — emit FAIL on dbt-reported failure, then raise
+        if not result.success:
+            msg = f"dbt model '{model_name}' failed with {result.failures} failures"
+            try:
+                lineage.emit_fail(run_id, model_name, error_message=msg)
+            except Exception:
+                logger.warning("lineage_emit_fail_failed", exc_info=True)
+            raise RuntimeError(msg)
+
+        # 6. Emit COMPLETE — never blocks the asset return
+        try:
+            lineage.emit_complete(run_id, model_name)
+        except Exception:
+            logger.warning("lineage_emit_complete_failed", exc_info=True)
 
     def get_helm_values(self) -> dict[str, Any]:
         """Return Helm chart values for deploying Dagster services.

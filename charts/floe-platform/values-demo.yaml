@@ -236,6 +236,10 @@ otel:
     exporters:
       debug:
         verbosity: detailed
+      prometheus:
+        endpoint: 0.0.0.0:9464
+      otlphttp/loki:
+        endpoint: http://floe-platform-loki:3100/otlp
       otlp/jaeger:
         endpoint: "{{ .Release.Name }}-jaeger-collector:4317"
         tls:
@@ -249,11 +253,29 @@ otel:
         metrics:
           receivers: [otlp]
           processors: [memory_limiter, batch]
-          exporters: [debug]
+          exporters: [prometheus]
         logs:
           receivers: [otlp]
           processors: [memory_limiter, batch]
-          exporters: [debug]
+          exporters: [otlphttp/loki]
+  ports:
+    prometheus:
+      enabled: true
+      containerPort: 9464
+      servicePort: 9464
+      protocol: TCP
+
+# =============================================================================
+# Loki Configuration (Queryable Logs - Demo)
+# =============================================================================
+loki:
+  enabled: true
+
+# =============================================================================
+# Prometheus Configuration (Queryable Metrics - Demo)
+# =============================================================================
+prometheus:
+  enabled: true
 
 # =============================================================================
 # PostgreSQL Configuration (Metadata Store)
@@ -368,3 +390,13 @@ demo:
 # =============================================================================
 cube:
   enabled: true
+
+# =============================================================================
+# Observability Configuration (Grafana Datasources - Demo)
+# =============================================================================
+observability:
+  grafana:
+    enabled: true
+    refreshInterval: 30s
+    datasourceUid: prometheus
+    datasources: []

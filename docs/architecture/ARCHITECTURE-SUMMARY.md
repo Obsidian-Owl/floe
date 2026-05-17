@@ -37,9 +37,9 @@ floe is built on **composability** as a core architectural principle (ADR-0037):
 - **Progressive Disclosure**: Point to detailed docs, don't duplicate content
 - **Opt-in Complexity**: Start simple (2-tier), with architecture direction toward Data Mesh-compatible (3-tier) governance. See [Capability Status](capability-status.md) for the current alpha-validated state.
 
-**14 plugin categories** enable flexibility while maintaining enforced standards (see [Plugin Catalog](../reference/plugin-catalog.md) for implementation truth):
+**15 plugin categories** enable flexibility while maintaining enforced standards (see [Plugin Catalog](../reference/plugin-catalog.md) for implementation truth):
 - Compute, Orchestrator, Catalog, Storage, TelemetryBackend, LineageBackend
-- DBT, Semantic Layer, Ingestion, Quality, RBAC, Alert Channel, Secrets, Identity
+- DBT, Semantic Layer, Ingestion, Quality, RBAC, Alert Channel, Secrets, Identity, Network Security
 
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins.
 
@@ -140,7 +140,7 @@ destination raw table, write mode, and schema contract in `floe.yaml`.
 
 ## Key Interfaces
 
-floe documents **14 plugin categories** for extensibility (see [plugin-system/index.md](plugin-system/index.md) for the canonical registry and implemented ABCs):
+floe documents **15 plugin categories** for extensibility (see [plugin-system/index.md](plugin-system/index.md) for the canonical registry and implemented ABCs):
 
 | Plugin Type | Purpose | Entry Point | ADR |
 |-------------|---------|-------------|-----|
@@ -158,6 +158,7 @@ floe documents **14 plugin categories** for extensibility (see [plugin-system/in
 | `DataQualityPlugin` | Data quality validation frameworks | `floe.quality` | ADR-0044 |
 | `RBACPlugin` | Namespace and service-account isolation | `floe.rbac` | Epic 7B |
 | `AlertChannelPlugin` | Contract violation alert delivery | `floe.alert_channels` | Epic 15 |
+| `NetworkSecurityPlugin` | Network isolation and pod security policy | `floe.network_security` | Epic 7C |
 
 > **Note:** PolicyEnforcer and DataContract are now **core modules** in floe-core, not plugins.
 

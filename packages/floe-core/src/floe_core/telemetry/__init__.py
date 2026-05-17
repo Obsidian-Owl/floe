@@ -46,16 +46,32 @@ from floe_core.telemetry.config import (
     TelemetryConfig,
 )
 
+# Runtime context
+from floe_core.telemetry.context import (
+    ObservabilityContext,
+    clean_attribute_value,
+    is_secret_attribute_key,
+)
+
 # Semantic conventions
 from floe_core.telemetry.conventions import (
+    FLOE_ASSET_KEY,
     FLOE_DAGSTER_ASSET,
     FLOE_DBT_MODEL,
+    FLOE_ENVIRONMENT,
     FLOE_JOB_TYPE,
+    FLOE_LINEAGE_NAMESPACE,
     FLOE_MODE,
     FLOE_NAMESPACE,
     FLOE_PIPELINE_ID,
+    FLOE_PLUGIN_NAME,
+    FLOE_PLUGIN_TYPE,
     FLOE_PRODUCT_NAME,
     FLOE_PRODUCT_VERSION,
+    FLOE_RUN_ID,
+    FLOE_STAGE,
+    FLOE_STATUS,
+    FLOE_TABLE_NAME,
     FloeSpanAttributes,
 )
 
@@ -108,6 +124,10 @@ __all__: list[str] = [
     "SamplingConfig",
     "TelemetryAuth",
     "BatchSpanProcessorConfig",
+    # Runtime context
+    "ObservabilityContext",
+    "clean_attribute_value",
+    "is_secret_attribute_key",
     # Provider
     "TelemetryProvider",
     "ProviderState",
@@ -117,11 +137,20 @@ __all__: list[str] = [
     "FLOE_NAMESPACE",
     "FLOE_PRODUCT_NAME",
     "FLOE_PRODUCT_VERSION",
+    "FLOE_ENVIRONMENT",
     "FLOE_MODE",
     "FLOE_PIPELINE_ID",
+    "FLOE_RUN_ID",
     "FLOE_JOB_TYPE",
     "FLOE_DBT_MODEL",
     "FLOE_DAGSTER_ASSET",
+    "FLOE_ASSET_KEY",
+    "FLOE_STAGE",
+    "FLOE_TABLE_NAME",
+    "FLOE_PLUGIN_TYPE",
+    "FLOE_PLUGIN_NAME",
+    "FLOE_LINEAGE_NAMESPACE",
+    "FLOE_STATUS",
     # Propagation
     "configure_propagators",
     "get_propagator",

@@ -1,0 +1,71 @@
+{{- if .Values.prometheus.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "floe-platform.prometheus.fullname" . }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  replicas: {{ .Values.prometheus.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "floe-platform.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: prometheus
+  template:
+    metadata:
+      labels:
+        {{- include "floe-platform.labels" . | nindent 8 }}
+        app.kubernetes.io/component: prometheus
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "floe-platform.serviceAccountName" . }}
+      securityContext:
+        {{- include "floe-platform.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: prometheus
+          image: "{{ .Values.prometheus.image.repository }}:{{ .Values.prometheus.image.tag }}"
+          imagePullPolicy: {{ .Values.prometheus.image.pullPolicy | default .Values.global.imagePullPolicy }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=24h
+            - --web.listen-address=0.0.0.0:{{ .Values.prometheus.service.port | default 9090 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.prometheus.service.port | default 9090 }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.prometheus.resources | nindent 12 }}
+          securityContext:
+            {{- include "floe-platform.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+              readOnly: true
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "floe-platform.prometheus.fullname" . }}
+        - name: data
+          emptyDir: {}
+{{- end }}

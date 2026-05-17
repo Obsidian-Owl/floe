@@ -99,9 +99,12 @@ def test_rejects_internal_agent_runbook_in_public_reference(tmp_path: Path) -> N
 
 def test_rejects_wrong_plugin_count(tmp_path: Path) -> None:
     readme = tmp_path / "README.md"
-    readme.write_text("Floe lets teams choose from 12 plugin types.\n")
+    readme.write_text(
+        "Floe lets teams choose from 12 plugin types.\n"
+        "The plugin-quality agent covers 14 floe plugin types testing.\n"
+    )
 
-    errors = validate_docs_content(tmp_path, plugin_category_count=14)
+    errors = validate_docs_content(tmp_path, plugin_category_count=15)
 
     assert any("plugin count" in error for error in errors)
 ```
@@ -197,7 +200,7 @@ def test_plugin_catalog_mentions_current_plugin_category_count() -> None:
 
 def test_public_docs_do_not_use_stale_plugin_counts() -> None:
     count = len(list(PluginType))
-    stale_phrases = {"11 plugin types", "12 plugin types", "13 plugin types"}
+    stale_phrases = {"11 plugin types", "12 plugin types", "13 plugin types", "14 plugin types"}
     for path in [ROOT / "README.md", *sorted((ROOT / "docs").rglob("*.md"))]:
         if "docs/architecture/adr/" in path.as_posix():
             continue
@@ -219,7 +222,7 @@ Expected: FAIL because `plugin-catalog.md` is missing and stale counts exist.
 Create `docs/reference/plugin-catalog.md` with:
 
 - Current implementation source: `floe_core.plugin_types.PluginType`.
-- Current count: `14 plugin categories`.
+- Current count: `15 plugin categories`.
 - Clear distinction between `PluginType` categories and public plugin ABC reference pages.
 - Table with category, entry point group, current alpha status, and owner:
   - Compute: `floe.computes`
@@ -235,12 +238,13 @@ Create `docs/reference/plugin-catalog.md` with:
   - Identity: `floe.identity`
   - Quality: `floe.quality`
   - RBAC: `floe.rbac`
+  - Network security: `floe.network_security`
   - Alert channel: `floe.alert_channels`
 - Note that `PluginType.LINEAGE` is a code alias for `LINEAGE_BACKEND` and is not an additional category.
 
 - [ ] **Step 3: Replace stale concept counts**
 
-Update public docs to avoid stale counts or use the canonical phrase `14 plugin categories`:
+Update public docs to avoid stale counts or use the canonical phrase `15 plugin categories`:
 
 ```bash
 rg -n "11 plugin|12 plugin|13 plugin|14 plugin|plugin types|plugin categories" README.md docs
@@ -248,7 +252,7 @@ rg -n "11 plugin|12 plugin|13 plugin|14 plugin|plugin types|plugin categories" R
 
 Expected after edits:
 
-- `README.md` aligns to `14 plugin categories`.
+- `README.md` aligns to `15 plugin categories`.
 - `docs/architecture/plugin-system/index.md` links to `docs/reference/plugin-catalog.md`.
 - `docs/architecture/interfaces/index.md` says public ABC coverage is a subset/reference surface, not the canonical category count.
 - `docs/architecture/ARCHITECTURE-SUMMARY.md` stops claiming stale counts.

@@ -368,7 +368,7 @@ helm-test-infra: ## Verify test infrastructure is healthy
 # Demo Targets
 # ============================================================
 
-.PHONY: compile-demo build-demo-image demo demo-local demo-stop demo-customer-360-run demo-customer-360-validate
+.PHONY: compile-demo build-demo-image demo demo-local demo-stop demo-observability-port-forwards demo-customer-360-run demo-customer-360-validate
 
 DEMO_MANIFEST ?= demo/manifest.yaml
 DEMO_IMAGE_REPOSITORY ?= floe-dagster-demo
@@ -378,6 +378,12 @@ export FLOE_DEMO_NAMESPACE ?= floe-dev
 export FLOE_DEMO_DAGSTER_URL ?= http://localhost:3100
 export FLOE_DEMO_MARQUEZ_URL ?= http://localhost:5100
 export FLOE_DEMO_JAEGER_URL ?= http://localhost:16686
+export FLOE_DEMO_LOKI_PORT ?= 3101
+export FLOE_DEMO_PROMETHEUS_PORT ?= 9090
+export FLOE_DEMO_LOKI_URL ?= http://localhost:$(FLOE_DEMO_LOKI_PORT)
+export FLOE_DEMO_PROMETHEUS_URL ?= http://localhost:$(FLOE_DEMO_PROMETHEUS_PORT)
+export FLOE_DEMO_RUN_EVIDENCE_FILE ?= .customer360-run.env
+export FLOE_DEMO_OBSERVABILITY_FRESHNESS_SECONDS ?= 1800
 export FLOE_DEMO_PLATFORM_EXPECTED_SERVICES ?= dagster,polaris,minio,jaeger,marquez
 export FLOE_DEMO_COMMAND_TIMEOUT_SECONDS ?= 30
 export FLOE_DEMO_DAGSTER_EXPECTED_TEXT
@@ -475,12 +481,15 @@ demo: ## Run contributor remote release-validation demo via DevPod
 		$(DEMO_IMAGE_HELM_SET_ARGS)
 	@echo "Starting port-forwards and waiting for demo endpoints..."
 	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" scripts/demo-start-port-forwards.sh
+	@KUBECONFIG="$(DEVPOD_KUBECONFIG)" $(MAKE) --no-print-directory demo-observability-port-forwards
 	@echo ""
 	@echo "=== Demo Ready ==="
 	@echo "Dagster UI:    http://localhost:3100"
 	@echo "Polaris:       http://localhost:8181"
 	@echo "Marquez:       http://localhost:5100"
 	@echo "Jaeger:        http://localhost:16686"
+	@echo "Loki:          $(FLOE_DEMO_LOKI_URL)"
+	@echo "Prometheus:    $(FLOE_DEMO_PROMETHEUS_URL)"
 	@echo "MinIO Console: http://localhost:9001"
 	@echo "MinIO API:     http://localhost:9000"
 	@echo "OTel gRPC:     http://localhost:4317"
@@ -508,12 +517,15 @@ demo-local: build-demo-image ## Deploy demo locally (requires local Kind cluster
 		$(DEMO_IMAGE_HELM_SET_ARGS)
 	@echo "Starting port-forwards and waiting for demo endpoints..."
 	@scripts/demo-start-port-forwards.sh
+	@$(MAKE) --no-print-directory demo-observability-port-forwards
 	@echo ""
 	@echo "=== Demo Ready ==="
 	@echo "Dagster UI:    http://localhost:3100"
 	@echo "Polaris:       http://localhost:8181"
 	@echo "Marquez:       http://localhost:5100"
 	@echo "Jaeger:        http://localhost:16686"
+	@echo "Loki:          $(FLOE_DEMO_LOKI_URL)"
+	@echo "Prometheus:    $(FLOE_DEMO_PROMETHEUS_URL)"
 	@echo "MinIO Console: http://localhost:9001"
 	@echo "MinIO API:     http://localhost:9000"
 	@echo "OTel gRPC:     http://localhost:4317"
@@ -521,8 +533,11 @@ demo-local: build-demo-image ## Deploy demo locally (requires local Kind cluster
 	@echo ""
 	@echo "Stop with: make demo-stop"
 
+demo-observability-port-forwards: ## Start demo Loki and Prometheus port-forwards
+	@bash scripts/demo-observability-port-forwards.sh
+
 demo-customer-360-run: ## Trigger Customer 360 golden demo Dagster run
-	@uv run python -m testing.ci.run_customer_360_demo
+	@bash -euo pipefail -c 'uv run python -m testing.ci.run_customer_360_demo | tee "$${FLOE_DEMO_RUN_EVIDENCE_FILE}"'
 
 demo-customer-360-validate: ## Validate Customer 360 golden demo evidence
 	@uv run python -m testing.ci.validate_customer_360_demo

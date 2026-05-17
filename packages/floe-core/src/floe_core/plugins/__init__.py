@@ -4,7 +4,7 @@ This module provides:
 1. Abstract base classes (ABCs) for all pluggable component types
 2. Registry components for plugin discovery, loading, and lifecycle management
 
-Plugin Categories (14 types):
+Plugin Categories (15 types):
     Compute: Database execution engines (DuckDB, Snowflake, BigQuery)
     Orchestrator: Workflow schedulers (Dagster, Airflow)
     Catalog: Iceberg catalog providers (Polaris, AWS Glue, Hive)
@@ -19,6 +19,7 @@ Plugin Categories (14 types):
     Quality: Data quality validators (Great Expectations, Soda, dbt-expectations)
     RBAC: Kubernetes RBAC manifest generation
     Alert Channel: Contract violation alert delivery (Slack, webhook, email)
+    Network Security: Kubernetes NetworkPolicy and Pod Security generation
 
 Registry Components (Epic 12B US4):
     PluginDiscovery: Entry point scanning for installed plugins

@@ -68,6 +68,16 @@ _FIELD_TYPE_MAP: dict[FieldType, str] = {
 }
 
 
+def _table_identity_attributes(identifier: str) -> dict[str, str]:
+    """Return logical table identity attributes for lifecycle spans."""
+    attrs = {"table.identifier": identifier}
+    parts = identifier.rsplit(".", 1)
+    if len(parts) == 2:
+        attrs["table.namespace"] = parts[0]
+        attrs["table.name"] = parts[1]
+    return attrs
+
+
 class _IcebergTableLifecycle:
     """Internal helper class for table lifecycle operations.
 
@@ -217,6 +227,11 @@ class _IcebergTableLifecycle:
         # Load and return the created table
         return self.load_table(identifier)
 
+    @traced(
+        name="iceberg.lifecycle.load_table",
+        attributes={"operation": "load"},
+        attributes_fn=lambda self, identifier: _table_identity_attributes(identifier),
+    )
     def load_table(self, identifier: str) -> Table:
         """Load an existing table by identifier.
 
@@ -233,13 +248,21 @@ class _IcebergTableLifecycle:
         Example:
             >>> table = lifecycle.load_table("bronze.customers")
         """
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
         self._log.debug("load_table_requested", identifier=identifier)
 
         # Validate identifier format
-        self._validate_identifier(identifier)
+        try:
+            self._validate_identifier(identifier)
+        except Exception:
+            span.set_attribute("table.status", "error")
+            raise
 
         # Check if table exists
         if not self.table_exists(identifier):
+            span.set_attribute("table.status", "error")
             msg = f"Table '{identifier}' does not exist"
             raise NoSuchTableError(msg)
 
@@ -247,16 +270,25 @@ class _IcebergTableLifecycle:
         try:
             table = self._catalog.load_table(identifier)
         except StaleTableMetadataError:
+            span.set_attribute("table.status", "error")
             raise
         except Exception as exc:
             if self._is_stale_metadata_error(exc):
+                span.set_attribute("table.status", "error")
                 raise self._stale_metadata_error(identifier, exc) from exc
+            span.set_attribute("table.status", "error")
             raise
 
         self._log.debug("table_loaded", identifier=identifier)
+        span.set_attribute("table.status", "success")
 
         return table
 
+    @traced(
+        name="iceberg.lifecycle.table_exists",
+        attributes={"operation": "exists"},
+        attributes_fn=lambda self, identifier: _table_identity_attributes(identifier),
+    )
     def table_exists(self, identifier: str) -> bool:
         """Check if a table exists.
 
@@ -270,12 +302,16 @@ class _IcebergTableLifecycle:
             >>> if not lifecycle.table_exists("bronze.new_table"):
             ...     lifecycle.create_table(config)
         """
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
         self._log.debug("table_exists_check", identifier=identifier)
 
         # Parse identifier to get namespace and table name
         parts = identifier.rsplit(".", 1)
         if len(parts) < 2:
             # Invalid identifier format - can't exist
+            span.set_attribute("table.status", "invalid")
             return False
 
         namespace = parts[0]
@@ -284,13 +320,17 @@ class _IcebergTableLifecycle:
         # Check if namespace exists (mock-specific attribute for unit testing)
         namespaces: list[str] | None = getattr(self._catalog_plugin, "_namespaces", None)
         if namespaces is not None and namespace not in namespaces:
+            span.set_attribute("table.status", "not_found")
             return False
 
         # Check if table exists in catalog (mock-specific attribute for unit testing)
         tables: dict[str, Any] | None = getattr(self._catalog_plugin, "_tables", None)
         if tables is not None:
             full_identifier = f"{namespace}.{table_name}"
-            return full_identifier in tables
+            exists = full_identifier in tables
+            span.set_attribute("table.status", "found" if exists else "not_found")
+            return exists
+        span.set_attribute("table.status", "unknown")
         return True  # Assume exists in production (real catalog will verify)
 
     @traced(

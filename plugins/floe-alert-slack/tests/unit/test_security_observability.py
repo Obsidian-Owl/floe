@@ -1,0 +1,144 @@
+"""Security-sensitive observability tests for Slack alerts."""
+
+from __future__ import annotations
+
+from contextlib import AbstractContextManager
+from datetime import datetime, timezone
+from typing import Any
+from unittest.mock import AsyncMock, Mock, patch
+
+import httpx
+import pytest
+from floe_core.contracts.monitoring.violations import (
+    ContractViolationEvent,
+    ViolationSeverity,
+    ViolationType,
+)
+
+from floe_alert_slack.plugin import SlackAlertPlugin
+
+
+class _Span:
+    def __init__(self, name: str, attributes: dict[str, Any] | None) -> None:
+        self.name = name
+        self.attributes = dict(attributes or {})
+
+    def set_attribute(self, key: str, value: Any) -> None:
+        self.attributes[key] = value
+
+    def set_status(self, status: Any) -> None:
+        self.status = status
+
+
+class _SpanContext(AbstractContextManager[_Span]):
+    def __init__(self, span: _Span) -> None:
+        self._span = span
+
+    def __enter__(self) -> _Span:
+        return self._span
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
+        return False
+
+
+class _Tracer:
+    def __init__(self) -> None:
+        self.spans: list[_Span] = []
+
+    def start_as_current_span(self, name: str, **kwargs: Any) -> _SpanContext:
+        span = _Span(name, kwargs.get("attributes"))
+        self.spans.append(span)
+        return _SpanContext(span)
+
+
+def _event() -> ContractViolationEvent:
+    return ContractViolationEvent(
+        contract_name="orders_v1",
+        contract_version="1.0.0",
+        violation_type=ViolationType.SCHEMA_DRIFT,
+        severity=ViolationSeverity.WARNING,
+        message="xoxb-body-token person@example.com",  # pragma: allowlist secret
+        timestamp=datetime.now(tz=timezone.utc),
+        check_duration_seconds=0.1,
+    )
+
+
+def _attrs_text(tracer: _Tracer) -> str:
+    return repr([span.attributes for span in tracer.spans])
+
+
+@pytest.mark.requirement("OBS-SLACK-SECURITY-001")
+@pytest.mark.asyncio
+async def test_send_alert_records_delivery_metadata_without_webhook_or_body() -> None:
+    tracer = _Tracer()
+    plugin = SlackAlertPlugin(
+        webhook_url=(
+            "https://hooks.slack.com/services/T/B/xoxb-secret-token"  # pragma: allowlist secret
+        )
+    )
+    plugin._tracer = tracer
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.return_value = Mock(status_code=200)
+        assert await plugin.send_alert(_event()) is True
+
+    attrs = tracer.spans[-1].attributes
+    assert attrs["alert.destination_type"] == "slack"
+    assert attrs["alert.delivery_status"] == "delivered"
+    assert attrs["alert.retry_count"] == 0
+    assert attrs["contract.violation_id"] == "orders_v1:1.0.0:schema_drift"
+    text = _attrs_text(tracer)
+    assert "hooks.slack.com" not in text
+    assert "xoxb-secret-token" not in text  # pragma: allowlist secret
+    assert "xoxb-body-token" not in text  # pragma: allowlist secret
+    assert "person@example.com" not in text
+
+
+@pytest.mark.requirement("OBS-SLACK-SECURITY-002")
+@pytest.mark.asyncio
+async def test_send_alert_classifies_failures() -> None:
+    tracer = _Tracer()
+    plugin = SlackAlertPlugin(webhook_url="https://hooks.slack.com/services/T/B/token")
+    plugin._tracer = tracer
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.return_value = Mock(status_code=403)
+        assert await plugin.send_alert(_event()) is False
+    assert tracer.spans[-1].attributes["alert.error_type"] == "access_denied"
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.return_value = Mock(status_code=404)
+        assert await plugin.send_alert(_event()) is False
+    assert tracer.spans[-1].attributes["alert.error_type"] == "not_found"
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.side_effect = httpx.ConnectError(
+            "unavailable token=leaked"  # pragma: allowlist secret
+        )
+        assert await plugin.send_alert(_event()) is False
+    assert tracer.spans[-1].attributes["alert.error_type"] == "unavailable"
+
+    invalid = SlackAlertPlugin(webhook_url="")
+    invalid._tracer = tracer
+    assert invalid.validate_config()
+    assert tracer.spans[-1].attributes["alert.error_type"] == "validation"
+
+
+@pytest.mark.requirement("OBS-SLACK-SECURITY-003")
+@pytest.mark.asyncio
+async def test_send_alert_sanitizes_transport_exception_logs() -> None:
+    plugin = SlackAlertPlugin(webhook_url="https://hooks.slack.com/services/T/B/token")
+    plugin._log = Mock()
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.side_effect = httpx.ConnectError(
+            "failed https://hooks.slack.com/services/T/B/"  # pragma: allowlist secret
+            "xoxb-leaked-token "  # pragma: allowlist secret
+            "message=xoxb-body-token"  # pragma: allowlist secret
+        )
+        assert await plugin.send_alert(_event()) is False
+
+    log_text = repr(plugin._log.warning.call_args)
+    assert "hooks.slack.com" not in log_text
+    assert "xoxb-leaked-token" not in log_text  # pragma: allowlist secret
+    assert "xoxb-body-token" not in log_text  # pragma: allowlist secret
