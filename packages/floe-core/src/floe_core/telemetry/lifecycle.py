@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from floe_core.telemetry.context import _clean_value, _is_secret_key
+from floe_core.telemetry.context import clean_attribute_value, is_secret_attribute_key
 from floe_core.telemetry.metrics import MetricRecorder
 from floe_core.telemetry.tracing import create_span
 
@@ -51,7 +51,11 @@ def plugin_lifecycle_attributes(
         attrs["floe.error.type"] = error_type
     if extra:
         attrs.update(
-            {key: _clean_value(value) for key, value in extra.items() if not _is_secret_key(key)}
+            {
+                key: clean_attribute_value(value)
+                for key, value in extra.items()
+                if not is_secret_attribute_key(key)
+            }
         )
     return attrs
 

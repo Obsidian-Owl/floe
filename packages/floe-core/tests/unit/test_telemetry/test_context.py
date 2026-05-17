@@ -7,6 +7,7 @@ import pytest
 from floe_core.telemetry.context import ObservabilityContext
 
 
+@pytest.mark.requirement("OBS-CTX-001")
 def test_observability_context_exports_span_attributes() -> None:
     """Context exports secret-free span attributes for runtime correlation."""
     ctx = ObservabilityContext(
@@ -35,6 +36,7 @@ def test_observability_context_exports_span_attributes() -> None:
     assert attrs["floe.lineage.namespace"] == "customer-360"
 
 
+@pytest.mark.requirement("OBS-CTX-002")
 def test_observability_context_metric_labels_exclude_high_cardinality_run_id() -> None:
     """Metric labels include only bounded-cardinality dimensions."""
     ctx = ObservabilityContext(
@@ -66,6 +68,7 @@ def test_observability_context_metric_labels_exclude_high_cardinality_run_id() -
     assert "floe.table.name" not in labels
 
 
+@pytest.mark.requirement("OBS-CTX-003")
 def test_observability_context_rejects_secret_like_fields() -> None:
     """Secret-like extra attribute keys are removed before export."""
     ctx = ObservabilityContext(
@@ -89,6 +92,7 @@ def test_observability_context_rejects_secret_like_fields() -> None:
     assert "password" not in attrs
 
 
+@pytest.mark.requirement("OBS-CTX-004")
 def test_observability_context_redacts_nested_secret_like_values() -> None:
     """Safe-looking keys do not emit raw nested secret material."""
     ctx = ObservabilityContext(
@@ -109,6 +113,7 @@ def test_observability_context_redacts_nested_secret_like_values() -> None:
     assert attrs["db.config"] == "[REDACTED]"
 
 
+@pytest.mark.requirement("OBS-CTX-005")
 def test_observability_context_redacts_url_credentials() -> None:
     """URL userinfo is removed before attributes are emitted."""
     ctx = ObservabilityContext(
@@ -127,6 +132,7 @@ def test_observability_context_redacts_url_credentials() -> None:
     assert attrs["floe.endpoint"] == "https://example.com/path?region=us"
 
 
+@pytest.mark.requirement("OBS-CTX-006")
 def test_observability_context_redacts_malformed_credential_url_without_raising() -> None:
     """Malformed credential-bearing URLs fail closed during sanitization."""
     ctx = ObservabilityContext(
@@ -145,6 +151,7 @@ def test_observability_context_redacts_malformed_credential_url_without_raising(
     assert "user:pass" not in attrs["floe.endpoint"]
 
 
+@pytest.mark.requirement("OBS-CTX-007")
 def test_observability_context_extra_attributes_cannot_override_canonical_values() -> None:
     """Extra attributes cannot replace canonical Floe context values."""
     ctx = ObservabilityContext(
@@ -165,6 +172,7 @@ def test_observability_context_extra_attributes_cannot_override_canonical_values
     assert attrs["floe.run.id"] == "run-123"
 
 
+@pytest.mark.requirement("OBS-CTX-008")
 def test_observability_context_rejects_high_cardinality_status() -> None:
     """Metric status labels are constrained to a bounded vocabulary."""
     ctx = ObservabilityContext(

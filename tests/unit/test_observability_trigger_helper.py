@@ -362,12 +362,15 @@ def test_customer360_prometheus_helper_queries_metrics_by_product_status_and_plu
     assert result.status is EvidenceStatus.PASS
     assert client.requests == [
         (
-            "http://prometheus/api/v1/query",
+            "http://prometheus/api/v1/query_range",
             {
                 "query": (
                     'floe_asset_materializations_total{floe_product_name="customer-360",'
                     'floe_status="success",floe_plugin_name=~"dagster"}'
-                )
+                ),
+                "start": "1699999700.000",
+                "end": "1700000000.000",
+                "step": "15s",
             },
         )
     ]

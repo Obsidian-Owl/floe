@@ -48,6 +48,7 @@ def _attrs_text(tracer: _Tracer) -> str:
     return repr([span.attributes for span in tracer.spans])
 
 
+@pytest.mark.requirement("OBS-NETWORK-SECURITY-001")
 def test_default_deny_records_resource_metadata_without_yaml_body() -> None:
     tracer = _Tracer()
     plugin = K8sNetworkSecurityPlugin()
@@ -66,6 +67,7 @@ def test_default_deny_records_resource_metadata_without_yaml_body() -> None:
     assert "policyTypes" not in _attrs_text(tracer)
 
 
+@pytest.mark.requirement("OBS-NETWORK-SECURITY-002")
 def test_network_generation_does_not_emit_credential_like_policy_body() -> None:
     tracer = _Tracer()
     plugin = K8sNetworkSecurityPlugin()
@@ -78,6 +80,7 @@ def test_network_generation_does_not_emit_credential_like_policy_body() -> None:
     assert "10.0.0.1" not in text
 
 
+@pytest.mark.requirement("OBS-NETWORK-SECURITY-003")
 def test_public_security_context_methods_emit_success_spans_without_bodies() -> None:
     tracer = _Tracer()
     plugin = K8sNetworkSecurityPlugin()
@@ -107,6 +110,7 @@ def test_public_security_context_methods_emit_success_spans_without_bodies() -> 
     assert "/tmp/cache" not in text
 
 
+@pytest.mark.requirement("OBS-NETWORK-SECURITY-004")
 def test_remaining_public_generation_methods_emit_success_spans_without_bodies() -> None:
     tracer = _Tracer()
     plugin = K8sNetworkSecurityPlugin()
@@ -170,6 +174,7 @@ def test_remaining_public_generation_methods_emit_success_spans_without_bodies()
     assert "apiVersion" not in text
 
 
+@pytest.mark.requirement("OBS-NETWORK-SECURITY-005")
 def test_public_custom_and_pss_validation_failures_are_classified() -> None:
     tracer = _Tracer()
     plugin = K8sNetworkSecurityPlugin()
@@ -189,6 +194,7 @@ def test_public_custom_and_pss_validation_failures_are_classified() -> None:
     assert "invalid" not in _attrs_text(tracer)
 
 
+@pytest.mark.requirement("OBS-NETWORK-SECURITY-006")
 def test_public_writable_volumes_failures_are_classified() -> None:
     tracer = _Tracer()
     plugin = K8sNetworkSecurityPlugin()
@@ -212,6 +218,7 @@ def test_public_writable_volumes_failures_are_classified() -> None:
     assert "leaked" not in _attrs_text(tracer)  # pragma: allowlist secret
 
 
+@pytest.mark.requirement("OBS-NETWORK-SECURITY-007")
 def test_generation_failures_are_classified() -> None:
     tracer = _Tracer()
     plugin = K8sNetworkSecurityPlugin()

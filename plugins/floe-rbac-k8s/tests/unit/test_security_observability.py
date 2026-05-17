@@ -49,6 +49,7 @@ def _attrs_text(tracer: _Tracer) -> str:
     return repr([span.attributes for span in tracer.spans])
 
 
+@pytest.mark.requirement("OBS-RBAC-SECURITY-001")
 def test_generate_service_account_records_resource_metadata_without_yaml_body() -> None:
     tracer = _Tracer()
     plugin = K8sRBACPlugin()
@@ -67,6 +68,7 @@ def test_generate_service_account_records_resource_metadata_without_yaml_body() 
     assert "automountServiceAccountToken" not in _attrs_text(tracer)
 
 
+@pytest.mark.requirement("OBS-RBAC-SECURITY-002")
 def test_generate_role_does_not_emit_private_key_or_rule_body() -> None:
     tracer = _Tracer()
     plugin = K8sRBACPlugin()
@@ -83,6 +85,7 @@ def test_generate_role_does_not_emit_private_key_or_rule_body() -> None:
     assert "rules" not in _attrs_text(tracer)
 
 
+@pytest.mark.requirement("OBS-RBAC-SECURITY-003")
 def test_generation_failures_are_classified() -> None:
     tracer = _Tracer()
     plugin = K8sRBACPlugin()

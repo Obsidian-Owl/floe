@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import time
 from collections.abc import Callable
+from ipaddress import ip_address
 from typing import TYPE_CHECKING, Any, Literal
 
 from floe_core.network.schemas import _validate_namespace
@@ -474,6 +475,13 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             if cidr is None:
                 k8s_service_host = os.environ.get("KUBERNETES_SERVICE_HOST")
                 if k8s_service_host:
+                    try:
+                        ip_address(k8s_service_host)
+                    except ValueError as exc:
+                        raise ValueError(
+                            "KUBERNETES_SERVICE_HOST must be a valid IP address "
+                            "when deriving the Kubernetes API egress CIDR"
+                        ) from exc
                     cidr = f"{k8s_service_host}/32"
                 elif strict_mode:
                     raise ValueError(

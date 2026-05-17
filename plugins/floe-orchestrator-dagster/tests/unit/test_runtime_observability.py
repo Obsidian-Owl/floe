@@ -28,6 +28,12 @@ def _captured_span_attrs(span: MagicMock) -> dict[str, Any]:
     return {call.args[0]: call.args[1] for call in span.set_attribute.call_args_list}
 
 
+def _observed_span_attrs(tracer: MagicMock, span: MagicMock) -> dict[str, Any]:
+    attrs = dict(tracer.start_as_current_span.call_args.kwargs["attributes"])
+    attrs.update(_captured_span_attrs(span))
+    return attrs
+
+
 def _run_fake_dagster_asset(fake_context: Any) -> str:
     from floe_orchestrator_dagster.runtime_observability import (
         observability_context_from_dagster,
@@ -46,6 +52,7 @@ def _run_fake_dagster_asset(fake_context: Any) -> str:
     )
 
 
+@pytest.mark.requirement("OBS-DAGSTER-RUNTIME-001")
 def test_observed_asset_success_records_context_span_logs_and_materialization(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -87,7 +94,7 @@ def test_observed_asset_success_records_context_span_logs_and_materialization(
         record_exception=False,
         set_status_on_exception=False,
     )
-    attrs = _captured_span_attrs(span)
+    attrs = _observed_span_attrs(tracer, span)
     assert attrs["floe.product.name"] == "customer-360"
     assert attrs["floe.run.id"] == "run-123"
     assert attrs["floe.asset.key"] == "orders_daily"
@@ -116,6 +123,7 @@ def test_observed_asset_success_records_context_span_logs_and_materialization(
     assert completed_log.kwargs["floe.status"] == "success"
 
 
+@pytest.mark.requirement("OBS-DAGSTER-RUNTIME-002")
 def test_fake_dagster_context_fields_flow_through_observed_asset_wrapper(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -152,7 +160,7 @@ def test_fake_dagster_context_fields_flow_through_observed_asset_wrapper(
     result = _run_fake_dagster_asset(fake_context)
 
     assert result == "ok"
-    attrs = _captured_span_attrs(span)
+    attrs = _observed_span_attrs(tracer, span)
     assert attrs["floe.product.name"] == "customer-360"
     assert attrs["floe.product.version"] == "2.0.0"
     assert attrs["floe.environment"] == "staging"
@@ -190,6 +198,7 @@ def test_fake_dagster_context_fields_flow_through_observed_asset_wrapper(
     assert completed_log.kwargs["floe.table.name"] == "analytics.orders_daily"
 
 
+@pytest.mark.requirement("OBS-DAGSTER-RUNTIME-003")
 def test_observed_asset_failure_records_context_span_logs_and_failure_metric(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -221,7 +230,7 @@ def test_observed_asset_failure_records_context_span_logs_and_failure_metric(
             lambda: (_ for _ in ()).throw(error),
         )
 
-    attrs = _captured_span_attrs(span)
+    attrs = _observed_span_attrs(tracer, span)
     assert attrs["floe.product.name"] == "customer-360"
     assert attrs["floe.run.id"] == "run-123"
     assert attrs["floe.asset.key"] == "orders_daily"
@@ -261,6 +270,7 @@ def test_observed_asset_failure_records_context_span_logs_and_failure_metric(
     assert failed_log.kwargs["error_type"] == "RuntimeError"
 
 
+@pytest.mark.requirement("OBS-DAGSTER-RUNTIME-004")
 def test_observed_asset_failure_sanitizes_exception_telemetry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

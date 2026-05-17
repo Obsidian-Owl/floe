@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from floe_core.plugin_metadata import HealthState
 from floe_core.schemas.compiled_artifacts import (
     DagsterStorageBinding,
@@ -114,6 +115,7 @@ def _storage_binding() -> StorageDeploymentBinding:
     )
 
 
+@pytest.mark.requirement("OBS-POLARIS-RUNTIME-001")
 def test_connect_emits_sanitized_endpoint_identity() -> None:
     """connect() spans and logs do not emit credential-bearing endpoint URLs."""
     plugin = _plugin_with_secret_url()
@@ -135,6 +137,7 @@ def test_connect_emits_sanitized_endpoint_identity() -> None:
     assert "oauth-secret" not in str(mock_logger.method_calls)
 
 
+@pytest.mark.requirement("OBS-POLARIS-RUNTIME-002")
 def test_endpoint_identity_strips_userinfo_query_and_fragment() -> None:
     """Endpoint identity used by telemetry never includes presigned query material."""
     uri = (
@@ -149,6 +152,7 @@ def test_endpoint_identity_strips_userinfo_query_and_fragment() -> None:
     assert "X-Amz-Signature" not in _sanitize_uri(uri)
 
 
+@pytest.mark.requirement("OBS-POLARIS-RUNTIME-003")
 def test_connect_failure_logs_sanitized_error_message() -> None:
     """connect() failure logs sanitize exception messages before recording them."""
     plugin = _plugin_with_secret_url()
@@ -183,6 +187,7 @@ def test_connect_failure_logs_sanitized_error_message() -> None:
     assert "X-Amz-Credential=cred" not in str(mock_logger.method_calls)
 
 
+@pytest.mark.requirement("OBS-POLARIS-RUNTIME-004")
 def test_create_namespace_failure_logs_secret_free_uri_and_error_message() -> None:
     """Non-connect catalog failures use sanitized endpoint and error fields."""
     plugin = _plugin_with_presigned_secret_url()
@@ -215,6 +220,7 @@ def test_create_namespace_failure_logs_secret_free_uri_and_error_message() -> No
     assert "X-Amz-Signature=secret" not in str(mock_logger.method_calls)
 
 
+@pytest.mark.requirement("OBS-POLARIS-RUNTIME-005")
 def test_health_check_failure_status_and_logs_are_secret_free() -> None:
     """health_check() sanitizes logged and returned probe failure details."""
     plugin = _plugin_with_presigned_secret_url()
@@ -245,6 +251,7 @@ def test_health_check_failure_status_and_logs_are_secret_free() -> None:
     assert "abc.def" not in str(mock_logger.method_calls)
 
 
+@pytest.mark.requirement("OBS-POLARIS-RUNTIME-006")
 def test_build_catalog_deployment_emits_secret_free_storage_context() -> None:
     """Deployment binding generation records only logical storage identity."""
     plugin = _plugin_with_secret_url()
@@ -264,6 +271,7 @@ def test_build_catalog_deployment_emits_secret_free_storage_context() -> None:
     assert "secret-access-key" not in str(attrs)
 
 
+@pytest.mark.requirement("OBS-POLARIS-RUNTIME-007")
 def test_health_check_emits_status_for_unconnected_plugin() -> None:
     """health_check() emits health status even before a catalog connection exists."""
     plugin = _plugin_with_secret_url()

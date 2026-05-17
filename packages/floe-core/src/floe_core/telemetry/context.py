@@ -29,17 +29,22 @@ AttributeValue = str | int | float | bool
 ObservabilityStatus = Literal["success", "failure", "error", "skipped"]
 
 
-def _is_secret_key(key: str) -> bool:
+def is_secret_attribute_key(key: str) -> bool:
     """Return True when an attribute key appears to identify secret material."""
     lowered = key.lower()
     return any(marker in lowered for marker in _SECRET_KEY_MARKERS)
+
+
+def _is_secret_key(key: str) -> bool:
+    """Backward-compatible alias for internal callers."""
+    return is_secret_attribute_key(key)
 
 
 def _contains_unsafe_value(value: Any) -> bool:
     """Return True when a nested value may contain secret material."""
     if isinstance(value, dict):
         return any(
-            _is_secret_key(str(key)) or _contains_unsafe_value(nested_value)
+            is_secret_attribute_key(str(key)) or _contains_unsafe_value(nested_value)
             for key, nested_value in value.items()
         )
     if isinstance(value, list | tuple | set | frozenset):
@@ -51,6 +56,8 @@ def _contains_unsafe_value(value: Any) -> bool:
 
 def _has_url_credentials(value: str) -> bool:
     """Return True when a string URL includes userinfo credentials."""
+    if "://" not in value:
+        return False
     parsed = urlsplit(value)
     return bool(parsed.scheme and parsed.netloc and (parsed.username or parsed.password))
 
@@ -87,7 +94,7 @@ def _safe_url_netloc(parsed: SplitResult) -> str:
     return f"{host}:{parsed.port}" if parsed.port is not None else host
 
 
-def _clean_value(value: Any) -> AttributeValue:
+def clean_attribute_value(value: Any) -> AttributeValue:
     """Convert arbitrary attribute values to OpenTelemetry-compatible scalars."""
     if isinstance(value, str):
         return _redact_url_credentials(value)
@@ -96,6 +103,11 @@ def _clean_value(value: Any) -> AttributeValue:
     if isinstance(value, int | float | bool):
         return value
     return str(value)
+
+
+def _clean_value(value: Any) -> AttributeValue:
+    """Backward-compatible alias for internal callers."""
+    return clean_attribute_value(value)
 
 
 def _validate_status(status: str) -> ObservabilityStatus:
@@ -146,9 +158,9 @@ class ObservabilityContext:
         attrs.update({key: value for key, value in optionals.items() if value is not None})
 
         for key, value in self.extra_attributes.items():
-            if _is_secret_key(key) or key in attrs:
+            if is_secret_attribute_key(key) or key in attrs:
                 continue
-            attrs[key] = _clean_value(value)
+            attrs[key] = clean_attribute_value(value)
         return attrs
 
     def to_log_fields(self) -> dict[str, AttributeValue]:

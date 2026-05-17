@@ -17,6 +17,7 @@ from floe_core.telemetry.lifecycle import (
 )
 
 
+@pytest.mark.requirement("OBS-LIFECYCLE-001")
 def test_plugin_lifecycle_attributes_are_secret_free() -> None:
     attrs = plugin_lifecycle_attributes(
         plugin_type="SECRETS",
@@ -40,6 +41,7 @@ def test_plugin_lifecycle_attributes_are_secret_free() -> None:
     assert "token" not in attrs
 
 
+@pytest.mark.requirement("OBS-LIFECYCLE-002")
 def test_lifecycle_metric_labels_are_low_cardinality() -> None:
     labels = lifecycle_metric_labels(
         plugin_type="COMPUTE",
@@ -56,6 +58,7 @@ def test_lifecycle_metric_labels_are_low_cardinality() -> None:
     }
 
 
+@pytest.mark.requirement("OBS-LIFECYCLE-003")
 def test_observe_plugin_lifecycle_records_startup_success_span_and_duration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -95,6 +98,7 @@ def test_observe_plugin_lifecycle_records_startup_success_span_and_duration(
     assert metrics.counters == []
 
 
+@pytest.mark.requirement("OBS-LIFECYCLE-004")
 def test_observe_plugin_lifecycle_records_exception_failure_metric(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -129,6 +133,7 @@ def test_observe_plugin_lifecycle_records_exception_failure_metric(
     assert metrics.counters[0]["labels"]["floe.plugin.lifecycle.status"] == "failure"
 
 
+@pytest.mark.requirement("OBS-LIFECYCLE-005")
 def test_plugin_lifecycle_startup_success_uses_telemetry_helper(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -154,6 +159,7 @@ def test_plugin_lifecycle_startup_success_uses_telemetry_helper(
     assert observations[0].finishes == [{"status": "success"}]
 
 
+@pytest.mark.requirement("OBS-LIFECYCLE-006")
 def test_plugin_lifecycle_startup_failure_records_failure_and_preserves_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -183,6 +189,7 @@ def test_plugin_lifecycle_startup_failure_records_failure_and_preserves_error(
     assert observations[0].finishes == [{"status": "failure", "error_type": "ValueError"}]
 
 
+@pytest.mark.requirement("OBS-LIFECYCLE-007")
 def test_plugin_lifecycle_health_check_degraded_records_actual_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -211,6 +218,7 @@ def test_plugin_lifecycle_health_check_degraded_records_actual_status(
     assert observations[0].finishes == [{"status": "degraded"}]
 
 
+@pytest.mark.requirement("OBS-LIFECYCLE-008")
 def test_plugin_lifecycle_shutdown_failure_records_failure_and_continues(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

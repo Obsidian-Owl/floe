@@ -66,6 +66,7 @@ def _attrs_text(tracer: _Tracer) -> str:
     return repr([span.attributes for span in tracer.spans])
 
 
+@pytest.mark.requirement("OBS-KEYCLOAK-SECURITY-001")
 def test_authenticate_records_token_operation_without_credentials_or_token() -> None:
     tracer = _Tracer()
     plugin = _plugin()
@@ -97,6 +98,7 @@ def test_authenticate_records_token_operation_without_credentials_or_token() -> 
     assert "refresh-token" not in text  # pragma: allowlist secret
 
 
+@pytest.mark.requirement("OBS-KEYCLOAK-SECURITY-002")
 def test_get_user_info_records_outcome_without_profile_or_pii_claims() -> None:
     tracer = _Tracer()
     plugin = _plugin()
@@ -127,6 +129,7 @@ def test_get_user_info_records_outcome_without_profile_or_pii_claims() -> None:
     assert "bearer-sensitive-token" not in text  # pragma: allowlist secret
 
 
+@pytest.mark.requirement("OBS-KEYCLOAK-SECURITY-003")
 def test_identity_failures_are_classified() -> None:
     tracer = _Tracer()
     plugin = _plugin()
@@ -152,6 +155,7 @@ def test_identity_failures_are_classified() -> None:
     assert tracer.spans[-1].attributes["identity.error_type"] == "validation"
 
 
+@pytest.mark.requirement("OBS-KEYCLOAK-SECURITY-004")
 def test_health_check_sanitizes_provider_error_message() -> None:
     plugin = _plugin()
     plugin._client.get.side_effect = httpx.ConnectError(

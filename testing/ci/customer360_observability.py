@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
+import threading
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -473,11 +475,21 @@ def query_prometheus_metrics(
         f'{metric_name}{{{METRIC_PRODUCT_NAME_LABEL}="{product}",'
         f'{METRIC_STATUS_LABEL}="{status}",{METRIC_PLUGIN_NAME_LABEL}=~"{plugin}"}}'
     )
-    url = _join_url(prometheus_url, "api/v1/query")
+    url = _join_url(prometheus_url, "api/v1/query_range")
+    end = context.now_epoch_seconds if context.now_epoch_seconds is not None else time.time()
+    start = max(0.0, context.freshness_cutoff_epoch_seconds)
     owns_client = client is None
     http_client = client or httpx.Client(timeout=timeout_seconds)
     try:
-        response = http_client.get(url, params={"query": prom_query})
+        response = http_client.get(
+            url,
+            params={
+                "query": prom_query,
+                "start": f"{start:.3f}",
+                "end": f"{end:.3f}",
+                "step": "15s",
+            },
+        )
         response.raise_for_status()
         records = _prometheus_records(response.json())
     except Exception as exc:  # noqa: BLE001
@@ -1145,10 +1157,25 @@ def _marquez_run_identity_candidates(run_payload: Mapping[str, Any]) -> set[str]
 
 
 def _regex_fullmatch(pattern: str, value: str) -> bool:
+    if threading.current_thread() is not threading.main_thread():
+        try:
+            return re.fullmatch(pattern, value) is not None
+        except re.error:
+            return False
+
+    def _timeout_handler(_signum: int, _frame: object) -> None:
+        raise TimeoutError("regex match timed out")
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
     try:
+        signal.signal(signal.SIGALRM, _timeout_handler)
+        signal.setitimer(signal.ITIMER_REAL, 0.05)
         return re.fullmatch(pattern, value) is not None
-    except re.error:
+    except (re.error, TimeoutError):
         return False
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0.0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 def _record_has_failure_status(record: EvidenceRecord) -> bool:

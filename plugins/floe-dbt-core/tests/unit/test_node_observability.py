@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from floe_dbt_core.callbacks import (
     DBTEventCollector,
     DBTNodeRecord,
@@ -11,6 +13,7 @@ from floe_dbt_core.callbacks import (
 )
 
 
+@pytest.mark.requirement("OBS-DBT-NODE-001")
 def test_run_result_record_includes_node_context_without_error_secrets() -> None:
     """run_results.json entries become secret-free per-node records."""
     records = dbt_node_records_from_run_results(
@@ -57,6 +60,7 @@ def test_run_result_record_includes_node_context_without_error_secrets() -> None
     assert "password" not in str(labels)
 
 
+@pytest.mark.requirement("OBS-DBT-NODE-002")
 def test_run_result_error_type_is_bounded_and_secret_free() -> None:
     """run_results error_type values cannot become credential-bearing labels."""
     records = dbt_node_records_from_run_results(
@@ -82,6 +86,7 @@ def test_run_result_error_type_is_bounded_and_secret_free() -> None:
     assert "password" not in str(records[0].to_metric_labels()).lower()
 
 
+@pytest.mark.requirement("OBS-DBT-NODE-003")
 def test_callback_record_includes_node_name_resource_type_status_and_duration() -> None:
     """Synthetic dbt callbacks produce per-node records."""
     collector = DBTEventCollector()
@@ -111,6 +116,7 @@ def test_callback_record_includes_node_name_resource_type_status_and_duration() 
     )
 
 
+@pytest.mark.requirement("OBS-DBT-NODE-004")
 def test_callback_error_type_is_bounded_and_secret_free() -> None:
     """Callback error_type values cannot become credential-bearing attributes."""
     collector = DBTEventCollector()

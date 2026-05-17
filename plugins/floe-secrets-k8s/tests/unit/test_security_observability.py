@@ -68,6 +68,7 @@ def _attrs_text(tracer: _Tracer) -> str:
     return repr([span.attributes for span in tracer.spans])
 
 
+@pytest.mark.requirement("OBS-K8S-SECRETS-SECURITY-001")
 def test_get_secret_records_success_without_secret_value() -> None:
     tracer = _Tracer()
     plugin = _plugin_with_api(type("ApiException", (Exception,), {}))
@@ -86,6 +87,7 @@ def test_get_secret_records_success_without_secret_value() -> None:
     assert secret_value not in _attrs_text(tracer)
 
 
+@pytest.mark.requirement("OBS-K8S-SECRETS-SECURITY-002")
 def test_get_secret_classifies_access_denied_without_sensitive_reference() -> None:
     tracer = _Tracer()
     api_exception_type = type("ApiException", (Exception,), {})
@@ -113,6 +115,7 @@ def test_get_secret_classifies_access_denied_without_sensitive_reference() -> No
     assert "secrets.key_name" not in attrs
 
 
+@pytest.mark.requirement("OBS-K8S-SECRETS-SECURITY-003")
 def test_get_secret_access_denied_sanitizes_audit_and_public_exception() -> None:
     tracer = _Tracer()
     api_exception_type = type("ApiException", (Exception,), {})
@@ -143,6 +146,7 @@ def test_get_secret_access_denied_sanitizes_audit_and_public_exception() -> None
     assert "leaked-private-key" not in text  # pragma: allowlist secret
 
 
+@pytest.mark.requirement("OBS-K8S-SECRETS-SECURITY-004")
 def test_set_secret_access_denied_sanitizes_audit_and_public_exception() -> None:
     tracer = _Tracer()
     api_exception_type = type("ApiException", (Exception,), {})
@@ -174,6 +178,7 @@ def test_set_secret_access_denied_sanitizes_audit_and_public_exception() -> None
     assert "secret-value" not in text  # pragma: allowlist secret
 
 
+@pytest.mark.requirement("OBS-K8S-SECRETS-SECURITY-005")
 def test_get_secret_classifies_not_found_unavailable_and_validation() -> None:
     tracer = _Tracer()
     api_exception_type = type("ApiException", (Exception,), {})

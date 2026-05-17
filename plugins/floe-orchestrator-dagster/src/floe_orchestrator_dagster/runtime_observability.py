@@ -66,8 +66,6 @@ def _observe_asset(
         record_exception=False,
         set_status_on_exception=False,
     ) as span:
-        for key, value in span_attributes.items():
-            span.set_attribute(key, value)
         logger.info("floe_asset_started", **context.to_log_fields())
         try:
             yield

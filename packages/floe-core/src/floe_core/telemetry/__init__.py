@@ -47,7 +47,11 @@ from floe_core.telemetry.config import (
 )
 
 # Runtime context
-from floe_core.telemetry.context import ObservabilityContext
+from floe_core.telemetry.context import (
+    ObservabilityContext,
+    clean_attribute_value,
+    is_secret_attribute_key,
+)
 
 # Semantic conventions
 from floe_core.telemetry.conventions import (
@@ -122,6 +126,8 @@ __all__: list[str] = [
     "BatchSpanProcessorConfig",
     # Runtime context
     "ObservabilityContext",
+    "clean_attribute_value",
+    "is_secret_attribute_key",
     # Provider
     "TelemetryProvider",
     "ProviderState",

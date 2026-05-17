@@ -67,6 +67,7 @@ def _attrs_text(tracer: _Tracer) -> str:
     return repr([span.attributes for span in tracer.spans])
 
 
+@pytest.mark.requirement("OBS-ALERTMANAGER-SECURITY-001")
 @pytest.mark.asyncio
 async def test_send_alert_records_delivery_metadata_without_url_or_body() -> None:
     tracer = _Tracer()
@@ -96,6 +97,7 @@ async def test_send_alert_records_delivery_metadata_without_url_or_body() -> Non
     assert "person@example.com" not in text
 
 
+@pytest.mark.requirement("OBS-ALERTMANAGER-SECURITY-002")
 @pytest.mark.asyncio
 async def test_send_alert_classifies_failures() -> None:
     tracer = _Tracer()
@@ -132,6 +134,7 @@ async def test_send_alert_classifies_failures() -> None:
     assert tracer.spans[-1].attributes["alert.error_type"] == "validation"
 
 
+@pytest.mark.requirement("OBS-ALERTMANAGER-SECURITY-003")
 @pytest.mark.asyncio
 async def test_send_alert_sanitizes_transport_exception_logs() -> None:
     plugin = AlertmanagerPlugin(api_url="https://alerts.example.com")

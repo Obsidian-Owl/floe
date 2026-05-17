@@ -66,6 +66,7 @@ def _attrs_text(tracer: _Tracer) -> str:
     return repr([span.attributes for span in tracer.spans])
 
 
+@pytest.mark.requirement("OBS-EMAIL-SECURITY-001")
 @pytest.mark.asyncio
 async def test_send_alert_records_delivery_metadata_without_email_password_or_body() -> None:
     tracer = _Tracer()
@@ -95,6 +96,7 @@ async def test_send_alert_records_delivery_metadata_without_email_password_or_bo
     assert "body-secret" not in text  # pragma: allowlist secret
 
 
+@pytest.mark.requirement("OBS-EMAIL-SECURITY-002")
 @pytest.mark.asyncio
 async def test_send_alert_and_validation_failures_are_classified() -> None:
     tracer = _Tracer()
@@ -120,6 +122,7 @@ async def test_send_alert_and_validation_failures_are_classified() -> None:
     assert tracer.spans[-1].attributes["alert.error_type"] == "validation"
 
 
+@pytest.mark.requirement("OBS-EMAIL-SECURITY-003")
 @pytest.mark.asyncio
 async def test_send_alert_classifies_access_denied_and_not_found() -> None:
     tracer = _Tracer()
@@ -151,6 +154,7 @@ async def test_send_alert_classifies_access_denied_and_not_found() -> None:
     assert "leaked" not in _attrs_text(tracer)  # pragma: allowlist secret
 
 
+@pytest.mark.requirement("OBS-EMAIL-SECURITY-004")
 @pytest.mark.asyncio
 async def test_send_alert_sanitizes_transport_exception_logs() -> None:
     plugin = EmailAlertPlugin(

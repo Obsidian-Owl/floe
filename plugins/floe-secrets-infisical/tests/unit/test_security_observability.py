@@ -77,6 +77,7 @@ def _fake_infisical_client_module() -> object:
     return SimpleNamespace(GetSecretOptions=_options)
 
 
+@pytest.mark.requirement("OBS-INFISICAL-SECURITY-001")
 def test_get_secret_records_success_without_secret_value() -> None:
     tracer = _Tracer()
     plugin = _plugin()
@@ -97,6 +98,7 @@ def test_get_secret_records_success_without_secret_value() -> None:
     assert secret_value not in _attrs_text(tracer)
 
 
+@pytest.mark.requirement("OBS-INFISICAL-SECURITY-002")
 def test_get_secret_classifies_access_denied_without_sensitive_reference() -> None:
     tracer = _Tracer()
     plugin = _plugin()
@@ -124,6 +126,7 @@ def test_get_secret_classifies_access_denied_without_sensitive_reference() -> No
     assert "leaked-private-key" not in text  # pragma: allowlist secret
 
 
+@pytest.mark.requirement("OBS-INFISICAL-SECURITY-003")
 def test_get_secret_access_denied_sanitizes_audit_and_public_exception() -> None:
     tracer = _Tracer()
     plugin = _plugin()
@@ -154,6 +157,7 @@ def test_get_secret_access_denied_sanitizes_audit_and_public_exception() -> None
     assert "leaked-private-key" not in text  # pragma: allowlist secret
 
 
+@pytest.mark.requirement("OBS-INFISICAL-SECURITY-004")
 def test_get_secret_classifies_not_found_unavailable_and_validation() -> None:
     tracer = _Tracer()
     plugin = _plugin()
@@ -181,6 +185,7 @@ def test_get_secret_classifies_not_found_unavailable_and_validation() -> None:
     assert tracer.spans[-1].attributes["secrets.error_type"] == "validation"
 
 
+@pytest.mark.requirement("OBS-INFISICAL-SECURITY-005")
 def test_set_secret_classifies_access_denied_and_unavailable_known_errors() -> None:
     tracer = _Tracer()
     plugin = _plugin()
@@ -232,6 +237,7 @@ def test_set_secret_classifies_access_denied_and_unavailable_known_errors() -> N
     assert "leaked-token" not in text  # pragma: allowlist secret
 
 
+@pytest.mark.requirement("OBS-INFISICAL-SECURITY-006")
 def test_set_secret_access_denied_sanitizes_log_audit_and_public_exception() -> None:
     tracer = _Tracer()
     plugin = _plugin()
