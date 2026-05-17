@@ -107,6 +107,88 @@ def test_public_security_context_methods_emit_success_spans_without_bodies() -> 
     assert "/tmp/cache" not in text
 
 
+def test_remaining_public_generation_methods_emit_success_spans_without_bodies() -> None:
+    tracer = _Tracer()
+    plugin = K8sNetworkSecurityPlugin()
+
+    with patch("floe_network_security_k8s.plugin.get_tracer", return_value=tracer):
+        platform_rules = plugin.generate_platform_egress_rules()
+        ingress_rule = plugin.generate_ingress_controller_rule(namespace="ingress-nginx")
+        jobs_rule = plugin.generate_jobs_ingress_rule()
+        intra_rule = plugin.generate_intra_namespace_rule("floe-jobs")
+        external_rule = plugin.generate_external_https_egress_rule(enabled=True)
+        disabled_external_rule = plugin.generate_external_https_egress_rule(enabled=False)
+        custom_rule = plugin.generate_custom_egress_rule(cidr="10.0.0.0/8", port=443)
+        custom_rules = plugin.generate_custom_egress_rules(
+            namespace="floe-platform",
+            ports=[443, 8181],
+        )
+        pss_labels = plugin.generate_pss_labels(level="restricted")
+        namespace_manifest = plugin.generate_namespace_manifest(
+            name="floe-jobs",
+            pss_level="restricted",
+            additional_labels={"team": "platform"},
+        )
+
+    assert len(platform_rules) == 4
+    assert ingress_rule["ports"][0]["port"] == 80
+    assert jobs_rule["ports"][0]["port"] == 8181
+    assert intra_rule["from"][0]["podSelector"] == {}
+    assert external_rule is not None
+    assert disabled_external_rule is None
+    assert custom_rule["ports"][0]["port"] == 443
+    assert len(custom_rules["ports"]) == 2
+    assert pss_labels["pod-security.kubernetes.io/enforce"] == "restricted"
+    assert namespace_manifest["kind"] == "Namespace"
+
+    span_names = [span.name for span in tracer.spans]
+    for operation in [
+        "generate_platform_egress_rules",
+        "generate_ingress_controller_rule",
+        "generate_jobs_ingress_rule",
+        "generate_intra_namespace_rule",
+        "generate_external_https_egress_rule",
+        "generate_custom_egress_rule",
+        "generate_custom_egress_rules",
+        "generate_pss_labels",
+        "generate_namespace_manifest",
+    ]:
+        assert f"security.{operation}" in span_names
+
+    for span in tracer.spans:
+        attrs = span.attributes
+        assert attrs["security.status"] == "success"
+        assert "security.resource_kind" in attrs
+        assert "security.policy_type" in attrs
+        assert "security.duration_ms" in attrs
+
+    text = _attrs_text(tracer)
+    assert "10.0.0.0" not in text
+    assert "floe-platform" not in text
+    assert "pod-security.kubernetes.io" not in text
+    assert "team" not in text
+    assert "apiVersion" not in text
+
+
+def test_public_custom_and_pss_validation_failures_are_classified() -> None:
+    tracer = _Tracer()
+    plugin = K8sNetworkSecurityPlugin()
+
+    with patch("floe_network_security_k8s.plugin.get_tracer", return_value=tracer):
+        with pytest.raises(ValueError):
+            plugin.generate_custom_egress_rule(cidr="not-a-cidr")
+    assert tracer.spans[-1].name == "security.generate_custom_egress_rule"
+    assert tracer.spans[-1].attributes["security.error_type"] == "validation"
+
+    with patch("floe_network_security_k8s.plugin.get_tracer", return_value=tracer):
+        with pytest.raises(ValueError):
+            plugin.generate_pss_labels(level="invalid")  # type: ignore[arg-type]
+    assert tracer.spans[-1].name == "security.generate_pss_labels"
+    assert tracer.spans[-1].attributes["security.error_type"] == "validation"
+    assert "not-a-cidr" not in _attrs_text(tracer)
+    assert "invalid" not in _attrs_text(tracer)
+
+
 def test_public_writable_volumes_failures_are_classified() -> None:
     tracer = _Tracer()
     plugin = K8sNetworkSecurityPlugin()

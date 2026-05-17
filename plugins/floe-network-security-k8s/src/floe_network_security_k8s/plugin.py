@@ -292,36 +292,47 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             List of egress rules for platform services.
         """
-        platform_namespace_selector = {
-            "namespaceSelector": {
-                "matchLabels": {
-                    "kubernetes.io/metadata.name": "floe-platform",
-                },
-            },
-        }
 
-        return [
-            # Polaris catalog (REST API)
-            {
-                "to": [platform_namespace_selector],
-                "ports": [{"port": 8181, "protocol": "TCP"}],
-            },
-            # OTel Collector (gRPC for traces/metrics)
-            {
-                "to": [platform_namespace_selector],
-                "ports": [{"port": 4317, "protocol": "TCP"}],
-            },
-            # OTel Collector (HTTP for traces/metrics)
-            {
-                "to": [platform_namespace_selector],
-                "ports": [{"port": 4318, "protocol": "TCP"}],
-            },
-            # MinIO storage (S3-compatible API)
-            {
-                "to": [platform_namespace_selector],
-                "ports": [{"port": 9000, "protocol": "TCP"}],
-            },
-        ]
+        def _generate() -> list[dict[str, Any]]:
+            platform_namespace_selector = {
+                "namespaceSelector": {
+                    "matchLabels": {
+                        "kubernetes.io/metadata.name": "floe-platform",
+                    },
+                },
+            }
+
+            return [
+                # Polaris catalog (REST API)
+                {
+                    "to": [platform_namespace_selector],
+                    "ports": [{"port": 8181, "protocol": "TCP"}],
+                },
+                # OTel Collector (gRPC for traces/metrics)
+                {
+                    "to": [platform_namespace_selector],
+                    "ports": [{"port": 4317, "protocol": "TCP"}],
+                },
+                # OTel Collector (HTTP for traces/metrics)
+                {
+                    "to": [platform_namespace_selector],
+                    "ports": [{"port": 4318, "protocol": "TCP"}],
+                },
+                # MinIO storage (S3-compatible API)
+                {
+                    "to": [platform_namespace_selector],
+                    "ports": [{"port": 9000, "protocol": "TCP"}],
+                },
+            ]
+
+        return self._record_generation(
+            operation="generate_platform_egress_rules",
+            policy_type="EgressRule",
+            resource_kind="NetworkPolicyEgressRule",
+            namespace=None,
+            resource_count=4,
+            action=_generate,
+        )
 
     # =========================================================================
     # Platform Ingress Rules (US2 - Platform Namespace Policies)
@@ -339,23 +350,33 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             Ingress rule allowing traffic from ingress controller.
         """
-        _validate_namespace(namespace)
-        return {
-            "from": [
-                {
-                    "namespaceSelector": {
-                        "matchLabels": {
-                            "kubernetes.io/metadata.name": namespace,
+
+        def _generate() -> dict[str, Any]:
+            _validate_namespace(namespace)
+            return {
+                "from": [
+                    {
+                        "namespaceSelector": {
+                            "matchLabels": {
+                                "kubernetes.io/metadata.name": namespace,
+                            },
                         },
                     },
-                },
-            ],
-            "ports": [
-                {"port": 80, "protocol": "TCP"},
-                {"port": 443, "protocol": "TCP"},
-                {"port": 8080, "protocol": "TCP"},
-            ],
-        }
+                ],
+                "ports": [
+                    {"port": 80, "protocol": "TCP"},
+                    {"port": 443, "protocol": "TCP"},
+                    {"port": 8080, "protocol": "TCP"},
+                ],
+            }
+
+        return self._record_generation(
+            operation="generate_ingress_controller_rule",
+            policy_type="IngressRule",
+            resource_kind="NetworkPolicyIngressRule",
+            namespace=namespace or None,
+            action=_generate,
+        )
 
     def generate_jobs_ingress_rule(self) -> dict[str, Any]:
         """Generate ingress rule from floe-jobs namespace.
@@ -368,23 +389,29 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             Ingress rule allowing traffic from floe-jobs.
         """
-        return {
-            "from": [
-                {
-                    "namespaceSelector": {
-                        "matchLabels": {
-                            "kubernetes.io/metadata.name": "floe-jobs",
+        return self._record_generation(
+            operation="generate_jobs_ingress_rule",
+            policy_type="IngressRule",
+            resource_kind="NetworkPolicyIngressRule",
+            namespace="floe-jobs",
+            action=lambda: {
+                "from": [
+                    {
+                        "namespaceSelector": {
+                            "matchLabels": {
+                                "kubernetes.io/metadata.name": "floe-jobs",
+                            },
                         },
                     },
-                },
-            ],
-            "ports": [
-                {"port": 8181, "protocol": "TCP"},  # Polaris
-                {"port": 4317, "protocol": "TCP"},  # OTel gRPC
-                {"port": 4318, "protocol": "TCP"},  # OTel HTTP
-                {"port": 9000, "protocol": "TCP"},  # MinIO
-            ],
-        }
+                ],
+                "ports": [
+                    {"port": 8181, "protocol": "TCP"},  # Polaris
+                    {"port": 4317, "protocol": "TCP"},  # OTel gRPC
+                    {"port": 4318, "protocol": "TCP"},  # OTel HTTP
+                    {"port": 9000, "protocol": "TCP"},  # MinIO
+                ],
+            },
+        )
 
     def generate_intra_namespace_rule(self, namespace: str) -> dict[str, Any]:
         """Generate intra-namespace communication rule.
@@ -398,14 +425,24 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             Ingress rule allowing intra-namespace traffic.
         """
-        _validate_namespace(namespace)
-        return {
-            "from": [
-                {
-                    "podSelector": {},  # Match all pods in same namespace
-                },
-            ],
-        }
+
+        def _generate() -> dict[str, Any]:
+            _validate_namespace(namespace)
+            return {
+                "from": [
+                    {
+                        "podSelector": {},  # Match all pods in same namespace
+                    },
+                ],
+            }
+
+        return self._record_generation(
+            operation="generate_intra_namespace_rule",
+            policy_type="IngressRule",
+            resource_kind="NetworkPolicyIngressRule",
+            namespace=namespace or None,
+            action=_generate,
+        )
 
     def generate_k8s_api_egress_rule(
         self,
@@ -488,28 +525,39 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             Egress rule for external HTTPS, or None if disabled.
         """
-        if not enabled:
-            return None
 
-        return {
-            "to": [
-                {
-                    "ipBlock": {
-                        "cidr": "0.0.0.0/0",
-                        "except": [
-                            "10.0.0.0/8",
-                            "172.16.0.0/12",
-                            "192.168.0.0/16",
-                            "169.254.0.0/16",
-                            "127.0.0.0/8",
-                        ],
+        def _generate() -> dict[str, Any] | None:
+            if not enabled:
+                return None
+
+            return {
+                "to": [
+                    {
+                        "ipBlock": {
+                            "cidr": "0.0.0.0/0",
+                            "except": [
+                                "10.0.0.0/8",
+                                "172.16.0.0/12",
+                                "192.168.0.0/16",
+                                "169.254.0.0/16",
+                                "127.0.0.0/8",
+                            ],
+                        },
                     },
-                },
-            ],
-            "ports": [
-                {"port": 443, "protocol": "TCP"},
-            ],
-        }
+                ],
+                "ports": [
+                    {"port": 443, "protocol": "TCP"},
+                ],
+            }
+
+        return self._record_generation(
+            operation="generate_external_https_egress_rule",
+            policy_type="EgressRule",
+            resource_kind="NetworkPolicyEgressRule",
+            namespace=None,
+            resource_count=1 if enabled else 0,
+            action=_generate,
+        )
 
     # =========================================================================
     # Custom Egress Rules (T033 - User-configurable egress)
@@ -541,34 +589,45 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             ValueError: If neither cidr nor namespace is provided, or if
                 cidr/namespace/port values are invalid.
         """
-        if cidr is None and namespace is None:
-            raise ValueError("Either cidr or namespace must be provided")
 
-        self._validate_port(port)
-        if cidr is not None:
-            self._validate_cidr(cidr)
-        if namespace is not None:
-            self._validate_namespace(namespace)
+        def _generate() -> dict[str, Any]:
+            if cidr is None and namespace is None:
+                raise ValueError("Either cidr or namespace must be provided")
 
-        rule: dict[str, Any] = {
-            "to": [],
-            "ports": [{"port": port, "protocol": protocol}],
-        }
+            self._validate_port(port)
+            if cidr is not None:
+                self._validate_cidr(cidr)
+            if namespace is not None:
+                self._validate_namespace(namespace)
 
-        if cidr is not None:
-            rule["to"].append({"ipBlock": {"cidr": cidr}})
-        elif namespace is not None:
-            rule["to"].append(
-                {
-                    "namespaceSelector": {
-                        "matchLabels": {
-                            "kubernetes.io/metadata.name": namespace,
+            rule: dict[str, Any] = {
+                "to": [],
+                "ports": [{"port": port, "protocol": protocol}],
+            }
+
+            if cidr is not None:
+                rule["to"].append({"ipBlock": {"cidr": cidr}})
+            elif namespace is not None:
+                rule["to"].append(
+                    {
+                        "namespaceSelector": {
+                            "matchLabels": {
+                                "kubernetes.io/metadata.name": namespace,
+                            },
                         },
-                    },
-                }
-            )
+                    }
+                )
 
-        return rule
+            return rule
+
+        return self._record_generation(
+            operation="generate_custom_egress_rule",
+            policy_type="EgressRule",
+            resource_kind="NetworkPolicyEgressRule",
+            namespace=None,
+            resource_count=1,
+            action=_generate,
+        )
 
     def generate_custom_egress_rules(
         self,
@@ -595,38 +654,48 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
             ValueError: If neither cidr nor namespace is provided, or if
                 cidr/namespace/port values are invalid.
         """
-        if cidr is None and namespace is None:
-            raise ValueError("Either cidr or namespace must be provided")
 
-        if ports is None:
-            ports = [443]
+        def _generate() -> dict[str, Any]:
+            if cidr is None and namespace is None:
+                raise ValueError("Either cidr or namespace must be provided")
 
-        for port in ports:
-            self._validate_port(port)
-        if cidr is not None:
-            self._validate_cidr(cidr)
-        if namespace is not None:
-            self._validate_namespace(namespace)
+            resolved_ports = ports if ports is not None else [443]
 
-        rule: dict[str, Any] = {
-            "to": [],
-            "ports": [{"port": p, "protocol": protocol} for p in ports],
-        }
+            for port in resolved_ports:
+                self._validate_port(port)
+            if cidr is not None:
+                self._validate_cidr(cidr)
+            if namespace is not None:
+                self._validate_namespace(namespace)
 
-        if cidr is not None:
-            rule["to"].append({"ipBlock": {"cidr": cidr}})
-        elif namespace is not None:
-            rule["to"].append(
-                {
-                    "namespaceSelector": {
-                        "matchLabels": {
-                            "kubernetes.io/metadata.name": namespace,
+            rule: dict[str, Any] = {
+                "to": [],
+                "ports": [{"port": p, "protocol": protocol} for p in resolved_ports],
+            }
+
+            if cidr is not None:
+                rule["to"].append({"ipBlock": {"cidr": cidr}})
+            elif namespace is not None:
+                rule["to"].append(
+                    {
+                        "namespaceSelector": {
+                            "matchLabels": {
+                                "kubernetes.io/metadata.name": namespace,
+                            },
                         },
-                    },
-                }
-            )
+                    }
+                )
 
-        return rule
+            return rule
+
+        return self._record_generation(
+            operation="generate_custom_egress_rules",
+            policy_type="EgressRule",
+            resource_kind="NetworkPolicyEgressRule",
+            namespace=None,
+            resource_count=len(ports) if ports is not None else 1,
+            action=_generate,
+        )
 
     # =========================================================================
     # Pod Security Standards (Phase 5 - US3)
@@ -660,6 +729,22 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Raises:
             ValueError: If an invalid PSS level is provided.
         """
+        return self._record_generation(
+            operation="generate_pss_labels",
+            policy_type="PodSecurityStandards",
+            resource_kind="NamespaceLabels",
+            namespace=None,
+            resource_count=3,
+            action=lambda: self._build_pss_labels(level, audit_level, warn_level),
+        )
+
+    def _build_pss_labels(
+        self,
+        level: PSSLevel,
+        audit_level: PSSLevel | None,
+        warn_level: PSSLevel | None,
+    ) -> dict[str, str]:
+        """Build Pod Security Standards labels without recording telemetry."""
         for lvl_name, lvl_value in [
             ("level", level),
             ("audit_level", audit_level),
@@ -667,7 +752,7 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         ]:
             if lvl_value is not None and lvl_value not in _VALID_PSS_LEVELS:
                 raise ValueError(
-                    f"Invalid PSS {lvl_name}: '{lvl_value}'. "
+                    f"Invalid PSS {lvl_name}. "
                     f"Must be one of: {', '.join(sorted(_VALID_PSS_LEVELS))}"
                 )
 
@@ -723,24 +808,35 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             Dictionary representing K8s Namespace YAML.
         """
-        # Start with PSS labels
-        labels = self.generate_pss_labels(level=pss_level)
 
-        # Add managed-by label
-        labels["app.kubernetes.io/managed-by"] = "floe"
+        def _generate() -> dict[str, Any]:
+            # Start with PSS labels
+            labels = self._build_pss_labels(pss_level, None, None)
 
-        # Merge additional labels
-        if additional_labels:
-            labels.update(additional_labels)
+            # Add managed-by label
+            labels["app.kubernetes.io/managed-by"] = "floe"
 
-        return {
-            "apiVersion": "v1",
-            "kind": "Namespace",
-            "metadata": {
-                "name": name,
-                "labels": labels,
-            },
-        }
+            # Merge additional labels
+            if additional_labels:
+                labels.update(additional_labels)
+
+            return {
+                "apiVersion": "v1",
+                "kind": "Namespace",
+                "metadata": {
+                    "name": name,
+                    "labels": labels,
+                },
+            }
+
+        return self._record_generation(
+            operation="generate_namespace_manifest",
+            policy_type="PodSecurityStandards",
+            resource_kind="Namespace",
+            namespace=None,
+            resource_count=1,
+            action=_generate,
+        )
 
     def generate_pod_security_context(self, config: Any) -> dict[str, Any]:
         """Generate pod-level securityContext.
@@ -885,12 +981,12 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         try:
             ipaddress.ip_network(cidr, strict=False)
         except ValueError as e:
-            raise ValueError(f"Invalid CIDR: {cidr}") from e
+            raise ValueError("Invalid CIDR") from e
 
     def _validate_port(self, port: int) -> None:
         """Validate port is in valid range (1-65535). Raises ValueError if invalid."""
         if not 1 <= port <= 65535:
-            raise ValueError(f"Port {port} out of range (1-65535)")
+            raise ValueError("Port value out of range (1-65535)")
 
     def _validate_namespace(self, namespace: str) -> None:
         """Validate Kubernetes namespace name. Raises ValueError if invalid."""
