@@ -1446,6 +1446,8 @@ def test_runtime_passes_dlt_ingestion_binding_to_asset_factory(
         "namespace": "default",
         "lineage_namespace": "customer-360",
     }
+    assert callable(call.kwargs["telemetry_initializer"])
+    assert callable(call.kwargs["telemetry_finalizer"])
 
 
 @pytest.mark.requirement("AC-5")
@@ -1483,6 +1485,8 @@ def test_runtime_passes_compiled_observability_context_to_semantic_asset_factory
         "namespace": "default",
         "lineage_namespace": "customer-360",
     }
+    assert callable(call.kwargs["telemetry_initializer"])
+    assert callable(call.kwargs["telemetry_finalizer"])
 
 
 @pytest.mark.requirement("AC-5")
@@ -1646,8 +1650,59 @@ def test_runtime_telemetry_env_comes_from_compiled_artifacts(
     ensure.assert_called_once()
     assert os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://localhost:4317"
     assert os.environ["OTEL_SERVICE_NAME"] == "customer-360"
-    create_span.assert_called_once()
-    assert create_span.call_args.args[0] == f"floe.dagster.{PRODUCT_NAME}.lineage_correlation_facet"
+    span_names = [call.args[0] for call in create_span.call_args_list]
+    assert f"floe.dagster.{PRODUCT_NAME}.lineage_correlation_facet" in span_names
+    assert f"floe.dbt.{PRODUCT_NAME}.models" in span_names
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_emit_model_summary_span_for_runtime_trace_categories(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Runtime trace proof needs dbt/model/table context in the Dagster trace."""
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
+    artifacts = _make_artifacts()
+    artifacts = artifacts.model_copy(
+        update={
+            "transforms": artifacts.transforms.model_copy(
+                update={
+                    "models": [
+                        ResolvedModel(name="stg_crm_customers", compute="duckdb"),
+                        ResolvedModel(name="mart_customer_360", compute="duckdb"),
+                    ]
+                }
+            )
+        }
+    )
+    project_dir = tmp_path / "dbt_project"
+    _write_artifacts_and_manifest(project_dir, artifacts)
+    definitions = load_product_definitions(PRODUCT_NAME, project_dir)
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, _lineage = _make_mock_context_with_lineage()
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = MagicMock(return_value=iter([]))
+    context.resources.dbt.cli.return_value.stream.return_value = mock_stream
+
+    with patch(f"{_RUNTIME_MODULE}.create_span") as create_span:
+        create_span.return_value.__enter__.return_value = MagicMock()
+        create_span.return_value.__exit__.return_value = None
+
+        list(asset_fn(context))
+
+    dbt_span_calls = [
+        call
+        for call in create_span.call_args_list
+        if call.args[0] == f"floe.dbt.{PRODUCT_NAME}.models"
+    ]
+    assert len(dbt_span_calls) == 1
+    attrs = dbt_span_calls[0].kwargs["attributes"]
+    assert attrs["floe.plugin.name"] == "dbt"
+    assert attrs["floe.plugin.type"] == "transformation"
+    assert attrs["dbt.model.count"] == 2
+    assert "mart_customer_360" in attrs["dbt.model.names"]
+    assert "mart_customer_360" in attrs["floe.table.names"]
 
 
 @pytest.mark.requirement("AC-5")

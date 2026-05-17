@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -122,6 +122,8 @@ def create_ingestion_assets(
     project_dir: Path,
     runtime_binding: Mapping[str, Any] | None = None,
     observability_context: Mapping[str, str | None] | None = None,
+    telemetry_initializer: Callable[[], None] | None = None,
+    telemetry_finalizer: Callable[[], None] | None = None,
 ) -> list[AssetsDefinition]:
     """Create Dagster asset definitions for ingestion pipelines.
 
@@ -187,6 +189,8 @@ def create_ingestion_assets(
                 filesystem_config=filesystem_config,
                 runtime_binding=runtime_binding,
                 observability_context=observability_context,
+                telemetry_initializer=telemetry_initializer,
+                telemetry_finalizer=telemetry_finalizer,
             )
         )
 
@@ -277,6 +281,8 @@ def _create_ingestion_asset(
     filesystem_config: Mapping[str, Any],
     runtime_binding: Mapping[str, Any] | None,
     observability_context: Mapping[str, str | None] | None,
+    telemetry_initializer: Callable[[], None] | None,
+    telemetry_finalizer: Callable[[], None] | None,
 ) -> AssetsDefinition:
     source_name = str(source_config["name"])
 
@@ -315,6 +321,8 @@ def _create_ingestion_asset(
                 filesystem_config=filesystem_config,
                 runtime_binding=runtime_binding,
             ),
+            telemetry_initializer=telemetry_initializer,
+            telemetry_finalizer=telemetry_finalizer,
         )
 
     return _run_ingestion_source

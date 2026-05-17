@@ -6,7 +6,8 @@ import hashlib
 import logging
 import os
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -17,9 +18,11 @@ from dagster_dbt import DbtCliResource, dbt_assets
 from floe_core.compilation.naming import dbt_project_name
 from floe_core.lineage.facets import TraceCorrelationFacetBuilder
 from floe_core.schemas.compiled_artifacts import CompiledArtifacts
-from floe_core.telemetry.initialization import ensure_telemetry_initialized
+from floe_core.telemetry.initialization import (
+    ensure_telemetry_initialized,
+    force_flush_telemetry,
+)
 from floe_core.telemetry.tracing import create_span
-from opentelemetry import trace
 
 from floe_orchestrator_dagster.capabilities import CapabilityPolicy
 from floe_orchestrator_dagster.export.iceberg import export_dbt_to_iceberg
@@ -89,10 +92,11 @@ def _safe_product_name(product_name: str) -> str:
 
 def _configure_runtime_telemetry(artifacts: CompiledArtifacts) -> bool:
     """Configure OTel env vars from the compiled product contract."""
+    if not _runtime_telemetry_enabled(artifacts):
+        return False
+
     observability = getattr(artifacts, "observability", None)
     telemetry = getattr(observability, "telemetry", None)
-    if telemetry is None or not getattr(telemetry, "enabled", False):
-        return False
 
     endpoint = str(getattr(telemetry, "otlp_endpoint", "") or "").strip()
     if endpoint:
@@ -108,15 +112,51 @@ def _configure_runtime_telemetry(artifacts: CompiledArtifacts) -> bool:
     return True
 
 
+def _runtime_telemetry_enabled(artifacts: CompiledArtifacts) -> bool:
+    """Return whether the compiled product contract enables runtime telemetry."""
+    observability = getattr(artifacts, "observability", None)
+    telemetry = getattr(observability, "telemetry", None)
+    return bool(telemetry is not None and getattr(telemetry, "enabled", False))
+
+
+def _runtime_telemetry_initializer(
+    artifacts: CompiledArtifacts,
+) -> Callable[[], None] | None:
+    """Return an initializer that configures and starts runtime telemetry."""
+    if not _runtime_telemetry_enabled(artifacts):
+        return None
+
+    def _initialize() -> None:
+        if _configure_runtime_telemetry(artifacts):
+            ensure_telemetry_initialized()
+
+    return _initialize
+
+
 def _flush_runtime_telemetry() -> None:
-    """Best-effort flush of runtime spans before short-lived run pods exit."""
+    """Best-effort flush of runtime telemetry before short-lived run pods exit."""
     try:
-        force_flush = getattr(trace.get_tracer_provider(), "force_flush", None)
-        if callable(force_flush):
-            force_flush(timeout_millis=5000)
+        force_flush_telemetry(timeout_millis=5000)
     except Exception:
-        # Tracing must never make a successful data product run fail.
+        # Telemetry must never make a successful data product run fail.
         logger.debug("runtime_telemetry_flush_failed", exc_info=True)
+
+
+def _runtime_telemetry_finalizer() -> None:
+    """Resolve the runtime telemetry flush function when the asset finishes."""
+    _flush_runtime_telemetry()
+
+
+def _dbt_model_names(artifacts: CompiledArtifacts) -> tuple[str, ...]:
+    """Return compiled dbt model names for runtime trace enrichment."""
+    transforms = getattr(artifacts, "transforms", None)
+    models = getattr(transforms, "models", []) or []
+    names: list[str] = []
+    for model in models:
+        name = getattr(model, "name", None)
+        if isinstance(name, str) and name:
+            names.append(name)
+    return tuple(names)
 
 
 def _prepare_duckdb_output_directories(
@@ -222,93 +262,109 @@ def _run_dbt_assets_body(
     project_dir: Path,
 ) -> Iterator[Any]:
     """Run dbt build with lineage emission."""
-    telemetry_enabled = _configure_runtime_telemetry(artifacts)
-    if telemetry_enabled:
-        ensure_telemetry_initialized()
+    telemetry_enabled = _runtime_telemetry_enabled(artifacts)
     dbt = context.resources.dbt
     lineage = context.resources.lineage
     run_id: UUID | None = None
 
+    run_facets: dict[str, object] = {}
+    if telemetry_enabled:
+        try:
+            # This span intentionally scopes only trace-correlation facet construction;
+            # dbt execution and lineage emission publish their own runtime events.
+            with create_span(
+                f"floe.dagster.{product_name}.lineage_correlation_facet",
+                attributes={
+                    "floe.product.name": product_name,
+                    "floe.orchestrator": "dagster",
+                },
+            ):
+                trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
+                if trace_facet is not None:
+                    run_facets["traceCorrelation"] = trace_facet
+        except Exception as _trace_exc:
+            context.log.warning("Trace facet creation failed: %s", _trace_exc)
     try:
-        run_facets: dict[str, object] = {}
-        if telemetry_enabled:
-            try:
-                # This span intentionally scopes only trace-correlation facet construction;
-                # dbt execution and lineage emission publish their own runtime events.
-                with create_span(
-                    f"floe.dagster.{product_name}.lineage_correlation_facet",
-                    attributes={
-                        "floe.product.name": product_name,
-                        "floe.orchestrator": "dagster",
-                    },
-                ):
-                    trace_facet = TraceCorrelationFacetBuilder.from_otel_context()
-                    if trace_facet is not None:
-                        run_facets["traceCorrelation"] = trace_facet
-            except Exception as _trace_exc:
-                context.log.warning("Trace facet creation failed: %s", _trace_exc)
-        try:
-            dagster_run_id = _dagster_run_id(context)
-            run_id = lineage.emit_start(
-                product_name,
-                run_id=dagster_run_id,
-                run_facets=run_facets or None,
-            )
-        except Exception as _start_exc:
-            if policy.require_lineage:
-                raise
-            context.log.warning("emit_start failed; using fallback run id: %s", _start_exc)
-            run_id = uuid4()
-
-        try:
-            yield from dbt.cli(["build"], context=context).stream()
-            if _has_iceberg_config(artifacts):
-                export_result = export_dbt_to_iceberg(
-                    context,
-                    product_name,
-                    project_dir,
-                    artifacts,
-                )
-                if export_result.tables_written == 0:
-                    raise RuntimeError(
-                        f"Configured Iceberg export wrote no tables for product {product_name}"
-                    )
-            try:
-                model_events = extract_dbt_model_lineage(
-                    project_dir,
-                    run_id,
-                    product_name,
-                    lineage.namespace,
-                )
-                for event in model_events:
-                    lineage.emit_event(event)
-            except Exception as _model_lineage_exc:
-                if policy.require_lineage:
-                    raise
-                context.log.warning(
-                    "runtime model lineage emission failed: %s",
-                    _model_lineage_exc,
-                )
-        except Exception as exc:
-            try:
-                lineage.emit_fail(run_id, product_name, error_message=type(exc).__name__)
-                lineage.flush()
-            except Exception as _fail_exc:
-                if policy.require_lineage:
-                    raise
-                context.log.warning("emit_fail failed: %s", _fail_exc)
+        dagster_run_id = _dagster_run_id(context)
+        run_id = lineage.emit_start(
+            product_name,
+            run_id=dagster_run_id,
+            run_facets=run_facets or None,
+        )
+    except Exception as _start_exc:
+        if policy.require_lineage:
             raise
+        context.log.warning("emit_start failed; using fallback run id: %s", _start_exc)
+        run_id = uuid4()
 
+    try:
+        model_names = _dbt_model_names(artifacts)
+        model_attributes: dict[str, object] = {
+            "floe.product.name": product_name,
+            "floe.orchestrator": "dagster",
+            "floe.plugin.name": "dbt",
+            "floe.plugin.type": "transformation",
+            "floe.stage": "transform",
+            "dbt.command": "build",
+            "dbt.model.count": len(model_names),
+        }
+        if model_names:
+            model_attributes["dbt.model.names"] = ",".join(model_names)
+            model_attributes["floe.table.names"] = ",".join(model_names)
+        span_context = (
+            create_span(
+                f"floe.dbt.{product_name}.models",
+                attributes=model_attributes,
+            )
+            if telemetry_enabled
+            else nullcontext()
+        )
+        with span_context:
+            yield from dbt.cli(["build"], context=context).stream()
+        if _has_iceberg_config(artifacts):
+            export_result = export_dbt_to_iceberg(
+                context,
+                product_name,
+                project_dir,
+                artifacts,
+            )
+            if export_result.tables_written == 0:
+                raise RuntimeError(
+                    f"Configured Iceberg export wrote no tables for product {product_name}"
+                )
         try:
-            lineage.emit_complete(run_id, product_name)
-            lineage.flush()
-        except Exception as _complete_exc:
+            model_events = extract_dbt_model_lineage(
+                project_dir,
+                run_id,
+                product_name,
+                lineage.namespace,
+            )
+            for event in model_events:
+                lineage.emit_event(event)
+        except Exception as _model_lineage_exc:
             if policy.require_lineage:
                 raise
-            context.log.warning("emit_complete failed: %s", _complete_exc)
-    finally:
-        if telemetry_enabled:
-            _flush_runtime_telemetry()
+            context.log.warning(
+                "runtime model lineage emission failed: %s",
+                _model_lineage_exc,
+            )
+    except Exception as exc:
+        try:
+            lineage.emit_fail(run_id, product_name, error_message=type(exc).__name__)
+            lineage.flush()
+        except Exception as _fail_exc:
+            if policy.require_lineage:
+                raise
+            context.log.warning("emit_fail failed: %s", _fail_exc)
+        raise
+
+    try:
+        lineage.emit_complete(run_id, product_name)
+        lineage.flush()
+    except Exception as _complete_exc:
+        if policy.require_lineage:
+            raise
+        context.log.warning("emit_complete failed: %s", _complete_exc)
 
 
 def build_product_definitions(
@@ -342,6 +398,10 @@ def build_product_definitions(
 
     plugins = artifacts.plugins
     runtime_observability_context = _runtime_observability_context(artifacts)
+    telemetry_initializer = _runtime_telemetry_initializer(artifacts)
+    telemetry_finalizer = (
+        _runtime_telemetry_finalizer if telemetry_initializer is not None else None
+    )
 
     manifest_path = project_dir / "target" / "manifest.json"
 
@@ -360,7 +420,11 @@ def build_product_definitions(
                 asset_key=product_name,
                 stage="transform",
                 table_name=product_name,
-                **runtime_observability_context,
+                product_name=runtime_observability_context["product_name"],
+                product_version=runtime_observability_context["product_version"],
+                environment=runtime_observability_context["environment"],
+                namespace=runtime_observability_context["namespace"],
+                lineage_namespace=runtime_observability_context["lineage_namespace"],
             ),
             f"floe.orchestrator.dagster.asset.{product_name}",
             lambda: _run_dbt_assets_body(
@@ -371,6 +435,8 @@ def build_product_definitions(
                 project_dir=project_dir,
             ),
             yield_events=True,
+            telemetry_initializer=telemetry_initializer,
+            telemetry_finalizer=telemetry_finalizer,
         )
 
     def _dbt_resource_fn(_init_context: Any) -> Any:
@@ -397,6 +463,9 @@ def build_product_definitions(
         from floe_orchestrator_dagster.assets.ingestion import create_ingestion_assets
         from floe_orchestrator_dagster.resources.ingestion import create_ingestion_resources
 
+        if plugins is None or plugins.ingestion is None:
+            raise RuntimeError("ingestion workloads require an ingestion plugin binding")
+        ingestion_ref = plugins.ingestion
         ingestion_runtime_binding = None
         deployment = getattr(artifacts, "deployment", None)
         ingestion_deployment = getattr(deployment, "ingestion", None) if deployment else None
@@ -404,13 +473,15 @@ def build_product_definitions(
         if dlt_binding is not None:
             ingestion_runtime_binding = dlt_binding.model_dump(mode="python")
 
-        resources.update(create_ingestion_resources(plugins.ingestion))
+        resources.update(create_ingestion_resources(ingestion_ref))
         assets.extend(
             create_ingestion_assets(
-                plugins.ingestion,
+                ingestion_ref,
                 project_dir=project_dir,
                 runtime_binding=ingestion_runtime_binding,
                 observability_context=runtime_observability_context,
+                telemetry_initializer=telemetry_initializer,
+                telemetry_finalizer=telemetry_finalizer,
             )
         )
 
@@ -431,6 +502,8 @@ def build_product_definitions(
                         for model in getattr(getattr(artifacts, "transforms", None), "models", [])
                     ],
                     observability_context=runtime_observability_context,
+                    telemetry_initializer=telemetry_initializer,
+                    telemetry_finalizer=telemetry_finalizer,
                 )
             )
 

@@ -19,6 +19,7 @@ def _run_setup_function(
     *,
     flux_branch: str = "feature-worktree",
     required_branch: str = "release-alpha",
+    extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Source setup-cluster.sh without running main, then execute a Bash snippet."""
     script_dir = tmp_path / "testing" / "k8s"
@@ -49,6 +50,8 @@ def _run_setup_function(
     env["FLOE_DEMO_IMAGE_REPOSITORY"] = "floe-dagster-demo"
     env["FLOE_DEMO_IMAGE_TAG"] = "local"
     env["FLOE_DEMO_IMAGE"] = "floe-dagster-demo:local"
+    if extra_env:
+        env.update(extra_env)
 
     return subprocess.run(
         ["bash", str(bash_script)],
@@ -67,6 +70,22 @@ def test_resolve_flux_git_branch_uses_explicit_flux_branch(tmp_path: Path) -> No
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "feature-worktree"
+
+
+@pytest.mark.requirement("AC-2")
+def test_resolve_flux_git_branch_skips_branch_when_commit_is_pinned(tmp_path: Path) -> None:
+    """Exact commit validation must not fall back to the detached checkout branch."""
+    result = _run_setup_function(
+        "resolve_flux_git_branch",
+        tmp_path,
+        extra_env={
+            "FLOE_FLUX_GIT_COMMIT": "a" * 40,
+            "FLOE_REQUIRED_FLUX_GIT_COMMIT": "a" * 40,
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == ""
 
 
 @pytest.mark.requirement("AC-2")
@@ -90,6 +109,34 @@ def test_deploy_via_flux_rejects_explicit_branch_mismatch(tmp_path: Path) -> Non
     assert "Flux branch mismatch" in result.stderr
     assert "expected release-alpha" in result.stderr
     assert "got feature-worktree" in result.stderr
+    assert "kubectl should not be called" not in result.stderr
+
+
+@pytest.mark.requirement("AC-2")
+def test_deploy_via_flux_rejects_explicit_commit_mismatch(tmp_path: Path) -> None:
+    """Remote validation fails before deploy when the pinned Flux commit drifts."""
+    result = _run_setup_function(
+        textwrap.dedent(
+            """\
+            kubectl() {
+                echo "kubectl should not be called before commit validation" >&2
+                return 99
+            }
+
+            deploy_via_flux
+            """
+        ),
+        tmp_path,
+        extra_env={
+            "FLOE_FLUX_GIT_COMMIT": "a" * 40,
+            "FLOE_REQUIRED_FLUX_GIT_COMMIT": "b" * 40,
+        },
+    )
+
+    assert result.returncode != 0
+    assert "Flux commit mismatch" in result.stderr
+    assert f"expected {'b' * 40}" in result.stderr
+    assert f"got {'a' * 40}" in result.stderr
     assert "kubectl should not be called" not in result.stderr
 
 
@@ -126,6 +173,34 @@ def test_deploy_via_flux_accepts_explicit_branch_match(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert "rendered_branch=feature-worktree" in result.stdout
+
+
+@pytest.mark.requirement("AC-2")
+def test_render_flux_manifests_can_pin_exact_commit(tmp_path: Path) -> None:
+    """SHA-pinned remote validation must deploy charts from the checked-out commit."""
+    commit_sha = "c" * 40
+    result = _run_setup_function(
+        textwrap.dedent(
+            """\
+            FLOE_FLUX_FIXTURE_DIR="{fixture_dir}"
+
+            rendered_dir="$(render_flux_manifests "")"
+            printf '%s\\n' "$rendered_dir"
+            """.format(fixture_dir=_REPO_ROOT / "testing" / "k8s" / "flux")
+        ),
+        tmp_path,
+        extra_env={
+            "FLOE_FLUX_GIT_COMMIT": commit_sha,
+            "FLOE_REQUIRED_FLUX_GIT_COMMIT": commit_sha,
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    rendered_dir = Path(result.stdout.strip().splitlines()[-1])
+    rendered_content = (rendered_dir / "gitrepository.yaml").read_text()
+
+    assert f"commit: {commit_sha}" in rendered_content
+    assert "branch: main" not in rendered_content
 
 
 @pytest.mark.requirement("AC-2")

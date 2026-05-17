@@ -111,6 +111,8 @@ def test_devpod_remote_run_can_pin_commit_after_branch_clone() -> None:
     assert "FLOE_REMOTE_GIT_CHECKOUT_SHA" in test_script
     assert "git checkout --detach" in test_script
     assert "git fetch origin" in test_script
+    assert 'export FLOE_FLUX_GIT_COMMIT="\\${FLOE_REMOTE_GIT_CHECKOUT_SHA}"' in test_script
+    assert 'export FLOE_REQUIRED_FLUX_GIT_COMMIT="\\${FLOE_REMOTE_GIT_CHECKOUT_SHA}"' in test_script
     assert "Invalid DEVPOD_REMOTE_GIT_CHECKOUT_SHA=" in test_script
 
 

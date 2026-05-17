@@ -46,6 +46,8 @@ Fields:
 {{- $marquez := include "floe-platform.marquez.fullname" $context }}
 {{- $otel := include "floe-platform.otel.fullname" $context }}
 {{- $jaegerQuery := include "floe-platform.jaeger.queryName" $context }}
+{{- $loki := include "floe-platform.loki.fullname" $context }}
+{{- $prometheus := include "floe-platform.prometheus.fullname" $context }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -157,10 +159,26 @@ spec:
               value: {{ $dagsterWeb | quote }}
             - name: DAGSTER_WEBSERVER_HOST
               value: {{ $dagsterWeb | quote }}
+            - name: DAGSTER_URL
+              value: "http://{{ $dagsterWeb }}:{{ include "floe-platform.dagster.webserverPort" $context }}"
             - name: JAEGER_QUERY_HOST
               value: {{ $jaegerQuery | quote }}
             - name: JAEGER_URL
               value: "http://{{ $jaegerQuery }}:16686"
+            - name: LOKI_HOST
+              value: {{ $loki | quote }}
+            - name: PROMETHEUS_HOST
+              value: {{ $prometheus | quote }}
+            - name: FLOE_DEMO_DAGSTER_URL
+              value: "http://{{ $dagsterWeb }}:{{ include "floe-platform.dagster.webserverPort" $context }}"
+            - name: FLOE_DEMO_JAEGER_URL
+              value: "http://{{ $jaegerQuery }}:16686"
+            - name: FLOE_DEMO_MARQUEZ_URL
+              value: "http://{{ $marquez }}:5000"
+            - name: FLOE_DEMO_LOKI_URL
+              value: "http://{{ $loki }}:3100"
+            - name: FLOE_DEMO_PROMETHEUS_URL
+              value: "http://{{ $prometheus }}:9090"
             - name: OTEL_HOST
               value: {{ $otel | quote }}
             - name: OTEL_COLLECTOR_GRPC_HOST

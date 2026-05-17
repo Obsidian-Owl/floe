@@ -14,7 +14,9 @@
 #   VERBOSE: Set to "true" for verbose output
 #   FLOE_FLUX_GIT_URL: Git URL for the Flux GitRepository test fixture
 #   FLOE_FLUX_GIT_BRANCH: Git branch for the Flux GitRepository fixture
+#   FLOE_FLUX_GIT_COMMIT: Exact Git commit for the Flux GitRepository fixture
 #   FLOE_REQUIRED_FLUX_GIT_BRANCH: Required GitRepository branch; fails fast on mismatch
+#   FLOE_REQUIRED_FLUX_GIT_COMMIT: Required GitRepository commit; fails fast on mismatch
 #
 # After setup, services are accessible via localhost:
 #   Polaris:     http://localhost:8181
@@ -587,6 +589,10 @@ install_flux() {
 }
 
 resolve_flux_git_branch() {
+    if [[ -n "${FLOE_FLUX_GIT_COMMIT:-}" ]]; then
+        return 0
+    fi
+
     if [[ -n "${FLOE_FLUX_GIT_BRANCH:-}" ]]; then
         printf '%s\n' "${FLOE_FLUX_GIT_BRANCH}"
         return 0
@@ -605,8 +611,29 @@ resolve_flux_git_branch() {
     printf '%s\n' "main"
 }
 
-assert_flux_git_branch_matches() {
+validate_flux_git_ref() {
+    if [[ -n "${FLOE_FLUX_GIT_COMMIT:-}" && ! "${FLOE_FLUX_GIT_COMMIT}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+        log_error "Invalid FLOE_FLUX_GIT_COMMIT='${FLOE_FLUX_GIT_COMMIT}'"
+        return 1
+    fi
+}
+
+assert_flux_git_ref_matches() {
     local actual_branch="$1"
+
+    validate_flux_git_ref || return 1
+
+    if [[ -n "${FLOE_REQUIRED_FLUX_GIT_COMMIT:-}" ]]; then
+        if [[ -z "${FLOE_FLUX_GIT_COMMIT:-}" ]]; then
+            log_error "Flux commit mismatch: expected ${FLOE_REQUIRED_FLUX_GIT_COMMIT}, got branch ${actual_branch:-<none>}"
+            return 1
+        fi
+        if [[ "${FLOE_FLUX_GIT_COMMIT}" != "${FLOE_REQUIRED_FLUX_GIT_COMMIT}" ]]; then
+            log_error "Flux commit mismatch: expected ${FLOE_REQUIRED_FLUX_GIT_COMMIT}, got ${FLOE_FLUX_GIT_COMMIT}"
+            return 1
+        fi
+        return 0
+    fi
 
     if [[ -z "${FLOE_REQUIRED_FLUX_GIT_BRANCH:-}" ]]; then
         return 0
@@ -616,6 +643,22 @@ assert_flux_git_branch_matches() {
         log_error "Flux branch mismatch: expected ${FLOE_REQUIRED_FLUX_GIT_BRANCH}, got ${actual_branch}"
         return 1
     fi
+}
+
+render_flux_git_ref() {
+    local gitrepository_file="$1"
+    local flux_git_branch="$2"
+
+    if [[ -n "${FLOE_FLUX_GIT_COMMIT:-}" ]]; then
+        sed -i.bak \
+            -e "s|    branch: main|    commit: ${FLOE_FLUX_GIT_COMMIT}|" \
+            "${gitrepository_file}"
+    else
+        sed -i.bak \
+            -e "s|    branch: main|    branch: ${flux_git_branch}|" \
+            "${gitrepository_file}"
+    fi
+    rm -f "${gitrepository_file}.bak"
 }
 
 render_flux_manifests() {
@@ -652,9 +695,9 @@ render_flux_manifests() {
 
     sed -i.bak \
         -e "s|url: https://github.com/Obsidian-Owl/floe|url: ${FLOE_FLUX_GIT_URL}|" \
-        -e "s|branch: main|branch: ${flux_git_branch}|" \
         "${rendered_dir}/gitrepository.yaml"
     rm -f "${rendered_dir}/gitrepository.yaml.bak"
+    render_flux_git_ref "${rendered_dir}/gitrepository.yaml" "${flux_git_branch}"
 
     inject_demo_image_values "${rendered_dir}/helmrelease-platform.yaml"
 
@@ -665,7 +708,7 @@ render_flux_manifests() {
 deploy_via_flux() {
     local flux_git_branch
     flux_git_branch=$(resolve_flux_git_branch)
-    assert_flux_git_branch_matches "${flux_git_branch}"
+    assert_flux_git_ref_matches "${flux_git_branch}"
 
     # Ensure target namespace exists (direct Helm path uses --create-namespace,
     # but kubectl apply of namespaced CRDs requires the namespace to pre-exist)
@@ -675,7 +718,11 @@ deploy_via_flux() {
     flux_manifest_dir=$(render_flux_manifests "${flux_git_branch}")
     local apply_status=0
 
-    log_info "Applying Flux HelmRelease CRDs from ${FLOE_FLUX_GIT_URL}@${flux_git_branch}..."
+    if [[ -n "${FLOE_FLUX_GIT_COMMIT:-}" ]]; then
+        log_info "Applying Flux HelmRelease CRDs from ${FLOE_FLUX_GIT_URL}@${FLOE_FLUX_GIT_COMMIT}..."
+    else
+        log_info "Applying Flux HelmRelease CRDs from ${FLOE_FLUX_GIT_URL}@${flux_git_branch}..."
+    fi
     if kubectl apply -f "${flux_manifest_dir}/"; then
         apply_status=0
     else

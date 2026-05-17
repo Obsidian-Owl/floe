@@ -52,6 +52,45 @@ def _run_fake_dagster_asset(fake_context: Any) -> str:
     )
 
 
+@pytest.mark.requirement("OBS-DAGSTER-RUNTIME-005")
+def test_observed_asset_initializes_telemetry_before_starting_span(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Runtime telemetry must initialize before wrapper spans are created."""
+    from floe_orchestrator_dagster.runtime_observability import run_observed_asset
+
+    calls: list[str] = []
+    span = MagicMock()
+    tracer = MagicMock()
+
+    def _start_span(*_args: Any, **_kwargs: Any) -> MagicMock:
+        calls.append("span")
+        return tracer.start_as_current_span.return_value
+
+    tracer.start_as_current_span.side_effect = _start_span
+    tracer.start_as_current_span.return_value.__enter__.return_value = span
+    tracer.start_as_current_span.return_value.__exit__.return_value = None
+    monkeypatch.setattr(
+        "floe_orchestrator_dagster.runtime_observability.get_tracer",
+        lambda _name: tracer,
+    )
+    monkeypatch.setattr(
+        "floe_orchestrator_dagster.runtime_observability.MetricRecorder",
+        MagicMock(return_value=MagicMock()),
+    )
+
+    result = run_observed_asset(
+        _context(),
+        "materialize_orders",
+        lambda: "ok",
+        telemetry_initializer=lambda: calls.append("init"),
+        telemetry_finalizer=lambda: calls.append("flush"),
+    )
+
+    assert result == "ok"
+    assert calls == ["init", "span", "flush"]
+
+
 @pytest.mark.requirement("OBS-DAGSTER-RUNTIME-001")
 def test_observed_asset_success_records_context_span_logs_and_materialization(
     monkeypatch: pytest.MonkeyPatch,

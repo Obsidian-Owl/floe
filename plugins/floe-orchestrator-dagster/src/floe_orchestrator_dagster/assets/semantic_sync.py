@@ -28,7 +28,7 @@ See Also:
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -124,6 +124,8 @@ def create_sync_semantic_schemas_asset(
     output_dir: Path,
     deps: list[AssetKey] | None = None,
     observability_context: Mapping[str, str | None] | None = None,
+    telemetry_initializer: Callable[[], None] | None = None,
+    telemetry_finalizer: Callable[[], None] | None = None,
 ) -> Any:
     """Create a semantic schema sync asset bound to product runtime paths.
 
@@ -157,6 +159,8 @@ def create_sync_semantic_schemas_asset(
                 default_manifest_path=manifest_path,
                 default_output_dir=output_dir,
             ),
+            telemetry_initializer=telemetry_initializer,
+            telemetry_finalizer=telemetry_finalizer,
         )
 
     return _sync_semantic_schemas_asset

@@ -509,6 +509,42 @@ class TestDagsterOtelEnvVars:
             }
             assert envs["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://floe-platform-otel:4317"
 
+    @pytest.mark.requirement("platform-observability-defaults-task-7")
+    @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
+    def test_values_test_renders_queryable_observability_backends_for_e2e_gate(
+        self,
+        platform_chart_path: Path,
+    ) -> None:
+        """The live E2E runner must receive URLs for every observability backend."""
+        documents = _render_template_with_values_file(
+            platform_chart_path,
+            "values-test.yaml",
+            set_args=["tests.enabled=true"],
+        )
+        names_by_kind = {
+            (doc.get("kind"), doc.get("metadata", {}).get("name"))
+            for doc in documents
+            if doc.get("kind")
+        }
+        assert ("Service", "floe-platform-loki") in names_by_kind
+        assert ("Service", "floe-platform-prometheus") in names_by_kind
+
+        test_jobs = [
+            doc
+            for doc in documents
+            if doc.get("kind") == "Job" and doc.get("metadata", {}).get("name") == "floe-test-e2e"
+        ]
+        assert test_jobs, "Expected standard E2E test runner Job"
+        container = test_jobs[0]["spec"]["template"]["spec"]["containers"][0]
+        envs = {env["name"]: env.get("value") for env in container.get("env", [])}
+
+        assert envs["DAGSTER_URL"] == "http://floe-platform-dagster-webserver:3000"
+        assert envs["FLOE_DEMO_DAGSTER_URL"] == envs["DAGSTER_URL"]
+        assert envs["FLOE_DEMO_JAEGER_URL"] == "http://floe-platform-jaeger-query:16686"
+        assert envs["FLOE_DEMO_MARQUEZ_URL"] == "http://floe-platform-marquez:5000"
+        assert envs["FLOE_DEMO_LOKI_URL"] == "http://floe-platform-loki:3100"
+        assert envs["FLOE_DEMO_PROMETHEUS_URL"] == "http://floe-platform-prometheus:9090"
+
     @pytest.mark.requirement("AC-17.6")
     @pytest.mark.usefixtures("helm_available", "update_helm_dependencies")
     def test_custom_otel_fullname_requires_matching_dagster_endpoints(
@@ -1152,6 +1188,7 @@ def _helm_template_with_sets(
 def _render_template_with_values_file(
     chart_path: Path,
     values_file: str,
+    set_args: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Render Helm template with a values file.
 
@@ -1163,16 +1200,19 @@ def _render_template_with_values_file(
         List of parsed Kubernetes resource documents.
     """
     values_path = chart_path / values_file
+    cmd = [
+        "helm",
+        "template",
+        "floe-platform",
+        str(chart_path),
+        "-f",
+        str(values_path),
+        "--skip-schema-validation",
+    ]
+    for arg in set_args or []:
+        cmd.extend(["--set", arg])
     result = subprocess.run(
-        [
-            "helm",
-            "template",
-            "floe-platform",
-            str(chart_path),
-            "-f",
-            str(values_path),
-            "--skip-schema-validation",
-        ],
+        cmd,
         capture_output=True,
         timeout=60,
         check=True,

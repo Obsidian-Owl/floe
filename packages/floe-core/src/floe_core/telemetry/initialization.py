@@ -26,11 +26,15 @@ See Also:
 
 from __future__ import annotations
 
+import logging
 import os
 
-from opentelemetry import metrics, trace
+from opentelemetry import _logs, metrics, trace
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
@@ -49,6 +53,10 @@ _initialized: bool = False
 
 # Module-level reference to the active MeterProvider (for reset_telemetry).
 _meter_provider: MeterProvider | None = None
+
+# Module-level reference to the active LoggerProvider and handler (for reset_telemetry).
+_logger_provider: LoggerProvider | None = None
+_otel_logging_handler: LoggingHandler | None = None
 
 # Module-level flag for idempotent logging configuration.  Separate from
 # _initialized because logging should be configured even without an OTLP
@@ -87,7 +95,8 @@ def ensure_telemetry_initialized() -> None:
         >>> ensure_telemetry_initialized()  # configures SDK
         >>> ensure_telemetry_initialized()  # no-op on second call
     """
-    global _initialized, _meter_provider, _logging_configured
+    global _initialized, _logger_provider, _meter_provider, _otel_logging_handler
+    global _logging_configured
 
     # Idempotency guard: skip if already initialised.
     # NOTE: _initialized implies _logging_configured is already True,
@@ -160,14 +169,48 @@ def ensure_telemetry_initialized() -> None:
     # Register as the global meter provider.
     metrics.set_meter_provider(meter_provider)
 
+    # Export Python/structlog records through the OTLP logs pipeline.  Structlog
+    # is configured to route through stdlib logging, so attaching the OTel
+    # handler to the root logger captures Floe runtime logs without plugin code
+    # knowing about the backend.
+    log_exporter = OTLPLogExporter(endpoint=endpoint)
+    log_processor = BatchLogRecordProcessor(log_exporter)
+    logger_provider = LoggerProvider(resource=resource)
+    logger_provider.add_log_record_processor(log_processor)
+    _logs.set_logger_provider(logger_provider)
+    otel_logging_handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
+    logging.getLogger().addHandler(otel_logging_handler)
+
     # Store reference for reset_telemetry().
     _meter_provider = meter_provider
+    _logger_provider = logger_provider
+    _otel_logging_handler = otel_logging_handler
 
     # Invalidate the tracer_factory cache so subsequent tracer requests use
     # the new provider rather than stale cached NoOp tracers.
     reset_tracer()
 
     _initialized = True
+
+
+def force_flush_telemetry(timeout_millis: int = 5000) -> None:
+    """Best-effort flush of trace, metric, and log telemetry providers.
+
+    Short-lived runtime pods can exit before batch processors naturally drain.
+    Calling this at asset boundaries keeps backend validation deterministic
+    without coupling product code to a specific backend.
+    """
+    for provider in (
+        trace.get_tracer_provider(),
+        metrics.get_meter_provider(),
+        _logs.get_logger_provider(),
+    ):
+        force_flush = getattr(provider, "force_flush", None)
+        if callable(force_flush):
+            try:
+                force_flush(timeout_millis=timeout_millis)
+            except Exception:
+                continue
 
 
 def reset_telemetry() -> None:
@@ -202,7 +245,8 @@ def reset_telemetry() -> None:
         >>> reset_telemetry()                      # flush and clear
         >>> ensure_telemetry_initialized()          # fresh re-init
     """
-    global _initialized, _meter_provider, _logging_configured
+    global _initialized, _logger_provider, _meter_provider, _otel_logging_handler
+    global _logging_configured
 
     provider = trace.get_tracer_provider()
     if isinstance(provider, TracerProvider):
@@ -211,6 +255,13 @@ def reset_telemetry() -> None:
     # Shut down MeterProvider if one was created.
     if _meter_provider is not None:
         _meter_provider.shutdown()
+
+    if _otel_logging_handler is not None:
+        logging.getLogger().removeHandler(_otel_logging_handler)
+        _otel_logging_handler.close()
+
+    if _logger_provider is not None:
+        _logger_provider.shutdown()  # type: ignore[no-untyped-call]
 
     # Reset the OTel API's "set once" guard so that a subsequent call to
     # trace.set_tracer_provider() in ensure_telemetry_initialized() is
@@ -240,10 +291,20 @@ def reset_telemetry() -> None:
         if hasattr(metrics._internal, "_PROXY_METER_PROVIDER"):
             metrics._internal._PROXY_METER_PROVIDER = metrics._internal._ProxyMeterProvider()
 
+    if hasattr(_logs, "_internal"):
+        if hasattr(_logs._internal, "_LOGGER_PROVIDER_SET_ONCE"):
+            _logs._internal._LOGGER_PROVIDER_SET_ONCE._done = False
+        if hasattr(_logs._internal, "_LOGGER_PROVIDER"):
+            _logs._internal._LOGGER_PROVIDER = None
+        if hasattr(_logs._internal, "_PROXY_LOGGER_PROVIDER"):
+            _logs._internal._PROXY_LOGGER_PROVIDER = _logs._internal.ProxyLoggerProvider()
+
     _meter_provider = None
+    _logger_provider = None
+    _otel_logging_handler = None
     _initialized = False
     _logging_configured = False
     reset_tracer()
 
 
-__all__ = ["ensure_telemetry_initialized", "reset_telemetry"]
+__all__ = ["ensure_telemetry_initialized", "force_flush_telemetry", "reset_telemetry"]

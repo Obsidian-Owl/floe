@@ -28,7 +28,8 @@
 #                        inside the DevPod after cloning the configured branch.
 #                        Release workflows use this to keep DevPod sources
 #                        branch-clone compatible while executing the exact
-#                        resolved release candidate.
+#                        resolved release candidate. Remote Flux deployment is
+#                        pinned to the same commit.
 #   DEVPOD_REMOTE_E2E_TIMEOUT Remote E2E timeout in seconds (default: 7200).
 #   DEVPOD_REMOTE_POLL_INTERVAL Remote E2E polling interval in seconds
 #                        (default: 20).
@@ -565,6 +566,10 @@ wait_for_flux_settlement() {
         # shellcheck disable=SC1091
         source "\${FLOE_REMOTE_ENV_FILE}"
         cleanup_remote_env_file
+    fi
+    if [[ -n "\${FLOE_REMOTE_GIT_CHECKOUT_SHA:-}" ]]; then
+        export FLOE_FLUX_GIT_COMMIT="\${FLOE_REMOTE_GIT_CHECKOUT_SHA}"
+        export FLOE_REQUIRED_FLUX_GIT_COMMIT="\${FLOE_REMOTE_GIT_CHECKOUT_SHA}"
     fi
     SKIP_MONITORING=\${SKIP_MONITORING:-true} make kind-up
     wait_for_flux_settlement

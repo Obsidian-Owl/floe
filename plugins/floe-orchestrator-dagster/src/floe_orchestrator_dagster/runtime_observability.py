@@ -31,23 +31,49 @@ def run_observed_asset(
     fn: Callable[[], T],
     *,
     yield_events: bool = False,
+    telemetry_initializer: Callable[[], None] | None = None,
+    telemetry_finalizer: Callable[[], None] | None = None,
 ) -> T:
     """Run a Dagster asset body inside a shared Floe observability envelope."""
     if yield_events:
-        return cast(T, _run_observed_asset_events(context, operation_name, fn))
+        return cast(
+            T,
+            _run_observed_asset_events(
+                context,
+                operation_name,
+                fn,
+                telemetry_initializer=telemetry_initializer,
+                telemetry_finalizer=telemetry_finalizer,
+            ),
+        )
 
-    with _observe_asset(context, operation_name):
-        return fn()
+    if telemetry_initializer is not None:
+        telemetry_initializer()
+    try:
+        with _observe_asset(context, operation_name):
+            return fn()
+    finally:
+        if telemetry_finalizer is not None:
+            telemetry_finalizer()
 
 
 def _run_observed_asset_events(
     context: ObservabilityContext,
     operation_name: str,
     fn: Callable[[], T],
+    *,
+    telemetry_initializer: Callable[[], None] | None = None,
+    telemetry_finalizer: Callable[[], None] | None = None,
 ) -> Iterator[Any]:
     """Yield generator asset events while observing the full iteration."""
-    with _observe_asset(context, operation_name):
-        yield from cast(Iterator[Any], fn())
+    if telemetry_initializer is not None:
+        telemetry_initializer()
+    try:
+        with _observe_asset(context, operation_name):
+            yield from cast(Iterator[Any], fn())
+    finally:
+        if telemetry_finalizer is not None:
+            telemetry_finalizer()
 
 
 @contextmanager
