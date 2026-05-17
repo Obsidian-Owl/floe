@@ -546,8 +546,6 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         logger.info(
             "Secret stored",
             extra={
-                "key": _safe_audit_secret_path(key),
-                "path": self._config.secret_path,
                 "operation": operation_type,
             },
         )
@@ -738,7 +736,7 @@ class InfisicalSecretsPlugin(SecretsPlugin):
                 )
 
                 self._client.deleteSecret(options)
-                logger.info("Secret deleted", extra={"key": _safe_audit_secret_path(key)})
+                logger.info("Secret deleted")
                 self._audit_logger.log_success(
                     requester_id="system",
                     secret_path=_safe_audit_secret_path(key),
@@ -1098,7 +1096,6 @@ class InfisicalSecretsPlugin(SecretsPlugin):
         logger.debug(
             "Secret not found or error retrieving",
             extra={
-                "key": _safe_audit_secret_path(key),
                 "error_type": _classify_error(e),
             },
         )

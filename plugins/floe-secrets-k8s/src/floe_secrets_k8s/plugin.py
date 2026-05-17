@@ -571,10 +571,7 @@ class K8sSecretsPlugin(SecretsPlugin):
                     )
                     logger.info(
                         "Updated secret",
-                        extra={
-                            "secret_name": _safe_audit_secret_path(secret_name),
-                            "key": _safe_audit_secret_path(secret_key),
-                        },
+                        extra={"operation": "update"},
                     )
                     self._audit_logger.log_success(
                         requester_id="system",
@@ -612,10 +609,7 @@ class K8sSecretsPlugin(SecretsPlugin):
                     )
                     logger.info(
                         "Created secret",
-                        extra={
-                            "secret_name": _safe_audit_secret_path(secret_name),
-                            "key": _safe_audit_secret_path(secret_key),
-                        },
+                        extra={"operation": "create"},
                     )
                     self._audit_logger.log_success(
                         requester_id="system",
