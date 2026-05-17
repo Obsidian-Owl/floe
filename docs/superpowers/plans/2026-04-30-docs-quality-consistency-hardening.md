@@ -101,7 +101,7 @@ def test_rejects_wrong_plugin_count(tmp_path: Path) -> None:
     readme = tmp_path / "README.md"
     readme.write_text("Floe lets teams choose from 12 plugin types.\n")
 
-    errors = validate_docs_content(tmp_path, plugin_category_count=14)
+    errors = validate_docs_content(tmp_path, plugin_category_count=15)
 
     assert any("plugin count" in error for error in errors)
 ```

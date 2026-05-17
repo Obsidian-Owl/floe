@@ -70,7 +70,7 @@ The February 2026 E2E test run on branch `audit/test-hardening-wu1` revealed **7
 
 | Requirement ID | Description | Root Cause | Priority |
 |----------------|-------------|------------|----------|
-| 15-FR-010 | `PLUGIN_ABC_MAP` must include `ALERT_CHANNEL`; plugin tests must expect 14 types | RC-7 | MEDIUM |
+| 15-FR-010 | Historical: `PLUGIN_ABC_MAP` had to include `ALERT_CHANNEL`; plugin tests then expected 14 types before `NETWORK_SECURITY` became a first-class plugin type | RC-7 | MEDIUM |
 | 15-FR-011 | `compile_pipeline()` must pass `enforcement_result` to `build_artifacts()` (stages.py:368) | RC-8 | MEDIUM |
 | 15-FR-012 | `governance` field must be populated in `CompiledArtifacts` for demo specs | RC-8 | MEDIUM |
 | 15-FR-013 | Replace hardcoded secrets in 6 unit test files with env vars / fixtures | RC-9 | MEDIUM |
@@ -158,7 +158,7 @@ The February 2026 E2E test run on branch `audit/test-hardening-wu1` revealed **7
 
 ### RC-7: ALERT_CHANNEL Plugin Type Missing
 
-**Error**: `Expected 13 plugin types, found 14. Missing: {PluginType.ALERT_CHANNEL}`
+**Historical error**: `Expected 13 plugin types, found 14. Missing: {PluginType.ALERT_CHANNEL}`. Current plugin category count is higher; this entry records the original Epic 15 failure.
 
 **Affected tests** (4): All `test_plugin_system.py` tests.
 
