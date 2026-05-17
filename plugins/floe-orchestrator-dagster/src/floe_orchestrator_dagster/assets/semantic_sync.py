@@ -28,6 +28,7 @@ See Also:
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -122,6 +123,7 @@ def create_sync_semantic_schemas_asset(
     manifest_path: Path,
     output_dir: Path,
     deps: list[AssetKey] | None = None,
+    observability_context: Mapping[str, str | None] | None = None,
 ) -> Any:
     """Create a semantic schema sync asset bound to product runtime paths.
 
@@ -147,6 +149,7 @@ def create_sync_semantic_schemas_asset(
                 context,
                 asset_key="sync_semantic_schemas",
                 stage="semantic_sync",
+                **dict(observability_context or {}),
             ),
             "floe.orchestrator.dagster.asset.sync_semantic_schemas",
             lambda: _sync_semantic_schemas(

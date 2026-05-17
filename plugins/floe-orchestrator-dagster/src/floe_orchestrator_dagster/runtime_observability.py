@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable, Mapping
-from typing import Any, TypeVar
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
+from typing import Any, TypeVar, cast
 
 import structlog
 from floe_core.telemetry.context import ObservabilityContext
@@ -28,8 +29,33 @@ def run_observed_asset(
     context: ObservabilityContext,
     operation_name: str,
     fn: Callable[[], T],
+    *,
+    yield_events: bool = False,
 ) -> T:
     """Run a Dagster asset body inside a shared Floe observability envelope."""
+    if yield_events:
+        return cast(T, _run_observed_asset_events(context, operation_name, fn))
+
+    with _observe_asset(context, operation_name):
+        return fn()
+
+
+def _run_observed_asset_events(
+    context: ObservabilityContext,
+    operation_name: str,
+    fn: Callable[[], T],
+) -> Iterator[Any]:
+    """Yield generator asset events while observing the full iteration."""
+    with _observe_asset(context, operation_name):
+        yield from cast(Iterator[Any], fn())
+
+
+@contextmanager
+def _observe_asset(
+    context: ObservabilityContext,
+    operation_name: str,
+) -> Iterator[None]:
+    """Observe one asset execution, recording final status once."""
     tracer = get_tracer(TRACER_NAME)
     metrics = MetricRecorder(name=METER_NAME)
     span_attributes = context.to_span_attributes()
@@ -44,11 +70,21 @@ def run_observed_asset(
             span.set_attribute(key, value)
         logger.info("floe_asset_started", **context.to_log_fields())
         try:
-            result = fn()
+            yield
         except Exception as exc:
+            sanitized_message = sanitize_error_message(str(exc))
             span.set_attribute(FLOE_STATUS, "failure")
-            span.record_exception(exc)
-            span.set_status(Status(StatusCode.ERROR, sanitize_error_message(type(exc).__name__)))
+            span.set_attribute("exception.type", type(exc).__name__)
+            span.set_attribute("exception.message", sanitized_message)
+            span.add_event(
+                "exception",
+                {
+                    "exception.type": type(exc).__name__,
+                    "exception.message": sanitized_message,
+                    "exception.escaped": True,
+                },
+            )
+            span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
             _record_metric(
                 metrics,
                 ASSET_FAILURES_METRIC,
@@ -75,7 +111,6 @@ def run_observed_asset(
             **context.to_log_fields(),
             **{FLOE_STATUS: "success"},
         )
-        return result
 
 
 def observability_context_from_dagster(

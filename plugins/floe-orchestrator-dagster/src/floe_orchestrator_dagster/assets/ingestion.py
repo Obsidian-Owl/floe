@@ -121,6 +121,7 @@ def create_ingestion_assets(
     *,
     project_dir: Path,
     runtime_binding: Mapping[str, Any] | None = None,
+    observability_context: Mapping[str, str | None] | None = None,
 ) -> list[AssetsDefinition]:
     """Create Dagster asset definitions for ingestion pipelines.
 
@@ -185,6 +186,7 @@ def create_ingestion_assets(
                 project_dir=project_dir,
                 filesystem_config=filesystem_config,
                 runtime_binding=runtime_binding,
+                observability_context=observability_context,
             )
         )
 
@@ -274,6 +276,7 @@ def _create_ingestion_asset(
     project_dir: Path,
     filesystem_config: Mapping[str, Any],
     runtime_binding: Mapping[str, Any] | None,
+    observability_context: Mapping[str, str | None] | None,
 ) -> AssetsDefinition:
     source_name = str(source_config["name"])
 
@@ -300,6 +303,7 @@ def _create_ingestion_asset(
                 asset_key=asset_name,
                 stage="ingestion",
                 table_name=str(source_config["destination_table"]),
+                **dict(observability_context or {}),
             ),
             f"floe.orchestrator.dagster.asset.{asset_name}",
             lambda: _run_ingestion_source_body(

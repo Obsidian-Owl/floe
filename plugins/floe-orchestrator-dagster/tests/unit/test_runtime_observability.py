@@ -7,7 +7,6 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-import structlog
 from floe_core.telemetry.context import ObservabilityContext
 from opentelemetry.trace import StatusCode
 
@@ -67,9 +66,10 @@ def test_observed_asset_success_records_context_span_logs_and_materialization(
         "floe_orchestrator_dagster.runtime_observability.MetricRecorder",
         metric_recorder_cls,
     )
+    log = MagicMock()
+    monkeypatch.setattr("floe_orchestrator_dagster.runtime_observability.logger", log)
 
-    with structlog.testing.capture_logs() as logs:
-        result = run_observed_asset(_context(), "materialize_orders", lambda: "ok")
+    result = run_observed_asset(_context(), "materialize_orders", lambda: "ok")
 
     assert result == "ok"
     tracer.start_as_current_span.assert_called_once_with(
@@ -107,12 +107,13 @@ def test_observed_asset_success_records_context_span_logs_and_materialization(
         description="Dagster asset materializations",
         unit="1",
     )
-    assert logs[-1]["event"] == "floe_asset_completed"
-    assert logs[-1]["floe.product.name"] == "customer-360"
-    assert logs[-1]["floe.run.id"] == "run-123"
-    assert logs[-1]["floe.asset.key"] == "orders_daily"
-    assert logs[-1]["floe.plugin.type"] == "orchestrator"
-    assert logs[-1]["floe.status"] == "success"
+    completed_log = log.info.call_args_list[-1]
+    assert completed_log.args == ("floe_asset_completed",)
+    assert completed_log.kwargs["floe.product.name"] == "customer-360"
+    assert completed_log.kwargs["floe.run.id"] == "run-123"
+    assert completed_log.kwargs["floe.asset.key"] == "orders_daily"
+    assert completed_log.kwargs["floe.plugin.type"] == "orchestrator"
+    assert completed_log.kwargs["floe.status"] == "success"
 
 
 def test_fake_dagster_context_fields_flow_through_observed_asset_wrapper(
@@ -132,6 +133,8 @@ def test_fake_dagster_context_fields_flow_through_observed_asset_wrapper(
         "floe_orchestrator_dagster.runtime_observability.MetricRecorder",
         MagicMock(return_value=metric_recorder),
     )
+    log = MagicMock()
+    monkeypatch.setattr("floe_orchestrator_dagster.runtime_observability.logger", log)
 
     fake_context = SimpleNamespace(
         run=SimpleNamespace(
@@ -146,8 +149,7 @@ def test_fake_dagster_context_fields_flow_through_observed_asset_wrapper(
         asset_key=SimpleNamespace(path=["analytics", "orders_daily"]),
     )
 
-    with structlog.testing.capture_logs() as logs:
-        result = _run_fake_dagster_asset(fake_context)
+    result = _run_fake_dagster_asset(fake_context)
 
     assert result == "ok"
     attrs = _captured_span_attrs(span)
@@ -176,15 +178,16 @@ def test_fake_dagster_context_fields_flow_through_observed_asset_wrapper(
         description="Dagster asset materializations",
         unit="1",
     )
-    assert logs[-1]["event"] == "floe_asset_completed"
-    assert logs[-1]["floe.product.name"] == "customer-360"
-    assert logs[-1]["floe.product.version"] == "2.0.0"
-    assert logs[-1]["floe.environment"] == "staging"
-    assert logs[-1]["floe.namespace"] == "finance"
-    assert logs[-1]["floe.run.id"] == "dagster-run-456"
-    assert logs[-1]["floe.asset.key"] == "analytics.orders_daily"
-    assert logs[-1]["floe.stage"] == "transform"
-    assert logs[-1]["floe.table.name"] == "analytics.orders_daily"
+    completed_log = log.info.call_args_list[-1]
+    assert completed_log.args == ("floe_asset_completed",)
+    assert completed_log.kwargs["floe.product.name"] == "customer-360"
+    assert completed_log.kwargs["floe.product.version"] == "2.0.0"
+    assert completed_log.kwargs["floe.environment"] == "staging"
+    assert completed_log.kwargs["floe.namespace"] == "finance"
+    assert completed_log.kwargs["floe.run.id"] == "dagster-run-456"
+    assert completed_log.kwargs["floe.asset.key"] == "analytics.orders_daily"
+    assert completed_log.kwargs["floe.stage"] == "transform"
+    assert completed_log.kwargs["floe.table.name"] == "analytics.orders_daily"
 
 
 def test_observed_asset_failure_records_context_span_logs_and_failure_metric(
@@ -206,16 +209,17 @@ def test_observed_asset_failure_records_context_span_logs_and_failure_metric(
         "floe_orchestrator_dagster.runtime_observability.MetricRecorder",
         MagicMock(return_value=metric_recorder),
     )
+    log = MagicMock()
+    monkeypatch.setattr("floe_orchestrator_dagster.runtime_observability.logger", log)
 
     error = RuntimeError("dbt failed")
 
-    with structlog.testing.capture_logs() as logs:
-        with pytest.raises(RuntimeError, match="dbt failed"):
-            run_observed_asset(
-                _context(),
-                "materialize_orders",
-                lambda: (_ for _ in ()).throw(error),
-            )
+    with pytest.raises(RuntimeError, match="dbt failed"):
+        run_observed_asset(
+            _context(),
+            "materialize_orders",
+            lambda: (_ for _ in ()).throw(error),
+        )
 
     attrs = _captured_span_attrs(span)
     assert attrs["floe.product.name"] == "customer-360"
@@ -223,7 +227,15 @@ def test_observed_asset_failure_records_context_span_logs_and_failure_metric(
     assert attrs["floe.asset.key"] == "orders_daily"
     assert attrs["floe.plugin.type"] == "orchestrator"
     assert attrs["floe.status"] == "failure"
-    span.record_exception.assert_called_once_with(error)
+    span.record_exception.assert_not_called()
+    span.add_event.assert_called_once_with(
+        "exception",
+        {
+            "exception.type": "RuntimeError",
+            "exception.message": "dbt failed",
+            "exception.escaped": True,
+        },
+    )
     status = span.set_status.call_args.args[0]
     assert status.status_code is StatusCode.ERROR
     metric_recorder.increment.assert_called_once_with(
@@ -239,10 +251,54 @@ def test_observed_asset_failure_records_context_span_logs_and_failure_metric(
         description="Dagster asset failures",
         unit="1",
     )
-    assert logs[-1]["event"] == "floe_asset_failed"
-    assert logs[-1]["floe.product.name"] == "customer-360"
-    assert logs[-1]["floe.run.id"] == "run-123"
-    assert logs[-1]["floe.asset.key"] == "orders_daily"
-    assert logs[-1]["floe.plugin.type"] == "orchestrator"
-    assert logs[-1]["floe.status"] == "failure"
-    assert logs[-1]["error_type"] == "RuntimeError"
+    failed_log = log.error.call_args
+    assert failed_log.args == ("floe_asset_failed",)
+    assert failed_log.kwargs["floe.product.name"] == "customer-360"
+    assert failed_log.kwargs["floe.run.id"] == "run-123"
+    assert failed_log.kwargs["floe.asset.key"] == "orders_daily"
+    assert failed_log.kwargs["floe.plugin.type"] == "orchestrator"
+    assert failed_log.kwargs["floe.status"] == "failure"
+    assert failed_log.kwargs["error_type"] == "RuntimeError"
+
+
+def test_observed_asset_failure_sanitizes_exception_telemetry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from floe_orchestrator_dagster.runtime_observability import run_observed_asset
+
+    span = MagicMock()
+    tracer = MagicMock()
+    tracer.start_as_current_span.return_value.__enter__.return_value = span
+    tracer.start_as_current_span.return_value.__exit__.return_value = None
+    monkeypatch.setattr(
+        "floe_orchestrator_dagster.runtime_observability.get_tracer",
+        lambda _name: tracer,
+    )
+    monkeypatch.setattr(
+        "floe_orchestrator_dagster.runtime_observability.MetricRecorder",
+        MagicMock(return_value=MagicMock()),
+    )
+    log = MagicMock()
+    monkeypatch.setattr("floe_orchestrator_dagster.runtime_observability.logger", log)
+
+    error = RuntimeError("dbt failed password=secret123")  # pragma: allowlist secret
+
+    with pytest.raises(RuntimeError, match="password=secret123"):  # pragma: allowlist secret
+        run_observed_asset(
+            _context(),
+            "materialize_orders",
+            lambda: (_ for _ in ()).throw(error),
+        )
+
+    span.record_exception.assert_not_called()
+    emitted_values = repr(
+        {
+            "events": span.add_event.call_args_list,
+            "attributes": span.set_attribute.call_args_list,
+            "status": span.set_status.call_args_list,
+            "logs": log.method_calls,
+        }
+    )
+    assert "secret123" not in emitted_values  # pragma: allowlist secret
+    assert "password=secret123" not in emitted_values  # pragma: allowlist secret
+    assert "RuntimeError" in emitted_values

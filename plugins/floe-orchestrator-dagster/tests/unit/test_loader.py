@@ -885,6 +885,27 @@ def _make_mock_context_with_lineage() -> tuple[MagicMock, MagicMock]:
     return context, lineage
 
 
+def _patch_runtime_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> MagicMock:
+    """Patch runtime envelope dependencies and return the metric recorder."""
+    span = MagicMock()
+    tracer = MagicMock()
+    tracer.start_as_current_span.return_value.__enter__.return_value = span
+    tracer.start_as_current_span.return_value.__exit__.return_value = None
+    monkeypatch.setattr(
+        "floe_orchestrator_dagster.runtime_observability.get_tracer",
+        lambda _name: tracer,
+    )
+
+    metric_recorder = MagicMock()
+    monkeypatch.setattr(
+        "floe_orchestrator_dagster.runtime_observability.MetricRecorder",
+        MagicMock(return_value=metric_recorder),
+    )
+    return metric_recorder
+
+
 @pytest.mark.requirement("AC-5")
 def test_dbt_assets_calls_emit_start_before_build(project_dir: Path) -> None:
     """The @dbt_assets body must call lineage.emit_start() before dbt.cli().
@@ -942,9 +963,73 @@ def test_dbt_assets_calls_emit_complete_on_success(project_dir: Path) -> None:
     list(asset_fn(context))
 
     lineage.emit_complete.assert_called_once()
-    # emit_complete must receive the run_id from emit_start
     args = lineage.emit_complete.call_args
-    assert args is not None, "emit_complete was called with no arguments"
+    assert args is not None
+    assert args.args[0] == FAKE_RUN_ID
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_runtime_envelope_records_materialization(
+    project_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Canonical dbt asset path records runtime materialization metrics."""
+    metric_recorder = _patch_runtime_envelope(monkeypatch)
+    definitions = load_product_definitions(PRODUCT_NAME, project_dir)
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, _lineage = _make_mock_context_with_lineage()
+    mock_stream = MagicMock()
+    mock_stream.__iter__ = MagicMock(return_value=iter(["dbt-event"]))
+    context.resources.dbt.cli.return_value.stream.return_value = mock_stream
+
+    assert list(asset_fn(context)) == ["dbt-event"]
+    metric_recorder.increment.assert_any_call(
+        "floe.asset.materializations",
+        labels={
+            "floe.product.name": "customer-360",
+            "floe.environment": "dev",
+            "floe.namespace": "default",
+            "floe.stage": "transform",
+            "floe.plugin.type": "orchestrator",
+            "floe.plugin.name": "dagster",
+            "floe.status": "success",
+        },
+        description="Dagster asset materializations",
+        unit="1",
+    )
+
+
+@pytest.mark.requirement("AC-5")
+def test_dbt_assets_runtime_envelope_records_failure(
+    project_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Canonical dbt asset path records runtime failure metrics."""
+    metric_recorder = _patch_runtime_envelope(monkeypatch)
+    definitions = load_product_definitions(PRODUCT_NAME, project_dir)
+    asset_fn = _extract_dbt_assets_fn(definitions)
+
+    context, _lineage = _make_mock_context_with_lineage()
+    context.resources.dbt.cli.return_value.stream.side_effect = RuntimeError("dbt failed")
+
+    with pytest.raises(RuntimeError, match="dbt failed"):
+        list(asset_fn(context))
+
+    metric_recorder.increment.assert_any_call(
+        "floe.asset.failures",
+        labels={
+            "floe.product.name": "customer-360",
+            "floe.environment": "dev",
+            "floe.namespace": "default",
+            "floe.stage": "transform",
+            "floe.plugin.type": "orchestrator",
+            "floe.plugin.name": "dagster",
+            "floe.status": "failure",
+        },
+        description="Dagster asset failures",
+        unit="1",
+    )
 
 
 @pytest.mark.requirement("AC-5")
@@ -1353,6 +1438,50 @@ def test_runtime_passes_dlt_ingestion_binding_to_asset_factory(
         "endpoint_url": "http://minio:9000",
         "region_name": "us-east-1",
         "s3_url_style": "path",
+    }
+    assert call.kwargs["observability_context"] == {
+        "product_name": "customer-360",
+        "product_version": "1.0.0",
+        "environment": "dev",
+        "namespace": "default",
+        "lineage_namespace": "customer-360",
+    }
+
+
+@pytest.mark.requirement("AC-5")
+def test_runtime_passes_compiled_observability_context_to_semantic_asset_factory(
+    project_dir_with_semantic: Path,
+) -> None:
+    """Compiled product context must reach runtime semantic assets."""
+
+    @asset
+    def expected_semantic_asset() -> None:
+        return None
+
+    expected_asset = expected_semantic_asset
+
+    with (
+        patch(
+            f"{_RUNTIME_MODULE}._create_semantic_resources",
+            return_value={"semantic_layer": MagicMock()},
+        ),
+        patch(
+            "floe_orchestrator_dagster.assets.semantic_sync.create_sync_semantic_schemas_asset",
+            return_value=expected_asset,
+        ) as create_asset,
+    ):
+        result = load_product_definitions(PRODUCT_NAME, project_dir_with_semantic)
+
+    assert expected_asset in list(result.assets or [])
+    create_asset.assert_called_once()
+    call = create_asset.call_args
+    assert call is not None
+    assert call.kwargs["observability_context"] == {
+        "product_name": "customer-360",
+        "product_version": "1.0.0",
+        "environment": "dev",
+        "namespace": "default",
+        "lineage_namespace": "customer-360",
     }
 
 
