@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import shlex
+from dataclasses import replace
 from pathlib import Path
 
 from testing.ci.customer360_observability import (
@@ -244,13 +245,14 @@ def main() -> int:
         or manifest_config.lifetime_value_command,
     )
     result = Customer360Validator(config=config).validate()
+    observability_config = Customer360ObservabilityConfig.from_env()
     observability_result = validate_customer360_observability(
-        Customer360ObservabilityConfig(
+        replace(
+            observability_config,
             dagster_url=config.dagster_url,
             jaeger_url=config.jaeger_url,
-            loki_url=args.loki_url or os.environ.get("FLOE_DEMO_LOKI_URL", "http://localhost:3101"),
-            prometheus_url=args.prometheus_url
-            or os.environ.get("FLOE_DEMO_PROMETHEUS_URL", "http://localhost:9090"),
+            loki_url=args.loki_url or observability_config.loki_url,
+            prometheus_url=args.prometheus_url or observability_config.prometheus_url,
             marquez_url=config.marquez_url,
             run_id=args.run_id.strip() if args.run_id and args.run_id.strip() else None,
             run_evidence_file=Path(args.run_evidence_file) if args.run_evidence_file else None,
