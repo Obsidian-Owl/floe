@@ -8,6 +8,10 @@ import os
 import shlex
 from pathlib import Path
 
+from testing.ci.customer360_observability import (
+    Customer360ObservabilityConfig,
+    validate_customer360_observability,
+)
 from testing.demo.customer360_validator import (
     DEFAULT_VALIDATION_MANIFEST,
     Customer360Config,
@@ -85,6 +89,32 @@ def build_parser() -> argparse.ArgumentParser:
         "--jaeger-url",
         default=os.environ.get("FLOE_DEMO_JAEGER_URL"),
         help="Base URL for Jaeger query API.",
+    )
+    parser.add_argument(
+        "--loki-url",
+        default=os.environ.get("FLOE_DEMO_LOKI_URL"),
+        help="Base URL for Loki query API.",
+    )
+    parser.add_argument(
+        "--prometheus-url",
+        default=os.environ.get("FLOE_DEMO_PROMETHEUS_URL"),
+        help="Base URL for Prometheus API.",
+    )
+    parser.add_argument(
+        "--run-id",
+        default=os.environ.get("FLOE_DEMO_RUN_ID"),
+        help="Customer 360 Dagster run id to validate. Defaults to the run evidence file.",
+    )
+    parser.add_argument(
+        "--run-evidence-file",
+        default=os.environ.get("FLOE_DEMO_RUN_EVIDENCE_FILE", ".customer360-run.env"),
+        help="Path containing dagster.run_id output from make demo-customer-360-run.",
+    )
+    parser.add_argument(
+        "--observability-freshness-seconds",
+        type=float,
+        default=_optional_float_env(parser, "FLOE_DEMO_OBSERVABILITY_FRESHNESS_SECONDS"),
+        help="Maximum age for Customer 360 observability evidence.",
     )
     parser.add_argument(
         "--platform-expected-services",
@@ -214,7 +244,43 @@ def main() -> int:
         or manifest_config.lifetime_value_command,
     )
     result = Customer360Validator(config=config).validate()
+    observability_result = validate_customer360_observability(
+        Customer360ObservabilityConfig(
+            dagster_url=config.dagster_url,
+            jaeger_url=config.jaeger_url,
+            loki_url=args.loki_url or os.environ.get("FLOE_DEMO_LOKI_URL", "http://localhost:3101"),
+            prometheus_url=args.prometheus_url
+            or os.environ.get("FLOE_DEMO_PROMETHEUS_URL", "http://localhost:9090"),
+            marquez_url=config.marquez_url,
+            run_id=args.run_id.strip() if args.run_id and args.run_id.strip() else None,
+            run_evidence_file=Path(args.run_evidence_file) if args.run_evidence_file else None,
+            freshness_window_seconds=args.observability_freshness_seconds
+            if args.observability_freshness_seconds is not None
+            else float(os.environ.get("FLOE_DEMO_OBSERVABILITY_FRESHNESS_SECONDS", "1800")),
+            timeout_seconds=config.command_timeout_seconds,
+        )
+    )
+    result = _merge_validation_results(
+        result,
+        observability_result.evidence,
+        observability_result.failures,
+    )
     return print_result(result)
+
+
+def _merge_validation_results(
+    result: ValidationResult,
+    evidence: dict[str, str],
+    failures: list[str],
+) -> ValidationResult:
+    merged_evidence = dict(result.evidence)
+    merged_evidence.update(evidence)
+    merged_failures = [*result.failures, *failures]
+    return ValidationResult(
+        status="FAIL" if merged_failures else "PASS",
+        evidence=merged_evidence,
+        failures=merged_failures,
+    )
 
 
 if __name__ == "__main__":

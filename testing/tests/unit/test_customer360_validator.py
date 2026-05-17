@@ -579,6 +579,11 @@ validation:
     monkeypatch.setenv("FLOE_DEMO_VALIDATION_MANIFEST", str(manifest))
     monkeypatch.setattr("sys.argv", ["validate_customer_360_demo"])
     monkeypatch.setattr(module, "Customer360Validator", FakeValidator)
+    monkeypatch.setattr(
+        module,
+        "validate_customer360_observability",
+        lambda _config: SimpleNamespace(evidence={}, failures=[]),
+    )
 
     exit_code = module.main()
 
