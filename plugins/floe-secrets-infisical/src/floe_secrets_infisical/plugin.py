@@ -366,9 +366,10 @@ class InfisicalSecretsPlugin(SecretsPlugin):
                 message=f"Connected to Infisical at {self._config.site_url}",
             )
         except Exception as e:
+            error_type = _classify_error(e)
             return HealthStatus(
                 state=HealthState.UNHEALTHY,
-                message=f"Infisical health check failed: {e}",
+                message=f"Infisical health check failed: {error_type}",
             )
 
     # =========================================================================

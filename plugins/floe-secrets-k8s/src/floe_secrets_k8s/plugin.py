@@ -70,14 +70,27 @@ def _classify_k8s_error(error: Exception) -> str:
     status = getattr(error, "status", None)
     error_str = str(error).lower()
     if status in {401, 403} or any(
-        marker in error_str for marker in ("unauthorized", "forbidden", "permission")
+        marker in error_str for marker in ("401", "403", "unauthorized", "forbidden", "permission")
     ):
         return _ErrorType.ACCESS_DENIED
-    if status == 404:
+    if status == 404 or "404" in error_str or "not found" in error_str:
         return _ErrorType.NOT_FOUND
-    if status in {408, 429, 500, 502, 503, 504}:
+    if status in {408, 429, 500, 502, 503, 504} or any(
+        marker in error_str
+        for marker in (
+            "408",
+            "429",
+            "500",
+            "502",
+            "503",
+            "504",
+            "connection",
+            "timeout",
+            "unavailable",
+        )
+    ):
         return _ErrorType.UNAVAILABLE
-    if isinstance(error, ValueError):
+    if isinstance(error, ValueError) or "400" in error_str or "validation" in error_str:
         return _ErrorType.VALIDATION
     return _ErrorType.UNKNOWN
 
@@ -270,7 +283,16 @@ class K8sSecretsPlugin(SecretsPlugin):
             self._api = client.CoreV1Api()
 
         except Exception as e:
-            logger.exception("Failed to initialize Kubernetes client")
+            error_type = _classify_k8s_error(e)
+            if error_type == _ErrorType.UNKNOWN:
+                error_type = _ErrorType.UNAVAILABLE
+            logger.error(
+                "Failed to initialize Kubernetes client",
+                extra={
+                    "error_type": error_type,
+                    "error_message": _safe_error_reason(e, "backend unavailable"),
+                },
+            )
             raise SecretBackendUnavailableError(
                 reason=_safe_error_reason(e, "backend unavailable")
             ) from e
@@ -309,9 +331,10 @@ class K8sSecretsPlugin(SecretsPlugin):
                     message=f"Connected to K8s API, namespace: {self.config.namespace}",
                 )
             except Exception as e:
+                error_type = _classify_k8s_error(e)
                 return HealthStatus(
                     state=HealthState.UNHEALTHY,
-                    message=f"K8s API check failed: {e}",
+                    message=f"K8s API check failed: {error_type}",
                 )
 
     # =========================================================================

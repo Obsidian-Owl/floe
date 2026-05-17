@@ -228,7 +228,7 @@ class KeycloakIdentityPlugin(IdentityPlugin):
         except httpx.HTTPError as e:
             return HealthStatus(
                 state=HealthState.UNHEALTHY,
-                message=f"Failed to connect to Keycloak: {e}",
+                message=f"Keycloak connection failed: {_classify_exception(e)}",
             )
 
     def authenticate(self, credentials: dict[str, Any]) -> str | None:

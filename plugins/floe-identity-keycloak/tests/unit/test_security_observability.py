@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 import httpx
 import pytest
+from floe_core.plugin_metadata import HealthState
 from pydantic import SecretStr
 
 from floe_identity_keycloak.config import KeycloakIdentityConfig
@@ -149,3 +150,21 @@ def test_identity_failures_are_classified() -> None:
         with pytest.raises(ValueError):
             plugin.authenticate({"username": "", "password": "x"})
     assert tracer.spans[-1].attributes["identity.error_type"] == "validation"
+
+
+def test_health_check_sanitizes_provider_error_message() -> None:
+    plugin = _plugin()
+    plugin._client.get.side_effect = httpx.ConnectError(
+        "https://keycloak.example.com/realms/floe?token=raw-token "
+        "password=raw-password private_key=raw-key person@example.com"
+    )
+
+    status = plugin.health_check()
+
+    assert status.state == HealthState.UNHEALTHY
+    assert status.message == "Keycloak connection failed: unavailable"
+    assert "raw-token" not in status.message
+    assert "raw-password" not in status.message
+    assert "raw-key" not in status.message
+    assert "keycloak.example.com" not in status.message
+    assert "person@example.com" not in status.message
