@@ -236,3 +236,53 @@ class TestSanitizeErrorMessage:
         assert result_colon == "Header: token : <REDACTED>"
         assert "secret123" not in result_equals
         assert "bearer-token-xyz" not in result_colon
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_presigned_https_query_parameters_are_redacted(self) -> None:
+        """Presigned HTTPS URL query credentials are redacted but safe context remains."""
+        msg = (
+            "S3 fetch failed for "
+            "https://bucket.s3.amazonaws.com/key?"
+            "X-Amz-Signature=abc&X-Amz-Credential=cred&safe=value"
+        )
+
+        result = sanitize_error_message(msg)
+
+        assert result == (
+            "S3 fetch failed for "
+            "https://bucket.s3.amazonaws.com/key?"
+            "X-Amz-Signature=<REDACTED>&X-Amz-Credential=<REDACTED>&safe=value"
+        )
+        assert "abc" not in result
+        assert "cred" not in result
+        assert "safe=value" in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_presigned_s3_query_parameters_are_redacted(self) -> None:
+        """S3 URI presign query credentials are redacted."""
+        msg = "Load failed for s3://bucket/key?AWSAccessKeyId=abc&Signature=def"
+
+        result = sanitize_error_message(msg)
+
+        assert result == (
+            "Load failed for s3://bucket/key?AWSAccessKeyId=<REDACTED>&Signature=<REDACTED>"
+        )
+        assert "abc" not in result
+        assert "def" not in result
+
+    @pytest.mark.requirement("6C-FR-014")
+    def test_fragment_signature_parameters_are_redacted(self) -> None:
+        """Credential-bearing fragment parameters are redacted."""
+        msg = (
+            "Redirect failed for "
+            "https://bucket.s3.amazonaws.com/key#token=abc&signature=def&safe=value"
+        )
+
+        result = sanitize_error_message(msg)
+
+        assert result == (
+            "Redirect failed for "
+            "https://bucket.s3.amazonaws.com/key#token=<REDACTED>&signature=<REDACTED>&safe=value"
+        )
+        assert "abc" not in result
+        assert "def" not in result

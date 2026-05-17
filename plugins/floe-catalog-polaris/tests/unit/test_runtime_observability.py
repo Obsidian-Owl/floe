@@ -137,7 +137,11 @@ def test_connect_failure_logs_sanitized_error_message() -> None:
     with (
         patch(
             "floe_catalog_polaris.plugin.load_catalog",
-            side_effect=RuntimeError("failed password=super-secret token=super-token"),
+            side_effect=RuntimeError(
+                "failed password=super-secret token=super-token "
+                "https://bucket.s3.amazonaws.com/key?"
+                "X-Amz-Signature=abc&X-Amz-Credential=cred&safe=value"
+            ),
         ),
         patch("floe_catalog_polaris.plugin.logger") as mock_logger,
     ):
@@ -149,9 +153,15 @@ def test_connect_failure_logs_sanitized_error_message() -> None:
 
     log_kwargs = mock_logger.bind.return_value.error.call_args.kwargs
     assert log_kwargs["error_type"] == "RuntimeError"
-    assert log_kwargs["error_message"] == "failed password=<REDACTED> token=<REDACTED>"
+    assert log_kwargs["error_message"] == (
+        "failed password=<REDACTED> token=<REDACTED> "
+        "https://bucket.s3.amazonaws.com/key?"
+        "X-Amz-Signature=<REDACTED>&X-Amz-Credential=<REDACTED>&safe=value"
+    )
     assert "super-secret" not in str(mock_logger.method_calls)
     assert "super-token" not in str(mock_logger.method_calls)
+    assert "X-Amz-Signature=abc" not in str(mock_logger.method_calls)
+    assert "X-Amz-Credential=cred" not in str(mock_logger.method_calls)
 
 
 def test_build_catalog_deployment_emits_secret_free_storage_context() -> None:
