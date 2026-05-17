@@ -21,10 +21,15 @@ Expected evidence keys:
 - `platform.ready`
 - `dagster.customer_360_run`
 - `storage.customer_360_outputs`
-- `observability.logs`
-- `observability.metrics`
-- `observability.traces`
-- `observability.lineage`
+- `observability.logs.status`
+- `observability.logs.count`
+- `observability.metrics.status`
+- `observability.metrics.count`
+- `observability.traces.status`
+- `observability.traces.count`
+- `observability.lineage.status`
+- `observability.lineage.count`
+- `observability.run_id`
 - `lineage.marquez_customer_360`
 - `tracing.jaeger_customer_360`
 - `business.customer_count`
@@ -46,11 +51,15 @@ evidence.business.customer_count=<non-negative integer>
 evidence.business.total_lifetime_value=<non-negative decimal>
 evidence.dagster.customer_360_run=true
 evidence.lineage.marquez_customer_360=true
-evidence.observability.lineage=true
-evidence.observability.logs=true
-evidence.observability.metrics=true
+evidence.observability.lineage.status=pass
+evidence.observability.lineage.count=<positive integer>
+evidence.observability.logs.status=pass
+evidence.observability.logs.count=<positive integer>
+evidence.observability.metrics.status=pass
+evidence.observability.metrics.count=<positive integer>
 evidence.observability.run_id=<same run id>
-evidence.observability.traces=true
+evidence.observability.traces.status=pass
+evidence.observability.traces.count=<positive integer>
 evidence.platform.ready=true
 evidence.storage.customer_360_outputs=true
 evidence.tracing.jaeger_customer_360=true
@@ -72,11 +81,15 @@ The evidence maps to the release surfaces as follows:
 | --- | --- | --- |
 | Dagster | Open run history | Latest Customer 360 run succeeded |
 | MinIO | Open object browser | Customer 360 output objects are visible |
-| Grafana/Loki | Query logs by product and run ID | Logs include `customer-360` and the current `dagster.run_id` |
-| Grafana/Prometheus | Query `floe_asset_materializations_total` by `floe_product_name`, `floe_status`, and `floe_plugin_name` | Fresh samples exist for `customer-360` with `floe_status="success"` |
+| Loki-compatible API | Query logs by product and run ID | Logs include `customer-360` and the current `dagster.run_id` |
+| Prometheus-compatible API | Query `floe_asset_materializations_total` by `floe_product_name`, `floe_status`, and `floe_plugin_name` | Fresh samples exist for `customer-360` with `floe_status="success"` |
 | Marquez | Search Customer 360 namespace/job and model/table jobs | Product run evidence exists, and model/table runs carry `ParentRunFacet` linkage to the product/Dagster run |
-| Jaeger | Search service `customer-360` with tags `floe.product.name` and `floe.run.id` | Trace exists for the current run and includes runtime/plugin spans |
+| Jaeger | Search service `customer-360` with tags `floe.product.name` and `floe.run.id`, then inspect model/table spans | Trace exists for the current run and includes runtime/plugin spans plus `floe.table.name` or dbt model evidence for `mart_customer_360` |
 | Polaris | Open catalog API/UI path | Customer 360 tables are registered |
+
+If your platform provisions Grafana, use the same Loki and Prometheus queries
+through Grafana. The contributor `make demo` lane exposes Loki and Prometheus
+direct API endpoints by default, not a Grafana UI.
 
 Useful manual queries:
 
@@ -98,6 +111,9 @@ Jaeger API query shape:
 service=customer-360
 tags={"floe.product.name":"customer-360","floe.run.id":"<dagster.run_id>"}
 ```
+
+After finding the run trace, inspect spans for `floe.table.name=mart_customer_360`
+or equivalent dbt model span evidence for `mart_customer_360`.
 
 Marquez evidence must include both the product job run, usually
 `namespace=customer-360 job=customer-360`, and model/table run records for

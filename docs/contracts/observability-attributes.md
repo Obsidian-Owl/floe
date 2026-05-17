@@ -27,11 +27,14 @@ fields when the value is known:
 | `floe.plugin.type` | Plugin known | Plugin category | `orchestrator` |
 | `floe.plugin.name` | Plugin known | Plugin implementation | `dagster` |
 | `floe.lineage.namespace` | Lineage configured | OpenLineage namespace | `customer-360` |
-| `floe.status` | Final status known | Bounded result status | `success` |
 
 The implemented context above is the source of truth for Customer 360 proof.
 Do not introduce older pipeline, mode, or Dagster-specific aliases in new alpha
 evidence.
+
+Runtime envelopes add `floe.status` when final status is known. It is not part
+of the base context constructor; it is set by the asset/lifecycle wrapper that
+observes success or failure.
 
 ## Structured Logs
 

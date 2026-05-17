@@ -10,9 +10,10 @@ Platform Engineers and Data Engineers should run Customer 360 against a Floe pla
 
 - A Floe platform is deployed and reachable.
 - The Customer 360 data product has been compiled or is available in the demo project.
-- You can access Dagster, object storage, Marquez, Jaeger, Prometheus, Loki or
-  Grafana, Polaris, and the current alpha query surface through your platform
-  access method.
+- You can access Dagster, object storage, Marquez, Jaeger, Prometheus-compatible
+  metrics, Loki-compatible logs, Polaris, and the current alpha query surface
+  through your platform access method. If your platform provisions Grafana, it
+  can be used on top of the same Loki and Prometheus queries.
 
 The current alpha query proof is the Customer 360 business metric check against generated Iceberg outputs. Cube is charted but disabled by default and is not part of the Customer 360 alpha gate unless your platform enables it.
 
