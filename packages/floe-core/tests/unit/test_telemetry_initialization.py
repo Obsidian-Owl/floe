@@ -726,6 +726,23 @@ class TestEndpointEdgeCases:
         )
 
     @pytest.mark.requirement("001-FR-040")
+    def test_http_endpoint_without_host_does_not_initialize(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """HTTP(S) endpoints without a host are invalid OTLP collector targets."""
+        monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://")
+
+        from floe_core.telemetry.initialization import ensure_telemetry_initialized
+
+        ensure_telemetry_initialized()
+
+        provider = trace.get_tracer_provider()
+        assert not isinstance(provider, TracerProvider), (
+            "http:// without a host should not initialize SDK TracerProvider."
+        )
+
+    @pytest.mark.requirement("001-FR-040")
     def test_https_endpoint(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -1090,6 +1107,35 @@ class TestLoggerProviderInitialization:
         trace_provider.force_flush.assert_called_once_with(timeout_millis=7000)
         meter_provider.force_flush.assert_called_once_with(timeout_millis=7000)
         logger_provider.force_flush.assert_called_once_with(timeout_millis=7000)
+
+    @pytest.mark.requirement("001-FR-040")
+    def test_force_flush_telemetry_logs_provider_failures(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Flush failures remain best-effort but leave debug evidence."""
+        import floe_core.telemetry.initialization as init_mod
+        from floe_core.telemetry.initialization import force_flush_telemetry
+
+        failing_provider = MagicMock()
+        failing_provider.force_flush.side_effect = RuntimeError("collector unavailable")
+        healthy_provider = MagicMock()
+        logger = MagicMock()
+
+        monkeypatch.setattr(init_mod.trace, "get_tracer_provider", lambda: failing_provider)
+        monkeypatch.setattr(init_mod.metrics, "get_meter_provider", lambda: healthy_provider)
+        monkeypatch.setattr(init_mod._logs, "get_logger_provider", lambda: healthy_provider)
+        monkeypatch.setattr(init_mod, "logger", logger, raising=False)
+
+        force_flush_telemetry(timeout_millis=7000)
+
+        failing_provider.force_flush.assert_called_once_with(timeout_millis=7000)
+        assert healthy_provider.force_flush.call_count == 2
+        logger.debug.assert_called_once_with(
+            "telemetry_flush_provider_failed",
+            provider=type(failing_provider).__name__,
+            exc_info=True,
+        )
 
 
 class TestLoggingDecoupling:

@@ -70,6 +70,8 @@ def _run_observed_asset_events(
         telemetry_initializer()
     try:
         with _observe_asset(context, operation_name):
+            # Dagster exhausts or closes generator asset iterators, so this
+            # finally block flushes telemetry before the run pod exits.
             yield from cast(Iterator[Any], fn())
     finally:
         if telemetry_finalizer is not None:

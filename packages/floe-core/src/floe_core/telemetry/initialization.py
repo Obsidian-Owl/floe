@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 import os
 
+import structlog
 from opentelemetry import _logs, metrics, trace
 from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
@@ -43,6 +44,8 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from floe_core.telemetry.logging import configure_logging
 from floe_core.telemetry.tracer_factory import reset_tracer
+
+logger = structlog.get_logger(__name__)
 
 # Default service name used when OTEL_SERVICE_NAME is not set or is empty.
 _DEFAULT_SERVICE_NAME = "floe-platform"
@@ -127,12 +130,19 @@ def ensure_telemetry_initialized() -> None:
 
     parsed = urlparse(endpoint)
     if parsed.scheme not in ("http", "https"):
-        import structlog
-
         from floe_core.telemetry.sanitization import sanitize_error_message as _sanitize
 
-        structlog.get_logger(__name__).warning(
+        logger.warning(
             "otel_endpoint_invalid_scheme",
+            endpoint=_sanitize(endpoint),
+            scheme=parsed.scheme,
+        )
+        return
+    if not parsed.hostname:
+        from floe_core.telemetry.sanitization import sanitize_error_message as _sanitize
+
+        logger.warning(
+            "otel_endpoint_invalid_host",
             endpoint=_sanitize(endpoint),
             scheme=parsed.scheme,
         )
@@ -210,6 +220,11 @@ def force_flush_telemetry(timeout_millis: int = 5000) -> None:
             try:
                 force_flush(timeout_millis=timeout_millis)
             except Exception:
+                logger.debug(
+                    "telemetry_flush_provider_failed",
+                    provider=type(provider).__name__,
+                    exc_info=True,
+                )
                 continue
 
 

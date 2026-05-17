@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable, Mapping
+from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -38,6 +39,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 _UNSAFE_ASSET_NAME_CHARS = re.compile(r"[^a-zA-Z0-9_]")
+_MAX_SAFE_SOURCE_NAME_LENGTH = 80
+_SOURCE_NAME_HASH_LENGTH = 12
 
 
 class FloeIngestionTranslator:
@@ -262,7 +265,11 @@ def _safe_source_name(source_name: str) -> str:
     if not safe_name:
         return "source"
     if safe_name[0].isdigit():
-        return f"source_{safe_name}"
+        safe_name = f"source_{safe_name}"
+    if len(safe_name) > _MAX_SAFE_SOURCE_NAME_LENGTH:
+        digest = sha256(safe_name.encode("utf-8")).hexdigest()[:_SOURCE_NAME_HASH_LENGTH]
+        prefix_length = _MAX_SAFE_SOURCE_NAME_LENGTH - _SOURCE_NAME_HASH_LENGTH - 1
+        safe_name = f"{safe_name[:prefix_length].rstrip('_')}_{digest}"
     return safe_name
 
 
@@ -286,7 +293,7 @@ def _create_ingestion_asset(
 ) -> AssetsDefinition:
     source_name = str(source_config["name"])
 
-    @asset(  # type: ignore[untyped-decorator]
+    @asset(
         name=asset_name,
         required_resource_keys=frozenset({"ingestion"}),
         description=(
@@ -303,13 +310,18 @@ def _create_ingestion_asset(
     )
     def _run_ingestion_source(context) -> Any:  # type: ignore[no-untyped-def]  # noqa: ANN001
         """Execute one configured ingestion source via the ingestion plugin resource."""
+        runtime_context = observability_context or {}
         return run_observed_asset(
             observability_context_from_dagster(
                 context,
                 asset_key=asset_name,
                 stage="ingestion",
                 table_name=str(source_config["destination_table"]),
-                **dict(observability_context or {}),
+                product_name=runtime_context.get("product_name"),
+                product_version=runtime_context.get("product_version"),
+                environment=runtime_context.get("environment"),
+                namespace=runtime_context.get("namespace"),
+                lineage_namespace=runtime_context.get("lineage_namespace"),
             ),
             f"floe.orchestrator.dagster.asset.{asset_name}",
             lambda: _run_ingestion_source_body(
