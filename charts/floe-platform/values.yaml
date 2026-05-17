@@ -642,7 +642,7 @@ prometheus:
         metrics_path: /metrics
         static_configs:
           - targets:
-              - floe-platform-otel:9464
+              - "{{ include \"floe-platform.otel.fullname\" . }}:{{ .Values.otel.ports.prometheus.servicePort | default 9464 }}"
 
 # =============================================================================
 # PostgreSQL Configuration (Metadata Store)

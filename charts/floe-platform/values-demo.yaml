@@ -399,23 +399,4 @@ observability:
     enabled: true
     refreshInterval: 30s
     datasourceUid: prometheus
-    datasources:
-      - name: Prometheus
-        uid: prometheus
-        type: prometheus
-        access: proxy
-        url: http://floe-platform-prometheus:9090
-        isDefault: true
-        editable: true
-      - name: Jaeger
-        uid: jaeger
-        type: jaeger
-        access: proxy
-        url: "http://{{ .Release.Name }}-jaeger-query:16686"
-        editable: true
-      - name: Loki
-        uid: loki
-        type: loki
-        access: proxy
-        url: "http://{{ .Values.fullnameOverride | default .Release.Name }}-loki:3100"
-        editable: true
+    datasources: []

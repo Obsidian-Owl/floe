@@ -145,26 +145,6 @@ class TestFloePlatformSchema:
             "OTel Prometheus exporter must not duplicate the floe metric prefix"
         )
         assert values["prometheus"]["enabled"] is True
-        scrape_configs = values["prometheus"]["config"]["scrape_configs"]
-        otel_scrape_jobs = [
-            job for job in scrape_configs if job.get("job_name") == "floe-otel-collector"
-        ]
-        assert otel_scrape_jobs, "Prometheus must scrape OTel collector metrics"
-        assert "floe-platform-otel:9464" in otel_scrape_jobs[0]["static_configs"][0]["targets"]
-
-        datasources = values["observability"]["grafana"]["datasources"]
-        datasource_types = {
-            datasource["type"]: datasource
-            for datasource in datasources
-            if isinstance(datasource, dict) and "type" in datasource
-        }
-        assert datasource_types["loki"]["url"], "Grafana logs datasource must be wired"
-        metrics_url = datasource_types["prometheus"]["url"]
-        assert metrics_url == "http://floe-platform-prometheus:9090", (
-            "Grafana metrics datasource must point at the Prometheus query API, "
-            "not the OTel collector scrape endpoint"
-        )
-        assert datasource_types["jaeger"]["url"], "Grafana trace datasource must remain wired"
         assert values["loki"]["config"]["limits_config"]["allow_structured_metadata"] is True
 
     @pytest.mark.requirement("FR-044")
@@ -203,7 +183,6 @@ class TestFloePlatformSchema:
         assert "endpoint: 0.0.0.0:9464" in rendered
         assert "- prometheus" in rendered
         assert "targets:" in rendered
-        assert "- floe-platform-otel:9464" in rendered
         assert "namespace: floe" not in rendered
 
         datasource_configmaps = [
@@ -226,6 +205,17 @@ class TestFloePlatformSchema:
         assert "floe_lineage_marquez_event_sends" in rendered
         assert "floe_floe_asset_materializations" not in rendered
         assert "allow_structured_metadata: true" in rendered
+
+        prometheus_configmap = next(
+            doc
+            for doc in documents
+            if doc.get("kind") == "ConfigMap"
+            and doc.get("metadata", {}).get("name") == "floe-platform-prometheus"
+        )
+        prometheus_config = yaml.safe_load(prometheus_configmap["data"]["prometheus.yml"])
+        assert prometheus_config["scrape_configs"][0]["static_configs"][0]["targets"] == [
+            "floe-platform-otel:9464"
+        ]
 
     @pytest.mark.requirement("FR-044")
     def test_default_profile_does_not_render_disabled_backend_links(self) -> None:
@@ -298,8 +288,144 @@ class TestFloePlatformSchema:
         assert ("Service", "custom-prometheus") in names_by_kind
         assert ("Service", "custom-otel") in names_by_kind
         assert "endpoint: http://custom-loki:3100/otlp" in rendered
-        assert "- custom-otel:9464" in rendered
         assert "url: http://custom-prometheus:9090" in rendered
+
+        prometheus_configmap = next(
+            doc
+            for doc in documents
+            if doc.get("kind") == "ConfigMap"
+            and doc.get("metadata", {}).get("name") == "custom-prometheus"
+        )
+        prometheus_config = yaml.safe_load(prometheus_configmap["data"]["prometheus.yml"])
+        assert prometheus_config["scrape_configs"][0]["static_configs"][0]["targets"] == [
+            "custom-otel:9464"
+        ]
+
+    @pytest.mark.requirement("FR-044")
+    def test_custom_grafana_datasource_uid_matches_generated_dashboard(self) -> None:
+        """Generated Prometheus datasource UID must match dashboard panel references."""
+        chart_path = CHARTS_DIR / "floe-platform"
+        result = run_helm_template(
+            "test-release",
+            chart_path,
+            values_path=chart_path / "values-demo.yaml",
+            set_values={"observability.grafana.datasourceUid": "custom-prom"},
+            timeout=60,
+        )
+
+        assert result.returncode == 0, (
+            f"Helm template rendering failed: {result.returncode}\nstderr: {result.stderr}"
+        )
+
+        documents = [
+            doc
+            for doc in yaml.safe_load_all(result.stdout)
+            if isinstance(doc, dict) and doc.get("kind") == "ConfigMap"
+        ]
+        dashboard_configmap = next(
+            doc
+            for doc in documents
+            if "grafana-dashboards" in doc.get("metadata", {}).get("name", "")
+        )
+        backend_dashboard = json.loads(dashboard_configmap["data"]["observability-backends.json"])
+        prometheus_panel_uids = {
+            panel["datasource"]["uid"]
+            for panel in backend_dashboard["panels"]
+            if panel["datasource"]["type"] == "prometheus"
+        }
+        assert prometheus_panel_uids == {"custom-prom"}
+
+        datasource_configmap = next(
+            doc
+            for doc in documents
+            if "grafana-datasources" in doc.get("metadata", {}).get("name", "")
+        )
+        datasource_config = yaml.safe_load(datasource_configmap["data"]["datasources.yaml"])
+        prometheus_datasource = next(
+            datasource
+            for datasource in datasource_config["datasources"]
+            if datasource["type"] == "prometheus"
+        )
+        assert prometheus_datasource["uid"] == "custom-prom"
+
+    @pytest.mark.requirement("FR-044")
+    def test_custom_grafana_datasources_render_when_supplied(self) -> None:
+        """Non-empty observability.grafana.datasources should be rendered via tpl."""
+        chart_path = CHARTS_DIR / "floe-platform"
+        result = run_helm_template(
+            "test-release",
+            chart_path,
+            set_values={
+                "jaeger.enabled": "false",
+                "observability.grafana.datasources[0].name": "ExternalPrometheus",
+                "observability.grafana.datasources[0].uid": "external-prom",
+                "observability.grafana.datasources[0].type": "prometheus",
+                "observability.grafana.datasources[0].access": "proxy",
+                "observability.grafana.datasources[0].url": "http://external-prometheus:9090",
+                "observability.grafana.datasources[0].editable": "true",
+            },
+            timeout=60,
+        )
+
+        assert result.returncode == 0, (
+            f"Helm template rendering failed: {result.returncode}\nstderr: {result.stderr}"
+        )
+
+        documents = [
+            doc
+            for doc in yaml.safe_load_all(result.stdout)
+            if isinstance(doc, dict) and doc.get("kind") == "ConfigMap"
+        ]
+        datasource_configmap = next(
+            doc
+            for doc in documents
+            if "grafana-datasources" in doc.get("metadata", {}).get("name", "")
+        )
+        datasource_payload = datasource_configmap["data"]["datasources.yaml"]
+        assert "name: ExternalPrometheus" in datasource_payload
+        assert "uid: external-prom" in datasource_payload
+        assert "url: http://external-prometheus:9090" in datasource_payload
+
+    @pytest.mark.requirement("FR-044")
+    def test_custom_prometheus_scrape_configs_render_when_supplied(self) -> None:
+        """prometheus.config.scrape_configs should render instead of being ignored."""
+        chart_path = CHARTS_DIR / "floe-platform"
+        result = run_helm_template(
+            "test-release",
+            chart_path,
+            set_values={
+                "prometheus.enabled": "true",
+                "prometheus.config.scrape_configs[0].job_name": "custom-otel",
+                "prometheus.config.scrape_configs[0].metrics_path": "/custom-metrics",
+                "prometheus.config.scrape_configs[0].static_configs[0].targets[0]": (
+                    "custom-otel:9999"
+                ),
+            },
+            timeout=60,
+        )
+
+        assert result.returncode == 0, (
+            f"Helm template rendering failed: {result.returncode}\nstderr: {result.stderr}"
+        )
+
+        documents = [
+            doc
+            for doc in yaml.safe_load_all(result.stdout)
+            if isinstance(doc, dict) and doc.get("kind") == "ConfigMap"
+        ]
+        prometheus_configmap = next(
+            doc
+            for doc in documents
+            if doc.get("metadata", {}).get("name") == "floe-platform-prometheus"
+        )
+        prometheus_config = yaml.safe_load(prometheus_configmap["data"]["prometheus.yml"])
+        assert prometheus_config["scrape_configs"] == [
+            {
+                "job_name": "custom-otel",
+                "metrics_path": "/custom-metrics",
+                "static_configs": [{"targets": ["custom-otel:9999"]}],
+            }
+        ]
 
     @pytest.mark.requirement("9b-FR-004")
     def test_invalid_environment_rejected(self, floe_platform_schema: dict[str, Any]) -> None:
