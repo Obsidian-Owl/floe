@@ -243,7 +243,7 @@ Create `docs/reference/plugin-catalog.md` with:
 Update public docs to avoid stale counts or use the canonical phrase `15 plugin categories`:
 
 ```bash
-rg -n "11 plugin|12 plugin|13 plugin|15 plugin|plugin types|plugin categories" README.md docs
+rg -n "11 plugin|12 plugin|13 plugin|14 plugin|plugin types|plugin categories" README.md docs
 ```
 
 Expected after edits:
