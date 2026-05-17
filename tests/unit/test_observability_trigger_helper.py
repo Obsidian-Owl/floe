@@ -81,10 +81,12 @@ class _FakeResponse:
         *,
         status_code: int = 200,
         error: Exception | None = None,
+        json_error: Exception | None = None,
     ) -> None:
         self._payload = payload
         self.status_code = status_code
         self._error = error
+        self._json_error = json_error
 
     def raise_for_status(self) -> None:
         if self._error is not None:
@@ -92,6 +94,8 @@ class _FakeResponse:
         return None
 
     def json(self) -> JsonObject:
+        if self._json_error is not None:
+            raise self._json_error
         return self._payload
 
 
@@ -636,6 +640,52 @@ def test_customer360_marquez_helper_treats_optional_facet_failure_as_wrong_conte
                     response=httpx.Response(404),
                 ),
             ),
+        }
+    )
+
+    result = query_marquez_lineage(
+        marquez_url="http://marquez",
+        namespace="customer-360",
+        job_name="customer-360",
+        context=_context(),
+        client=cast(httpx.Client, client),
+    )
+
+    assert result.status is EvidenceStatus.WRONG_CONTEXT
+
+
+def test_customer360_marquez_helper_treats_malformed_optional_facets_as_wrong_context() -> None:
+    """Malformed optional run facet payloads do not hide reachable Marquez evidence."""
+    facets_url = "http://marquez/api/v1/runs/model-run-1/facets"
+    client = _FakeClient(
+        {
+            "http://marquez/api/v1/namespaces/customer-360/jobs/customer-360/runs": {
+                "runs": [
+                    {
+                        "id": "run-123",
+                        "state": "COMPLETED",
+                        "startedAt": "2023-11-14T22:12:30Z",
+                        "facets": {"product": {"name": "customer-360"}},
+                    }
+                ]
+            },
+            "http://marquez/api/v1/namespaces/customer-360/jobs": {
+                "jobs": [{"name": "model.customer_360.mart_customer_360"}]
+            },
+            (
+                "http://marquez/api/v1/namespaces/customer-360/jobs/"
+                "model.customer_360.mart_customer_360/runs"
+            ): {
+                "runs": [
+                    {
+                        "id": "model-run-1",
+                        "state": "COMPLETED",
+                        "startedAt": "2023-11-14T22:12:31Z",
+                        "endedAt": "2023-11-14T22:12:40Z",
+                    }
+                ]
+            },
+            facets_url: _FakeResponse({}, json_error=ValueError("malformed json")),
         }
     )
 

@@ -1113,9 +1113,12 @@ def _parent_run_id_from_marquez_run_facets(
                 params={"type": "run"},
             )
             response.raise_for_status()
+            payload = response.json()
         except Exception:  # noqa: BLE001 - facets are optional enrichment.
             continue
-        facets = response.json().get("facets")
+        if not isinstance(payload, Mapping):
+            continue
+        facets = payload.get("facets")
         if not isinstance(facets, Mapping):
             continue
         parent_run_id = _parent_run_id_from_marquez_payload({"facets": facets})
