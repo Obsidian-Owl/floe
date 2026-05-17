@@ -1,8 +1,8 @@
 # Customer 360 Golden Demo
 
-Customer 360 is the `v0.1.0-alpha.1` golden demo. The alpha release gate will prove that Floe can run a data product through orchestration, transformation, storage, lineage, tracing, and business-facing query validation.
+Customer 360 is the `v0.1.0-alpha.1` golden demo. The alpha release gate will prove that Floe can run a data product through orchestration, transformation, storage, queryable logs, metrics, traces, lineage, and business-facing query validation.
 
-If you are learning Floe for the first time, start with [Build Your First Data Product](../data-engineers/first-data-product.md). Customer 360 is the advanced proof that demonstrates the full platform, runtime, lineage, telemetry, storage, and business-output path.
+If you are learning Floe for the first time, start with [Build Your First Data Product](../data-engineers/first-data-product.md). Customer 360 is the advanced proof that demonstrates the full platform, runtime, observability, lineage, storage, and business-output path.
 
 Platform Engineers and Data Engineers should run Customer 360 against a Floe platform that has already been deployed and made reachable through their platform access method. Floe Contributors can use the remote DevPod lane when they need contributor release-validation evidence.
 
@@ -10,7 +10,9 @@ Platform Engineers and Data Engineers should run Customer 360 against a Floe pla
 
 - A Floe platform is deployed and reachable.
 - The Customer 360 data product has been compiled or is available in the demo project.
-- You can access Dagster, object storage, Marquez, Jaeger, Polaris, and the current alpha query surface through your platform access method.
+- You can access Dagster, object storage, Marquez, Jaeger, Prometheus, Loki or
+  Grafana, Polaris, and the current alpha query surface through your platform
+  access method.
 
 The current alpha query proof is the Customer 360 business metric check against generated Iceberg outputs. Cube is charted but disabled by default and is not part of the Customer 360 alpha gate unless your platform enables it.
 
@@ -60,14 +62,16 @@ These URLs match the current contributor `make demo` DevPod port-forwards. Produ
 | --- | --- | --- |
 | Dagster | http://localhost:3100 | Customer 360 run succeeds |
 | MinIO | http://localhost:9001 | Customer 360 output objects exist |
-| Marquez | http://localhost:5100 | Customer 360 lineage exists |
-| Jaeger | http://localhost:16686 | Customer 360 traces exist |
+| Marquez | http://localhost:5100 | Customer 360 product run and model/table lineage exists |
+| Jaeger | http://localhost:16686 | Customer 360 traces exist by service/product/run |
+| Prometheus | http://localhost:9090 | Customer 360 asset metrics exist by product/status/plugin |
+| Loki-compatible logs | http://localhost:3101 | Customer 360 logs exist by product/run ID |
 | Polaris | http://localhost:8181 | Customer 360 tables are registered |
 | Business query surface | `make demo-customer-360-validate` | Customer count and total lifetime value checks pass |
 
 ## Business Outcome
 
-The final mart is `mart_customer_360`. The alpha release gate will be successful when Customer 360 outputs can be queried and lineage/tracing evidence is visible for the run.
+The final mart is `mart_customer_360`. The alpha release gate will be successful when Customer 360 outputs can be queried and log, metric, trace, and lineage evidence is visible for the same run.
 
 ## Next Step
 

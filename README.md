@@ -123,8 +123,8 @@ make docs-build
 
 For the full Customer 360 release-validation path, start with
 [Customer 360 Golden Demo](docs/demo/customer-360.md). Contributor remote E2E
-validation uses DevPod + Hetzner and is intentionally separate from normal
-package installation.
+validation uses the documented contributor remote lane and is intentionally
+separate from normal package installation.
 
 ## Alpha Scope
 
@@ -135,7 +135,13 @@ package installation.
 - Manifest-driven platform and data-product configuration for the documented
   alpha path.
 - Dagster-centered runtime artifact generation for the documented alpha path.
-- OpenTelemetry and OpenLineage evidence through Jaeger and Marquez.
+- Queryable logs, traces, metrics, and lineage for supported alpha paths,
+  including Customer 360 proof through Loki-compatible logs,
+  Prometheus-compatible metrics, Jaeger-compatible traces, and Marquez
+  OpenLineage evidence.
+- Backend-pluggable observability through the OpenTelemetry Collector and the
+  lineage backend plugin model, without coupling data-product code to a
+  specific backend implementation.
 - MinIO/S3-compatible storage in the demo path.
 - Live AWS S3 + Glue provider compatibility validation in isolated test
   infrastructure.
@@ -388,6 +394,8 @@ Code standards:
   provider validation on their documented release lanes.
 - Security: no hardcoded secrets, no raw credentials in compiled artifacts.
 - Architecture: respect layer and plugin-contract boundaries.
+- Observability: keep OpenTelemetry and OpenLineage signals portable,
+  backend-pluggable, and secret-free.
 
 ## Roadmap
 
@@ -397,6 +405,8 @@ Code standards:
 - [x] Two-tier configuration.
 - [x] Manifest-declared package cutline.
 - [x] Kubernetes-native Customer 360 validation path.
+- [x] Queryable Customer 360 logs, traces, metrics, and lineage for the
+  supported alpha path.
 - [x] Live AWS S3 + Glue provider compatibility validation.
 
 **Next candidate work:**

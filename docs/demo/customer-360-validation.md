@@ -21,6 +21,10 @@ Expected evidence keys:
 - `platform.ready`
 - `dagster.customer_360_run`
 - `storage.customer_360_outputs`
+- `observability.logs`
+- `observability.metrics`
+- `observability.traces`
+- `observability.lineage`
 - `lineage.marquez_customer_360`
 - `tracing.jaeger_customer_360`
 - `business.customer_count`
@@ -42,6 +46,11 @@ evidence.business.customer_count=<non-negative integer>
 evidence.business.total_lifetime_value=<non-negative decimal>
 evidence.dagster.customer_360_run=true
 evidence.lineage.marquez_customer_360=true
+evidence.observability.lineage=true
+evidence.observability.logs=true
+evidence.observability.metrics=true
+evidence.observability.run_id=<same run id>
+evidence.observability.traces=true
 evidence.platform.ready=true
 evidence.storage.customer_360_outputs=true
 evidence.tracing.jaeger_customer_360=true
@@ -51,9 +60,11 @@ The evidence maps to the release surfaces as follows:
 
 - Business evidence comes from querying the generated Customer 360 mart metrics.
 - Dagster evidence proves the configured `customer-360` run completed.
-- Lineage evidence proves Marquez has Customer 360 namespace/job/dataset records.
+- Log evidence proves the log backend has structured records for the product and run ID.
+- Metric evidence proves Prometheus-compatible series exist for the product, status, and plugin.
+- Lineage evidence proves Marquez has product run evidence and model/table run evidence linked to that run.
 - Storage evidence proves the expected Iceberg output table is readable.
-- Tracing evidence proves Jaeger contains Customer 360 run traces.
+- Tracing evidence proves Jaeger contains Customer 360 run traces by service, product, and run ID.
 
 ## Manual UI Inspection
 
@@ -61,9 +72,48 @@ The evidence maps to the release surfaces as follows:
 | --- | --- | --- |
 | Dagster | Open run history | Latest Customer 360 run succeeded |
 | MinIO | Open object browser | Customer 360 output objects are visible |
-| Marquez | Search Customer 360 namespace/job | Lineage graph has Customer 360 datasets |
-| Jaeger | Search Floe/Dagster service | Trace exists for Customer 360 run |
+| Grafana/Loki | Query logs by product and run ID | Logs include `customer-360` and the current `dagster.run_id` |
+| Grafana/Prometheus | Query `floe_asset_materializations_total` by `floe_product_name`, `floe_status`, and `floe_plugin_name` | Fresh samples exist for `customer-360` with `floe_status="success"` |
+| Marquez | Search Customer 360 namespace/job and model/table jobs | Product run evidence exists, and model/table runs carry `ParentRunFacet` linkage to the product/Dagster run |
+| Jaeger | Search service `customer-360` with tags `floe.product.name` and `floe.run.id` | Trace exists for the current run and includes runtime/plugin spans |
 | Polaris | Open catalog API/UI path | Customer 360 tables are registered |
+
+Useful manual queries:
+
+```text
+{job=~".+"} |= "customer-360" |= "<dagster.run_id>"
+```
+
+```promql
+floe_asset_materializations_total{
+  floe_product_name="customer-360",
+  floe_status="success",
+  floe_plugin_name=~".+"
+}
+```
+
+Jaeger API query shape:
+
+```text
+service=customer-360
+tags={"floe.product.name":"customer-360","floe.run.id":"<dagster.run_id>"}
+```
+
+Marquez evidence must include both the product job run, usually
+`namespace=customer-360 job=customer-360`, and model/table run records for
+`mart_customer_360` whose `ParentRunFacet` points at the same Dagster run ID.
+
+## Failure Classification
+
+Use the validator status to decide where to debug first:
+
+| Status | Meaning | First action |
+| --- | --- | --- |
+| `backend_unreachable` | The backend API, service URL, tunnel, or collector path is unavailable | Check service pods, URLs, and port-forwards before rerunning the product |
+| `no_fresh_evidence` | The backend is reachable but returned no records for the expected product/run/table | Confirm the run ID and that the relevant signal exporter is enabled |
+| `stale_evidence` | Records exist only outside the freshness window | Trigger a new Customer 360 run and validate against the new run ID |
+| `wrong_context` | Records exist but match another product, run, or table | Check `FLOE_DEMO_RUN_ID`, the validation manifest, and service URLs |
+| `product_failure` | Evidence shows the Customer 360 run or model/table execution failed | Debug Dagster/dbt/storage output before investigating observability backends |
 
 ## Related Guides
 
