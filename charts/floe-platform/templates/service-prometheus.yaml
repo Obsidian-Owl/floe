@@ -1,9 +1,8 @@
 {{- if .Values.prometheus.enabled }}
-{{- $prometheusName := default (printf "%s-prometheus" (include "floe-platform.fullname" .)) .Values.prometheus.fullnameOverride }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $prometheusName | trunc 63 | trimSuffix "-" }}
+  name: {{ include "floe-platform.prometheus.fullname" . }}
   labels:
     {{- include "floe-platform.labels" . | nindent 4 }}
     app.kubernetes.io/component: prometheus

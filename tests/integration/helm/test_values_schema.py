@@ -141,6 +141,9 @@ class TestFloePlatformSchema:
             "Demo metrics pipeline must expose a Prometheus-compatible scrape path"
         )
         assert exporters["prometheus"]["endpoint"].endswith(":9464")
+        assert "namespace" not in exporters["prometheus"], (
+            "OTel Prometheus exporter must not duplicate the floe metric prefix"
+        )
         assert values["prometheus"]["enabled"] is True
         scrape_configs = values["prometheus"]["config"]["scrape_configs"]
         otel_scrape_jobs = [
@@ -162,6 +165,7 @@ class TestFloePlatformSchema:
             "not the OTel collector scrape endpoint"
         )
         assert datasource_types["jaeger"]["url"], "Grafana trace datasource must remain wired"
+        assert values["loki"]["config"]["limits_config"]["allow_structured_metadata"] is True
 
     @pytest.mark.requirement("FR-044")
     def test_demo_observability_backend_profile_renders_query_backends(self) -> None:
@@ -200,6 +204,7 @@ class TestFloePlatformSchema:
         assert "- prometheus" in rendered
         assert "targets:" in rendered
         assert "- floe-platform-otel:9464" in rendered
+        assert "namespace: floe" not in rendered
 
         datasource_configmaps = [
             doc
@@ -219,6 +224,82 @@ class TestFloePlatformSchema:
         assert "floe_asset_materializations" in rendered
         assert "floe_asset_failures" in rendered
         assert "floe_lineage_marquez_event_sends" in rendered
+        assert "floe_floe_asset_materializations" not in rendered
+        assert "allow_structured_metadata: true" in rendered
+
+    @pytest.mark.requirement("FR-044")
+    def test_default_profile_does_not_render_disabled_backend_links(self) -> None:
+        """Default chart must not link Grafana to disabled logs/metrics backends."""
+        chart_path = CHARTS_DIR / "floe-platform"
+        result = run_helm_template("test-release", chart_path, timeout=60)
+
+        assert result.returncode == 0, (
+            f"Helm template rendering failed: {result.returncode}\nstderr: {result.stderr}"
+        )
+
+        documents = [
+            doc
+            for doc in yaml.safe_load_all(result.stdout)
+            if isinstance(doc, dict) and doc.get("kind")
+        ]
+        dashboard_configmaps = [
+            doc
+            for doc in documents
+            if doc.get("kind") == "ConfigMap"
+            and "grafana-dashboards" in doc.get("metadata", {}).get("name", "")
+        ]
+        assert dashboard_configmaps, "Grafana dashboard ConfigMap not rendered"
+        for configmap in dashboard_configmaps:
+            assert "observability-backends.json" not in configmap.get("data", {})
+
+        datasource_configmaps = [
+            doc
+            for doc in documents
+            if doc.get("kind") == "ConfigMap"
+            and "grafana-datasources" in doc.get("metadata", {}).get("name", "")
+        ]
+        datasource_payload = yaml.safe_dump(datasource_configmaps)
+        assert "type: loki" not in datasource_payload
+        assert "type: prometheus" not in datasource_payload
+        assert "type: jaeger" in datasource_payload
+
+    @pytest.mark.requirement("FR-044")
+    def test_demo_backend_name_overrides_keep_links_aligned(self) -> None:
+        """Backend fullnameOverride values must propagate to rendered links."""
+        chart_path = CHARTS_DIR / "floe-platform"
+        result = run_helm_template(
+            "test-release",
+            chart_path,
+            values_path=chart_path / "values-demo.yaml",
+            set_values={
+                "loki.fullnameOverride": "custom-loki",
+                "prometheus.fullnameOverride": "custom-prometheus",
+                "otel.fullnameOverride": "custom-otel",
+                "otel.config.exporters.otlphttp/loki.endpoint": "http://custom-loki:3100/otlp",
+                "dagster.dagsterWebserver.env[0].value": "http://custom-otel:4317",
+                "dagster.dagsterDaemon.env[0].value": "http://custom-otel:4317",
+            },
+            timeout=60,
+        )
+
+        assert result.returncode == 0, (
+            f"Helm template rendering failed: {result.returncode}\nstderr: {result.stderr}"
+        )
+
+        rendered = result.stdout
+        documents = [
+            doc for doc in yaml.safe_load_all(rendered) if isinstance(doc, dict) and doc.get("kind")
+        ]
+        names_by_kind = {
+            (doc.get("kind"), doc.get("metadata", {}).get("name")) for doc in documents
+        }
+
+        assert ("Service", "custom-loki") in names_by_kind
+        assert ("Service", "custom-prometheus") in names_by_kind
+        assert ("Service", "custom-otel") in names_by_kind
+        assert "endpoint: http://custom-loki:3100/otlp" in rendered
+        assert "- custom-otel:9464" in rendered
+        assert "url: http://custom-prometheus:9090" in rendered
 
     @pytest.mark.requirement("9b-FR-004")
     def test_invalid_environment_rejected(self, floe_platform_schema: dict[str, Any]) -> None:

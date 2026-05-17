@@ -238,7 +238,6 @@ otel:
         verbosity: detailed
       prometheus:
         endpoint: 0.0.0.0:9464
-        namespace: floe
       otlphttp/loki:
         endpoint: http://floe-platform-loki:3100/otlp
       otlp/jaeger:

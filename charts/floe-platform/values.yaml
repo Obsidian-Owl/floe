@@ -476,7 +476,6 @@ otel:
       # Prometheus scrape exporter for queryable alpha metrics
       prometheus:
         endpoint: 0.0.0.0:9464
-        namespace: floe
       # OTLP export to Jaeger (enabled when jaeger.enabled=true)
       otlp/jaeger:
         endpoint: "{{ .Release.Name }}-jaeger-collector:4317"
@@ -593,7 +592,7 @@ loki:
             prefix: index_
             period: 24h
     limits_config:
-      allow_structured_metadata: false
+      allow_structured_metadata: true
       retention_period: 24h
     compactor:
       working_directory: /tmp/loki/compactor
@@ -1130,20 +1129,7 @@ observability:
 
     # Datasources provisioned for Grafana sidecars or file provisioning.
     # Demo values resolve these to the in-chart alpha backends.
-    datasources:
-      - name: Prometheus
-        uid: prometheus
-        type: prometheus
-        access: proxy
-        url: http://floe-platform-prometheus:9090
-        isDefault: true
-        editable: true
-      - name: Jaeger
-        uid: jaeger
-        type: jaeger
-        access: proxy
-        url: "http://{{ .Release.Name }}-jaeger-query:16686"
-        editable: true
+    datasources: []
 
 # =============================================================================
 # Cube Configuration (Semantic Layer)

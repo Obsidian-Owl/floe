@@ -19,6 +19,7 @@ data:
 {{ .Files.Get "dashboards/data-quality.json" | indent 4 }}
   lineage-overview.json: |
 {{ .Files.Get "dashboards/lineage-overview.json" | indent 4 }}
+  {{- if and .Values.prometheus.enabled .Values.loki.enabled }}
   observability-backends.json: |
     {
       "uid": "floe-observability-backends",
@@ -123,6 +124,8 @@ data:
         }
       ]
     }
+  {{- end }}
+{{- if or .Values.prometheus.enabled .Values.loki.enabled .Values.jaeger.enabled }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -140,5 +143,30 @@ data:
   datasources.yaml: |
     apiVersion: 1
     datasources:
-{{ tpl (toYaml .Values.observability.grafana.datasources) . | indent 6 }}
+      {{- if .Values.prometheus.enabled }}
+      - access: proxy
+        editable: true
+        isDefault: true
+        name: Prometheus
+        type: prometheus
+        uid: prometheus
+        url: http://{{ include "floe-platform.prometheus.fullname" . }}:{{ .Values.prometheus.service.port | default 9090 }}
+      {{- end }}
+      {{- if .Values.jaeger.enabled }}
+      - access: proxy
+        editable: true
+        name: Jaeger
+        type: jaeger
+        uid: jaeger
+        url: http://{{ include "floe-platform.jaeger.queryName" . }}:16686
+      {{- end }}
+      {{- if .Values.loki.enabled }}
+      - access: proxy
+        editable: true
+        name: Loki
+        type: loki
+        uid: loki
+        url: http://{{ include "floe-platform.loki.fullname" . }}:{{ .Values.loki.service.port | default 3100 }}
+      {{- end }}
+{{- end }}
 {{- end }}

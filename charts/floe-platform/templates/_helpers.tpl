@@ -199,6 +199,28 @@ OTel Collector component name.
 {{- end }}
 
 {{/*
+Loki component name.
+*/}}
+{{- define "floe-platform.loki.fullname" -}}
+{{- if .Values.loki.fullnameOverride }}
+{{- .Values.loki.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-loki" (include "floe-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Prometheus component name.
+*/}}
+{{- define "floe-platform.prometheus.fullname" -}}
+{{- if .Values.prometheus.fullnameOverride }}
+{{- .Values.prometheus.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-prometheus" (include "floe-platform.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+
+{{/*
 Find an environment variable value in a list of env var maps.
 */}}
 {{- define "floe-platform.envValue" -}}
