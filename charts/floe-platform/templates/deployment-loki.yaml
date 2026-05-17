@@ -1,0 +1,69 @@
+{{- if .Values.loki.enabled }}
+{{- $lokiName := default (printf "%s-loki" (include "floe-platform.fullname" .)) .Values.loki.fullnameOverride }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $lokiName | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loki
+spec:
+  replicas: {{ .Values.loki.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "floe-platform.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: loki
+  template:
+    metadata:
+      labels:
+        {{- include "floe-platform.labels" . | nindent 8 }}
+        app.kubernetes.io/component: loki
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "floe-platform.serviceAccountName" . }}
+      securityContext:
+        {{- include "floe-platform.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: loki
+          image: "{{ .Values.loki.image.repository }}:{{ .Values.loki.image.tag }}"
+          imagePullPolicy: {{ .Values.loki.image.pullPolicy | default .Values.global.imagePullPolicy }}
+          args:
+            - -config.file=/etc/loki/config.yaml
+          ports:
+            - name: http
+              containerPort: {{ .Values.loki.service.port | default 3100 }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.loki.resources | nindent 12 }}
+          securityContext:
+            {{- include "floe-platform.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+              readOnly: true
+            - name: data
+              mountPath: /tmp/loki
+      volumes:
+        - name: config
+          configMap:
+            name: {{ $lokiName | trunc 63 | trimSuffix "-" }}
+        - name: data
+          emptyDir: {}
+{{- end }}

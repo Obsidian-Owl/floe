@@ -34,6 +34,19 @@ data:
       http:
         endpoint: http://{{ include "floe-platform.otel.fullname" . }}:4318
         insecure: true
+    metrics:
+      prometheus:
+        endpoint: http://{{ include "floe-platform.otel.fullname" . }}:{{ .Values.otel.ports.prometheus.servicePort | default 9464 }}/metrics
+    {{- if .Values.loki.enabled }}
+    logs:
+      loki:
+        endpoint: {{ tpl (get (get .Values.otel.config.exporters "otlphttp/loki") "endpoint") . | quote }}
+    {{- end }}
+    {{- if .Values.jaeger.enabled }}
+    traces:
+      jaeger:
+        endpoint: {{ tpl (get (get .Values.otel.config.exporters "otlp/jaeger") "endpoint") . | quote }}
+    {{- end }}
 
   # Sampling configuration
   sampling.yaml: |

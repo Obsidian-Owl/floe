@@ -97,6 +97,45 @@ class TestFloePlatformSchema:
         jsonschema.validate(values, floe_platform_schema)
 
     @pytest.mark.requirement("9b-FR-004")
+    def test_demo_values_conform_to_schema(self, floe_platform_schema: dict[str, Any]) -> None:
+        """Test that values-demo.yaml conforms to schema."""
+        values = load_values_file("floe-platform", "values-demo.yaml")
+        jsonschema.validate(values, floe_platform_schema)
+
+    @pytest.mark.requirement("FR-044")
+    def test_demo_values_wire_queryable_observability_backends(self) -> None:
+        """Demo profile must send logs and metrics to queryable backends."""
+        values = load_values_file("floe-platform", "values-demo.yaml")
+
+        otel_config = values["otel"]["config"]
+        exporters = otel_config["exporters"]
+        pipelines = otel_config["service"]["pipelines"]
+
+        log_exporters = pipelines["logs"]["exporters"]
+        assert log_exporters, "Demo logs pipeline must configure at least one exporter"
+        assert any(exporter != "debug" for exporter in log_exporters), (
+            "Demo logs pipeline must export to a queryable backend, not debug only"
+        )
+        assert "otlphttp/loki" in log_exporters
+        assert "otlphttp/loki" in exporters
+
+        metric_exporters = pipelines["metrics"]["exporters"]
+        assert "prometheus" in metric_exporters, (
+            "Demo metrics pipeline must expose a Prometheus-compatible scrape path"
+        )
+        assert exporters["prometheus"]["endpoint"].endswith(":9464")
+
+        datasources = values["observability"]["grafana"]["datasources"]
+        datasource_types = {
+            datasource["type"]: datasource
+            for datasource in datasources
+            if isinstance(datasource, dict) and "type" in datasource
+        }
+        assert datasource_types["loki"]["url"], "Grafana logs datasource must be wired"
+        assert datasource_types["prometheus"]["url"], "Grafana metrics datasource must be wired"
+        assert datasource_types["jaeger"]["url"], "Grafana trace datasource must remain wired"
+
+    @pytest.mark.requirement("9b-FR-004")
     def test_invalid_environment_rejected(self, floe_platform_schema: dict[str, Any]) -> None:
         """Test that invalid environment value is rejected."""
         invalid_values = {"global": {"environment": "invalid"}}

@@ -1,0 +1,13 @@
+{{- if .Values.loki.enabled }}
+{{- $lokiName := default (printf "%s-loki" (include "floe-platform.fullname" .)) .Values.loki.fullnameOverride }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $lokiName | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loki
+data:
+  config.yaml: |
+{{ toYaml .Values.loki.config | indent 4 }}
+{{- end }}

@@ -19,4 +19,126 @@ data:
 {{ .Files.Get "dashboards/data-quality.json" | indent 4 }}
   lineage-overview.json: |
 {{ .Files.Get "dashboards/lineage-overview.json" | indent 4 }}
+  observability-backends.json: |
+    {
+      "uid": "floe-observability-backends",
+      "title": "Floe Observability Backends",
+      "tags": ["floe", "otel", "logs", "metrics"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "{{ .Values.observability.grafana.refreshInterval | default "30s" }}",
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
+      "editable": true,
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "Asset Materializations",
+          "targets": [
+            {
+              "expr": "sum by (floe_product_name, floe_asset_key, floe_status) (increase(floe_asset_materializations_total[5m]))",
+              "legendFormat": "{{ "{{floe_product_name}}" }} / {{ "{{floe_asset_key}}" }}",
+              "refId": "A"
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.observability.grafana.datasourceUid | default "prometheus" }}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "Asset Failures",
+          "targets": [
+            {
+              "expr": "sum by (floe_product_name, floe_asset_key, floe_status) (increase(floe_asset_failures_total[5m]))",
+              "legendFormat": "{{ "{{floe_product_name}}" }} / {{ "{{floe_asset_key}}" }}",
+              "refId": "A"
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.observability.grafana.datasourceUid | default "prometheus" }}"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 0,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "Marquez Lineage Events",
+          "targets": [
+            {
+              "expr": "sum by (lineage_status, lineage_event_type) (increase(floe_lineage_marquez_event_sends_total[5m]))",
+              "legendFormat": "{{ "{{lineage_status}}" }} / {{ "{{lineage_event_type}}" }}",
+              "refId": "A"
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.observability.grafana.datasourceUid | default "prometheus" }}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 8,
+            "w": 12,
+            "h": 8
+          }
+        },
+        {
+          "id": 4,
+          "type": "logs",
+          "title": "Floe Logs",
+          "targets": [
+            {
+              "expr": "{service_namespace=~\".+\"}",
+              "refId": "A"
+            }
+          ],
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": {
+            "x": 12,
+            "y": 8,
+            "w": 12,
+            "h": 8
+          }
+        }
+      ]
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "floe-platform.fullname" . }}-grafana-datasources
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "floe-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: observability
+    grafana_datasource: "1"
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+{{ tpl (toYaml .Values.observability.grafana.datasources) . | indent 6 }}
 {{- end }}

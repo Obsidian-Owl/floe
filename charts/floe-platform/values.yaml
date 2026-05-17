@@ -473,11 +473,18 @@ otel:
       # Debug exporter (for development)
       debug:
         verbosity: detailed
+      # Prometheus scrape exporter for queryable alpha metrics
+      prometheus:
+        endpoint: 0.0.0.0:9464
+        namespace: floe
       # OTLP export to Jaeger (enabled when jaeger.enabled=true)
       otlp/jaeger:
         endpoint: "{{ .Release.Name }}-jaeger-collector:4317"
         tls:
           insecure: true
+      # OTLP HTTP export to a Loki-compatible log backend
+      otlphttp/loki:
+        endpoint: http://floe-platform-loki:3100/otlp
 
     service:
       pipelines:
@@ -511,10 +518,87 @@ otel:
       containerPort: 8888
       servicePort: 8888
       protocol: TCP
+    prometheus:
+      enabled: false
+      containerPort: 9464
+      servicePort: 9464
+      protocol: TCP
 
   # Pod Security Standards hardening (AC-2)
   podSecurityContext: *podSecurityContextPSS
   securityContext: *containerSecurityContextPSS
+
+# =============================================================================
+# Loki Configuration (Queryable Logs)
+# =============================================================================
+loki:
+  # Disabled by default; values-demo.yaml enables this low-cost alpha backend.
+  enabled: false
+
+  # Optional name override for the Loki resources.
+  fullnameOverride: ""
+
+  # Image configuration.
+  image:
+    repository: grafana/loki
+    tag: "3.3.2"
+    pullPolicy: IfNotPresent
+
+  # Replica count.
+  replicaCount: 1
+
+  # Service configuration.
+  service:
+    type: ClusterIP
+    port: 3100
+
+  # Resource limits.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Single-binary filesystem config for local alpha/demo deployments.
+  config:
+    auth_enabled: false
+    server:
+      http_listen_port: 3100
+      grpc_listen_port: 9095
+    common:
+      path_prefix: /tmp/loki
+      replication_factor: 1
+      storage:
+        filesystem:
+          chunks_directory: /tmp/loki/chunks
+          rules_directory: /tmp/loki/rules
+      ring:
+        kvstore:
+          store: inmemory
+    query_range:
+      results_cache:
+        cache:
+          embedded_cache:
+            enabled: true
+            max_size_mb: 64
+    schema_config:
+      configs:
+        - from: "2024-01-01"
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+    limits_config:
+      allow_structured_metadata: false
+      retention_period: 24h
+    compactor:
+      working_directory: /tmp/loki/compactor
+      retention_enabled: true
+      delete_request_store: filesystem
 
 # =============================================================================
 # PostgreSQL Configuration (Metadata Store)
@@ -998,6 +1082,23 @@ observability:
 
     # Datasource UID (must match Prometheus datasource in Grafana)
     datasourceUid: prometheus
+
+    # Datasources provisioned for Grafana sidecars or file provisioning.
+    # Demo values resolve these to the in-chart alpha backends.
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-server:80
+        isDefault: true
+        editable: true
+      - name: Jaeger
+        uid: jaeger
+        type: jaeger
+        access: proxy
+        url: "http://{{ .Release.Name }}-jaeger-query:16686"
+        editable: true
 
 # =============================================================================
 # Cube Configuration (Semantic Layer)
