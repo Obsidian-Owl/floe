@@ -49,6 +49,11 @@ def _classify_exception(exc: Exception) -> str:
     return "unknown"
 
 
+def _safe_exception_summary(exc: Exception) -> str:
+    """Return a secret-free delivery failure summary for logs."""
+    return f"delivery failed ({_classify_exception(exc)})"
+
+
 def _record_alert_span(
     span: Any,
     *,
@@ -200,7 +205,8 @@ class WebhookAlertPlugin(AlertChannelPlugin):
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 self._log.warning(
                     "webhook_connection_error",
-                    error=str(e),
+                    error_type=_classify_exception(e),
+                    error_message=_safe_exception_summary(e),
                     contract_name=event.contract_name,
                 )
                 _record_alert_span(
@@ -216,7 +222,8 @@ class WebhookAlertPlugin(AlertChannelPlugin):
             except Exception as e:
                 self._log.error(
                     "webhook_unexpected_error",
-                    error=str(e),
+                    error_type=_classify_exception(e),
+                    error_message=_safe_exception_summary(e),
                     contract_name=event.contract_name,
                 )
                 _record_alert_span(

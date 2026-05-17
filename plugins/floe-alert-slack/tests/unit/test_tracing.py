@@ -97,13 +97,20 @@ class TestAlertSpan:
         provider, exporter = tracer_with_exporter
         tracer = provider.get_tracer(TRACER_NAME)
 
-        with alert_span(tracer, "send", destination="#alerts"):
+        destination = (
+            "https://hooks.slack.com/services/T/B/xoxb-leaked-token"  # pragma: allowlist secret
+        )
+
+        with alert_span(tracer, "send", channel="slack", destination=destination):
             pass
 
         spans = exporter.get_finished_spans()
         assert len(spans) == 1
         attributes = dict(spans[0].attributes or {})
-        assert attributes[ATTR_DESTINATION] == "#alerts"
+        assert attributes[ATTR_DESTINATION] == "slack"
+        text = repr(attributes)
+        assert "hooks.slack.com" not in text
+        assert "xoxb-leaked-token" not in text  # pragma: allowlist secret
 
     @pytest.mark.requirement("6C-FR-020")
     def test_alert_span_sets_delivery_status_on_success(
@@ -188,7 +195,7 @@ class TestAlertSpan:
 
         # Verify expected attributes are channel names only
         assert attributes.get(ATTR_CHANNEL) == "slack"
-        assert attributes.get(ATTR_DESTINATION) == "#alerts"
+        assert attributes.get(ATTR_DESTINATION) == "slack"
 
     @pytest.mark.requirement("6C-FR-020")
     def test_alert_span_error_sanitized(

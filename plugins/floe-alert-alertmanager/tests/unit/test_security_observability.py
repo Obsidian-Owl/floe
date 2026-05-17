@@ -130,3 +130,22 @@ async def test_send_alert_classifies_failures() -> None:
     with patch("floe_alert_alertmanager.plugin.get_tracer", return_value=tracer):
         assert AlertmanagerPlugin(api_url="").validate_config()
     assert tracer.spans[-1].attributes["alert.error_type"] == "validation"
+
+
+@pytest.mark.asyncio
+async def test_send_alert_sanitizes_transport_exception_logs() -> None:
+    plugin = AlertmanagerPlugin(api_url="https://alerts.example.com")
+    plugin._log = Mock()
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.side_effect = httpx.ConnectError(
+            "failed https://user:password@"  # pragma: allowlist secret
+            "alerts.example.com/api/v2/alerts "
+            "token=leaked summary=secret-body"  # pragma: allowlist secret
+        )
+        assert await plugin.send_alert(_event()) is False
+
+    log_text = repr(plugin._log.warning.call_args)
+    assert "alerts.example.com" not in log_text
+    assert "leaked" not in log_text  # pragma: allowlist secret
+    assert "secret-body" not in log_text  # pragma: allowlist secret

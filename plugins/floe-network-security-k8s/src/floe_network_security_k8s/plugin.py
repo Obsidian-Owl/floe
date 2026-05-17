@@ -259,21 +259,27 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             Egress rule allowing UDP 53 to kube-system.
         """
-        return {
-            "to": [
-                {
-                    "namespaceSelector": {
-                        "matchLabels": {
-                            "kubernetes.io/metadata.name": "kube-system",
+        return self._record_generation(
+            operation="generate_dns_egress_rule",
+            policy_type="EgressRule",
+            resource_kind="NetworkPolicyEgressRule",
+            namespace=None,
+            action=lambda: {
+                "to": [
+                    {
+                        "namespaceSelector": {
+                            "matchLabels": {
+                                "kubernetes.io/metadata.name": "kube-system",
+                            },
                         },
                     },
-                },
-            ],
-            "ports": [
-                {"port": 53, "protocol": "UDP"},
-                {"port": 53, "protocol": "TCP"},
-            ],
-        }
+                ],
+                "ports": [
+                    {"port": 53, "protocol": "UDP"},
+                    {"port": 53, "protocol": "TCP"},
+                ],
+            },
+        )
 
     def generate_platform_egress_rules(self) -> list[dict[str, Any]]:
         """Generate platform service egress rules (built-in).
@@ -745,15 +751,21 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             Dictionary representing K8s pod securityContext.
         """
-        return {
-            "runAsNonRoot": True,
-            "runAsUser": 1000,
-            "runAsGroup": 1000,
-            "fsGroup": 1000,
-            "seccompProfile": {
-                "type": "RuntimeDefault",
+        return self._record_generation(
+            operation="generate_pod_security_context",
+            policy_type="PodSecurity",
+            resource_kind="PodSecurityContext",
+            namespace=None,
+            action=lambda: {
+                "runAsNonRoot": True,
+                "runAsUser": 1000,
+                "runAsGroup": 1000,
+                "fsGroup": 1000,
+                "seccompProfile": {
+                    "type": "RuntimeDefault",
+                },
             },
-        }
+        )
 
     def generate_container_security_context(self, config: Any) -> dict[str, Any]:
         """Generate container-level securityContext.
@@ -764,17 +776,23 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Returns:
             Dictionary representing K8s container securityContext.
         """
-        return {
-            "allowPrivilegeEscalation": False,
-            "readOnlyRootFilesystem": True,
-            "runAsNonRoot": True,
-            "capabilities": {
-                "drop": ["ALL"],
+        return self._record_generation(
+            operation="generate_container_security_context",
+            policy_type="PodSecurity",
+            resource_kind="ContainerSecurityContext",
+            namespace=None,
+            action=lambda: {
+                "allowPrivilegeEscalation": False,
+                "readOnlyRootFilesystem": True,
+                "runAsNonRoot": True,
+                "capabilities": {
+                    "drop": ["ALL"],
+                },
+                "seccompProfile": {
+                    "type": "RuntimeDefault",
+                },
             },
-            "seccompProfile": {
-                "type": "RuntimeDefault",
-            },
-        }
+        )
 
     _BLOCKED_MOUNT_PATHS: frozenset[str] = frozenset(
         {
@@ -803,32 +821,43 @@ class K8sNetworkSecurityPlugin(NetworkSecurityPlugin):
         Raises:
             ValueError: If a path is in the blocked mount paths list.
         """
-        for path in writable_paths:
-            normalized = path.rstrip("/")
-            if normalized in self._BLOCKED_MOUNT_PATHS or path in self._BLOCKED_MOUNT_PATHS:
-                raise ValueError(f"Mount path blocked for security: {path}")
 
-        volumes: list[dict[str, Any]] = []
-        volume_mounts: list[dict[str, Any]] = []
+        def _generate() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+            for path in writable_paths:
+                normalized = path.rstrip("/")
+                if normalized in self._BLOCKED_MOUNT_PATHS or path in self._BLOCKED_MOUNT_PATHS:
+                    raise ValueError("Mount path blocked for security")
 
-        for path in writable_paths:
-            volume_name = self._path_to_volume_name(path)
+            volumes: list[dict[str, Any]] = []
+            volume_mounts: list[dict[str, Any]] = []
 
-            volumes.append(
-                {
-                    "name": volume_name,
-                    "emptyDir": {},
-                }
-            )
+            for path in writable_paths:
+                volume_name = self._path_to_volume_name(path)
 
-            volume_mounts.append(
-                {
-                    "name": volume_name,
-                    "mountPath": path,
-                }
-            )
+                volumes.append(
+                    {
+                        "name": volume_name,
+                        "emptyDir": {},
+                    }
+                )
 
-        return volumes, volume_mounts
+                volume_mounts.append(
+                    {
+                        "name": volume_name,
+                        "mountPath": path,
+                    }
+                )
+
+            return volumes, volume_mounts
+
+        return self._record_generation(
+            operation="generate_writable_volumes",
+            policy_type="PodSecurity",
+            resource_kind="VolumeMount",
+            namespace=None,
+            resource_count=len(writable_paths),
+            action=_generate,
+        )
 
     def _path_to_volume_name(self, path: str) -> str:
         """Convert a path to a valid K8s volume name.

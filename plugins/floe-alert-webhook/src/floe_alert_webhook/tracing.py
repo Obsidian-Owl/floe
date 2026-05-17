@@ -46,6 +46,15 @@ ATTR_DESTINATION = "alert.destination"
 ATTR_DELIVERY_STATUS = "alert.delivery_status"
 
 
+def _safe_destination_identity(destination: str | None, channel: str | None) -> str | None:
+    """Return a low-cardinality destination identity safe for spans."""
+    if channel:
+        return channel
+    if destination:
+        return "configured"
+    return None
+
+
 def get_tracer() -> trace.Tracer:
     """Get the OpenTelemetry tracer for webhook alert operations.
 
@@ -109,8 +118,9 @@ def alert_span(
 
     if channel is not None:
         attributes[ATTR_CHANNEL] = channel
-    if destination is not None:
-        attributes[ATTR_DESTINATION] = destination
+    safe_destination = _safe_destination_identity(destination, channel)
+    if safe_destination is not None:
+        attributes[ATTR_DESTINATION] = safe_destination
     if extra_attributes:
         attributes.update(extra_attributes)
 

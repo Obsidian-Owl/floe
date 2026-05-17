@@ -120,3 +120,21 @@ async def test_send_alert_classifies_failures() -> None:
     invalid._tracer = tracer
     assert invalid.validate_config()
     assert tracer.spans[-1].attributes["alert.error_type"] == "validation"
+
+
+@pytest.mark.asyncio
+async def test_send_alert_sanitizes_transport_exception_logs() -> None:
+    plugin = WebhookAlertPlugin(webhook_url="https://webhook.example.com/hook")
+    plugin._log = Mock()
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.side_effect = httpx.ConnectError(
+            "failed https://user:password@webhook.example.com/hook "  # pragma: allowlist secret
+            "token=leaked body=secret-body"  # pragma: allowlist secret
+        )
+        assert await plugin.send_alert(_event()) is False
+
+    log_text = repr(plugin._log.warning.call_args)
+    assert "webhook.example.com" not in log_text
+    assert "leaked" not in log_text  # pragma: allowlist secret
+    assert "secret-body" not in log_text  # pragma: allowlist secret

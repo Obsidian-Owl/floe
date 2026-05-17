@@ -113,6 +113,67 @@ def test_get_secret_classifies_access_denied_without_sensitive_reference() -> No
     assert "secrets.key_name" not in attrs
 
 
+def test_get_secret_access_denied_sanitizes_audit_and_public_exception() -> None:
+    tracer = _Tracer()
+    api_exception_type = type("ApiException", (Exception,), {})
+    plugin = _plugin_with_api(api_exception_type)
+    plugin._audit_logger = Mock()
+    plugin._api.read_namespaced_secret.side_effect = _api_exception(
+        api_exception_type,
+        401,
+        "unauthorized token=leaked-session-token "  # pragma: allowlist secret
+        "password=leaked-password",  # pragma: allowlist secret
+    )
+
+    with patch("floe_secrets_k8s.plugin.get_tracer", return_value=tracer):
+        with pytest.raises(SecretAccessDeniedError) as exc_info:
+            plugin.get_secret(
+                "db-password/private_key=leaked-private-key"  # pragma: allowlist secret
+            )
+
+    attrs = tracer.spans[-1].attributes
+    assert attrs["secrets.error_type"] == "access_denied"
+    plugin._audit_logger.log_denied.assert_called_once()
+    audit_kwargs = plugin._audit_logger.log_denied.call_args.kwargs
+    assert audit_kwargs["secret_path"] == "<redacted>"
+    assert audit_kwargs["reason"] == "access denied (401)"
+    text = f"{audit_kwargs!r} {exc_info.value!s}"
+    assert "leaked-session-token" not in text  # pragma: allowlist secret
+    assert "leaked-password" not in text  # pragma: allowlist secret
+    assert "leaked-private-key" not in text  # pragma: allowlist secret
+
+
+def test_set_secret_access_denied_sanitizes_audit_and_public_exception() -> None:
+    tracer = _Tracer()
+    api_exception_type = type("ApiException", (Exception,), {})
+    plugin = _plugin_with_api(api_exception_type)
+    plugin._audit_logger = Mock()
+    plugin._api.read_namespaced_secret.side_effect = _api_exception(
+        api_exception_type,
+        403,
+        "forbidden token=leaked-session-token password=leaked-password",  # pragma: allowlist secret
+    )
+
+    with patch("floe_secrets_k8s.plugin.get_tracer", return_value=tracer):
+        with pytest.raises(SecretAccessDeniedError) as exc_info:
+            plugin.set_secret(
+                "db-password/private_key=leaked-private-key",  # pragma: allowlist secret
+                "secret-value",  # pragma: allowlist secret
+            )
+
+    attrs = tracer.spans[-1].attributes
+    assert attrs["secrets.error_type"] == "access_denied"
+    plugin._audit_logger.log_denied.assert_called_once()
+    audit_kwargs = plugin._audit_logger.log_denied.call_args.kwargs
+    assert audit_kwargs["secret_path"] == "<redacted>"
+    assert audit_kwargs["reason"] == "access denied (403)"
+    text = f"{audit_kwargs!r} {exc_info.value!s}"
+    assert "leaked-session-token" not in text  # pragma: allowlist secret
+    assert "leaked-password" not in text  # pragma: allowlist secret
+    assert "leaked-private-key" not in text  # pragma: allowlist secret
+    assert "secret-value" not in text  # pragma: allowlist secret
+
+
 def test_get_secret_classifies_not_found_unavailable_and_validation() -> None:
     tracer = _Tracer()
     api_exception_type = type("ApiException", (Exception,), {})

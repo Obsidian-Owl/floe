@@ -78,6 +78,58 @@ def test_network_generation_does_not_emit_credential_like_policy_body() -> None:
     assert "10.0.0.1" not in text
 
 
+def test_public_security_context_methods_emit_success_spans_without_bodies() -> None:
+    tracer = _Tracer()
+    plugin = K8sNetworkSecurityPlugin()
+
+    with patch("floe_network_security_k8s.plugin.get_tracer", return_value=tracer):
+        dns_rule = plugin.generate_dns_egress_rule()
+        pod_context = plugin.generate_pod_security_context(config={})
+        container_context = plugin.generate_container_security_context(config={})
+        volumes, mounts = plugin.generate_writable_volumes(["/tmp/cache"])
+
+    assert dns_rule["ports"][0]["port"] == 53
+    assert pod_context["seccompProfile"]["type"] == "RuntimeDefault"
+    assert container_context["capabilities"]["drop"] == ["ALL"]
+    assert volumes[0]["name"] == "writable-tmp-cache"
+    assert mounts[0]["mountPath"] == "/tmp/cache"
+    assert [span.name for span in tracer.spans[-4:]] == [
+        "security.generate_dns_egress_rule",
+        "security.generate_pod_security_context",
+        "security.generate_container_security_context",
+        "security.generate_writable_volumes",
+    ]
+    for span in tracer.spans[-4:]:
+        assert span.attributes["security.status"] == "success"
+        assert "security.duration_ms" in span.attributes
+    text = _attrs_text(tracer)
+    assert "seccompProfile" not in text
+    assert "/tmp/cache" not in text
+
+
+def test_public_writable_volumes_failures_are_classified() -> None:
+    tracer = _Tracer()
+    plugin = K8sNetworkSecurityPlugin()
+
+    with patch("floe_network_security_k8s.plugin.get_tracer", return_value=tracer):
+        with pytest.raises(ValueError):
+            plugin.generate_writable_volumes(["/var/run/docker.sock"])
+    assert tracer.spans[-1].attributes["security.error_type"] == "validation"
+
+    with (
+        patch("floe_network_security_k8s.plugin.get_tracer", return_value=tracer),
+        patch.object(
+            plugin,
+            "_path_to_volume_name",
+            side_effect=TimeoutError("api unavailable token=leaked"),  # pragma: allowlist secret
+        ),
+    ):
+        with pytest.raises(TimeoutError):
+            plugin.generate_writable_volumes(["/tmp/cache"])
+    assert tracer.spans[-1].attributes["security.error_type"] == "unavailable"
+    assert "leaked" not in _attrs_text(tracer)  # pragma: allowlist secret
+
+
 def test_generation_failures_are_classified() -> None:
     tracer = _Tracer()
     plugin = K8sNetworkSecurityPlugin()

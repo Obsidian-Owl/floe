@@ -102,14 +102,20 @@ class TestAlertSpan:
         with alert_span(
             tracer,
             "send_alert",
-            destination="https://alertmanager:9093",
+            channel="alertmanager",
+            destination=(
+                "https://user:password@alertmanager:9093?token=leaked"  # pragma: allowlist secret
+            ),
         ):
             pass
 
         spans = exporter.get_finished_spans()
         assert len(spans) == 1
         attributes = dict(spans[0].attributes or {})
-        assert attributes[ATTR_DESTINATION] == "https://alertmanager:9093"
+        assert attributes[ATTR_DESTINATION] == "alertmanager"
+        text = repr(attributes)
+        assert "alertmanager:9093" not in text
+        assert "leaked" not in text
 
     @pytest.mark.requirement("6C-FR-020")
     def test_alert_span_sets_severity_attribute(
@@ -169,7 +175,7 @@ class TestAlertSpan:
 
         # Verify expected attributes are metadata only
         assert attributes.get(ATTR_CHANNEL) == "alertmanager"
-        assert attributes.get(ATTR_DESTINATION) == "https://alertmanager:9093"
+        assert attributes.get(ATTR_DESTINATION) == "alertmanager"
         assert attributes.get(ATTR_SEVERITY) == "critical"
 
     @pytest.mark.requirement("6C-FR-020")

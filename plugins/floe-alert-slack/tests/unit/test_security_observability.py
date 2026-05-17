@@ -120,3 +120,22 @@ async def test_send_alert_classifies_failures() -> None:
     invalid._tracer = tracer
     assert invalid.validate_config()
     assert tracer.spans[-1].attributes["alert.error_type"] == "validation"
+
+
+@pytest.mark.asyncio
+async def test_send_alert_sanitizes_transport_exception_logs() -> None:
+    plugin = SlackAlertPlugin(webhook_url="https://hooks.slack.com/services/T/B/token")
+    plugin._log = Mock()
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as post:
+        post.side_effect = httpx.ConnectError(
+            "failed https://hooks.slack.com/services/T/B/"  # pragma: allowlist secret
+            "xoxb-leaked-token "  # pragma: allowlist secret
+            "message=xoxb-body-token"  # pragma: allowlist secret
+        )
+        assert await plugin.send_alert(_event()) is False
+
+    log_text = repr(plugin._log.warning.call_args)
+    assert "hooks.slack.com" not in log_text
+    assert "xoxb-leaked-token" not in log_text  # pragma: allowlist secret
+    assert "xoxb-body-token" not in log_text  # pragma: allowlist secret

@@ -124,6 +124,36 @@ def test_get_secret_classifies_access_denied_without_sensitive_reference() -> No
     assert "leaked-private-key" not in text  # pragma: allowlist secret
 
 
+def test_get_secret_access_denied_sanitizes_audit_and_public_exception() -> None:
+    tracer = _Tracer()
+    plugin = _plugin()
+    plugin._audit_logger = Mock()
+    plugin._client.getSecret.side_effect = RuntimeError(
+        "401 unauthorized access_token=leaked-token "  # pragma: allowlist secret
+        "password=leaked-password"  # pragma: allowlist secret
+    )
+
+    with (
+        patch("floe_secrets_infisical.plugin.get_tracer", return_value=tracer),
+        patch.dict(sys.modules, {"infisical_client": _fake_infisical_client_module()}),
+    ):
+        with pytest.raises(InfisicalAccessDeniedError) as exc_info:
+            plugin.get_secret(
+                "db-password/private_key=leaked-private-key"  # pragma: allowlist secret
+            )
+
+    attrs = tracer.spans[-1].attributes
+    assert attrs["secrets.error_type"] == "access_denied"
+    plugin._audit_logger.log_denied.assert_called_once()
+    audit_kwargs = plugin._audit_logger.log_denied.call_args.kwargs
+    assert audit_kwargs["secret_path"] == "<redacted>"
+    assert audit_kwargs["reason"] == "access denied (401)"
+    text = f"{audit_kwargs!r} {exc_info.value!s}"
+    assert "leaked-token" not in text  # pragma: allowlist secret
+    assert "leaked-password" not in text  # pragma: allowlist secret
+    assert "leaked-private-key" not in text  # pragma: allowlist secret
+
+
 def test_get_secret_classifies_not_found_unavailable_and_validation() -> None:
     tracer = _Tracer()
     plugin = _plugin()
@@ -160,30 +190,80 @@ def test_set_secret_classifies_access_denied_and_unavailable_known_errors() -> N
         patch.object(
             plugin,
             "_create_or_update_secret",
-            side_effect=InfisicalAccessDeniedError(secret_key="<redacted>", reason="403"),
+            side_effect=InfisicalAccessDeniedError(
+                secret_key="db-password",  # pragma: allowlist secret
+                reason="403 password=leaked-password",  # pragma: allowlist secret
+            ),
         ),
     ):
-        with pytest.raises(InfisicalAccessDeniedError):
-            plugin.set_secret("catalog-ref", "set-secret-value")  # pragma: allowlist secret
+        with pytest.raises(InfisicalAccessDeniedError) as exc_info:
+            plugin.set_secret(
+                "db-password/private_key=leaked-private-key",  # pragma: allowlist secret
+                "set-secret-value",  # pragma: allowlist secret
+            )
 
     attrs = tracer.spans[-1].attributes
     assert attrs["secrets.operation_type"] == "set"
     assert attrs["secrets.outcome"] == "failure"
     assert attrs["secrets.error_type"] == "access_denied"
+    text = f"{_attrs_text(tracer)} {exc_info.value!s}"
+    assert "leaked-password" not in text  # pragma: allowlist secret
+    assert "leaked-private-key" not in text  # pragma: allowlist secret
 
     with (
         patch("floe_secrets_infisical.plugin.get_tracer", return_value=tracer),
         patch.object(
             plugin,
             "_create_or_update_secret",
-            side_effect=InfisicalBackendUnavailableError(reason="503"),
+            side_effect=InfisicalBackendUnavailableError(
+                reason="503 token=leaked-token"  # pragma: allowlist secret
+            ),
         ),
     ):
-        with pytest.raises(InfisicalBackendUnavailableError):
+        with pytest.raises(InfisicalBackendUnavailableError) as exc_info:
             plugin.set_secret("catalog-ref", "set-secret-value")  # pragma: allowlist secret
 
     attrs = tracer.spans[-1].attributes
     assert attrs["secrets.operation_type"] == "set"
     assert attrs["secrets.outcome"] == "failure"
     assert attrs["secrets.error_type"] == "unavailable"
-    assert "set-secret-value" not in _attrs_text(tracer)  # pragma: allowlist secret
+    text = f"{_attrs_text(tracer)} {exc_info.value!s}"
+    assert "set-secret-value" not in text  # pragma: allowlist secret
+    assert "leaked-token" not in text  # pragma: allowlist secret
+
+
+def test_set_secret_access_denied_sanitizes_log_audit_and_public_exception() -> None:
+    tracer = _Tracer()
+    plugin = _plugin()
+    plugin._audit_logger = Mock()
+
+    with (
+        patch("floe_secrets_infisical.plugin.get_tracer", return_value=tracer),
+        patch("floe_secrets_infisical.plugin.logger") as logger,
+        patch.object(
+            plugin,
+            "_create_or_update_secret",
+            side_effect=RuntimeError(
+                "unauthorized access_token=leaked-token "  # pragma: allowlist secret
+                "password=leaked-password"  # pragma: allowlist secret
+            ),
+        ),
+    ):
+        with pytest.raises(InfisicalAccessDeniedError) as exc_info:
+            plugin.set_secret(
+                "db-password/private_key=leaked-private-key",  # pragma: allowlist secret
+                "set-secret-value",  # pragma: allowlist secret
+            )
+
+    attrs = tracer.spans[-1].attributes
+    assert attrs["secrets.error_type"] == "access_denied"
+    plugin._audit_logger.log_denied.assert_called_once()
+    audit_kwargs = plugin._audit_logger.log_denied.call_args.kwargs
+    assert audit_kwargs["secret_path"] == "<redacted>"
+    assert audit_kwargs["reason"] == "access denied"
+    logger.debug.assert_not_called()
+    text = f"{audit_kwargs!r} {exc_info.value!s}"
+    assert "leaked-token" not in text  # pragma: allowlist secret
+    assert "leaked-password" not in text  # pragma: allowlist secret
+    assert "leaked-private-key" not in text  # pragma: allowlist secret
+    assert "set-secret-value" not in text  # pragma: allowlist secret

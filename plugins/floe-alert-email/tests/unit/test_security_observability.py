@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import AbstractContextManager
 from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from floe_core.contracts.monitoring.violations import (
@@ -149,3 +149,25 @@ async def test_send_alert_classifies_access_denied_and_not_found() -> None:
         assert await plugin.send_alert(_event()) is False
     assert tracer.spans[-1].attributes["alert.error_type"] == "not_found"
     assert "leaked" not in _attrs_text(tracer)  # pragma: allowlist secret
+
+
+@pytest.mark.asyncio
+async def test_send_alert_sanitizes_transport_exception_logs() -> None:
+    plugin = EmailAlertPlugin(
+        smtp_host="smtp.example.com",
+        from_address="from@example.com",
+        to_addresses=["alerts@example.com"],
+    )
+    plugin._log = Mock()
+
+    with patch("aiosmtplib.send", new_callable=AsyncMock) as send:
+        send.side_effect = TimeoutError(
+            "smtp failure for alerts@example.com "  # pragma: allowlist secret
+            "password=leaked body=secret-body"  # pragma: allowlist secret
+        )
+        assert await plugin.send_alert(_event()) is False
+
+    log_text = repr(plugin._log.error.call_args)
+    assert "alerts@example.com" not in log_text
+    assert "leaked" not in log_text  # pragma: allowlist secret
+    assert "secret-body" not in log_text  # pragma: allowlist secret

@@ -50,6 +50,11 @@ def _classify_exception(exc: Exception) -> str:
     return "unknown"
 
 
+def _safe_exception_summary(exc: Exception) -> str:
+    """Return a secret-free delivery failure summary for logs."""
+    return f"delivery failed ({_classify_exception(exc)})"
+
+
 def _record_alert_span(
     span: Any,
     *,
@@ -168,7 +173,11 @@ class AlertmanagerPlugin(AlertChannelPlugin):
                     )
                     return True
             except (httpx.ConnectError, httpx.TimeoutException) as e:
-                self._log.warning("alertmanager_connection_error", error=str(e))
+                self._log.warning(
+                    "alertmanager_connection_error",
+                    error_type=_classify_exception(e),
+                    error_message=_safe_exception_summary(e),
+                )
                 _record_alert_span(
                     span,
                     destination_type="alertmanager",
@@ -180,7 +189,11 @@ class AlertmanagerPlugin(AlertChannelPlugin):
                 )
                 return False
             except Exception as e:
-                self._log.error("alertmanager_unexpected_error", error=str(e))
+                self._log.error(
+                    "alertmanager_unexpected_error",
+                    error_type=_classify_exception(e),
+                    error_message=_safe_exception_summary(e),
+                )
                 _record_alert_span(
                     span,
                     destination_type="alertmanager",
